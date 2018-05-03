@@ -704,7 +704,9 @@ impl fmt::Display for Listing {
 
         for token in self.listing.iter() {
             match token {
-                &Token::Label(_) => (),
+                &Token::Label(_) |
+                    &Token::Equ(_, _) |
+                    &Token::Comment(_) => (),
                 _ => {write!(f, "\t");}
             }
             write!(f, "{}\n", token);
