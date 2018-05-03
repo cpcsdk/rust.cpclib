@@ -1,0 +1,309 @@
+
+extern crate image as im;
+
+use std::collections::HashMap;
+use std::ops::Add;
+
+
+const INK0:im::Rgba<u8> = im::Rgba{data:[0, 0, 0, 255]};
+const INK1:im::Rgba<u8> = im::Rgba{data: [0x00, 0x00, 0x80, 255]};
+const INK2:im::Rgba<u8> = im::Rgba{data: [0x00, 0x00, 0xFF, 255]};
+const INK3:im::Rgba<u8> = im::Rgba{data: [0x80, 0x00, 0x00, 255]};
+const INK4:im::Rgba<u8> = im::Rgba{data: [0x80, 0x00, 0x80, 255]};
+const INK5:im::Rgba<u8> = im::Rgba{data: [0x80, 0x00, 0xFF, 255]};
+const INK6:im::Rgba<u8> = im::Rgba{data: [0xFF, 0x00, 0x00, 255]};
+const INK7:im::Rgba<u8> = im::Rgba{data: [0xFF, 0x00, 0x80, 255]};
+const INK8:im::Rgba<u8> = im::Rgba{data: [0xFF, 0x00, 0xFF, 255]};
+const INK9:im::Rgba<u8> = im::Rgba{data: [0x00, 0x80, 0x00, 255]};
+const INK10:im::Rgba<u8> = im::Rgba{data: [0x00, 0x80, 0x80, 255]};
+const INK11:im::Rgba<u8> = im::Rgba{data: [0x00, 0x80, 0xFF, 255]};
+const INK12:im::Rgba<u8> = im::Rgba{data: [0x80, 0x80, 0x00, 255]};
+const INK13:im::Rgba<u8> = im::Rgba{data: [0x80, 0x80, 0x80, 255]};
+const INK14:im::Rgba<u8> = im::Rgba{data: [0x80, 0x80, 0xFF, 255]};
+const INK15:im::Rgba<u8> = im::Rgba{data: [0xFF, 0x80, 0x00, 255]};
+const INK16:im::Rgba<u8> = im::Rgba{data: [0xFF, 0x80, 0x80, 255]};
+const INK17:im::Rgba<u8> = im::Rgba{data: [0xFF, 0x80, 0xFF, 255]};
+const INK18:im::Rgba<u8> = im::Rgba{data: [0x00, 0xFF, 0x00, 255]};
+const INK19:im::Rgba<u8> = im::Rgba{data: [0x00, 0xFF, 0x80, 255]};
+const INK20:im::Rgba<u8> = im::Rgba{data: [0x00, 0xFF, 0xFF, 255]};
+const INK21:im::Rgba<u8> = im::Rgba{data: [0x80, 0xFF, 0x00, 255]};
+const INK22:im::Rgba<u8> = im::Rgba{data: [0x80, 0xFF, 0x80, 255]};
+const INK23:im::Rgba<u8> = im::Rgba{data: [0x80, 0xFF, 0xFF, 255]};
+const INK24:im::Rgba<u8> = im::Rgba{data: [0xFF, 0xFF, 0x00, 255]};
+const INK25:im::Rgba<u8> = im::Rgba{data: [0xFF, 0xFF, 0x80, 255]};
+const INK26:im::Rgba<u8> = im::Rgba{data: [0xFF, 0xFF, 0xFF, 255]};
+
+pub const INKS_VALUES:[im::Rgba<u8>; 27] = [
+	INK0,
+	INK1,
+	INK2,
+	INK3,
+	INK4,
+	INK5,
+	INK6,
+	INK7,
+	INK8,
+	INK9,
+	INK10,
+	INK11,
+	INK12,
+	INK13,
+	INK14,
+	INK15,
+	INK16,
+	INK17,
+	INK18,
+	INK19,
+	INK20,
+	INK21,
+	INK22,
+	INK23,
+	INK24,
+	INK25,
+	INK26
+];
+
+
+const NB_INKS: u8 = 27;
+const NB_PENS: u8 = 16 + 1;
+
+
+#[derive(Clone, Copy,Debug)]
+pub struct Ink {
+    value: u8
+}
+
+/// Two inks are equal only if they share the same number
+impl PartialEq for Ink {
+    fn eq(&self, other: &Ink) -> bool {
+        self.value == other.value
+    }
+}
+
+impl Ink {
+    pub fn color(&self) -> im::Rgba<u8> {
+        INKS_VALUES[self.value as usize]
+    }
+
+    pub fn number(&self) -> u8 {
+        return self.value;
+    }
+}
+
+impl From<im::Rgb<u8>> for Ink {
+    fn from(color: im::Rgb<u8>) -> Self {
+        let mut ink: Option<Ink> = None;
+
+        for (idx, color_ink) in INKS_VALUES.iter().enumerate() {
+            if color_ink[0] == color[0] && color_ink[1] == color[1] && color_ink[2] == color[2] {
+                ink = Some(Ink::from(idx as u8));
+            }
+        }
+        assert!(ink.is_some());
+        ink.unwrap()
+    }
+
+}
+
+impl From<u8> for Ink {
+    fn from(item: u8) -> Self {
+        Ink{value: item}
+    }
+}
+
+impl From<String> for Ink {
+    fn from(item: String) -> Self {
+        match item
+                .to_uppercase()
+                .replace(" ", "")
+                .replace("_", "")
+                .as_str() {
+            "BLACK" => Ink{value: 0},
+            "BLUE" => Ink{value: 1},
+            "BRIGHTBLUE" => Ink{value: 2},
+            "RED" => Ink{value: 3},
+            "MAGENTA" => Ink{value: 4},
+            "MAUVE" => Ink{value: 5},
+            "BRIGHTRED" => Ink{value: 6},
+            "PURPLE" => Ink{value: 7},
+            "BRIGHTMAGENTA" => Ink{value: 8},
+            "GREEN" => Ink{value: 9},
+            "CYAN" => Ink{value: 10},
+            "SKYBLUE" => Ink{value: 11},
+            "YELLOW" => Ink{value: 12},
+            "WHITE" => Ink{value: 13},
+            "PASTELBLUE" => Ink{value: 14},
+            "ORANGE" => Ink{value: 15},
+            "PINK" => Ink{value: 16},
+            "PASTELMAGENTA" => Ink{value: 17},
+            "BRIGHTGREEN" => Ink{value: 18},
+            "SEAGREEN" => Ink{value: 19},
+            "BRIGHTCYAN" => Ink{value: 20},
+            "LIME" => Ink{value: 21},
+            "PASTELGREEN" => Ink{value: 22},
+            "PASTELCYAN" => Ink{value: 23},
+            "BRIGHTYELLOW" => Ink{value: 24},
+            "PASTELYELLOW" => Ink{value: 25},
+            "BRIGHTWHITE" => Ink{value: 26},
+            _ => panic!("{} color does not exist", item)
+        
+        }
+    }
+}
+
+pub const INKS:[Ink; NB_INKS as usize] = [
+    Ink{value: 0},
+    Ink{value: 1},
+    Ink{value: 2},
+    Ink{value: 3},
+    Ink{value: 4},
+    Ink{value: 5},
+    Ink{value: 6},
+    Ink{value: 7},
+    Ink{value: 8},
+    Ink{value: 9},
+    Ink{value: 10},
+    Ink{value: 11},
+    Ink{value: 12},
+    Ink{value: 13},
+    Ink{value: 14},
+    Ink{value: 15},
+    Ink{value: 16},
+    Ink{value: 17},
+    Ink{value: 18},
+    Ink{value: 19},
+    Ink{value: 20},
+    Ink{value: 21},
+    Ink{value: 22},
+    Ink{value: 23},
+    Ink{value: 24},
+    Ink{value: 25},
+    Ink{value: 26},
+];
+
+#[derive(Eq,  PartialEq, Hash, Clone, Copy, Debug)]
+pub struct Pen {
+    value: u8
+}
+
+
+impl Pen{
+    pub fn number(&self) -> u8 {
+        return self.value;
+    }
+}
+
+impl From<u8> for Pen{
+    fn from(item: u8) -> Self {
+        Pen{value: item}
+    }
+}
+
+impl Add<i8> for Pen {
+    type Output = Pen;
+
+    fn add(self, delta: i8) -> Pen{
+        Pen{
+            value: (self.value as i8 + delta) as u8
+        }
+    }
+}
+
+
+
+pub const PENS:[Pen; NB_PENS as usize] = [
+    Pen{value: 0},
+    Pen{value: 1},
+    Pen{value: 2},
+    Pen{value: 3},
+    Pen{value: 4},
+    Pen{value: 5},
+    Pen{value: 6},
+    Pen{value: 7},
+    Pen{value: 8},
+    Pen{value: 9},
+    Pen{value: 10},
+    Pen{value: 11},
+    Pen{value: 12},
+    Pen{value: 13},
+    Pen{value: 14},
+    Pen{value: 15},
+    Pen{value: 16},
+];
+
+
+#[derive(Debug)]
+pub struct Palette {
+    values: HashMap<Pen, Ink>
+}
+
+
+impl Clone for Palette {
+    fn clone(&self) -> Self {
+        let mut map:HashMap<Pen, Ink> = HashMap::new();
+        for (pen, ink) in &self.values{
+            map.insert(pen.clone(), ink.clone());
+        }
+
+        Palette {
+            values: map
+        }
+    }
+}
+
+
+impl Default for Palette {
+    /// Create a new palette.
+    /// Pen colors are the same than Amsdos ones.
+    fn default() -> Palette {
+        let mut p = Palette::new();
+        for i in 0..15 {
+            p.set(&PENS[i], INKS[i]);
+        }
+        p
+    }
+}
+
+impl Palette {
+
+    /// Create a new palette.
+    /// All pens are black.
+    pub fn new() -> Palette {
+        let mut  map:HashMap<Pen, Ink> = HashMap::new();
+
+        for pen in 0..NB_PENS {
+            map.insert(Pen{value:pen}, Ink{value:0});
+        }
+
+        Palette {
+            values: map
+        }
+    }
+
+
+    /// Get the ink of the requested pen
+    pub fn get(&self, pen: &Pen) -> &Ink {
+        self.values.get(pen).expect("Wrong pen")
+    }
+
+    /// Change the ink of the specified pen
+    pub fn set(& mut self, pen: &Pen, ink: Ink) {
+        self.values.insert(pen.clone(), ink);
+    }
+
+
+    /// Get the pen that corresponds to the required ink.
+    /// Ink 16 (border) is never tested
+    pub fn get_pen_for_ink(&self, expected: &Ink) -> Option<Pen> {
+        let mut res = None;
+
+        for (pen, ink) in &self.values {
+            if ink == expected && pen.number() != 16 {
+                res = Some(pen.clone());
+                break;
+            }
+        }
+
+        res
+    }
+}

@@ -1,0 +1,16 @@
+[package]
+name = "cpc"
+version = "0.1.1"
+authors = ["Romain Giot <giot.romain@gmail.com"]
+
+[dependencies]
+image = "*"
+vecmath = "*"
+matches = "*"
+lazy_static= "*"
+memchr = "*"
+smallvec = "*"
+
+[dependencies.nom]
+version = "4.0.0-beta"
+#features = ["verbose-errors"]
