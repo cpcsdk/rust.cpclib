@@ -538,7 +538,7 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Token::Assert(ref expr)
-                => write!(f, "{}", expr),
+                => write!(f, "ASSERT {}", expr),
             &Token::Label(ref string)
                 => write!(f, "{}", string),
             &Token::Comment(ref string)

@@ -679,5 +679,15 @@ mod tests {
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
 
+        let code = " ASSERT 1 < 0x1000";
+        eprintln!("RES: {:?}", parse_z80_str(code));
+        let tokens = get_val(parse_z80_str(code));
+        assert_eq!(tokens.len(), 1);
+
+
+        let code = " ASSERT 1 < 0x10000";
+        eprintln!("RES: {:?}", parse_z80_str(code));
+        let tokens = get_val(parse_z80_str(code));
+        assert_eq!(tokens.len(), 1);
     }
 }
