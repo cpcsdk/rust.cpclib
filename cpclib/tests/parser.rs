@@ -651,8 +651,31 @@ mod tests {
 
 
     #[test]
+    fn boolean_test() {
+        assert_eq!(
+            expr(CompleteStr(" 0 == 1 ")).map(|(i, x)| (i, format!("{:?}", x))),
+            Ok((CompleteStr(""), String::from("0 == 1")))
+        )
+    }
+
+
+    #[test]
     fn include_test() {
         let code = ("  include \"file.asm\"");
+        let tokens = get_val(parse_z80_str(code));
+        assert_eq!(tokens.len(), 1);
+
+    }
+
+    #[test]
+    fn assert_test() {
+        let code = " ASSERT 1";
+        let tokens = get_val(parse_z80_str(code));
+        assert_eq!(tokens.len(), 1);
+
+
+        let code = " ASSERT 1 == 2";
+        eprintln!("RES: {:?}", parse_z80_str(code));
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
 

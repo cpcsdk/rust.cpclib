@@ -33,14 +33,25 @@ use assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,Bytes
 ///TODO add the ability to manipulate value of different symbol
 #[derive(PartialEq, Eq, Clone)]
 pub enum Expr {
+// types to manipulate
   Value(i32),
   Label(String),
+
+  // Arithmetic operations
   Add(Box<Expr>, Box<Expr>),
   Sub(Box<Expr>, Box<Expr>),
   Mul(Box<Expr>, Box<Expr>),
   Div(Box<Expr>, Box<Expr>),
   Mod(Box<Expr>, Box<Expr>),
-  Paren(Box<Expr>)
+
+  Paren(Box<Expr>),
+
+  // Boolean operations
+  Equal(Box<Expr>, Box<Expr>),
+  LowerOrEqual(Box<Expr>, Box<Expr>),
+  GreaterOrEqual(Box<Expr>, Box<Expr>),
+  StrictlyGreater(Box<Expr>, Box<Expr>),
+  StrictlyLower(Box<Expr>, Box<Expr>),
 }
 
 
@@ -69,6 +80,13 @@ impl Expr {
                         Oper::Mul => Ok(a*b),
                         Oper::Div => Ok(a/b),
                         Oper::Mod => Ok(a%b),
+
+                        Oper::Equal => Ok( (a == b) as i32),
+
+                        Oper::LowerOrEqual => Ok( (a <= b) as i32),
+                        Oper::StrictlyLower=> Ok( (a < b) as i32),
+                        Oper::GreaterOrEqual => Ok( (a >= b) as i32),
+                        Oper::StrictlyGreater=> Ok( (a > b) as i32),
                     }
                 },
                 (Err(a), Ok(b))  => Err(format!("Unable to make the operation {:?}: {}", oper, a)),
@@ -97,6 +115,13 @@ impl Expr {
             Div(ref left, ref right) => oper(left, right, Oper::Div),
             Mod(ref left, ref right) => oper(left, right, Oper::Mod),
 
+
+            Equal(ref left, ref right) => oper(left, right, Oper::Equal),
+            LowerOrEqual(ref left, ref right) => oper(left, right, Oper::LowerOrEqual),
+            GreaterOrEqual(ref left, ref right) => oper(left, right, Oper::GreaterOrEqual),
+            StrictlyGreater(ref left, ref right) => oper(left, right, Oper::StrictlyGreater),
+            StrictlyLower(ref left, ref right) => oper(left, right, Oper::StrictlyLower),
+
             Paren(ref e) => e.resolve(sym),
 
             _ => Err(String::from("Need to implement the operation"))
@@ -124,7 +149,13 @@ pub enum Oper {
   Sub,
   Mul,
   Div,
-  Mod
+  Mod,
+
+  Equal,
+  LowerOrEqual,
+  GreaterOrEqual,
+  StrictlyGreater,
+  StrictlyLower,
 }
 
 impl Display for Expr {
@@ -133,12 +164,21 @@ impl Display for Expr {
     match *self {
       Value(val) => write!(format, "0x{:x}", val),
       Label(ref label) => write!(format, "{}", label),
+
       Add(ref left, ref right) => write!(format, "{} + {}", left, right),
       Sub(ref left, ref right) => write!(format, "{} - {}", left, right),
       Mul(ref left, ref right) => write!(format, "{} * {}", left, right),
       Mod(ref left, ref right) => write!(format, "{} % {}", left, right),
       Div(ref left, ref right) => write!(format, "{} / {}", left, right),
+
       Paren(ref expr) => write!(format, "({})", expr),
+
+
+      Equal(ref left, ref right) => write!(format, "{} == {}", left, right),
+      GreaterOrEqual(ref left, ref right) => write!(format, "{} >= {}", left, right),
+      StrictlyGreater(ref left, ref right) => write!(format, "{} > {}", left, right),
+      StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
+      LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
     }
   }
 }
@@ -149,12 +189,22 @@ impl Debug for Expr {
     match *self {
       Value(val) => write!(format, "{}", val),
       Label(ref label) => write!(format, "{}", label),
+
       Add(ref left, ref right) => write!(format, "({:?} + {:?})", left, right),
       Sub(ref left, ref right) => write!(format, "({:?} - {:?})", left, right),
       Mul(ref left, ref right) => write!(format, "({:?} * {:?})", left, right),
       Mod(ref left, ref right) => write!(format, "({:?} % {:?})", left, right),
       Div(ref left, ref right) => write!(format, "({:?} / {:?})", left, right),
+
       Paren(ref expr) => write!(format, "[{:?}]", expr),
+
+
+      Equal(ref left, ref right) => write!(format, "{:?} == {:?}", left, right),
+      GreaterOrEqual(ref left, ref right) => write!(format, "{:?} >= {:?}", left, right),
+      StrictlyGreater(ref left, ref right) => write!(format, "{:?} > {:?}", left, right),
+      StrictlyLower(ref left, ref right) => write!(format, "{:?} < {:?}", left, right),
+      LowerOrEqual(ref left, ref right) => write!(format, "{:?} <= {:?}", left, right),
+
     }
   }
 }
@@ -473,13 +523,13 @@ pub enum Token {
 
     OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>),
 
-    Org(Expr),
+    Assert(Expr),
     Defs(Expr),
     Db(Expr),
     Dw(Expr),
     Equ(String, Expr),
-
-    Include(String)
+    Include(String),
+    Org(Expr),
 }
 
 
@@ -487,6 +537,8 @@ pub enum Token {
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &Token::Assert(ref expr)
+                => write!(f, "{}", expr),
             &Token::Label(ref string)
                 => write!(f, "{}", string),
             &Token::Comment(ref string)

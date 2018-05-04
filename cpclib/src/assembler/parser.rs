@@ -11,11 +11,10 @@ use std::io::prelude::*;
     use std::iter;
 
 
-
-
-pub mod error_code {
-    pub const INVALID_ARGUMENT:u32  = 1000;
-}
+    pub mod error_code {
+        pub const ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION:u32 = 128;
+        pub const INVALID_ARGUMENT:u32 = 129;
+    }
 
 #[derive(Copy, Clone)]
 pub struct ParserContext {
@@ -248,6 +247,7 @@ named!(
 named!(
     parse_directive <CompleteStr, Token>,
         alt_complete!(
+            parse_assert |
             parse_org |
             parse_defs |
             parse_include |
@@ -320,6 +320,21 @@ named!(
         }
     })
   )
+);
+
+
+named!(
+    pub parse_assert <CompleteStr, Token>, do_parse!(
+        tag_no_case!("ASSERT") >>
+        many1!(space) >>
+        expr: return_error!(
+            ErrorKind::Custom(error_code::ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION),
+            expr
+        ) >>
+        (
+            Token::Assert(expr)
+        )
+    )
 );
 
 
@@ -694,6 +709,12 @@ fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
       Oper::Mul => Expr::Mul(Box::new(acc), Box::new(expr)),
       Oper::Div => Expr::Div(Box::new(acc), Box::new(expr)),
       Oper::Mod => Expr::Mod(Box::new(acc), Box::new(expr)),
+
+      Oper::Equal => Expr::Equal(Box::new(acc), Box::new(expr)),
+      Oper::StrictlyGreater => Expr::StrictlyGreater(Box::new(acc), Box::new(expr)),
+      Oper::StrictlyLower => Expr::StrictlyLower(Box::new(acc), Box::new(expr)),
+      Oper::LowerOrEqual => Expr::LowerOrEqual(Box::new(acc), Box::new(expr)),
+      Oper::GreaterOrEqual => Expr::GreaterOrEqual(Box::new(acc), Box::new(expr)),
     }
   })
 }
@@ -711,6 +732,21 @@ named!(pub term< CompleteStr, Expr >, do_parse!(
 ));
 
 named!(pub expr< CompleteStr, Expr >, do_parse!(
+    initial: comp >>
+    remainder: many0!(
+        alt_complete!(
+            do_parse!(tag!("<=") >> le: comp >> (Oper::LowerOrEqual, le) ) |
+            do_parse!(tag!(">=") >> ge: comp >> (Oper::GreaterOrEqual, ge) ) |
+            do_parse!(tag!("<") >> lt: comp >> (Oper::StrictlyLower, lt) ) |
+            do_parse!(tag!(">") >> gt: comp >> (Oper::StrictlyGreater, gt) ) |
+            do_parse!(tag!("==") >> eq: comp >> (Oper::Equal , eq) )  // TODO should be done even one step before
+        )
+    ) >>
+    (fold_exprs(initial, remainder))
+ )
+);
+
+named!(pub comp<CompleteStr, Expr>, do_parse!(
     initial: term >>
     remainder: many0!(
            alt_complete!(
@@ -719,7 +755,8 @@ named!(pub expr< CompleteStr, Expr >, do_parse!(
            )
          ) >>
     (fold_exprs(initial, remainder))
-));
+    )
+);
 
 
 
