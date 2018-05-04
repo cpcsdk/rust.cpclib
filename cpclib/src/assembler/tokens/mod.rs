@@ -470,12 +470,16 @@ impl fmt::Display for Mnemonic {
 pub enum Token {
     Label(String),
     Comment(String),
+
     OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>),
+
     Org(Expr),
     Defs(Expr),
     Db(Expr),
     Dw(Expr),
-    Equ(String, Expr)
+    Equ(String, Expr),
+
+    Include(String)
 }
 
 
@@ -504,7 +508,9 @@ impl fmt::Display for Token {
             &Token::Dw(ref expr)
                 => write!(f, "DW {}", expr),
             &Token::Equ(ref name, ref expr)
-                => write!(f, "{} EQU {}", name, expr)
+                => write!(f, "{} EQU {}", name, expr),
+            &Token::Include(ref fname)
+                => write!(f, "INCLUDE \"{}\"", fname)
 
         }
     }

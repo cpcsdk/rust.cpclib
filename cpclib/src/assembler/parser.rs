@@ -125,7 +125,7 @@ named!(
         label: opt!(parse_label) >>
        // opt!(char!(':')) >> // XXX need to move that
         space1 >>
-        opcode: parse_token >>
+        opcode: alt!(parse_token | parse_directive) >>
         additional_opcodes: fold_many0!(
                 do_parse!(
                     space0 >>
@@ -134,7 +134,7 @@ named!(
    //                     delimited!(many0!(space), tag!("\n"), many1!(space))
      //               ) >>
                     space0 >>
-                    inner_opcode: parse_token >>
+                    inner_opcode: alt!(parse_token | parse_directive) >>
                     (inner_opcode)
                 ),
                 Vec::new(),
@@ -174,6 +174,9 @@ named!(
        pub parse_z80_line_label_only <CompleteStr, Vec<Token>>, do_parse!(
         opt!(line_ending) >>
             label: parse_label >>
+
+            // TODO make these stuff alternatives ...
+            // Manage Equ
             equ: opt!(
                 preceded!(
                     preceded!(
@@ -185,7 +188,9 @@ named!(
                             expr
                             )
                         )
-            ) >>
+            )
+            >>
+
            // opt!(char!(':')) >>
             space0 >>
             comment: opt!(comment) >>
@@ -209,13 +214,25 @@ named!(
         );
 
 
+named!(
+    parse_include <CompleteStr, Token>, do_parse!(
+        tag_no_case!("INCLUDE") >>
+        many1!(space) >>
+        fname: delimited!(
+            tag!("\""),
+            parse_label, // TODO really write file stuff
+            tag!("\"")
+        ) >>
+        (
+            Token::Include(fname)
+        )
+    )
+);
+
 
 named!(
-    parse_token <CompleteStr, Token>, do_parse!(
-        opcode: alt_complete!(
-            parse_org |
-            parse_defs |
-            parse_db_or_dw |
+    parse_token <CompleteStr, Token>,
+        alt_complete!(
             parse_ld |
             parse_inc_dec |
             parse_jp_or_jr |
@@ -223,10 +240,20 @@ named!(
             parse_push_n_pop |
             parse_res_set |
             parse_ret
-            )
-         >>
-        (opcode)
         )
+
+    );
+
+
+named!(
+    parse_directive <CompleteStr, Token>,
+        alt_complete!(
+            parse_org |
+            parse_defs |
+            parse_include |
+            parse_db_or_dw
+        )
+
     );
 
 

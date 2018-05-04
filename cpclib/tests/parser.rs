@@ -648,4 +648,13 @@ mod tests {
 
 
     }
+
+
+    #[test]
+    fn include_test() {
+        let code = ("  include \"file.asm\"");
+        let tokens = get_val(parse_z80_str(code));
+        assert_eq!(tokens.len(), 1);
+
+    }
 }
