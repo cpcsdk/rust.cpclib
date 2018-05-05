@@ -530,6 +530,8 @@ pub enum Token {
     Equ(String, Expr),
     Include(String),
     Org(Expr),
+
+    MacroCall(String) // TODO add parameters
 }
 
 
@@ -562,7 +564,9 @@ impl fmt::Display for Token {
             &Token::Equ(ref name, ref expr)
                 => write!(f, "{} EQU {}", name, expr),
             &Token::Include(ref fname)
-                => write!(f, "INCLUDE \"{}\"", fname)
+                => write!(f, "INCLUDE \"{}\"", fname),
+            &Token::MacroCall(ref name)
+                => write!(f, "{}", name)
 
         }
     }
