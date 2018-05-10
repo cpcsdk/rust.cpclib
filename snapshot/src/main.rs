@@ -695,7 +695,7 @@ fn main() {
     // Display all tokens
     if matches.is_present("flags") {
         for flag in SnapshotFlag::enumerate().into_iter() {
-            println!("{:?} / {:?} bytes.{}", flag.offset(), flag.elem_size(), flag.comment());
+            println!("{:?} / {:?} bytes.{}", flag, flag.elem_size(), flag.comment());
         }
         return;
     }
@@ -741,7 +741,16 @@ fn main() {
             else {
                 (token, None)
             };
-            let value = loads[i*2+1].parse::<u16>().expect("Unable to read the value");
+            let value = {
+                let source =loads[i*2+1];
+                let error =format!("Unable to read the value: {}", source);
+                if source.starts_with("0x") {
+                    u16::from_str_radix(&source[2..], 16).expect(&error)
+                }
+                else {
+                    source.parse::<u16>().expect(&error)
+                }
+            };
 
             // Get the token
             let token = SnapshotFlag::from_str(token).unwrap();
