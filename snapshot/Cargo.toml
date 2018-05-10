@@ -1,0 +1,8 @@
+[package]
+name = "snapshot"
+version = "0.1.0"
+authors = ["Krusty/Benediction"]
+
+[dependencies]
+clap = "*"
+cpc = { path = "../cpclib" }
