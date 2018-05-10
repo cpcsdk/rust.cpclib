@@ -146,8 +146,14 @@ impl From<String> for Ink {
             "PASTELYELLOW" => Ink{value: 25},
             "BRIGHTWHITE" => Ink{value: 26},
             _ => panic!("{} color does not exist", item)
-        
         }
+    }
+}
+
+
+impl<'a> From<&'a str> for Ink {
+    fn from(item: &'a str) -> Self {
+        Ink::from(String::from(item))
     }
 }
 
@@ -262,6 +268,26 @@ impl Default for Palette {
         }
         p
     }
+}
+
+
+/// Create a palette with the right inks
+/// Usage
+/// `palette![1, 2, 3]`
+#[macro_export]
+macro_rules! palette {
+    ( $( $x:expr ),* ) => {
+        {
+            use cpc::ga::{Palette, Pen, Ink};
+            let mut palette = Palette::default();
+            let mut idx = 0;
+            $(
+                palette.set(&Pen::from(idx), Ink::from($x));
+                idx += 1;
+            )*
+            palette
+        }
+    };
 }
 
 impl Palette {
