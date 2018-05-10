@@ -3,7 +3,7 @@ extern crate image as im;
 
 use std::collections::HashMap;
 use std::ops::Add;
-
+use std::fmt::{Formatter, Debug, Result} ;
 
 const INK0:im::Rgba<u8> = im::Rgba{data:[0, 0, 0, 255]};
 const INK1:im::Rgba<u8> = im::Rgba{data: [0x00, 0x00, 0x80, 255]};
@@ -68,7 +68,7 @@ const NB_INKS: u8 = 27;
 const NB_PENS: u8 = 16 + 1;
 
 
-#[derive(Clone, Copy,Debug)]
+#[derive(Clone, Copy)]
 pub struct Ink {
     value: u8
 }
@@ -150,6 +150,43 @@ impl From<String> for Ink {
     }
 }
 
+
+impl Debug for Ink {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let repr = match self.value {
+            0=> "BLACK" ,
+            1=> "BLUE" ,
+            2=> "BRIGHTBLUE" ,
+            3=> "RED" ,
+            4=> "MAGENTA" ,
+            5=> "MAUVE" ,
+            6=> "BRIGHTRED" ,
+            7=> "PURPLE" ,
+            8=> "BRIGHTMAGENTA" ,
+            9=> "GREEN" ,
+            10=> "CYAN" ,
+            11=> "SKYBLUE" ,
+            12=> "YELLOW" ,
+            13=> "WHITE" ,
+            14=> "PASTELBLUE" ,
+            15=> "ORANGE" ,
+            16=> "PINK" ,
+            17=> "PASTELMAGENTA" ,
+            18=> "BRIGHTGREEN" ,
+            19=> "SEAGREEN" ,
+            20=> "BRIGHTCYAN" ,
+            21=> "LIME" ,
+            22=> "PASTELGREEN" ,
+            23=> "PASTELCYAN" ,
+            24=> "BRIGHTYELLOW" ,
+            25=> "PASTELYELLOW" ,
+            26=> "BRIGHTWHITE" ,
+            _ => panic!()
+        };
+
+        write!(f, "{} ({})", repr, self.value)
+    }
+}
 
 impl<'a> From<&'a str> for Ink {
     fn from(item: &'a str) -> Self {
@@ -238,7 +275,6 @@ pub const PENS:[Pen; NB_PENS as usize] = [
 ];
 
 
-#[derive(Debug)]
 pub struct Palette {
     values: HashMap<Pen, Ink>
 }
@@ -257,6 +293,15 @@ impl Clone for Palette {
     }
 }
 
+
+impl Debug for Palette{
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        for i in 0..16 {
+            write!(f, "{} => {:?}\n", i, self.values.get(&Pen::from(i)).unwrap());
+        }
+        Ok(())
+    }
+}
 
 impl Default for Palette {
     /// Create a new palette.
@@ -285,6 +330,11 @@ macro_rules! palette {
                 palette.set(&Pen::from(idx), Ink::from($x));
                 idx += 1;
             )*
+
+            // Ensure the other inks are black
+            for i in idx..15 {
+                palette.set(&Pen::from(i), Ink::from(0));
+            }
             palette
         }
     };
@@ -323,9 +373,11 @@ impl Palette {
     pub fn get_pen_for_ink(&self, expected: &Ink) -> Option<Pen> {
         let mut res = None;
 
-        for (pen, ink) in &self.values {
-            if ink == expected && pen.number() != 16 {
-                res = Some(pen.clone());
+        for i in 0..16 {
+            let pen = Pen::from(i);
+            let ink = self.values.get(&pen).unwrap();
+            if ink == expected && i != 16 {
+                res = Some(pen);
                 break;
             }
         }

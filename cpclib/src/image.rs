@@ -145,7 +145,6 @@ impl Sprite {
                 line.push(dest_pen);
 
             }
-
             // Add the current complete line to the current image
             lines.push(line);
         }

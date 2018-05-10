@@ -220,7 +220,7 @@ pub mod mode0 {
 
         let pen_bit0 : u8 = (pen.number() & (1 << 0)) >> 0;
         let pen_bit1 : u8 = (pen.number() & (1 << 1)) >> 1;
-        let pen_bit2 : u8 = (pen.number() & (1 << 2)) >> 3;
+        let pen_bit2 : u8 = (pen.number() & (1 << 2)) >> 2;
         let pen_bit3 : u8 = (pen.number() & (1 << 3)) >> 3;
 
         let byte =
