@@ -18,6 +18,7 @@ mod tests {
         let mut env = Env::default();
 
         visit_token(&Token::Org(Expr::Value(10)), &mut env);
+        visit_token(&Token::Db(vec![Expr::Value(10), Expr::Value(5)]), &mut env);
         visit_token(&Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::A)), Some(DataAccess::Register8(Register8::L))), &mut env);
     }
 

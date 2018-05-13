@@ -236,20 +236,22 @@ fn visit_db_or_dw(token: &Token, env: &mut Env) {
 pub fn assemble_db_or_dw(token: &Token, sym: &SymbolsTable) -> Result<Bytes, String> {
     let mut bytes = Bytes::new();
 
-    let (ref expr, mask) = {
+    let (ref exprs, mask) = {
         match token {
-            &Token::Db(ref expr) => (expr, 0xff),
-            &Token::Dw(ref expr) => (expr, 0xffff),
+            &Token::Db(ref exprs) => (exprs, 0xff),
+            &Token::Dw(ref exprs) => (exprs, 0xffff),
             _ => panic!("impossible case")
         }
     };
 
-    let val = expr.resolve(sym).unwrap() & mask;
-    if mask == 0xff {
-        add_byte(&mut bytes, val as u8);
-    }
-    else {
-        add_word(&mut bytes, val as u16);
+    for expr in exprs.iter() {
+        let val = expr.resolve(sym).unwrap() & mask;
+        if mask == 0xff {
+            add_byte(&mut bytes, val as u8);
+        }
+        else {
+            add_word(&mut bytes, val as u16);
+        }
     }
 
     Ok(bytes)

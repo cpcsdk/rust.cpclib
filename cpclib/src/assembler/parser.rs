@@ -310,7 +310,7 @@ named!(
         tag_no_case!("DW") => {|_| {false}}
     ) >>
     many1!(space) >>
-    expr: expr >>
+    expr: expr_list >>
     ({
         if is_db {
             Token::Db(expr)
@@ -322,6 +322,14 @@ named!(
   )
 );
 
+
+named!(
+    pub expr_list <CompleteStr, Vec<Expr>>,
+        separated_nonempty_list!(
+            do_parse!(tag!(",") >> many0!(space) >> ()),
+            expr
+            )
+    );
 
 named!(
     pub parse_assert <CompleteStr, Token>, do_parse!(

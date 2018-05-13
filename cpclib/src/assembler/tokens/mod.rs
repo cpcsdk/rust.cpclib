@@ -525,8 +525,8 @@ pub enum Token {
 
     Assert(Expr),
     Defs(Expr),
-    Db(Expr),
-    Dw(Expr),
+    Db(Vec<Expr>),
+    Dw(Vec<Expr>),
     Equ(String, Expr),
     Include(String),
     Org(Expr),
@@ -538,6 +538,15 @@ pub enum Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+
+        let expr_list_to_string= |exprs: &Vec<Expr>| {
+            exprs
+                .iter()
+                .map(|expr|{ format!("{}", expr)})
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+
         match self {
             &Token::Assert(ref expr)
                 => write!(f, "ASSERT {}", expr),
@@ -557,10 +566,10 @@ impl fmt::Display for Token {
                 => write!(f, "ORG {}", expr),
             &Token::Defs(ref expr)
                 => write!(f, "DEFS {}", expr),
-            &Token::Db(ref expr)
-                => write!(f, "DB {}", expr),
-            &Token::Dw(ref expr)
-                => write!(f, "DW {}", expr),
+            &Token::Db(ref exprs)
+                => write!(f, "DB {}", expr_list_to_string(exprs)),
+            &Token::Dw(ref exprs)
+                => write!(f, "DW {}", expr_list_to_string(exprs)),
             &Token::Equ(ref name, ref expr)
                 => write!(f, "{} EQU {}", name, expr),
             &Token::Include(ref fname)
