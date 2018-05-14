@@ -11,6 +11,11 @@ pub fn push_de() -> Token {
 }
 
 
+pub fn breakpoint_winape() -> Token {
+    Token::Db(vec![Expr::Value(0xed), Expr::Value(0xff)])
+}
+
+
 
 
 

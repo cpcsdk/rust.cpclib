@@ -209,7 +209,7 @@ impl Debug for Expr {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub enum Register16 {
     Af,
     Hl,
@@ -249,7 +249,7 @@ impl fmt::Display for IndexedRegister16 {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
 pub enum Register8 {
     A,
     B,
@@ -468,6 +468,14 @@ impl DataAccess {
         match self {
             &DataAccess::Register16(ref reg) => Some(reg.clone()),
             &DataAccess::MemoryRegister16(ref reg) => Some(reg.clone()),
+            _ => None
+        }
+    }
+
+
+    pub fn get_register8(&self) -> Option<Register8> {
+        match self {
+            &DataAccess::Register8(ref reg) => Some(reg.clone()),
             _ => None
         }
     }
@@ -762,7 +770,7 @@ impl Token {
 
 
 /// A listing is simply a list of token
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Listing {
     /// Ordered list of the tokens
     listing: Vec<Token>,
