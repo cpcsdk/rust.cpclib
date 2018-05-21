@@ -191,7 +191,7 @@ impl ColorMatrix {
         // Set the error positions
         for x in 0..(self.width() as usize) {
             for y in 0..(self.height() as usize) {
-                if self.data[y][x] == other.data[y][x] {
+                if self.data[y][x] != other.data[y][x] {
                     data[y][x] = Ink::from(0);
                 }
             }

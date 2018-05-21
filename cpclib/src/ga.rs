@@ -1,6 +1,7 @@
 
 extern crate image as im;
 
+use self::im::Pixel;
 use std::collections::HashMap;
 use std::ops::Add;
 use std::fmt::{Formatter, Debug, Result} ;
@@ -90,6 +91,14 @@ impl Ink {
     }
 }
 
+
+impl From<im::Rgba<u8>> for Ink{
+    
+    fn from(color: im::Rgba<u8>) -> Self {
+        Ink::from(color.to_rgb())
+    }
+}
+
 impl From<im::Rgb<u8>> for Ink {
     fn from(color: im::Rgb<u8>) -> Self {
         let mut ink: Option<Ink> = None;
@@ -103,7 +112,7 @@ impl From<im::Rgb<u8>> for Ink {
         let mut selected_idx = 0;
         let mut smallest = distances[0];
         for idx in 1..distances.len() {
-            if smallest < distances[idx] {
+            if smallest > distances[idx] {
                 smallest = distances[idx];
                 selected_idx = idx;
             }
@@ -415,5 +424,18 @@ impl Palette {
         }
 
         res
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use ga;
+
+    #[test]
+    fn test_ink() {
+            assert_eq!(ga::Ink::from(ga::INK0), ga::Ink::from(0));
+    
     }
 }
