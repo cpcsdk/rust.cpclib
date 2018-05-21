@@ -68,7 +68,7 @@ const NB_INKS: u8 = 27;
 const NB_PENS: u8 = 16 + 1;
 
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Ord, PartialOrd, Eq)]
 pub struct Ink {
     value: u8
 }
@@ -94,6 +94,24 @@ impl From<im::Rgb<u8>> for Ink {
     fn from(color: im::Rgb<u8>) -> Self {
         let mut ink: Option<Ink> = None;
 
+        // Not strict comparison
+        let distances = INKS_VALUES.into_iter().map(|color_ink|{
+              (color_ink[0] as i32 - color[0] as i32).pow(2)
+            + (color_ink[1] as i32 - color[1] as i32).pow(2)
+            + (color_ink[2] as i32 - color[2] as i32).pow(2)
+        }).collect::<Vec<_>>();
+        let mut selected_idx = 0;
+        let mut smallest = distances[0];
+        for idx in 1..distances.len() {
+            if smallest < distances[idx] {
+                smallest = distances[idx];
+                selected_idx = idx;
+            }
+        }
+        Ink::from(selected_idx as u8)
+
+        /*
+         //Strict comparison
         for (idx, color_ink) in INKS_VALUES.iter().enumerate() {
             if color_ink[0] == color[0] && color_ink[1] == color[1] && color_ink[2] == color[2] {
                 ink = Some(Ink::from(idx as u8));
@@ -101,6 +119,7 @@ impl From<im::Rgb<u8>> for Ink {
         }
         assert!(ink.is_some());
         ink.unwrap()
+        */
     }
 
 }
@@ -239,6 +258,19 @@ impl Pen{
 impl From<u8> for Pen{
     fn from(item: u8) -> Self {
         Pen{value: item}
+    }
+}
+
+impl From<usize> for Pen{
+    fn from(item: usize) -> Self {
+        Pen{value: item as u8}
+    }
+}
+
+
+impl From<i32> for Pen{
+    fn from(item: i32) -> Self {
+        Pen{value: item as u8}
     }
 }
 
