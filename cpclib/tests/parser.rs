@@ -520,6 +520,13 @@ mod tests {
     }
 
     #[test]
+    fn test_out() {
+        let line1 = CompleteStr(" OUT (C), D");
+        let tokens = get_val(parse_z80_line(line1));
+        assert_eq!(tokens.len(), 1);
+    }
+
+    #[test]
     fn fn_test_asm_prog1() {
 
         let code = ("  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $");

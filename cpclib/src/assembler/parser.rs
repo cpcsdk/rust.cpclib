@@ -234,6 +234,7 @@ named!(
         alt_complete!(
             parse_ld |
             parse_inc_dec |
+            parse_out |
             parse_jp_or_jr |
             parse_opcode_no_arg |
             parse_push_n_pop |
@@ -384,6 +385,32 @@ named!(
         )
         )
     );
+
+
+
+named!(// TODO manage other out formats
+    pub parse_out<CompleteStr, Token>, do_parse!(
+        tag_no_case!("OUT") >>
+
+        many1!(space) >>
+
+        tag!("(") >>
+        many0!(space) >>
+        tag!("C") >>
+        many0!(space) >>
+        tag!(")") >>
+
+        many0!(space) >>
+        tag!(",") >>
+        many0!(space) >>
+
+        reg : parse_register8 >>
+        (
+            Token::OpCode(Mnemonic::Out, Some(reg), None)
+        )
+
+    )
+);
 
 named!(
     parse_jp_or_jr <CompleteStr, Token>, do_parse!(
