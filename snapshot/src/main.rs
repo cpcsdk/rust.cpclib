@@ -666,7 +666,7 @@ impl Snapshot {
 
     /// Change a memory value
     pub fn set_memory(&mut self, address: u32, value: u8) {
-        assert!(address < 0x2000);
+        assert!(address < 0x20000);
         let address = address as usize;
 
         self.memory[address] = value;
