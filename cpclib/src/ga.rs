@@ -5,6 +5,7 @@ use self::im::Pixel;
 use std::collections::HashMap;
 use std::ops::Add;
 use std::fmt::{Formatter, Debug, Result} ;
+use std::hash::Hash;
 
 const INK0:im::Rgba<u8> = im::Rgba{data:[0, 0, 0, 255]};
 const INK1:im::Rgba<u8> = im::Rgba{data: [0x00, 0x00, 0x80, 255]};
@@ -69,7 +70,7 @@ const NB_INKS: u8 = 27;
 const NB_PENS: u8 = 16 + 1;
 
 
-#[derive(Clone, Copy, Ord, PartialOrd, Eq)]
+#[derive(Clone, Copy, Ord, PartialOrd, Eq, Hash)]
 pub struct Ink {
     value: u8
 }

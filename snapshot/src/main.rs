@@ -3,6 +3,8 @@ use std::io;
 use std::io::prelude::*;
 use std::fs::File;
 use std::str::FromStr;
+use std::path::Path;
+use std::io::BufReader;
 
 extern crate clap;
 use clap::{Arg, App, SubCommand};
@@ -37,7 +39,18 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 */
 
 
-
+/**
+ * Convert a string to its unsigned 32 bits representation (to access to extra memory)
+ */
+fn string_to_nb(source: &str) -> u32 {
+    let error =format!("Unable to read the value: {}", source);
+    if source.starts_with("0x") {
+        u32::from_str_radix(&source[2..], 16).expect(&error)
+    }
+    else {
+        source.parse::<u32>().expect(&error)
+    }
+}
 
 
 /// Encode a flag of the snaphot
@@ -114,6 +127,9 @@ enum SnapshotFlag {
 }
 
 impl SnapshotFlag {
+
+
+    
 
 
     pub fn enumerate() -> [SnapshotFlag;67] {
@@ -589,6 +605,19 @@ impl Default for Snapshot {
 
 impl Snapshot {
 
+    pub fn load(filename: &Path) -> Snapshot {
+        let mut sna = Snapshot::default();
+
+        let mut f = File::open(filename).expect("file not found");
+
+        f.read_exact(&mut sna.header);
+        f.read_exact(&mut sna.memory);
+
+        // TODO manage chuncks
+        sna
+    }
+
+
     /// Save the snapshot on disc
     pub fn save_sna(&self, fname:&str) -> Result<(), std::io::Error>{
         let mut buffer = File::create(fname)?;
@@ -635,6 +664,14 @@ impl Snapshot {
         }
     }
 
+    /// Change a memory value
+    pub fn set_memory(&mut self, address: u32, value: u8) {
+        assert!(address < 0x2000);
+        let address = address as usize;
+
+        self.memory[address] = value;
+    }
+
     /// Change the value of a flag
     pub fn set_value(&mut self, flag: SnapshotFlag, value: u16) -> Result<(), SnapshotError>{
         let offset = flag.offset();
@@ -672,6 +709,14 @@ fn main() {
                                .conflicts_with("flags")
                                .last(true)
                                .required(true))
+                          .arg(Arg::with_name("inSnapshot")
+                               .takes_value(true)
+                               .short("i")
+                               .value_name("INFILE")
+                               .multiple(false)
+                               .number_of_values(1)
+                               .help("Load <INFILE> snapshot file")
+                               )
                           .arg(Arg::with_name("load")
                                .takes_value(true)
                                .short("l")
@@ -684,6 +729,14 @@ fn main() {
                                .multiple(true)
                                .number_of_values(2)
                                .help("Set snapshot token <$1> to value <$2>\nUse <$1>:<val> to set array value\n\t\tex '-s CRTC_REG:6 20' : Set CRTC register 6 to 20"))
+                          .arg(Arg::with_name("putData")
+                               .takes_value(true)
+                               .short("p")
+                               .multiple(true)
+                               .number_of_values(2)
+                               .help("Put <$2> byte at <$1> address in snapshot memory")
+
+                            )
                           .arg(Arg::with_name("flags")
                                 .help("List the flags and exit")
                                .long("flags"))
@@ -700,8 +753,17 @@ fn main() {
         return;
     }
 
+    let mut sna = if matches.is_present("inSnapshot"){
+        let fname = matches.value_of("inSnapshot").unwrap();
+        let path = Path::new(&fname);
+        Snapshot::load(path)
+    }
+    else {
+        Snapshot::default()
+    };
+
+
     let fname = matches.value_of("OUTPUT").unwrap();
-    let mut sna = Snapshot::default();
 
     // Manage the files insertion
     if matches.is_present("load") {
@@ -727,6 +789,19 @@ fn main() {
 
 
 
+    // Patch memory
+    if matches.is_present("putData") {
+        let data = matches.values_of("putData").unwrap().collect::<Vec<_>>();
+
+        for i in 0..(data.len()/2) {
+            let address = string_to_nb(data[i*2+0]);
+            let value = string_to_nb(data[i*2+1]);
+            assert!(value < 0x100);
+
+            sna.set_memory(address, value as u8);
+        }
+    }
+
     // Set the tokens
     if matches.is_present("setToken") {
         let loads = matches.values_of("setToken").unwrap().collect::<Vec<_>>();
@@ -743,18 +818,12 @@ fn main() {
             };
             let value = {
                 let source =loads[i*2+1];
-                let error =format!("Unable to read the value: {}", source);
-                if source.starts_with("0x") {
-                    u16::from_str_radix(&source[2..], 16).expect(&error)
-                }
-                else {
-                    source.parse::<u16>().expect(&error)
-                }
+                string_to_nb(source)
             };
 
             // Get the token
             let token = SnapshotFlag::from_str(token).unwrap();
-            sna.set_value(token, value);
+            sna.set_value(token, value as u16);
         }
     }
 
