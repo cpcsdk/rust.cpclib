@@ -634,23 +634,44 @@ impl Token {
         }
     }
 
-    /// Return the number of bytes of the token
-    pub fn number_of_bytes(&self) -> Result<usize, &str> {
-        let bytes = self.to_bytes();
-        if bytes.is_ok() {
-            Ok(bytes.ok().unwrap().len())
-        }
-        else {
-            eprintln!("{:?}", bytes);
-            Err("Unable to get the bytes of this token")
+
+
+    /// Dummy version that assemble without taking into account the context
+    /// TODO find a way to not build a symbol table each time
+    pub fn to_bytes(&self) -> Result<Bytes, String> {
+        let table = &SymbolsTable::laxist();
+
+        match self {
+            &Token::OpCode(ref mnemonic, ref arg1, ref arg2)
+                => assemble_opcode(mnemonic, arg1, arg2, table),
+            &Token::Dw(_) | &Token::Db(_)
+                => assemble_db_or_dw(self, table),
+            &Token::Label(_) | &Token::Comment(_)
+                => Ok(Bytes::new()),
+            &Token::Defs(ref expr)
+                =>assemble_defs(expr, table),
+            _
+                => Err(String::from("Currently unable to generate bytes. Need to code that"))
         }
     }
+}
 
+/// The ListingElement trati contains the public method any memeber of a listing should contain
+pub trait ListingElement {
+    /// Estimate the duration of the token
+    fn estimated_duration(&self) -> usize;
+
+    /// Return the number of bytes of the token
+    fn number_of_bytes(&self) -> Result<usize, &str>;
+}
+
+
+impl ListingElement for Token {
     /// Returns an estimation of the duration.
     /// This estimation may be wrong for instruction having several states.
     /// Current version is dumbly simplified : we consider the duration is equal to the size of the
     /// instruction. This is flase of course.
-    pub fn estimated_duration(&self) -> usize {
+    fn estimated_duration(&self) -> usize {
         match self {
             &Token::Comment(_) | &Token::Label(_) => 0,
             &Token::Defs(ref expr) => expr.eval().ok().unwrap() as usize, // XXX will not work when variables are used
@@ -745,40 +766,37 @@ impl Token {
 
 
 
-}
-
-
-impl Token {
-
-    /// Dummy version that assemble without taking into account the context
-    /// TODO find a way to not build a symbol table each time
-    pub fn to_bytes(&self) -> Result<Bytes, String> {
-        let table = &SymbolsTable::laxist();
-
-        match self {
-            &Token::OpCode(ref mnemonic, ref arg1, ref arg2)
-                => assemble_opcode(mnemonic, arg1, arg2, table),
-            &Token::Dw(_) | &Token::Db(_)
-                => assemble_db_or_dw(self, table),
-            &Token::Label(_) | &Token::Comment(_)
-                => Ok(Bytes::new()),
-            &Token::Defs(ref expr)
-                =>assemble_defs(expr, table),
-            _
-                => Err(String::from("Currently unable to generate bytes. Need to code that"))
+    /// Return the number of bytes of the token
+    fn number_of_bytes(&self) -> Result<usize, &str> {
+        let bytes = self.to_bytes();
+        if bytes.is_ok() {
+            Ok(bytes.ok().unwrap().len())
+        }
+        else {
+            eprintln!("{:?}", bytes);
+            Err("Unable to get the bytes of this token")
         }
     }
+
+
 }
 
 
-/// A listing is simply a list of token
+
+
+/// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq)]
-pub struct Listing {
+pub struct BaseListing<T> {
+
     /// Ordered list of the tokens
-    listing: Vec<Token>,
+    listing: Vec<T>,
     /// Duration of the listing execution. Manually set by user
     duration: Option<usize>
 }
+
+
+/// Standard listing is a specific implementation
+pub type Listing = BaseListing<Token>;
 
 impl fmt::Display for Listing {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -797,47 +815,29 @@ impl fmt::Display for Listing {
     }
 }
 
-impl Deref for Listing {
-    type Target = Vec<Token>;
+/// To create a listing from a string correspond to assemble the string to produce the Tokens
+impl FromStr for Listing{
 
-    fn deref(&self) -> &Self::Target {
-        &self.listing
-    }
-}
+    type Err = String;
 
-
-impl DerefMut for Listing {
-    fn deref_mut(&mut self) -> &mut Vec<Token>{
-        &mut self.listing
-    }
-}
-
-
-impl Listing {
-
-    /// Create an empty listing without duration
-    pub fn new() -> Listing {
-        Listing{
-            listing: Vec::new(),
-            duration: None
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let res = parser::parse_z80_str(s);
+         match res {
+            Err(e) => Err(String::from_str(e.into_error_kind().description()).ok().unwrap()),
+            Ok( (_, opcodes) ) => {Ok(Listing{listing: opcodes, duration: None})}
         }
     }
+}
 
 
-    /// Add a new token to the listing
-    pub fn add(&mut self, token:Token) {
-        self.listing.push(token);
-    }
+/// Main usage of listing is related to Tokens.. Here are the methods strongly liked to Token
+impl Listing {
 
-    /// Add a new labl to the listing
+    /// Add a new label to the listing
     pub fn add_label(&mut self, label:&str) {
         self.listing.push(Token::Label(String::from(label)));
     }
 
-    /// Consume another listing by injecting it
-    pub fn inject_listing(&mut self, other:Listing) {
-        self.listing.extend_from_slice(&other.listing);
-    }
 
     /// Add additional tokens, that need to be parsed from a string, to the listing
     pub fn add_code(&mut self, code: &str) -> Result<(), String> {
@@ -862,6 +862,54 @@ impl Listing {
         }
 
     }
+}
+
+
+
+
+
+
+
+impl<T> Deref for BaseListing<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.listing
+    }
+}
+
+
+impl<T> DerefMut for BaseListing<T> {
+    fn deref_mut(&mut self) -> &mut Vec<T>{
+        &mut self.listing
+    }
+}
+
+
+impl<T: Clone + ListingElement> BaseListing<T> {
+
+    /// Create an empty listing without duration
+    pub fn new() -> Self{
+        BaseListing::<T>{
+            listing: Vec::new(),
+            duration: None
+        }
+    }
+
+
+    /// Add a new token to the listing
+    pub fn add(&mut self, token:T) {
+        self.listing.push(token);
+    }
+
+
+
+    /// Consume another listing by injecting it
+    pub fn inject_listing(&mut self, other: Self) {
+        self.listing.extend_from_slice(&other.listing);
+    }
+
+
 
     /// Compute the size of the listing.
     /// The listing has a size only if its tokens has a size
@@ -904,7 +952,7 @@ impl Listing {
     }
 
     /// Get the token at the required position
-    pub fn get(&self, idx: usize) -> Option<&Token> {
+    pub fn get(&self, idx: usize) -> Option<&T> {
         self.listing.get(idx)
     }
 }
@@ -912,21 +960,6 @@ impl Listing {
 
 
 
-
-
-/// To create a listing from a string correspond to assemble the string to produce the Tokens
-impl FromStr for Listing{
-
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let res = parser::parse_z80_str(s);
-         match res {
-            Err(e) => Err(String::from_str(e.into_error_kind().description()).ok().unwrap()),
-            Ok( (_, opcodes) ) => {Ok(Listing{listing: opcodes, duration: None})}
-        }
-    }
-}
 
 
 // Stolen code from https://github.com/tagua-vm/parser/blob/737e8625e51580cb6d8aaecea5b2f04fefbccaa5/source/tokens.rs
@@ -1130,7 +1163,7 @@ impl<'a, 'b> Compare<Input<'b>> for Span<'a> {
 
 #[cfg(test)]
 mod test {
-    use assembler::tokens::{Token,Mnemonic,DataAccess,Expr, Register16, Register8, FlagTest, Listing};
+    use assembler::tokens::{Token,Mnemonic,DataAccess,Expr, Register16, Register8, FlagTest, Listing, ListingElement};
     use std::str::FromStr;
     #[test]
     fn test_size (){
