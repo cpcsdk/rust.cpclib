@@ -9,9 +9,67 @@ pub fn bytes_to_db_str(bytes: &[u8]) -> String {
     format!("\tdb {}\n", bytes_str.join(","))
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum Bank {
+    Bank0,
+    Bank1,
+    Bank2,
+    Bank3,
+
+    Bank4,
+    Bank5,
+    Bank6,
+    Bank7,
+}
+
+
+impl Bank {
+
+    pub fn is_main_memory(&self) -> bool {
+        use self::Bank::*;
+        match self {
+            &Bank0 | &Bank1 | &Bank2 | &Bank3 => true,
+            _ => false
+        }
+    }
+
+
+    pub fn is_extra_bank(&self) -> bool {
+        ! self.is_main_memory()
+    }
+
+    pub fn num(&self) -> u8 {
+        use self::Bank::*;
+        match self {
+            &Bank0 => 0,
+            &Bank1 => 1,
+            &Bank2 => 2,
+            &Bank3 => 3,
+            &Bank4 => 4,
+            &Bank5 => 5,
+            &Bank6 => 6,
+            &Bank7 => 7,
+        }
+    }
+
+    pub fn start_address(&self) -> u16 {
+        use self::Bank::*;
+        match self {
+            &Bank0 => 0x0000,
+            &Bank1 => 0x4000,
+            &Bank2 => 0x8000,
+            &Bank3 => 0xc000,
+            _ => 0x4000
+        }
+    }
+}
+
+
+
+
+#[derive(Debug, Clone)]
 pub struct PageDefinition {
-    bank: u8,
+    bank: Bank,
     start: u16,
     end: Option<u16>
 }
@@ -19,7 +77,7 @@ pub struct PageDefinition {
 
 impl PageDefinition {
 
-    pub fn new(bank: u8, start:u16, end: Option<u16>) -> PageDefinition{
+    pub fn new(bank: Bank, start:u16, end: Option<u16>) -> PageDefinition{
         PageDefinition {
             bank,
             start,
@@ -28,8 +86,8 @@ impl PageDefinition {
     }
 
 
-    pub fn bank(&self) -> u8 {
-        self.bank
+    pub fn bank(&self) -> &Bank {
+        &self.bank
     }
 
     pub fn start(&self) -> u16 {
