@@ -14,6 +14,21 @@ impl ListingElement for Token {
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 match mnemonic {
 
+                    &Mnemonic::Add => {
+                        match arg1 {
+                            &Some(DataAccess::Register8(_)) => {
+                                match arg2 {
+                                    &Some(DataAccess::Register8(_)) => 1,
+                                    &Some(DataAccess::IndexRegister16WithIndex(_, _, _)) => 5,
+                                    _ => 2,
+                                }
+                            },
+                            &Some(DataAccess::Register16(_)) => 4,
+                            &Some(DataAccess::IndexRegister16(_)) => 5,
+                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                        }
+                    },
+
                     &Mnemonic::Inc | &Mnemonic::Dec => {
                         match arg1 {
                             &Some(DataAccess::Register8(_)) => 1,

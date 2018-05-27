@@ -10,6 +10,16 @@ const MAX_SIZE:usize = 4;
 pub type Bytes =  SmallVec<[u8; MAX_SIZE]>;
 
 
+fn add_index(m: &mut Bytes, idx: i32) -> Result<(), String>{
+    if idx < -127 || idx > 128 {
+        Err(format!("Index error {}", idx))
+    }
+    else {
+        let val = (idx & 0xff) as u8;
+        add_byte(m, val);
+        Ok(())
+    }
+}
 
 fn add_byte(m: &mut Bytes, b: u8) {
     m.push(b);
@@ -281,6 +291,8 @@ fn visit_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<Da
 /// assemble
 pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<DataAccess> , sym: & SymbolsTable) -> Result<Bytes, String> {
     match mnemonic{
+        &Mnemonic::Add | &Mnemonic::Adc
+            => assemble_add_or_adc(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), sym),
         &Mnemonic::Dec | &Mnemonic::Inc
             => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap()),
         &Mnemonic::Ld
@@ -598,6 +610,136 @@ fn assemble_push(arg1: &DataAccess) -> Result<Bytes, String>{
 }
 
 
+fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, String>{
+    let mut bytes = Bytes::new();
+    let is_add = match mnemonic {
+        &Mnemonic::Add => true,
+        &Mnemonic::Adc => false,
+        _ => panic!("Impossible case")
+    };
+
+
+    match arg1 {
+        &DataAccess::Register8(Register8::A) => {
+            match arg2 {
+                &DataAccess::MemoryRegister16(Register16::Hl) => {
+                    if is_add {
+                        bytes.push(0b10000110);
+                    }
+                    else {
+                        panic!();
+                    }
+                },
+
+                &DataAccess::IndexRegister16WithIndex(ref reg, ref op, ref exp) => {
+                    let val = exp.resolve(sym)? as i32;
+                    let val = match op {
+                        &Oper::Add => val,
+                        &Oper::Sub => -val,
+                        _ => panic!()
+                    };
+
+                    bytes.push(indexed_register16_to_code(reg));
+                    if is_add {
+                        bytes.push(0b10000110);
+                    }
+                    else {
+                        panic!();
+                    }
+                    add_index(&mut bytes, val)?;
+
+                },
+
+                &DataAccess::Expression(ref exp) => {
+                    let val = exp.resolve(sym)? as u8;
+                    if is_add {
+                        bytes.push(0b11000110);
+                    }
+                    else {
+                        panic!();
+                    }
+                    bytes.push(val);
+                },
+
+                &DataAccess::Register8(ref reg) => {
+                    let base = if is_add {
+                        0b10000000
+                    }
+                    else {
+                        panic!();
+                    };
+                    bytes.push(base | register8_to_code(reg));
+                },
+                _ => {}
+            }
+
+        },
+
+        &DataAccess::Register16(Register16::Hl) => {
+            match arg2 {
+                &DataAccess::Register16(ref reg) => {
+                    let base = if is_add {
+                        0b00001001
+                    }
+                    else {
+                        panic!();
+                    };
+
+                    bytes.push(base | (register16_to_code_with_sp(reg)<<4));
+                },
+
+                _ => {}
+            }
+        },
+
+        &DataAccess::IndexRegister16(ref reg1) => {
+            match arg2 {
+                &DataAccess::Register16(ref reg2) => {
+                    // TODO Error if reg2 = HL
+                    bytes.push(indexed_register16_to_code(reg1));
+                    let base = if is_add {
+                        0b00001001
+                    }
+                    else {
+                        panic!();
+                    };
+                    bytes.push(base | (register16_to_code_with_indexed(&DataAccess::Register16(reg2.clone())) <<4))
+                },
+
+                &DataAccess::IndexRegister16(ref reg2) => {
+                    if reg1 != reg2 {
+                        return Err(String::from("Unable to add differetn indexed registers"));
+                    }
+
+                    bytes.push(indexed_register16_to_code(reg1));
+                    let base = if is_add {
+                        0b00001001
+                    }
+                    else {
+                        panic!();
+                    };
+                    bytes.push(base | (register16_to_code_with_indexed(&DataAccess::IndexRegister16(reg2.clone())) <<4))
+                },
+
+
+
+
+
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+
+
+    if 0 == bytes.len() {
+        Err(format!("{:?} not implemented for {:?} {:?}", mnemonic, arg1, arg2))
+    }
+    else {
+        Ok(bytes)
+    }
+
+}
 
 fn assemble_res_or_set(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, String>{
     let mut bytes = Bytes::new();
@@ -693,6 +835,19 @@ fn register16_to_code_with_sp(reg: &Register16) -> u8 {
         &Register16::De => 0b01,
         &Register16::Hl => 0b10,
         &Register16::Sp => 0b11,
+        _ => panic!("no mapping for {:?}", reg)
+    }
+}
+
+
+
+fn register16_to_code_with_indexed(reg: &DataAccess) -> u8 {
+
+    match reg {
+        &DataAccess::Register16(Register16::Bc) => 0b00,
+        &DataAccess::Register16(Register16::De) => 0b01,
+        &DataAccess::IndexRegister16(_) => 0b10,
+        &DataAccess::Register16(Register16::Sp) => 0b11,
         _ => panic!("no mapping for {:?}", reg)
     }
 }
