@@ -9,7 +9,7 @@ pub trait ListingElement {
     fn estimated_duration(&self) -> usize;
 
     /// Return the number of bytes of the token
-    fn number_of_bytes(&self) -> Result<usize, &str>;
+    fn number_of_bytes(&self) -> Result<usize, String>;
 }
 
 
@@ -86,7 +86,7 @@ impl<T: Clone + ListingElement> BaseListing<T> {
 
     /// Compute the size of the listing.
     /// The listing has a size only if its tokens has a size
-    pub fn number_of_bytes(&self) -> Result<usize, &str> {
+    pub fn number_of_bytes(&self) -> Result<usize, String> {
         self
             .listing
             .iter()
@@ -95,7 +95,7 @@ impl<T: Clone + ListingElement> BaseListing<T> {
                 Ok(0),
                 |sum, val| {
                     if sum.is_err() || val.is_err() {
-                        Err("Unable to compute the number of bytes")
+                        Err(format!("Unable to compute the number of bytes {:?} {:?}", sum, val))
                     }
                     else {
                         Ok(sum.unwrap() + val.unwrap())

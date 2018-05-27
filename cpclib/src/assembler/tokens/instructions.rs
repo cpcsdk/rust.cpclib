@@ -180,6 +180,8 @@ impl Token {
         match self {
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2)
                 => assemble_opcode(mnemonic, arg1, arg2, table),
+            &Token::Equ(_, _)
+                => Ok(Bytes::new()),
             &Token::Dw(_) | &Token::Db(_)
                 => assemble_db_or_dw(self, table),
             &Token::Label(_) | &Token::Comment(_)
@@ -187,7 +189,7 @@ impl Token {
             &Token::Defs(ref expr)
                 =>assemble_defs(expr, table),
             _
-                => Err(String::from("Currently unable to generate bytes. Need to code that"))
+                => Err(format!("Currently unable to generate bytes for {}", self))
         }
     }
 }

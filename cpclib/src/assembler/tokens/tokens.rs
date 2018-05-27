@@ -9,7 +9,7 @@ impl ListingElement for Token {
     /// instruction. This is flase of course.
     fn estimated_duration(&self) -> usize {
         match self {
-            &Token::Comment(_) | &Token::Label(_) => 0,
+            &Token::Comment(_) | &Token::Label(_)  => 0,
             &Token::Defs(ref expr) => expr.eval().ok().unwrap() as usize, // XXX will not work when variables are used
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 match mnemonic {
@@ -103,14 +103,14 @@ impl ListingElement for Token {
 
 
     /// Return the number of bytes of the token
-    fn number_of_bytes(&self) -> Result<usize, &str> {
+    fn number_of_bytes(&self) -> Result<usize, String> {
         let bytes = self.to_bytes();
         if bytes.is_ok() {
             Ok(bytes.ok().unwrap().len())
         }
         else {
             eprintln!("{:?}", bytes);
-            Err("Unable to get the bytes of this token")
+            Err(format!("Unable to get the bytes of this token: {:?}", self))
         }
     }
 
