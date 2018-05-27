@@ -80,7 +80,7 @@ impl Debug for PageDefinition {
 
     fn fmt(&self, f: &mut Formatter) -> Result {
         if self.end.is_some() {
-            write!(f, "bank: {:?}, start: 0x{:x}, end: 0x{:?}", &self.bank, &self.start, self.end().unwrap())
+            write!(f, "bank: {:?}, start: 0x{:x}, end: 0x{:x}", &self.bank, &self.start, self.end().unwrap())
         }
         else {
             write!(f, "bank: {:?}, start: 0x{:x}, end: None", &self.bank, &self.start)
