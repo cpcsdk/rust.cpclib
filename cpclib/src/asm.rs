@@ -108,6 +108,18 @@ impl PageDefinition {
     }
 
 
+    pub fn set_start(&mut self, start: u16) {
+        assert!(start >= self.bank.start_address());
+        assert!( (start as u32) < (self.bank.start_address() as u32 + 0x4000));
+
+        if self.end.is_some() {
+            assert!(self.end.unwrap() > start);
+        }
+
+        self.start = start;
+    }
+
+
     pub fn bank(&self) -> &Bank {
         &self.bank
     }
@@ -118,6 +130,10 @@ impl PageDefinition {
 
     pub fn end(&self) -> Option<u16> {
         self.end
+    }
+
+    pub fn contains_address(&self, address: u32) -> bool {
+        self.start as u32 <= address && address <= self.end().unwrap() as u32
     }
 
     /// Check if there is overlapping between the two pages.

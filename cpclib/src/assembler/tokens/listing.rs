@@ -78,7 +78,7 @@ impl<T: Clone + ListingElement> BaseListing<T> {
 
 
     /// Consume another listing by injecting it
-    pub fn inject_listing(&mut self, other: Self) {
+    pub fn inject_listing(&mut self, other: &Self) {
         self.listing.extend_from_slice(&other.listing);
     }
 
