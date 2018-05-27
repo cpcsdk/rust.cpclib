@@ -62,12 +62,13 @@ impl Bank {
             _ => 0x4000
         }
     }
+
 }
 
 
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PageDefinition {
     bank: Bank,
     start: u16,
