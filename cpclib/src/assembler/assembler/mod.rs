@@ -365,7 +365,7 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, String>{
             bytes.push(byte);
         }
 
-        &DataAccess::IndexedRegister16(ref reg) => {
+        &DataAccess::IndexRegister16(ref reg) => {
             bytes.push(indexed_register16_to_code(reg));
             bytes.push(
                 if is_inc {
@@ -564,7 +564,7 @@ fn assemble_pop(arg1: &DataAccess) -> Result<Bytes, String>{
             let byte = 0b11000001 | (register16_to_code_with_af(reg) << 4);
             bytes.push(byte);
         },
-        &DataAccess::IndexedRegister16(ref reg) => {
+        &DataAccess::IndexRegister16(ref reg) => {
             bytes.push(indexed_register16_to_code(reg));
             bytes.push(0xe1);
         },
@@ -585,7 +585,7 @@ fn assemble_push(arg1: &DataAccess) -> Result<Bytes, String>{
             let byte = 0b11000101 | (register16_to_code_with_af(reg) << 4);
             bytes.push(byte);
         },
-        &DataAccess::IndexedRegister16(ref reg) => {
+        &DataAccess::IndexRegister16(ref reg) => {
             bytes.push(indexed_register16_to_code(reg));
             bytes.push(0xe5);
         },
@@ -644,10 +644,10 @@ pub fn assemble_defs(expr: &Expr, sym: &SymbolsTable) -> Result<Bytes, String> {
 }
 
 
-fn indexed_register16_to_code(reg: &IndexedRegister16) -> u8 {
+fn indexed_register16_to_code(reg: &IndexRegister16) -> u8 {
     match reg {
-        &IndexedRegister16::Ix => DD,
-        &IndexedRegister16::Iy => FD
+        &IndexRegister16::Ix => DD,
+        &IndexRegister16::Iy => FD
     }
 }
 

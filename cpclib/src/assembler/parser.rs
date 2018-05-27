@@ -228,6 +228,7 @@ named!(
 named!(
     parse_token <CompleteStr, Token>,
         alt_complete!(
+            parse_add_or_adc |
             parse_ld |
             parse_inc_dec |
             parse_out |
@@ -260,7 +261,11 @@ named!(
         space >>
         dst: return_error!(
             ErrorKind::Custom(error_code::INVALID_ARGUMENT),
-            alt_complete!( parse_reg_address | parse_register_sp | parse_register16 | parse_register8 |  parse_address)
+            alt_complete!( parse_reg_address |
+                           parse_register_sp |
+                           parse_register16 |
+                           parse_register8 |
+                           parse_address)
         ) >>
         opt!(space) >>
         tag!(",") >>
@@ -342,6 +347,42 @@ named!(
     )
 );
 
+named!(
+    pub parse_add_or_adc <CompleteStr, Token>, do_parse!(
+        add_or_adc: alt_complete!(
+            value!(Mnemonic::Adc, tag_no_case!("ADC")) |
+            value!(Mnemonic::Add, tag_no_case!("ADD"))
+        ) >>
+
+        many1!(space) >>
+
+        first: alt_complete!(
+            value!(DataAccess::Register8(Register8::A), tag_no_case!("A")) |
+            value!(DataAccess::Register16(Register16::Hl), tag_no_case!("HL")) |
+            value!(DataAccess::IndexRegister16(IndexRegister16::Ix), tag_no_case!("IX")) |
+            value!(DataAccess::IndexRegister16(IndexRegister16::Iy), tag_no_case!("IY"))
+        ) >>
+
+        opt!(space) >>
+        tag!(",") >>
+        opt!(space) >>
+
+        second: alt_complete!(
+            cond_reduce!(first.is_register8(), alt_complete!(parse_register8 | parse_hl_adress | parse_indexregister_with_index | parse_expr)) | // Case for A
+            cond_reduce!(first.is_register16(), alt_complete!(parse_register16 | parse_register_sp)) | // Case for HL XXX AF is accepted whereas it is not the case in real life
+            cond_reduce!(first.is_indexregister16(), alt_complete!(
+                    value!(DataAccess::Register16(Register16::De), tag_no_case!("DE")) |
+                    value!(DataAccess::Register16(Register16::Bc), tag_no_case!("BC")) |
+                    value!(DataAccess::Register16(Register16::Sp), tag_no_case!("SP")) |
+                    value!(DataAccess::IndexRegister16(IndexRegister16::Ix), tag_no_case!("IX")) |
+                    value!(DataAccess::IndexRegister16(IndexRegister16::Iy), tag_no_case!("IY"))
+                    )
+            )
+        ) >>
+
+        (Token::OpCode(add_or_adc, Some(first), Some(second)))
+    )
+);
 
 named!(
     pub parse_push_n_pop <CompleteStr, Token>, do_parse!(
@@ -485,6 +526,58 @@ named!(
     )
 );
 
+named!(
+    parse_indexregister8 <CompleteStr, DataAccess>, do_parse!(
+        reg: alt_complete!(
+            tag_no_case!("IXH") => { |_| IndexRegister8::Ixh} |
+            tag_no_case!("IXL") => { |_| IndexRegister8::Ixl} |
+            tag_no_case!("IYH") => { |_| IndexRegister8::Iyh} |
+            tag_no_case!("IYL") => { |_| IndexRegister8::Iyl}
+            )
+        >>
+        (DataAccess::IndexRegister8(reg))
+    )
+);
+
+named!(
+    parse_indexregister16 <CompleteStr, DataAccess>, do_parse!(
+        reg: alt_complete!(
+            tag_no_case!("IX") => { |_| IndexRegister16::Ix} |
+            tag_no_case!("IY") => { |_| IndexRegister16::Iy}
+            )
+        >>
+        (DataAccess::IndexRegister16(reg))
+    )
+);
+
+
+
+
+named!(
+    parse_indexregister_with_index <CompleteStr, DataAccess>, do_parse!(
+            tag!("(") >>
+            many0!(space) >>
+
+            reg: parse_indexregister16 >>
+
+            many0!(space) >>
+
+            op: alt_complete!(
+                value!(Oper::Add, tag!("+")) |
+                value!(Oper::Sub, tag!("-"))
+            ) >>
+
+            many0!(space) >>
+
+            expr: expr >>
+
+            many0!(space) >>
+            tag!(")")
+        >>
+        (DataAccess::IndexRegister16WithIndex(reg.get_indexregister16().unwrap(), op, expr))
+    )
+);
+
 
 named!(
     parse_register_sp <CompleteStr, DataAccess>, do_parse!(
@@ -521,6 +614,25 @@ named!(
     )
 
 );
+
+
+named!(
+    pub parse_hl_adress<CompleteStr, DataAccess>,
+    do_parse!(
+        tag!("(") >>
+        many0!(space) >>
+        tag_no_case!("HL") >>
+        many0!(space) >>
+        tag!(")") >>
+        (
+            DataAccess::MemoryRegister16(Register16::Hl)
+        )
+    )
+);
+
+
+
+
 
 
 

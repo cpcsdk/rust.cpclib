@@ -195,7 +195,7 @@ impl ListingElement for Token {
                     &Mnemonic::Pop => {
                         match arg1 {
                             &Some(DataAccess::Register16(_)) => 3,
-                            &Some(DataAccess::IndexedRegister16(_)) => 4,
+                            &Some(DataAccess::IndexRegister16(_)) => 4,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
                     },
@@ -203,7 +203,7 @@ impl ListingElement for Token {
                     &Mnemonic::Push => {
                         match arg1 {
                             &Some(DataAccess::Register16(_)) => 4,
-                            &Some(DataAccess::IndexedRegister16(_)) => 5,
+                            &Some(DataAccess::IndexRegister16(_)) => 5,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
                     },
@@ -212,7 +212,7 @@ impl ListingElement for Token {
                         match arg2 {
                             &Some(DataAccess::Register8(_)) => 2,
                             &Some(DataAccess::MemoryRegister16(_)) => 3, // XXX only HL
-                            &Some(DataAccess::IndexedRegister16WithIndex(_, _)) => 7,
+                            &Some(DataAccess::IndexRegister16WithIndex(_, _, _)) => 7,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
                     },

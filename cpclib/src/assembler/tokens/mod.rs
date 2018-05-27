@@ -150,7 +150,7 @@ impl Expr {
 
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Oper {
   Add,
   Sub,
@@ -165,27 +165,49 @@ pub enum Oper {
   StrictlyLower,
 }
 
+
+impl Display for Oper {
+    fn fmt(&self, format: &mut Formatter) -> fmt::Result {
+        use self::Oper::*;
+
+        match self {
+            &Add => write!(format, "+"),
+            &Sub => write!(format, "-"),
+            &Mul => write!(format, "*"),
+            &Div => write!(format, "/"),
+            &Mod => write!(format, "%"),
+
+            &Equal => write!(format, "=="),
+            &LowerOrEqual => write!(format, "<="),
+            &GreaterOrEqual => write!(format, ">="),
+            &StrictlyGreater  => write!(format, ">"),
+            &StrictlyLower => write!(format, "<"),
+        }
+    }
+
+}
+
 impl Display for Expr {
   fn fmt(&self, format: &mut Formatter) -> fmt::Result {
     use self::Expr::*;
-    match *self {
-      Value(val) => write!(format, "0x{:x}", val),
-      Label(ref label) => write!(format, "{}", label),
+    match self {
+      &Value(val) => write!(format, "0x{:x}", val),
+      &Label(ref label) => write!(format, "{}", label),
 
-      Add(ref left, ref right) => write!(format, "{} + {}", left, right),
-      Sub(ref left, ref right) => write!(format, "{} - {}", left, right),
-      Mul(ref left, ref right) => write!(format, "{} * {}", left, right),
-      Mod(ref left, ref right) => write!(format, "{} % {}", left, right),
-      Div(ref left, ref right) => write!(format, "{} / {}", left, right),
+      &Add(ref left, ref right) => write!(format, "{} + {}", left, right),
+      &Sub(ref left, ref right) => write!(format, "{} - {}", left, right),
+      &Mul(ref left, ref right) => write!(format, "{} * {}", left, right),
+      &Mod(ref left, ref right) => write!(format, "{} % {}", left, right),
+      &Div(ref left, ref right) => write!(format, "{} / {}", left, right),
 
-      Paren(ref expr) => write!(format, "({})", expr),
+      &Paren(ref expr) => write!(format, "({})", expr),
 
 
-      Equal(ref left, ref right) => write!(format, "{} == {}", left, right),
-      GreaterOrEqual(ref left, ref right) => write!(format, "{} >= {}", left, right),
-      StrictlyGreater(ref left, ref right) => write!(format, "{} > {}", left, right),
-      StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
-      LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
+      &Equal(ref left, ref right) => write!(format, "{} == {}", left, right),
+      &GreaterOrEqual(ref left, ref right) => write!(format, "{} >= {}", left, right),
+      &StrictlyGreater(ref left, ref right) => write!(format, "{} > {}", left, right),
+      &StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
+      &LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
     }
   }
 }
@@ -240,17 +262,17 @@ impl fmt::Display for Register16 {
 
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum IndexedRegister16{
+pub enum IndexRegister16{
     Ix,
     Iy
 }
 
-impl fmt::Display for IndexedRegister16 {
+impl fmt::Display for IndexRegister16 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::*;
         let code = match self {
-            &IndexedRegister16::Ix => "IX",
-            &IndexedRegister16::Iy => "IY"
+            &IndexRegister16::Ix => "IX",
+            &IndexRegister16::Iy => "IY"
         };
         write!(f, "{}", code)
     }
@@ -393,8 +415,9 @@ impl fmt::Display for FlagTest {
 /// Encode the way mnemonics access to data
 pub enum DataAccess {
     /// We are using an indexed register associated to its index
-    IndexedRegister16WithIndex(IndexedRegister16, i8),
-    IndexedRegister16(IndexedRegister16),
+    IndexRegister16WithIndex(IndexRegister16, Oper, Expr),
+    IndexRegister16(IndexRegister16),
+    IndexRegister8(IndexRegister8),
     /// Represents a standard 16 bits register
     Register16(Register16),
     /// Represents a standard 8 bits register
@@ -414,11 +437,13 @@ pub enum DataAccess {
 impl fmt::Display for DataAccess {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &DataAccess::IndexedRegister16WithIndex(ref reg, ref delta) =>
-                write!(f, "({} + {})", reg, delta),
-            &DataAccess::IndexedRegister16(ref reg) =>
+            &DataAccess::IndexRegister16WithIndex(ref reg, ref op,  ref delta) =>
+                write!(f, "({} {} {})", reg, op, delta),
+            &DataAccess::IndexRegister16(ref reg) =>
                 write!(f, "{}", reg),
             &DataAccess::Register16(ref reg) =>
+                write!(f, "{}", reg),
+            &DataAccess::IndexRegister8(ref reg) =>
                 write!(f, "{}", reg),
             &DataAccess::Register8(ref reg) =>
                 write!(f, "{}", reg),
@@ -457,6 +482,15 @@ impl DataAccess {
         }
     }
 
+    pub fn is_indexregister16(&self) -> bool {
+        match self {
+            &DataAccess::IndexRegister16(_) => true,
+            _ => false
+        }
+    }
+
+
+
     pub fn is_memory(&self) -> bool {
         match self {
             &DataAccess::Memory(_) => true,
@@ -479,6 +513,12 @@ impl DataAccess {
         }
     }
 
+    pub fn get_indexregister16(&self) -> Option<IndexRegister16> {
+        match self {
+            &DataAccess::IndexRegister16(ref reg) => Some(reg.clone()),
+            _ => None
+        }
+    }
 
     pub fn get_register8(&self) -> Option<Register8> {
         match self {
@@ -490,6 +530,8 @@ impl DataAccess {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Mnemonic {
+    Adc,
+    Add,
     Dec,
     Di,
     Ei,
@@ -512,6 +554,8 @@ pub enum Mnemonic {
 impl fmt::Display for Mnemonic {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &Mnemonic::Adc=> write!(f, "ADC"),
+            &Mnemonic::Add=> write!(f, "ADD"),
             &Mnemonic::Dec => write!(f, "DEC"),
             &Mnemonic::Di => write!(f, "DI"),
             &Mnemonic::Ei => write!(f, "EI"),
