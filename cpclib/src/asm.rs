@@ -92,9 +92,13 @@ impl Debug for PageDefinition {
 impl PageDefinition {
 
     pub fn new(bank: Bank, start:u16, end: Option<u16>) -> PageDefinition{
+        assert!(start >= bank.start_address());
+        assert!(start < bank.start_address()+ 0x4000);
         if end.is_some() {
             assert!(end.unwrap() > start);
+            assert!(end.unwrap() < (bank.start_address() + 0x4000) );
         }
+
         PageDefinition {
             bank,
             start,
