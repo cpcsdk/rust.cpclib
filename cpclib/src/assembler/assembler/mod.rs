@@ -627,7 +627,7 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
                         bytes.push(0b10000110);
                     }
                     else {
-                        panic!();
+                        bytes.push(0b10001110);
                     }
                 },
 
@@ -644,7 +644,7 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
                         bytes.push(0b10000110);
                     }
                     else {
-                        panic!();
+                        bytes.push(0b10001110);
                     }
                     add_index(&mut bytes, val)?;
 
@@ -656,7 +656,7 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
                         bytes.push(0b11000110);
                     }
                     else {
-                        panic!();
+                        bytes.push(0b11001110);
                     }
                     bytes.push(val);
                 },
@@ -666,7 +666,7 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
                         0b10000000
                     }
                     else {
-                        panic!();
+                        0b10001000
                     };
                     bytes.push(base | register8_to_code(reg));
                 },
@@ -682,7 +682,8 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
                         0b00001001
                     }
                     else {
-                        panic!();
+                        bytes.push(0xED);
+                        0b01001010
                     };
 
                     bytes.push(base | (register16_to_code_with_sp(reg)<<4));
