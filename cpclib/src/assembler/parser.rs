@@ -367,7 +367,7 @@ named!(
             value!( DataAccess::Register8(Register8::A), tag_no_case!("A")) |
             value!( DataAccess::Register16(Register16::Hl), tag_no_case!("HL")) |
             value!( DataAccess::IndexRegister16(IndexRegister16::Ix), tag_no_case!("IX")) |
-            value!( DataAccess::IndexRegister16(IndexRegister16::Iy), tag_no_case!("IY")) 
+            value!( DataAccess::IndexRegister16(IndexRegister16::Iy), tag_no_case!("IY"))
         ) >>
 
         opt!(space) >>
@@ -431,6 +431,9 @@ named!(
         )
     )
 );
+
+
+
 
 named!(
     pub parse_inc_dec<CompleteStr, Token>, do_parse!(
@@ -697,6 +700,7 @@ named!(
     res:alt_complete!(
         tag_no_case!("DI") => { |_| Mnemonic::Di } |
         tag_no_case!("EI") => { |_| Mnemonic::Ei } |
+        tag_no_case!("EXX") => { |_| Mnemonic::Exx } |
         tag_no_case!("LDI") => { |_| Mnemonic::Ldi } |
         tag_no_case!("LDD") => { |_| Mnemonic::Ldd } |
         tag_no_case!("NOP") => { |_| Mnemonic::Nop }
