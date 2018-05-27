@@ -2,7 +2,7 @@
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
-use assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,Bytes,SymbolsTable};
+use assembler::assembler::{SymbolsTable};
 
 ///TODO add the ability to manipulate value of different symbol
 #[derive(PartialEq, Eq, Clone)]
