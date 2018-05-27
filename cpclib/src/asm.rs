@@ -80,10 +80,10 @@ impl Debug for PageDefinition {
 
     fn fmt(&self, f: &mut Formatter) -> Result {
         if self.end.is_some() {
-            write!(f, "bank: {:?}, start: 0x{:x}, end: 0x{:x}", &self.bank, &self.start, self.end().unwrap())
+            write!(f, "PageDefinition( bank: {:?}, start: 0x{:x}, end: 0x{:x})", &self.bank, &self.start, self.end().unwrap())
         }
         else {
-            write!(f, "bank: {:?}, start: 0x{:x}, end: None", &self.bank, &self.start)
+            write!(f, "PageDefinition( bank: {:?}, start: 0x{:x}, end: None)", &self.bank, &self.start)
         }
     }
 }
@@ -93,10 +93,11 @@ impl PageDefinition {
 
     pub fn new(bank: Bank, start:u16, end: Option<u16>) -> PageDefinition{
         assert!(start >= bank.start_address());
-        assert!(start < bank.start_address()+ 0x4000);
+        assert!( (start as u32) < (bank.start_address() as u32 + 0x4000));
+
         if end.is_some() {
             assert!(end.unwrap() > start);
-            assert!(end.unwrap() < (bank.start_address() + 0x4000) );
+            assert!( (end.unwrap() as u32) < (bank.start_address() as u32 + 0x4000) );
         }
 
         PageDefinition {
