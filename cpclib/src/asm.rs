@@ -3,6 +3,7 @@
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+use std::fmt::{Debug, Formatter, Result};
 
 pub fn bytes_to_db_str(bytes: &[u8]) -> String {
     let bytes_str:Vec<String> = bytes.iter().map(|b| format!("0x{:x}", b)).collect();
@@ -68,17 +69,32 @@ impl Bank {
 
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct PageDefinition {
     bank: Bank,
     start: u16,
     end: Option<u16>
 }
 
+impl Debug for PageDefinition {
+
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        if self.end.is_some() {
+            write!(f, "bank: {:?}, start: 0x{:x}, end: 0x{:?}", &self.bank, &self.start, self.end().unwrap())
+        }
+        else {
+            write!(f, "bank: {:?}, start: 0x{:x}, end: None", &self.bank, &self.start)
+        }
+    }
+}
+
 
 impl PageDefinition {
 
     pub fn new(bank: Bank, start:u16, end: Option<u16>) -> PageDefinition{
+        if end.is_some() {
+            assert!(end.unwrap() > start);
+        }
         PageDefinition {
             bank,
             start,
