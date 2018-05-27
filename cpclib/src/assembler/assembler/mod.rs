@@ -548,7 +548,18 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
                         bytes.push(code);
                     }
                 }
-            _ => panic!("TODO")
+
+            &Register16::De if &DataAccess::Register8(Register8::A) == arg2
+                => {
+                    bytes.push(0b00010010);
+            },
+
+            &Register16::Bc if &DataAccess::Register8(Register8::A) == arg2
+                => {
+                    bytes.push(0b00000010);
+            },
+
+            _ => {}
         }
     }
 
