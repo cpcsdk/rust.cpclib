@@ -348,7 +348,14 @@ named!(
 );
 
 named!(
-    pub parse_add_or_adc <CompleteStr, Token>, do_parse!(
+    pub parse_add_or_adc <CompleteStr, Token>, alt_complete!(
+        parse_add_or_adc_complete |
+        parse_add_or_adc_shorten
+    )
+);
+
+named!(
+    pub parse_add_or_adc_complete <CompleteStr, Token>, do_parse!(
         add_or_adc: alt_complete!(
             value!(Mnemonic::Adc, tag_no_case!("ADC")) |
             value!(Mnemonic::Add, tag_no_case!("ADD"))
@@ -357,10 +364,10 @@ named!(
         many1!(space) >>
 
         first: alt_complete!(
-            value!(DataAccess::Register8(Register8::A), tag_no_case!("A")) |
-            value!(DataAccess::Register16(Register16::Hl), tag_no_case!("HL")) |
-            value!(DataAccess::IndexRegister16(IndexRegister16::Ix), tag_no_case!("IX")) |
-            value!(DataAccess::IndexRegister16(IndexRegister16::Iy), tag_no_case!("IY"))
+            value!( DataAccess::Register8(Register8::A), tag_no_case!("A")) |
+            value!( DataAccess::Register16(Register16::Hl), tag_no_case!("HL")) |
+            value!( DataAccess::IndexRegister16(IndexRegister16::Ix), tag_no_case!("IX")) |
+            value!( DataAccess::IndexRegister16(IndexRegister16::Iy), tag_no_case!("IY")) 
         ) >>
 
         opt!(space) >>
@@ -383,6 +390,23 @@ named!(
         (Token::OpCode(add_or_adc, Some(first), Some(second)))
     )
 );
+
+// TODO Find a way to not duplicate code with complete version
+named!(
+    pub parse_add_or_adc_shorten <CompleteStr, Token>, do_parse!(
+        add_or_adc: alt_complete!(
+            value!(Mnemonic::Adc, tag_no_case!("ADC")) |
+            value!(Mnemonic::Add, tag_no_case!("ADD"))
+        ) >>
+
+        many1!(space) >>
+
+        second: alt_complete!(parse_register8 | parse_hl_adress | parse_indexregister_with_index | parse_expr)
+        >>
+        (Token::OpCode(add_or_adc, Some(DataAccess::Register8(Register8::A)), Some(second)))
+    )
+);
+
 
 named!(
     pub parse_push_n_pop <CompleteStr, Token>, do_parse!(

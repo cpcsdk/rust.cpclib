@@ -479,6 +479,28 @@ mod tests {
 
 
     #[test]
+    fn test_add() {
+        let line1 = CompleteStr("   ADD A, C");
+        let tokens = get_val(parse_z80_line(line1));
+
+        let line1 = CompleteStr("   ADD A, IXL");
+        let tokens = get_val(parse_z80_line(line1));
+        assert_eq!(tokens.len(), 1);
+
+        let line1 = CompleteStr("   ADD HL, DE");
+        let tokens = get_val(parse_z80_line(line1));
+        assert_eq!(tokens.len(), 1);
+
+        let line1 = CompleteStr("   ADD A, (HL)");
+        let tokens = get_val(parse_z80_line(line1));
+        assert_eq!(tokens.len(), 1);
+
+        let line1 = CompleteStr("   ADD C");
+        let tokens = get_val(parse_z80_line(line1));
+        assert_eq!(tokens.len(), 1);
+    }
+
+    #[test]
     fn test_ret() {
         let line1 = CompleteStr("   RET");
         let tokens = get_val(parse_z80_line(line1));
