@@ -57,7 +57,6 @@ named! (
 /// This one is a workaround as still as the other is not fixed
 pub fn parse_z80_str(code: &str) -> Result< (CompleteStr, Vec<Token>), Err<CompleteStr>> {
     let mut tokens = Vec::new();
-    let mut error = None;
     let mut rest = None;
 
     for (line_number, line) in code.split("\n").enumerate() {
@@ -68,22 +67,16 @@ pub fn parse_z80_str(code: &str) -> Result< (CompleteStr, Vec<Token>), Err<Compl
                 rest = Some(res);
             },
             Err(e) => {
-                error = Some(Err(e));
+                let error_string = format!("Error at line {}: {}", line_number, line);
+                eprintln!("{}", error_string);
+                return Err(e);
             }
         }
 
-        if error.is_some() {
-            break;
-        }
 
     }
-    
-    if error.is_some() {
-        error.unwrap()
-    }
-    else {
-        Ok((rest.unwrap(), tokens))
-    }
+    //TODO vérifier que c'est totallement assemblé
+    Ok((rest.unwrap(), tokens))
 }
 
 
@@ -133,7 +126,10 @@ named!(
    //                     delimited!(many0!(space), tag!("\n"), many1!(space))
      //               ) >>
                     space0 >>
-                    inner_opcode: alt!(parse_token | parse_directive) >>
+                    inner_opcode:return_error!(
+                                        ErrorKind::Custom(error_code::INVALID_ARGUMENT),
+                                        alt_complete!(parse_token | parse_directive)
+                                        )>>
                     (inner_opcode)
                 ),
                 Vec::new(),
@@ -264,7 +260,7 @@ named!(
         space >>
         dst: return_error!(
             ErrorKind::Custom(error_code::INVALID_ARGUMENT),
-            alt_complete!( parse_reg_address | parse_register16 | parse_register8 |  parse_address)
+            alt_complete!( parse_reg_address | parse_register_sp | parse_register16 | parse_register8 |  parse_address)
         ) >>
         opt!(space) >>
         tag!(",") >>
