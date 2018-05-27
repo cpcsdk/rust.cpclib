@@ -19,11 +19,15 @@ mod tokens;
 mod listing;
 mod expression;
 mod registers;
+mod data_access;
+mod instructions;
 
 pub use self::tokens::*;
 pub use self::listing::*;
 pub use self::expression::*;
 pub use self::registers::*;
+pub use self::data_access::*;
+pub use self::instructions::*;
 
 
 /// Represent the type of the input elements.
@@ -37,60 +41,6 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use assembler::parser;
 use assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,Bytes,SymbolsTable};
-
-
-
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Mnemonic {
-    Adc,
-    Add,
-    Dec,
-    Di,
-    Ei,
-    Inc,
-    Jp,
-    Jr,
-    Ld,
-    Ldd,
-    Ldi,
-    Nop,
-    Out,
-    Push,
-    Pop,
-    Res,
-    Ret,
-    Set
-}
-
-
-impl fmt::Display for Mnemonic {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Mnemonic::Adc=> write!(f, "ADC"),
-            &Mnemonic::Add=> write!(f, "ADD"),
-            &Mnemonic::Dec => write!(f, "DEC"),
-            &Mnemonic::Di => write!(f, "DI"),
-            &Mnemonic::Ei => write!(f, "EI"),
-            &Mnemonic::Inc => write!(f, "INC"),
-            &Mnemonic::Jp => write!(f, "JP"),
-            &Mnemonic::Jr => write!(f, "JR"),
-            &Mnemonic::Ld => write!(f, "LD"),
-            &Mnemonic::Ldi => write!(f, "LDI"),
-            &Mnemonic::Ldd => write!(f, "LDD"),
-            &Mnemonic::Nop => write!(f, "NOP"),
-            &Mnemonic::Out => write!(f, "OUT"),
-            &Mnemonic::Push => write!(f, "PUSH"),
-            &Mnemonic::Pop => write!(f, "POP"),
-            &Mnemonic::Res => write!(f, "RES"),
-            &Mnemonic::Ret => write!(f, "RET"),
-            &Mnemonic::Set => write!(f, "SET"),
-        }
-    }
-}
-
-
-
 
 
 
