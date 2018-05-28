@@ -37,6 +37,27 @@ impl ListingElement for Token {
                         }
                     },
 
+                    &Mnemonic::Jp => {
+                        match arg1 {
+                            &None => {
+                                match arg2 {
+                                    &Some(DataAccess::Expression(_)) => 3,
+                                    &Some(DataAccess::MemoryRegister16(Register16::Hl)) => 1,
+                                    &Some(DataAccess::IndexRegister16(_)) => 2,
+                                    _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                                }
+                            },
+
+                            &Some(DataAccess::FlagTest(_)) => {
+                                match arg2 {
+                                    &Some(DataAccess::Expression(_)) => 3,
+                                    _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                                }
+                            },
+
+                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                        }
+                    },
 
                     &Mnemonic::Ld => {
                         match arg1 {
