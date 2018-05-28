@@ -297,7 +297,7 @@ pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Op
             => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap()),
         &Mnemonic::Ld
             => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
-        &Mnemonic::Ldi | &Mnemonic::Ldd | &Mnemonic::Ei | &Mnemonic::Di
+        &Mnemonic::Ldi | &Mnemonic::Ldd | &Mnemonic::Ei | &Mnemonic::Di | &Mnemonic::Exx
             => assemble_no_arg(mnemonic),
         &Mnemonic::Nop
             => assemble_nop(),
@@ -311,7 +311,7 @@ pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Op
             => assemble_res_or_set(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ret
             => assemble_ret(arg1),
-        _ => Err(format!("Mnemonic not treated: {:?}, {:?}, {:?}", mnemonic, arg1, arg2))
+        _ => Err(format!("[assemble_opcode] Mnemonic not treated: {:?}, {:?}, {:?}", mnemonic, arg1, arg2))
     }
 }
 
@@ -344,6 +344,9 @@ fn assemble_no_arg(mnemonic: &Mnemonic) -> Result<Bytes, String> {
         },
         &Mnemonic::Ei => {
             bytes.push(0xF3);
+        },
+        &Mnemonic::Exx => {
+            bytes.push(0xD9);
         },
         &Mnemonic::Di => {
             bytes.push(0xFB);
