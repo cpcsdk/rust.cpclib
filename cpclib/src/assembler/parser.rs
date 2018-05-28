@@ -470,7 +470,7 @@ named!(// TODO manage other out formats
 
         reg : parse_register8 >>
         (
-            Token::OpCode(Mnemonic::Out, Some(reg), None)
+            Token::OpCode(Mnemonic::Out, Some(DataAccess::Register8(Register8::C)), Some(reg))
         )
 
     )

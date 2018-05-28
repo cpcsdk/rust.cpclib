@@ -301,6 +301,8 @@ pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Op
             => assemble_no_arg(mnemonic),
         &Mnemonic::Nop
             => assemble_nop(),
+        &Mnemonic::Out
+            => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Jr | &Mnemonic::Jp
             => assemble_jr_or_jp(mnemonic, arg1, &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Pop
@@ -581,6 +583,43 @@ fn assemble_nop() -> Result<Bytes, String> {
     bytes.push(0);
     Ok(bytes)
 }
+
+
+
+fn assemble_out(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, String>{
+    let mut bytes = Bytes::new();
+
+    match arg1 {
+        &DataAccess::Register8(Register8::C) => {
+            match arg2 {
+                &DataAccess::Register8( ref reg) => {
+                    bytes.push(0xED);
+                    bytes.push(0b01000001 | (register8_to_code(reg)<<3))
+                },
+                _ => {}
+            }
+        },
+
+        &DataAccess::Memory(ref exp) => {
+            if let &DataAccess::Register8(Register8::A) = arg2 {
+                let val = (exp.resolve(sym).expect("Unable to evaluate expression") & 0xff) as u8;
+                bytes.push(0xED);
+                bytes.push(val);
+
+            }
+        }
+        _ => {}
+    };
+
+    if bytes.len() == 0
+    {
+        Err(format!("OUT not properly implemented for '{:?}, {:?}'", arg1, arg2))
+    }
+    else {
+        Ok(bytes)
+    }
+}
+
 
 fn assemble_pop(arg1: &DataAccess) -> Result<Bytes, String>{
     let mut bytes = Bytes::new();
