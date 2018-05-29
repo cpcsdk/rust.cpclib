@@ -95,7 +95,15 @@ impl ListingElement for Token {
 
                     &Mnemonic::Ldi | &Mnemonic::Ldd => 5,
 
-                    &Mnemonic::Nop=> 1,
+                    &Mnemonic::Nop | &Mnemonic::Exx => 1,
+
+                    &Mnemonic::Out => {
+                        match arg1 {
+                            &Some(DataAccess::Register8(Register8::C)) => 4, // XXX Not sure for out (c), 0
+                            &Some(DataAccess::Expression(_)) => 3,
+                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                        }
+                    }
 
                     &Mnemonic::Pop => {
                         match arg1 {
@@ -210,6 +218,10 @@ impl Listing {
         self.mut_listing().push(Token::Label(String::from(label)));
     }
 
+    /// Add a new comment to the listing
+    pub fn add_comment(&mut self, comment: &str) {
+        self.mut_listing().push(Token::Comment(String::from(comment)));
+    }
 
     /// Add additional tokens, that need to be parsed from a string, to the listing
     pub fn add_code(&mut self, code: &str) -> Result<(), String> {
