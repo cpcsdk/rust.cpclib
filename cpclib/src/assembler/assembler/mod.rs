@@ -542,6 +542,30 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
         }
     }
 
+    else if let &DataAccess::IndexRegister16(ref dst) = arg1 {
+        let code = indexed_register16_to_code(dst);
+
+        match arg2 {
+            &DataAccess::Expression(ref exp) => {
+                let val = (exp.resolve(sym).expect("Unable to evaluate expression") & 0xffff) as u16;
+
+                add_byte(&mut bytes, code);
+                add_byte(&mut bytes, 0x21);
+                add_word(&mut bytes, val);
+            },
+
+            &DataAccess::Memory(ref exp) => {
+                let val = (exp.resolve(sym).expect("Unable to evaluate expression") & 0xffff) as u16;
+
+                add_byte(&mut bytes, code);
+                add_byte(&mut bytes, 0x2a);
+                add_word(&mut bytes, val);
+
+            }
+            _ => {}
+        }
+    }
+
     else if let &DataAccess::MemoryRegister16(ref dst) = arg1 {
         // Want to store in memory pointed by register
         match dst {
