@@ -58,6 +58,7 @@ named! (
 pub fn parse_z80_str(code: &str) -> Result< (CompleteStr, Vec<Token>), Err<CompleteStr>> {
     let mut tokens = Vec::new();
     let mut rest = None;
+    let src = "<str>";
 
     for (line_number, line) in code.split("\n").enumerate() {
         let res = parse_z80_line(CompleteStr(line));
@@ -68,7 +69,7 @@ pub fn parse_z80_str(code: &str) -> Result< (CompleteStr, Vec<Token>), Err<Compl
             },
             Err(e) => {
                 let error_string = format!("Error at line {}: {}", line_number, line);
-                eprintln!("{}", error_string);
+                eprintln!("{}:{} ({}) {}", src, line_number, line, error_string);
                 return Err(e);
             }
         }
@@ -265,6 +266,7 @@ named!(
                            parse_register_sp |
                            parse_register16 |
                            parse_register8 |
+                           parse_indexregister16 |
                            parse_address)
         ) >>
         opt!(space) >>
@@ -274,7 +276,7 @@ named!(
         src: return_error!(
             ErrorKind::Custom(error_code::INVALID_ARGUMENT),
             alt_complete!(
-                cond_reduce!(dst.is_register16(), alt_complete!(parse_expr | parse_address)) |
+                cond_reduce!(dst.is_register16() | dst.is_indexregister16(), alt_complete!(parse_expr | parse_address)) |
                 cond_reduce!(dst.is_register8(), alt_complete!(parse_expr | parse_register8)) |
                 cond_reduce!(dst.is_memory(), alt_complete!(parse_register16 | parse_register8)) |
                 cond_reduce!(dst.is_address_in_register16(), parse_register8)

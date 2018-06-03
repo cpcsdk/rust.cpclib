@@ -73,7 +73,8 @@ impl Bank {
 pub struct PageDefinition {
     bank: Bank,
     start: u16,
-    end: Option<u16>
+    end: Option<u16>,
+    name: Option<String>
 }
 
 impl Debug for PageDefinition {
@@ -103,8 +104,17 @@ impl PageDefinition {
         PageDefinition {
             bank,
             start,
-            end
+            end,
+            name: None
         }
+    }
+
+    pub fn set_name(&mut self, name: String) {
+        self.name = Some(name);
+    }
+
+    pub fn name(&self) -> Option<&String> {
+        self.name.as_ref()
     }
 
 
@@ -170,6 +180,22 @@ impl PageDefinition {
 
         }
 
+    }
+
+
+    /// Chekc that hte other page is contained by self. Cannot be used only when end address is
+    /// given
+    pub fn includes(&self, other: &PageDefinition) -> bool {
+        if self.end.is_none() || other.end.is_none() {
+            return false;
+        }
+
+        if self.bank != other.bank {
+            return false;
+        }
+
+        // By definition, end is defined for everyone
+        other.start() >= self.start() && other.end().unwrap() <= self.end().unwrap()
     }
 }
 
