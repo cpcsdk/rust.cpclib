@@ -592,6 +592,21 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
         }
     }
 
+
+    else if let &DataAccess::Memory(ref exp) = arg1 {
+        let address = exp.resolve(sym)?;
+
+        match arg2 {
+            &DataAccess::Register16(ref reg) => {
+                bytes.push(0xED);
+                bytes.push(0b01000011 |  (register16_to_code_with_sp(reg)));
+                add_word(&mut bytes, address as _);
+            }
+
+            _ => {}
+        }
+    }
+
     if bytes.len() == 0
     {
         Err(format!("LD not properly implemented for '{:?}, {:?}'", arg1, arg2))

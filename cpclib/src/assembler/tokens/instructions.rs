@@ -184,7 +184,7 @@ impl Token {
                 => Ok(Bytes::new()),
             &Token::Dw(_) | &Token::Db(_)
                 => assemble_db_or_dw(self, table),
-            &Token::Label(_) | &Token::Comment(_)
+            &Token::Label(_) | &Token::Comment(_) | &Token::Org(_)
                 => Ok(Bytes::new()),
             &Token::Defs(ref expr)
                 =>assemble_defs(expr, table),

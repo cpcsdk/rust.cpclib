@@ -278,7 +278,7 @@ named!(
             alt_complete!(
                 cond_reduce!(dst.is_register16() | dst.is_indexregister16(), alt_complete!(parse_expr | parse_address)) |
                 cond_reduce!(dst.is_register8(), alt_complete!(parse_expr | parse_register8)) |
-                cond_reduce!(dst.is_memory(), alt_complete!(parse_register16 | parse_register8)) |
+                cond_reduce!(dst.is_memory(), alt_complete!(parse_register16 | parse_register8 | parse_register_sp)) |
                 cond_reduce!(dst.is_address_in_register16(), parse_register8)
             )
         )
