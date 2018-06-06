@@ -9,7 +9,15 @@ use std::io::BufReader;
 extern crate clap;
 use clap::{Arg, App, SubCommand};
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+pub mod built_info {
+include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
+extern crate built;
+extern crate time;
+extern crate semver;
+
+
 
 ///! Reimplementation of createsnapshot by Ramlaid/Arkos
 ///! in rust by Krusty/Benediction
@@ -700,10 +708,13 @@ impl Snapshot {
 }
 
 fn main() {
+    let desc_before = format!("Profile {} compiled: {}", built_info::PROFILE, built_info::BUILT_TIME_UTC);
     let matches = App::new("createSnapshot")
-                          .version(VERSION)
+                          .version(built_info::PKG_VERSION)
                           .author("Krusty/Benediction")
-                          .about("CPC snapshot manipulation")
+                          .about("Amstrad CPC snapshot manipulation")
+                          .before_help(&desc_before[..])
+                          .after_help("This tool tries to be similar than Ramlaid's one")
                           .arg(Arg::with_name("OUTPUT")
                                .help("Sets the output file to generate")
                                .conflicts_with("flags")

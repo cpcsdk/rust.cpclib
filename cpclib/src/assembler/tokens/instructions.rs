@@ -94,6 +94,9 @@ impl fmt::Display for Token {
         };
 
         match self {
+            &Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2)) if &Mnemonic::Out == mne
+                => write!(f, "{} (C), {}", mne, arg2),
+
             &Token::Assert(ref expr)
                 => write!(f, "ASSERT {}", expr),
             &Token::Label(ref string)
@@ -104,6 +107,7 @@ impl fmt::Display for Token {
                 => write!(f, "{}", mne),
             &Token::OpCode(ref mne, Some(ref arg1), None)
                 => write!(f, "{} {}", mne, arg1),
+
             &Token::OpCode(ref mne, None, Some(ref arg2)) // JP/JR without flags
                 => write!(f, "{} {}", mne, arg2),
             &Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2))
