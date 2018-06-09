@@ -502,6 +502,7 @@ impl FromStr for SnapshotFlag {
         let s = &s.to_uppercase();
 
         if s.contains(":") {
+
             let elems = s.split(":").collect::<Vec<_>>();
             let s = elems[0];
             let idx = match elems[1].parse::<usize>() {
@@ -519,6 +520,12 @@ impl FromStr for SnapshotFlag {
         }
         else {
             match s.as_str() {
+                "GA_PAL" => Ok(SnapshotFlag::GA_PAL(None)),
+                "CRTC_REG" => Ok(SnapshotFlag::CRTC_REG(None)),
+                "PSG_REG" => Ok(SnapshotFlag::PSG_REG(None)),
+                "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(None)),
+
+
                 "Z80_AF" => Ok(SnapshotFlag::Z80_AF),
                 "Z80_F" => Ok(SnapshotFlag::Z80_F),
                 "Z80_A" => Ok(SnapshotFlag::Z80_A),
@@ -820,6 +827,7 @@ fn main() {
                                .help("Sets the output file to generate")
                                .conflicts_with("flags")
                                .conflicts_with("info")
+                               .conflicts_with("getToken")
                                .last(true)
                                .required(true))
                           .arg(Arg::with_name("inSnapshot")
@@ -836,6 +844,14 @@ fn main() {
                                .multiple(true)
                                .number_of_values(2)
                                .help("Specify a file to include. -l fname address"))
+                          .arg(Arg::with_name("getToken")
+                               .takes_value(true)
+                               .short("g")
+                               .multiple(true)
+                               .number_of_values(1)
+                               .help("Display the value of a snapshot token")
+                               .requires("inSnapshot")
+                           )
                           .arg(Arg::with_name("setToken")
                                .takes_value(true)
                                .short("s")
@@ -883,7 +899,6 @@ fn main() {
         return;
     }
 
-    let fname = matches.value_of("OUTPUT").unwrap();
 
     // Manage the files insertion
     if matches.is_present("load") {
@@ -922,6 +937,15 @@ fn main() {
         }
     }
 
+    // Read the tokens
+    if matches.is_present("getToken") {
+        for token in matches.values_of("getToken").unwrap() {
+            let mut token = SnapshotFlag::from_str(token).unwrap();
+            println!("{:?} => {}", &token, sna.get_value(&token));
+        }
+        return;
+    }
+
     // Set the tokens
     if matches.is_present("setToken") {
         let loads = matches.values_of("setToken").unwrap().collect::<Vec<_>>();
@@ -948,6 +972,7 @@ fn main() {
     }
 
 
+    let fname = matches.value_of("OUTPUT").unwrap();
     sna.save_sna(&fname);
 
 }
