@@ -510,12 +510,19 @@ impl FromStr for SnapshotFlag {
                 Err(_) => return Err(String::from("Unable to parse index"))
             };
 
-            match s {
-                "GA_PAL" => Ok(SnapshotFlag::GA_PAL(Some(idx))),
-                "CRTC_REG" => Ok(SnapshotFlag::CRTC_REG(Some(idx))),
-                "PSG_REG" => Ok(SnapshotFlag::PSG_REG(Some(idx))),
-                "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(Some(idx))),
-                _ => Err(String::from("Unable to convert string to a flag"))
+            let indexed_flag = match s {
+                "GA_PAL" => SnapshotFlag::GA_PAL(Some(idx)),
+                "CRTC_REG" => SnapshotFlag::CRTC_REG(Some(idx)),
+                "PSG_REG" => SnapshotFlag::PSG_REG(Some(idx)),
+                "GA_MULTIMODE" => SnapshotFlag::GA_MULTIMODE(Some(idx)),
+                _ => {return Err(String::from("Unable to convert string to a flag"));}
+            };
+
+            if indexed_flag.indice().unwrap() < indexed_flag.nb_elems() {
+                return Ok(indexed_flag);
+            }
+            else {
+                return Err(format!("Wrong index size {:?}", indexed_flag));
             }
         }
         else {
