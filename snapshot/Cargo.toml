@@ -1,6 +1,6 @@
 [package]
 name = "snapshot"
-version = "0.1.0-alpha1"
+version = "0.1.0-alpha2"
 authors = ["Krusty/Benediction"]
 build = "build.rs"
 
