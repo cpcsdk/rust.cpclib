@@ -5,6 +5,7 @@ use std::fs::File;
 use std::str::FromStr;
 use std::path::Path;
 use std::io::BufReader;
+use std::fmt;
 
 extern crate clap;
 use clap::{Arg, App, SubCommand};
@@ -62,7 +63,7 @@ fn string_to_nb(source: &str) -> u32 {
 
 
 /// Encode a flag of the snaphot
-#[derive(PartialEq,Debug)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 enum SnapshotFlag {
     Z80_AF,
     Z80_F,
@@ -101,22 +102,22 @@ enum SnapshotFlag {
     Z80_HLX,
     Z80_LX,
     Z80_HX,
-    GA_PAL(usize),
+    GA_PAL(Option<usize>),
     GA_PEN,
     GA_ROMCFG,
     GA_RAMCFG,
-    CRTC_REG(usize),
+    CRTC_REG(Option<usize>),
     CRTC_SEL,
     ROM_UP,
     PPI_A,
     PPI_B,
     PPI_C,
     PPI_CTL,
-    PSG_REG(usize),
+    PSG_REG(Option<usize>),
     PSG_SEL,
     CPC_TYPE,
     INT_NUM,
-    GA_MULTIMODE(usize),
+    GA_MULTIMODE(Option<usize>),
     FDD_MOTOR,
     FDD_TRACK,
     PRNT_DATA,
@@ -181,22 +182,22 @@ impl SnapshotFlag {
             Z80_HLX,
             Z80_LX,
             Z80_HX,
-            GA_PAL(0),
+            GA_PAL(None),
             GA_PEN,
             GA_ROMCFG,
             GA_RAMCFG,
-            CRTC_REG(0),
+            CRTC_REG(None),
             CRTC_SEL,
             ROM_UP,
             PPI_A,
             PPI_B,
             PPI_C,
             PPI_CTL,
-            PSG_REG(0),
+            PSG_REG(None),
             PSG_SEL,
             CPC_TYPE,
             INT_NUM,
-            GA_MULTIMODE(0),
+            GA_MULTIMODE(None),
             FDD_MOTOR,
             FDD_TRACK,
             PRNT_DATA,
@@ -221,11 +222,38 @@ impl SnapshotFlag {
             &CRTC_REG(ref idx) |
             &PSG_REG(ref idx) |
             &GA_MULTIMODE(ref idx)
-                => self.base() + idx * self.elem_size(),
+                => self.base() + idx.unwrap_or(0) * self.elem_size(),
             _
                 => self.base()
         }
     }
+
+    pub fn indice(&self) -> Option<usize> {
+        use SnapshotFlag::*;
+
+        match self {
+            &GA_PAL(ref idx) |
+            &CRTC_REG(ref idx) |
+            &PSG_REG(ref idx) |
+            &GA_MULTIMODE(ref idx)
+            => idx.clone(),
+            _ => Some(0) // For standard stuff indice is considered to be 0
+        }
+    }
+
+    pub fn set_indice(&mut self, indice: usize) -> Result<(), SnapshotError>{
+        use SnapshotFlag::*;
+        match self {
+            &mut GA_PAL(ref mut idx) |
+                &mut CRTC_REG(ref mut idx) |
+                &mut PSG_REG(ref mut idx) |
+                &mut GA_MULTIMODE(ref mut idx)
+                => {*idx = Some(indice); Ok(())},
+            _ => Err(SnapshotError::InvalidIndex)
+        }
+    }
+
+
     /// Return the header base position that corresponds to the flag
     pub fn base(&self) -> usize {
         use SnapshotFlag::*;
@@ -482,10 +510,10 @@ impl FromStr for SnapshotFlag {
             };
 
             match s {
-                "GA_PAL" => Ok(SnapshotFlag::GA_PAL(idx)),
-                "CRTC_REG" => Ok(SnapshotFlag::CRTC_REG(idx)),
-                "PSG_REG" => Ok(SnapshotFlag::PSG_REG(idx)),
-                "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(idx)),
+                "GA_PAL" => Ok(SnapshotFlag::GA_PAL(Some(idx))),
+                "CRTC_REG" => Ok(SnapshotFlag::CRTC_REG(Some(idx))),
+                "PSG_REG" => Ok(SnapshotFlag::PSG_REG(Some(idx))),
+                "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(Some(idx))),
                 _ => Err(String::from("Unable to convert string to a flag"))
             }
         }
@@ -561,6 +589,38 @@ impl FromStr for SnapshotFlag {
     }
 }
 
+#[derive(Debug)]
+enum FlagValue {
+    Byte(u8),
+    Word(u16),
+    Array(Vec<FlagValue>), // Restr$icted to Byte or Word
+
+}
+
+impl fmt::Display for FlagValue{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &FlagValue::Byte(ref val) => {
+                write!(f, "0x{:x}", val)
+            },
+            &FlagValue::Word(ref val) => {
+                write!(f, "0x{:x}", val)
+            }
+            &FlagValue::Array(ref array) => {
+                write!(f, "[")
+                    .and_then(|_x|{
+                        write!(f, "{:?}",
+                        &array
+                            .iter()
+                            .map(|b|{format!("{}", b)})
+                            .collect::<Vec<_>>())
+                    })
+                    .and_then(|_x|{write!(f, "]")})
+            }
+        }
+    }
+}
+
 
 #[derive(Debug)]
 pub enum SnapshotError {
@@ -568,6 +628,7 @@ pub enum SnapshotError {
     NotEnougSpaceAvailable,
     InvalidValue,
     FlagDoesNotExists,
+    InvalidIndex
 }
 
 struct SnapshotChunk {
@@ -704,6 +765,40 @@ impl Snapshot {
         }
     }
 
+    pub fn get_value(&self, flag: &SnapshotFlag) -> FlagValue {
+
+        if flag.indice().is_some() {
+            // Here we treate the case where we read only one value
+            let offset = flag.offset();
+            match flag.elem_size() {
+                1 => {
+                    return FlagValue::Byte(self.header[offset]);
+                },
+                2 => {
+                    return FlagValue::Word(self.header[offset+1] as u16 *256 + self.header[offset] as u16)
+                },
+                _ => panic!()
+            };
+        }
+
+        else {
+            // Here we treat the case where we read an array
+            let mut vals:Vec<FlagValue> = Vec::new();
+            for idx in 0..flag.nb_elems() { // By construction, >1
+                let mut flag2 = flag.clone();
+                flag2.set_indice(idx);
+                vals.push(self.get_value(&flag2));
+            }
+            return FlagValue::Array(vals);
+        }
+    }
+
+    pub fn print_info(&self) {
+        for flag in SnapshotFlag::enumerate().into_iter() {
+            println!("{:?} => {}", &flag, &self.get_value(flag));
+        }
+    }
+
 
 }
 
@@ -715,9 +810,16 @@ fn main() {
                           .about("Amstrad CPC snapshot manipulation")
                           .before_help(&desc_before[..])
                           .after_help("This tool tries to be similar than Ramlaid's one")
+                          .arg(Arg::with_name("info")
+                               .help("Display informations on the loaded snapshot")
+                               .multiple(false)
+                               .long("info")
+                               .requires("inSnapshot")
+                           )
                           .arg(Arg::with_name("OUTPUT")
                                .help("Sets the output file to generate")
                                .conflicts_with("flags")
+                               .conflicts_with("info")
                                .last(true)
                                .required(true))
                           .arg(Arg::with_name("inSnapshot")
@@ -764,6 +866,7 @@ fn main() {
         return;
     }
 
+
     let mut sna = if matches.is_present("inSnapshot"){
         let fname = matches.value_of("inSnapshot").unwrap();
         let path = Path::new(&fname);
@@ -773,6 +876,12 @@ fn main() {
         Snapshot::default()
     };
 
+
+
+    if matches.is_present("info") {
+        sna.print_info();
+        return;
+    }
 
     let fname = matches.value_of("OUTPUT").unwrap();
 
@@ -820,7 +929,7 @@ fn main() {
 
             // Read the parameters from the command line
             let token = loads[i*2+0];
-            let (token, index) = if token.contains(":") {
+            let (token, _index) = if token.contains(":") {
                 let elems = token.split(":").collect::<Vec<_>>();
                 (elems[0], Some(elems[1].parse::<usize>().expect("Unable to read indice")))
             }
