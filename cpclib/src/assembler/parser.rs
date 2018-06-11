@@ -1,13 +1,8 @@
-use nom::{Err, ErrorKind, IResult, space, space1, space0, is_space, line_ending,CompareResult};
+use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending};
 use nom::types::{CompleteStr};
-use nom::{digit, multispace};
-use nom::{InputLength, InputIter,ParseTo};
-use std::str::FromStr;
-use nom::Compare;
+use nom::{multispace};
+use nom::{InputLength, InputIter};
 use assembler::tokens::*;
-use std;
-use std::fs::File;
-use std::io::prelude::*;
     use std::iter;
 
 
@@ -15,12 +10,6 @@ use std::io::prelude::*;
         pub const ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION:u32 = 128;
         pub const INVALID_ARGUMENT:u32 = 129;
     }
-
-#[derive(Copy, Clone)]
-pub struct ParserContext {
-    line_counter: usize
-}
-
 
 named! (
     pub parse_z80_code <CompleteStr, Vec<Token>>,
@@ -268,6 +257,7 @@ named!(
                            parse_register16 |
                            parse_register8 |
                            parse_indexregister16 |
+                           parse_indexregister8 |
                            parse_address)
         ) >>
         opt!(space) >>
@@ -530,7 +520,7 @@ named!(
         )
     );
 
-
+/*
 /// XXX to remove as soon as possible
 named!(
     parse_dollar <CompleteStr, Expr>, do_parse!(
@@ -538,7 +528,7 @@ named!(
         (Expr::Label(String::from("$")))
         )
     );
-
+*/
 
 named!(
     parse_register16 <CompleteStr, DataAccess>, do_parse!(
@@ -844,7 +834,7 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 pub fn parse_str(code: CompleteStr) -> Vec<Token> {
     match parse_z80_code(code) {
         Err(e) => panic!("{:?}", e),
-        Ok((remaining, parsed)) => {
+        Ok((_, parsed)) => {
             parsed
         }
     }
@@ -878,7 +868,7 @@ named!(pub factor< CompleteStr, Expr >, alt_complete!(
     // manage $
    | map!(
         delimited!(opt!(multispace), tag!("$"), opt!(multispace)),
-        |x|{Expr::Label(String::from("$"))}
+        |_x|{Expr::Label(String::from("$"))}
     )
     // manage labels
    | map!(
@@ -952,15 +942,12 @@ named!(pub comp<CompleteStr, Expr>, do_parse!(
 
 pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr>) -> String {
 
-    use nom::InputIter;
     use nom::InputLength;
-    use nom::FindSubstring;
-
 
     let error_string = {
         let mut error_string;
 
-        if let ::nom::Err::Failure(::nom::simple_errors::Context::Code(remaining, ErrorKind::Custom(error_val))) = e {
+        if let ::nom::Err::Failure(::nom::simple_errors::Context::Code(remaining, ErrorKind::Custom(_))) = e {
 
             let bytes = orig.as_bytes();
             let complete_size = orig.len();
@@ -984,7 +971,7 @@ pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr>) -> String {
 
             let line = &orig[line_start..line_end];
             let line_idx = orig[..(error_position)].bytes().filter(|b| *b == b'\n').count(); // way too slow I guess
-            let column_idx = (error_position - line_start);
+            let column_idx = error_position - line_start;
             let error_description = "Error because";
             let empty = iter::repeat(" ").take(column_idx).collect::<String>();
             error_string = format!("{}:{}:{} {}\n{}\n{}^", "fname", line_idx, column_idx, error_description, line, empty);

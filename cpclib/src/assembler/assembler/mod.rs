@@ -1,7 +1,6 @@
 extern crate smallvec;
 
 use assembler::tokens::*;
-use assembler::parser::*;
 use std::collections::HashMap;
 use smallvec::SmallVec;
 
@@ -41,8 +40,8 @@ type Bank = [u8; 0x10000];
 struct OrgZone {
     ibank: usize,
     protect: bool,
-    memstart: usize,
-    memend: usize
+    _memstart: usize,
+    _memend: usize
 }
 
 #[derive(Debug)]
@@ -85,7 +84,6 @@ impl SymbolsTable {
         if res.is_some() {
             match res.unwrap() {
                 &Symbol::Integer(val) => Some(val),
-                _ => panic!("Only integer are currently manipulated....")
             }
         }
         else {
@@ -157,7 +155,7 @@ impl Env {
     /// Output one byte
     /// (RASM ___internal_output)
     pub fn output(&mut self, v: u8) {
-        if (self.outputadr <= self.maxptr) {
+        if self.outputadr <= self.maxptr {
             self.mem[self.activebank][self.outputadr] = v;
             self.outputadr += 1; // XXX will fail at 0xffff
             self.codeadr += 1;
@@ -206,11 +204,9 @@ impl Env {
 pub fn visit_tokens(tokens: & Vec<Token>) -> Env{
 
     let mut env = Env::default();
-    let mut count = 0;
 
     for token in tokens.iter() {
         visit_token(token, &mut env);
-        count += 1;
     }
 
     env
@@ -272,7 +268,7 @@ pub fn assemble_db_or_dw(token: &Token, sym: &SymbolsTable) -> Result<Bytes, Str
 /// Assemble the opcode and inject in the environement
 fn visit_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<DataAccess> , env: &mut Env) {
 
-    /// TODO update $ in the symbol table
+    // TODO update $ in the symbol table
     let bytes = assemble_opcode(mnemonic, arg1, arg2, env.symbols());
     match bytes {
         Ok(ref bytes ) => {
@@ -313,7 +309,6 @@ pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Op
             => assemble_res_or_set(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ret
             => assemble_ret(arg1),
-        _ => Err(format!("[assemble_opcode] Mnemonic not treated: {:?}, {:?}, {:?}", mnemonic, arg1, arg2))
     }
 }
 
@@ -415,7 +410,7 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, String>{
 
 
 /// Result represents -16 to 129
-pub fn absolute_to_relative(address: i32, sym: &SymbolsTable) -> u8 {
+pub fn absolute_to_relative(_address: i32, _sym: &SymbolsTable) -> u8 {
     eprintln!("absolute_to_relative is not implemented and returns 0");
     0
 }
@@ -446,7 +441,7 @@ fn assemble_jr_or_jp(mne: &Mnemonic, arg1: &Option<DataAccess>, arg2: &DataAcces
     let mut bytes = Bytes::new();
 
     // check if it is jp or jr
-    let is_jr = match(mne) {
+    let is_jr = match mne {
         &Mnemonic::Jr => true,
         &Mnemonic::Jp => false,
         _ =>panic!()
@@ -870,7 +865,7 @@ pub fn assemble_defs(expr: &Expr, sym: &SymbolsTable) -> Result<Bytes, String> {
     let count = expr.resolve(sym).expect("Unable to resolve the count");
     let mut bytes = Bytes::with_capacity(count as usize);
 
-    for i in 0..count {
+    for _i in 0..count {
         bytes.push(0);
     }
 

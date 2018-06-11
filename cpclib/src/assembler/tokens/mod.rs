@@ -5,11 +5,7 @@ use nom::{
     FindSubstring,
     InputIter,
     InputLength,
-    Offset,
-    Slice,
-    ErrorKind
 };
-use nom::types::{CompleteStr, CompleteByteSlice};
 use std::slice::Iter;
 use std::iter::Enumerate;
 use memchr;
@@ -38,9 +34,7 @@ pub type Input<'a> = &'a [InputElement];
 
 
 use std::fmt;
-use std::fmt::{Debug, Display, Formatter};
 use assembler::parser;
-use assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,Bytes,SymbolsTable};
 
 
 

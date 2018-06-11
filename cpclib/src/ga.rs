@@ -5,7 +5,6 @@ use self::im::Pixel;
 use std::collections::HashMap;
 use std::ops::Add;
 use std::fmt::{Formatter, Debug, Result} ;
-use std::hash::Hash;
 
 const INK0:im::Rgba<u8> = im::Rgba{data:[0, 0, 0, 255]};
 const INK1:im::Rgba<u8> = im::Rgba{data: [0x00, 0x00, 0x80, 255]};
@@ -102,8 +101,6 @@ impl From<im::Rgba<u8>> for Ink{
 
 impl From<im::Rgb<u8>> for Ink {
     fn from(color: im::Rgb<u8>) -> Self {
-        let mut ink: Option<Ink> = None;
-
         // Not strict comparison
         let distances = INKS_VALUES.into_iter().map(|color_ink|{
               (color_ink[0] as i32 - color[0] as i32).pow(2)
@@ -339,7 +336,7 @@ impl Clone for Palette {
 impl Debug for Palette{
     fn fmt(&self, f: &mut Formatter) -> Result {
         for i in 0..16 {
-            write!(f, "{} => {:?}\n", i, self.values.get(&Pen::from(i)).unwrap());
+            write!(f, "{} => {:?}\n", i, self.values.get(&Pen::from(i)))?;
         }
         Ok(())
     }

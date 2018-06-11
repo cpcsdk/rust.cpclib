@@ -146,21 +146,21 @@ impl Token {
 
     pub fn mnemonic(&self) -> Option<&Mnemonic> {
         match self {
-            &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => Some(mnemonic),
+            &Token::OpCode(ref mnemonic, _, _) => Some(mnemonic),
             _ => None
         }
     }
 
     pub fn mnemonic_arg1(&self) -> Option<&DataAccess> {
         match self {
-            &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => arg1.as_ref(),
+            &Token::OpCode(_, ref arg1, _) => arg1.as_ref(),
             _ => None
         }
     }
 
     pub fn mnemonic_arg2(&self) -> Option<&DataAccess> {
         match self {
-            &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => arg2.as_ref(),
+            &Token::OpCode(_, _, ref arg2) => arg2.as_ref(),
             _ => None
         }
     }

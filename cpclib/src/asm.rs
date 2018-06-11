@@ -248,7 +248,7 @@ impl StringCodePage {
     pub fn can_contain(&self, size:Option<u16>) -> bool{
         match size {
             None => {assert!(!self.maximum_address().is_some()); true},
-            Some(address) => self.remaining_space().unwrap() >= size.unwrap()
+            Some(_) => self.remaining_space().unwrap() >= size.unwrap()
         }
     }
 
@@ -324,10 +324,11 @@ impl StringCodePageContainer {
     }
 
 
-    pub fn save_code(&self, fname_prefix: &str) {
+    pub fn save_code(&self, fname_prefix: &str) -> io::Result<()>  {
         for (idx, page) in self.pages.iter().enumerate() {
-            page.save_code(&format!("{}_{}.asm", fname_prefix, idx));
+            page.save_code(&format!("{}_{}.asm", fname_prefix, idx))?;
         }
+        Ok(())
     }
 
 }

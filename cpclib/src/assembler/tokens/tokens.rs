@@ -132,7 +132,7 @@ impl ListingElement for Token {
 
                     &Mnemonic::Ret => {
                         match arg1 {
-                            none => 3,
+                            None => 3,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
                     },
@@ -182,9 +182,13 @@ impl fmt::Display for Listing {
                 &Token::Label(_) |
                     &Token::Equ(_, _) |
                     &Token::Comment(_) => (),
-                _ => {write!(f, "\t");}
+                _ => {
+                    let res = write!(f, "\t");
+                    if res.is_err() {return res;}
+                }
             }
-            write!(f, "{}\n", token);
+            let res = write!(f, "{}\n", token);
+            if res.is_err(){return res;}
         }
 
         Ok(())
@@ -228,7 +232,7 @@ impl Listing {
         let res = parser::parse_z80_str(code);
 
         let tokens = match res {
-            Ok((res, local_tokens)) => {
+            Ok((_res, local_tokens)) => {
                 Ok(local_tokens)
             },
             Err(e) => {

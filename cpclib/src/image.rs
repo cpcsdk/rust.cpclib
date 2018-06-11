@@ -233,6 +233,15 @@ pub struct Sprite {
 
 impl Sprite {
 
+    pub fn palette(&self) -> Option<Palette>{
+        self.palette.clone()
+    }
+
+
+    pub fn mode(&self) -> Option<Mode>{
+        self.mode.clone()
+    }
+
     /// Get the height (in pixels) of the image
     /// TODO Use a trait for that
     pub fn height(&self) -> u32 {

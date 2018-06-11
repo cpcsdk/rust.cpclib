@@ -1,6 +1,5 @@
 /// Manage all the stuff related to mode 1 pixels
 pub mod mode1 {
-    use std::mem::transmute;
     use ga::Pen;
 
     /// Pixel ordering in a byte
@@ -161,7 +160,6 @@ def get_mode1_pixel3_byte_encoded(pen):
 
 
 pub mod mode0 {
-    use std::mem::transmute;
     use ga::Pen;
 
 

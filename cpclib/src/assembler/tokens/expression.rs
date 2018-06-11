@@ -62,8 +62,8 @@ impl Expr {
                         Oper::StrictlyGreater=> Ok( (a > b) as i32),
                     }
                 },
-                (Err(a), Ok(b))  => Err(format!("Unable to make the operation {:?}: {}", oper, a)),
-                (Ok(a), Err(b))  => Err(format!("Unable to make the operation {:?}: {}", oper, b)),
+                (Err(a), Ok(_b))  => Err(format!("Unable to make the operation {:?}: {}", oper, a)),
+                (Ok(_a), Err(b))  => Err(format!("Unable to make the operation {:?}: {}", oper, b)),
                 (Err(a), Err(b))  => Err(format!("Unable to make the operation {:?}: {} & {}", oper, a, b))
             }
 
@@ -97,7 +97,6 @@ impl Expr {
 
             Paren(ref e) => e.resolve(sym),
 
-            _ => Err(String::from("Need to implement the operation"))
         }
     }
 
@@ -109,7 +108,7 @@ impl Expr {
     pub fn is_context_independant(&self) -> bool {
         use self::Expr::*;
         match *self {
-            Label(ref label) => false,
+            Label(_) => false,
             _ => true
         }
     }

@@ -1,6 +1,5 @@
 use std::fmt;
 
-use assembler::tokens::expression::*;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub enum Register16 {
