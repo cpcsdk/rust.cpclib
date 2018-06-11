@@ -247,6 +247,7 @@ named!(
     parse_directive <CompleteStr, Token>,
         alt_complete!(
             parse_assert |
+            parse_align |
             parse_org |
             parse_defs |
             parse_include |
@@ -345,6 +346,21 @@ named!(
         ) >>
         (
             Token::Assert(expr)
+        )
+    )
+);
+
+
+named!(
+    pub parse_align <CompleteStr, Token>, do_parse!(
+        tag_no_case!("ALIGN") >>
+        many1!(space) >>
+        expr: return_error!(
+            ErrorKind::Custom(error_code::ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION),
+            expr
+        ) >>
+        (
+            Token::Align(expr)
         )
     )
 );

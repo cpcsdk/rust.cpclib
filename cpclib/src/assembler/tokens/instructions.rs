@@ -69,6 +69,7 @@ pub enum Token {
 
     OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>),
 
+    Align(Expr),
     Assert(Expr),
     Defs(Expr),
     Db(Vec<Expr>),
@@ -97,6 +98,8 @@ impl fmt::Display for Token {
             &Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2)) if &Mnemonic::Out == mne
                 => write!(f, "{} (C), {}", mne, arg2),
 
+            &Token::Align(ref expr)
+                => write!(f, "ALIGN {}", expr),
             &Token::Assert(ref expr)
                 => write!(f, "ASSERT {}", expr),
             &Token::Label(ref string)
@@ -192,6 +195,10 @@ impl Token {
                 => Ok(Bytes::new()),
             &Token::Defs(ref expr)
                 =>assemble_defs(expr, table),
+
+            &Token::Align(_)
+                => Err("It is impossible to obtain ALIGN size without context on the current address".to_owned()),
+
             _
                 => Err(format!("Currently unable to generate bytes for {}", self))
         }
