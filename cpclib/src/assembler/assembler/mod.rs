@@ -291,6 +291,8 @@ pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Op
             => assemble_add_or_adc(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), sym),
         &Mnemonic::Dec | &Mnemonic::Inc
             => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap()),
+        &Mnemonic::Djnz
+            => assemble_djnz(arg1.as_ref().unwrap(), sym),
         &Mnemonic::Ld
             => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ldi | &Mnemonic::Ldd | &Mnemonic::Ei | &Mnemonic::Di | &Mnemonic::Exx
@@ -411,7 +413,7 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, String>{
 
 /// Result represents -16 to 129
 pub fn absolute_to_relative(_address: i32, _sym: &SymbolsTable) -> u8 {
-    eprintln!("absolute_to_relative is not implemented and returns 0");
+    eprintln!("absolute_to_relative is not implemented and systematically returns 0");
     0
 }
 
@@ -493,6 +495,23 @@ fn assemble_jr_or_jp(mne: &Mnemonic, arg1: &Option<DataAccess>, arg2: &DataAcces
     Ok(bytes)
 }
 
+fn assemble_djnz(arg1: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, String> {
+
+    if let &DataAccess::Expression(ref expr) = arg1 {
+        let mut bytes = Bytes::new();
+        let address = expr.resolve(sym)?;
+        let relative = absolute_to_relative(address, sym);
+
+        bytes.push(0x10);
+        bytes.push(relative);
+
+        return Ok(bytes)
+    }
+    else {
+        return Err("DJNZ must be followed by an expression".to_owned());
+    }
+
+}
 
 
 fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, String>{

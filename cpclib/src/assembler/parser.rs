@@ -219,6 +219,7 @@ named!(
     parse_token <CompleteStr, Token>,
         alt_complete!(
             parse_add_or_adc |
+            parse_djnz |
             parse_ld |
             parse_inc_dec |
             parse_out |
@@ -315,6 +316,17 @@ named!(
         }
     })
   )
+);
+
+
+
+named!(
+    pub parse_djnz<CompleteStr, Token>, do_parse!(
+        tag_no_case!("DJNZ") >>
+        many1!(space) >>
+        expr: parse_expr >>
+        (Token::OpCode(Mnemonic::Djnz, Some(expr), None))
+    )
 );
 
 
