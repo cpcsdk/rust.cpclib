@@ -8,6 +8,6 @@ pub mod screen;
 pub mod ga;
 pub mod pixels;
 pub mod asm;
-pub mod z80;
+pub mod z80emu;
 pub mod assembler;
 pub mod image;
