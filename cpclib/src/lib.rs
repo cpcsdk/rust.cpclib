@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate nom;
-
+extern crate num;
 extern crate memchr;
 extern crate smallvec;
 

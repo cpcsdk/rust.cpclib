@@ -15,12 +15,71 @@ impl Z80 {
             }
             _ => panic!()
         }
+
+
+        /// TODO use a cache to speed up that
+        let opcode_size = opcode.number_of_bytes().unwrap();
+        self.pc_mut().add(opcode_size as _);
     }
 
 
-    /// Execute the given opcode
-    fn execute_opcode(&mut self, mneomonic: &Mnemonic, arg1: Option<&DataAccess>, arg2: Option<&DataAccess>) {
-    
+    /// Execute the given opcode. Parameters are assumed to be valid
+    fn execute_opcode(&mut self, mnemonic: &Mnemonic, arg1: Option<&DataAccess>, arg2: Option<&DataAccess>) {
+        match mnemonic {
+            Mnemonic::Add => {
+                match (arg1, arg2)  {
+                    (Some(&DataAccess::Register8(::assembler::tokens::Register8::A)), Some(&DataAccess::Register8(_))) => {
+                        let val = self.get_register_8(arg2.unwrap()).value();
+                        self.get_register_8_mut(arg1.unwrap()).add(val);
+                    },
+                    _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
+                }
+            },
+
+            Mnemonic::Pop => {
+                let word = self.read_memory_word(self.sp().value());
+                self.bc_mut().set(word);
+                self.sp_mut().add(2);
+            },
+
+            Mnemonic::Ldi => {
+                let byte = self.read_memory_byte(self.hl().value());
+                self.write_memory_byte(self.de().value(), byte);
+                self.bc_mut().inc();
+                self.de_mut().inc();
+                self.hl_mut().inc();
+            },
+
+            Mnemonic::Ld => {
+                match (arg1, arg2)  {
+                    (Some(&DataAccess::Register8(_)), Some(&DataAccess::Register8(_))) => {
+                        let val = self.get_register_8(arg2.unwrap()).value();
+                        self.get_register_8_mut(arg1.unwrap()).set(val);
+                    },
+                    _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
+                }
+            },
+
+            _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
+        }
+
+    }
+
+
+
+    /// TODO need to manage memory
+    fn write_memory_byte(&self, addr:u16, val: u8)  {
+    }
+
+    /// TODO need to manage memory
+    fn read_memory_byte(&self, addr:u16) -> u8 {
+        0
+    }
+
+    fn read_memory_word(&self, addr:u16) -> u16 {
+        let low = self.read_memory_byte(addr);
+        let high = self.read_memory_byte(addr+1); // TODO manage overflow case
+        low as u16 + high as u16 *256
     }
 
     /// Read the value provided by the given access.
@@ -30,10 +89,10 @@ impl Z80 {
         match access {
             &DataAccess::Memory(_) => None, // TODO read the value from memory
             &DataAccess::IndexRegister16WithIndex(_, _, _) => None,
-            &DataAccess::IndexRegister16(ref reg) => Some(self.get_register_16(access).value() as _),
-            &DataAccess::IndexRegister8(ref reg) => Some(self.get_register_8(access).value() as _),
-            &DataAccess::Register16(ref reg) => Some(self.get_register_16(access).value() as _),
-            &DataAccess::Register8(ref reg) => Some(self.get_register_8(access).value() as _),
+            &DataAccess::IndexRegister16(_) => Some(self.get_register_16(access).value() as _),
+            &DataAccess::IndexRegister8(_) => Some(self.get_register_8(access).value() as _),
+            &DataAccess::Register16(_) => Some(self.get_register_16(access).value() as _),
+            &DataAccess::Register8(_) => Some(self.get_register_8(access).value() as _),
             &DataAccess::MemoryRegister16(_) => None,
             &DataAccess::Expression(ref expr) => self.eval_expr(expr),
             &DataAccess::FlagTest(_) => panic!()
@@ -61,7 +120,6 @@ impl Z80 {
             },
             _ => panic!()
         }
-
     }
 
     fn get_register_8(&self, reg: &DataAccess) -> &::z80emu::z80::Register8{
@@ -78,12 +136,39 @@ impl Z80 {
                 }
             },
 
-            &DataAccess::IndexRegister8(ref reg) => 
+            &DataAccess::IndexRegister8(ref reg) =>
                 match reg {
                     IndexRegister8::Ixl => self.ixl(),
                     IndexRegister8::Ixh => self.ixh(),
                     IndexRegister8::Iyl => self.iyl(),
                     IndexRegister8::Iyh => self.iyh(),
+                },
+            _ => panic!()
+        }
+    }
+
+
+    // Mutable version to be synced with the immutable one
+    fn get_register_8_mut(&mut self, reg: &DataAccess) -> &mut ::z80emu::z80::Register8{
+        match reg{
+            &DataAccess::Register8(ref reg) => {
+                match reg {
+                    ::assembler::tokens::Register8::A => self.a_mut(),
+                    ::assembler::tokens::Register8::B => self.b_mut(),
+                    ::assembler::tokens::Register8::D => self.d_mut(),
+                    ::assembler::tokens::Register8::H => self.h_mut(),
+                    ::assembler::tokens::Register8::C => self.c_mut(),
+                    ::assembler::tokens::Register8::E => self.e_mut(),
+                    ::assembler::tokens::Register8::L => self.l_mut(),
+                }
+            },
+
+            &DataAccess::IndexRegister8(ref reg) =>
+                match reg {
+                    IndexRegister8::Ixl => self.ixl_mut(),
+                    IndexRegister8::Ixh => self.ixh_mut(),
+                    IndexRegister8::Iyl => self.iyl_mut(),
+                    IndexRegister8::Iyh => self.iyh_mut(),
                 },
             _ => panic!()
         }
@@ -96,3 +181,5 @@ impl Z80 {
         }
     }
 }
+
+

@@ -4,17 +4,25 @@
 use std::mem::swap;
 use std::fmt::Debug;
 use std::fmt;
-
+use num::integer::Integer;
 
 /// Common trait for Register 8 and 6 bits
 pub trait HasValue {
-    type ValueType;
+    type ValueType: Integer;
 
     /// Retreive the stored value
     fn value(&self) -> Self::ValueType;
 
     /// Change the stored value
     fn set(&mut self, value:Self::ValueType);
+
+    /// Add value to register
+    // TODO return flags
+    fn add(&mut self, value:Self::ValueType);
+
+    // TODO find a way to implement it here
+    // TODO return flags
+    fn inc(&mut self);
 }
 
 /// Represents an 8 bit register
@@ -43,6 +51,15 @@ impl HasValue for Register8 {
 
     fn set(&mut self, value:Self::ValueType) {
         self.val = value;
+    }
+
+
+    fn add(&mut self, value:Self::ValueType) {
+        self.val = ((self.val as u16 + value as u16) & 256) as u8;
+    }
+
+    fn inc(&mut self) {
+        self.add(1);
     }
 }
 
@@ -75,6 +92,15 @@ impl HasValue for Register16 {
     fn set(&mut self, value:Self::ValueType) {
         self.low_mut().set((value%256) as _);
         self.high_mut().set((value/256) as _);
+    }
+
+    fn add(&mut self, value:Self::ValueType) {
+        let val = ((self.value() as u32 + value as u32) & 0xffff) as u16;
+        self.set(val);
+    }
+
+    fn inc(&mut self) {
+        self.add(1);
     }
 }
 
@@ -254,6 +280,26 @@ impl Z80 {
        tmp.low_mut()
     }
 
+    pub fn ixh_mut(&mut self)-> &mut Register8 {
+       let tmp = self.ix_mut();
+       tmp.high_mut()
+    }
+    pub fn ixl_mut(&mut self)-> &mut Register8 {
+       let tmp = self.ix_mut();
+       tmp.low_mut()
+    }
+
+    pub fn iyh_mut(&mut self)-> &mut Register8 {
+       let tmp = self.iy_mut();
+       tmp.high_mut()
+    }
+    pub fn iyl_mut(&mut self)-> &mut Register8 {
+       let tmp = self.iy_mut();
+       tmp.low_mut()
+    }
+
+
+
 
     pub fn ex_af_af_prime(&mut self) {
         swap(& mut self.reg_af_prime, & mut self.reg_af);
@@ -297,10 +343,22 @@ mod tests{
         BC.set(22);
         assert_eq!(BC.low().value(), 22);
         assert_eq!(BC.high().value(), 0);
+        assert_eq!(BC.value(), 22);
 
         BC.set(50*256);
         assert_eq!(BC.low().value(), 0);
         assert_eq!(BC.high().value(), 50);
+        assert_eq!(BC.value(), 50*256);
+
+
+        BC.set(0xffff);
+        BC.add(1);
+        assert_eq!(BC.value(), 0);
+
+
+        BC.set(0x4000);
+        BC.add(1);
+        assert_eq!(BC.value(), 0x4001);
     }
 
 
@@ -327,4 +385,37 @@ mod tests{
 
     }
 
+
+    #[test]
+    fn eval() {
+        use assembler::tokens::*;
+
+        let mut z80 = Z80::default();
+        z80.pc_mut().set(0x4000);
+        z80.hl_mut().set(0x8000);
+        z80.de_mut().set(0xc000);
+        z80.a_mut().set(0);
+
+
+        let pop_bc = Token::OpCode(Mnemonic::Pop, Some(DataAccess::Register16(Register16::Bc)), None);
+        let ld_l_a = Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::L)), Some(DataAccess::Register8(Register8::A)));
+        let add_a_b = Token::OpCode(Mnemonic::Add,Some(DataAccess::Register8(Register8::A)), Some(DataAccess::Register8(Register8::B)));
+        let ldi = Token::OpCode(Mnemonic::Ldi, None, None);
+
+        assert_eq!(z80.pc().value(), 0x4000);
+
+        z80.execute(&pop_bc);
+        assert_eq!(z80.pc().value(), 0x4001);
+
+        z80.execute(&add_a_b);
+        assert_eq!(z80.pc().value(), 0x4002);
+
+        z80.execute(&ld_l_a);
+        assert_eq!(z80.pc().value(), 0x4003);
+        assert_eq!(z80.a().value(), z80.l().value());
+
+        z80.execute(&ldi);
+        assert_eq!(z80.pc().value(), 0x4005);
+        assert_eq!(z80.de().value(), 0xc001);
+    }
 }
