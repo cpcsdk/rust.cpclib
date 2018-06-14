@@ -5,6 +5,7 @@ use std::mem::swap;
 use std::fmt::Debug;
 use std::fmt;
 
+
 /// Common trait for Register 8 and 6 bits
 pub trait HasValue {
     type ValueType;
@@ -102,9 +103,11 @@ impl Register16 {
 
 
 /// Z80 CPU model
+/// TODO Add memory
 #[derive(Default, Debug)]
 pub struct Z80 {
     reg_pc: Register16,
+    reg_sp: Register16,
 
     reg_af: Register16,
 
@@ -130,6 +133,7 @@ impl Z80 {
 
     // Immutable accessors
     pub fn pc(& self)-> & Register16 {& self.reg_pc}
+    pub fn sp(& self)-> & Register16 {& self.reg_sp}
 
     pub fn af(& self)-> & Register16 {& self.reg_af}
 
@@ -179,8 +183,28 @@ impl Z80 {
        tmp.low()
     }
 
+    pub fn ixh(& self)-> & Register8 {
+       let tmp = self.ix();
+       tmp.high()
+    }
+    pub fn ixl(& self)-> & Register8 {
+       let tmp = self.ix();
+       tmp.low()
+    }
+
+    pub fn iyh(& self)-> & Register8 {
+       let tmp = self.iy();
+       tmp.high()
+    }
+    pub fn iyl(& self)-> & Register8 {
+       let tmp = self.iy();
+       tmp.low()
+    }
+
+
     // Mutable accessors
     pub fn pc_mut(&mut self)-> &mut Register16 {&mut self.reg_pc}
+    pub fn sp_mut(&mut self)-> &mut Register16 {&mut self.reg_sp}
 
     pub fn af_mut(&mut self)-> &mut Register16 {&mut self.reg_af}
 
