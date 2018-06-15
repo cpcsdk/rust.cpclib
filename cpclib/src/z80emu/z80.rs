@@ -5,6 +5,7 @@ use std::mem::swap;
 use std::fmt::Debug;
 use std::fmt;
 use num::integer::Integer;
+use assembler::tokens::*;
 
 /// Common trait for Register 8 and 6 bits
 pub trait HasValue {
@@ -12,6 +13,11 @@ pub trait HasValue {
 
     /// Retreive the stored value
     fn value(&self) -> Self::ValueType;
+
+    #[inline]
+    fn get(&self) -> Self::ValueType {
+        self.value()
+    }
 
     /// Change the stored value
     fn set(&mut self, value:Self::ValueType);
@@ -309,6 +315,18 @@ impl Z80 {
         swap(& mut self.reg_hl_prime, & mut self.reg_hl);
         swap(& mut self.reg_de_prime, & mut self.reg_de);
         swap(& mut self.reg_bc_prime, & mut self.reg_bc);
+    }
+
+
+
+    // To reduce copy paste/implementation errors, all manipulation are translated as token usage
+    pub fn copy_to_from(&mut self, to: ::assembler::tokens::Register8, from: ::assembler::tokens::Register8) {
+        self.execute(&Token::OpCode(
+                        Mnemonic::Ld,
+                        Some(DataAccess::Register8(to)),
+                        Some(DataAccess::Register8(from)),
+                )
+        );
     }
 }
 
