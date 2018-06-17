@@ -184,6 +184,24 @@ pub mod mode0 {
         Pixel0Bit0 = 7
     }
 
+
+    /// For a given byte, returns the left and right represented pixels
+    pub fn byte_to_pens(b:u8) -> (Pen, Pen) {
+        let pen0 =
+            (b & BitMapping::Pixel0Bit0 as u8) << 0
+            + (b & BitMapping::Pixel0Bit1 as u8) << 1
+            + (b & BitMapping::Pixel0Bit2 as u8) << 2
+            + (b & BitMapping::Pixel0Bit3 as u8) << 3;
+
+        let pen1 =
+            (b & BitMapping::Pixel1Bit0 as u8) << 0
+            + (b & BitMapping::Pixel1Bit1 as u8) << 1
+            + (b & BitMapping::Pixel1Bit2 as u8) << 2
+            + (b & BitMapping::Pixel1Bit3 as u8) << 3;
+
+        (pen0.into(), pen1.into())
+    }
+
     pub fn pen_to_pixel_byte(pen: Pen, pixel: PixelPosition) -> u8 {
         assert!(pen.number()<16, format!("{} >=16", pen.number()));
 
@@ -233,8 +251,8 @@ pub mod mode0 {
 
     /// Convert the 2 pens in the corresponding byte
     pub fn pens_to_byte(pen0: Pen, pen1: Pen) -> u8 {
-          pen_to_pixel_byte(pen0, PixelPosition::Pixel0)
-        + pen_to_pixel_byte(pen1, PixelPosition::Pixel1)
+        pen_to_pixel_byte(pen0, PixelPosition::Pixel0)
+            + pen_to_pixel_byte(pen1, PixelPosition::Pixel1)
     }
 
 
@@ -248,5 +266,35 @@ pub mod mode0 {
         }
 
         res
+    }
+
+
+    /// Returns a pen that corresponds to first argument in mode 0 and second in mode3
+    pub fn mix_mode0_mode3(p0: Pen, p3: Pen) -> Pen {
+        (match (p0.number(), p3.number()) {
+            (0, 0) => 0,
+
+            (0, 1) => 5,
+            (0, 2) => 6,
+            (0, 3) => 7,
+
+            (1, 0) => 8,
+            (1, 1) => 1,
+            (1, 2) => 10,
+            (1, 3) => 11,
+
+            (2, 0) => 12,
+            (2, 1) => 13,
+            (2, 2) => 2,
+            (2, 3) => 15,
+
+            (3, 0) => 4,
+            (3, 1) => 9,
+            (3, 2) => 14,
+            (3, 3) => 3,
+
+            _ => panic!()
+        }
+        ).into()
     }
 }

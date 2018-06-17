@@ -4,6 +4,9 @@ extern crate num;
 extern crate memchr;
 extern crate smallvec;
 
+extern crate itertools;
+
+
 pub mod screen;
 pub mod ga;
 pub mod pixels;

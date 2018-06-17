@@ -5,6 +5,7 @@ use self::im::Pixel;
 use std::collections::HashMap;
 use std::ops::Add;
 use std::fmt::{Formatter, Debug, Result} ;
+use num::Integer;
 
 const INK0:im::Rgba<u8> = im::Rgba{data:[0, 0, 0, 255]};
 const INK1:im::Rgba<u8> = im::Rgba{data: [0x00, 0x00, 0x80, 255]};
@@ -255,6 +256,25 @@ pub struct Pen {
     value: u8
 }
 
+// Constructor of Pen from an integer
+impl<T:Integer> From<T> for Pen
+where i32: From<T>
+{
+    fn from(item: T) -> Self {
+        let item:i32 = item.into();
+        Pen{value: item as u8}
+    }
+}
+
+// Constructor of Pen reference from an integer
+impl<'a, T:Integer> From<T> for &'a Pen
+where i32: From<T>
+{
+    fn from(item: T) -> Self {
+        let pos:i32= item.into();
+        & PENS[pos as usize]
+    }
+}
 
 impl Pen{
     pub fn number(&self) -> u8 {
@@ -262,6 +282,9 @@ impl Pen{
     }
 }
 
+
+/*
+ * XXX To be removed once impl<T:Integer> From<T> for Pen is validated
 impl From<u8> for Pen{
     fn from(item: u8) -> Self {
         Pen{value: item}
@@ -280,6 +303,8 @@ impl From<i32> for Pen{
         Pen{value: item as u8}
     }
 }
+*/
+
 
 impl Add<i8> for Pen {
     type Output = Pen;
