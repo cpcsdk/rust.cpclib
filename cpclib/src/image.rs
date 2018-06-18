@@ -389,6 +389,15 @@ impl Sprite {
 
     }
 
+    /// Apply a transformation function on each line
+    /// It can change there size
+    pub fn horizontal_transform<F>(&mut self, f: F)
+        where F: Fn(&Vec<u8>) -> Vec<u8>{
+        let mut transformed = self.data.iter().map(f).collect::<Vec<_>>();
+        ::std::mem::swap(&mut transformed, &mut self.data);
+
+    }
+
 }
 
 /// Simple multimode sprite where each line can have its own resolution mode
