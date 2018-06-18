@@ -286,6 +286,9 @@ impl ColorMatrix {
     }
 }
 
+
+
+
 /// A Sprite corresponds to a set of bytes encoded to the right CPC pixel format for a given
 /// palette.
 /// TODO Check why mode nad palette are optionnals. Force them if it is not mandatory to have htem
@@ -298,6 +301,37 @@ pub struct Sprite {
 
 
 impl Sprite {
+
+    /// TODO Use TryFrom once in standard rust
+    /// The conversion can only work if a palette and a mode is provided
+    pub fn to_color_matrix(&self) -> Option<ColorMatrix> {
+        if self.mode.is_none() && self.palette.is_none() {
+            return None;
+        }
+
+        let mut data = Vec::with_capacity(self.data.len());
+        let p = self.palette.as_ref().unwrap();
+        for line in self.data.iter() {
+            let inks = match self.mode {
+                Some(Mode::Mode0) => {
+                    line
+                        .iter()
+                        .flat_map(|b: &u8| {
+                            let pens = pixels::mode0::byte_to_pens(*b);
+                            vec![p.get(&pens.0).clone(), p.get(&pens.1).clone()]
+                        })
+                        .collect::<Vec<Ink>>()
+                },
+
+                _ => unimplemented!()
+            };
+            data.push(inks);
+        }
+
+        Some(ColorMatrix {
+            data
+        })
+    }
 
     /// Get the palette of the sprite
     pub fn palette(&self) -> Option<Palette>{
@@ -393,7 +427,19 @@ impl MultiModeSprite {
     pub fn width(&self) -> usize {
         self.data[0].len()
     }
- 
+
+    /// Build a standard mode 0 sprite from a multimode sprite
+    /// Bytes values will be strictly the same. However representation is loss (bytes supposed to
+    /// be displayed in mode 1, 2, 3 will be represented in mode 0)
+    /// The multimode sprite is consummed
+    pub fn to_mode0_sprite(self) -> Sprite {
+        Sprite {
+            mode: Some(Mode::Mode0),
+            palette: Some(self.palette),
+            data: self.data
+        }
+    }
+
     /// Generate a multimode sprite that mixes mode 0 and mode 3 and uses only 4 colors
     pub fn mode0_mode3_mix_from_mode0(sprite: &Sprite, conversion: MultiModeConversion) -> MultiModeSprite {
         // TODO check that there are only the first 4 inks used
