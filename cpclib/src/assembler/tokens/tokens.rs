@@ -217,6 +217,18 @@ impl FromStr for Listing{
 /// Main usage of listing is related to Tokens.. Here are the methods strongly liked to Token
 impl Listing {
 
+    /// Save the listing on disc
+    pub fn save(&self, path: &::std::path::Path) -> ::std::io::Result<()> {
+        use std::io::prelude::*;
+        use std::fs::File;
+
+        // Open a file in write-only mode, returns `io::Result<File>`
+        let mut file = File::create(path)?;
+        file.write_all(self.to_string().as_bytes())?;
+
+        Ok(())
+    }
+
     /// Add a new label to the listing
     pub fn add_label(&mut self, label:&str) {
         self.mut_listing().push(Token::Label(String::from(label)));
