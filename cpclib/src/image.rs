@@ -86,14 +86,21 @@ fn encode(pens: Vec<Vec<Pen>>, mode: Mode) -> Vec<Vec<u8>>{
 /// Build a new screen line that reprents line1 in mode 0 and line2 in mode3
 fn merge_mode0_mode3(line1: &Vec<u8>, line2: &Vec<u8>) -> Vec<u8> {
     assert_eq!(line1.len(), line2.len());
+
+    eprintln!("Line 1 {:?}", line1);
+    eprintln!("Line 2 {:?}", line2);
     line1.iter().zip(line2.iter()).map(|(u1, u2)|{
-        let (p10, p11) = pixels::mode0::byte_to_pens(*u1);
-        let (p20, p21) = pixels::mode0::byte_to_pens(*u2);
 
-        let p0 = pixels::mode0::mix_mode0_mode3(p10, p20);
-        let p1 = pixels::mode0::mix_mode0_mode3(p11, p21);
+        let (p10, p11) = pixels::mode0::byte_to_pens(u1.clone());
+        let (p20, p21) = pixels::mode0::byte_to_pens(u2.clone());
 
-        pixels::mode0::pens_to_byte(p0, p1)
+        let p0 = pixels::mode0::mix_mode0_mode3(&p10, &p20);
+        let p1 = pixels::mode0::mix_mode0_mode3(&p11, &p21);
+
+        eprintln!("{}/{} {:?} + {:?} = {:?}", *u1, *u2, &p10, &p20, &p0);
+        eprintln!("{}/{} {:?} + {:?} = {:?}", *u1, *u2, &p11, &p21, &p1);
+
+        pixels::mode0::pens_to_byte(&p0, &p1)
     }).collect::<Vec<u8>>()
 }
 
@@ -297,6 +304,9 @@ impl Sprite {
         self.palette.clone()
     }
 
+    pub fn bytes(&self) -> &Vec<Vec<u8>> {
+        &self.data
+    }
 
     /// Get hte sprite Mode
     /// Cannot manage multimode sprites of course
@@ -371,6 +381,19 @@ impl MultiModeSprite {
         }
     }
 
+
+    pub fn bytes(&self) -> &Vec<Vec<u8>> {
+        &self.data
+    }
+
+    pub fn height(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn width(&self) -> usize {
+        self.data[0].len()
+    }
+ 
     /// Generate a multimode sprite that mixes mode 0 and mode 3 and uses only 4 colors
     pub fn mode0_mode3_mix_from_mode0(sprite: &Sprite, conversion: MultiModeConversion) -> MultiModeSprite {
         // TODO check that there are only the first 4 inks used

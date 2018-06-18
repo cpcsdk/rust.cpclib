@@ -227,6 +227,13 @@ impl Listing {
         self.mut_listing().push(Token::Comment(String::from(comment)));
     }
 
+    /// Add a list of bytes to the listing
+    pub fn add_bytes(&mut self, bytes: &[u8]) {
+        let exp = bytes.iter().map(|pu8|{Expr::Value(*pu8 as _)}).collect::<Vec<_>>();
+        let tok = Token::Db(exp);
+        self.push(tok);
+    }
+
     /// Add additional tokens, that need to be parsed from a string, to the listing
     pub fn add_code(&mut self, code: &str) -> Result<(), String> {
         let res = parser::parse_z80_str(code);

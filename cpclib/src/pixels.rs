@@ -186,23 +186,28 @@ pub mod mode0 {
 
 
     /// For a given byte, returns the left and right represented pixels
+    /// TODO rewrite using BitMapping and factorizing code
     pub fn byte_to_pens(b:u8) -> (Pen, Pen) {
-        let pen0 =
-            (b & BitMapping::Pixel0Bit0 as u8) << 0
-            + (b & BitMapping::Pixel0Bit1 as u8) << 1
-            + (b & BitMapping::Pixel0Bit2 as u8) << 2
-            + (b & BitMapping::Pixel0Bit3 as u8) << 3;
+        let mut pen0 = 0;
+        for pos in [7, 3, 5, 1].into_iter().rev() {
+            pen0 *= 2;
+            if (b & 1<<*pos as u8) != 0 {
+                pen0 += 1;
+            }
+        }
 
-        let pen1 =
-            (b & BitMapping::Pixel1Bit0 as u8) << 0
-            + (b & BitMapping::Pixel1Bit1 as u8) << 1
-            + (b & BitMapping::Pixel1Bit2 as u8) << 2
-            + (b & BitMapping::Pixel1Bit3 as u8) << 3;
+        let mut pen1 = 0;
+        for pos in [6, 2, 4, 0].iter().rev() {
+            pen1 *= 2;
+            if (b & 1<<*pos as u8) != 0 {
+                pen1 += 1;
+            }
+        }
 
-        (pen0.into(), pen1.into())
+         (pen0.into(), pen1.into())
     }
 
-    pub fn pen_to_pixel_byte(pen: Pen, pixel: PixelPosition) -> u8 {
+    pub fn pen_to_pixel_byte(pen: &Pen, pixel: PixelPosition) -> u8 {
         assert!(pen.number()<16, format!("{} >=16", pen.number()));
 
         let bits_position:[u8;4] = {
@@ -250,7 +255,7 @@ pub mod mode0 {
 
 
     /// Convert the 2 pens in the corresponding byte
-    pub fn pens_to_byte(pen0: Pen, pen1: Pen) -> u8 {
+    pub fn pens_to_byte(pen0: &Pen, pen1: &Pen) -> u8 {
         pen_to_pixel_byte(pen0, PixelPosition::Pixel0)
             + pen_to_pixel_byte(pen1, PixelPosition::Pixel1)
     }
@@ -262,7 +267,7 @@ pub mod mode0 {
 
         let mut res = Vec::new();
         for idx in 0..(pens.len()/2) {
-            res.push(pens_to_byte(pens[idx*2+0], pens[idx*2+1]));
+            res.push(pens_to_byte(&pens[idx*2+0], &pens[idx*2+1]));
         }
 
         res
@@ -270,7 +275,7 @@ pub mod mode0 {
 
 
     /// Returns a pen that corresponds to first argument in mode 0 and second in mode3
-    pub fn mix_mode0_mode3(p0: Pen, p3: Pen) -> Pen {
+    pub fn mix_mode0_mode3(p0: &Pen, p3: &Pen) -> Pen {
         (match (p0.number(), p3.number()) {
             (0, 0) => 0,
 
@@ -296,5 +301,65 @@ pub mod mode0 {
             _ => panic!()
         }
         ).into()
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use ga::Pen;
+    use pixels::*;
+
+
+    fn test_couple(a: u8, b: u8) {
+        let pa: Pen = a.into();
+        let pb: Pen = b.into();
+
+        assert_eq!(a, pa.number());
+        assert_eq!(b, pb.number());
+
+        let b = mode0::pens_to_byte(&pa, &pb);
+        let (pa2, pb2) = mode0::byte_to_pens(b);
+
+
+        assert_eq!(pa2.number(), pa2.number());
+        assert_eq!(pb2.number(), pb2.number());
+    }
+
+    #[test]
+    fn mode0() {
+        for a in 0..16 {
+            for b in 0..16 {
+                test_couple(a, b);
+            }
+        }
+    }
+
+
+    #[test]
+    fn bytes_to_pen() {
+        // 1000000
+        let res = ::pixels::mode0::byte_to_pens(64);
+        assert!(res.0.number() != res.1.number());
+    }
+
+    fn test_mode3(a: &Pen, b: &Pen, c: &Pen) {
+        let d = mode0::mix_mode0_mode3(a, b);
+        assert_eq!(d.number(), c.number());
+    }
+
+    #[test]
+    fn mode3() {
+        test_mode3(&0.into(), &0.into(), &0.into());
+
+        test_mode3(&0.into(), &1.into(), &5.into());
+        test_mode3(&0.into(), &2.into(), &6.into());
+        test_mode3(&0.into(), &3.into(), &7.into());
+
+        test_mode3(&3.into(), &0.into(), &4.into());
+        test_mode3(&3.into(), &1.into(), &9.into());
+        test_mode3(&3.into(), &2.into(), &14.into());
+        test_mode3(&3.into(), &3.into(), &3.into());
     }
 }
