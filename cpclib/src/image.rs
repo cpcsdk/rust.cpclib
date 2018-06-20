@@ -313,11 +313,16 @@ impl Sprite {
         let p = self.palette.as_ref().unwrap();
         for line in self.data.iter() {
             let inks = match self.mode {
-                Some(Mode::Mode0) => {
+                Some(Mode::Mode0)  | Some(Mode::Mode3) => {
                     line
                         .iter()
                         .flat_map(|b: &u8| {
-                            let pens = pixels::mode0::byte_to_pens(*b);
+                            let pens = {
+                                let mut pens = pixels::mode0::byte_to_pens(*b);
+                                pens.0.limit(self.mode.unwrap());
+                                pens.1.limit(self.mode.unwrap());
+                                pens
+                            };
                             vec![p.get(&pens.0).clone(), p.get(&pens.1).clone()]
                         })
                         .collect::<Vec<Ink>>()
@@ -336,6 +341,10 @@ impl Sprite {
     /// Get the palette of the sprite
     pub fn palette(&self) -> Option<Palette>{
         self.palette.clone()
+    }
+
+    pub fn set_palette(&mut self, palette: Palette) {
+        self.palette = Some(palette);
     }
 
     pub fn bytes(&self) -> &Vec<Vec<u8>> {
@@ -402,6 +411,7 @@ impl Sprite {
 
 /// Simple multimode sprite where each line can have its own resolution mode
 /// The palette is assumed to be the same on all the lines
+#[derive(Clone)]
 pub struct MultiModeSprite {
     mode: Vec<Mode>,
     palette: Palette,
@@ -444,6 +454,14 @@ impl MultiModeSprite {
     pub fn to_mode0_sprite(self) -> Sprite {
         Sprite {
             mode: Some(Mode::Mode0),
+            palette: Some(self.palette),
+            data: self.data
+        }
+    }
+
+    pub fn to_mode3_sprite(self) -> Sprite {
+        Sprite {
+            mode: Some(Mode::Mode3),
             palette: Some(self.palette),
             data: self.data
         }

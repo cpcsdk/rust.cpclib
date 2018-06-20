@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::ops::Add;
 use std::fmt::{Formatter, Debug, Result} ;
 use num::Integer;
+use image::Mode;
 
 const INK0:im::Rgba<u8> = im::Rgba{data:[0, 0, 0, 255]};
 const INK1:im::Rgba<u8> = im::Rgba{data: [0x00, 0x00, 0x80, 255]};
@@ -280,6 +281,16 @@ impl Pen{
     pub fn number(&self) -> u8 {
         return self.value;
     }
+
+    /// Change the value of the pen in order to not exceed the number of pens available in the
+    /// given mode
+    pub fn limit(&mut self, mode: Mode) {
+        self.value = match mode {
+            Mode::Mode0 => self.value,
+            Mode::Mode3 | Mode::Mode1 => self.value & 3,
+            Mode::Mode2 => self.value & 1,
+        };
+    }
 }
 
 
@@ -447,6 +458,32 @@ impl Palette {
         }
 
         res
+    }
+
+    /// Replicate the firsts 4 pens in order to manage special texture that contains both mode 0
+    /// and mode 3 patterns
+    pub fn to_mode3_mixed_with_mode0(&self) -> Palette {
+        let mut p = self.clone();
+
+        let ink0 = self.get(&PENS[0]);
+        let ink1 = self.get(&PENS[1]);
+        let ink2 = self.get(&PENS[2]);
+        let ink3 = self.get(&PENS[3]);
+
+        p.set(&PENS[4], ink3.clone());
+        p.set(&PENS[5], ink0.clone());
+        p.set(&PENS[6], ink0.clone());
+        p.set(&PENS[7], ink0.clone());
+        p.set(&PENS[8], ink1.clone());
+        p.set(&PENS[9], ink3.clone());
+        p.set(&PENS[10], ink1.clone());
+        p.set(&PENS[11], ink1.clone());
+        p.set(&PENS[12], ink2.clone());
+        p.set(&PENS[13], ink2.clone());
+        p.set(&PENS[14], ink3.clone());
+        p.set(&PENS[15], ink2.clone());
+
+        p
     }
 }
 
