@@ -584,6 +584,10 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
 
             }
 
+            &DataAccess::MemoryRegister16(Register16::Hl) => {
+                add_byte(&mut bytes, 0b01000110 | (dst<<3));
+            }
+
             _ => return Err(format!("LD not properly implemented for '{:?}, {:?}'", arg1, arg2))
         }
     }
