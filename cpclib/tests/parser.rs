@@ -719,4 +719,13 @@ mod tests {
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
     }
+
+    #[test]
+    fn test_ix_expr() {
+        let code = "  LD L, (IX + 0x0)";
+        let token = &get_val(parse_z80_str(code))[0];
+        assert_eq!(token.mnemonic().unwrap(), &Mnemonic::Ld);
+        assert_eq!(token.mnemonic_arg1().unwrap(), &DataAccess::Register8(Register8::L));
+        assert_eq!(token.mnemonic_arg1().unwrap(), &DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, Oper::Add, Expr::Value(0)));
+    }
 }

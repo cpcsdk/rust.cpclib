@@ -228,7 +228,7 @@ impl fmt::Display for Listing {
                 }
             }
             // XXX Rermove this verbose notation
-            write!(f, "{} ; {:?} nops {:?} bytes\n", token, token.estimated_duration(), token.number_of_bytes())?;
+            write!(f, "{} ; {:?} {:?} nops {:?} bytes\n", token, token, token.estimated_duration(), token.number_of_bytes())?;
         }
 
         Ok(())
