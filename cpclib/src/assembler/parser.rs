@@ -269,7 +269,7 @@ named!(
             ErrorKind::Custom(error_code::INVALID_ARGUMENT),
             alt_complete!(
                 cond_reduce!(dst.is_register16() | dst.is_indexregister16(), alt_complete!(parse_expr | parse_address)) |
-                cond_reduce!(dst.is_register8(), alt_complete!(parse_indexregister_with_index | parse_expr | parse_register8)) |
+                cond_reduce!(dst.is_register8(), alt_complete!(parse_indexregister_with_index | parse_hl_address | parse_expr | parse_register8)) |
                 cond_reduce!(dst.is_memory(), alt_complete!(parse_register16 | parse_register8 | parse_register_sp)) |
                 cond_reduce!(dst.is_address_in_register16(), parse_register8)
             )
@@ -395,7 +395,7 @@ named!(
         opt!(space) >>
 
         second: alt_complete!(
-            cond_reduce!(first.is_register8(), alt_complete!(parse_register8 | parse_hl_adress | parse_indexregister_with_index | parse_expr)) | // Case for A
+            cond_reduce!(first.is_register8(), alt_complete!(parse_register8 | parse_hl_address | parse_indexregister_with_index | parse_expr)) | // Case for A
             cond_reduce!(first.is_register16(), alt_complete!(parse_register16 | parse_register_sp)) | // Case for HL XXX AF is accepted whereas it is not the case in real life
             cond_reduce!(first.is_indexregister16(), alt_complete!(
                     value!(DataAccess::Register16(Register16::De), tag_no_case!("DE")) |
@@ -421,7 +421,7 @@ named!(
 
         many1!(space) >>
 
-        second: alt_complete!(parse_register8 | parse_hl_adress | parse_indexregister_with_index | parse_expr)
+        second: alt_complete!(parse_register8 | parse_hl_address | parse_indexregister_with_index | parse_expr)
         >>
         (Token::OpCode(add_or_adc, Some(DataAccess::Register8(Register8::A)), Some(second)))
     )
@@ -668,7 +668,7 @@ named!(
 
 /// Parse (HL)
 named!(
-    pub parse_hl_adress<CompleteStr, DataAccess>,
+    pub parse_hl_address<CompleteStr, DataAccess>,
     do_parse!(
         tag!("(") >>
         many0!(space) >>
