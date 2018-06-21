@@ -76,10 +76,11 @@ impl ListingElement for Token {
                             },
 
                             // Dest in 8bits reg
-                            &Some(DataAccess::Register8(_)) => {
+                            &Some(DataAccess::Register8(ref dst)) => {
                                 match arg2 {
                                     &Some(DataAccess::Register8(_)) => 1,
                                     &Some(DataAccess::Expression(_)) => 2,
+                                    &Some(DataAccess::IndexRegister16WithIndex(_, _, _))=> 5,
                                     _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                                 }
 

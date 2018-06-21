@@ -9,6 +9,7 @@ const MAX_SIZE:usize = 4;
 pub type Bytes =  SmallVec<[u8; MAX_SIZE]>;
 
 
+/// Add the encoding of an indexed structure
 fn add_index(m: &mut Bytes, idx: i32) -> Result<(), String>{
     if idx < -127 || idx > 128 {
         Err(format!("Index error {}", idx))
@@ -27,6 +28,10 @@ fn add_byte(m: &mut Bytes, b: u8) {
 fn add_word(m: &mut Bytes, w: u16) {
     m.push( (w%256) as u8);
     m.push( (w/256) as u8);
+}
+
+fn add_index_register_code(m: &mut Bytes, r: &IndexRegister16) {
+    add_byte(m, indexed_register16_to_code(r));
 }
 
 const DD:u8 = 0xdd;
@@ -564,6 +569,18 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
 
                 bytes.push(0b00000110 | (dst<<3));
                 bytes.push(val);
+
+            }
+
+            &DataAccess::IndexRegister16WithIndex(ref reg, ref op, ref exp) => {
+                let mut val = exp.resolve(sym)?;
+                if let &Oper::Sub = op {
+                    val = -val;
+                }
+
+                add_index_register_code(&mut bytes, reg);
+                add_byte(&mut bytes, 0b01000110 | (dst <<3));
+                add_index(&mut bytes, val)?;
 
             }
 
