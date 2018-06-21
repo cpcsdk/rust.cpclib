@@ -1,6 +1,7 @@
 use assembler::tokens::*;
 use assembler::tokens::listing::*;
 use std::str::FromStr;
+use assembler::assembler::SymbolsTable;
 
 impl ListingElement for Token {
     /// Returns an estimation of the duration.
@@ -28,6 +29,10 @@ impl ListingElement for Token {
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
                     },
+
+
+                    /// XXX Not stable timing
+                    &Mnemonic::Djnz => 3, // or 4
 
                     &Mnemonic::Inc | &Mnemonic::Dec => {
                         match arg1 {
@@ -89,13 +94,35 @@ impl ListingElement for Token {
 
                             },
 
+                            &Some(DataAccess::IndexRegister16(_)) => {
+                                match arg2 {
+                                    &Some(DataAccess::Expression(_)) => 4,
+                                    _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                                }
+
+
+                            }
+
+
+                            &Some(DataAccess::Memory(_)) => {
+                                match arg2 {
+                                    &Some(DataAccess::Register8(Register8::A)) => 4,
+                                    &Some(DataAccess::Register16(Register16::Hl)) => 5,
+                                    &Some(DataAccess::Register16(_)) => 6,
+                                    &Some(DataAccess::IndexRegister16(_)) => 6,
+                                    _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                                }
+
+
+                            }
+
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
                     },
 
                     &Mnemonic::Ldi | &Mnemonic::Ldd => 5,
 
-                    &Mnemonic::Nop | &Mnemonic::Exx => 1,
+                    &Mnemonic::Nop | &Mnemonic::Exx | &Mnemonic::Di => 1,
 
                     &Mnemonic::Out => {
                         match arg1 {
@@ -159,6 +186,20 @@ impl ListingElement for Token {
     }
 
 
+
+    /// Return the number of bytes of the token given the provided context
+    fn number_of_bytes_with_context(&self, table: &SymbolsTable) -> Result<usize, String> {
+        let bytes = self.to_bytes_with_context(table);
+        if bytes.is_ok() {
+            Ok(bytes.ok().unwrap().len())
+        }
+        else {
+            eprintln!("{:?}", bytes);
+            Err(format!("Unable to get the bytes of this token: {:?}", self))
+        }
+    }
+
+
 }
 
 
@@ -183,12 +224,11 @@ impl fmt::Display for Listing {
                     &Token::Equ(_, _) |
                     &Token::Comment(_) => (),
                 _ => {
-                    let res = write!(f, "\t");
-                    if res.is_err() {return res;}
+                   write!(f, "\t")?;
                 }
             }
-            let res = write!(f, "{}\n", token);
-            if res.is_err(){return res;}
+            // XXX Rermove this verbose notation
+            write!(f, "{} ; {:?} nops {:?} bytes\n", token, token.estimated_duration(), token.number_of_bytes())?;
         }
 
         Ok(())
@@ -267,6 +307,53 @@ impl Listing {
         else {
             Err(format!("Unable to assemble '{}'", code))
         }
+
+    }
+
+
+
+
+    /// Compute the size of the listing.
+    /// The listing has a size only if its tokens has a size
+    pub fn number_of_bytes(&self) -> Result<usize, String> {
+        let mut count = 0;
+        let mut current_address : Option<usize>= None;
+        let mut sym = SymbolsTable::default();
+
+        for token in self.listing().iter() {
+            if current_address.is_some() {
+                sym.set_current_address(current_address.unwrap() as u16);
+            }
+
+
+            let mut current_size = 0;
+
+
+                println!("Treat {:?}", token);
+
+            if let  &Token::Org(ref expr) = token {
+                current_address = Some(expr.resolve(&sym)? as usize);
+                println!("Set address to {:?}", current_address);
+            }
+            else if let &Token::Align(ref expr) = token {
+                if current_address.is_none() {
+                    return Err("Unable to guess align size if current address is unknown".to_owned())
+                }
+
+                current_size = token.number_of_bytes_with_context(&sym)?;
+            }
+            else {
+                current_size = token.number_of_bytes()?;
+            }
+
+
+            if current_address.is_some() {
+                current_address = Some(current_address.unwrap() as usize + current_size);
+            }
+            count += current_size;
+        }
+
+        Ok(count)
 
     }
 }

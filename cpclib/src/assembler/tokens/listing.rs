@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use std::ops::DerefMut;
+use assembler::assembler::SymbolsTable;
 
 
 
@@ -10,6 +11,10 @@ pub trait ListingElement {
 
     /// Return the number of bytes of the token
     fn number_of_bytes(&self) -> Result<usize, String>;
+
+
+    /// Return the number of bytes given the context (needed for Align)
+    fn number_of_bytes_with_context(&self, table: &SymbolsTable) -> Result<usize, String>;
 }
 
 
@@ -47,7 +52,7 @@ impl<T: Clone + ListingElement> DerefMut for BaseListing<T> {
 }
 
 
-impl<T: Clone + ListingElement> BaseListing<T> {
+impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
 
     /// Create an empty listing without duration
     pub fn new() -> Self{
@@ -84,25 +89,7 @@ impl<T: Clone + ListingElement> BaseListing<T> {
 
 
 
-    /// Compute the size of the listing.
-    /// The listing has a size only if its tokens has a size
-    pub fn number_of_bytes(&self) -> Result<usize, String> {
-        self
-            .listing
-            .iter()
-            .map(|token|{token.number_of_bytes()})
-            .fold(
-                Ok(0),
-                |sum, val| {
-                    if sum.is_err() || val.is_err() {
-                        Err(format!("Unable to compute the number of bytes {:?} {:?}", sum, val))
-                    }
-                    else {
-                        Ok(sum.unwrap() + val.unwrap())
-                    }
-                }
-            )
-    }
+
 
 
     /// Get the execution duration.

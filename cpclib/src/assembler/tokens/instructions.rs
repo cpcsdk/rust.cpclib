@@ -1,7 +1,7 @@
 
 use std::fmt;
 
-use assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,Bytes,SymbolsTable};
+use assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,assemble_align,Bytes,SymbolsTable};
 use assembler::tokens::expression::*;
 use assembler::tokens::data_access::*;
 
@@ -185,8 +185,12 @@ impl Token {
     /// TODO find a way to not build a symbol table each time
     pub fn to_bytes(&self) -> Result<Bytes, String> {
         let table = &SymbolsTable::laxist();
+        self.to_bytes_with_context(table)
+    }
 
-        match self {
+    /// Assemble the symbol taking into account some context
+    pub fn to_bytes_with_context(&self, table: &SymbolsTable) -> Result<Bytes, String> {
+                match self {
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2)
                 => assemble_opcode(mnemonic, arg1, arg2, table),
 
@@ -200,10 +204,10 @@ impl Token {
                 => Ok(Bytes::new()),
 
             &Token::Defs(ref expr)
-                =>assemble_defs(expr, table),
+                => assemble_defs(expr, table),
 
-            &Token::Align(_)
-                => Err("It is impossible to obtain ALIGN size without context on the current address".to_owned()),
+            &Token::Align(ref expr)
+                => assemble_align(expr, table),
 
             _
                 => Err(format!("Currently unable to generate bytes for {}", self))

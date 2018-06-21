@@ -75,6 +75,17 @@ impl SymbolsTable {
         }
     }
 
+    /// Return the current addres if it is known or return an error
+    pub fn current_address(&self) -> Result<u16, String> {
+        match self.value(&"$".to_owned()) {
+            Some(address) => Ok(address as u16),
+            None => Err("Current assembling adress is unknown".to_owned())
+        }
+    }
+
+    pub fn set_current_address(&mut self, address: u16) {
+        self.map.insert(String::from("$"), Symbol::Integer(address as _));
+    }
 
     /// TODO return the symbol instead of the int
     pub fn value(&self, key:&String) -> Option<i32> {
@@ -255,6 +266,35 @@ pub fn assemble_db_or_dw(token: &Token, sym: &SymbolsTable) -> Result<Bytes, Str
     }
 
     Ok(bytes)
+
+}
+
+
+
+/// Assemble align directive. It can only work if current address is known...
+pub fn assemble_align(expr: &Expr, sym: &SymbolsTable) -> Result<Bytes, String> {
+    let expression = expr.resolve(sym)? as u16;
+    let current = sym.current_address()?;
+
+
+
+    // compute the number of 0 to put
+    let mut until = current;
+    while until % expression != 0 {
+        until +=1;
+    }
+
+    // Create the vector
+    let hole = (until-current) as usize;
+    let mut bytes = Bytes::with_capacity(hole);
+    for i in 0..hole {
+        bytes.push(0);
+    }
+
+    println!("Expression {}, current {}, hole {}", expression, current, hole);
+    // and return it
+    Ok(bytes)
+
 
 }
 
