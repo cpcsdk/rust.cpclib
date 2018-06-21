@@ -269,7 +269,7 @@ named!(
             ErrorKind::Custom(error_code::INVALID_ARGUMENT),
             alt_complete!(
                 cond_reduce!(dst.is_register16() | dst.is_indexregister16(), alt_complete!(parse_expr | parse_address)) |
-                cond_reduce!(dst.is_register8(), alt_complete!(parse_expr | parse_register8)) |
+                cond_reduce!(dst.is_register8(), alt_complete!(parse_indexregister_with_index | parse_expr | parse_register8)) |
                 cond_reduce!(dst.is_memory(), alt_complete!(parse_register16 | parse_register8 | parse_register_sp)) |
                 cond_reduce!(dst.is_address_in_register16(), parse_register8)
             )
@@ -600,6 +600,7 @@ named!(
 
 
 
+/// Parse the use of an indexed register as (IX + 5)
 named!(
     parse_indexregister_with_index <CompleteStr, DataAccess>, do_parse!(
             tag!("(") >>
@@ -633,6 +634,7 @@ named!(
         )
     );
 
+/// Parse an address access `(expression)`
 named!(
     pub parse_address <CompleteStr, DataAccess>,
     do_parse!(
@@ -647,6 +649,7 @@ named!(
 );
 
 
+/// Parse (R16)
 named!(
     pub parse_reg_address <CompleteStr, DataAccess>,
     do_parse!(
@@ -663,6 +666,7 @@ named!(
 );
 
 
+/// Parse (HL)
 named!(
     pub parse_hl_adress<CompleteStr, DataAccess>,
     do_parse!(
@@ -682,7 +686,7 @@ named!(
 
 
 
-
+/// Parse and expression and returns it inside a DataAccession::Expression
 named!(
     pub parse_expr <CompleteStr, DataAccess>,
     do_parse!(
@@ -760,6 +764,8 @@ named!(
         )
     );
 
+
+/// Parse a comment that start by `;` and ends at the end of the line.
 named!( comment<CompleteStr, Token>,
         map!(
             preceded!(
