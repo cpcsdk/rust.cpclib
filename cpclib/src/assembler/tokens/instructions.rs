@@ -1,9 +1,10 @@
-
+use std::convert::TryFrom;
 use std::fmt;
 
 use assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,assemble_align,Bytes,SymbolsTable};
 use assembler::tokens::expression::*;
 use assembler::tokens::data_access::*;
+use assembler::parser::*;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Mnemonic {
@@ -136,6 +137,31 @@ impl fmt::Display for Token {
     }
 }
 
+
+
+impl<'a> TryFrom<&'a str> for Token {
+    type Error = String;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        let tokens = {
+            let res = parse_z80_str(value);
+            match res {
+                Ok(tokens) => tokens.1,
+                Err(e) => {
+                    return Err(decode_parsing_error(value, e));
+                }
+            }
+
+        };
+        if tokens.len() > 1 {
+            Err(format!("{} tokens are present instead of one", tokens.len()))
+        }
+        else {
+            Ok(tokens[0].clone())
+        }
+
+    }
+}
 
 
 impl Token {

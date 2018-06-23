@@ -213,7 +213,6 @@ impl ListingElement for Token {
 
 
 
-
 /// Standard listing is a specific implementation
 pub type Listing = BaseListing<Token>;
 
@@ -229,8 +228,8 @@ impl fmt::Display for Listing {
                    write!(f, "\t")?;
                 }
             }
-            // XXX Rermove this verbose notation
-            write!(f, "{} ; {:?} {:?} nops {:?} bytes\n", token, token, token.estimated_duration(), token.number_of_bytes())?;
+            //write!(f, "{} ; {:?} {:?} nops {:?} bytes\n", token, token, token.estimated_duration(), token.number_of_bytes())?;
+            write!(f, "{}\n", token)?;
         }
 
         Ok(())
@@ -364,3 +363,13 @@ impl Listing {
 
 
 
+#[cfg(test)]
+mod tests {
+    use assembler::tokens::*;
+    use std::convert::TryFrom;
+
+    #[test]
+    fn fixup_duration() {
+        assert_eq!(Token::try_from(" di").unwrap().estimated_duration(), 1)
+    }
+}
