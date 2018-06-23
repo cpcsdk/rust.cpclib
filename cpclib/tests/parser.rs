@@ -733,5 +733,15 @@ mod tests {
         assert_eq!(token.mnemonic().unwrap(), &Mnemonic::Ld);
         assert_eq!(token.mnemonic_arg1().unwrap(), &DataAccess::Register8(Register8::E));
         assert_eq!(token.mnemonic_arg2().unwrap(), &DataAccess::MemoryRegister16(Register16::Hl));
+
+        let code = "  LD A, (DD)";
+        let token = &get_val(parse_z80_str(code))[0];
+        assert_eq!(token.mnemonic().unwrap(), &Mnemonic::Ld);
+        assert_eq!(token.mnemonic_arg1().unwrap(), &DataAccess::Register8(Register8::A));
+        assert_eq!(token.mnemonic_arg2().unwrap(), &DataAccess::Memory(Expr::Label("DD".into())));
+
+
+
+
     }
 }

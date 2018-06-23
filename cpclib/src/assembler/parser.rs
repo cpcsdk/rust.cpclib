@@ -268,8 +268,8 @@ named!(
         src: return_error!(
             ErrorKind::Custom(error_code::INVALID_ARGUMENT),
             alt_complete!(
-                cond_reduce!(dst.is_register16() | dst.is_indexregister16(), alt_complete!(parse_expr | parse_address)) |
-                cond_reduce!(dst.is_register8(), alt_complete!(parse_indexregister_with_index | parse_hl_address | parse_expr | parse_register8)) |
+                cond_reduce!(dst.is_register16() | dst.is_indexregister16(), alt_complete!(parse_address | parse_expr)) |
+                cond_reduce!(dst.is_register8(), alt_complete!(parse_indexregister_with_index | parse_hl_address | parse_address | parse_expr | parse_register8)) |
                 cond_reduce!(dst.is_memory(), alt_complete!(parse_register16 | parse_register8 | parse_register_sp)) |
                 cond_reduce!(dst.is_address_in_register16(), parse_register8)
             )
@@ -434,7 +434,7 @@ named!(
             value!(Mnemonic::Push, tag_no_case!("PUSH")) |
             value!(Mnemonic::Pop, tag_no_case!("POP"))) >>
         space >>
-        register: parse_register16 >>
+        register: alt!(parse_register16 | parse_indexregister16) >>
         (
             Token::OpCode(push_or_pop, Some(register), None)
         )

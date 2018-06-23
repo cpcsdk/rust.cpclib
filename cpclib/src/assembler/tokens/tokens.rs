@@ -81,6 +81,7 @@ impl ListingElement for Token {
                                     &Some(DataAccess::Register8(_)) => 1,
                                     &Some(DataAccess::MemoryRegister16(Register16::Hl)) => 2,
                                     &Some(DataAccess::Expression(_)) => 2,
+                                    &Some(DataAccess::Memory(_)) => 4,
                                     &Some(DataAccess::IndexRegister16WithIndex(_, _, _))=> 5,
                                     _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                                 }
@@ -88,9 +89,11 @@ impl ListingElement for Token {
                             },
 
                             // Dest in 16bits reg
-                            &Some(DataAccess::Register16(_)) => {
+                            &Some(DataAccess::Register16(ref dst)) => {
                                 match arg2 {
                                     &Some(DataAccess::Expression(_)) => 3,
+                                    &Some(DataAccess::Memory(_)) if dst == &Register16::Hl => 5,
+                                    &Some(DataAccess::Memory(_)) => 6,
                                     _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                                 }
 
@@ -370,6 +373,22 @@ mod tests {
 
     #[test]
     fn fixup_duration() {
-        assert_eq!(Token::try_from(" di").unwrap().estimated_duration(), 1)
+        assert_eq!(Token::try_from(" di").unwrap().estimated_duration(), 1);
+        assert_eq!(Token::try_from(" add a,c ").unwrap().estimated_duration(), 1);
+        assert_eq!(Token::try_from(" ld l, a").unwrap().estimated_duration(), 1);
+        assert_eq!(Token::try_from(" exx").unwrap().estimated_duration(), 1);
+        assert_eq!(Token::try_from(" push bc").unwrap().estimated_duration(), 4);
+        assert_eq!(Token::try_from(" pop bc").unwrap().estimated_duration(), 3);
+        assert_eq!(Token::try_from(" push ix").unwrap().estimated_duration(), 5);
+        assert_eq!(Token::try_from(" pop ix").unwrap().estimated_duration(), 4);
+        assert_eq!(Token::try_from(" ld e, (hl)").unwrap().estimated_duration(), 2);
+        assert_eq!(Token::try_from(" ld a, (hl)").unwrap().estimated_duration(), 2);
+        assert_eq!(Token::try_from(" ld a, (dd)").unwrap().estimated_duration(), 4);
+        assert_eq!(Token::try_from(" ld hl, (dd)").unwrap().estimated_duration(), 5);
+        assert_eq!(Token::try_from(" ld de, (dd)").unwrap().estimated_duration(), 6);
+        assert_eq!(Token::try_from(" ld a, (ix+0)").unwrap().estimated_duration(), 5);
+        assert_eq!(Token::try_from(" ldi").unwrap().estimated_duration(), 5);
+        assert_eq!(Token::try_from(" inc c").unwrap().estimated_duration(), 1);
+        assert_eq!(Token::try_from(" dec c").unwrap().estimated_duration(), 1);
     }
 }
