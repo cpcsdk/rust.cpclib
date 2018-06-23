@@ -376,11 +376,13 @@ mod tests {
         assert_eq!(Token::try_from(" di").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" add a,c ").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" ld l, a").unwrap().estimated_duration(), 1);
+        assert_eq!(Token::try_from(" ld b, e").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" exx").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" push bc").unwrap().estimated_duration(), 4);
         assert_eq!(Token::try_from(" pop bc").unwrap().estimated_duration(), 3);
         assert_eq!(Token::try_from(" push ix").unwrap().estimated_duration(), 5);
         assert_eq!(Token::try_from(" pop ix").unwrap().estimated_duration(), 4);
+        assert_eq!(Token::try_from(" ld b, nnn").unwrap().estimated_duration(), 2);
         assert_eq!(Token::try_from(" ld e, (hl)").unwrap().estimated_duration(), 2);
         assert_eq!(Token::try_from(" ld a, (hl)").unwrap().estimated_duration(), 2);
         assert_eq!(Token::try_from(" ld a, (dd)").unwrap().estimated_duration(), 4);
