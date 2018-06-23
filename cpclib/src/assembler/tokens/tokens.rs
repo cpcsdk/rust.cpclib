@@ -387,8 +387,10 @@ mod tests {
         assert_eq!(Token::try_from(" ld hl, (dd)").unwrap().estimated_duration(), 5);
         assert_eq!(Token::try_from(" ld de, (dd)").unwrap().estimated_duration(), 6);
         assert_eq!(Token::try_from(" ld a, (ix+0)").unwrap().estimated_duration(), 5);
+        assert_eq!(Token::try_from(" ld l, (ix+0)").unwrap().estimated_duration(), 5);
         assert_eq!(Token::try_from(" ldi").unwrap().estimated_duration(), 5);
         assert_eq!(Token::try_from(" inc c").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" dec c").unwrap().estimated_duration(), 1);
+        assert_eq!(Token::try_from(" out (c), d").unwrap().estimated_duration(), 4);
     }
 }

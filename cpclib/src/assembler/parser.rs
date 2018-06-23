@@ -480,7 +480,7 @@ named!(// TODO manage other out formats
 
         tag!("(") >>
         many0!(space) >>
-        tag!("C") >>
+        tag_no_case!("C") >>
         many0!(space) >>
         tag!(")") >>
 
