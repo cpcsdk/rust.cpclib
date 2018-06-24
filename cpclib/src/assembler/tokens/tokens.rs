@@ -11,6 +11,7 @@ impl ListingElement for Token {
     fn estimated_duration(&self) -> usize {
         match self {
             &Token::Comment(_) | &Token::Label(_)  => 0,
+            &Token::Protect(_, _) => 0,
             &Token::Defs(ref expr) => expr.eval().ok().unwrap() as usize, // XXX will not work when variables are used
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 match mnemonic {

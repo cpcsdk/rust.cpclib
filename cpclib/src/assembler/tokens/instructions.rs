@@ -80,6 +80,7 @@ pub enum Token {
     Equ(String, Expr),
     Include(String),
     Org(Expr),
+    Protect(Expr, Expr),
 
     MacroCall(String) // TODO add parameters
 }
@@ -130,6 +131,9 @@ impl fmt::Display for Token {
                 => write!(f, "{} EQU {}", name, expr),
             &Token::Include(ref fname)
                 => write!(f, "INCLUDE \"{}\"", fname),
+            &Token::Protect(ref exp1, ref exp2)
+                => write!(f, "PROTECT {}, {}", exp1, exp2),
+
             &Token::MacroCall(ref name)
                 => write!(f, "{}", name)
 
@@ -234,6 +238,10 @@ impl Token {
 
             &Token::Align(ref expr)
                 => assemble_align(expr, table),
+
+            // Protect directive does not produce any bytes
+            &Token::Protect(_, _)
+                => Ok(Bytes::new()),
 
             _
                 => Err(format!("Currently unable to generate bytes for {}", self))

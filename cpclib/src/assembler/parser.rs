@@ -241,7 +241,8 @@ named!(
             parse_org |
             parse_defs |
             parse_include |
-            parse_db_or_dw
+            parse_db_or_dw |
+            parse_protect
         )
 
     );
@@ -363,6 +364,22 @@ named!(
         ) >>
         (
             Token::Align(expr)
+        )
+    )
+);
+
+
+named!(
+    pub parse_protect <CompleteStr, Token>, do_parse!(
+        tag_no_case!("PROTECT") >>
+        many1!(space) >>
+        start: expr >>
+        many0!(space) >>
+        tag!(",") >>
+        many0!(space) >>
+        end: expr >>
+        (
+            Token::Protect(start, end)
         )
     )
 );
