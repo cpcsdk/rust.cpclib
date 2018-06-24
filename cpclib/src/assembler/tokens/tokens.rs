@@ -331,10 +331,6 @@ impl Listing {
 
 
             let mut current_size = 0;
-
-
-                println!("Treat {:?}", token);
-
             if let  &Token::Org(ref expr) = token {
                 current_address = Some(expr.resolve(&sym)? as usize);
                 println!("Set address to {:?}", current_address);
