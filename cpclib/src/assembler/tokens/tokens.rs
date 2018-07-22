@@ -129,6 +129,7 @@ impl ListingElement for Token {
                     &Mnemonic::Ldi | &Mnemonic::Ldd => 5,
 
                     &Mnemonic::Nop | &Mnemonic::Exx | &Mnemonic::Di => 1,
+                    &Mnemonic::Nops2 => 2,
 
                     &Mnemonic::Out => {
                         match arg1 {
@@ -374,6 +375,7 @@ mod tests {
         assert_eq!(Token::try_from(" add a,c ").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" ld l, a").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" ld b, e").unwrap().estimated_duration(), 1);
+        assert_eq!(Token::try_from(" ld e, b").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" exx").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" push bc").unwrap().estimated_duration(), 4);
         assert_eq!(Token::try_from(" pop bc").unwrap().estimated_duration(), 3);
@@ -381,6 +383,7 @@ mod tests {
         assert_eq!(Token::try_from(" pop ix").unwrap().estimated_duration(), 4);
         assert_eq!(Token::try_from(" ld b, nnn").unwrap().estimated_duration(), 2);
         assert_eq!(Token::try_from(" ld e, (hl)").unwrap().estimated_duration(), 2);
+        assert_eq!(Token::try_from(" ld d, (hl)").unwrap().estimated_duration(), 2);
         assert_eq!(Token::try_from(" ld a, (hl)").unwrap().estimated_duration(), 2);
         assert_eq!(Token::try_from(" ld a, (dd)").unwrap().estimated_duration(), 4);
         assert_eq!(Token::try_from(" ld hl, (dd)").unwrap().estimated_duration(), 5);
@@ -389,7 +392,11 @@ mod tests {
         assert_eq!(Token::try_from(" ld l, (ix+0)").unwrap().estimated_duration(), 5);
         assert_eq!(Token::try_from(" ldi").unwrap().estimated_duration(), 5);
         assert_eq!(Token::try_from(" inc c").unwrap().estimated_duration(), 1);
+        assert_eq!(Token::try_from(" inc l").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" dec c").unwrap().estimated_duration(), 1);
         assert_eq!(Token::try_from(" out (c), d").unwrap().estimated_duration(), 4);
+        assert_eq!(Token::try_from(" out (c), c").unwrap().estimated_duration(), 4);
+        assert_eq!(Token::try_from(" out (c), e").unwrap().estimated_duration(), 4);
+        assert_eq!(Token::try_from(" ld b, 0x7f").unwrap().estimated_duration(), 2);
     }
 }

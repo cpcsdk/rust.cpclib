@@ -668,7 +668,7 @@ mod tests {
             );
     }
 
-#[test]
+    #[test]
     fn parens_test() {
         assert_eq!(
             expr(CompleteStr(" ( 1 + 2 ) *  3 ")).map(|(i, x)| (i, format!("{:?}", x))),
@@ -676,6 +676,15 @@ mod tests {
             );
 
 
+    }
+
+
+    #[test]
+    fn functions_test() {
+        assert_eq!(
+            expr(CompleteStr("lo(5)")).map(|(i, x)| (i, format!("{:?}", x))),
+            Ok((CompleteStr(""), String::from("LO(5)")))
+            );
     }
 
 

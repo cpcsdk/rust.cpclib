@@ -332,6 +332,8 @@ pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Op
             => assemble_no_arg(mnemonic),
         &Mnemonic::Nop
             => assemble_nop(),
+        &Mnemonic::Nops2
+            => assemble_nops2(),
         &Mnemonic::Out
             => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Jr | &Mnemonic::Jp
@@ -687,6 +689,15 @@ fn assemble_nop() -> Result<Bytes, String> {
     bytes.push(0);
     Ok(bytes)
 }
+
+
+fn assemble_nops2() -> Result<Bytes, String> {
+    let mut bytes = Bytes::new();
+    bytes.push(0xed);
+    bytes.push(0xff);
+    Ok(bytes)
+}
+
 
 
 

@@ -26,6 +26,10 @@ pub enum Expr {
   GreaterOrEqual(Box<Expr>, Box<Expr>),
   StrictlyGreater(Box<Expr>, Box<Expr>),
   StrictlyLower(Box<Expr>, Box<Expr>),
+
+  // Functions
+  High(Box<Expr>),
+  Low(Box<Expr>),
 }
 
 
@@ -60,6 +64,7 @@ impl Expr {
                         Oper::StrictlyLower=> Ok( (a < b) as i32),
                         Oper::GreaterOrEqual => Ok( (a >= b) as i32),
                         Oper::StrictlyGreater=> Ok( (a > b) as i32),
+
                     }
                 },
                 (Err(a), Ok(_b))  => Err(format!("Unable to make the operation {:?}: {}", oper, a)),
@@ -97,6 +102,17 @@ impl Expr {
 
             Paren(ref e) => e.resolve(sym),
 
+            High(ref inner) => {
+                    inner.resolve(sym)
+                    .and_then(|val| {Ok((val >> 8) & 0xff)})
+
+            },
+
+            Low(ref inner) => {
+                    inner.resolve(sym)
+                    .and_then(|val| {Ok(val & 0xff)})
+            }
+
         }
     }
 
@@ -128,6 +144,13 @@ pub enum Oper {
   GreaterOrEqual,
   StrictlyGreater,
   StrictlyLower,
+
+}
+
+pub enum Function {
+    Hi,
+    Lo
+
 }
 
 
@@ -173,6 +196,9 @@ impl Display for Expr {
       &StrictlyGreater(ref left, ref right) => write!(format, "{} > {}", left, right),
       &StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
       &LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
+
+      &High(ref inner) => write!(format, "hi({})", inner),
+      &Low(ref inner) => write!(format, "lo({})", inner),
     }
   }
 }
@@ -199,6 +225,8 @@ impl Debug for Expr {
       StrictlyLower(ref left, ref right) => write!(format, "{:?} < {:?}", left, right),
       LowerOrEqual(ref left, ref right) => write!(format, "{:?} <= {:?}", left, right),
 
+      High(ref inner) => write!(format, "HI({:?})", inner),
+      Low(ref inner) => write!(format, "LO({:?})", inner),
     }
   }
 }

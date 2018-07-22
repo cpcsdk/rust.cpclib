@@ -513,6 +513,8 @@ named!(// TODO manage other out formats
     )
 );
 
+
+
 named!(
     parse_jp_or_jr <CompleteStr, Token>, do_parse!(
         jp_or_jr: alt_complete!(
@@ -744,7 +746,8 @@ named!(
         tag_no_case!("EXX") => { |_| Mnemonic::Exx } |
         tag_no_case!("LDI") => { |_| Mnemonic::Ldi } |
         tag_no_case!("LDD") => { |_| Mnemonic::Ldd } |
-        tag_no_case!("NOP") => { |_| Mnemonic::Nop }
+        tag_no_case!("NOPS2") => { |_| Mnemonic::Nops2 } |
+        tag_no_case!("NOP") => { |_| Mnemonic::Nop } 
       )
     >> (Token::OpCode(res, None, None) )
     )
@@ -895,8 +898,10 @@ named!(parens< CompleteStr, Expr >, delimited!(
 
 //TODO add stuff to manipulate any kind of data (value/label)
 named!(pub factor< CompleteStr, Expr >, alt_complete!(
+    // Manahge functions
+    parse_hi_or_lo
     // manage values
-    map!(
+    | map!(
         delimited!(opt!(multispace), alt_complete!(hex_u16 | dec_u16), opt!(multispace)),
         |d:u16| {Expr::Value(d as i32)}
         )
@@ -911,6 +916,7 @@ named!(pub factor< CompleteStr, Expr >, alt_complete!(
         Expr::Label
     )
   | parens
+  
   )
 );
 
@@ -959,6 +965,28 @@ named!(pub expr< CompleteStr, Expr >, do_parse!(
     (fold_exprs(initial, remainder))
  )
 );
+
+named!(pub   parse_hi_or_lo <CompleteStr, Expr>, do_parse!(
+        hi_or_lo: alt_complete!(
+            value!(Function::Hi, tag_no_case!("HI")) |
+            value!(Function::Lo, tag_no_case!("LO")) 
+        ) >>
+        many0!(space) >>
+        tag!("(") >>
+        many0!(space) >>
+        exp: expr >>
+        many0!(space) >>
+        tag!(")") >>
+        (
+            match hi_or_lo {
+                Function::Hi => Expr::High(Box::new(exp)),
+                Function::Lo => Expr::Low(Box::new(exp)),
+            }
+        )
+    )
+);
+
+
 
 named!(pub comp<CompleteStr, Expr>, do_parse!(
     initial: term >>
