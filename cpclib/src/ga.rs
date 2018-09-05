@@ -277,6 +277,7 @@ where i32: From<T>
     }
 }
 
+
 impl Pen{
     pub fn number(&self) -> u8 {
         return self.value;
@@ -302,11 +303,7 @@ impl From<u8> for Pen{
     }
 }
 
-impl From<usize> for Pen{
-    fn from(item: usize) -> Self {
-        Pen{value: item as u8}
-    }
-}
+
 
 
 impl From<i32> for Pen{
@@ -391,15 +388,33 @@ impl Default for Palette {
 }
 
 
+impl<T> From<Vec<T>> for Palette
+where Ink: From<T>, T:Copy
+{
+    fn from(items: Vec<T>) -> Self {
+        let mut p = Palette::new();
+
+        for (idx, ink) in items.iter().enumerate() {
+            p.set(&Pen::from(idx as u8), Ink::from(ink.clone()));
+        }
+
+        p
+    }
+}
+
+
+
 /// Create a palette with the right inks
 /// Usage
 /// `palette![1, 2, 3]`
+/// XXX do not still work ...
 #[macro_export]
 macro_rules! palette {
     ( $( $x:expr ),* ) => {
         {
-            use cpc::ga::{Palette, Pen, Ink};
-            let mut palette = Palette::default();
+            extern crate cpc;
+            use cpc::ga;
+            let mut palette = ga::Palette::default();
             let mut idx = 0;
             $(
                 palette.set(&Pen::from(idx), Ink::from($x));
@@ -497,5 +512,21 @@ mod tests {
     fn test_ink() {
             assert_eq!(ga::Ink::from(ga::INK0), ga::Ink::from(0));
     
+    }
+
+    #[test]
+    fn test_macro() {
+       // let p = palette![0, 1, 11, 20];
+    }
+
+    #[test]
+    fn test_from() {
+        let p: ga::Palette = vec![7,8,9,10].into();
+
+        assert_eq!(*p.get(0.into()), ga::INKS[7]);
+         assert_eq!(*p.get(1.into()), ga::INKS[8]);
+          assert_eq!(*p.get(2.into()), ga::INKS[9]);
+           assert_eq!(*p.get(3.into()), ga::INKS[10]);
+            assert_eq!(*p.get(4.into()), ga::INKS[0]);
     }
 }

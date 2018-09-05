@@ -19,3 +19,4 @@ pub mod asm;
 pub mod z80emu;
 pub mod assembler;
 pub mod image;
+pub mod imageconverter;

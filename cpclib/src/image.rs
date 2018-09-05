@@ -27,6 +27,16 @@ impl Mode {
             &Mode::Mode3 => 4
         }
     }
+
+
+    /// Return the number of pixels encode by one byte in the given mode
+    pub fn nbPixelsPerByte(&self) -> usize {
+        match self {
+            &Mode::Mode0 | &Mode::Mode3 => 2,
+            &Mode::Mode1 => 4,
+            &Mode::Mode2 => 8
+        }
+    }
 }
 
 /// Conversion rules
@@ -179,7 +189,7 @@ impl ColorMatrix {
     }
 
 
-       pub fn convert(
+    pub fn convert(
         img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>,
         conversion: ConversionRule) -> ColorMatrix {
 
