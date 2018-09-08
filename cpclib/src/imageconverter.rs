@@ -213,6 +213,34 @@ pub enum Output {
     CPCSplittingMemory(Vec<Output>)
 }
 
+
+impl Output {
+
+    /// Generate a color matrix from the ouptut.
+    /// This mainly serves for debugging purposes.
+    pub fn to_color_matrix(&self, format: &OutputFormat) -> ColorMatrix {
+        match self {
+            &Output::CPCMemoryOverscan(ref bank1, ref bank2, ref palette) => {
+                if let OutputFormat::CPCMemory{ref outputDimension, ref displayAddress} = format {
+                    let pixel_width = 10;  // TODO set the real value
+                    let pixel_height = 20; // TODO
+                    let mut matrix = ColorMatrix::new(pixel_width, pixel_height);
+                    matrix
+                }
+                else {
+                    unreachable!();
+                }
+            }
+            _ => unimplemented!()
+        }
+    }
+}
+
+
+
+
+
+
 /// ImageConverter is able to make the conversion of images to several output format
 pub struct ImageConverter<'a> {
 
@@ -245,6 +273,8 @@ impl<'a> ImageConverter<'a> {
         };
 
         let sprite = converter.load(input_file);
+
+
         converter.apply_conversion(&sprite)
     }
 
@@ -284,6 +314,43 @@ impl<'a> ImageConverter<'a> {
 
     /// Manage the creation of the memory blocks
     fn build_memory_blocks(&mut self, sprite: & Sprite, dim: CPCScreenDimension, displayAddress: DisplayAddress) -> Output {
+
+        let screen_width = dim.width(&sprite.mode().unwrap()) as u32;
+        let screen_height = dim.height() as u32;
+
+        // Check if the destination is compatible
+        if screen_width < sprite.pixel_width() {
+            panic!(
+                "The image width ({}) is larger than the cpc screen width ({})",
+                sprite.pixel_width(),
+                screen_width
+            );
+        }
+        else if screen_width > sprite.pixel_width() {
+            eprintln!(
+                "[Warning] The image width ({}) is smaller than the cpc screen width ({})",
+                sprite.pixel_width(),
+                screen_width
+            );
+        }
+
+        if screen_height < sprite.height() {
+            panic!(
+                "The image height ({}) is larger than the cpc screen height ({})",
+                sprite.height(),
+                screen_height
+            );
+        }
+        else if  screen_height > sprite.height() {
+            eprintln!(
+                "[Warning] The image height ({}) is smaller than the cpc screen height ({})",
+                sprite.height(),
+                screen_height
+            );   
+        }
+
+
+
         // Simulate the memory
         let mut pages  = [
             [0 as u8; 0x4000],
@@ -304,6 +371,7 @@ impl<'a> ImageConverter<'a> {
 
         // loop over the chars
         for char_y in 0..dim.nbCharLines() {
+            println!("[{}] Current address: 0x{:x} in {}", char_y, current_address.address(), current_address.page());
             for char_x in 0..dim.nbWordColumns() {
  
                 // Loop over the lines of the current char
@@ -333,6 +401,7 @@ impl<'a> ImageConverter<'a> {
 
         }
 
+        eprintln!("Pages: {:?}", used_pages);
         // By construction, the order should be good
         let used_pages = used_pages.iter().map(|idx| {pages[*idx as usize]}).collect::<Vec<_>>();
 

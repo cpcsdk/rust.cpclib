@@ -3,7 +3,7 @@ extern crate image as im;
 use pixels;
 use ga::*;
 use std::collections::HashSet;
-use itertools::Itertools;
+use itertools::{flatten, Itertools};
 
 /// Screen mode
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -119,7 +119,13 @@ fn merge_mode0_mode3(line1: &Vec<u8>, line2: &Vec<u8>) -> Vec<u8> {
 fn inks_to_pens(inks: &Vec<Vec<Ink>>, p: &Palette) -> Vec<Vec<Pen>> {
     inks.iter().map( |line| {
         line.iter().map(|ink|{
-            p.get_pen_for_ink(ink).unwrap()
+            let pen = p.get_pen_for_ink(ink);
+            match pen {
+                Some(pen) => pen,
+                None => {
+                    panic!("Unable to find a correspondance for ink {:?} in given palette {:?}", ink, p);
+                }
+            }
         }).collect::<Vec<Pen>>()
     }).collect::<Vec<_>>()
 }
@@ -134,6 +140,12 @@ pub struct ColorMatrix {
 
 impl ColorMatrix {
 
+    /// Create a new empty color matrix for the given dimensions
+    pub fn new(width: usize, height: usize) -> ColorMatrix {
+        ColorMatrix{
+            data: vec![vec![Ink::from(0); width] ; height]
+        }
+    }
 
     /// Create a new ColorMatrix that encodes a new image full of black
     pub fn empty_like(&self) -> ColorMatrix {
@@ -166,7 +178,7 @@ impl ColorMatrix {
     /// Returns the palette used (as soon as there is less than 16 inks)
     pub fn extract_palette(&self) -> Palette {
         let mut p = Palette::default();
-        for (idx, color) in self.data.iter().flatten().unique().enumerate() {
+        for (idx, color) in flatten(self.data.iter()).unique().enumerate() {
             assert!(idx < 16);
             let color = color.clone();
             p.set(
@@ -375,16 +387,34 @@ impl Sprite {
 
     /// Get the width (in bytes) of the image
     /// TODO Use a trait for that
-    pub fn width(&self) -> u32 {
+    pub fn byte_width(&self) -> u32 {
         match self.height() {
             0 => 0 as u32,
             _ => self.data[0].len() as u32
         }
     }
 
-    /// Returns the byte at the right position
+    /// Get the width in pixels of the image.
+    /// The mode must be specified
+    pub fn pixel_width(&self) -> u32 {
+        match self.mode {
+            None => panic!("Unable to get the pixel width when mode is not specified"),
+            Some(mode) => mode.nbPixelsPerByte() as u32 * self.byte_width()
+        }
+    }
+
+    /// Returns the byte at the right position and crash if it does not exists
     pub fn get_byte(&self, x: usize, y: usize) -> u8 {
         self.data[y][x]
+    }
+
+    /// Returns the byte at the right position if exists
+    pub fn get_byte_safe(&self, x: usize, y: usize) -> Option<u8> {
+        self
+            .data
+            .get(y)
+            .and_then(|v|{v.get(y)})
+            .and_then(|v|{Some(*v)})
     }
 
     /// Returns the line of interest
