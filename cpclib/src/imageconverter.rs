@@ -203,14 +203,18 @@ pub enum Output {
     CPCMemoryStandard([u8; 0x4000], Palette),
 
     /// Result using two banks 
-    CPCMemoryOverscan([u8; 0x4000], [u8; 0x4000], Palette),
+    CPCMemoryOverscan(
+        [u8; 0x4000], 
+        [u8; 0x4000], 
+        Palette
+    ),
 
     /// Result using several chunks of memory
     CPCSplittingMemory(Vec<Output>)
 }
 
 /// ImageConverter is able to make the conversion of images to several output format
-pub struct ImageConverter {
+pub struct ImageConverter<'a> {
 
     // TODO add a crop area to not keep the complete image
      // cropArea: Option<???>
@@ -222,16 +226,16 @@ pub struct ImageConverter {
     mode: Mode,
 
     /// Output format
-    output: OutputFormat
+    output: &'a OutputFormat
         
 }
 
 
 
-impl ImageConverter {
+impl<'a> ImageConverter<'a> {
 
     /// Create the object that will be used to make the conversion
-    pub fn convert (input_file: &Path, palette: Option<Palette>, mode: Mode, output: OutputFormat) -> Output
+    pub fn convert (input_file: &Path, palette: Option<Palette>, mode: Mode, output: &'a OutputFormat) -> Output
     {
         
         let mut converter = ImageConverter {
