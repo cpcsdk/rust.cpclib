@@ -5,6 +5,7 @@ extern crate image as im;
 use std::path::Path;
 use std::mem::swap;
 use std::collections::HashSet;
+use itertools::Itertools;
 
 use image::*;
 use ga::*;
@@ -349,8 +350,6 @@ impl<'a> ImageConverter<'a> {
             );   
         }
 
-        println!("Source image\n\twidth: {} bytes\n\theight: {} pixels", sprite.byte_width(), sprite.height());
-
         // Simulate the memory
         let mut pages  = [
             [0 as u8; 0x4000],
@@ -372,7 +371,6 @@ impl<'a> ImageConverter<'a> {
         // loop over the chars vertically
         for char_y in 0..dim.nbCharLines() {
             let char_y = char_y as usize;
-            println!("[{}] Current address: 0x{:x} in {}", char_y, current_address.address(), current_address.page());
 
             // loop over the chars horiontally (2 bytes)
             for char_x in 0..dim.nbWordColumns() {
@@ -394,14 +392,13 @@ impl<'a> ImageConverter<'a> {
 
                         match value {
                             None => {
-                                eprintln!("Unable to access byte in {}, {}", x_coord, y_coord);
+                                //eprintln!("Unable to access byte in {}, {}", x_coord, y_coord);
                             },
                             Some(byte) => {
 
                                 let page = current_address.page() as usize;
                                 let address = current_address.offset() as usize *2 + byte_nb + line_in_char*0x800;
 
-                                println!("Byte ({},{}) = {} => {}:0x{:x}", x_coord, y_coord, byte, page, address);
                                 pages[page][address] = byte;
                             }
                         };
@@ -415,7 +412,6 @@ impl<'a> ImageConverter<'a> {
 
         }
 
-        eprintln!("Pages: {:?}", used_pages);
         // By construction, the order should be good
         let used_pages = used_pages
                             .iter()
