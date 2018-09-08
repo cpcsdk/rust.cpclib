@@ -4,3 +4,5 @@ snapshot/target/
 cpclib/target/
 
 *.swp
+
+tags
