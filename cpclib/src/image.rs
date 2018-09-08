@@ -405,15 +405,18 @@ impl Sprite {
 
     /// Returns the byte at the right position and crash if it does not exists
     pub fn get_byte(&self, x: usize, y: usize) -> u8 {
-        self.data[y][x]
+        let line = &self.data[y];
+        let byte = line[x];
+        byte
     }
+
 
     /// Returns the byte at the right position if exists
     pub fn get_byte_safe(&self, x: usize, y: usize) -> Option<u8> {
         self
             .data
             .get(y)
-            .and_then(|v|{v.get(y)})
+            .and_then(|v|{v.get(x)})
             .and_then(|v|{Some(*v)})
     }
 

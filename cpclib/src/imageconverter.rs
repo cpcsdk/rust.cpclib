@@ -349,7 +349,7 @@ impl<'a> ImageConverter<'a> {
             );   
         }
 
-
+        println!("Source image\n\twidth: {} bytes\n\theight: {} pixels", sprite.byte_width(), sprite.height());
 
         // Simulate the memory
         let mut pages  = [
@@ -369,26 +369,40 @@ impl<'a> ImageConverter<'a> {
         let mut current_address = displayAddress.clone();
         used_pages.insert(current_address.page());
 
-        // loop over the chars
+        // loop over the chars vertically
         for char_y in 0..dim.nbCharLines() {
+            let char_y = char_y as usize;
             println!("[{}] Current address: 0x{:x} in {}", char_y, current_address.address(), current_address.page());
+
+            // loop over the chars horiontally (2 bytes)
             for char_x in 0..dim.nbWordColumns() {
+               let char_x = char_x as usize;
  
-                // Loop over the lines of the current char
-                for char_line in 0..dim.nbLinesPerChar() {
+                // Loop over the lines of the current char (8 lines for a standard screen)
+                for line_in_char in 0..dim.nbLinesPerChar() {
+                    let line_in_char = line_in_char as usize;
+
                     // Loop over the bytes of the current char 
                     for byte_nb in 0..2 {
-                        let value = sprite.get_byte_safe(
-                                    (char_x as u16*2 + byte_nb) as usize, 
-                                    (char_y as u16 *dim.nbLinesPerChar() as u16 + char_line as u16) as usize);
+                       let byte_nb = byte_nb as usize;
+
+                        let x_coord = 2*char_x  + byte_nb;
+                        let y_coord = dim.nbLinesPerChar() as usize *char_y + line_in_char;
+
+                        let value = sprite.get_byte_safe(x_coord as _, y_coord as _);
+                        //let value = Some(sprite.get_byte(x_coord as _, y_coord as _));
 
                         match value {
-                            None => {},
+                            None => {
+                                eprintln!("Unable to access byte in {}, {}", x_coord, y_coord);
+                            },
                             Some(byte) => {
-                                pages
-                                    [current_address.page() as usize]
-                                    [ (current_address.offset()*2+byte_nb) as usize] 
-                                        = byte;
+
+                                let page = current_address.page() as usize;
+                                let address = current_address.offset() as usize *2 + byte_nb + line_in_char*0x800;
+
+                                println!("Byte ({},{}) = {} => {}:0x{:x}", x_coord, y_coord, byte, page, address);
+                                pages[page][address] = byte;
                             }
                         };
                     }
