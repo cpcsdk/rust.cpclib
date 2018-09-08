@@ -91,6 +91,40 @@ impl Ink {
     pub fn number(&self) -> u8 {
         return self.value;
     }
+
+    /// Return the value required by the gate array the select the ink
+    pub fn gate_array(&self) -> u8 {
+        [
+            0x54,
+            0x44,
+            0x55,
+            0x5c,
+            0x58,
+            0x5d,
+            0x4c,
+            0x45,
+            0x4d,
+            0x56,
+            0x46,
+            0x57,
+            0x5e,
+            0x40,
+            0x5f,
+            0x4e,
+            0x47,
+            0x4f,
+            0x52,
+            0x42,
+            0x53,
+            0x5a,
+            0x59,
+            0x5b,
+            0x4a,
+            0x43,
+            0x4b
+        ][self.value as usize]
+
+    }
 }
 
 
@@ -446,6 +480,14 @@ impl Palette {
         }
     }
 
+
+    pub fn to_gate_array(&self) -> [u8; NB_PENS as usize] {
+        let mut res = [0 as u8; NB_PENS as usize];
+        for pen in 0..NB_PENS {
+            res[pen as usize] = self.get(&pen.into()).gate_array();
+        }
+        res
+    }
 
     /// Get the ink of the requested pen
     pub fn get(&self, pen: &Pen) -> &Ink {
