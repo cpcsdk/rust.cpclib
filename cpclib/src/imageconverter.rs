@@ -417,7 +417,13 @@ impl<'a> ImageConverter<'a> {
 
         eprintln!("Pages: {:?}", used_pages);
         // By construction, the order should be good
-        let used_pages = used_pages.iter().map(|idx| {pages[*idx as usize]}).collect::<Vec<_>>();
+        let used_pages = used_pages
+                            .iter()
+                            .sorted()
+                            .iter()
+                            .map(|idx| {
+                                pages[**idx as usize]
+                            }).collect::<Vec<_>>();
 
         // Generate the right output format
         let palette = sprite.palette().unwrap();
