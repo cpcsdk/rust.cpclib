@@ -201,6 +201,17 @@ impl ColorMatrix {
     }
 
 
+    pub fn convert_from_fname(
+        fname: &str,
+        conversion: ConversionRule) -> Result<ColorMatrix, im::ImageError> {
+            let img = im::open(fname)?;
+            Ok(ColorMatrix::convert(
+                &img.to_rgb(),
+                conversion)
+            )
+        }
+        
+
     pub fn convert(
         img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>,
         conversion: ConversionRule) -> ColorMatrix {
@@ -439,6 +450,22 @@ impl Sprite {
         let matrix = ColorMatrix::convert(img, conversion);
         matrix.as_sprite(mode, palette)
 
+    }
+
+    pub fn convert_from_fname(
+        fname: &str,
+        mode: Mode,
+        conversion: ConversionRule,
+        palette: Option<Palette>) 
+        -> Result<Sprite, im::ImageError> {
+
+        let img = im::open(fname)?;
+        Ok(Sprite::convert(
+            &img.to_rgb(),
+            mode,
+            conversion,
+            palette
+        ))
     }
 
     /// Apply a transformation function on each line
