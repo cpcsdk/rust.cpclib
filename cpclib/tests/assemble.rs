@@ -52,7 +52,7 @@ mod tests {
 
 
 
-        let count = visit_tokens(&tokens).unwrap().size();
+        let _count = visit_tokens(&tokens).unwrap().size();
  //       assert_eq!(count, 2);
     }
 

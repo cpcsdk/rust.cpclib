@@ -48,7 +48,7 @@ mod tests {
 
     fn is_error<T>(res: IResult<CompleteStr, T>) -> bool {
         match res {
-            Err(e) => true,
+            Err(_e) => true,
             Ok( (_,_)) => false
         }
     }
@@ -334,7 +334,7 @@ mod tests {
         // XXX Do we allow that ? The parse knows de is not a register but a label
         // XXX Do we forbid labels with the same name as a register ? => Probably better
         let code = CompleteStr(" ld hl, a");
-        let tokens = get_val(parse_z80_line(code));
+        let _tokens = get_val(parse_z80_line(code));
     }
 
     #[test]
@@ -344,7 +344,7 @@ mod tests {
         // XXX Do we allow that ? The parse knows de is not a register but a label
         // XXX Do we forbid labels with the same name as a register ? => Probably better
         let code = CompleteStr(" ld hl, de");
-        let tokens = get_val(parse_z80_line(code));
+        let _tokens = get_val(parse_z80_line(code));
     }
 
     #[test]
@@ -453,7 +453,7 @@ mod tests {
         assert_eq!(tokens.len(), 0);
 
         let code = CompleteStr("  ");
-        let tokens = get_val(parse_empty_line(code));
+        let _tokens = get_val(parse_empty_line(code));
 
         let code = CompleteStr("  ");
         let tokens = get_val(parse_z80_line(code));
@@ -481,7 +481,7 @@ mod tests {
     #[test]
     fn test_add() {
         let line1 = CompleteStr("   ADD A, C");
-        let tokens = get_val(parse_z80_line(line1));
+        let _tokens = get_val(parse_z80_line(line1));
 
         let line1 = CompleteStr("   ADD A, IXL");
         let tokens = get_val(parse_z80_line(line1));
@@ -551,31 +551,31 @@ mod tests {
     #[test]
     fn fn_test_asm_prog1() {
 
-        let code = ("  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $");
+        let code = "  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 6);
 
 
 
-        let code = ("\n\n  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $");
+        let code = "\n\n  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 6);
 
 
-        let code = ("  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $");
+        let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 6);
 
-        let code = ("  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $");
+        let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 6);
 
 
-        let code = ("  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ");
+        let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 6);
 
-        let code = ("  \n  \n  org 0x100\n  di\n    \nlabel ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ");
+        let code = "  \n  \n  org 0x100\n  di\n    \nlabel ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 7);
     }
@@ -699,7 +699,7 @@ mod tests {
 
     #[test]
     fn include_test() {
-        let code = ("  include \"file.asm\"");
+        let code = "  include \"file.asm\"";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
 
