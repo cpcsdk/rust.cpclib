@@ -28,7 +28,12 @@ pub mod mode1 {
 
     /// Convert the pen value to its byte representation at the proper place
     pub fn pen_to_pixel_byte(pen: Pen, pixel: PixelPosition) -> u8 {
-        assert!(pen.number() < 4);
+        let pen = if pen.number() > 3 {
+            eprintln!("[MODE1] with pen {:?}", &pen);
+            Pen::from(0)
+        } else {
+            pen
+        };
 
         // Bits of interest (attention order is good when reading it, not using it...)
         let bits_position:[u8;2] = {

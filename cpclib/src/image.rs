@@ -299,7 +299,7 @@ impl ColorMatrix {
     }
 
 
-    /// Conver the matrix as a sprite, given the right mode and an optionnal palette
+    /// Convert the matrix as a sprite, given the right mode and an optionnal palette
     pub fn as_sprite(&self, mode: Mode, palette: Option<Palette>) -> Sprite {
 
         // Extract the palette is not provided as an argument
@@ -314,7 +314,56 @@ impl ColorMatrix {
             palette: Some(palette),
             data: encode(pens, mode.clone())
         }
+    }
 
+    /// Convert the matrix as a sprite in mode1. Pen 1/2/3 are changed at each line. Pen 0 is constant
+    pub fn as_mode1_sprite_with_different_inks_per_line(&self, palette: &Vec<(Ink, Ink, Ink, Ink)>, dummy_palette: &Palette) -> Sprite {
+
+        // Build the matrix of pens
+        let mut data : Vec<Vec<Pen>> = Vec::new();
+        for y in 0..self.height() {
+            let y = y as usize;
+
+            // Build the palette for the current ink
+            let line_palette = {
+                let mut p = Palette::new(); // Palette full of 0
+                p.set(&Pen::from(0), palette[y].0);
+                p.set(&Pen::from(1), palette[y].1);
+                p.set(&Pen::from(2), palette[y].2);
+                p.set(&Pen::from(3), palette[y].3);
+                p
+            };
+
+            // get the pens for the current line
+            let pens = self.get_line(y).iter().enumerate().map(|(x, ink)|{
+                let pen = line_palette.get_pen_for_ink(ink);
+                match pen {
+                    Some(pen) => pen,
+                    None => {
+                        eprintln!("
+                            [ERROR] In line {}, pixel {} color ({:?}) is not in the palette {:?}. Background is used insted", 
+                            y,
+                            x,
+                            ink,
+                            line_palette
+                        );
+                        Pen::from(0)
+                    }, // If the color is not in the palette, use pen 0
+                }
+            }).collect::<Vec<Pen>>();
+
+            // Transform the pens in bytes
+            data.push(pens);
+        }
+
+        let encoded_pixels = encode(data, Mode::Mode1);
+
+        // Convert the matrix of pens as a sprite
+        Sprite {
+            mode: Some(Mode::Mode1),
+            palette: Some(dummy_palette.clone()),
+            data:  encoded_pixels
+        }
 
     }
 }
@@ -327,9 +376,9 @@ impl ColorMatrix {
 /// TODO Check why mode nad palette are optionnals. Force them if it is not mandatory to have htem
 /// optionnal
 pub struct Sprite {
-    mode: Option<Mode>,
-    palette: Option<Palette>,
-    data: Vec<Vec<u8>>
+    pub(crate) mode: Option<Mode>,
+    pub(crate) palette: Option<Palette>,
+    pub(crate) data: Vec<Vec<u8>>
 }
 
 

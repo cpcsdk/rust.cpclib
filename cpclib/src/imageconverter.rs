@@ -217,24 +217,6 @@ pub enum Output {
 
 impl Output {
 
-    /// Generate a color matrix from the ouptut.
-    /// This mainly serves for debugging purposes.
-    pub fn to_color_matrix(&self, format: &OutputFormat) -> ColorMatrix {
-        match self {
-            &Output::CPCMemoryOverscan(ref bank1, ref bank2, ref palette) => {
-                if let OutputFormat::CPCMemory{ref outputDimension, ref displayAddress} = format {
-                    let pixel_width = 10;  // TODO set the real value
-                    let pixel_height = 20; // TODO
-                    let mut matrix = ColorMatrix::new(pixel_width, pixel_height);
-                    matrix
-                }
-                else {
-                    unreachable!();
-                }
-            }
-            _ => unimplemented!()
-        }
-    }
 }
 
 
@@ -275,6 +257,16 @@ impl<'a> ImageConverter<'a> {
 
         let sprite = converter.load(input_file);
 
+
+        converter.apply_conversion(&sprite)
+    }
+
+    pub fn import(sprite: &Sprite, output: &'a OutputFormat) -> Output {
+        let mut converter = ImageConverter {
+            palette: None,
+            mode: Mode::Mode0, // TODO make the mode optional,
+            output: output
+        };
 
         converter.apply_conversion(&sprite)
     }
