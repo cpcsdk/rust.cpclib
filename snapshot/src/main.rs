@@ -646,7 +646,34 @@ pub enum SnapshotError {
 }
 
 struct SnapshotChunk {
+    code: [u8;4],
+    data: Vec<u8>   
+}
 
+impl SnapshotChunk {
+    pub fn code(&self) -> &[u8;4] {
+            & (self.code)
+    }
+
+    pub fn size(&self) -> u32 {
+        return 0;
+    }
+
+    pub fn size_as_array(&self) -> [u8;4] {
+        let mut size = self.size();
+        let mut array = [0, 0, 0, 0];
+
+        for i in 0..4 {
+            array[i] = (size % 256) as u8;
+            size = size / 256;
+        }
+
+        array
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
 }
 
 const PAGE_SIZE:usize = 0x4000;
@@ -701,12 +728,22 @@ impl Snapshot {
     }
 
 
-    /// Save the snapshot on disc
+    /// Save the snapshot V3 on disc
     pub fn save_sna(&self, fname:&str) -> Result<(), std::io::Error>{
         let mut buffer = File::create(fname)?;
 
+        // Write header and main memory
         buffer.write(&self.header)?;
         buffer.write(&self.memory)?;
+
+        // TODO add extra memory ?
+
+        // Save the chucks
+        for chunck in self.chuncks.iter() {
+           buffer.write(chunck.code());
+           buffer.write(&chunck.size_as_array());
+           buffer.write(chunck.data());
+        }
 
         //TODO add the chuncks
         Ok(())
@@ -817,6 +854,8 @@ impl Snapshot {
 }
 
 fn main() {
+    eprintln!("[WARNING] This is still a draft version that implement still few functionnalities");
+
     let desc_before = format!("Profile {} compiled: {}", built_info::PROFILE, built_info::BUILT_TIME_UTC);
     let matches = App::new("createSnapshot")
                           .version(built_info::PKG_VERSION)

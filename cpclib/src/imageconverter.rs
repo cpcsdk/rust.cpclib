@@ -220,10 +220,6 @@ impl Output {
 }
 
 
-
-
-
-
 /// ImageConverter is able to make the conversion of images to several output format
 pub struct ImageConverter<'a> {
 
@@ -240,8 +236,6 @@ pub struct ImageConverter<'a> {
     output: &'a OutputFormat
         
 }
-
-
 
 impl<'a> ImageConverter<'a> {
 
