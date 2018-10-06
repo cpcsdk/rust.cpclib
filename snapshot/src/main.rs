@@ -682,7 +682,10 @@ const HEADER_SIZE:usize = 256;
 struct Snapshot {
     header: [u8; HEADER_SIZE],
     memory: [u8; PAGE_SIZE*8],
-    chuncks: Vec<SnapshotChunk>
+    chuncks: Vec<SnapshotChunk>,
+
+    // nothing to do with the snapshot. Should be moved elsewhere
+    pub debug: bool
 }
 
 
@@ -707,13 +710,20 @@ impl Default for Snapshot {
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
                 memory: [0; PAGE_SIZE*8],
-                chuncks: Vec::new()
+                chuncks: Vec::new(),
+                debug: false
         }
     }
 }
 
 
 impl Snapshot {
+
+    pub fn log<S: std::fmt::Display>(&self, msg: S) {
+        if self.debug {
+            println!("> {}", msg);
+        }
+    }
 
     pub fn load(filename: &Path) -> Snapshot {
         let mut sna = Snapshot::default();
@@ -755,7 +765,7 @@ impl Snapshot {
         let data:Vec<u8> = f.bytes().map(|byte| byte.unwrap()).collect();
         let size = data.len();
 
-        println!("Add {} in 0x{:x} (0x{:x} bytes)", fname, address, size);
+        self.log(format!("Add {} in 0x{:x} (0x{:x} bytes)", fname, address, size));
         self.add_data(data, address)
     }
 
@@ -869,6 +879,10 @@ fn main() {
                                .long("info")
                                .requires("inSnapshot")
                            )
+                          .arg(Arg::with_name("debug")
+                            .help("Display debugging information while manipulating the snapshot")
+                            .long("debug")
+                          )
                           .arg(Arg::with_name("OUTPUT")
                                .help("Sets the output file to generate")
                                .conflicts_with("flags")
@@ -879,6 +893,7 @@ fn main() {
                           .arg(Arg::with_name("inSnapshot")
                                .takes_value(true)
                                .short("i")
+                               .long("inSnapshot")
                                .value_name("INFILE")
                                .multiple(false)
                                .number_of_values(1)
@@ -887,12 +902,14 @@ fn main() {
                           .arg(Arg::with_name("load")
                                .takes_value(true)
                                .short("l")
+                               .long("load")
                                .multiple(true)
                                .number_of_values(2)
                                .help("Specify a file to include. -l fname address"))
                           .arg(Arg::with_name("getToken")
                                .takes_value(true)
                                .short("g")
+                               .long("getToken")
                                .multiple(true)
                                .number_of_values(1)
                                .help("Display the value of a snapshot token")
@@ -901,12 +918,14 @@ fn main() {
                           .arg(Arg::with_name("setToken")
                                .takes_value(true)
                                .short("s")
+                               .long("setToken")
                                .multiple(true)
                                .number_of_values(2)
                                .help("Set snapshot token <$1> to value <$2>\nUse <$1>:<val> to set array value\n\t\tex '-s CRTC_REG:6 20' : Set CRTC register 6 to 20"))
                           .arg(Arg::with_name("putData")
                                .takes_value(true)
                                .short("p")
+                               .long("putData")
                                .multiple(true)
                                .number_of_values(2)
                                .help("Put <$2> byte at <$1> address in snapshot memory")
@@ -937,6 +956,9 @@ fn main() {
     else {
         Snapshot::default()
     };
+
+    // Activate the debug mode
+    sna.debug = matches.is_present("debug");
 
 
 
@@ -1014,6 +1036,9 @@ fn main() {
             // Get the token
             let token = SnapshotFlag::from_str(token).unwrap();
             sna.set_value(token, value as u16);
+
+
+            sna.log(format!("Token {:?} set at value {} (0x{:x})", token, value, value));
         }
     }
 
