@@ -1,6 +1,6 @@
 ///! Utility code to build more easily tokens to manipulate in code generators
 
-use assembler::tokens::*;
+use crate::assembler::tokens::*;
 
 pub fn push_de() -> Token {
     Token::OpCode(

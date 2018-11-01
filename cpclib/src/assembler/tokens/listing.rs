@@ -1,6 +1,6 @@
 use std::ops::Deref;
 use std::ops::DerefMut;
-use assembler::assembler::SymbolsTable;
+use crate::assembler::assembler::SymbolsTable;
 
 
 

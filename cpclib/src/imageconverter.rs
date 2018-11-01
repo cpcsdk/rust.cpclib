@@ -7,8 +7,8 @@ use std::mem::swap;
 use std::collections::HashSet;
 use itertools::Itertools;
 
-use image::*;
-use ga::*;
+use crate::image::*;
+use crate::ga::*;
 
 
 /// Encode the screen dimension in CRTC measures
@@ -292,7 +292,7 @@ impl<'a> ImageConverter<'a> {
                 => unimplemented!(),
             OutputFormat::CPCMemory{ref outputDimension, ref displayAddress}
                 => self.build_memory_blocks(sprite, outputDimension.clone(), displayAddress.clone()),
-            OutputFormat::CPCSplittingMemory(ref vec)
+            OutputFormat::CPCSplittingMemory(ref _vec)
                 => unimplemented!()
         }
     } 
@@ -422,7 +422,7 @@ impl<'a> ImageConverter<'a> {
 
 #[cfg(test)]
 mod tests {
-    use imageconverter::*;
+    use crate::imageconverter::*;
 
     #[test]
     fn overscan_test() {

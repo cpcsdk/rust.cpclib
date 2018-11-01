@@ -1,6 +1,6 @@
 use std::fmt;
-use assembler::tokens::expression::*;
-use assembler::tokens::registers::*;
+use crate::assembler::tokens::expression::*;
+use crate::assembler::tokens::registers::*;
 
 
 #[derive(Debug, PartialEq, Eq, Clone)]

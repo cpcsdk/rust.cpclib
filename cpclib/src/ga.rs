@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::ops::Add;
 use std::fmt::{Formatter, Debug, Result} ;
 use num::Integer;
-use image::Mode;
+use crate::image::Mode;
 
 const INK0:im::Rgba<u8> = im::Rgba{data:[0, 0, 0, 255]};
 const INK1:im::Rgba<u8> = im::Rgba{data: [0x00, 0x00, 0x80, 255]};
@@ -548,7 +548,7 @@ impl Palette {
 
 #[cfg(test)]
 mod tests {
-    use ga;
+    use crate::ga;
 
     #[test]
     fn test_ink() {

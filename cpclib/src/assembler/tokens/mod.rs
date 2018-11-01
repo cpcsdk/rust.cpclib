@@ -34,7 +34,7 @@ pub type Input<'a> = &'a [InputElement];
 
 
 use std::fmt;
-use assembler::parser;
+use crate::assembler::parser;
 
 
 
@@ -240,7 +240,7 @@ impl<'a, 'b> Compare<Input<'b>> for Span<'a> {
 
 #[cfg(test)]
 mod test {
-    use assembler::tokens::{Token,Mnemonic,DataAccess,Expr, Register16, Register8, FlagTest, Listing, ListingElement};
+    use crate::assembler::tokens::{Token,Mnemonic,DataAccess,Expr, Register16, Register8, FlagTest, Listing, ListingElement};
     use std::str::FromStr;
     #[test]
     fn test_size (){
@@ -289,7 +289,7 @@ mod test {
 
     #[test]
     fn test_duration() {
-         let mut listing = Listing::from_str("
+         let listing = Listing::from_str("
             pop de      ; 3
             inc l       ; 1
             ld (hl), e  ; 2

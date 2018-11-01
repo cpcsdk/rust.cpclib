@@ -1,7 +1,7 @@
 extern crate image as im;
 
-use pixels;
-use ga::*;
+use crate::pixels;
+use crate::ga::*;
 use std::collections::HashSet;
 use itertools::{flatten, Itertools};
 

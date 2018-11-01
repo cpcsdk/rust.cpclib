@@ -1,6 +1,6 @@
 extern crate smallvec;
 
-use assembler::tokens::*;
+use crate::assembler::tokens::*;
 use std::collections::HashMap;
 use smallvec::SmallVec;
 
@@ -292,7 +292,7 @@ pub fn assemble_align(expr: &Expr, sym: &SymbolsTable) -> Result<Bytes, String> 
     // Create the vector
     let hole = (until-current) as usize;
     let mut bytes = Bytes::with_capacity(hole);
-    for i in 0..hole {
+    for _i in 0..hole {
         bytes.push(0);
     }
 
@@ -1040,8 +1040,8 @@ fn flag_test_to_code(flag: &FlagTest) -> u8 {
 
 #[cfg(test)]
 mod test {
-    use assembler::tokens::*;
-    use assembler::assembler::*;
+    use crate::assembler::tokens::*;
+    use crate::assembler::assembler::*;
 
     #[test]
     pub fn test_pop() {
@@ -1095,7 +1095,7 @@ mod test {
     #[test]
     #[should_panic]
     pub fn test_ld_fail() {
-        let res = assemble_ld(
+        let _res = assemble_ld(
             &DataAccess::Register16(Register16::Af),
             &DataAccess::Expression(Expr::Value(0x1234)),
             &SymbolsTable::default()

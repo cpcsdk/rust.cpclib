@@ -5,7 +5,7 @@ use std::mem::swap;
 use std::fmt::Debug;
 use std::fmt;
 use num::integer::Integer;
-use assembler::tokens::*;
+use crate::assembler::tokens::*;
 
 /// Common trait for Register 8 and 6 bits
 pub trait HasValue {
@@ -320,7 +320,7 @@ impl Z80 {
 
 
     // To reduce copy paste/implementation errors, all manipulation are translated as token usage
-    pub fn copy_to_from(&mut self, to: ::assembler::tokens::Register8, from: ::assembler::tokens::Register8) {
+    pub fn copy_to_from(&mut self, to: crate::assembler::tokens::Register8, from: crate::assembler::tokens::Register8) {
         self.execute(&Token::OpCode(
                         Mnemonic::Ld,
                         Some(DataAccess::Register8(to)),
@@ -333,11 +333,11 @@ impl Z80 {
 
 #[cfg(test)]
 mod tests{
-    use z80emu::z80::*;
+    use crate::z80emu::z80::*;
 
     #[test]
     fn build_z80() {
-        let z80 = Z80::default();
+        let _z80 = Z80::default();
     }
 
     #[test]
@@ -406,7 +406,7 @@ mod tests{
 
     #[test]
     fn eval() {
-        use assembler::tokens::*;
+        use crate::assembler::tokens::*;
 
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);

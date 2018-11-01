@@ -1,5 +1,5 @@
-use z80emu::z80::*;
-use assembler::tokens::*;
+use crate::z80emu::z80::*;
+use crate::assembler::tokens::*;
 
 impl Z80 {
 
@@ -28,7 +28,7 @@ impl Z80 {
         match mnemonic {
             Mnemonic::Add => {
                 match (arg1, arg2)  {
-                    (Some(&DataAccess::Register8(::assembler::tokens::Register8::A)), Some(&DataAccess::Register8(_))) => {
+                    (Some(&DataAccess::Register8(crate::assembler::tokens::Register8::A)), Some(&DataAccess::Register8(_))) => {
                         let val = self.get_register_8(arg2.unwrap()).value();
                         self.get_register_8_mut(arg1.unwrap()).add(val);
                     },
@@ -68,11 +68,11 @@ impl Z80 {
 
 
     /// TODO need to manage memory
-    fn write_memory_byte(&self, addr:u16, val: u8)  {
+    fn write_memory_byte(&self, _addr:u16, _val: u8)  {
     }
 
     /// TODO need to manage memory
-    fn read_memory_byte(&self, addr:u16) -> u8 {
+    fn read_memory_byte(&self, _addr:u16) -> u8 {
         0
     }
 
@@ -101,7 +101,7 @@ impl Z80 {
 
 
     /// Returns the register encoded by the DataAccess
-    fn get_register_16(&self, reg: &DataAccess) -> & ::z80emu::z80::Register16{
+    fn get_register_16(&self, reg: &DataAccess) -> & crate::z80emu::z80::Register16{
         match reg{
             &DataAccess::IndexRegister16(ref reg) => {
                 match reg {
@@ -111,28 +111,28 @@ impl Z80 {
             },
             &DataAccess::Register16(ref reg) => {
                 match reg {
-                    ::assembler::tokens::Register16::Af => self.af(),
-                    ::assembler::tokens::Register16::Bc => self.bc(),
-                    ::assembler::tokens::Register16::De => self.de(),
-                    ::assembler::tokens::Register16::Hl => self.hl(),
-                    ::assembler::tokens::Register16::Sp => self.sp(),
+                    crate::assembler::tokens::Register16::Af => self.af(),
+                    crate::assembler::tokens::Register16::Bc => self.bc(),
+                    crate::assembler::tokens::Register16::De => self.de(),
+                    crate::assembler::tokens::Register16::Hl => self.hl(),
+                    crate::assembler::tokens::Register16::Sp => self.sp(),
                 }
             },
             _ => panic!()
         }
     }
 
-    fn get_register_8(&self, reg: &DataAccess) -> &::z80emu::z80::Register8{
+    fn get_register_8(&self, reg: &DataAccess) -> &crate::z80emu::z80::Register8{
         match reg{
             &DataAccess::Register8(ref reg) => {
                 match reg {
-                    ::assembler::tokens::Register8::A => self.a(),
-                    ::assembler::tokens::Register8::B => self.b(),
-                    ::assembler::tokens::Register8::D => self.d(),
-                    ::assembler::tokens::Register8::H => self.h(),
-                    ::assembler::tokens::Register8::C => self.c(),
-                    ::assembler::tokens::Register8::E => self.e(),
-                    ::assembler::tokens::Register8::L => self.l(),
+                    crate::assembler::tokens::Register8::A => self.a(),
+                    crate::assembler::tokens::Register8::B => self.b(),
+                    crate::assembler::tokens::Register8::D => self.d(),
+                    crate::assembler::tokens::Register8::H => self.h(),
+                    crate::assembler::tokens::Register8::C => self.c(),
+                    crate::assembler::tokens::Register8::E => self.e(),
+                    crate::assembler::tokens::Register8::L => self.l(),
                 }
             },
 
@@ -149,17 +149,17 @@ impl Z80 {
 
 
     // Mutable version to be synced with the immutable one
-    fn get_register_8_mut(&mut self, reg: &DataAccess) -> &mut ::z80emu::z80::Register8{
+    fn get_register_8_mut(&mut self, reg: &DataAccess) -> &mut crate::z80emu::z80::Register8{
         match reg{
             &DataAccess::Register8(ref reg) => {
                 match reg {
-                    ::assembler::tokens::Register8::A => self.a_mut(),
-                    ::assembler::tokens::Register8::B => self.b_mut(),
-                    ::assembler::tokens::Register8::D => self.d_mut(),
-                    ::assembler::tokens::Register8::H => self.h_mut(),
-                    ::assembler::tokens::Register8::C => self.c_mut(),
-                    ::assembler::tokens::Register8::E => self.e_mut(),
-                    ::assembler::tokens::Register8::L => self.l_mut(),
+                    crate::assembler::tokens::Register8::A => self.a_mut(),
+                    crate::assembler::tokens::Register8::B => self.b_mut(),
+                    crate::assembler::tokens::Register8::D => self.d_mut(),
+                    crate::assembler::tokens::Register8::H => self.h_mut(),
+                    crate::assembler::tokens::Register8::C => self.c_mut(),
+                    crate::assembler::tokens::Register8::E => self.e_mut(),
+                    crate::assembler::tokens::Register8::L => self.l_mut(),
                 }
             },
 

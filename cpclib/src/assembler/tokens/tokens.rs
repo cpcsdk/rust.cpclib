@@ -1,7 +1,7 @@
-use assembler::tokens::*;
-use assembler::tokens::listing::*;
+use crate::assembler::tokens::*;
+use crate::assembler::tokens::listing::*;
 use std::str::FromStr;
-use assembler::assembler::SymbolsTable;
+use crate::assembler::assembler::SymbolsTable;
 
 impl ListingElement for Token {
     /// Returns an estimation of the duration.
@@ -77,7 +77,7 @@ impl ListingElement for Token {
                             },
 
                             // Dest in 8bits reg
-                            &Some(DataAccess::Register8(ref dst)) => {
+                            &Some(DataAccess::Register8(ref _dst)) => {
                                 match arg2 {
                                     &Some(DataAccess::Register8(_)) => 1,
                                     &Some(DataAccess::MemoryRegister16(Register16::Hl)) => 2,
@@ -337,7 +337,7 @@ impl Listing {
                 current_address = Some(expr.resolve(&sym)? as usize);
                 println!("Set address to {:?}", current_address);
             }
-            else if let &Token::Align(ref expr) = token {
+            else if let &Token::Align(ref _expr) = token {
                 if current_address.is_none() {
                     return Err("Unable to guess align size if current address is unknown".to_owned())
                 }
@@ -366,7 +366,7 @@ impl Listing {
 
 #[cfg(test)]
 mod tests {
-    use assembler::tokens::*;
+    use crate::assembler::tokens::*;
     use std::convert::TryFrom;
 
     #[test]

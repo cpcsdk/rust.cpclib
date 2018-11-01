@@ -1,6 +1,6 @@
 /// Manage all the stuff related to mode 1 pixels
 pub mod mode1 {
-    use ga::Pen;
+    use crate::ga::Pen;
 
     /// Pixel ordering in a byte
     /// [Pixel0(), Pixel1(), Pixel2(), Pixel3()]
@@ -165,7 +165,7 @@ def get_mode1_pixel3_byte_encoded(pen):
 
 
 pub mod mode0 {
-    use ga::Pen;
+    use crate::ga::Pen;
 
 
     /// Pixel ordering in a byte
@@ -313,8 +313,8 @@ pub mod mode0 {
 
 #[cfg(test)]
 mod tests {
-    use ga::Pen;
-    use pixels::*;
+    use crate::ga::Pen;
+    use crate::pixels::*;
 
 
     fn test_couple(a: u8, b: u8) {
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn bytes_to_pen() {
         // 1000000
-        let res = ::pixels::mode0::byte_to_pens(64);
+        let res = crate::pixels::mode0::byte_to_pens(64);
         assert!(res.0.number() != res.1.number());
     }
 

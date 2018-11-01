@@ -2,7 +2,7 @@ use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending};
 use nom::types::{CompleteStr};
 use nom::{multispace};
 use nom::{InputLength, InputIter};
-use assembler::tokens::*;
+use crate::assembler::tokens::*;
     use std::iter;
 
 

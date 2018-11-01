@@ -1,10 +1,10 @@
 use std::convert::TryFrom;
 use std::fmt;
 
-use assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,assemble_align,Bytes,SymbolsTable};
-use assembler::tokens::expression::*;
-use assembler::tokens::data_access::*;
-use assembler::parser::*;
+use crate::assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,assemble_align,Bytes,SymbolsTable};
+use crate::assembler::tokens::expression::*;
+use crate::assembler::tokens::data_access::*;
+use crate::assembler::parser::*;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Mnemonic {
