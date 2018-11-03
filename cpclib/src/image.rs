@@ -420,6 +420,18 @@ impl Sprite {
         })
     }
 
+    /// Produce a linearized version of the sprite.
+    pub fn to_linear_vec(&self) -> Vec<u8> {
+        let size = self.height() * self.byte_width();
+        let mut bytes:Vec<u8> = Vec::with_capacity(size as usize);
+
+        for y in 0..self.height() {
+            bytes.extend_from_slice(&self.data[y as usize]);
+        }
+
+        bytes
+    }
+
     /// Get the palette of the sprite
     pub fn palette(&self) -> Option<Palette>{
         self.palette.clone()

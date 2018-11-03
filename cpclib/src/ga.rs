@@ -89,7 +89,11 @@ impl Ink {
     }
 
     pub fn number(&self) -> u8 {
-        return self.value;
+        self.value
+    }
+
+    pub fn value(&self) -> u8 {
+        self.value
     }
 
     /// Return the value required by the gate array the select the ink
@@ -127,6 +131,17 @@ impl Ink {
     }
 }
 
+impl Into<u8> for Ink {
+    fn into(self) -> u8 {
+        self.value()
+    }
+}
+
+impl Into<u8> for &Ink {
+    fn into(self) -> u8 {
+        self.value()
+    }
+}
 
 impl From<im::Rgba<u8>> for Ink{
     
@@ -544,6 +559,17 @@ impl Palette {
     }
 }
 
+
+impl Into<Vec<u8>> for &Palette {
+
+    fn into(self) -> Vec<u8> {
+        let mut vec = Vec::with_capacity(16);
+        for pen in 0..16 {
+            vec.push(self.get(pen.into()).into());
+        }
+        vec
+    }
+}
 
 
 #[cfg(test)]

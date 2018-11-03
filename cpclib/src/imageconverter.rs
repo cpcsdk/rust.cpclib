@@ -198,7 +198,7 @@ pub enum OutputFormat {
 /// Embeds the conversion output
 /// There must be one implementation per OuputFormat
 pub enum Output {
-    LinearEncodedSprite(Palette),
+    LinearEncodedSprite{data: Vec<u8>, palette: Palette, byte_width: usize, height: usize},
 
     /// Result using one bank
     CPCMemoryStandard([u8; 0x4000], Palette),
@@ -294,13 +294,25 @@ impl<'a> ImageConverter<'a> {
 
         match output {
             OutputFormat::LinearEncodedSprite 
-                => unimplemented!(),
+                => self.linearize_sprite(sprite),
             OutputFormat::CPCMemory{ref outputDimension, ref displayAddress}
                 => self.build_memory_blocks(sprite, outputDimension.clone(), displayAddress.clone()),
             OutputFormat::CPCSplittingMemory(ref _vec)
                 => unimplemented!()
         }
     } 
+
+
+    /// Produce the linearized version of the sprite.
+    /// TODO add size constraints to keep a small part of the sprite
+    fn linearize_sprite(&mut self, sprite: &Sprite) -> Output {
+        Output::LinearEncodedSprite{
+            data: sprite.to_linear_vec(),
+            palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set 
+            byte_width: sprite.byte_width() as _, 
+            height: sprite.height() as _
+        }
+    }
 
 
 
