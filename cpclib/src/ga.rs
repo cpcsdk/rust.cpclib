@@ -92,10 +92,6 @@ impl Ink {
         self.value
     }
 
-    pub fn value(&self) -> u8 {
-        self.value
-    }
-
     /// Return the value required by the gate array the select the ink
     pub fn gate_array(&self) -> u8 {
         [
@@ -133,13 +129,13 @@ impl Ink {
 
 impl Into<u8> for Ink {
     fn into(self) -> u8 {
-        self.value()
+        (&self).into()
     }
 }
 
 impl Into<u8> for &Ink {
     fn into(self) -> u8 {
-        self.value()
+        self.gate_array()
     }
 }
 
