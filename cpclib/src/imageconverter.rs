@@ -240,9 +240,14 @@ pub struct ImageConverter<'a> {
 impl<'a> ImageConverter<'a> {
 
     /// Create the object that will be used to make the conversion
-    pub fn convert (input_file: &Path, palette: Option<Palette>, mode: Mode, output: &'a OutputFormat) -> Output
+    pub fn convert<P> (input_file: P, palette: Option<Palette>, mode: Mode, output: &'a OutputFormat) -> Output
+    where P: AsRef<Path>
     {
-        
+        Self::convert_impl(input_file.as_ref(), palette, mode, output)        
+    }
+
+    fn convert_impl(input_file: &Path, palette: Option<Palette>, mode: Mode, output: &'a OutputFormat) -> Output
+    {
         let mut converter = ImageConverter {
             palette,
             mode,
