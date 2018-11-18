@@ -6,9 +6,66 @@ use std::path::Path;
 use std::mem::swap;
 use std::collections::HashSet;
 use itertools::Itertools;
+use std::mem;
 
 use crate::image::*;
 use crate::ga::*;
+
+
+#[derive(Clone)]
+/// List of all the possible transformations applicable to a ColorMAtrix
+pub enum Transformation {
+    /// When using mode 0, do not read all the pixels lines
+    SkipOddPixels
+}
+
+
+impl Transformation {
+    pub fn apply(&self, matrix: ColorMatrix) -> ColorMatrix {
+        match self {
+           Transformation::SkipOddPixels => {
+               let mut res = matrix.clone();
+               res.remove_odd_columns();
+               res
+           }
+        }
+    } 
+}
+
+
+
+/// Container of transformations
+#[derive(Clone)]
+pub struct TransformationsList {
+    transformations: Vec<Transformation>
+}
+
+impl TransformationsList {
+    /// Create an empty list of transformations
+    pub fn new() -> Self {
+        TransformationsList {
+            transformations: Vec::new()
+        }
+    }
+
+    /// Add a transformation that remove one pixel column out of two
+    pub fn skip_odd_pixels(self) -> Self {
+        let mut transformations = self.transformations.clone();
+        transformations.push(Transformation::SkipOddPixels);
+        TransformationsList {
+            transformations
+        }
+    }
+
+    /// Apply ALL the transformation (in order of addition)
+    pub fn apply(&self, matrix: ColorMatrix) -> ColorMatrix {
+        let mut matrix = matrix;
+        for transformation in self.transformations.iter() {
+            matrix = transformation.apply(matrix);
+        }
+        matrix
+    }
+}
 
 
 /// Encode the screen dimension in CRTC measures
@@ -239,24 +296,38 @@ pub struct ImageConverter<'a> {
     mode: Mode,
 
     /// Output format
-    output: &'a OutputFormat
+    output: &'a OutputFormat,
+
+    /// List of transformations
+    transformations: TransformationsList,
         
 }
 
 impl<'a> ImageConverter<'a> {
 
     /// Create the object that will be used to make the conversion
-    pub fn convert<P> (input_file: P, palette: Option<Palette>, mode: Mode, output: &'a OutputFormat) -> Output
+    pub fn convert<P> (
+            input_file: P, 
+            palette: Option<Palette>, 
+            mode: Mode, 
+            transformations: TransformationsList,
+            output: &'a OutputFormat) -> Output
     where P: AsRef<Path>
     {
-        Self::convert_impl(input_file.as_ref(), palette, mode, output)        
+        Self::convert_impl(input_file.as_ref(), palette, mode, transformations,  output)        
     }
 
-    fn convert_impl(input_file: &Path, palette: Option<Palette>, mode: Mode, output: &'a OutputFormat) -> Output
+    fn convert_impl(
+        input_file: &Path, 
+        palette: Option<Palette>, 
+        mode: Mode, 
+        transformations: TransformationsList,
+        output: &'a OutputFormat) -> Output
     {
         let mut converter = ImageConverter {
             palette,
             mode,
+            transformations,
             output
         };
 
@@ -283,7 +354,8 @@ impl<'a> ImageConverter<'a> {
         let mut converter = ImageConverter {
             palette: None,
             mode: Mode::Mode0, // TODO make the mode optional,
-            output: output
+            output: output,
+            transformations: TransformationsList::new()
         };
       
         converter.apply_sprite_conversion(&sprite)
@@ -302,11 +374,12 @@ impl<'a> ImageConverter<'a> {
     }
 
     fn load_color_matrix(&self, input_file: &Path) -> ColorMatrix {
-        let img = im::open(input_file).unwrap();
-        ColorMatrix::convert(
+        let img = im::open(input_file).expect(&format!("Unable to convert {:?} properly.", input_file));
+        let mat = ColorMatrix::convert(
             &img.to_rgb(),
             ConversionRule::AnyModeUseAllPixels
-        )
+        );
+        self.transformations.apply(mat)
     }
 
 

@@ -143,6 +143,7 @@ fn inks_to_pens(inks: &Vec<Vec<Ink>>, p: &Palette) -> Vec<Vec<Pen>> {
 /// A ColorMatrix represents an image through a list of Inks.
 /// It has no real meaning in CPC world but can be used for image transformaton
 /// There is no mode information
+#[derive(Clone)]
 pub struct ColorMatrix {
     data: Vec<Vec<Ink>>
 }
@@ -154,6 +155,12 @@ impl ColorMatrix {
     pub fn new(width: usize, height: usize) -> ColorMatrix {
         ColorMatrix{
             data: vec![vec![Ink::from(0); width] ; height]
+        }
+    }
+
+    pub fn empty() -> ColorMatrix {
+        ColorMatrix {
+            data: Vec::new()
         }
     }
 
@@ -174,6 +181,21 @@ impl ColorMatrix {
                 let color = self.get_ink(x as _, y as _);
                 new_data[y][x*2+0] = color.clone();
                 new_data[y][x*2+1] = color.clone();
+            }
+        }
+
+        // Set them in the right position
+        std::mem::swap(&mut self.data, &mut new_data)
+    }
+
+
+    pub fn remove_odd_columns(&mut self){
+        // Create the doubled pixels
+        let mut new_data = vec![vec![Ink::from(0); (self.width()/2) as usize] ; self.height() as usize];
+        for x in 0..( (self.width()/2) as usize) {
+            for y in 0..(self.height() as usize){
+                let color = self.get_ink((x*2) as _ , y as _);
+                new_data[y][x] = color.clone();
             }
         }
 
