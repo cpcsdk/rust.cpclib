@@ -216,12 +216,13 @@ impl Token {
     /// Dummy version that assemble without taking into account the context
     /// TODO find a way to not build a symbol table each time
     pub fn to_bytes(&self) -> Result<Bytes, String> {
-        let table = &SymbolsTable::laxist();
+        let mut table = SymbolsTable::laxist();
+        let table = &mut table;
         self.to_bytes_with_context(table)
     }
 
     /// Assemble the symbol taking into account some context
-    pub fn to_bytes_with_context(&self, table: &SymbolsTable) -> Result<Bytes, String> {
+    pub fn to_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<Bytes, String> {
                 match self {
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2)
                 => assemble_opcode(mnemonic, arg1, arg2, table),

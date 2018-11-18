@@ -195,7 +195,7 @@ impl ListingElement for Token {
 
 
     /// Return the number of bytes of the token given the provided context
-    fn number_of_bytes_with_context(&self, table: &SymbolsTable) -> Result<usize, String> {
+    fn number_of_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<usize, String> {
         let bytes = self.to_bytes_with_context(table);
         if bytes.is_ok() {
             Ok(bytes.ok().unwrap().len())
@@ -342,7 +342,7 @@ impl Listing {
                     return Err("Unable to guess align size if current address is unknown".to_owned())
                 }
 
-                current_size = token.number_of_bytes_with_context(&sym)?;
+                current_size = token.number_of_bytes_with_context(&mut sym)?;
             }
             else {
                 current_size = token.number_of_bytes()?;

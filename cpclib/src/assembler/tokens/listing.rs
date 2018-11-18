@@ -14,7 +14,7 @@ pub trait ListingElement {
 
 
     /// Return the number of bytes given the context (needed for Align)
-    fn number_of_bytes_with_context(&self, table: &SymbolsTable) -> Result<usize, String>;
+    fn number_of_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<usize, String>;
 }
 
 
