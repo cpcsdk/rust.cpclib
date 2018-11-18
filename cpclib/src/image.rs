@@ -14,7 +14,17 @@ pub enum Mode {
     Mode3
 }
 
-
+impl From<u8> for Mode {
+    fn from(val: u8) -> Mode {
+        match val {
+            0 => Mode::Mode0,
+            1 => Mode::Mode1,
+            2 => Mode::Mode2,
+            3 => Mode::Mode3,
+            _ => panic!(format!("{} is not a valid mode.", val))
+        }
+    }
+}
 
 impl Mode {
 
@@ -152,6 +162,23 @@ impl ColorMatrix {
         ColorMatrix{
             data: vec![vec![Ink::from(0); self.width() as usize]; self.height() as usize]
         }
+    }
+
+
+    /// Double the width (usefull for chuncky conversions)
+    pub fn double_horizontally(&mut self) {
+        // Create the doubled pixels
+        let mut new_data = vec![vec![Ink::from(0); (2*self.width()) as usize] ; self.height() as usize];
+        for x in 0..(self.width() as usize) {
+            for y in 0..(self.height() as usize){
+                let color = self.get_ink(x as _, y as _);
+                new_data[y][x*2+0] = color.clone();
+                new_data[y][x*2+1] = color.clone();
+            }
+        }
+
+        // Set them in the right position
+        std::mem::swap(&mut self.data, &mut new_data)
     }
 
     /// Get the height (in pixels) of the image

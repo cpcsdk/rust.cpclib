@@ -93,6 +93,8 @@ impl CPCScreenDimension {
 #[derive(Clone)]
 pub struct DisplayAddress(u16);
 
+pub type DisplayCRTCAddress = DisplayAddress;
+
 impl DisplayAddress {
     const OFFSET_MASK:u16 = 0b1111111111;
     const PAGE_MASK:u16 = 0b11000000000000;
@@ -185,6 +187,9 @@ pub enum OutputFormat {
     /// Mode specific bytes are stored consecutively in a linear way (line 0, line 1, ... line n)
     LinearEncodedSprite,
 
+    /// Chuncky output where each pixel is encoded in one byte (and is supposed to be vertically duplicated)
+    LinearEncodedChuncky,
+
     /// CPC memory encoded. The binary can be directly included in a snapshot
     CPCMemory{
         outputDimension: CPCScreenDimension,
@@ -199,6 +204,7 @@ pub enum OutputFormat {
 /// There must be one implementation per OuputFormat
 pub enum Output {
     LinearEncodedSprite{data: Vec<u8>, palette: Palette, byte_width: usize, height: usize},
+    LinearEncodedChuncky{data: Vec<u8>, palette: Palette, byte_width: usize, height: usize},
 
     /// Result using one bank
     CPCMemoryStandard([u8; 0x4000], Palette),
@@ -254,10 +260,23 @@ impl<'a> ImageConverter<'a> {
             output
         };
 
-        let sprite = converter.load(input_file);
-
-
-        converter.apply_conversion(&sprite)
+        match output {
+            OutputFormat::LinearEncodedChuncky => {
+                let mut matrix = converter.load_color_matrix(input_file);
+                matrix.double_horizontally();
+                let sprite = matrix.as_sprite(mode, None);
+                Output::LinearEncodedChuncky{
+                    data: sprite.to_linear_vec(),
+                    palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set 
+                    byte_width: sprite.byte_width() as _, 
+                    height: sprite.height() as _
+                }
+            },
+            _ => {
+                let sprite = converter.load_sprite(input_file);
+                converter.apply_sprite_conversion(&sprite)
+            }
+        }
     }
 
     pub fn import(sprite: &Sprite, output: &'a OutputFormat) -> Output {
@@ -266,30 +285,33 @@ impl<'a> ImageConverter<'a> {
             mode: Mode::Mode0, // TODO make the mode optional,
             output: output
         };
-
-        converter.apply_conversion(&sprite)
+      
+        converter.apply_sprite_conversion(&sprite)
     }
 
 
     /// Load the initial image
     /// TODO make compatibility tests are alike
     /// TODO propagate errors when needed
-    fn load(&mut self, input_file: &Path) -> Sprite {
-
-        let img = im::open(input_file).unwrap();
-        let matrix = ColorMatrix::convert(
-            &img.to_rgb(),
-            ConversionRule::AnyModeUseAllPixels
-        );
+    fn load_sprite(&mut self, input_file: &Path) -> Sprite {
+        let matrix = self.load_color_matrix(input_file);
         let sprite = matrix.as_sprite(self.mode, self.palette.clone());
         self.palette = sprite.palette();
 
         sprite
     }
 
+    fn load_color_matrix(&self, input_file: &Path) -> ColorMatrix {
+        let img = im::open(input_file).unwrap();
+        ColorMatrix::convert(
+            &img.to_rgb(),
+            ConversionRule::AnyModeUseAllPixels
+        )
+    }
+
 
     /// Manage the conversion on the given sprite
-    fn apply_conversion(&mut self, sprite: & Sprite) -> Output {
+    fn apply_sprite_conversion(&mut self, sprite: & Sprite) -> Output {
         let output = self.output.clone();
 
         match output {
@@ -298,7 +320,9 @@ impl<'a> ImageConverter<'a> {
             OutputFormat::CPCMemory{ref outputDimension, ref displayAddress}
                 => self.build_memory_blocks(sprite, outputDimension.clone(), displayAddress.clone()),
             OutputFormat::CPCSplittingMemory(ref _vec)
-                => unimplemented!()
+                => unimplemented!(),
+
+             _ => unreachable!()
         }
     } 
 
