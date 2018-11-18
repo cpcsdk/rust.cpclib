@@ -1,4 +1,6 @@
 extern crate cpc;
+extern crate bitsets;
+
 use std::io;
 use std::io::prelude::*;
 use std::fs::File;
@@ -136,11 +138,6 @@ enum SnapshotFlag {
 }
 
 impl SnapshotFlag {
-
-
-    
-
-
     pub fn enumerate() -> [SnapshotFlag;67] {
         use SnapshotFlag::*;
 
@@ -682,6 +679,7 @@ const HEADER_SIZE:usize = 256;
 struct Snapshot {
     header: [u8; HEADER_SIZE],
     memory: [u8; PAGE_SIZE*8],
+    memory_already_written: bitsets::DenseBitSet,
     chuncks: Vec<SnapshotChunk>,
 
     // nothing to do with the snapshot. Should be moved elsewhere
@@ -711,6 +709,7 @@ impl Default for Snapshot {
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
                 memory: [0; PAGE_SIZE*8],
                 chuncks: Vec::new(),
+                memory_already_written:  bitsets::DenseBitSet::with_capacity_and_state(PAGE_SIZE*8, 0),
                 debug: false
         }
     }
@@ -787,7 +786,12 @@ impl Snapshot {
             // TODO add warning when writting in other banks
 
             for (idx, byte) in data.iter().enumerate() {
-                self.memory[address + idx] = byte.clone();
+                let current_pos = address + idx;
+                if self.memory_already_written.test(current_pos) {
+                    eprintln!("[WARNING] Replace memory in 0x{:x}", current_pos);
+                }
+                self.memory[current_pos] = byte.clone();
+                self.memory_already_written.set(current_pos);
             }
 
             Ok(())
