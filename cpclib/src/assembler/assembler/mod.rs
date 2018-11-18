@@ -401,13 +401,13 @@ fn assemble_no_arg(mnemonic: &Mnemonic) -> Result<Bytes, String> {
             bytes.push(0xED);
             bytes.push(0xA8);
         },
-        &Mnemonic::Ei => {
+        &Mnemonic::Di => {
             bytes.push(0xF3);
         },
         &Mnemonic::Exx => {
             bytes.push(0xD9);
         },
-        &Mnemonic::Di => {
+        &Mnemonic::Ei => {
             bytes.push(0xFB);
         },
         _ => {
