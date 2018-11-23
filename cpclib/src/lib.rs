@@ -8,7 +8,8 @@ extern crate nom;
 extern crate num;
 extern crate memchr;
 extern crate smallvec;
-
+#[macro_use]
+extern crate bitflags;
 extern crate itertools;
 
 
@@ -21,5 +22,5 @@ pub mod assembler;
 pub mod image;
 pub mod imageconverter;
 pub mod sna;
-
+pub mod disc;
 
