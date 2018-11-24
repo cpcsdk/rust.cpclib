@@ -7,6 +7,8 @@ use std::mem::swap;
 use std::collections::HashSet;
 use itertools::Itertools;
 use std::mem;
+use std::fmt::Debug;
+use bitfield::BitRange;
 
 use crate::image::*;
 use crate::ga::*;
@@ -79,6 +81,20 @@ pub struct CPCScreenDimension {
     maximumRasterAddress: u8
 }
 
+impl Debug for CPCScreenDimension{
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        write!(
+            fmt,
+            "CPCScreenDimension {{ horizontalDisplayed: {}, verticalDisplayed: {}, maximumRasterAddress: {}, use_two_banks: {} }}",
+            self.horizontalDisplayed,
+            self.verticalDisplayed,
+            self.maximumRasterAddress,
+            self.use_two_banks()
+        )
+    }
+}
+
 impl CPCScreenDimension {
 
     /// Return screen dimension for a standard screen
@@ -147,50 +163,102 @@ impl CPCScreenDimension {
 }
 
 /// Manage the display address contained in R12-R13
-#[derive(Clone)]
+/// TODO move that later in a CRTC emulator code
+#[derive(Clone, Debug)]
 pub struct DisplayAddress(u16);
 
 pub type DisplayCRTCAddress = DisplayAddress;
 
 impl DisplayAddress {
-    const OFFSET_MASK:u16 = 0b1111111111;
-    const PAGE_MASK:u16 = 0b11000000000000;
-    const PAGE_SHIFT:u8 = 12;
+    const OFFSET_START: usize = 9;
+    const OFFSET_END: usize = 0;
+
+    const BUFFER_START: usize = 11;
+    const BUFFER_END : usize = 10;
+
+    const PAGE_START: usize = 13;
+    const PAGE_END: usize = 12;
+
 
     /// Create the display address
-    pub fn new(val: u16) -> DisplayAddress {
-        DisplayAddress(val & 0b0011111111111111)
+    pub fn new_from(val: u16) -> DisplayAddress {
+        assert!(val < 0b1100000000000000);
+        DisplayAddress(val) 
     }
 
+    pub fn new(page: u16, is_overscan: bool, offset: u16) -> DisplayAddress {
+        let mut address = Self::new_from(0);
+        address.set_page(page);
+        address.set_overscan(is_overscan);
+        address.set_offset(offset);
+        address
+    }
+
+    pub fn new_standard_from_page(page: u16) -> DisplayAddress {
+        Self::new(page, false, 0)
+    }
+
+    pub fn new_overscan_from_page(page: u16) -> DisplayAddress {
+        Self::new(page, true, 0)
+    }
+
+    pub fn new_standard_from_address(address: u16) -> DisplayAddress {
+        unimplemented!()
+    }
+
+    pub fn new_overscan_from_address(address: u16) -> DisplayAddress {
+        unimplemented!()
+    }
     /// Return the offset part of the address
     pub fn offset(&self) -> u16 {
-        self.0 & DisplayAddress::OFFSET_MASK
+        self.0.bit_range(Self::OFFSET_START, Self::OFFSET_END)
     }
 
     pub fn set_offset(&mut self, offset:u16) {
-        self.0 = self.0 & (!DisplayAddress::OFFSET_MASK) | (offset & DisplayAddress::OFFSET_MASK);
+        self.0.set_bit_range(Self::OFFSET_START, Self::OFFSET_END, offset)
     }
 
     /// Return the buffer configuration
+    /// 0 0 16k
+    /// 0 1 16k
+    /// 1 0 16k
+    /// 1 1 16k
     pub fn buffer(&self) -> u16 {
-        (self.0 & 0b110000000000) >> 10
+        self.0.bit_range(Self::BUFFER_START, Self::BUFFER_END)
+    }
+
+    pub fn set_buffer(&mut self, buffer: u16) {
+        self.0.set_bit_range(Self::BUFFER_START, Self::BUFFER_END, buffer)
+    }
+
+    pub fn set_overscan(&mut self, is_overscan: bool) {
+        if is_overscan {
+            self.set_buffer(0b11);
+        }
+        else {
+            self.set_buffer(0b00);
+        }
     }
 
     /// Return the page configuration
+    /// 0 0 0x0000
+    /// 0 1 0x4000
+    /// 1 0 0x8000
+    /// 1 1 0xc000
     pub fn page(&self) -> u16 {
-        (self.0 & DisplayAddress::PAGE_MASK) >> DisplayAddress::PAGE_SHIFT
+        self.0.bit_range(Self::PAGE_START, Self::PAGE_END)
     }
 
     pub fn set_page(&mut self, page:u16) {
-        self.0 = self.0 & (!DisplayAddress::PAGE_MASK) | ( (page << DisplayAddress::PAGE_SHIFT) & DisplayAddress::PAGE_MASK);
+        self.0.set_bit_range(Self::PAGE_START, Self::PAGE_END, page);
     }
 
     pub fn R12(&self) -> u8 {
-        (self.0 / 256) as u8
+        self.0.bit_range(15, 8) 
     }
 
     pub fn R13(&self) -> u8 {
-        (self.0 % 256) as u8
+        self.0.bit_range(7, 0) 
     }
 
     /// Return the page value
@@ -214,24 +282,31 @@ impl DisplayAddress {
 
     }
 
-    /// Returns the CPC address.
+    /// Returns the CPC address of the first word.
     pub fn address(&self) -> u16{
         self.page_start() + self.offset()*2
     }
 
     /// Assume the object represent the character of interest and move to next one
     pub fn move_to_next_word(&mut self) {
+        let was_overscan = self.is_overscan();
+
         let expected_offset = self.offset()+1;
-        let truncated_expected_offset = expected_offset & 0b1111111111;
+        let truncated_expected_offset = expected_offset.bit_range(Self::OFFSET_START, Self::OFFSET_END);
 
         // Move the offset of one char
         self.set_offset(truncated_expected_offset);
-
+if truncated_expected_offset != expected_offset {
+    println!("From {} to {} / {} / {:?}", expected_offset, truncated_expected_offset, self.is_overscan(), self);
+}
         // In overscan screen, change the page
         if truncated_expected_offset != expected_offset && self.is_overscan() {
+            println!("Change of page");
             let val = self.page()+1;
             self.set_page(val);
         }
+
+        assert_eq!(was_overscan, self.is_overscan());
     }
 
 
@@ -239,7 +314,7 @@ impl DisplayAddress {
 
 /// Specify the output format to be used
 /// TODO - add additional output format (for example zigzag sprites that can be usefull or sprite display routines)
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum OutputFormat {
     /// Mode specific bytes are stored consecutively in a linear way (line 0, line 1, ... line n)
     LinearEncodedSprite,
@@ -261,6 +336,7 @@ pub enum OutputFormat {
 /// There must be one implementation per OuputFormat
 pub enum Output {
     LinearEncodedSprite{data: Vec<u8>, palette: Palette, byte_width: usize, height: usize},
+
     LinearEncodedChuncky{data: Vec<u8>, palette: Palette, byte_width: usize, height: usize},
 
     /// Result using one bank
@@ -275,6 +351,30 @@ pub enum Output {
 
     /// Result using several chunks of memory
     CPCSplittingMemory(Vec<Output>)
+}
+
+
+impl Debug for Output {
+
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            &Output::LinearEncodedSprite{ref data, ref palette, ref byte_width,ref height} => {
+                writeln!(fmt, "LinearEncodedSprite")
+            },
+            &Output::LinearEncodedChuncky{ref data, ref palette, ref byte_width,ref height}=> {
+                writeln!(fmt, "LinearEncodedChuncky")
+            },
+            &Output::CPCMemoryStandard(_, _) => {
+               writeln!(fmt, "CPCMemoryStandard (16kb)")
+            },
+            &Output::CPCMemoryOverscan(_, _, _) => {
+                writeln!(fmt, "CPCMemoryStandard (32kb)")
+            },
+            &Output::CPCSplittingMemory(ref vec) =>{
+               writeln!(fmt, "CPCSplitterdMemory {:?}", &vec)
+            }
+        }
+    }
 }
 
 
@@ -522,12 +622,17 @@ impl<'a> ImageConverter<'a> {
                                 pages[**idx as usize]
                             }).collect::<Vec<_>>();
 
+        if is_overscan && used_pages.len() != 2 {
+            panic!("An overscan screen is requested but {} pages has been feed", used_pages.len());
+        }
+
         // Generate the right output format
         let palette = sprite.palette().unwrap();
-        match used_pages.len() {
-            1 => Output::CPCMemoryStandard(used_pages[0], palette),
-            2 => Output::CPCMemoryOverscan(used_pages[0], used_pages[1], palette),
-            _ => unreachable!()
+        if is_overscan {
+            Output::CPCMemoryOverscan(used_pages[0], used_pages[1], palette)
+        }
+        else {
+            Output::CPCMemoryStandard(used_pages[0], palette)
         }
     }
 

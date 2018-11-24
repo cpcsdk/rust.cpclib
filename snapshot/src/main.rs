@@ -219,6 +219,6 @@ fn main() {
 
 
     let fname = matches.value_of("OUTPUT").unwrap();
-    sna.save_sna(&fname);
+    sna.save_sna(&fname).expect("Unable to save the snapshot");
 
 }
