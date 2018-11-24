@@ -349,6 +349,8 @@ pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Op
             => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap()),
         &Mnemonic::Djnz
             => assemble_djnz(arg1.as_ref().unwrap(), sym),
+        &Mnemonic::In
+            => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ld
             => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ldi | &Mnemonic::Ldd | &Mnemonic::Ei | &Mnemonic::Di | &Mnemonic::Exx
@@ -723,6 +725,39 @@ fn assemble_nops2() -> Result<Bytes, String> {
 
 
 
+fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, String>{
+   let mut bytes = Bytes::new();
+
+    match arg2 {
+        &DataAccess::Register8(Register8::C) => {
+            match arg1 {
+                &DataAccess::Register8( ref reg) => {
+                    bytes.push(0xED);
+                    bytes.push(0b01000000 | (register8_to_code(reg)<<3))
+                },
+                _ => panic!()
+            }
+        },
+
+        &DataAccess::Memory(ref exp) => {
+            if let &DataAccess::Register8(Register8::A) = arg1 {
+                let val = (exp.resolve(sym)? & 0xff) as u8;
+                bytes.push(0xDB);
+                bytes.push(val);
+
+            }
+        }
+        _ => panic!()
+    };
+
+    if bytes.len() == 0
+    {
+        Err(format!("IN not properly implemented for '{:?}, {:?}'", arg1, arg2))
+    }
+    else {
+        Ok(bytes)
+    }
+}
 
 fn assemble_out(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, String>{
     let mut bytes = Bytes::new();

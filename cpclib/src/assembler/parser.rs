@@ -222,7 +222,7 @@ named!(
             parse_djnz |
             parse_ld |
             parse_inc_dec |
-            parse_out |
+            parse_out | parse_in |
             parse_jp_or_jr |
             parse_opcode_no_arg |
             parse_push_n_pop |
@@ -507,12 +507,44 @@ named!(// TODO manage other out formats
 
         reg : parse_register8 >>
         (
-            Token::OpCode(Mnemonic::Out, Some(DataAccess::Register8(Register8::C)), Some(reg))
+            Token::OpCode(
+                Mnemonic::Out, 
+                Some(DataAccess::Register8(Register8::C)),
+                Some(reg)
+            )
         )
 
     )
 );
 
+
+named!(// TODO manage other out formats
+    pub parse_in<CompleteStr, Token>, do_parse!(
+        tag_no_case!("IN") >>
+
+        many1!(space) >>
+        reg : parse_register8 >>
+
+        many0!(space) >>
+        tag!(",") >>
+        many0!(space) >>
+
+
+        tag!("(") >>
+        many0!(space) >>
+        tag_no_case!("C") >>
+        many0!(space) >>
+        tag!(")") >>
+        (
+            Token::OpCode(
+                Mnemonic::Out, 
+                Some(DataAccess::Register8(Register8::C)),
+                Some(reg)
+            )
+        )
+
+    )
+);
 
 
 named!(

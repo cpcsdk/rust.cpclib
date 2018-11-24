@@ -15,6 +15,7 @@ pub enum Mnemonic {
     Djnz,
     Ei,
     Exx,
+    In,
     Inc,
     Jp,
     Jr,
@@ -22,7 +23,7 @@ pub enum Mnemonic {
     Ldd,
     Ldi,
     Nop,
-    Nops2, // Fake instruciton that generate a breakpoint on winape
+    Nops2, // Fake instruction that generate a breakpoint on winape
     Out,
     Push,
     Pop,
@@ -42,6 +43,7 @@ impl fmt::Display for Mnemonic {
             &Mnemonic::Djnz => write!(f, "DJNZ"),
             &Mnemonic::Ei => write!(f, "EI"),
             &Mnemonic::Exx => write!(f, "EXX"),
+            &Mnemonic::In => write!(f, "IN"),
             &Mnemonic::Inc => write!(f, "INC"),
             &Mnemonic::Jp => write!(f, "JP"),
             &Mnemonic::Jr => write!(f, "JR"),
@@ -59,13 +61,6 @@ impl fmt::Display for Mnemonic {
         }
     }
 }
-
-
-
-
-
-
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {

@@ -548,6 +548,18 @@ mod tests {
         assert_eq!(tokens.len(), 1);
     }
 
+
+    #[test]
+    fn test_in() {
+
+        for reg in ["A", "B", "C", "D", "E", "H", "L"].iter() {
+            let content  =format!(" OUT (C), {}", reg);
+            let line1 = CompleteStr(&content);
+            let tokens = get_val(parse_z80_line(line1));
+            assert_eq!(tokens.len(), 1);
+        }
+    }
+
     #[test]
     fn fn_test_asm_prog1() {
 

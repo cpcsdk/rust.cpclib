@@ -414,6 +414,7 @@ impl<'a> ImageConverter<'a> {
 
 
     /// Manage the creation of the memory blocks
+    /// XXX Warning, overscan is wrongly used, it is more fullscreen with 2 pages
     fn build_memory_blocks(&mut self, sprite: & Sprite, dim: CPCScreenDimension, displayAddress: DisplayAddress) -> Output {
 
         let screen_width = dim.width(&sprite.mode().unwrap()) as u32;
