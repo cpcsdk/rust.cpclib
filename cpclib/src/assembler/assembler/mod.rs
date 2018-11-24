@@ -84,7 +84,7 @@ impl SymbolsTable {
     pub fn current_address(&self) -> Result<u16, String> {
         match self.value(&"$".to_owned()) {
             Some(address) => Ok(address as u16),
-            None => Err("Current assembling adress is unknown".to_owned())
+            None => Err("Current assembling address is unknown".to_owned())
         }
     }
 
@@ -730,6 +730,10 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
         let address = exp.resolve(sym)?;
 
         match arg2 {
+            &DataAccess::Register16(Register16::Hl) => {
+                bytes.push(0b00100010);
+                add_word(&mut bytes, address as _);
+            },
             &DataAccess::Register16(ref reg) => {
                 bytes.push(0xED);
                 bytes.push(0b01000011 |  (register16_to_code_with_sp(reg)));
