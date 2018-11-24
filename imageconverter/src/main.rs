@@ -54,6 +54,7 @@ fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> St
         di
         ld hl, 0xc9fb
         ld (0x38), hl
+        ld sp, $
         ei
 
         ld bc, 0x7f00 + 0x{:x}
