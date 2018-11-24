@@ -32,6 +32,18 @@ pub enum Expr {
   Low(Box<Expr>),
 }
 
+impl From<&str> for Expr {
+    fn from(src: &str) -> Expr {
+        Expr::Label(src.to_string())
+    }
+}
+
+impl From<i32> for Expr {
+    fn from(src: i32) -> Expr {
+        Expr::Value(src)
+    }
+}
+
 
 impl Expr {
 
