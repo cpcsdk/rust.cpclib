@@ -92,6 +92,16 @@ impl SymbolsTable {
         self.map.insert(String::from("$"), Symbol::Integer(address as _));
     }
 
+    pub fn set_symbol_to_current_address(&mut self, label: &String) -> Result<(), String> {
+
+        self.current_address()
+            .map(|val| {
+                self.map.insert(label.clone(), Symbol::Integer(val as i32));
+                ()
+                }
+            )
+    }
+
     /// TODO return the symbol instead of the int
     pub fn value(&self, key:&String) -> Option<i32> {
 
@@ -112,6 +122,10 @@ impl SymbolsTable {
                 None
             }
         }
+    }
+
+    pub fn contains_symbol(&self, key:&String) -> bool {
+        self.map.contains_key(key)
     }
 }
 
@@ -259,7 +273,18 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
         &Token::Db(_) | &Token::Dw(_) => visit_db_or_dw(token, env),
         &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => visit_opcode(&mnemonic, &arg1, &arg2, env),
         &Token::Comment(_) => Ok(()), // Nothing to do for a comment
-        _ => panic!("Not treated")
+        &Token::Label(ref label) => visit_label(label, env),
+        _ => panic!("Not treated {:?}", token)
+    }
+}
+
+
+fn visit_label(label: &String, env: &mut Env) -> Result<(), String> {
+    if env.symbols().contains_symbol(label) {
+        Err(format!("Symbol \"{}\" already present in symbols table", label))
+    }
+    else {
+        env.symbols_mut().set_symbol_to_current_address(label)
     }
 }
 
