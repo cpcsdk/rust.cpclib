@@ -730,6 +730,16 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
         let address = exp.resolve(sym)?;
 
         match arg2 {
+            &DataAccess::IndexRegister16(IndexRegister16::Ix) => {
+                bytes.push(0xdd);
+                bytes.push(0b00100010);
+                add_word(&mut bytes, address as _);
+            },
+            &DataAccess::IndexRegister16(IndexRegister16::Iy) => {
+                bytes.push(0xfd);
+                bytes.push(0b00100010);
+                add_word(&mut bytes, address as _);
+            },
             &DataAccess::Register16(Register16::Hl) => {
                 bytes.push(0b00100010);
                 add_word(&mut bytes, address as _);
