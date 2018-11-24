@@ -27,6 +27,7 @@ pub enum Mnemonic {
     Out,
     Push,
     Pop,
+    Rra,
     Res,
     Ret,
     Set
@@ -55,6 +56,7 @@ impl fmt::Display for Mnemonic {
             &Mnemonic::Out => write!(f, "OUT"),
             &Mnemonic::Push => write!(f, "PUSH"),
             &Mnemonic::Pop => write!(f, "POP"),
+            &Mnemonic::Rra => write!(f, "RRA"),
             &Mnemonic::Res => write!(f, "RES"),
             &Mnemonic::Ret => write!(f, "RET"),
             &Mnemonic::Set => write!(f, "SET"),

@@ -353,7 +353,7 @@ pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Op
             => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ld
             => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
-        &Mnemonic::Ldi | &Mnemonic::Ldd | &Mnemonic::Ei | &Mnemonic::Di | &Mnemonic::Exx
+        &Mnemonic::Ldi | &Mnemonic::Ldd | &Mnemonic::Ei | &Mnemonic::Di | &Mnemonic::Exx | & Mnemonic::Rra
             => assemble_no_arg(mnemonic),
         &Mnemonic::Nop
             => assemble_nop(),
@@ -411,6 +411,9 @@ fn assemble_no_arg(mnemonic: &Mnemonic) -> Result<Bytes, String> {
         },
         &Mnemonic::Ei => {
             bytes.push(0xFB);
+        },
+        &Mnemonic::Rra => {
+            bytes.push(0x1f)
         },
         _ => {
             return Err(format!("{} not treated", mnemonic));
