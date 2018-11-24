@@ -1201,4 +1201,25 @@ mod test {
         assert_eq!(m[1], 0x34);
         assert_eq!(m[2], 0x12);
     }
+
+
+    #[test]
+    pub fn test_labels() {
+        let mut env = Env::default();
+        let res = visit_token(
+            &Token::Org(0x4000.into()),
+            &mut env
+        );
+        assert!(res.is_ok());
+        assert!(!env.symbols().contains_symbol(&"hello".into()));
+        let res = visit_token(
+            &Token::Label("hello".into()),
+            &mut env
+        );
+        assert!(res.is_ok());
+        assert!(env.symbols().contains_symbol(&"hello".into()));
+        assert_eq!(env.symbols().value(&"hello".into()), 0x4000.into());
+    }
+
+
 }
