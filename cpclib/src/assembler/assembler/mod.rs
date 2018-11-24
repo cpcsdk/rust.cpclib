@@ -489,7 +489,7 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, String>{
                 else {
                     0b00000101
                 }
-                | register8_to_code(reg)
+                | (register8_to_code(reg) << 3)
             );
         }
         _ => {

@@ -59,6 +59,14 @@ mod tests {
     }
 
     #[test]
+    fn test_bin_u16() {
+        assert_eq!(get_val::<u16>(bin_u16(CompleteStr("0b101011"))), 0b101011);
+    }
+
+
+
+
+    #[test]
     fn test_hex_u16() {
         assert_eq!(get_val::<u16>(hex_u16(CompleteStr("0x123"))), 0x123);
         assert_eq!(get_val::<u16>(hex_u16(CompleteStr("0xffff"))), 0xffff);
@@ -78,6 +86,16 @@ mod tests {
     fn test_hex_u16_neg() {
 
         get_val::<u16>(hex_u16(CompleteStr("-0x0")));
+    }
+
+
+    #[test]
+    fn test_expr() {
+        let formula = "0xbd00 + 0x20 + 0b00001100";
+        let res = expr(CompleteStr(formula));
+         assert_eq!(
+             res.ok().unwrap().1.eval().unwrap(), 
+             0xbd00 + 0x20 + 0b00001100);
     }
 
     #[test]
@@ -105,6 +123,9 @@ mod tests {
         assert_eq!(arg1.eval().ok().unwrap(), 123);
 
     }
+
+
+ 
 
     #[test]
     fn test_org_value_hexadecimal() {

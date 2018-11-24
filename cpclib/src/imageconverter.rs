@@ -653,7 +653,7 @@ mod tests {
 
     #[test]
     fn manipulation_test() {
-        let mut address = DisplayAddress::new(0x3000);
+        let mut address = DisplayAddress::new_from(0x3000);
 
         assert_eq!(address.address(), 0xC000);
         assert_eq!(address.R12(), 0x30);

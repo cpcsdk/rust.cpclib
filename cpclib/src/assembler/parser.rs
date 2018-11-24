@@ -857,8 +857,24 @@ pub fn dec_u16(input: CompleteStr) -> IResult<CompleteStr, u16> {
     }
 }
 
+named!(
+pub bin_u16<CompleteStr, u16>, do_parse!(
+    tag_no_case!("0b") >>
+    value: fold_many1!( 
+        alt!(
+            tag!("0") => {|_|{0 as u16}} |
+            tag!("1") => {|_|{1 as u16}}
+        ),
+         0, 
+        |mut acc: u16, item: u16| {
+            acc *= 2;
+            acc += item;
+            acc
+        }
+    )
 
-
+    >> (value)
+));
 
 
 
@@ -935,7 +951,7 @@ named!(pub factor< CompleteStr, Expr >, alt_complete!(
     parse_hi_or_lo
     // manage values
     | map!(
-        delimited!(opt!(multispace), alt_complete!(hex_u16 | dec_u16), opt!(multispace)),
+        delimited!(opt!(multispace), alt_complete!(hex_u16 | dec_u16 | bin_u16), opt!(multispace)),
         |d:u16| {Expr::Value(d as i32)}
         )
     // manage $

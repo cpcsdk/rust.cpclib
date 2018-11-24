@@ -31,7 +31,7 @@ fn standard_display_code(mode: u8) -> String {
 }
 
 
-fn fullscreen_display_code(mode: u8, crtc_width: usize) -> String {
+fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> String {
     let code = match mode {
         0 => 0x8c,
         1 => 0x8d,
@@ -39,7 +39,16 @@ fn fullscreen_display_code(mode: u8, crtc_width: usize) -> String {
         _ => unreachable!()
     };
 
-    format!("
+    let r12 = 0x20 + 0b00001100;
+
+
+    let mut palette_code = String::new();
+        palette_code += "\tld bc, 0x7f00\n";
+        for i in 0..16 {
+            palette_code += &format!("\tld a, {}\n\t out (c), c\n\tout (c), a\n\t inc c\n", palette.get((i as i32).into()).gate_array());
+    }
+
+    let code = format!("
         org 0x4000
 
         di
@@ -62,9 +71,25 @@ fn fullscreen_display_code(mode: u8, crtc_width: usize) -> String {
 
         ld bc, 0xbc00 + 12
         out (c), c
-        ld bc, 0xbd00 + 0x20
+        ld bc, 0xbd00 + {}
         out (c), c
 
+        ld bc, 0xbc00 + 13
+        out (c), c
+        ld bc, 0xbd00 + 0x00
+        out (c), c
+
+        ld bc, 0xbc00 + 7
+        out (c), c
+        ld bc, 0xbd00 + 35
+        out (c), c
+
+        ld bc, 0xbc00 + 6
+        out (c), c
+        ld bc, 0xbd00 + 38
+        out (c), c
+
+        {}
 
 frame_loop
         ld b, 0xf5
@@ -77,11 +102,14 @@ vsync_loop
 
 
         jp frame_loop
-    ", code, crtc_width)
+    ", code, crtc_width, r12, palette_code);
+
+
+    code
 }
 
-fn overscan_display_code(mode: u8, crtc_width: usize) -> String {
-    fullscreen_display_code(mode, crtc_width)
+fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) -> String {
+    fullscreen_display_code(mode, crtc_width, pal)
 }
 
 fn assemble(z80: String) -> Vec<u8> {
@@ -226,7 +254,7 @@ fn main() {
 
             Output::CPCMemoryOverscan(memory1, memory2, pal) => {
                 palette = Some(pal);
-                code = Some(assemble(fullscreen_display_code(output_mode, 96/2)));
+                code = Some(assemble(fullscreen_display_code(output_mode, 96/2, palette.as_ref().unwrap())));
                 sna.add_data(memory1.to_vec(), 0x8000)
                     .expect("Unable to add the image in the snapshot");
                 sna.add_data(memory2.to_vec(), 0xc000)
