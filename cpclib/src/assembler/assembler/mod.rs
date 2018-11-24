@@ -501,10 +501,23 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, String>{
 }
 
 
-/// Result represents -16 to 129
-pub fn absolute_to_relative(_address: i32, _sym: &SymbolsTable) -> u8 {
-    eprintln!("absolute_to_relative is not implemented and systematically returns 0");
-    0
+/// Converts an absolute address to a relative one (relative to $)
+pub fn absolute_to_relative(address: i32, sym: &SymbolsTable) -> u8 {
+    match sym.current_address() {
+        Err(msg) => panic!("Unable to compute the relative address {}", msg),
+        Ok(root) => {
+            let delta = ((root as i32) - address);
+            if delta > 128 || delta < -127 {
+                panic!(
+                    "Address 0x{:x} relative to 0x{:x} is too far {}",
+                    address, root, delta
+                );
+            }
+            else {
+                (delta & 0xff) as u8
+            }
+        }
+    }
 }
 
 fn assemble_ret(arg1: &Option<DataAccess>) -> Result<Bytes, String> {
