@@ -502,11 +502,11 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, String>{
 
 
 /// Converts an absolute address to a relative one (relative to $)
-pub fn absolute_to_relative(address: i32, sym: &SymbolsTable) -> u8 {
+pub fn absolute_to_relative(address: i32, opcode_delta: i32, sym: &SymbolsTable) -> u8 {
     match sym.current_address() {
         Err(msg) => panic!("Unable to compute the relative address {}", msg),
         Ok(root) => {
-            let delta = ((root as i32) - address);
+            let delta = (address - (root as i32)) - opcode_delta;
             if delta > 128 || delta < -127 {
                 panic!(
                     "Address 0x{:x} relative to 0x{:x} is too far {}",
@@ -514,7 +514,9 @@ pub fn absolute_to_relative(address: i32, sym: &SymbolsTable) -> u8 {
                 );
             }
             else {
-                (delta & 0xff) as u8
+                let res = (delta & 0xff) as u8;
+                println!("{:x} {:x} {:x} {:x}", address, root, delta, res);
+                res
             }
         }
     }
@@ -567,7 +569,7 @@ fn assemble_jr_or_jp(mne: &Mnemonic, arg1: &Option<DataAccess>, arg2: &DataAcces
         &DataAccess::Expression(ref e) => {
             let address = e.resolve(sym)?;
             if is_jr {
-                let relative =absolute_to_relative(address, sym);
+                let relative =absolute_to_relative(address, 2, sym);
                 if flag_code.is_some(){
                     // jr - flag
                     add_byte(&mut bytes, 0b00100000 | (flag_code.unwrap() << 3));
@@ -603,7 +605,7 @@ fn assemble_djnz(arg1: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, String>
     if let &DataAccess::Expression(ref expr) = arg1 {
         let mut bytes = Bytes::new();
         let address = expr.resolve(sym)?;
-        let relative = absolute_to_relative(address, sym);
+        let relative = absolute_to_relative(address, 1, sym);
 
         bytes.push(0x10);
         bytes.push(relative);
@@ -783,9 +785,9 @@ fn assemble_nops2() -> Result<Bytes, String> {
 fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, String>{
    let mut bytes = Bytes::new();
 
-    match arg2 {
+    match arg1 {
         &DataAccess::Register8(Register8::C) => {
-            match arg1 {
+            match arg2 {
                 &DataAccess::Register8( ref reg) => {
                     bytes.push(0xED);
                     bytes.push(0b01000000 | (register8_to_code(reg)<<3))
@@ -795,7 +797,7 @@ fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Resu
         },
 
         &DataAccess::Memory(ref exp) => {
-            if let &DataAccess::Register8(Register8::A) = arg1 {
+            if let &DataAccess::Register8(Register8::A) = arg2 {
                 let val = (exp.resolve(sym)? & 0xff) as u8;
                 bytes.push(0xDB);
                 bytes.push(val);

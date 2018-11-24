@@ -537,7 +537,7 @@ named!(// TODO manage other out formats
         tag!(")") >>
         (
             Token::OpCode(
-                Mnemonic::Out, 
+                Mnemonic::In, 
                 Some(DataAccess::Register8(Register8::C)),
                 Some(reg)
             )
