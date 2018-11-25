@@ -228,7 +228,7 @@ impl ColorMatrix {
     pub fn extract_palette(&self) -> Palette {
         let mut p = Palette::default();
         for (idx, color) in flatten(self.data.iter()).unique().enumerate() {
-            if idx >= 15 {
+            if idx >= 16 {
                 panic!("[ERROR] your picture uses more than 16 different colors");
             }
             let color = color.clone();

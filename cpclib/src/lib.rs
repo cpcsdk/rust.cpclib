@@ -12,7 +12,8 @@ extern crate memchr;
 extern crate smallvec;
 
 extern crate itertools;
-
+extern crate reqwest;
+extern crate curl;
 
 pub mod screen;
 pub mod ga;
@@ -24,4 +25,5 @@ pub mod image;
 pub mod imageconverter;
 pub mod sna;
 pub mod disc;
+pub mod xfer;
 

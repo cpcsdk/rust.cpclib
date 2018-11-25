@@ -714,6 +714,10 @@ impl Snapshot {
     /// Save the snapshot V3 on disc
     pub fn save_sna(&self, fname:&str) -> Result<(), std::io::Error>{
         let mut buffer = File::create(fname)?;
+        self.write(&mut buffer)
+    }
+
+    pub fn write(&self, buffer: &mut File)  -> Result<(), std::io::Error> {
 
         // Write header and main memory
         buffer.write(&self.header)?;
@@ -731,6 +735,9 @@ impl Snapshot {
         //TODO add the chuncks
         Ok(())
     }
+
+
+
 
     /// Add the content of a file at the required position
     pub fn add_file(&mut self, fname:&str, address: usize) -> Result<(), SnapshotError>{

@@ -16,6 +16,8 @@ itertools="0.7.8"
 bitsets = "0.1.1"
 bitfield = "*"
 bitflags = "*"
+reqwest = "*"
+curl = "*"
 
 [dependencies.nom]
 version = "4.1.1"

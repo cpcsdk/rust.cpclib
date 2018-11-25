@@ -3,6 +3,7 @@ extern crate cpc;
 
 use clap::{App, Arg, SubCommand, ArgMatches};
 use std::path::Path;
+use tempfile::Builder;
 
 use cpc::imageconverter::*;
 use cpc::image::*;
@@ -10,7 +11,7 @@ use cpc::sna::*;
 use cpc::ga::{Pen, Palette};
 use cpc::assembler::parser::parse_z80_str;
 use cpc::assembler::assembler::visit_tokens;
-
+use cpc::xfer::CpcXfer;
 
 
 // Produce the code that display a standard screen
@@ -170,6 +171,16 @@ fn main() {
                                     })  
                             )
                     )
+                    .subcommand(
+                        SubCommand::with_name("m4")
+                        .about("Directly send the code on the M4 through a snapshot")
+                        .arg(
+                            Arg::with_name("CPCM4")
+                            .takes_value(true)
+                            .help("Address of the M4")
+                            .required(true)
+                        )
+                    )
                     .arg(
                         Arg::with_name("MODE")
                             .short("m")
@@ -238,9 +249,11 @@ fn main() {
     println!("Expected {:?}", & output_format);
     println!("Conversion  {:?}", &conversion);
 
-    if let Some(sub_sna) = matches.subcommand_matches("sna") {
+    let sub_sna = matches.subcommand_matches("sna");
+    let sub_m4 = matches.subcommand_matches("m4");
+
+    if sub_sna.is_some() || sub_m4.is_some() {
         // Create a snapshot with a standard screen
-        let sna_fname = sub_sna.value_of("SNA").unwrap();
         let mut sna = Snapshot::default();
         let mut palette: Option<Palette> = None;
         let mut code = None;
@@ -276,7 +289,25 @@ fn main() {
             ).unwrap();
         }
 
-        sna.save_sna(sna_fname).expect("Unable to save the snapshot");
+        if let Some(sub_sna) = sub_sna {
+            let sna_fname = sub_sna.value_of("SNA").unwrap();
+            sna.save_sna(sna_fname).expect("Unable to save the snapshot");
+        }
+        else if let Some(sub_m4) = sub_m4 {
+            let mut f = Builder::new()
+                            .suffix(".sna")
+                            .tempfile()
+                            .expect("Unable to create the temporary file");
+
+            sna.write(f.as_file_mut())
+                .expect("Unable to write the sna in the temporary file");
+            let xfer = CpcXfer::new(sub_m4.value_of("CPCM4").unwrap());
+
+            let tmp_file_name = f.path().to_str().unwrap();
+            xfer.upload_and_run(
+                tmp_file_name,
+                None)
+        }
 
     }
 }
