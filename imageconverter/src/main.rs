@@ -1,9 +1,15 @@
 extern crate clap;
 extern crate cpc;
+extern crate notify;
 
 use clap::{App, Arg, SubCommand, ArgMatches};
 use std::path::Path;
 use tempfile::Builder;
+
+use notify::{RecommendedWatcher, Watcher, RecursiveMode, DebouncedEvent};
+use std::sync::mpsc::channel;
+use std::time::Duration;
+
 
 use cpc::imageconverter::*;
 use cpc::image::*;
@@ -149,86 +155,8 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     }
 }
 
-fn main() {
 
-    let matches = App::new("CPC image conversion tool")
-                    .version("0.1")
-                    .author("Krusty/Benediction")
-                    .about("Simple CPC image conversion tool")
-                    .subcommand(
-                        SubCommand::with_name("sna")
-                            .about("Generate a snapshot with the converted image.")
-                            .arg(
-                                Arg::with_name("SNA")
-                                    .takes_value(true)
-                                    .help("Filename to generate")
-                                    .required(true)
-                                    .validator(|sna| {
-                                        match sna.to_lowercase().ends_with("sna") {
-                                            true => Ok(()),
-                                            false => Err(format!("{} has not a snapshot extension.", sna))
-                                        }
-                                    })  
-                            )
-                    )
-                    .subcommand(
-                        SubCommand::with_name("m4")
-                        .about("Directly send the code on the M4 through a snapshot")
-                        .arg(
-                            Arg::with_name("CPCM4")
-                            .takes_value(true)
-                            .help("Address of the M4")
-                            .required(true)
-                        )
-                    )
-                    .arg(
-                        Arg::with_name("MODE")
-                            .short("m")
-                            .long("mode")
-                            .help("Screen mode of the image to convert.")
-                            .value_name("MODE")
-                            .default_value("0")
-                            .possible_values(&["0", "1", "2"])
-                    )
-                    .arg(
-                        Arg::with_name("FULLSCREEN")
-                            .long("fullscreen")
-                            .help("Specify a full screen displayed using 2 non consecutive banks.")
-                            .conflicts_with("OVERSCAN")
-                    )
-                    .arg(
-                        Arg::with_name("OVERSCAN")
-                            .long("overscan")
-                            .help("Specify an overscan screen (crtc meaning).")
-                    )
-                    .arg(
-                        Arg::with_name("STANDARD")
-                            .long("standard")
-                            .help("Specify a standard screen manipulation.")
-                            .conflicts_with("OVERSCAN")
-                            .conflicts_with("FULLSCREEN")
-                    )
-                    .arg(
-                        Arg::with_name("SKIP_ODD_PIXELS")
-                            .long("skipoddpixels")
-                            .short("s")
-                            .help("Skip odd pixels when reading the image (usefull when the picture is mode 0 with duplicated pixels")
-                    )
-                    .arg(
-                        Arg::with_name("SOURCE")
-                            .takes_value(true)
-                            .help("Filename to convert")
-//                            .last(true)
-                            .required(true)
-                            .empty_values(false)
-                            .validator(|source| {
-                              match  Path::new(&source).exists() {
-                                  true => Ok(()),
-                                  false => Err(format!("{} does not exists!", source))
-                              }
-                            })
-                   ).get_matches();
-
+fn convert(matches: &ArgMatches) {
     let input_file = matches.value_of("SOURCE").unwrap();
     let output_mode = matches.value_of("MODE").unwrap().parse::<u8>().unwrap();
     let mut transformations = TransformationsList::new();
@@ -309,5 +237,134 @@ fn main() {
                 None)
         }
 
+    }
+}
+
+fn main() {
+
+    let matches = App::new("CPC image conversion tool")
+                    .version("0.1")
+                    .author("Krusty/Benediction")
+                    .about("Simple CPC image conversion tool")
+                    .subcommand(
+                        SubCommand::with_name("sna")
+                            .about("Generate a snapshot with the converted image.")
+                            .arg(
+                                Arg::with_name("SNA")
+                                    .takes_value(true)
+                                    .help("Filename to generate")
+                                    .required(true)
+                                    .validator(|sna| {
+                                        match sna.to_lowercase().ends_with("sna") {
+                                            true => Ok(()),
+                                            false => Err(format!("{} has not a snapshot extension.", sna))
+                                        }
+                                    })  
+                            )
+                    )
+                    .subcommand(
+                        SubCommand::with_name("m4")
+                        .about("Directly send the code on the M4 through a snapshot")
+                        .arg(
+                            Arg::with_name("CPCM4")
+                            .takes_value(true)
+                            .help("Address of the M4")
+                            .required(true)
+                        )
+                        .arg(
+                            Arg::with_name("WATCH")
+                            .takes_value(false)
+                            .help("Monitor the source file modification and restart the conversion and transfer automatically. Picture must ALWAYS be valid.")
+                            .long("watch")
+
+                        )
+                    )
+                    .arg(
+                        Arg::with_name("MODE")
+                            .short("m")
+                            .long("mode")
+                            .help("Screen mode of the image to convert.")
+                            .value_name("MODE")
+                            .default_value("0")
+                            .possible_values(&["0", "1", "2"])
+                    )
+                    .arg(
+                        Arg::with_name("FULLSCREEN")
+                            .long("fullscreen")
+                            .help("Specify a full screen displayed using 2 non consecutive banks.")
+                            .conflicts_with("OVERSCAN")
+                    )
+                    .arg(
+                        Arg::with_name("OVERSCAN")
+                            .long("overscan")
+                            .help("Specify an overscan screen (crtc meaning).")
+                    )
+                    .arg(
+                        Arg::with_name("STANDARD")
+                            .long("standard")
+                            .help("Specify a standard screen manipulation.")
+                            .conflicts_with("OVERSCAN")
+                            .conflicts_with("FULLSCREEN")
+                    )
+                    .arg(
+                        Arg::with_name("SKIP_ODD_PIXELS")
+                            .long("skipoddpixels")
+                            .short("s")
+                            .help("Skip odd pixels when reading the image (usefull when the picture is mode 0 with duplicated pixels")
+                    )
+                    .arg(
+                        Arg::with_name("SOURCE")
+                            .takes_value(true)
+                            .help("Filename to convert")
+//                            .last(true)
+                            .required(true)
+                            .empty_values(false)
+                            .validator(|source| {
+                              match  Path::new(&source).exists() {
+                                  true => Ok(()),
+                                  false => Err(format!("{} does not exists!", source))
+                              }
+                            })
+                   ).get_matches();
+
+
+    convert(&matches);
+    if let Some(sub_m4) = matches.subcommand_matches("m4") {
+
+        if sub_m4.is_present("WATCH") {
+            println!("Watching for file modification...");
+            // Create a channel to receive the events.
+            let (tx, rx) = channel();
+
+            // Automatically select the best implementation for your platform.
+            // You can also access each implementation directly e.g. INotifyWatcher.
+            let mut watcher: RecommendedWatcher = 
+                Watcher::new(tx, Duration::from_secs(2))
+                .unwrap();
+
+            // Add a path to be watched. All files and directories at that path and
+            // below will be monitored for changes.
+            watcher.watch(
+                matches.value_of("SOURCE").unwrap(), 
+                RecursiveMode::NonRecursive
+            ).expect("Unable to watch the file");
+
+            // This is a simple loop, but you may want to use more complex logic here,
+            // for example to handle I/O.
+            loop {
+                match rx.recv() {
+                    Ok(event) => {
+                        match event {
+                            DebouncedEvent::Write(_) => {
+                                println!("Image modifified. Launch new conversion");
+                                convert(&matches);
+                            }
+                            _ => {}
+                        }
+                    },
+                    Err(e) => println!("watch error: {:?}", e),
+                }
+            }
+        }
     }
 }
