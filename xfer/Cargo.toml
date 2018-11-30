@@ -1,0 +1,9 @@
+[package]
+name = "xfer"
+version = "0.1.0"
+authors = ["rgiot <giot.romain@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+clap ="2.32.0"
+cpc = {path="../cpclib/"} 
