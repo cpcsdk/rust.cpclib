@@ -37,6 +37,14 @@ fn main() {
                 .required(true)
             )
         )
+        .subcommand(
+            clap::SubCommand::with_name("--ls")
+            .about("Display contents of the M4")
+        )
+        .subcommand(
+            clap::SubCommand::with_name("--pwd")
+            .about("Display the current working directory selected on the M4")
+        )
         .get_matches();
 
 
@@ -53,5 +61,15 @@ fn main() {
     else if let Some(y_opt) =  matches.subcommand_matches("-y")  {
         let fname = y_opt.value_of("fname").unwrap();
         xfer.upload_and_run(fname, None);
+    }
+    else if let Some(ls_opt) = matches.subcommand_matches("--ls") {
+        let content = xfer.current_folder_content();
+        for file in content.files() {
+            println!("{:?}", file);
+        }
+    }
+    else if let Some(pwd_opt) = matches.subcommand_matches("--pwd") {
+        let cwd = xfer.current_working_directory();
+        println!("{}", cwd);
     }
 }

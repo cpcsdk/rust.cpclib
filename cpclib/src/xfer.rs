@@ -6,8 +6,63 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::fs;
 use std::path::Path;
-
 use curl::easy::{Easy, Form};
+use std::sync::Arc;
+use std::borrow::BorrowMut;
+use std::borrow::Borrow;
+
+#[derive(Debug)]
+pub struct M4File {
+    fname: String,
+    unknown: String,
+    size: String
+}
+
+impl From<&str> for M4File {
+    fn from(line: &str) -> M4File {
+        let mut splitted = line.split(',');
+        M4File {
+            fname: splitted.next().unwrap().into(),
+            unknown: splitted.next().unwrap().into(),
+            size: splitted.next().unwrap().into()
+        }
+    }
+}
+
+pub struct M4FilesList {
+    cwd: String,
+    files: Vec<M4File>
+}
+
+impl From<&str> for M4FilesList {
+    fn from(buffer: &str) -> M4FilesList {
+        let mut iter = buffer.lines();
+        let path = iter.next().unwrap();
+        let files = iter.map(|s|{s.into()}).collect::<Vec<M4File>>();
+        M4FilesList {
+            cwd: path.into(),
+            files: files
+        }
+    }
+}
+
+impl M4FilesList {
+    pub fn cwd(&self) -> &String {
+        &self.cwd
+    }
+
+    pub fn nb_files(&self) -> usize {
+        self.files.len()
+    }
+
+    // TODO do not give acces to the vector
+    pub fn files(&self) -> &Vec<M4File> {
+        &self.files
+    }
+}
+
+
+
 
 pub struct CpcXfer {
     hostname: String,
@@ -145,7 +200,40 @@ impl CpcXfer {
 			self.upload_impl(path, "/tmp", header);
 			self.run(&format!("/tmp/{}", path.file_name().unwrap().to_str().unwrap()));
 	}
-}
 
+
+    pub fn current_folder_content(&self) -> M4FilesList {
+        self.download_dir()
+    }
+
+    pub fn current_working_directory(&self) -> String {
+        let data = self.download_dir();
+        data.cwd().clone()
+    }
+
+
+
+    fn download_dir(&self) -> M4FilesList{
+        let mut dst = Vec::new();
+        {
+            {
+                let mut easy = Easy::new();
+                easy.url(&self.uri("sd/m4/dir.txt")).unwrap();
+                let mut easy = easy.transfer();
+                easy.write_function(|data| {
+                    dst.extend_from_slice(data);
+                    Ok(data.len())
+                }).unwrap();
+                easy.perform().unwrap();
+            }
+        }
+
+        let content = std::str::from_utf8(&dst).expect("Unable to create an UTF8 string for M4 content");
+
+        M4FilesList::from(content)
+
+    }
+
+}
 
 

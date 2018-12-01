@@ -1,6 +1,6 @@
 [package]
 name = "cpc"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Romain Giot <giot.romain@gmail.com"]
 edition = "2018"
 
@@ -17,7 +17,7 @@ bitsets = "0.1.1"
 bitfield = "*"
 bitflags = "*"
 reqwest = "*"
-curl = "*"
+curl = "0.4.19"
 
 [dependencies.nom]
 version = "4.1.1"
