@@ -6,7 +6,7 @@ pub const MAX_WIDTH_MODE2:u32 = 96*8;
 pub const MAX_WIDTH_MODE3:u32 = 96*2;
 pub const MAX_HEIGHT:u32 = 39*8;
 
-
+ 
 pub struct SimpleMonitor {
     pub width: u32,
     pub height: u32,

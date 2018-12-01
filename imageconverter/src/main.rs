@@ -50,9 +50,9 @@ fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> St
 
 
     let mut palette_code = String::new();
-        palette_code += "\tld bc, 0x7f00\n";
-        for i in 0..16 {
-            palette_code += &format!("\tld a, {}\n\t out (c), c\n\tout (c), a\n\t inc c\n", palette.get((i as i32).into()).gate_array());
+    palette_code += "\tld bc, 0x7f00\n";
+    for i in 0..16 {
+        palette_code += &format!("\tld a, {}\n\t out (c), c\n\tout (c), a\n\t inc c\n", palette.get((i as i32).into()).gate_array());
     }
 
     let code = format!("
