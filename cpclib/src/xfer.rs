@@ -135,8 +135,9 @@ impl CpcXfer {
    }
 
     /// Run the file whose complete path is provided
-    pub fn run(&self, path: &str) {
-       self.simple_query(&[("run2", path)])
+    pub fn run(&self, path: &str)  {
+       let absolute = self.absolute_path(path).unwrap();
+       self.simple_query(&[("run2", &absolute)])
         .expect("Unable to run the given file");
     }
 
@@ -276,11 +277,17 @@ impl CpcXfer {
 
 
     fn absolute_path(&self, relative: &str) -> Result<String, String> {
-        let cwd = self.current_working_directory();
-        let absolute = Path::new(&cwd).join(relative);
+        match relative.chars().next() {
+            None => Err("No path provided".into()),
+            Some('/') => Ok(relative.to_owned()),
+            _ => {
+                let cwd = self.current_working_directory();
+                let absolute = Path::new(&cwd).join(relative);
 
-        let absolute = absolute.absolutize().unwrap();
-        Ok(absolute.to_str().unwrap().into())
+                let absolute = absolute.absolutize().unwrap();
+                Ok(absolute.to_str().unwrap().into())
+            }
+        }
 
     }
 

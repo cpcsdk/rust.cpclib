@@ -38,6 +38,14 @@ fn main() {
             )
         )
         .subcommand(
+            clap::SubCommand::with_name("-x")
+            .about("Execute a file on the cpc (executable or snapshot)")
+            .arg(
+                clap::Arg::with_name("fname")
+                .help("Filename to execute on the CPC")
+            )
+        )
+        .subcommand(
             clap::SubCommand::with_name("--ls")
             .about("Display contents of the M4")
         )
@@ -70,6 +78,10 @@ fn main() {
     else if let Some(y_opt) =  matches.subcommand_matches("-y")  {
         let fname = y_opt.value_of("fname").unwrap();
         xfer.upload_and_run(fname, None);
+    }
+    else if let Some(x_opt) = matches.subcommand_matches("-x") {
+        let fname = x_opt.value_of("fname").unwrap();
+        xfer.run(fname); /*.expect("Unable to launch file on CPC.");*/
     }
     else if let Some(ls_opt) = matches.subcommand_matches("--ls") {
         let content = xfer.current_folder_content();
