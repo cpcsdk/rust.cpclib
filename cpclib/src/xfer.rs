@@ -40,7 +40,10 @@ pub struct M4FilesList {
 impl From<&str> for M4FilesList {
     fn from(buffer: &str) -> M4FilesList {
         let mut iter = buffer.lines();
-        let path = iter.next().unwrap();
+        let mut path = iter.next().unwrap();
+        if path == "//" {
+            path  = "/";
+        }
         let files = iter.map(|s|{s.into()}).collect::<Vec<M4File>>();
         M4FilesList {
             cwd: path.into(),
@@ -240,18 +243,30 @@ impl CpcXfer {
 
     /// Change the current directory
     pub fn cd(&self, directory: &str) -> Result<(), String> {
-        if let Some('/') = directory.chars().next() {
-            // Manage an absolute changes
-            self.ls_request(directory);
-            Ok(())
 
+        // Get the absolute directory
+        let mut directory = if let Some('/') = directory.chars().next() {
+            directory.to_owned()
         }
-
         else {
-            let directory = self.absolute_path(directory)?;
-            println!("Try to go in {}", directory);
-            self.ls_request(&directory);
+            self.absolute_path(directory)?
+        };
+
+
+
+        self.ls_request(&directory);
+
+        // Ensure theire is a / at the end
+        if  directory.chars().rev().next().unwrap() != '/' {
+            directory.push('/');
+        }
+        let cwd = self.current_working_directory();
+
+        if cwd == directory {
             Ok(())
+        }
+        else {
+            Err(format!("[ERROR] Unable to move in {}. Current working directory is {}", directory, cwd))
         }
 
 
@@ -264,7 +279,6 @@ impl CpcXfer {
         let cwd = self.current_working_directory();
         let absolute = Path::new(&cwd).join(relative);
 
-        println!("Before {}", absolute.to_str().unwrap());
         let absolute = absolute.absolutize().unwrap();
         Ok(absolute.to_str().unwrap().into())
 
