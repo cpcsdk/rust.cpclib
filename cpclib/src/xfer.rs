@@ -1,5 +1,6 @@
 
 
+extern crate path_absolutize;
 
 use std::env;
 use std::fs::File;
@@ -10,6 +11,8 @@ use curl::easy::{Easy, Form};
 use std::sync::Arc;
 use std::borrow::BorrowMut;
 use std::borrow::Borrow;
+
+use path_absolutize::*;
 
 #[derive(Debug)]
 pub struct M4File {
@@ -232,6 +235,53 @@ impl CpcXfer {
 
         M4FilesList::from(content)
 
+    }
+
+
+    /// Change the current directory
+    pub fn cd(&self, directory: &str) -> Result<(), String> {
+        if let Some('/') = directory.chars().next() {
+            // Manage an absolute changes
+            self.ls_request(directory);
+            Ok(())
+
+        }
+
+        else {
+            let directory = self.absolute_path(directory)?;
+            println!("Try to go in {}", directory);
+            self.ls_request(&directory);
+            Ok(())
+        }
+
+
+
+    }
+
+
+
+    fn absolute_path(&self, relative: &str) -> Result<String, String> {
+        let cwd = self.current_working_directory();
+        let absolute = Path::new(&cwd).join(relative);
+
+        println!("Before {}", absolute.to_str().unwrap());
+        let absolute = absolute.absolutize().unwrap();
+        Ok(absolute.to_str().unwrap().into())
+
+    }
+
+
+    fn ls_request(&self, folder: &str) {
+        let mut easy = Easy::new();
+        let folder = easy.url_encode(folder.as_bytes());
+        easy.get(true).unwrap();
+        let url = format!(
+            "{}?ls={}",
+            self.uri("config.cgi"),
+            folder
+            );
+        easy.url(&url).unwrap();
+        easy.perform().unwrap();
     }
 
 }

@@ -45,6 +45,15 @@ fn main() {
             clap::SubCommand::with_name("--pwd")
             .about("Display the current working directory selected on the M4")
         )
+        .subcommand(
+            clap::SubCommand::with_name("--cd")
+            .about("Change of current directory in the M4.")
+            .arg(
+                clap::Arg::with_name("directory")
+                .help("Directory to move on. Must exists")
+                .required(true)
+            )
+        )
         .get_matches();
 
 
@@ -71,5 +80,8 @@ fn main() {
     else if let Some(pwd_opt) = matches.subcommand_matches("--pwd") {
         let cwd = xfer.current_working_directory();
         println!("{}", cwd);
+    }
+    else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
+        let cwd = xfer.cd(cd_opt.value_of("directory").unwrap()).expect("Unable to move in the requested folder.");
     }
 }
