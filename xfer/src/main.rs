@@ -1,9 +1,15 @@
 extern crate cpc;
 extern crate clap;
+#[macro_use]
+extern crate nom;
 
 use std::path::Path;
 
-fn main() {
+mod interact;
+mod parser;
+
+
+fn main() -> Result<(), cpc::xfer::XferError> {
     let matches = clap::App::new("CPC xfer to M4")
         .author("Krusty/Benediction")
         .about("RUST version of the communication tool between a PC and a CPC through the CPC Wifi card")
@@ -62,6 +68,10 @@ fn main() {
                 .required(true)
             )
         )
+        .subcommand(
+            clap::SubCommand::with_name("--interactive")
+            .about("Start an interactive session")
+        )
         .get_matches();
 
 
@@ -84,16 +94,22 @@ fn main() {
         xfer.run(fname); /*.expect("Unable to launch file on CPC.");*/
     }
     else if let Some(ls_opt) = matches.subcommand_matches("--ls") {
-        let content = xfer.current_folder_content();
+        let content = xfer.current_folder_content()?;
         for file in content.files() {
             println!("{:?}", file);
         }
     }
     else if let Some(pwd_opt) = matches.subcommand_matches("--pwd") {
-        let cwd = xfer.current_working_directory();
+        let cwd = xfer.current_working_directory()?;
         println!("{}", cwd);
     }
     else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
         let cwd = xfer.cd(cd_opt.value_of("directory").unwrap()).expect("Unable to move in the requested folder.");
     }
+    else if let Some(interactive_opt) = matches.subcommand_matches("--interactive") {
+        interact::start(xfer);
+    }
+
+
+    Ok(())
 }

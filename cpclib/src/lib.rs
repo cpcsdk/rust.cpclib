@@ -18,6 +18,9 @@ extern crate curl;
 #[cfg(feature = "xfer")]
 extern crate reqwest;
 
+#[macro_use]
+extern crate custom_error;
+
 pub mod screen;
 pub mod pixels;
 pub mod image;

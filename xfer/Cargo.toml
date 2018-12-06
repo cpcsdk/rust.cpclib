@@ -6,4 +6,6 @@ edition = "2018"
 
 [dependencies]
 clap ="2.32.0"
+rustyline = "2.1.0"
+nom="4.1.1"
 cpc = {path="../cpclib/", features=["xfer"]} 

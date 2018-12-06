@@ -11,8 +11,26 @@ use curl::easy::{Easy, Form};
 use std::sync::Arc;
 use std::borrow::BorrowMut;
 use std::borrow::Borrow;
-
+use curl::Error;
 use path_absolutize::*;
+
+
+extern crate custom_error;
+use custom_error::custom_error;
+
+custom_error!{pub XferError
+    ConnectionError{source: Error} = "There is a connection error with the Cpc Wifi.",
+    CdError{from: String, to: String} = @ {
+        format!(
+            "Unable to move in {}. Current working directory is {}.", 
+            from, to)
+    },
+    InternalError{reason: String} = @ {
+        format!("Internal error: {}", reason)
+    }
+}
+
+
 
 #[derive(Debug)]
 pub struct M4File {
@@ -69,12 +87,6 @@ impl M4FilesList {
 
 
 
-
-pub struct CpcXfer {
-    hostname: String,
-}
-
-
 pub enum AmsdosFileType {
     Basic,
     Protected,
@@ -93,12 +105,22 @@ impl AmsdosFileType {
 
 
 
+pub struct CpcXfer {
+    hostname: String,
+}
+
+
+
 impl CpcXfer {
     pub fn new(hostname: &str) -> CpcXfer {
         CpcXfer {
             hostname: String::from(hostname)
         }
 
+    }
+
+    pub fn hostname(&self) -> &str {
+        &self.hostname
     }
 
     /// Return the appropriate uri
@@ -209,41 +231,41 @@ impl CpcXfer {
 	}
 
 
-    pub fn current_folder_content(&self) -> M4FilesList {
+    pub fn current_folder_content(&self) -> Result<M4FilesList, XferError> {
         self.download_dir()
     }
 
-    pub fn current_working_directory(&self) -> String {
-        let data = self.download_dir();
-        data.cwd().clone()
+    pub fn current_working_directory(&self) -> Result<String, XferError> {
+        let data = self.download_dir()?;
+        Ok(data.cwd().clone())
     }
 
 
 
-    fn download_dir(&self) -> M4FilesList{
+    fn download_dir(&self) -> Result<M4FilesList, XferError> {
         let mut dst = Vec::new();
         {
             {
                 let mut easy = Easy::new();
-                easy.url(&self.uri("sd/m4/dir.txt")).unwrap();
+                easy.url(&self.uri("sd/m4/dir.txt"))?;
                 let mut easy = easy.transfer();
                 easy.write_function(|data| {
                     dst.extend_from_slice(data);
                     Ok(data.len())
-                }).unwrap();
-                easy.perform().unwrap();
+                })?;
+                easy.perform()?;
             }
         }
 
         let content = std::str::from_utf8(&dst).expect("Unable to create an UTF8 string for M4 content");
 
-        M4FilesList::from(content)
+        Ok(M4FilesList::from(content))
 
     }
 
 
     /// Change the current directory
-    pub fn cd(&self, directory: &str) -> Result<(), String> {
+    pub fn cd(&self, directory: &str) -> Result<(), XferError> {
 
         // Get the absolute directory
         let mut directory = if let Some('/') = directory.chars().next() {
@@ -261,13 +283,13 @@ impl CpcXfer {
         if  directory.chars().rev().next().unwrap() != '/' {
             directory.push('/');
         }
-        let cwd = self.current_working_directory();
+        let cwd = self.current_working_directory()?;
 
         if cwd == directory {
             Ok(())
         }
         else {
-            Err(format!("[ERROR] Unable to move in {}. Current working directory is {}", directory, cwd))
+            Err(XferError::CdError{from:directory, to: cwd})
         }
 
 
@@ -276,12 +298,14 @@ impl CpcXfer {
 
 
 
-    fn absolute_path(&self, relative: &str) -> Result<String, String> {
+    fn absolute_path(&self, relative: &str) -> Result<String, XferError> {
         match relative.chars().next() {
-            None => Err("No path provided".into()),
+            None => Err(
+                XferError::InternalError{reason: "No path provided".into()}
+            ),
             Some('/') => Ok(relative.to_owned()),
             _ => {
-                let cwd = self.current_working_directory();
+                let cwd = self.current_working_directory()?;
                 let absolute = Path::new(&cwd).join(relative);
 
                 let absolute = absolute.absolutize().unwrap();
