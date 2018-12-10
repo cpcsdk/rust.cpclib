@@ -5,6 +5,8 @@ use arrayref;
 use bitfield::Bit;
 use slice_of_array::prelude::*;
 
+use std::iter::Iterator;
+
 pub struct AmsdosManager {
 	disc: ExtendedDsk,
 	side: u8
@@ -73,6 +75,10 @@ impl AmsdosEntry {
 		self.read_only
 	}
 
+	pub fn is_system(&self) -> bool {
+		self.system
+	}
+
 	pub fn format(&self) -> String {
 		format!(
 			"{}:{}.{}",
@@ -91,6 +97,18 @@ pub struct AmsdosEntries {
 
 impl AmsdosEntries {
 
+	/// Returns all the entries of the catalog
+	pub fn all_entries(&self) -> impl Iterator<Item = &AmsdosEntry> {
+		self.entries.iter()
+	}
+
+	/// Returns an iterator on the visible entries : they are not erased and are not system entries
+	pub fn visible_entries(&self) -> impl Iterator<Item = &AmsdosEntry> {
+		self.entries.iter()
+			.filter(|&entry|{
+				!entry.is_erased() && !entry.is_system()
+			})
+	}
 }
 
 impl AmsdosManager {
@@ -122,8 +140,8 @@ impl AmsdosManager {
 
 	pub fn print_catalog(&self) {
 		let entries = self.catalog();
-		for entry in entries.entries.iter() {
-			if !entry.is_erased() {
+		for entry in entries.visible_entries() {
+			if !entry.is_erased() && !entry.is_system() {
 				println!("{}", entry.format());
 			}
 		}
