@@ -1,1 +1,2 @@
-pub mod dsk;
+pub mod edsk;
+pub mod amsdos;

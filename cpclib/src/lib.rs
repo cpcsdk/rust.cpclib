@@ -21,6 +21,12 @@ extern crate reqwest;
 #[macro_use]
 extern crate custom_error;
 
+#[macro_use]
+extern crate arrayref;
+
+extern crate slice_of_array;
+
+
 pub mod screen;
 pub mod pixels;
 pub mod image;

@@ -356,7 +356,7 @@ fn main() {
                     Ok(event) => {
                         match event {
                             DebouncedEvent::Write(_) => {
-                                println!("Image modifified. Launch new conversion");
+                                println!("Image modified. Launch new conversion");
                                 convert(&matches);
                             }
                             _ => {}
