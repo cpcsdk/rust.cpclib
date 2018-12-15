@@ -232,12 +232,12 @@ fn parse_double_sided_cfg() {
 
 			assert!(
 				res.track_information_for_track(
-					&cpc::disc::cfg::Side::SideA, 
+					&cpc::disc::edsk::Side::SideA, 
 					0
 				).is_some());
 			assert!(
 				res.track_information_for_track(
-					&cpc::disc::cfg::Side::SideA, 
+					&cpc::disc::edsk::Side::SideA, 
 					200
 				).is_none());
 

@@ -9,10 +9,18 @@ use std::str::FromStr;
 use std::iter::Iterator;
 use itertools;
 use itertools::Itertools;
+
+
+use crate::disc::edsk::Side;
+
+
 #[derive(Debug)]
 pub struct DiscConfig {
+	/// Number of tracks in the disc
 	pub(crate) nb_tracks: u8,
+	/// Number of sides in the disc (1 or 2)
 	pub(crate) nb_sides: u8,
+	/// List of tracks description
 	pub(crate) track_groups: Vec<TrackGroup>
 }
 
@@ -40,21 +48,19 @@ impl DiscConfig {
 	}
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Side {
-	SideA,
-	SideB,
-	Unspecified
-}
-
 
 #[derive(Debug)]
 pub struct TrackGroup {
+	/// Identifier of the tracks molded from this configuration
 	pub(crate) tracks: Vec<u8>,
+	/// Physical ide
 	pub(crate) side: Side,
+	/// Size of a sector
 	pub(crate) sector_size: u16,
 	pub(crate) gap3: u16,
+	/// List of id of the sectors
 	pub(crate) sector_id: Vec<u16>,
+	/// List of logical side of the sectors
 	pub(crate) sector_id_head: Vec<u16>,
 }
 

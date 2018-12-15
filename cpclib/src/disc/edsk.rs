@@ -8,6 +8,16 @@ use std::fs::File;
 use std::string::ToString;
 use itertools::zip;
 
+
+#[derive(Debug, PartialEq)]
+pub enum Side {
+	SideA,
+	SideB,
+	Unspecified
+}
+
+
+
 #[derive(Debug, Default)]
 pub struct DiscInformation {
 	pub(crate) creator_name: String, 
@@ -410,6 +420,7 @@ impl ExtendedDsk {
 
 
 	/// Search and returns the appropriate sector
+	/// TODO use get_track_information
 	pub fn sector(&self, track: u8, sector: u8, side: u8) -> Option<&Sector> {
 
 		let idx = if self.disc_information_bloc.is_double_sided() {
@@ -423,6 +434,25 @@ impl ExtendedDsk {
 		self.track_list.list[idx].sector(sector)
 	}
 
+
+	pub fn get_track_information(&self, side: &Side, track: u8) -> Option<&TrackInformation> {
+		let idx = if self.disc_information_bloc.is_double_sided() {
+			let side = match side {
+				&Side::SideA => 0,
+				&Side::SideB => 1,
+				&Side::Unspecified => panic!("You must specify a side for a double sided disc.")
+			};
+			track as usize * 2 + side
+		}
+		else {
+			if let &Side::SideB = side {
+				panic!("You cannot select side B in a single sided disc");
+			}
+			track as usize
+		};
+
+		self.track_list.list.get(idx)
+	}
 
 	/// Return the concatenated vlaues of several consecutive sectors
 	pub fn sectors_bytes(&self, track: u8, sector: u8, nb_sectors: u8, side: u8) -> Option<Vec<u8>> {
