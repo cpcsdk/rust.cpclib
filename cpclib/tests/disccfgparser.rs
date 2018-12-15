@@ -223,9 +223,12 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 #[test]
 fn parse_double_sided_cfg() {
 	let parsed = cpc::disc::cfg::parse_config(DOUBLE_SIDED.into());
-
-
-	println!("{:?}", parsed);
-	panic!()
+	assert!(parsed.is_ok());
+	match parsed {
+		Ok( (next, res) ) => {
+			assert!(next.len() == 0);
+		},
+		_ => unreachable!()
+	}
 }
 }

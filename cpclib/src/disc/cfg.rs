@@ -153,7 +153,6 @@ do_parse!(
 		many0!(empty_line) >>
 		sector_id: call!(list_of_key, "SectorId") >>
 		sector_id_head: call!(list_of_key, "SectorIdHead") >>
-		empty_line >>
 	(
 		TrackGroup{
 			tracks: tracks,
