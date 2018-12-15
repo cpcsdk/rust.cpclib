@@ -8,12 +8,12 @@ use std::fs::File;
 use std::string::ToString;
 use itertools::zip;
 
-#[derive(Debug)]
-struct DiscInformation {
-	creator_name: String, 
-	number_of_tracks: u8, 
-	number_of_sides: u8, 
-	track_size_table: Vec<u8> // XXX dor standard DSK only one value is provided It should be duplicated there
+#[derive(Debug, Default)]
+pub struct DiscInformation {
+	pub(crate) creator_name: String, 
+	pub(crate) number_of_tracks: u8, 
+	pub(crate) number_of_sides: u8, 
+	pub(crate) track_size_table: Vec<u8> // XXX dor standard DSK only one value is provided It should be duplicated there
 }
 
 
@@ -91,17 +91,17 @@ impl DiscInformation {
 
 }
 
-#[derive(Debug)]
-struct TrackInformation {
-	track_number: u8,
-	side_number: u8,
-	sector_size: u8, // XXX check if really needed to be stored
-	number_of_sectors: u8,
-	gap3_length: u8,
-	filler_byte: u8,
-	data_rate: DataRate,
-	recording_mode: RecordingMode,
-	sector_information_list: SectorInformationList,
+#[derive(Debug, Default)]
+pub struct TrackInformation {
+	pub(crate) track_number: u8,
+	pub(crate) side_number: u8,
+	pub(crate) sector_size: u8, // XXX check if really needed to be stored
+	pub(crate) number_of_sectors: u8,
+	pub(crate) gap3_length: u8,
+	pub(crate) filler_byte: u8,
+	pub(crate) data_rate: DataRate,
+	pub(crate) recording_mode: RecordingMode,
+	pub(crate) sector_information_list: SectorInformationList,
 }
 
 impl TrackInformation {
@@ -161,11 +161,17 @@ impl TrackInformation {
 
 
 #[derive(Debug)]
-enum DataRate {
+pub enum DataRate {
 	Unknown = 0,
 	SingleOrDoubleDensity = 1,
 	HighDensity = 2,
 	ExtendedDensity = 3
+}
+
+impl Default for DataRate {
+	fn default() -> Self {
+		DataRate::Unknown
+	}
 }
 
 impl From<u8> for DataRate {
@@ -181,11 +187,19 @@ impl From<u8> for DataRate {
 }
 
 #[derive(Debug)]
-enum RecordingMode {
+pub enum RecordingMode {
 	Unknown = 0,
 	FM = 1,
 	MFM = 2
 }
+
+
+impl Default for RecordingMode{
+	fn default() -> Self {
+		RecordingMode::Unknown
+	}
+}
+
 
 
 impl From<u8> for RecordingMode {
@@ -199,15 +213,15 @@ impl From<u8> for RecordingMode {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SectorInformation {
-	track: u8,
-	side: u8,
-	sector_id: u8,
-	sector_size: u8,
-	fdc_status_register_1: u8,
-	fdc_status_register_2: u8,
-	data_length: u16, // in bytes, little endian notation
+	pub(crate) track: u8,
+	pub(crate) side: u8,
+	pub(crate) sector_id: u8,
+	pub(crate) sector_size: u8,
+	pub(crate) fdc_status_register_1: u8,
+	pub(crate) fdc_status_register_2: u8,
+	pub(crate) data_length: u16, // in bytes, little endian notation
 }
 
 
@@ -234,10 +248,10 @@ impl SectorInformation {
 }
 
 
-#[derive(Debug)]
-struct SectorInformationList {
+#[derive(Debug, Default)]
+pub struct SectorInformationList {
 	//sectors: Vec<Sector>
-	sectors: Vec<Sector>,
+	pub(crate) sectors: Vec<Sector>,
 }
 
 impl SectorInformationList {
@@ -312,10 +326,10 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Sector {
-	sector_information_bloc: SectorInformation,
-	values: Vec<u8>
+	pub(crate) sector_information_bloc: SectorInformation,
+	pub(crate) values: Vec<u8>
 }
 
 
@@ -326,8 +340,9 @@ impl Sector  {
 	}
 }
 
-struct TrackInformationList {
-	list: Vec<TrackInformation>
+#[derive(Default)]
+pub struct TrackInformationList {
+	pub(crate) list: Vec<TrackInformation>
 }
 
 
@@ -360,10 +375,10 @@ impl TrackInformationList {
 }
 
 
-
+#[derive(Default)]
 pub struct ExtendedDsk {
-	disc_information_bloc: DiscInformation,
-	track_list: TrackInformationList
+	pub(crate) disc_information_bloc: DiscInformation,
+	pub(crate) track_list: TrackInformationList
 }
 
 

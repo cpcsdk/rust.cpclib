@@ -6,15 +6,41 @@ use nom::{hex_u32, space0, space1, eol };
 use nom::types::CompleteStr;
 use std::str::FromStr;
 
+use std::iter::Iterator;
+use itertools;
+use itertools::Itertools;
 #[derive(Debug)]
 pub struct DiscConfig {
-	nb_track: u16,
-	nb_side: u16,
-	track_groups: Vec<TrackGroup>
+	pub(crate) nb_tracks: u8,
+	pub(crate) nb_sides: u8,
+	pub(crate) track_groups: Vec<TrackGroup>
 }
 
 
-#[derive(Debug)]
+impl DiscConfig {
+	pub fn track_information_for_track(&self, side: &Side, track: u8) -> Option<&TrackGroup> {
+		self.track_groups.iter()
+			.find(|info| {
+				&info.side == side &&
+				info.tracks.iter().find(|&val|{*val == track}).is_some()
+			}
+	  )
+	}
+
+
+	pub fn track_idx_iterator(&self) -> impl Iterator<Item=(&Side, u8)> {
+		let side_iterator = match self.nb_sides {
+			2 => [Side::SideA, Side::SideB].iter(),
+			1 => [Side::Unspecified].iter(),
+			_ => unreachable!()
+		};
+		let track_iterator = (0..self.nb_tracks);
+
+		side_iterator.cartesian_product(track_iterator)
+	}
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Side {
 	SideA,
 	SideB,
@@ -24,12 +50,12 @@ pub enum Side {
 
 #[derive(Debug)]
 pub struct TrackGroup {
-	tracks: Vec<u16>,
-	side: Side,
-	sector_size: u16,
-	gap3: u16,
-	sector_id: Vec<u16>,
-	sector_id_head: Vec<u16>,
+	pub(crate) tracks: Vec<u8>,
+	pub(crate) side: Side,
+	pub(crate) sector_size: u16,
+	pub(crate) gap3: u16,
+	pub(crate) sector_id: Vec<u16>,
+	pub(crate) sector_id_head: Vec<u16>,
 }
 
 
@@ -50,6 +76,10 @@ named!(list_of_values<CompleteStr, Vec<u16>>,
 
 fn from_hex(input: CompleteStr) -> Result<u16, std::num::ParseIntError> {
   u16::from_str_radix(&input, 16)
+}
+
+fn from_dec(input: CompleteStr) -> Result<u16, std::num::ParseIntError> {
+  u16::from_str_radix(&input, 10)
 }
 
 fn is_hex_digit(c: char) -> bool {
@@ -78,7 +108,7 @@ named!(hex<CompleteStr, u16>,
 named!(dec<CompleteStr, u16>,
   map_res!(
 	  take_while!(is_dec_digit), 
-	  from_hex
+	  from_dec
   )
 );
 
@@ -161,7 +191,7 @@ do_parse!(
 		sector_id_head: call!(list_of_key, "SectorIdHead") >>
 	(
 		TrackGroup{
-			tracks: tracks,
+			tracks: tracks.iter().map(|v|{*v as u8}).collect::<Vec<u8>>(),
 			side: side,
 			sector_size,
 			gap3,
@@ -176,9 +206,9 @@ do_parse!(
 named!(pub parse_config<CompleteStr, DiscConfig>,
   do_parse!(
 		many0!(empty_line) >>
-	  nb_track: call!(value_of_key, "NbTrack") >>
+	  nb_tracks: call!(value_of_key, "NbTrack") >>
 		many0!(empty_line) >>
-	  nb_side: call!(value_of_key, "NbSide") >>
+	  nb_sides: call!(value_of_key, "NbSide") >>
 		track_groups: fold_many1!(
 			 preceded!(
 			  many0!(empty_line),
@@ -192,8 +222,8 @@ named!(pub parse_config<CompleteStr, DiscConfig>,
 		 ) >>
 	(
 		DiscConfig {
-			nb_track,
-			nb_side,
+			nb_tracks: nb_tracks as _,
+			nb_sides: nb_sides as _,
 			track_groups
 		}
 	)
@@ -234,7 +264,23 @@ use crate::disc::cfg::*;
 
 		let res = value("10 ".into());
 		assert!(res.is_ok());
+	}
 
+
+ #[test]
+	fn parse_list_value() {
+		let res = list_of_values("0x10 ".into());
+		assert!(res.is_ok());
+		let (next, res) = res.unwrap();
+		assert_eq!(res.len(), 1);
+		assert_eq!(res[0], 0x10);
+
+		let res = list_of_values("10,11 ".into());
+		assert!(res.is_ok());
+		let (next, res) = res.unwrap();
+		assert_eq!(res.len(), 2);
+		assert_eq!(res[0], 10);
+		assert_eq!(res[1], 11);
 
 	}
 

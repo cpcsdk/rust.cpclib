@@ -226,10 +226,34 @@ fn parse_double_sided_cfg() {
 	assert!(parsed.is_ok());
 	match parsed {
 		Ok( (next, res) ) => {
+
+			println!("{:?}", res);
 			assert!(next.len() == 0);
+
+			assert!(
+				res.track_information_for_track(
+					&cpc::disc::cfg::Side::SideA, 
+					0
+				).is_some());
+			assert!(
+				res.track_information_for_track(
+					&cpc::disc::cfg::Side::SideA, 
+					200
+				).is_none());
+
+
+			for idx in res.track_idx_iterator() {
+				let track = res.track_information_for_track(idx.0, idx.1)
+							.expect(&format!("Unable to get information for {:?}", idx));
+				println!("{:?}", idx);
+
+			}
+			let edsk = cpc::disc::builder::build_disc_from_cfg(&res);
 		},
 		_ => unreachable!()
 	}
+
+	
 }
 
 
