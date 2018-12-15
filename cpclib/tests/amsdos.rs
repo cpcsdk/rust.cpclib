@@ -9,6 +9,5 @@ mod tests {
 		let amsdos = cpc::disc::amsdos::AmsdosManager::new(dsk, 0);
 		amsdos.print_catalog();
 
-		panic!();
 	}
 }
