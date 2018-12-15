@@ -231,4 +231,18 @@ fn parse_double_sided_cfg() {
 		_ => unreachable!()
 	}
 }
+
+
+#[test]
+fn parse_single_sided_cfg() {
+	let parsed = cpc::disc::cfg::parse_config(SINGLE_SIDED.into());
+	println!("{:?}", &parsed);
+	assert!(parsed.is_ok());
+	match parsed {
+		Ok( (next, res) ) => {
+			assert!(next.len() == 0);
+		},
+		_ => unreachable!()
+	}
+}
 }

@@ -17,7 +17,8 @@ pub struct DiscConfig {
 #[derive(Debug)]
 pub enum Side {
 	SideA,
-	SideB
+	SideB,
+	Unspecified
 }
 
 
@@ -136,14 +137,19 @@ named!(empty_line<CompleteStr, ()>,
 
 named!(track_group_sided<CompleteStr, TrackGroup>,
 do_parse!(
-	side: delimited!(
+	
+	side: alt! (
+	
+	delimited!(
 		tag_no_case!("[Track-"), 
 		alt!(
 			tag_no_case!("A") => {|_|{Side::SideA}} |
 			tag_no_case!("B") => {|_|{Side::SideB}}
 		),
 	 tag_no_case!(":")
- ) >>
+ ) |
+
+ tag_no_case!("[Track:")  => {|_| {Side::Unspecified}}) >>
  tracks: list_of_values >>
  tag_no_case!("]") >>
 	many0!(empty_line) >>
