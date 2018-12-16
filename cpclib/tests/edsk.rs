@@ -10,7 +10,7 @@ mod tests {
 		let track = dsk.get_track_information(&cpc::disc::edsk::Side::SideA, 0).unwrap();
 		assert_eq!(track.number_of_sectors(), 9);
 
-		for (sector, sum) in &[
+		for (sector_idx, sum) in &[
 			(0xc1, 21413),
 			(0xc6, 60263),
 			(0xc2, 22014),
@@ -18,12 +18,24 @@ mod tests {
 			(0xc3, 85780)
 		] {
 
+			let sector = track.sector(*sector_idx).unwrap();
+			let values = sector.values().iter().map(|&v|{format!("{:x}", v)}).collect::<Vec<_>>();
+			println!("0x{:x} => {:?}", sector_idx, values);
 			assert_eq!(
-				track.sector(*sector).unwrap().data_sum(), 
+				values.len(),
+				512
+			);
+			assert_eq!(
+				sector.data_sum(), 
 				*sum);
 		}
 
 		assert_eq!(track.data_sum(), 484121);
+		assert_eq!(
+			dsk.get_track_information(&cpc::disc::edsk::Side::SideA, 41).unwrap().data_sum(),
+			329484);
+
+
 	}
 
 

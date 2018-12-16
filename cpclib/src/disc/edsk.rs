@@ -477,7 +477,7 @@ impl SectorInformationList {
 		}
 
 		// Get the data
-		consummed_bytes = 231; // XXX No idea why we use this value !! there is no explanation in the documentation
+		consummed_bytes = 256 - 0x18; // Skip the unused bytes
 		for sector in list_info.iter() {
 			let current_sector_size = sector.data_length as usize;
 			let current_buffer = &buffer[consummed_bytes.. current_sector_size + consummed_bytes];
@@ -576,6 +576,10 @@ impl Sector  {
 		self.values.iter()
 			.map(|&v|{v as usize})
 			.sum::<usize>()
+	}
+
+	pub fn values(&self) -> &[u8] {
+		&self.values
 	}
 }
 
