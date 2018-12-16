@@ -143,7 +143,7 @@ impl DiscInformation {
 
 	/// Returns the length of the track including the track information block
 	pub fn track_length(&self, track: u8, side: u8) -> u16{
-		assert!(side <= self.number_of_sides);
+		assert!(side < self.number_of_sides);
 
 		let track = track as usize;
 		let side = side as usize;
@@ -151,7 +151,7 @@ impl DiscInformation {
 			track
 		}
 		else {
-			track*2 + (side-1)
+			track*2 + side
 		};
 
 		self.track_length_at_idx(idx)
@@ -626,6 +626,15 @@ impl TrackInformationList {
 		self.list.last_mut().unwrap()
 	}
 
+	/// Returns the tracks for the given side
+	pub fn tracks_for_side(&self, side: Side) -> impl Iterator<Item=&TrackInformation> {
+		let side:u8 = side.into();
+		self.list.iter()
+			.filter(move |info| {
+				info.side_number == side
+			})
+	}
+
 
 
 }
@@ -679,6 +688,10 @@ impl ExtendedDsk {
 	}
 
 
+	pub fn is_double_sided(&self) -> bool {
+		self.disc_information_bloc.is_double_sided()
+	}
+
 	// We assume we have the same number of tracks per side.
 	// Need to be modified the day ot will not be the case.
 	pub fn nb_tracks_per_side(&self) -> u8 {
@@ -723,8 +736,6 @@ impl ExtendedDsk {
 	}
 
 
-
-
 	fn get_track_idx(&self, side: &Side, track: u8) -> usize {
 		if self.disc_information_bloc.is_double_sided() {
 			let side = match side {
@@ -759,5 +770,14 @@ impl ExtendedDsk {
 		Some(res)
 	}
 
+
+	/// Compute the datasum for the given track
+	pub fn data_sum(&self, side: Side) -> usize {
+		self.track_list.tracks_for_side(side)
+			.map(|t|{
+				t.data_sum()
+			})
+			.sum()
+	}
 
 }

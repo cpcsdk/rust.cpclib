@@ -42,6 +42,17 @@ mod tests {
 	#[test]
 	fn open_double_side_edsk() {
 		let dsk = cpc::disc::edsk::ExtendedDsk::open("bf2sides.dsk").unwrap();
+
+		assert!(dsk.is_double_sided());
+		assert_eq!(
+			dsk.data_sum(cpc::disc::edsk::Side::SideA),
+			66709468
+		);
+
+		assert_eq!(
+			dsk.data_sum(cpc::disc::edsk::Side::SideB),
+			54340792	
+		);
 	}
 
 	#[test]
