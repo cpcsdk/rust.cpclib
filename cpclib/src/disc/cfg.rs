@@ -11,7 +11,7 @@ use itertools;
 use itertools::Itertools;
 
 
-use crate::disc::edsk::Side;
+use crate::disc::edsk::*;
 
 
 #[derive(Debug)]
@@ -59,12 +59,20 @@ pub struct TrackGroup {
 	pub(crate) sector_size: u16,
 	pub(crate) gap3: u16,
 	/// List of id of the sectors
-	pub(crate) sector_id: Vec<u16>,
+	pub(crate) sector_id: Vec<u8>,
 	/// List of logical side of the sectors
-	pub(crate) sector_id_head: Vec<u16>,
+	pub(crate) sector_id_head: Vec<u8>,
 }
 
 
+impl TrackGroup {
+
+	/// Return the sector size in the format expected by a DSK
+	pub fn sector_size_dsk_format(&self) -> u8 {
+		convert_real_sector_size_to_fdc_sector_size(self.sector_size)
+	}
+	
+}
 
 named!(value<CompleteStr, u16>,
 alt!(hex|dec)
@@ -201,8 +209,8 @@ do_parse!(
 			side: side,
 			sector_size,
 			gap3,
-			sector_id,
-			sector_id_head
+			sector_id: sector_id.iter().map(|&v| v as u8).collect::<Vec<_>>(),
+			sector_id_head: sector_id_head.iter().map(|&v| v as u8).collect::<Vec<_>>(),
 		}
 	)
 )

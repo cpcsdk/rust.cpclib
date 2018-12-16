@@ -9,13 +9,50 @@ use std::string::ToString;
 use itertools::zip;
 
 
-#[derive(Debug, PartialEq)]
+
+pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {
+		let mut n=0;
+		while size!=0x80 {
+			size = size >> 1;
+			n=n+1
+		}
+
+		n as _
+}
+
+pub fn convert_fdc_sector_size_to_real_sector_size(size: u8) -> u16 {
+	0x80 << size
+}
+
+
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Side {
 	SideA,
 	SideB,
 	Unspecified
 }
 
+
+impl Into<u8> for Side {
+	fn into(self) -> u8 {
+		match self {
+			Side::SideA => 0,
+			Side::SideB => 1,
+			Side::Unspecified => 0
+		}
+	}
+}
+
+
+impl Into<u8> for &Side {
+	fn into(self) -> u8 {
+		match self {
+			&Side::SideA => 0,
+			&Side::SideB => 1,
+			&Side::Unspecified => 0
+		}
+	}
+}
 
 
 #[derive(Debug, Default)]
@@ -50,7 +87,6 @@ impl DiscInformation {
 			track_size_table:  track_size_table.to_vec()
 		}
 	}
-
 
 	pub fn is_double_sided(&self) -> bool {
 		self.number_of_sides == 2
@@ -167,6 +203,10 @@ impl TrackInformation {
 	pub fn sector(&self, sector: u8) -> Option<&Sector> {
 		self.sector_information_list.sector(sector)
 	}
+
+
+
+	
 }
 
 
@@ -265,6 +305,17 @@ pub struct SectorInformationList {
 }
 
 impl SectorInformationList {
+
+	/// Return the number of sectors
+	pub fn len(&self) -> usize {
+		self.sectors.len()
+	}
+
+	/// Add a sector
+	pub fn add_sector(&mut self, sector: Sector) {
+		self.sectors.push(sector);
+	}
+
 	fn from_buffer(buffer: &[u8], number_of_sectors: u8) -> SectorInformationList {
 
 		let mut list_info = Vec::new();
@@ -316,6 +367,33 @@ impl SectorInformationList {
 			.find(|sector|{
 				sector.sector_information_bloc.sector_id == sector_id
 			})
+	}
+
+/// Fill the information list with sectors corresponding to the provided arguments
+	pub fn fill_with(
+		&mut self, 
+		ids: &Vec<u8>, 
+		heads: &Vec<u8>, 
+		track_number: u8, 
+		sector_size: u8) {
+		assert_eq!(ids.len(), heads.len());
+		assert_eq!(self.len(), 0);
+
+		for idx in 0..ids.len() {
+			let mut sector= Sector::default();
+
+
+			sector.sector_information_bloc.track = track_number;
+			sector.sector_information_bloc.sector_size = sector_size;
+			sector.sector_information_bloc.data_length = 0;
+			sector.sector_information_bloc.sector_id = ids[idx];
+			sector.sector_information_bloc.side = heads[idx];
+
+			sector.values.resize(convert_fdc_sector_size_to_real_sector_size(sector.sector_information_bloc.sector_size as _) as _, 0);
+
+			self.add_sector(sector);
+		}
+
 	}
 }
 
@@ -378,7 +456,14 @@ impl TrackInformationList {
 		TrackInformationList {
 			list
 		}
+	}
 
+
+	/// Add an empty track and return it. It is up to the caller to properly feed it
+	pub fn add_empty_track(&mut self) -> &mut TrackInformation{
+		let mut track = TrackInformation::default();
+		self.list.push(track);
+		self.list.last_mut().unwrap()
 	}
 
 
@@ -436,7 +521,21 @@ impl ExtendedDsk {
 
 
 	pub fn get_track_information(&self, side: &Side, track: u8) -> Option<&TrackInformation> {
-		let idx = if self.disc_information_bloc.is_double_sided() {
+		let idx = self.get_track_idx(side, track);
+		self.track_list.list.get(idx)
+	}
+
+
+	pub fn get_track_information_mut(&mut self, side: &Side, track: u8) -> Option<&mut TrackInformation> {
+		let idx = self.get_track_idx(side, track);
+		self.track_list.list.get_mut(idx)
+	}
+
+
+
+
+	fn get_track_idx(&self, side: &Side, track: u8) -> usize {
+		if self.disc_information_bloc.is_double_sided() {
 			let side = match side {
 				&Side::SideA => 0,
 				&Side::SideB => 1,
@@ -449,9 +548,7 @@ impl ExtendedDsk {
 				panic!("You cannot select side B in a single sided disc");
 			}
 			track as usize
-		};
-
-		self.track_list.list.get(idx)
+		}
 	}
 
 	/// Return the concatenated vlaues of several consecutive sectors
