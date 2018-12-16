@@ -253,9 +253,15 @@ fn parse_double_sided_cfg() {
 			let edsk = cpc::disc::builder::build_disc_from_cfg(&res);
 			let generated = edsk.to_cfg();
 
+			// Verify if we have the same content of tracks ids
 			assert_eq!(
-				res.to_string(), 
-				generated.to_string()
+				res.track_idx_iterator().collect::<Vec<_>>(),
+				generated.track_idx_iterator().collect::<Vec<_>>()
+			);
+
+			assert_eq!(
+				res.to_string().to_lowercase(), 
+				generated.to_string().to_lowercase()
 			);
 		},
 		_ => unreachable!()

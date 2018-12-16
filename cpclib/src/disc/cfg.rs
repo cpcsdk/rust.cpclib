@@ -132,7 +132,7 @@ impl TrackInformationList {
 			}
 		);
 	// group_by
-		single.iter().group_by(
+		let mut grouped = single.iter().group_by(
 			|item| {
 				(
 					item.side, 
@@ -144,7 +144,8 @@ impl TrackInformationList {
 			}
 		).into_iter().map(
 			|(k, group)| {
-					let tracks = group.map(|item|{item.tracks[0]}).collect::<Vec<u8>>();
+					let mut tracks = group.map(|item|{item.tracks[0]}).collect::<Vec<u8>>();
+					tracks.sort();
 					TrackGroup {
 						tracks,
 						side: k.0,
@@ -154,7 +155,17 @@ impl TrackInformationList {
 						sector_id_head: k.4
 					}
 			}
-		).collect::<Vec<TrackGroup>>()
+		).collect::<Vec<TrackGroup>>();
+
+		// Sorted the result
+		grouped.sort_by_key(|item|{
+			(
+				item.side,
+				item.tracks[0]
+			)
+		});
+
+		grouped
 	}
 }
 
