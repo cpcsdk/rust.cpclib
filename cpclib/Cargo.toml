@@ -28,6 +28,8 @@ reqwest = {version="*", optional=true}
 version = "4.1.1"
 #features = ["verbose-errors"]
 
+[dev-dependencies] 
+pretty_assertions="0.5.1"
 
 [features]
 xfer = ["curl", "reqwest", "path-absolutize"] # CPCWifi compatibility

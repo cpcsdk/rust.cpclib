@@ -25,13 +25,24 @@ pub fn convert_fdc_sector_size_to_real_sector_size(size: u8) -> u16 {
 }
 
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone, Ord, PartialOrd, Eq)]
 pub enum Side {
 	SideA,
 	SideB,
 	Unspecified
 }
 
+
+impl From<u8> for Side {
+
+	fn from(val: u8) -> Side {
+		match val {
+			0 => Side::SideA,
+			1 => Side::SideB,
+			_ => Side::Unspecified
+		}
+	} 
+}
 
 impl Into<u8> for Side {
 	fn into(self) -> u8 {
@@ -504,6 +515,22 @@ impl ExtendedDsk {
 	}
 
 
+	// We assume we have the same number of tracks per side.
+	// Need to be modified the day ot will not be the case.
+	pub fn nb_tracks_per_side(&self) -> u8 {
+		let val = if self.disc_information_bloc.is_single_sided() {
+			self.track_list.list.len()
+		}
+		else {
+			self.track_list.list.len()/2
+		};
+		val as u8
+	}
+
+	pub fn nb_sides(&self) -> u8 {
+		self.disc_information_bloc.number_of_sides
+	}
+
 	/// Search and returns the appropriate sector
 	/// TODO use get_track_information
 	pub fn sector(&self, track: u8, sector: u8, side: u8) -> Option<&Sector> {
@@ -567,4 +594,6 @@ impl ExtendedDsk {
 
 		Some(res)
 	}
+
+
 }

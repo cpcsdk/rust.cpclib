@@ -3,6 +3,9 @@
 extern crate cpc;
 
 #[cfg(test)]
+#[macro_use] extern crate pretty_assertions;
+
+#[cfg(test)]
 mod tests {
 
 
@@ -75,10 +78,6 @@ SectorSize = 512
 Gap3 = 0x30
 SectorID = 0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,0xa8,0xa9,0xaa,0xa1
 sectorIDHead = 0,0,0,0,0,0,0,0,0,0
-
-
-
-
 
 [Track-B:0]
 SectorSize = 512
@@ -227,8 +226,11 @@ fn parse_double_sided_cfg() {
 	match parsed {
 		Ok( (next, res) ) => {
 
-			println!("{:?}", res);
 			assert!(next.len() == 0);
+			assert_eq!(
+				res.to_string().to_uppercase(),
+				DOUBLE_SIDED.to_uppercase()
+			);
 
 			assert!(
 				res.track_information_for_track(
@@ -249,6 +251,12 @@ fn parse_double_sided_cfg() {
 
 			}
 			let edsk = cpc::disc::builder::build_disc_from_cfg(&res);
+			let generated = edsk.to_cfg();
+
+			assert_eq!(
+				res.to_string(), 
+				generated.to_string()
+			);
 		},
 		_ => unreachable!()
 	}

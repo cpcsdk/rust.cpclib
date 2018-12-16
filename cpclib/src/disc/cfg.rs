@@ -10,7 +10,7 @@ use std::iter::Iterator;
 use itertools;
 use itertools::Itertools;
 
-
+use std::fmt;
 use crate::disc::edsk::*;
 
 
@@ -24,6 +24,20 @@ pub struct DiscConfig {
 	pub(crate) track_groups: Vec<TrackGroup>
 }
 
+
+impl fmt::Display for DiscConfig {
+
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "NbTrack = {}\n", self.nb_tracks)?;
+				write!(f, "NbSide = {}\n", self.nb_sides)?;
+
+				for track_group in self.track_groups.iter() {
+					write!(f,"\n{}", track_group)?;
+				}
+
+			Ok(())
+    }
+}
 
 impl DiscConfig {
 	pub fn track_information_for_track(&self, side: &Side, track: u8) -> Option<&TrackGroup> {
@@ -57,13 +71,35 @@ pub struct TrackGroup {
 	pub(crate) side: Side,
 	/// Size of a sector
 	pub(crate) sector_size: u16,
-	pub(crate) gap3: u16,
+	pub(crate) gap3: u8,
 	/// List of id of the sectors
 	pub(crate) sector_id: Vec<u8>,
 	/// List of logical side of the sectors
 	pub(crate) sector_id_head: Vec<u8>,
 }
 
+
+impl fmt::Display for TrackGroup {
+
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+			let side_info = match self.side {
+				Side::SideA => "-A",
+				Side::SideB => "-B",
+				Side::Unspecified => ""
+			};
+			let tracks_info = self.tracks.iter().map(|t|{format!("{}", t)}).join(",");
+			let sector_id = self.sector_id.iter().map(|t|{format!("0x{:x}", t)}).join(",");
+			let sector_id_head = self.sector_id_head.iter().map(|t|{format!("{}", t)}).join(",");
+
+			write!(f, "[Track{}:{}]\n", side_info, tracks_info)?;
+			write!(f, "SectorSize = {}\n", self.sector_size)?;
+			write!(f, "Gap3 = 0x{:x}\n", self.gap3)?;
+			write!(f, "SectorID = {}\n", sector_id)?;
+			write!(f, "SectorIDHead = {}\n", sector_id_head)?;
+
+			Ok(())
+		}
+}
 
 impl TrackGroup {
 
@@ -73,6 +109,102 @@ impl TrackGroup {
 	}
 	
 }
+
+
+impl TrackInformationList {
+	pub fn to_cfg(&self) -> Vec<TrackGroup> {
+		
+		
+		let mut single = self.list.iter()
+			.map(|t|{t.to_cfg()})
+			.collect::<Vec<_>>();
+
+		// elements need to be sorted before using group_by
+		single.sort_by_key(
+			|item| {
+				(
+					item.side, 
+					item.sector_size,
+					item.gap3,
+					item.sector_id.clone(),
+					item.sector_id_head.clone()
+				)
+			}
+		);
+	// group_by
+		single.iter().group_by(
+			|item| {
+				(
+					item.side, 
+					item.sector_size,
+					item.gap3,
+					item.sector_id.clone(),
+					item.sector_id_head.clone()
+				)
+			}
+		).into_iter().map(
+			|(k, group)| {
+					let tracks = group.map(|item|{item.tracks[0]}).collect::<Vec<u8>>();
+					TrackGroup {
+						tracks,
+						side: k.0,
+						sector_size: k.1,
+						gap3: k.2,
+						sector_id: k.3,
+						sector_id_head: k.4
+					}
+			}
+		).collect::<Vec<TrackGroup>>()
+	}
+}
+
+
+impl TrackInformation {
+	pub fn to_cfg(&self) -> TrackGroup {
+		let tracks = vec![self.track_number];
+		let side:Side = self.side_number.clone().into();
+		let sector_size = convert_fdc_sector_size_to_real_sector_size(self.sector_size); 
+		let gap3 = self.gap3_length;
+
+		let sector_id = self.sector_information_list.sectors
+											.iter()
+											.map(|s|{s.sector_information_bloc.sector_id})
+											.collect::<Vec<_>>();
+		let sector_id_head = self.sector_information_list.sectors
+											.iter()
+											.map(|s|{s.sector_information_bloc.side})
+											.collect::<Vec<_>>();
+
+	// XXX ensure the size of each sector corresponds to the given size
+	// XXX if test fails, maube it is necessary to make another test
+	self.sector_information_list.sectors.iter()
+				.for_each(|s|{
+					assert_eq!(s.sector_information_bloc.sector_size, self.sector_size)
+				});
+
+		TrackGroup {
+			tracks,
+			side,
+			sector_size,
+			gap3,
+			sector_id,
+			sector_id_head
+		}
+	}
+}
+
+impl ExtendedDsk {
+	pub fn to_cfg(&self) -> DiscConfig {
+		DiscConfig {
+			nb_tracks: self.nb_tracks_per_side(),
+			nb_sides: self.nb_sides(),
+			track_groups: self.track_list.to_cfg()
+		}
+	}
+}
+
+
+
 
 named!(value<CompleteStr, u16>,
 alt!(hex|dec)
@@ -208,7 +340,7 @@ do_parse!(
 			tracks: tracks.iter().map(|v|{*v as u8}).collect::<Vec<u8>>(),
 			side: side,
 			sector_size,
-			gap3,
+			gap3: gap3 as u8,
 			sector_id: sector_id.iter().map(|&v| v as u8).collect::<Vec<_>>(),
 			sector_id_head: sector_id_head.iter().map(|&v| v as u8).collect::<Vec<_>>(),
 		}
