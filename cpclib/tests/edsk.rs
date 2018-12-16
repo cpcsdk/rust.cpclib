@@ -4,7 +4,7 @@ extern crate cpc;
 mod tests {
 
 	#[test]
-	fn open_edsk() {
+	fn open_singel_side_edsk() {
 		let dsk = cpc::disc::edsk::ExtendedDsk::open("pirate.dsk").unwrap();
 
 		let track = dsk.get_track_information(&cpc::disc::edsk::Side::SideA, 0).unwrap();
@@ -39,6 +39,10 @@ mod tests {
 	}
 
 
+	#[test]
+	fn open_double_side_edsk() {
+		let dsk = cpc::disc::edsk::ExtendedDsk::open("bf2sides.dsk").unwrap();
+	}
 
 	#[test]
 	fn save_edsk() {
