@@ -238,8 +238,11 @@ impl TrackInformation {
 
 
 	fn to_buffer(&self, buffer: &mut Vec<u8>) {
-		buffer.extend_from_slice("Track-Info\r\n".as_bytes());
+		let start_size = buffer.len();
+		buffer.extend_from_slice(&"Track-Info\r\n".as_bytes()[..12]);
+		assert_eq!(buffer.len()-start_size, 12);
 
+		buffer.push(0); 
 		buffer.push(0); 
 		buffer.push(0); 
 		buffer.push(0); 
@@ -255,8 +258,7 @@ impl TrackInformation {
 		buffer.push(self.gap3_length);
 		buffer.push(self.filler_byte);
 
-		assert_eq!(buffer.len()%256, 18);
-
+		assert_eq!(buffer.len()-start_size, 0x18);
 		// Inject sectors information list
 		self.sector_information_list.sectors
 			.iter()
@@ -264,6 +266,9 @@ impl TrackInformation {
 				s.sector_information_bloc.to_buffer(buffer);
 			});
 
+		let added_bytes = buffer.len() - start_size;
+		let missing_bytes = 256 - added_bytes - 1;
+		buffer.resize(buffer.len() + missing_bytes, 0); 
 
 		// Inject sectors information data
 		self.sector_information_list.sectors
@@ -271,7 +276,13 @@ impl TrackInformation {
 			.for_each(|s|{
 				buffer.extend_from_slice(&s.values);
 			});
-		
+
+
+		while buffer.len()%256 != 0 {
+			buffer.push(0);
+		}	
+		let added_bytes = buffer.len() - start_size;
+		// TODO check if the number of added bytes corresponds
 	}
 
 	pub fn total_size(&self) -> usize {
@@ -411,8 +422,8 @@ impl SectorInformation {
 		buffer.push(self.sector_size);
 		buffer.push(self.fdc_status_register_1);
 		buffer.push(self.fdc_status_register_2);
-		buffer.push( (self.data_length/256) as u8);
 		buffer.push( (self.data_length%256) as u8);
+		buffer.push( (self.data_length/256) as u8);
 	}
 
 
@@ -453,7 +464,6 @@ impl SectorInformationList {
 		}
 
 		// Get the data
-		assert_eq!(231, 256-consummed_bytes );
 		consummed_bytes = 231; // XXX No idea why we use this value !! there is no explanation in the documentation
 		for sector in list_info.iter() {
 			let current_sector_size = sector.data_length as usize;
@@ -580,6 +590,11 @@ impl TrackInformationList {
 		}
 	}
 
+	fn to_buffer(&self, buffer: &mut Vec<u8>) {
+		for track in self.list.iter() {
+			track.to_buffer(buffer);
+		}
+	}
 
 	/// Add an empty track and return it. It is up to the caller to properly feed it
 	pub fn add_empty_track(&mut self) -> &mut TrackInformation{
@@ -589,13 +604,6 @@ impl TrackInformationList {
 	}
 
 
-
-	fn to_buffer(&self, buffer: &mut Vec<u8>) {
-		for track in self.list.iter() {
-			assert_eq!(buffer.len()%256, 0);
-			track.to_buffer(buffer);
-		}
-	}
 
 }
 
