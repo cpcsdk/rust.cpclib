@@ -76,6 +76,14 @@ pub struct DiscInformation {
 
 
 impl DiscInformation {
+	fn creator_name_as_bytes(&self) -> [u8;14] {
+		let mut data = [0 as u8; 14];
+		for (idx,byte) in self.creator_name.as_bytes()[0..14].iter().enumerate() {
+			data[idx] = *byte;
+		}
+		data
+	}
+
 	fn from_buffer(buffer: &[u8]) -> DiscInformation {
 		assert_eq!(buffer.len(), 256);
 		assert_eq!(
@@ -97,6 +105,32 @@ impl DiscInformation {
 			number_of_sides,
 			track_size_table:  track_size_table.to_vec()
 		}
+	}
+
+
+	fn to_buffer(&self, buffer: &mut Vec<u8>) {
+		buffer.extend_from_slice(
+			"EXTENDED CPC DSK File\r\nDisk-Info\r\n".as_bytes());
+		assert_eq!(buffer.len(), 34);
+		
+		buffer.extend_from_slice(
+			&self.creator_name_as_bytes());
+		assert_eq!(buffer.len(), 34+14);
+
+		buffer.push(self.number_of_tracks);
+		buffer.push(self.number_of_sides);
+		assert_eq!(buffer.len(), 34+14+1+1);
+
+		// XXX missing size of a track 
+		buffer.push(0);
+		buffer.push(0);
+		assert_eq!(buffer.len(), 34+14+1+1+2);
+
+		buffer.extend_from_slice(&self.track_size_table);
+		assert_eq!(buffer.len(), 34+14+1+1+2 + self.track_size_table.len());
+
+		// ensure we use 256 bytes
+		buffer.resize(256, 0);
 	}
 
 	pub fn is_double_sided(&self) -> bool {
@@ -202,6 +236,44 @@ impl TrackInformation {
 
 	}
 
+
+	fn to_buffer(&self, buffer: &mut Vec<u8>) {
+		buffer.extend_from_slice("Track-Info\r\n".as_bytes());
+
+		buffer.push(0); 
+		buffer.push(0); 
+		buffer.push(0); 
+
+		buffer.push(self.track_number);
+		buffer.push(self.side_number);
+
+		buffer.push(self.data_rate.clone().into());
+		buffer.push(self.recording_mode.clone().into());
+
+		buffer.push(self.sector_size);
+		buffer.push(self.number_of_sectors);
+		buffer.push(self.gap3_length);
+		buffer.push(self.filler_byte);
+
+		assert_eq!(buffer.len()%256, 18);
+
+		// Inject sectors information list
+		self.sector_information_list.sectors
+			.iter()
+			.for_each(|s|{
+				s.sector_information_bloc.to_buffer(buffer);
+			});
+
+
+		// Inject sectors information data
+		self.sector_information_list.sectors
+			.iter()
+			.for_each(|s|{
+				buffer.extend_from_slice(&s.values);
+			});
+		
+	}
+
 	pub fn total_size(&self) -> usize {
 		self.sector_information_list.sectors.iter()
 			.map(|info|{
@@ -221,7 +293,7 @@ impl TrackInformation {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DataRate {
 	Unknown = 0,
 	SingleOrDoubleDensity = 1,
@@ -247,7 +319,20 @@ impl From<u8> for DataRate {
 	}
 }
 
-#[derive(Debug)]
+
+impl Into<u8> for DataRate {
+	fn into(self) -> u8 {
+		match self {
+			DataRate::Unknown => 0,
+			DataRate::SingleOrDoubleDensity => 1,
+			DataRate::HighDensity => 2,
+			DataRate::ExtendedDensity => 3,
+			_ => unreachable!()
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
 pub enum RecordingMode {
 	Unknown = 0,
 	FM = 1,
@@ -274,14 +359,33 @@ impl From<u8> for RecordingMode {
 	}
 }
 
+
+impl Into<u8> for RecordingMode {
+	fn into(self) -> u8 {
+		match self {
+			RecordingMode::Unknown => 0,
+			RecordingMode::FM => 1,
+			RecordingMode::MFM => 2,
+			_ => unreachable!()
+		}
+	}
+}
+
 #[derive(Debug, Default)]
 pub struct SectorInformation {
+	/// track (equivalent to C parameter in NEC765 commands)
 	pub(crate) track: u8,
+	/// side (equivalent to H parameter in NEC765 commands)
 	pub(crate) side: u8,
+	/// sector ID (equivalent to R parameter in NEC765 commands)
 	pub(crate) sector_id: u8,
+	/// sector size (equivalent to N parameter in NEC765 commands)
 	pub(crate) sector_size: u8,
+	/// FDC status register 1 (equivalent to NEC765 ST1 status register)
 	pub(crate) fdc_status_register_1: u8,
+	/// FDC status register 2 (equivalent to NEC765 ST2 status register)
 	pub(crate) fdc_status_register_2: u8,
+	/// actual data length in bytes
 	pub(crate) data_length: u16, // in bytes, little endian notation
 }
 
@@ -297,12 +401,18 @@ impl SectorInformation {
 			fdc_status_register_2: buffer[0x05],
 			data_length: buffer[0x06] as u16 + (buffer[0x07] as u16 *  256)
 		};
-
-		println!("{:?}", info);
-
-
-
 		info
+	}
+
+	fn to_buffer(&self, buffer: &mut Vec<u8>) {
+		buffer.push(self.track);
+		buffer.push(self.side);
+		buffer.push(self.sector_id);
+		buffer.push(self.sector_size);
+		buffer.push(self.fdc_status_register_1);
+		buffer.push(self.fdc_status_register_2);
+		buffer.push( (self.data_length/256) as u8);
+		buffer.push( (self.data_length%256) as u8);
 	}
 
 
@@ -343,6 +453,7 @@ impl SectorInformationList {
 		}
 
 		// Get the data
+		assert_eq!(231, 256-consummed_bytes );
 		consummed_bytes = 231; // XXX No idea why we use this value !! there is no explanation in the documentation
 		for sector in list_info.iter() {
 			let current_sector_size = sector.data_length as usize;
@@ -478,6 +589,14 @@ impl TrackInformationList {
 	}
 
 
+
+	fn to_buffer(&self, buffer: &mut Vec<u8>) {
+		for track in self.list.iter() {
+			assert_eq!(buffer.len()%256, 0);
+			track.to_buffer(buffer);
+		}
+	}
+
 }
 
 
@@ -510,8 +629,22 @@ impl ExtendedDsk {
 			disc_information_bloc: disc_info,
 			track_list
 		})
+	}
 
 
+	/// Save the dsk in a file one disc
+	pub fn save<P>(&self, path: P) -> io::Result<()>
+	where P:AsRef<Path>{
+		let mut file_buffer = File::create(path)?;
+		let mut memory_buffer = Vec::new();
+		self.to_buffer(&mut memory_buffer);
+		file_buffer.write_all(&memory_buffer)
+	}
+
+	/// Write the dsk in the buffer
+	fn to_buffer(&self, buffer: &mut Vec<u8>) {
+		self.disc_information_bloc.to_buffer(buffer);
+		self.track_list.to_buffer( buffer);
 	}
 
 
@@ -578,7 +711,7 @@ impl ExtendedDsk {
 		}
 	}
 
-	/// Return the concatenated vlaues of several consecutive sectors
+	/// Return the concatenated values of several consecutive sectors
 	pub fn sectors_bytes(&self, track: u8, sector: u8, nb_sectors: u8, side: u8) -> Option<Vec<u8>> {
 		let mut res = Vec::new();
 
