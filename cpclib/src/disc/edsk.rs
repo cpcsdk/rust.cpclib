@@ -197,6 +197,20 @@ pub struct TrackInformation {
 
 impl TrackInformation {
 
+	pub fn number_of_sectors(&self) -> u8 {
+		self.number_of_sectors
+	}
+
+	/// Compute the sum of data contained by all the sectors.
+	/// Only serves for debug purposes
+	pub fn data_sum(&self) -> usize {
+		self.sector_information_list.sectors.iter()
+			.map(|s|{
+				s.data_sum()
+			})
+			.sum::<usize>()
+	}
+
 	pub fn corresponds_to(&self, track: u8, side: u8) -> bool {
 		self.track_number == track && self.side_number == side
 	}
@@ -292,7 +306,6 @@ impl TrackInformation {
 			})
 			.sum()
 	}
-
 
 	pub fn sector(&self, sector: u8) -> Option<&Sector> {
 		self.sector_information_list.sector(sector)
@@ -557,6 +570,12 @@ impl Sector  {
 	/// Number of bytes stored in the sector
 	pub fn len(&self) -> u16 {
 		self.values.len() as u16
+	}
+
+	pub fn data_sum(&self) -> usize {
+		self.values.iter()
+			.map(|&v|{v as usize})
+			.sum::<usize>()
 	}
 }
 
