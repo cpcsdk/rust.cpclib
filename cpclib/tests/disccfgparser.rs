@@ -219,6 +219,13 @@ SectorID = 0xb2,0xb3,0xb4,0xb5,0xb6,0xb7,0xb8,0xb9,0xba,0xb1
 sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 ";
 
+
+#[test]
+fn test_data() {
+	// should not panic
+	let data_cfg = cpc::disc::cfg::DiscConfig::single_side_data_format();
+}
+
 #[test]
 fn parse_double_sided_cfg() {
 	let parsed = cpc::disc::cfg::parse_config(DOUBLE_SIDED.into());

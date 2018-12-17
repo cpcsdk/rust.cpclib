@@ -13,6 +13,17 @@ use itertools::Itertools;
 use std::fmt;
 use crate::disc::edsk::*;
 
+const DATA_FORMAT_CFG: &str = "
+NbTrack = 40
+NbSide = 1
+
+[Track:0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39]
+SectorSize = 512
+Gap3 = 0x4e
+SectorID = 0xc1,0xc6,0xc2,0xc7,0xc3,0xc8,0xc4,0xc9,0xc5
+sectorIDHead = 0,0,0,0,0,0,0,0,0
+";
+
 
 #[derive(Debug)]
 pub struct DiscConfig {
@@ -24,6 +35,19 @@ pub struct DiscConfig {
 	pub(crate) track_groups: Vec<TrackGroup>
 }
 
+
+impl From<&str> for DiscConfig {
+	fn from(config: &str) -> DiscConfig {
+		let (_,res) = parse_config(config.into()).unwrap();
+		res
+	}
+}
+
+impl DiscConfig {
+	pub fn single_side_data_format() -> DiscConfig {
+		DATA_FORMAT_CFG.into()
+	}
+}
 
 impl fmt::Display for DiscConfig {
 
