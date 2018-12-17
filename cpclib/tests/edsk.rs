@@ -3,10 +3,8 @@ extern crate cpc;
 #[cfg(test)]
 mod tests {
 
-	#[test]
-	fn open_singel_side_edsk() {
-		let dsk = cpc::disc::edsk::ExtendedDsk::open("pirate.dsk").unwrap();
 
+	fn test_single_dsk(dsk:&cpc::disc::edsk::ExtendedDsk) {
 		let track = dsk.get_track_information(&cpc::disc::edsk::Side::SideA, 0).unwrap();
 		assert_eq!(track.number_of_sectors(), 9);
 
@@ -34,7 +32,17 @@ mod tests {
 		assert_eq!(
 			dsk.get_track_information(&cpc::disc::edsk::Side::SideA, 41).unwrap().data_sum(),
 			329484);
+	}
 
+	#[test]
+	fn open_singel_side_edsk() {
+		let dsk = cpc::disc::edsk::ExtendedDsk::open("pirate.dsk").unwrap();
+		test_single_dsk(&dsk);
+
+		let tmp_file = "/tmp/tmp.dsk";
+		dsk.save(tmp_file);
+		let dsk = cpc::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
+		test_single_dsk(&dsk);
 
 	}
 

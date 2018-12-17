@@ -281,7 +281,7 @@ impl TrackInformation {
 			});
 
 		let added_bytes = buffer.len() - start_size;
-		let missing_bytes = 256 - added_bytes - 1;
+		let missing_bytes = 256 - added_bytes ;
 		buffer.resize(buffer.len() + missing_bytes, 0); 
 
 		// Inject sectors information data
