@@ -1,5 +1,5 @@
 [package]
-name = "cpc"
+name = "cpclib"
 version = "0.2.2"
 authors = ["Romain Giot <giot.romain@gmail.com"]
 edition = "2018"
@@ -13,8 +13,8 @@ memchr = "2.1.1"
 smallvec = "0.6.6"
 itertools="0.7.8"
 bitsets = "0.1.1"
-bitfield = "*"
-bitflags = "*"
+bitfield = "0.13.1"
+bitflags = "1.0.4"
 image = "0.20.1"
 custom_error = "1.3.0"
 arrayref="0.3.5"

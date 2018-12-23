@@ -36,7 +36,15 @@ const INK24:im::Rgba<u8> = im::Rgba{data: [0xFF, 0xFF, 0x00, 255]};
 const INK25:im::Rgba<u8> = im::Rgba{data: [0xFF, 0xFF, 0x80, 255]};
 const INK26:im::Rgba<u8> = im::Rgba{data: [0xFF, 0xFF, 0xFF, 255]};
 
-pub const INKS_VALUES:[im::Rgba<u8>; 27] = [
+
+/// Number of inks managed by the system. Do not take into account the few duplicates
+const NB_INKS: u8 = 27;
+
+/// Number of pens, including the border
+const NB_PENS: u8 = 16 + 1;
+
+/// RGB color for each ink
+pub const INKS_RGB_VALUES:[im::Rgba<u8>; 27] = [
 	INK0,
 	INK1,
 	INK2,
@@ -66,35 +74,8 @@ pub const INKS_VALUES:[im::Rgba<u8>; 27] = [
 	INK26
 ];
 
-
-const NB_INKS: u8 = 27;
-const NB_PENS: u8 = 16 + 1;
-
-
-#[derive(Clone, Copy, Ord, PartialOrd, Eq, Hash)]
-pub struct Ink {
-    value: u8
-}
-
-/// Two inks are equal only if they share the same number
-impl PartialEq for Ink {
-    fn eq(&self, other: &Ink) -> bool {
-        self.value == other.value
-    }
-}
-
-impl Ink {
-    pub fn color(&self) -> im::Rgba<u8> {
-        INKS_VALUES[self.value as usize]
-    }
-
-    pub fn number(&self) -> u8 {
-        self.value
-    }
-
-    /// Return the value required by the gate array the select the ink
-    pub fn gate_array(&self) -> u8 {
-        [
+// Ga value for each ink
+pub const INKS_GA_VALUE : [u8;27] = [
             0x54,
             0x44,
             0x55,
@@ -122,7 +103,36 @@ impl Ink {
             0x4a,
             0x43,
             0x4b
-        ][self.value as usize]
+        ];
+
+
+#[derive(Clone, Copy, Ord, PartialOrd, Eq, Hash)]
+pub struct Ink {
+    value: u8
+}
+
+impl PartialEq for Ink {
+    /// Two inks are equal only if they share the same code number
+    fn eq(&self, other: &Ink) -> bool {
+        self.value == other.value
+    }
+}
+
+impl Ink {
+
+    /// Get the RGB color value of the ink
+    pub fn color(&self) -> im::Rgba<u8> {
+        INKS_RGB_VALUES[self.value as usize]
+    }
+
+    /// Get the ink number (firmware wise)
+    pub fn number(&self) -> u8 {
+        self.value
+    }
+
+    /// Get the value required by the gate array the select the ink
+    pub fn gate_array(&self) -> u8 {
+        INKS_GA_VALUES[self.value as usize]
 
     }
 }
@@ -147,9 +157,11 @@ impl From<im::Rgba<u8>> for Ink{
 }
 
 impl From<im::Rgb<u8>> for Ink {
+    /// Convert an rgb value to the corresponding ink.
+    /// The closest color is provided if the provided color is not strictly corresponding to a CPC color.
     fn from(color: im::Rgb<u8>) -> Self {
         // Not strict comparison
-        let distances = INKS_VALUES.into_iter().map(|color_ink|{
+        let distances = INKS_RGB_VALUES.into_iter().map(|color_ink|{
               (color_ink[0] as i32 - color[0] as i32).pow(2)
             + (color_ink[1] as i32 - color[1] as i32).pow(2)
             + (color_ink[2] as i32 - color[2] as i32).pow(2)
@@ -163,17 +175,6 @@ impl From<im::Rgb<u8>> for Ink {
             }
         }
         Ink::from(selected_idx as u8)
-
-        /*
-         //Strict comparison
-        for (idx, color_ink) in INKS_VALUES.iter().enumerate() {
-            if color_ink[0] == color[0] && color_ink[1] == color[1] && color_ink[2] == color[2] {
-                ink = Some(Ink::from(idx as u8));
-            }
-        }
-        assert!(ink.is_some());
-        ink.unwrap()
-        */
     }
 
 }
@@ -298,6 +299,7 @@ pub const INKS:[Ink; NB_INKS as usize] = [
 ];
 
 #[derive(Eq,  PartialEq, Hash, Clone, Copy, Debug)]
+/// Represents a Pen. There a 16 pens + the border in the Amstrad CPC
 pub struct Pen {
     value: u8
 }
@@ -324,6 +326,7 @@ where i32: From<T>
 
 
 impl Pen{
+    /// Get the number of the pen
     pub fn number(&self) -> u8 {
         return self.value;
     }
@@ -338,26 +341,6 @@ impl Pen{
         };
     }
 }
-
-
-/*
- * XXX To be removed once impl<T:Integer> From<T> for Pen is validated
-impl From<u8> for Pen{
-    fn from(item: u8) -> Self {
-        Pen{value: item}
-    }
-}
-
-
-
-
-impl From<i32> for Pen{
-    fn from(item: i32) -> Self {
-        Pen{value: item as u8}
-    }
-}
-*/
-
 
 impl Add<i8> for Pen {
     type Output = Pen;
@@ -388,20 +371,22 @@ pub const PENS:[Pen; NB_PENS as usize] = [
     Pen{value: 13},
     Pen{value: 14},
     Pen{value: 15},
-    Pen{value: 16},
+    Pen{value: 16}, // Border
 ];
 
 
+/// The palette maps one Ink for each Pen
 pub struct Palette {
     values: HashMap<Pen, Ink>
 }
-
 
 impl Clone for Palette {
     fn clone(&self) -> Self {
         let mut map:HashMap<Pen, Ink> = HashMap::new();
         for (pen, ink) in &self.values{
-            map.insert(pen.clone(), ink.clone());
+            map.insert(
+                pen.clone(),
+                ink.clone());
         }
 
         Palette {
@@ -422,7 +407,7 @@ impl Debug for Palette{
 
 impl Default for Palette {
     /// Create a new palette.
-    /// Pen colors are the same than Amsdos ones.
+    /// Pens ink are the same than Amsdos ones.
     fn default() -> Palette {
         let mut p = Palette::new();
         for i in 0..15 {
@@ -452,7 +437,6 @@ where Ink: From<T>, T:Copy
 /// Create a palette with the right inks
 /// Usage
 /// `palette![1, 2, 3]`
-/// XXX do not still work ...
 #[macro_export]
 macro_rules! palette {
     ( $( $x:expr ),* ) => {

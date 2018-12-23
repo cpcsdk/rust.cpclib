@@ -25,6 +25,20 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0
 ";
 
 
+const DATA_FORMAT42_CFG: &str = "
+NbTrack = 40
+NbSide = 1
+
+[Track:0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41]
+SectorSize = 512
+Gap3 = 0x4e
+SectorID = 0xc1,0xc6,0xc2,0xc7,0xc3,0xc8,0xc4,0xc9,0xc5
+sectorIDHead = 0,0,0,0,0,0,0,0,0
+";
+
+
+
+/// Disk format configuration.
 #[derive(Debug)]
 pub struct DiscConfig {
 	/// Number of tracks in the disc
@@ -36,7 +50,10 @@ pub struct DiscConfig {
 }
 
 
+
 impl From<&str> for DiscConfig {
+/// Generates the configuration from a &str. Panic in case of failure.
+/// The format corresponds to cpctools format from Ramlaid/Mortel.
 	fn from(config: &str) -> DiscConfig {
 		let (_,res) = parse_config(config.into()).unwrap();
 		res
@@ -46,6 +63,10 @@ impl From<&str> for DiscConfig {
 impl DiscConfig {
 	pub fn single_side_data_format() -> DiscConfig {
 		DATA_FORMAT_CFG.into()
+	}
+
+	pub fn single_side_data42_format() -> DiscConfig {
+		DATA_FORMAT42_CFG.into()
 	}
 }
 
