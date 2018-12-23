@@ -35,7 +35,7 @@ pub enum Mnemonic {
 
 
 impl fmt::Display for Mnemonic {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             &Mnemonic::Adc=> write!(f, "ADC"),
             &Mnemonic::Add=> write!(f, "ADD"),
@@ -87,7 +87,7 @@ pub enum Token {
 
 
 impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 
         let expr_list_to_string= |exprs: &Vec<Expr>| {
             exprs

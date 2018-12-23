@@ -79,7 +79,7 @@ pub struct PageDefinition {
 
 impl Debug for PageDefinition {
 
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         if self.end.is_some() {
             write!(f, "PageDefinition( bank: {:?}, start: 0x{:x}, end: 0x{:x})", &self.bank, &self.start, self.end().unwrap())
         }

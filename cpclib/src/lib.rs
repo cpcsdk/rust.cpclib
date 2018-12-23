@@ -19,11 +19,11 @@ extern crate bitfield;
 extern crate bitflags;
 #[macro_use]
 extern crate nom;
-extern crate num;
-extern crate memchr;
-extern crate smallvec;
 
-extern crate itertools;
+use memchr;
+
+
+use itertools;
 
 #[cfg(feature = "xfer")]
 extern crate curl;
@@ -36,7 +36,7 @@ extern crate custom_error;
 #[macro_use]
 extern crate arrayref;
 
-extern crate slice_of_array;
+
 
 
 

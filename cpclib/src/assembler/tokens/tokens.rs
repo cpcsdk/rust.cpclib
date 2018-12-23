@@ -222,7 +222,7 @@ impl ListingElement for Token {
 pub type Listing = BaseListing<Token>;
 
 impl fmt::Display for Listing {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 
         for token in self.listing().iter() {
             match token {

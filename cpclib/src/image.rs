@@ -1,4 +1,4 @@
-extern crate image as im;
+use image as im;
 
 use crate::pixels;
 use crate::ga::*;

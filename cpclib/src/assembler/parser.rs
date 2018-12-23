@@ -12,7 +12,7 @@ use crate::assembler::tokens::*;
     }
 
 named! (
-    pub parse_z80_code <CompleteStr, Vec<Token>>,
+    pub parse_z80_code <CompleteStr<'_>, Vec<Token>>,
     do_parse!(
 //        // Skip empty beginning
 //       many0!(parse_empty_line) >>
@@ -44,7 +44,7 @@ named! (
 
 /// For an unknwon reason, the parse_z80_code function fails when there is no comment...
 /// This one is a workaround as still as the other is not fixed
-pub fn parse_z80_str(code: &str) -> Result< (CompleteStr, Vec<Token>), Err<CompleteStr>> {
+pub fn parse_z80_str(code: &str) -> Result< (CompleteStr<'_>, Vec<Token>), Err<CompleteStr<'_>>> {
     let mut tokens = Vec::new();
     let mut rest = None;
     let src = "<str>";
@@ -73,7 +73,7 @@ pub fn parse_z80_str(code: &str) -> Result< (CompleteStr, Vec<Token>), Err<Compl
 
 // TODO find a way to not use the alternative stuff
 named!(
-    pub parse_z80_line<CompleteStr, Vec<Token>>,
+    pub parse_z80_line<CompleteStr<'_>, Vec<Token>>,
         alt_complete!(
             parse_empty_line |
             parse_z80_line_label_only |
@@ -83,7 +83,7 @@ named!(
 
 
 named!(
-    pub parse_empty_line<CompleteStr, Vec<Token>>, do_parse!(
+    pub parse_empty_line<CompleteStr<'_>, Vec<Token>>, do_parse!(
         opt!(line_ending) >>
             space0 >>
             comment: opt!(comment) >>
@@ -102,7 +102,7 @@ named!(
     );
 
 named!(
-    pub parse_z80_line_complete <CompleteStr, Vec<Token>>, do_parse!(
+    pub parse_z80_line_complete <CompleteStr<'_>, Vec<Token>>, do_parse!(
         opt!(line_ending) >>
         label: opt!(parse_label) >>
        // opt!(char!(':')) >> // XXX need to move that
@@ -156,7 +156,7 @@ named!(
  * to labels fallowed by specific commands.
  */
 named!(
-       pub parse_z80_line_label_only <CompleteStr, Vec<Token>>, do_parse!(
+       pub parse_z80_line_label_only <CompleteStr<'_>, Vec<Token>>, do_parse!(
         opt!(line_ending) >>
             label: parse_label >>
 
@@ -200,7 +200,7 @@ named!(
 
 
 named!(
-    parse_include <CompleteStr, Token>, do_parse!(
+    parse_include <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("INCLUDE") >>
         many1!(space) >>
         fname: delimited!(
@@ -216,7 +216,7 @@ named!(
 
 
 named!(
-    parse_token <CompleteStr, Token>,
+    parse_token <CompleteStr<'_>, Token>,
         alt_complete!(
             parse_add_or_adc |
             parse_djnz |
@@ -234,7 +234,7 @@ named!(
 
 
 named!(
-    parse_directive <CompleteStr, Token>,
+    parse_directive <CompleteStr<'_>, Token>,
         alt_complete!(
             parse_assert |
             parse_align |
@@ -249,7 +249,7 @@ named!(
 
 
 named!(
-    pub parse_ld <CompleteStr, Token>, do_parse!(
+    pub parse_ld <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("LD") >>
         space >>
         dst: return_error!(
@@ -282,7 +282,7 @@ named!(
     );
 
 named!(
-    pub parse_res_set <CompleteStr, Token>, do_parse!(
+    pub parse_res_set <CompleteStr<'_>, Token>, do_parse!(
         res_or_set: alt!(
             tag_no_case!("RES") => { |_|Mnemonic::Res} |
             tag_no_case!("SET") => { |_|Mnemonic::Set}
@@ -301,7 +301,7 @@ named!(
 
 
 named!(
-  pub parse_db_or_dw <CompleteStr, Token>, do_parse!(
+  pub parse_db_or_dw <CompleteStr<'_>, Token>, do_parse!(
     is_db: alt!(
         tag_no_case!("DB") => {|_| {true}} |
         tag_no_case!("DW") => {|_| {false}}
@@ -322,7 +322,7 @@ named!(
 
 
 named!(
-    pub parse_djnz<CompleteStr, Token>, do_parse!(
+    pub parse_djnz<CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("DJNZ") >>
         many1!(space) >>
         expr: parse_expr >>
@@ -332,7 +332,7 @@ named!(
 
 
 named!(
-    pub expr_list <CompleteStr, Vec<Expr>>,
+    pub expr_list <CompleteStr<'_>, Vec<Expr>>,
         separated_nonempty_list!(
             do_parse!(tag!(",") >> many0!(space) >> ()),
             expr
@@ -340,7 +340,7 @@ named!(
     );
 
 named!(
-    pub parse_assert <CompleteStr, Token>, do_parse!(
+    pub parse_assert <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("ASSERT") >>
         many1!(space) >>
         expr: return_error!(
@@ -355,7 +355,7 @@ named!(
 
 
 named!(
-    pub parse_align <CompleteStr, Token>, do_parse!(
+    pub parse_align <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("ALIGN") >>
         many1!(space) >>
         expr: return_error!(
@@ -370,7 +370,7 @@ named!(
 
 
 named!(
-    pub parse_protect <CompleteStr, Token>, do_parse!(
+    pub parse_protect <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("PROTECT") >>
         many1!(space) >>
         start: expr >>
@@ -385,14 +385,14 @@ named!(
 );
 
 named!(
-    pub parse_add_or_adc <CompleteStr, Token>, alt_complete!(
+    pub parse_add_or_adc <CompleteStr<'_>, Token>, alt_complete!(
         parse_add_or_adc_complete |
         parse_add_or_adc_shorten
     )
 );
 
 named!(
-    pub parse_add_or_adc_complete <CompleteStr, Token>, do_parse!(
+    pub parse_add_or_adc_complete <CompleteStr<'_>, Token>, do_parse!(
         add_or_adc: alt_complete!(
             value!(Mnemonic::Adc, tag_no_case!("ADC")) |
             value!(Mnemonic::Add, tag_no_case!("ADD"))
@@ -430,7 +430,7 @@ named!(
 
 // TODO Find a way to not duplicate code with complete version
 named!(
-    pub parse_add_or_adc_shorten <CompleteStr, Token>, do_parse!(
+    pub parse_add_or_adc_shorten <CompleteStr<'_>, Token>, do_parse!(
         add_or_adc: alt_complete!(
             value!(Mnemonic::Adc, tag_no_case!("ADC")) |
             value!(Mnemonic::Add, tag_no_case!("ADD"))
@@ -446,7 +446,7 @@ named!(
 
 
 named!(
-    pub parse_push_n_pop <CompleteStr, Token>, do_parse!(
+    pub parse_push_n_pop <CompleteStr<'_>, Token>, do_parse!(
         push_or_pop: alt_complete!(
             value!(Mnemonic::Push, tag_no_case!("PUSH")) |
             value!(Mnemonic::Pop, tag_no_case!("POP"))) >>
@@ -460,7 +460,7 @@ named!(
 
 
 named!(
-    pub parse_ret <CompleteStr, Token>, do_parse!(
+    pub parse_ret <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("RET") >>
         cond: opt!(preceded!(many1!(space), parse_flag_test)) >>
         (
@@ -473,7 +473,7 @@ named!(
 
 
 named!(
-    pub parse_inc_dec<CompleteStr, Token>, do_parse!(
+    pub parse_inc_dec<CompleteStr<'_>, Token>, do_parse!(
         inc_or_dec: alt_complete!(
             value!(Mnemonic::Inc, tag_no_case!("INC") ) |
             value!(Mnemonic::Dec, tag_no_case!("DEC"))) >>
@@ -490,7 +490,7 @@ named!(
 
 
 named!(// TODO manage other out formats
-    pub parse_out<CompleteStr, Token>, do_parse!(
+    pub parse_out<CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("OUT") >>
 
         many1!(space) >>
@@ -519,7 +519,7 @@ named!(// TODO manage other out formats
 
 
 named!(// TODO manage other out formats
-    pub parse_in<CompleteStr, Token>, do_parse!(
+    pub parse_in<CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("IN") >>
 
         many1!(space) >>
@@ -548,7 +548,7 @@ named!(// TODO manage other out formats
 
 
 named!(
-    parse_jp_or_jr <CompleteStr, Token>, do_parse!(
+    parse_jp_or_jr <CompleteStr<'_>, Token>, do_parse!(
         jp_or_jr: alt_complete!(
             value!(Mnemonic::Jp, tag_no_case!("JP")) |
             value!(Mnemonic::Jr, tag_no_case!("JR"))
@@ -570,7 +570,7 @@ named!(
     );
 
 named!(
-    parse_flag_test <CompleteStr, FlagTest>,
+    parse_flag_test <CompleteStr<'_>, FlagTest>,
         alt_complete!(
             value!(FlagTest::NZ, tag_no_case!("NZ")) |
             value!(FlagTest::Z, tag_no_case!("Z"))|
@@ -594,7 +594,7 @@ named!(
 */
 
 named!(
-    parse_register16 <CompleteStr, DataAccess>, do_parse!(
+    parse_register16 <CompleteStr<'_>, DataAccess>, do_parse!(
         reg: alt_complete!(
             tag_no_case!("AF") => { |_| Register16::Af} |
             tag_no_case!("HL") => { |_| Register16::Hl} |
@@ -608,7 +608,7 @@ named!(
 
 
 named!(
-    parse_register8 <CompleteStr, DataAccess>, do_parse!(
+    parse_register8 <CompleteStr<'_>, DataAccess>, do_parse!(
         reg: alt_complete!(
             tag_no_case!("A") => { |_| Register8::A} |
             tag_no_case!("H") => { |_| Register8::H} |
@@ -625,7 +625,7 @@ named!(
 );
 
 named!(
-    parse_indexregister8 <CompleteStr, DataAccess>, do_parse!(
+    parse_indexregister8 <CompleteStr<'_>, DataAccess>, do_parse!(
         reg: alt_complete!(
             tag_no_case!("IXH") => { |_| IndexRegister8::Ixh} |
             tag_no_case!("IXL") => { |_| IndexRegister8::Ixl} |
@@ -638,7 +638,7 @@ named!(
 );
 
 named!(
-    parse_indexregister16 <CompleteStr, DataAccess>, do_parse!(
+    parse_indexregister16 <CompleteStr<'_>, DataAccess>, do_parse!(
         reg: alt_complete!(
             tag_no_case!("IX") => { |_| IndexRegister16::Ix} |
             tag_no_case!("IY") => { |_| IndexRegister16::Iy}
@@ -653,7 +653,7 @@ named!(
 
 /// Parse the use of an indexed register as (IX + 5)
 named!(
-    parse_indexregister_with_index <CompleteStr, DataAccess>, do_parse!(
+    parse_indexregister_with_index <CompleteStr<'_>, DataAccess>, do_parse!(
             tag!("(") >>
             many0!(space) >>
 
@@ -679,7 +679,7 @@ named!(
 
 
 named!(
-    parse_register_sp <CompleteStr, DataAccess>, do_parse!(
+    parse_register_sp <CompleteStr<'_>, DataAccess>, do_parse!(
         tag_no_case!("SP") >>
         (DataAccess::Register16(Register16::Sp))
         )
@@ -687,7 +687,7 @@ named!(
 
 /// Parse an address access `(expression)`
 named!(
-    pub parse_address <CompleteStr, DataAccess>,
+    pub parse_address <CompleteStr<'_>, DataAccess>,
     do_parse!(
         tag!("(") >>
         address: expr >>
@@ -702,7 +702,7 @@ named!(
 
 /// Parse (R16)
 named!(
-    pub parse_reg_address <CompleteStr, DataAccess>,
+    pub parse_reg_address <CompleteStr<'_>, DataAccess>,
     do_parse!(
         tag!("(") >>
         many0!(space) >>
@@ -719,7 +719,7 @@ named!(
 
 /// Parse (HL)
 named!(
-    pub parse_hl_address<CompleteStr, DataAccess>,
+    pub parse_hl_address<CompleteStr<'_>, DataAccess>,
     do_parse!(
         tag!("(") >>
         many0!(space) >>
@@ -739,7 +739,7 @@ named!(
 
 /// Parse and expression and returns it inside a DataAccession::Expression
 named!(
-    pub parse_expr <CompleteStr, DataAccess>,
+    pub parse_expr <CompleteStr<'_>, DataAccess>,
     do_parse!(
         expr: expr >>
         (
@@ -751,7 +751,7 @@ named!(
 
 
 named!(
-    pub parse_org <CompleteStr, Token>, do_parse!(
+    pub parse_org <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("ORG") >>
         space >>
         val: expr >>
@@ -761,7 +761,7 @@ named!(
 
 
 named!(
-    pub parse_defs <CompleteStr, Token>, do_parse!(
+    pub parse_defs <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("DEFS") >>
         space >>
         val: expr >>
@@ -770,7 +770,7 @@ named!(
     );
 
 named!(
-  pub parse_opcode_no_arg <CompleteStr, Token>,
+  pub parse_opcode_no_arg <CompleteStr<'_>, Token>,
     do_parse!(
     res:alt_complete!(
         tag_no_case!("DI") => { |_| Mnemonic::Di } |
@@ -788,7 +788,7 @@ named!(
 
 
 named!(
-    pub parse_value <CompleteStr, Expr>, do_parse!(
+    pub parse_value <CompleteStr<'_>, Expr>, do_parse!(
         val: alt_complete!(hex_u16 | dec_u16) >>
         (Expr::Value(val as i32))
         )
@@ -797,7 +797,7 @@ named!(
 
     // TODO foribd label with the same name as a register or mnemonic
 named!(
-    pub parse_label <CompleteStr, String>, do_parse!(
+    pub parse_label <CompleteStr<'_>, String>, do_parse!(
         first: one_of!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.") >> // XXX The inclusion of . is probably problematic
         middle: is_a!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.") >>
         (
@@ -810,7 +810,7 @@ named!(
     );
 
 named!(
-    pub hex_u16 <CompleteStr, u16>, do_parse!(
+    pub hex_u16 <CompleteStr<'_>, u16>, do_parse!(
         tag_no_case!( "0x") >>
         val: hex_u16_inner >>
         (val)
@@ -819,7 +819,7 @@ named!(
 
 
 /// Parse a comment that start by `;` and ends at the end of the line.
-named!( comment<CompleteStr, Token>,
+named!( comment<CompleteStr<'_>, Token>,
         map!(
             preceded!(
                 tag!( ";" ),
@@ -830,10 +830,10 @@ named!( comment<CompleteStr, Token>,
 );
 
 // Usefull later for db
-named!(string_between_quotes<CompleteStr, CompleteStr>, delimited!(char!('\"'), is_not!("\""), char!('\"')));
+named!(string_between_quotes<CompleteStr<'_>, CompleteStr<'_>>, delimited!(char!('\"'), is_not!("\""), char!('\"')));
 
 #[inline]
-pub fn dec_u16(input: CompleteStr) -> IResult<CompleteStr, u16> {
+pub fn dec_u16(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
     match is_a!(input, &b"0123456789"[..]) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
@@ -858,7 +858,7 @@ pub fn dec_u16(input: CompleteStr) -> IResult<CompleteStr, u16> {
 }
 
 named!(
-pub bin_u16<CompleteStr, u16>, do_parse!(
+pub bin_u16<CompleteStr<'_>, u16>, do_parse!(
     tag_no_case!("0b") >>
     value: fold_many1!( 
         alt!(
@@ -879,7 +879,7 @@ pub bin_u16<CompleteStr, u16>, do_parse!(
 
 
 #[inline]
-pub fn hex_u16_inner(input: CompleteStr) -> IResult<CompleteStr, u16> {
+pub fn hex_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
     match is_a!(input, &b"0123456789abcdefABCDEF"[..]) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
@@ -918,7 +918,7 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 }
 */
 
-pub fn parse_str(code: CompleteStr) -> Vec<Token> {
+pub fn parse_str(code: CompleteStr<'_>) -> Vec<Token> {
     match parse_z80_code(code) {
         Err(e) => panic!("{:?}", e),
         Ok((_, parsed)) => {
@@ -938,7 +938,7 @@ pub fn parse_str(code: CompleteStr) -> Vec<Token> {
 
 // XXX Code greatly inspired from https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs
 
-named!(parens< CompleteStr, Expr >, delimited!(
+named!(parens< CompleteStr<'_>, Expr >, delimited!(
     delimited!(opt!(multispace), tag!("("), opt!(multispace)),
     map!(map!(expr, Box::new), Expr::Paren),
     delimited!(opt!(multispace), tag!(")"), opt!(multispace))
@@ -946,7 +946,7 @@ named!(parens< CompleteStr, Expr >, delimited!(
 );
 
 //TODO add stuff to manipulate any kind of data (value/label)
-named!(pub factor< CompleteStr, Expr >, alt_complete!(
+named!(pub factor< CompleteStr<'_>, Expr >, alt_complete!(
     // Manahge functions
     parse_hi_or_lo
     // manage values
@@ -988,7 +988,7 @@ fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
   })
 }
 
-named!(pub term< CompleteStr, Expr >, do_parse!(
+named!(pub term< CompleteStr<'_>, Expr >, do_parse!(
     initial: factor >>
     remainder: many0!(
            alt_complete!(
@@ -1000,7 +1000,7 @@ named!(pub term< CompleteStr, Expr >, do_parse!(
     (fold_exprs(initial, remainder))
 ));
 
-named!(pub expr< CompleteStr, Expr >, do_parse!(
+named!(pub expr< CompleteStr<'_>, Expr >, do_parse!(
     initial: comp >>
     remainder: many0!(
         alt_complete!(
@@ -1015,7 +1015,7 @@ named!(pub expr< CompleteStr, Expr >, do_parse!(
  )
 );
 
-named!(pub   parse_hi_or_lo <CompleteStr, Expr>, do_parse!(
+named!(pub   parse_hi_or_lo <CompleteStr<'_>, Expr>, do_parse!(
         hi_or_lo: alt_complete!(
             value!(Function::Hi, tag_no_case!("HI")) |
             value!(Function::Lo, tag_no_case!("LO")) 
@@ -1037,7 +1037,7 @@ named!(pub   parse_hi_or_lo <CompleteStr, Expr>, do_parse!(
 
 
 
-named!(pub comp<CompleteStr, Expr>, do_parse!(
+named!(pub comp<CompleteStr<'_>, Expr>, do_parse!(
     initial: term >>
     remainder: many0!(
            alt_complete!(
@@ -1052,7 +1052,7 @@ named!(pub comp<CompleteStr, Expr>, do_parse!(
 
 
 
-pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr>) -> String {
+pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr<'_>>) -> String {
 
     use nom::InputLength;
 

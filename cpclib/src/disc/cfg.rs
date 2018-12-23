@@ -72,7 +72,7 @@ impl DiscConfig {
 
 impl fmt::Display for DiscConfig {
 
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "NbTrack = {}\n", self.nb_tracks)?;
 				write!(f, "NbSide = {}\n", self.nb_sides)?;
 
@@ -101,7 +101,7 @@ impl DiscConfig {
 			1 => [Side::Unspecified].iter(),
 			_ => unreachable!()
 		};
-		let track_iterator = (0..self.nb_tracks);
+		let track_iterator = 0..self.nb_tracks;
 
 		side_iterator.cartesian_product(track_iterator)
 	}
@@ -126,7 +126,7 @@ pub struct TrackGroup {
 
 impl fmt::Display for TrackGroup {
 
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			let side_info = match self.side {
 				Side::SideA => "-A",
 				Side::SideB => "-B",
@@ -262,12 +262,12 @@ impl ExtendedDsk {
 
 
 
-named!(value<CompleteStr, u16>,
+named!(value<CompleteStr<'_>, u16>,
 alt!(hex|dec)
 );
 
 
-named!(list_of_values<CompleteStr, Vec<u16>>,
+named!(list_of_values<CompleteStr<'_>, Vec<u16>>,
 	separated_list!(
 		tag!(","),
 		value
@@ -276,11 +276,11 @@ named!(list_of_values<CompleteStr, Vec<u16>>,
 
 
 
-fn from_hex(input: CompleteStr) -> Result<u16, std::num::ParseIntError> {
+fn from_hex(input: CompleteStr<'_>) -> Result<u16, std::num::ParseIntError> {
   u16::from_str_radix(&input, 16)
 }
 
-fn from_dec(input: CompleteStr) -> Result<u16, std::num::ParseIntError> {
+fn from_dec(input: CompleteStr<'_>) -> Result<u16, std::num::ParseIntError> {
   u16::from_str_radix(&input, 10)
 }
 
@@ -294,7 +294,7 @@ fn is_dec_digit(c: char) -> bool {
 }
 
 
-named!(hex<CompleteStr, u16>,
+named!(hex<CompleteStr<'_>, u16>,
  do_parse!(
 	 tag!("0x") >>
   value: map_res!(
@@ -307,7 +307,7 @@ named!(hex<CompleteStr, u16>,
  )
 );
 
-named!(dec<CompleteStr, u16>,
+named!(dec<CompleteStr<'_>, u16>,
   map_res!(
 	  take_while!(is_dec_digit), 
 	  from_dec
@@ -355,7 +355,7 @@ named_args!(list_of_key<'a>(key: &str)<CompleteStr<'a>, Vec<u16>>,
 
 
 
-named!(empty_line<CompleteStr, ()>,
+named!(empty_line<CompleteStr<'_>, ()>,
  do_parse!(
 	 space0 >>
 	 eol >>
@@ -367,7 +367,7 @@ named!(empty_line<CompleteStr, ()>,
 
 
 
-named!(track_group_sided<CompleteStr, TrackGroup>,
+named!(track_group_sided<CompleteStr<'_>, TrackGroup>,
 do_parse!(
 	
 	side: alt! (
@@ -405,7 +405,7 @@ do_parse!(
 );
 
 
-named!(pub parse_config<CompleteStr, DiscConfig>,
+named!(pub parse_config<CompleteStr<'_>, DiscConfig>,
   do_parse!(
 		many0!(empty_line) >>
 	  nb_tracks: call!(value_of_key, "NbTrack") >>

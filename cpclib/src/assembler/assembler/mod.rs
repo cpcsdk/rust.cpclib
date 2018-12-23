@@ -1,4 +1,4 @@
-extern crate smallvec;
+use smallvec;
 
 use crate::assembler::tokens::*;
 use std::collections::HashMap;

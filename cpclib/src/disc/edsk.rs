@@ -295,7 +295,7 @@ impl TrackInformation {
 		while buffer.len()%256 != 0 {
 			buffer.push(0);
 		}	
-		let added_bytes = buffer.len() - start_size;
+		let _added_bytes = buffer.len() - start_size;
 		// TODO check if the number of added bytes corresponds
 	}
 
@@ -621,7 +621,7 @@ impl TrackInformationList {
 
 	/// Add an empty track and return it. It is up to the caller to properly feed it
 	pub fn add_empty_track(&mut self) -> &mut TrackInformation{
-		let mut track = TrackInformation::default();
+		let track = TrackInformation::default();
 		self.list.push(track);
 		self.list.last_mut().unwrap()
 	}

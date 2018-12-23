@@ -1,4 +1,4 @@
-extern crate image as im;
+use image as im;
 
 pub const MAX_WIDTH_MODE0:u32 = 96*2;
 pub const MAX_WIDTH_MODE1:u32 = 96*4;

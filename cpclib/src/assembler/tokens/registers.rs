@@ -10,7 +10,7 @@ pub enum Register16 {
     Sp
 }
 impl fmt::Display for Register16 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let code = match self {
             &Register16::Af => "AF",
             &Register16::Bc => "BC",
@@ -31,7 +31,7 @@ pub enum IndexRegister16{
 }
 
 impl fmt::Display for IndexRegister16 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::*;
         let code = match self {
             &IndexRegister16::Ix => "IX",
@@ -95,7 +95,7 @@ impl Register8 {
 }
 
 impl fmt::Display for Register8 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::*;
         let code = match self {
             &Register8::A => "A",
@@ -122,7 +122,7 @@ pub enum IndexRegister8 {
 
 
 impl fmt::Display for IndexRegister8 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::*;
         let code = match self {
             &IndexRegister8::Ixh => "IXH",
@@ -159,7 +159,7 @@ pub enum FlagTest {
 }
 
 impl fmt::Display for FlagTest {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let code = match self {
             &FlagTest::NZ => "NZ",
             &FlagTest::Z => "Z",

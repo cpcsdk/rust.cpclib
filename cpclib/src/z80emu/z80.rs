@@ -77,7 +77,7 @@ pub struct Register16 {
 }
 
 impl Debug for Register16 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         unsafe {write!(f, "({:?}, {:?})", &self.high, &self.low)}
     }
 

@@ -1,5 +1,5 @@
 
-extern crate image as im;
+use image as im;
 
 use self::im::Pixel;
 use std::collections::HashMap;
@@ -226,7 +226,7 @@ impl From<String> for Ink {
 
 
 impl Debug for Ink {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let repr = match self.value {
             0=> "BLACK" ,
             1=> "BLUE" ,
@@ -397,7 +397,7 @@ impl Clone for Palette {
 
 
 impl Debug for Palette{
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         for i in 0..16 {
             write!(f, "{} => {:?}\n", i, self.values.get(&Pen::from(i)))?;
         }

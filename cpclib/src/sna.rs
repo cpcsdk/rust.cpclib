@@ -1,4 +1,4 @@
-extern crate bitsets;
+use bitsets;
 
 use std::io;
 use std::io::prelude::*;
@@ -583,7 +583,7 @@ pub enum FlagValue {
 }
 
 impl fmt::Display for FlagValue{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             &FlagValue::Byte(ref val) => {
                 write!(f, "0x{:x}", val)

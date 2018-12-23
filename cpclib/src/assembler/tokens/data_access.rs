@@ -27,7 +27,7 @@ pub enum DataAccess {
 
 
 impl fmt::Display for DataAccess {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             &DataAccess::IndexRegister16WithIndex(ref reg, ref op,  ref delta) =>
                 write!(f, "({} {} {})", reg, op, delta),

@@ -1,6 +1,6 @@
 // This module manage high level image conversion functions
 
-extern crate image as im;
+use image as im;
 
 use std::path::Path;
 use std::mem::swap;
@@ -83,7 +83,7 @@ pub struct CPCScreenDimension {
 
 impl Debug for CPCScreenDimension{
 
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(
             fmt,
             "CPCScreenDimension {{ horizontalDisplayed: {}, verticalDisplayed: {}, maximumRasterAddress: {}, use_two_banks: {} }}",
@@ -202,11 +202,11 @@ impl DisplayAddress {
         Self::new(page, true, 0)
     }
 
-    pub fn new_standard_from_address(address: u16) -> DisplayAddress {
+    pub fn new_standard_from_address(_address: u16) -> DisplayAddress {
         unimplemented!()
     }
 
-    pub fn new_overscan_from_address(address: u16) -> DisplayAddress {
+    pub fn new_overscan_from_address(_address: u16) -> DisplayAddress {
         unimplemented!()
     }
     /// Return the offset part of the address
@@ -356,9 +356,10 @@ pub enum Output {
 
 impl Debug for Output {
 
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
-            &Output::LinearEncodedSprite{ref data, ref palette, ref byte_width,ref height} => {
+            &Output::LinearEncodedSprite{
+                ref data, ref palette, ref byte_width,ref height} => {
                 writeln!(fmt, "LinearEncodedSprite")
             },
             &Output::LinearEncodedChuncky{ref data, ref palette, ref byte_width,ref height}=> {
