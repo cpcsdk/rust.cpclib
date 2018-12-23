@@ -747,7 +747,7 @@ impl Snapshot {
         let size = data.len();
 
         self.log(format!("Add {} in 0x{:x} (0x{:x} bytes)", fname, address, size));
-        self.add_data(data, address)
+        self.add_data(&data, address)
     }
 
     /// Add the memory content at the required posiiton
@@ -755,8 +755,8 @@ impl Snapshot {
     /// ```
     /// let mut sna = Snapshot::default();
     /// let data = vec![0,2,3,5];
-    /// sna.add_data(data, 0x4000);
-    pub fn add_data(&mut self, data:Vec<u8>, address: usize) -> Result<(), SnapshotError>{
+    /// sna.add_data(&data, 0x4000);
+    pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError>{
 
         if address + data.len() > 0x10000*2 {
             Err(SnapshotError::NotEnougSpaceAvailable)
