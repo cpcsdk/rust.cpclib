@@ -262,10 +262,10 @@ pub mod mode0 {
 
 
     /// Convert a vector of pens into a vector of bytes
-    pub fn pens_to_vec(pens: &Vec<Pen>) -> Vec<u8> {
+    pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
         assert!(pens.len() % 2 == 0);
 
-        let mut res = Vec::new();
+        let mut res = Vec::with_capacity(pens.len());
         for idx in 0..(pens.len()/2) {
             res.push(pens_to_byte(&pens[idx*2+0], &pens[idx*2+1]));
         }
