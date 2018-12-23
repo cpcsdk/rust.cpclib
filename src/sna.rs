@@ -713,10 +713,16 @@ impl Snapshot {
 
 
     /// Save the snapshot V3 on disc
+    #[deprecated]
     pub fn save_sna(&self, fname:&str) -> Result<(), std::io::Error>{
+        self.save(fname)
+    }
+
+    pub fn save(&self, fname:&str) -> Result<(), std::io::Error>{
         let mut buffer = File::create(fname)?;
         self.write(&mut buffer)
     }
+
 
     pub fn write(&self, buffer: &mut File)  -> Result<(), std::io::Error> {
 
