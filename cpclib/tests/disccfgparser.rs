@@ -223,7 +223,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 #[test]
 fn test_data() {
 	// should not panic
-	let data_cfg = cpclib::disc::cfg::DiscConfig::single_side_data_format();
+	let _data_cfg = cpclib::disc::cfg::DiscConfig::single_side_data_format();
 }
 
 #[test]
@@ -252,7 +252,7 @@ fn parse_double_sided_cfg() {
 
 
 			for idx in res.track_idx_iterator() {
-				let track = res.track_information_for_track(idx.0, idx.1)
+				let _track = res.track_information_for_track(idx.0, idx.1)
 							.expect(&format!("Unable to get information for {:?}", idx));
 				println!("{:?}", idx);
 
@@ -284,7 +284,7 @@ fn parse_single_sided_cfg() {
 	println!("{:?}", &parsed);
 	assert!(parsed.is_ok());
 	match parsed {
-		Ok( (next, res) ) => {
+		Ok( (next, _res) ) => {
 			assert!(next.len() == 0);
 		},
 		_ => unreachable!()

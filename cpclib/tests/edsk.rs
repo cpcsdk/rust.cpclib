@@ -78,7 +78,7 @@ mod tests {
 		let tmp_file = "/tmp/tmp.dsk";
 		let dsk1 = cpclib::disc::edsk::ExtendedDsk::open("pirate.dsk").unwrap();
 		dsk1.save(tmp_file);
-		let ds2 = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
+		let _ds2 = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
 
 	}
 }
