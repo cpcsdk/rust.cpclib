@@ -1,5 +1,5 @@
 
-use cpc::xfer::CpcXfer;
+use cpclib::xfer::CpcXfer;
 extern crate rustyline;
 
 use rustyline::error::ReadlineError;

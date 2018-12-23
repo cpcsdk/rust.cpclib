@@ -1,4 +1,3 @@
-extern crate cpc;
 extern crate clap;
 #[macro_use]
 extern crate nom;
@@ -8,6 +7,7 @@ use std::path::Path;
 mod interact;
 mod parser;
 
+use cpclib as cpc;
 
 fn main() -> Result<(), cpc::xfer::XferError> {
     let matches = clap::App::new("CPC xfer to M4")
