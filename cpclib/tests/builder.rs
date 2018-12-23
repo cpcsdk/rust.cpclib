@@ -1,9 +1,9 @@
-extern crate cpc;
+extern crate cpclib;
 
 #[cfg(test)]
 mod test {
-    use cpc::assembler::tokens::*;
-    use cpc::assembler::builder::*;
+    use cpclib::assembler::tokens::*;
+    use cpclib::assembler::builder::*;
 
     #[test]
     pub fn test_push() {

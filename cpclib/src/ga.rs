@@ -132,7 +132,7 @@ impl Ink {
 
     /// Get the value required by the gate array the select the ink
     pub fn gate_array(&self) -> u8 {
-        INKS_GA_VALUES[self.value as usize]
+        INKS_GA_VALUE[self.value as usize]
 
     }
 }

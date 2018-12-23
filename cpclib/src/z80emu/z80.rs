@@ -18,7 +18,6 @@ pub trait HasValue {
     fn get(&self) -> Self::ValueType {
         self.value()
     }
-
     /// Change the stored value
     fn set(&mut self, value:Self::ValueType);
 
@@ -59,7 +58,6 @@ impl HasValue for Register8 {
         self.val = value;
     }
 
-
     fn add(&mut self, value:Self::ValueType) {
         self.val = ((self.val as u16 + value as u16) & 256) as u8;
     }
@@ -71,14 +69,12 @@ impl HasValue for Register8 {
 
 
 
-/// Represents a 16 bits register
+/// Represents a 16 bits register by decomposing it in 2 8 bits registers
 #[derive(Copy, Clone, Default)]
 pub struct Register16 {
     low: Register8,
     high: Register8
 }
-
-
 
 impl Debug for Register16 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -86,7 +82,6 @@ impl Debug for Register16 {
     }
 
 }
-
 
 impl HasValue for Register16 {
     type ValueType=u16;
@@ -121,7 +116,6 @@ impl Register16 {
         &self.high
     }
 
-
     fn low_mut(&mut self) -> &mut Register8 {
         &mut self.low
     }
@@ -129,12 +123,10 @@ impl Register16 {
     fn high_mut(&mut self) -> &mut Register8 {
         &mut self.high
     }
-
-
 }
 
 
-/// Z80 CPU model
+/// Highly simplify z80 model.
 /// TODO Add memory
 #[derive(Default, Debug)]
 pub struct Z80 {
@@ -333,7 +325,8 @@ impl Z80 {
 
 #[cfg(test)]
 mod tests{
-    use crate::z80emu::z80::*;
+    use crate::z80emu::z80::{Z80, Register16, Register8};
+    use crate::z80emu::z80::HasValue;
 
     #[test]
     fn build_z80() {
@@ -413,7 +406,6 @@ mod tests{
         z80.hl_mut().set(0x8000);
         z80.de_mut().set(0xc000);
         z80.a_mut().set(0);
-
 
         let pop_bc = Token::OpCode(Mnemonic::Pop, Some(DataAccess::Register16(Register16::Bc)), None);
         let ld_l_a = Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::L)), Some(DataAccess::Register8(Register8::A)));

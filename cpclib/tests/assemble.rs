@@ -1,4 +1,4 @@
-extern crate cpc;
+extern crate cpclib;
 extern crate nom;
 
 #[macro_use]
@@ -6,10 +6,10 @@ extern crate matches;
 
 #[cfg(test)]
 mod tests {
-    use cpc::assembler::parser::*;
-    use cpc::assembler::tokens::*;
-    use cpc::assembler::assembler::*;
-    use cpc::assembler::tokens::Listing;
+    use cpclib::assembler::parser::*;
+    use cpclib::assembler::tokens::*;
+    use cpclib::assembler::assembler::*;
+    use cpclib::assembler::tokens::Listing;
 
     use std::str::FromStr;
 

@@ -1,4 +1,4 @@
-extern crate cpc;
+extern crate cpclib;
 extern crate nom;
 
 #[macro_use]
@@ -6,8 +6,8 @@ extern crate matches;
 
 #[cfg(test)]
 mod tests {
-    use cpc::assembler::parser::*;
-    use cpc::assembler::tokens::*;
+    use cpclib::assembler::parser::*;
+    use cpclib::assembler::tokens::*;
     use nom::types::{CompleteStr, CompleteByteSlice};
     use nom::{ErrorKind, IResult, line_ending, space};
 

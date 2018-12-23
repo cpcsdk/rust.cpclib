@@ -1,6 +1,6 @@
 
 
-extern crate cpc;
+extern crate cpclib;
 
 #[cfg(test)]
 #[macro_use] extern crate pretty_assertions;
@@ -223,12 +223,12 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 #[test]
 fn test_data() {
 	// should not panic
-	let data_cfg = cpc::disc::cfg::DiscConfig::single_side_data_format();
+	let data_cfg = cpclib::disc::cfg::DiscConfig::single_side_data_format();
 }
 
 #[test]
 fn parse_double_sided_cfg() {
-	let parsed = cpc::disc::cfg::parse_config(DOUBLE_SIDED.into());
+	let parsed = cpclib::disc::cfg::parse_config(DOUBLE_SIDED.into());
 	assert!(parsed.is_ok());
 	match parsed {
 		Ok( (next, res) ) => {
@@ -241,12 +241,12 @@ fn parse_double_sided_cfg() {
 
 			assert!(
 				res.track_information_for_track(
-					&cpc::disc::edsk::Side::SideA, 
+					&cpclib::disc::edsk::Side::SideA, 
 					0
 				).is_some());
 			assert!(
 				res.track_information_for_track(
-					&cpc::disc::edsk::Side::SideA, 
+					&cpclib::disc::edsk::Side::SideA, 
 					200
 				).is_none());
 
@@ -257,7 +257,7 @@ fn parse_double_sided_cfg() {
 				println!("{:?}", idx);
 
 			}
-			let edsk = cpc::disc::builder::build_disc_from_cfg(&res);
+			let edsk = cpclib::disc::builder::build_disc_from_cfg(&res);
 			let generated = edsk.to_cfg();
 
 			// Verify if we have the same content of tracks ids
@@ -280,7 +280,7 @@ fn parse_double_sided_cfg() {
 
 #[test]
 fn parse_single_sided_cfg() {
-	let parsed = cpc::disc::cfg::parse_config(SINGLE_SIDED.into());
+	let parsed = cpclib::disc::cfg::parse_config(SINGLE_SIDED.into());
 	println!("{:?}", &parsed);
 	assert!(parsed.is_ok());
 	match parsed {

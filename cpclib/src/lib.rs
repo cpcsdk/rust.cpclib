@@ -76,5 +76,6 @@ pub mod xfer;
 
 
 
-// Some reexport
+// Some reexports
 pub use crate::ga::{Ink, Palette, Pen};
+pub use crate::disc::edsk::ExtendedDsk;
