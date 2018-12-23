@@ -474,7 +474,7 @@ impl FromStr for SnapshotFlag {
 
         if s.contains(":") {
 
-            let elems = s.split(":").collect::<Vec<_>>();
+            let elems = s.split(':').collect::<Vec<_>>();
             let s = elems[0];
             let idx = match elems[1].parse::<usize>() {
                 Ok(idx) => idx,
@@ -584,14 +584,14 @@ pub enum FlagValue {
 
 impl fmt::Display for FlagValue{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            &FlagValue::Byte(ref val) => {
+        match *self {
+            FlagValue::Byte(ref val) => {
                 write!(f, "0x{:x}", val)
             },
-            &FlagValue::Word(ref val) => {
+            FlagValue::Word(ref val) => {
                 write!(f, "0x{:x}", val)
             }
-            &FlagValue::Array(ref array) => {
+            FlagValue::Array(ref array) => {
                 write!(f, "[")
                     .and_then(|_x|{
                         write!(f, "{:?}",
@@ -634,7 +634,7 @@ impl SnapshotChunk {
         let mut size = self.size();
         let mut array = [0, 0, 0, 0];
 
-        for i in 0..4 {
+        for i in 0..array.len() {
             array[i] = (size % 256) as u8;
             size = size / 256;
         }
@@ -703,8 +703,9 @@ impl Snapshot {
 
         let mut f = File::open(filename).expect("file not found");
 
-        f.read_exact(&mut sna.header);
-        f.read_exact(&mut sna.memory);
+        f.read_exact(&mut sna.header).expect("Unable to read snapshot header");
+        f.read_exact(&mut sna.memory).expect("Unable to read snapshot memory");
+        eprintln!("[Warning] Current sna reader does not take care of chuncks");
 
         // TODO manage chuncks
         sna
@@ -727,9 +728,9 @@ impl Snapshot {
 
         // Save the chucks
         for chunck in self.chuncks.iter() {
-           buffer.write_all(chunck.code());
-           buffer.write_all(&chunck.size_as_array());
-           buffer.write_all(chunck.data());
+           buffer.write_all(chunck.code())?;
+           buffer.write_all(&chunck.size_as_array())?;
+           buffer.write_all(chunck.data())?;
         }
 
         //TODO add the chuncks
@@ -771,7 +772,7 @@ impl Snapshot {
                 if self.memory_already_written.test(current_pos) {
                     eprintln!("[WARNING] Replace memory in 0x{:x}", current_pos);
                 }
-                self.memory[current_pos] = byte.clone();
+                self.memory[current_pos] = *byte;
                 self.memory_already_written.set(current_pos);
             }
 
@@ -821,7 +822,7 @@ impl Snapshot {
                     return FlagValue::Byte(self.header[offset]);
                 },
                 2 => {
-                    return FlagValue::Word(self.header[offset+1] as u16 *256 + self.header[offset] as u16)
+                    return FlagValue::Word( u16::from(self.header[offset+1])*256 + u16::from(self.header[offset]))
                 },
                 _ => panic!()
             };
@@ -831,8 +832,8 @@ impl Snapshot {
             // Here we treat the case where we read an array
             let mut vals:Vec<FlagValue> = Vec::new();
             for idx in 0..flag.nb_elems() { // By construction, >1
-                let mut flag2 = flag.clone();
-                flag2.set_indice(idx);
+                let mut flag2 = *flag;
+                flag2.set_indice(idx).unwrap();
                 vals.push(self.get_value(&flag2));
             }
             return FlagValue::Array(vals);
@@ -840,7 +841,7 @@ impl Snapshot {
     }
 
     pub fn print_info(&self) {
-        for flag in SnapshotFlag::enumerate().into_iter() {
+        for flag in SnapshotFlag::enumerate().iter() {
             println!("{:?} => {}", &flag, &self.get_value(flag));
         }
     }
