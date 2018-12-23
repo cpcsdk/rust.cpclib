@@ -1,0 +1,10 @@
+`cpclib` is a library that aims at helping to develop Amstrad CPC demos.
+Maybe it could be used for other `z80` platform.
+None of the functionalities are 100% functional. I have only implemented the subset I need.
+
+It is more or less able to:
+ - assemble z80 source code. Only interesting for auto-generated code, not for handcrafted one.
+ - create `.sna` files. Do not yet handle chuncks.
+ - convert images to CPC format. Usable for standard resolutions/modes
+ - create DSK. Far from being finished.
+ - communicate with cpcwifi board. Only reset and run file at the moment
