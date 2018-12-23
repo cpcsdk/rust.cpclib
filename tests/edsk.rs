@@ -36,7 +36,7 @@ mod tests {
 
 	#[test]
 	fn open_singel_side_edsk() {
-		let dsk = cpclib::disc::edsk::ExtendedDsk::open("pirate.dsk").unwrap();
+		let dsk = cpclib::disc::edsk::ExtendedDsk::open("./tests/dsk/pirate.dsk").unwrap();
 		test_single_dsk(&dsk);
 
 		let tmp_file = "/tmp/tmp.dsk";
@@ -62,7 +62,7 @@ mod tests {
 
 	#[test]
 	fn open_double_side_edsk() {
-		let dsk = cpclib::disc::edsk::ExtendedDsk::open("bf2sides.dsk").unwrap();
+		let dsk = cpclib::disc::edsk::ExtendedDsk::open("./tests/dsk/bf2sides.dsk").unwrap();
 		test_double_sided_bf_edsk(&dsk);
 
 		let tmp_file = "/tmp/tmp.dsk";
@@ -76,7 +76,7 @@ mod tests {
 	#[test]
 	fn save_edsk() {
 		let tmp_file = "/tmp/tmp.dsk";
-		let dsk1 = cpclib::disc::edsk::ExtendedDsk::open("pirate.dsk").unwrap();
+		let dsk1 = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/pirate.dsk").unwrap();
 		dsk1.save(tmp_file);
 		let _ds2 = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
 
