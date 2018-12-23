@@ -6,6 +6,9 @@ edition = "2018"
 license = "MIT"
 description = "Set of tools and libraries to ease demomaking on the Amstrad CPC platform. WIP"
 
+repository = "https://github.com/cpcsdk/rust.cpclib"
+readme = "Readme.mkd"
+
 [dependencies]
 num="0.1.42"
 vecmath = "0.3.1"
