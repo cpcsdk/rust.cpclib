@@ -918,11 +918,12 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 }
 */
 
-pub fn parse_str(code: CompleteStr<'_>) -> Vec<Token> {
-    match parse_z80_code(code) {
-        Err(e) => panic!("{:?}", e),
+/// Produce the stream of tokens. In case of error, return an explanatory string
+pub fn parse_str(code: &str) -> Result<Vec<Token>, String> {
+    match parse_z80_str(code) {
+        Err(e) => Err(format!("Error while assembling: {:?}", e)),
         Ok((_, parsed)) => {
-            parsed
+            Ok(parsed)
         }
     }
 }

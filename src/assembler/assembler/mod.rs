@@ -163,7 +163,7 @@ impl Default for Env {
     fn default() -> Env
     {
         Env{
-            startadr: Some(0),
+            startadr: None,
             outputadr: 0,
             codeadr: 0,
             maxptr: 0xffff,
@@ -196,6 +196,11 @@ impl Env {
             mem.push(self.mem[0][pos]); // XXX probably buggy later
         }
         mem
+    }
+
+    /// Returns the stream of bytes produces
+    pub fn produced_bytes(&self) -> Vec<u8> {
+        self.memory(self.startadr.unwrap() as _, self.outputadr - self.startadr.unwrap())
     }
 
 
@@ -253,7 +258,7 @@ impl Env {
     }
 }
 
-pub fn visit_tokens(tokens: & Vec<Token>) -> Result<Env, String> {
+pub fn visit_tokens(tokens: &[Token]) -> Result<Env, String> {
 
     let mut env = Env::default();
 
@@ -408,8 +413,8 @@ fn visit_org(address: &Expr, env: &mut Env) -> Result<(), String>{
     env.codeadr = adr as usize;
 
     // Specify start address at first use
-    if env.startadr.is_none() && env.outputadr == 0 {
-        env.startadr = Some(adr as usize);
+    if env.startadr.is_none() {
+        env.startadr = Some(env.outputadr as usize);
     }
 
     Ok(())
@@ -1250,5 +1255,18 @@ mod test {
         assert_eq!(env.symbols().value(&"hello".into()), 0x4000.into());
     }
 
+
+	#[test]
+	fn test_read_bytes() {
+        let tokens = vec![
+            Token::Org(0x100.into()),
+            Token::Db(vec![1.into(), 2.into()]),
+            Token::Db(vec![3.into(), 4.into()]),
+        ];
+
+        let env = visit_tokens(&tokens).unwrap();
+        let bytes = env.memory(0x100, 4);
+        assert_eq!(bytes, vec![1, 2, 3, 4]);
+	}
 
 }
