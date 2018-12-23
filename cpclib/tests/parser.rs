@@ -1,5 +1,5 @@
-extern crate cpclib;
-extern crate nom;
+
+
 
 #[macro_use]
 extern crate matches;
@@ -36,7 +36,7 @@ mod tests {
 
 
 
-    fn get_val<T>(res: IResult<CompleteStr, T>) -> T {
+    fn get_val<T>(res: IResult<CompleteStr<'_>, T>) -> T {
         match res {
             Err(e) => panic!("{:?}", e),
             Ok( (_, val) )=> {
@@ -46,7 +46,7 @@ mod tests {
     }
 
 
-    fn is_error<T>(res: IResult<CompleteStr, T>) -> bool {
+    fn is_error<T>(res: IResult<CompleteStr<'_>, T>) -> bool {
         match res {
             Err(_e) => true,
             Ok( (_,_)) => false

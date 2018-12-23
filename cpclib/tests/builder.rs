@@ -1,4 +1,4 @@
-extern crate cpclib;
+
 
 #[cfg(test)]
 mod test {
