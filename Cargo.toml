@@ -1,6 +1,6 @@
 [package]
 name = "cpclib"
-version = "0.2.2-beta"
+version = "0.2.3-beta"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -8,6 +8,8 @@ description = "Set of tools and libraries to ease demomaking on the Amstrad CPC 
 
 repository = "https://github.com/cpcsdk/rust.cpclib"
 readme = "Readme.mkd"
+keywords = ["amstrad", "demo", "z80", "dsk" ,"sna"]
+categories = ["command-line-utilities", "development-tools", "emulators"]
 
 [dependencies]
 num="0.1.42"
