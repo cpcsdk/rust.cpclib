@@ -1,3 +1,4 @@
+// TryFrom is used in the assembler stuff
 #![feature(try_from)] 
 
 //! cpclib aims at providing tools that help cross-development for the Amstrad CPC.
