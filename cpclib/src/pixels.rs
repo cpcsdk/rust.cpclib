@@ -194,7 +194,7 @@ pub mod mode0 {
     /// TODO rewrite using BitMapping and factorizing code
     pub fn byte_to_pens(b:u8) -> (Pen, Pen) {
         let mut pen0 = 0;
-        for pos in [7, 3, 5, 1].into_iter().rev() {
+        for pos in [7, 3, 5, 1].iter().rev() {
             pen0 *= 2;
             if (b & 1<<*pos as u8) != 0 {
                 pen0 += 1;

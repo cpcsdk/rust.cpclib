@@ -106,16 +106,9 @@ pub const INKS_GA_VALUE : [u8;27] = [
         ];
 
 
-#[derive(Clone, Copy, Ord, PartialOrd, Eq, Hash)]
+#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct Ink {
     value: u8
-}
-
-impl PartialEq for Ink {
-    /// Two inks are equal only if they share the same code number
-    fn eq(&self, other: &Ink) -> bool {
-        self.value == other.value
-    }
 }
 
 impl Ink {
@@ -161,7 +154,7 @@ impl From<im::Rgb<u8>> for Ink {
     /// The closest color is provided if the provided color is not strictly corresponding to a CPC color.
     fn from(color: im::Rgb<u8>) -> Self {
         // Not strict comparison
-        let distances = INKS_RGB_VALUES.into_iter().map(|color_ink|{
+        let distances = INKS_RGB_VALUES.iter().map(|color_ink|{
               (color_ink[0] as i32 - color[0] as i32).pow(2)
             + (color_ink[1] as i32 - color[1] as i32).pow(2)
             + (color_ink[2] as i32 - color[2] as i32).pow(2)

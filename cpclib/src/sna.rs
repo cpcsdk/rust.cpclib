@@ -720,16 +720,16 @@ impl Snapshot {
     pub fn write(&self, buffer: &mut File)  -> Result<(), std::io::Error> {
 
         // Write header and main memory
-        buffer.write(&self.header)?;
-        buffer.write(&self.memory)?;
+        buffer.write_all(&self.header)?;
+        buffer.write_all(&self.memory)?;
 
         // TODO add extra memory ?
 
         // Save the chucks
         for chunck in self.chuncks.iter() {
-           buffer.write(chunck.code());
-           buffer.write(&chunck.size_as_array());
-           buffer.write(chunck.data());
+           buffer.write_all(chunck.code());
+           buffer.write_all(&chunck.size_as_array());
+           buffer.write_all(chunck.data());
         }
 
         //TODO add the chuncks
