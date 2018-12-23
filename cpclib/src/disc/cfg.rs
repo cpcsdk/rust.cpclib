@@ -73,8 +73,8 @@ impl DiscConfig {
 impl fmt::Display for DiscConfig {
 
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NbTrack = {}\n", self.nb_tracks)?;
-				write!(f, "NbSide = {}\n", self.nb_sides)?;
+        writeln!(f, "NbTrack = {}", self.nb_tracks)?;
+				writeln!(f, "NbSide = {}", self.nb_sides)?;
 
 				for track_group in self.track_groups.iter() {
 					write!(f,"\n{}", track_group)?;
@@ -135,11 +135,11 @@ impl fmt::Display for TrackGroup {
 			let sector_id = self.sector_id.iter().map(|t|{format!("0x{:x}", t)}).join(",");
 			let sector_id_head = self.sector_id_head.iter().map(|t|{format!("{}", t)}).join(",");
 
-			write!(f, "[Track{}:{}]\n", side_info, tracks_info)?;
-			write!(f, "SectorSize = {}\n", self.sector_size)?;
-			write!(f, "Gap3 = 0x{:x}\n", self.gap3)?;
-			write!(f, "SectorID = {}\n", sector_id)?;
-			write!(f, "SectorIDHead = {}\n", sector_id_head)?;
+			writeln!(f, "[Track{}:{}]", side_info, tracks_info)?;
+			writeln!(f, "SectorSize = {}", self.sector_size)?;
+			writeln!(f, "Gap3 = 0x{:x}", self.gap3)?;
+			writeln!(f, "SectorID = {}", sector_id)?;
+			writeln!(f, "SectorIDHead = {}", sector_id_head)?;
 
 			Ok(())
 		}

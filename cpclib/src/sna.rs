@@ -627,7 +627,7 @@ impl SnapshotChunk {
     }
 
     pub fn size(&self) -> u32 {
-        return 0;
+       self.data.len() as u32
     }
 
     pub fn size_as_array(&self) -> [u8;4] {

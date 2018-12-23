@@ -1056,45 +1056,42 @@ pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr<'_>>) -> Strin
 
     use nom::InputLength;
 
-    let error_string = {
-        let mut error_string;
+    let mut error_string;
 
-        if let ::nom::Err::Failure(::nom::simple_errors::Context::Code(remaining, ErrorKind::Custom(_))) = e {
+    if let ::nom::Err::Failure(::nom::simple_errors::Context::Code(remaining, ErrorKind::Custom(_))) = e {
 
-            let bytes = orig.as_bytes();
-            let complete_size = orig.len();
-            let remaining_size = remaining.input_len();
-            let error_position = complete_size - remaining_size;
-            let line_end = {
-                let mut idx = error_position;
-                while idx < complete_size && bytes[idx] != b'\n' {
-                    idx += 1;
-                }
-                idx
-            };
-            let line_start = {
-                let mut idx = error_position;
-                while idx >0 &&  bytes[idx-1] != b'\n' {
-                    idx -= 1;
-                }
-                idx
-            };
+        let bytes = orig.as_bytes();
+        let complete_size = orig.len();
+        let remaining_size = remaining.input_len();
+        let error_position = complete_size - remaining_size;
+        let line_end = {
+            let mut idx = error_position;
+            while idx < complete_size && bytes[idx] != b'\n' {
+                idx += 1;
+            }
+            idx
+        };
+        let line_start = {
+            let mut idx = error_position;
+            while idx >0 &&  bytes[idx-1] != b'\n' {
+                idx -= 1;
+            }
+            idx
+        };
 
 
-            let line = &orig[line_start..line_end];
-            let line_idx = orig[..(error_position)].bytes().filter(|b| *b == b'\n').count(); // way too slow I guess
-            let column_idx = error_position - line_start;
-            let error_description = "Error because";
-            let empty = iter::repeat(" ").take(column_idx).collect::<String>();
-            error_string = format!("{}:{}:{} {}\n{}\n{}^", "fname", line_idx, column_idx, error_description, line, empty);
-        }
-        else {
-            error_string = String::from("Unknown error");
-        }
-
-        error_string
-    };
+        let line = &orig[line_start..line_end];
+        let line_idx = orig[..(error_position)].bytes().filter(|b| *b == b'\n').count(); // way too slow I guess
+        let column_idx = error_position - line_start;
+        let error_description = "Error because";
+        let empty = iter::repeat(" ").take(column_idx).collect::<String>();
+        error_string = format!("{}:{}:{} {}\n{}\n{}^", "fname", line_idx, column_idx, error_description, line, empty);
+    }
+    else {
+        error_string = String::from("Unknown error");
+    }
 
     error_string
+
 
 }

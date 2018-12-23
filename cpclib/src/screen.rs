@@ -18,9 +18,9 @@ pub struct SimpleMonitor {
     impl SimpleMonitor{
         pub fn new(width: u32, height: u32, mode: u8) -> SimpleMonitor {
             SimpleMonitor {
-                width: width,
-                height: height,
-                mode: mode,
+                width,
+                height,
+                mode,
                 pixels: vec![vec![0u8; width as usize]; height as usize],
                 palette: vec![0 as char; 16],
                 buffer: im::ImageBuffer::new(width, height)

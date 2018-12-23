@@ -3,10 +3,8 @@
 use image as im;
 
 use std::path::Path;
-use std::mem::swap;
 use std::collections::HashSet;
 use itertools::Itertools;
-use std::mem;
 use std::fmt::Debug;
 use bitfield::BitRange;
 

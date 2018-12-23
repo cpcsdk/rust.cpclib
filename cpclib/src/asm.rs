@@ -255,12 +255,12 @@ impl StringCodePage {
 
     pub fn save_code(&self, fname: &str) -> io::Result<()> {
          let mut out = File::create(fname)?;
-         write!(out,"\torg 0x{:x}\n", self.definition.start())?;
+         writeln!(out,"\torg 0x{:x}", self.definition.start())?;
          for instruction in self.code.iter() {
             write!(out,"{}", instruction)?;
          }
          if let Some(end) = self.definition.end() {
-             write!(out,"\tassert $ <= 0x{:x}\n", end)?;
+             writeln!(out,"\tassert $ <= 0x{:x}", end)?;
          }
          Ok(())
     }
@@ -290,7 +290,7 @@ impl StringCodePageContainer {
 
         StringCodePageContainer {
             pages: Vec::new(),
-            possibilities: possibilities
+            possibilities
         }
     }
 

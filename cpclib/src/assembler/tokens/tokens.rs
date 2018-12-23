@@ -234,7 +234,7 @@ impl fmt::Display for Listing {
                 }
             }
             //write!(f, "{} ; {:?} {:?} nops {:?} bytes\n", token, token, token.estimated_duration(), token.number_of_bytes())?;
-            write!(f, "{}\n", token)?;
+            writeln!(f, "{}", token)?;
         }
 
         Ok(())

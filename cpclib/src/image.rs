@@ -529,8 +529,7 @@ impl Sprite {
     /// Returns the byte at the right position and crash if it does not exists
     pub fn get_byte(&self, x: usize, y: usize) -> u8 {
         let line = &self.data[y];
-        let byte = line[x];
-        byte
+        line[x]
     }
 
 

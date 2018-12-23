@@ -24,11 +24,6 @@ extern crate bitflags;
 #[macro_use]
 extern crate nom;
 
-use memchr;
-
-
-use itertools;
-
 #[cfg(feature = "xfer")]
 extern crate curl;
 #[cfg(feature = "xfer")]

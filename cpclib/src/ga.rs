@@ -321,7 +321,7 @@ where i32: From<T>
 impl Pen{
     /// Get the number of the pen
     pub fn number(&self) -> u8 {
-        return self.value;
+        self.value
     }
 
     /// Change the value of the pen in order to not exceed the number of pens available in the
@@ -392,7 +392,7 @@ impl Clone for Palette {
 impl Debug for Palette{
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         for i in 0..16 {
-            write!(f, "{} => {:?}\n", i, self.values.get(&Pen::from(i)))?;
+            write!(f, "{} => {:?}", i, self.values.get(&Pen::from(i)))?;
         }
         Ok(())
     }

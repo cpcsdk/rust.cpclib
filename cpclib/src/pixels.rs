@@ -55,9 +55,7 @@ pub mod mode1 {
         let pen_bit0 : u8 = pen.number() & (1 << 0);
         let pen_bit1 : u8 = (pen.number() & (1 << 1)) >> 1;
 
-        let byte = pen_bit1 * (1<<byte_bit1) + pen_bit0 * (1<<byte_bit0);
-        byte
-
+        pen_bit1 * (1<<byte_bit1) + pen_bit0 * (1<<byte_bit0)
     }
 
     /// Convert the 4 pens in a row (from left to right)
@@ -249,13 +247,10 @@ pub mod mode0 {
         let pen_bit2 : u8 = (pen.number() & (1 << 2)) >> 2;
         let pen_bit3 : u8 = (pen.number() & (1 << 3)) >> 3;
 
-        let byte =
-            pen_bit3 * (1<<byte_bit3) +
-            pen_bit2 * (1<<byte_bit2) +
-            pen_bit1 * (1<<byte_bit1) +
-            pen_bit0 * (1<<byte_bit0);
-
-        byte
+        pen_bit3 * (1<<byte_bit3) +
+        pen_bit2 * (1<<byte_bit2) +
+        pen_bit1 * (1<<byte_bit1) +
+        pen_bit0 * (1<<byte_bit0)
     }
 
 
