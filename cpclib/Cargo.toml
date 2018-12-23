@@ -50,6 +50,7 @@ xferlib = [	"curl", "reqwest", "path-absolutize"]
 xfer = ["clap", "rustyline"]
 snapshot = ["clap", "built", "time", "semver"]
 imgconverter = ["clap", 'notify']
+dskmanager = ["clap"]
 
 [[bin]]
 name = "snapshot"
@@ -66,6 +67,11 @@ name = "imgconverter"
 path = "src/bin/imgconverter.rs"
 #required-features = ["xferlib", "imgconverter"]
 required-features = ["imgconverter"]
+
+[[bin]]
+name = "dskmanager"
+path = "src/bin/dsk_manager.rs"
+required-features = ["dskmanager"]
 
 
 
