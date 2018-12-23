@@ -1,5 +1,4 @@
 extern crate clap;
-extern crate cpc;
 extern crate notify;
 
 use clap::{App, Arg, SubCommand, ArgMatches};
@@ -11,13 +10,15 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 
-use cpc::imageconverter::*;
-use cpc::image::*;
-use cpc::sna::*;
-use cpc::ga::{Pen, Palette};
-use cpc::assembler::parser::parse_z80_str;
-use cpc::assembler::assembler::visit_tokens;
-use cpc::xfer::CpcXfer;
+use cpclib::imageconverter::*;
+use cpclib::image::*;
+use cpclib::sna::*;
+use cpclib::ga::{Pen, Palette};
+use cpclib::assembler::parser::parse_z80_str;
+use cpclib::assembler::assembler::visit_tokens;
+
+#[cfg(feature = "xferlib")]
+use cpclib::xfer::CpcXfer;
 
 
 // Produce the code that display a standard screen
@@ -222,19 +223,23 @@ fn convert(matches: &ArgMatches) {
             sna.save_sna(sna_fname).expect("Unable to save the snapshot");
         }
         else if let Some(sub_m4) = sub_m4 {
-            let mut f = Builder::new()
-                            .suffix(".sna")
-                            .tempfile()
-                            .expect("Unable to create the temporary file");
+            #[cfg(feature = "xferlib")]
+            {
+                let mut f = Builder::new()
+                                .suffix(".sna")
+                                .tempfile()
+                                .expect("Unable to create the temporary file");
 
-            sna.write(f.as_file_mut())
+                sna.write(f.as_file_mut())
                 .expect("Unable to write the sna in the temporary file");
-            let xfer = CpcXfer::new(sub_m4.value_of("CPCM4").unwrap());
 
-            let tmp_file_name = f.path().to_str().unwrap();
-            xfer.upload_and_run(
-                tmp_file_name,
-                None)
+                let xfer = CpcXfer::new(sub_m4.value_of("CPCM4").unwrap());
+
+                let tmp_file_name = f.path().to_str().unwrap();
+                xfer.upload_and_run(
+                    tmp_file_name,
+                    None)
+            }
         }
 
     }
@@ -242,7 +247,7 @@ fn convert(matches: &ArgMatches) {
 
 fn main() {
 
-    let matches = App::new("CPC image conversion tool")
+    let args = App::new("CPC image conversion tool")
                     .version("0.1")
                     .author("Krusty/Benediction")
                     .about("Simple CPC image conversion tool")
@@ -262,23 +267,7 @@ fn main() {
                                     })  
                             )
                     )
-                    .subcommand(
-                        SubCommand::with_name("m4")
-                        .about("Directly send the code on the M4 through a snapshot")
-                        .arg(
-                            Arg::with_name("CPCM4")
-                            .takes_value(true)
-                            .help("Address of the M4")
-                            .required(true)
-                        )
-                        .arg(
-                            Arg::with_name("WATCH")
-                            .takes_value(false)
-                            .help("Monitor the source file modification and restart the conversion and transfer automatically. Picture must ALWAYS be valid.")
-                            .long("watch")
 
-                        )
-                    )
                     .arg(
                         Arg::with_name("MODE")
                             .short("m")
@@ -325,13 +314,37 @@ fn main() {
                                   false => Err(format!("{} does not exists!", source))
                               }
                             })
-                   ).get_matches();
+                   );
+
+    let matches = if cfg!(feature = "xferlib") {
+        args.subcommand(
+                        SubCommand::with_name("m4")
+                        .about("Directly send the code on the M4 through a snapshot")
+                        .arg(
+                            Arg::with_name("CPCM4")
+                            .takes_value(true)
+                            .help("Address of the M4")
+                            .required(true)
+                        )
+                        .arg(
+                            Arg::with_name("WATCH")
+                            .takes_value(false)
+                            .help("Monitor the source file modification and restart the conversion and transfer automatically. Picture must ALWAYS be valid.")
+                            .long("watch")
+
+                        )
+                    )
+    }
+    else {
+        args
+    }
+    .get_matches();
 
 
     convert(&matches);
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
 
-        if sub_m4.is_present("WATCH") {
+        if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
             println!("Watching for file modification...");
             // Create a channel to receive the events.
             let (tx, rx) = channel();

@@ -24,9 +24,9 @@ extern crate bitflags;
 #[macro_use]
 extern crate nom;
 
-#[cfg(feature = "xfer")]
+#[cfg(feature = "xferlib")]
 extern crate curl;
-#[cfg(feature = "xfer")]
+#[cfg(feature = "xferlib")]
 extern crate reqwest;
 
 #[macro_use]
@@ -69,7 +69,7 @@ pub mod sna;
 pub mod disc;
 
 
-#[cfg(feature = "xfer")]
+#[cfg(feature = "xferlib")]
 pub mod xfer;
 
 
