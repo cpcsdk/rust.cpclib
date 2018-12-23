@@ -14,7 +14,7 @@ pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {
 		let mut n=0;
 		while size!=0x80 {
 			size = size >> 1;
-			n=n+1
+			n += 1
 		}
 
 		n as _
@@ -57,10 +57,10 @@ impl Into<u8> for Side {
 
 impl Into<u8> for &Side {
 	fn into(self) -> u8 {
-		match self {
-			&Side::SideA => 0,
-			&Side::SideB => 1,
-			&Side::Unspecified => 0
+		match *self {
+			Side::SideA => 0,
+			Side::SideB => 1,
+			Side::Unspecified => 0
 		}
 	}
 }
@@ -91,7 +91,7 @@ impl DiscInformation {
 			 "EXTENDED CPC DSK File\r\nDisk-Info\r\n".to_ascii_uppercase()
 		);
 
-		let creator_name = String::from_utf8_lossy(&buffer[0x22..0x2f+1]);
+		let creator_name = String::from_utf8_lossy(&buffer[0x22..=0x2f]);
 		let number_of_tracks = buffer[0x30];
 		let number_of_sides = buffer[0x31];
 		let track_size_table = &buffer[0x34..(0x34+number_of_tracks*number_of_sides+1)as usize];
@@ -163,12 +163,11 @@ impl DiscInformation {
 	}
 
 	fn track_length_at_idx(&self, idx: usize) -> u16 {
-		256 * (self.track_size_table[idx] as u16)
+		256 * u16::from(self.track_size_table[idx])
 	}
 
 	pub fn total_tracks_lengths(&self) -> usize {
 		(0..self.number_of_distinct_tracks())
-			.into_iter()
 			.map(|idx: usize|{
 				self.track_length_at_idx(idx) as usize
 			})
@@ -423,7 +422,7 @@ impl SectorInformation {
 			sector_size: buffer[0x03],
 			fdc_status_register_1: buffer[0x04],
 			fdc_status_register_2: buffer[0x05],
-			data_length: buffer[0x06] as u16 + (buffer[0x07] as u16 *  256)
+			data_length: u16::from(buffer[0x06]) + (u16::from(buffer[0x07]) *  256)
 		};
 		info
 	}
@@ -454,6 +453,10 @@ impl SectorInformationList {
 	/// Return the number of sectors
 	pub fn len(&self) -> usize {
 		self.sectors.len()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
 	}
 
 	/// Add a sector
@@ -517,8 +520,8 @@ impl SectorInformationList {
 /// Fill the information list with sectors corresponding to the provided arguments
 	pub fn fill_with(
 		&mut self, 
-		ids: &Vec<u8>, 
-		heads: &Vec<u8>, 
+		ids: &[u8], 
+		heads: &[u8], 
 		track_number: u8, 
 		sector_size: u8) {
 		assert_eq!(ids.len(), heads.len());
@@ -570,6 +573,10 @@ impl Sector  {
 	/// Number of bytes stored in the sector
 	pub fn len(&self) -> u16 {
 		self.values.len() as u16
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
 	}
 
 	pub fn data_sum(&self) -> usize {

@@ -1,6 +1,9 @@
 // TryFrom is used in the assembler stuff
 #![feature(try_from)] 
 
+// Notes for later when clippy will work:
+// https://rust-lang.github.io/rust-clippy/master/index.html#identity_op must be deactivated
+
 //! cpclib aims at providing tools that help cross-development for the Amstrad CPC.
 //! It is mainly focused on the creation of demos for the Amstrad CPC but could be used for games or tools.
 //! Warning: none of the proposed features is fully fonctional or complete ! But hey should be correct.
