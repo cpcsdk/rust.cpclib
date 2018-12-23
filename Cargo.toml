@@ -1,9 +1,9 @@
 [package]
 name = "cpclib"
-version = "0.2.2"
+version = "0.2.2-beta"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
-licence = "MIT"
+license = "MIT"
 description = "Set of tools and libraries to ease demomaking on the Amstrad CPC platform. WIP"
 
 [dependencies]
