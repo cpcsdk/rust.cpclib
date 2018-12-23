@@ -1,4 +1,4 @@
-extern crate cpc;
+
 extern crate bitsets;
 
 use std::io;
@@ -9,7 +9,7 @@ use std::path::Path;
 use std::io::BufReader;
 use std::fmt;
 
-use cpc::sna::*;
+use cpclib::sna::*;
 
 extern crate clap;
 use clap::{Arg, App, SubCommand};
