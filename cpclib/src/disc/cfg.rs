@@ -85,15 +85,14 @@ impl fmt::Display for DiscConfig {
 }
 
 impl DiscConfig {
-	pub fn track_information_for_track(&self, side: &Side, track: u8) -> Option<&TrackGroup> {
+	pub fn track_information_for_track(&self, side: Side, track: u8) -> Option<&TrackGroup> {
 		self.track_groups.iter()
 			.find(|info| {
-				&info.side == side &&
-				info.tracks.iter().find(|&val|{*val == track}).is_some()
+				info.side == side &&
+				info.tracks.iter().any(|&val|{val == track})
 			}
 	  )
 	}
-
 
 	pub fn track_idx_iterator(&self) -> impl Iterator<Item=(&Side, u8)> {
 		let side_iterator = match self.nb_sides {
@@ -218,7 +217,7 @@ impl TrackInformationList {
 impl TrackInformation {
 	pub fn to_cfg(&self) -> TrackGroup {
 		let tracks = vec![self.track_number];
-		let side:Side = self.side_number.clone().into();
+		let side:Side = self.side_number.into();
 		let sector_size = convert_fdc_sector_size_to_real_sector_size(self.sector_size); 
 		let gap3 = self.gap3_length;
 

@@ -40,7 +40,6 @@ extern crate arrayref;
 
 
 
-
 /// Screen emulation. Unknown state ;)
 pub mod screen;
 

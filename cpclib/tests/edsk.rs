@@ -5,7 +5,7 @@ mod tests {
 
 
 	fn test_single_dsk(dsk:&cpclib::disc::edsk::ExtendedDsk) {
-		let track = dsk.get_track_information(&cpclib::disc::edsk::Side::SideA, 0).unwrap();
+		let track = dsk.get_track_information(cpclib::disc::edsk::Side::SideA, 0).unwrap();
 		assert_eq!(track.number_of_sectors(), 9);
 
 		for (sector_idx, sum) in &[
@@ -30,7 +30,7 @@ mod tests {
 
 		assert_eq!(track.data_sum(), 484121);
 		assert_eq!(
-			dsk.get_track_information(&cpclib::disc::edsk::Side::SideA, 41).unwrap().data_sum(),
+			dsk.get_track_information(cpclib::disc::edsk::Side::SideA, 41).unwrap().data_sum(),
 			329484);
 	}
 

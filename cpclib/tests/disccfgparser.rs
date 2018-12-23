@@ -241,18 +241,18 @@ fn parse_double_sided_cfg() {
 
 			assert!(
 				res.track_information_for_track(
-					&cpclib::disc::edsk::Side::SideA, 
+					cpclib::disc::edsk::Side::SideA, 
 					0
 				).is_some());
 			assert!(
 				res.track_information_for_track(
-					&cpclib::disc::edsk::Side::SideA, 
+					cpclib::disc::edsk::Side::SideA, 
 					200
 				).is_none());
 
 
 			for idx in res.track_idx_iterator() {
-				let _track = res.track_information_for_track(idx.0, idx.1)
+				let _track = res.track_information_for_track(*idx.0, idx.1)
 							.expect(&format!("Unable to get information for {:?}", idx));
 				println!("{:?}", idx);
 

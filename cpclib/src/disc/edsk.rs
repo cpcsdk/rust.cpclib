@@ -724,29 +724,29 @@ impl ExtendedDsk {
 	}
 
 
-	pub fn get_track_information(&self, side: &Side, track: u8) -> Option<&TrackInformation> {
+	pub fn get_track_information(&self, side: Side, track: u8) -> Option<&TrackInformation> {
 		let idx = self.get_track_idx(side, track);
 		self.track_list.list.get(idx)
 	}
 
 
-	pub fn get_track_information_mut(&mut self, side: &Side, track: u8) -> Option<&mut TrackInformation> {
+	pub fn get_track_information_mut(&mut self, side: Side, track: u8) -> Option<&mut TrackInformation> {
 		let idx = self.get_track_idx(side, track);
 		self.track_list.list.get_mut(idx)
 	}
 
 
-	fn get_track_idx(&self, side: &Side, track: u8) -> usize {
+	fn get_track_idx(&self, side: Side, track: u8) -> usize {
 		if self.disc_information_bloc.is_double_sided() {
 			let side = match side {
-				&Side::SideA => 0,
-				&Side::SideB => 1,
-				&Side::Unspecified => panic!("You must specify a side for a double sided disc.")
+				Side::SideA => 0,
+				Side::SideB => 1,
+				Side::Unspecified => panic!("You must specify a side for a double sided disc.")
 			};
 			track as usize * 2 + side
 		}
 		else {
-			if let &Side::SideB = side {
+			if let Side::SideB = side {
 				panic!("You cannot select side B in a single sided disc");
 			}
 			track as usize
