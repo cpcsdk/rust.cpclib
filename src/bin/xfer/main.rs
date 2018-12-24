@@ -77,7 +77,7 @@ fn main() -> Result<(), cpc::xfer::XferError> {
 
     // TODO manage the retreival of env var
     let hostname = matches.value_of("CPCADDR").unwrap();
-    let mut xfer = cpc::xfer::CpcXfer::new(hostname);
+    let xfer = cpc::xfer::CpcXfer::new(hostname);
 
     if matches.is_present("-r") {
         xfer.reset_m4();
@@ -93,20 +93,20 @@ fn main() -> Result<(), cpc::xfer::XferError> {
         let fname = x_opt.value_of("fname").unwrap();
         xfer.run(fname); /*.expect("Unable to launch file on CPC.");*/
     }
-    else if let Some(ls_opt) = matches.subcommand_matches("--ls") {
+    else if let Some(_ls_opt) = matches.subcommand_matches("--ls") {
         let content = xfer.current_folder_content()?;
         for file in content.files() {
             println!("{:?}", file);
         }
     }
-    else if let Some(pwd_opt) = matches.subcommand_matches("--pwd") {
+    else if let Some(_pwd_opt) = matches.subcommand_matches("--pwd") {
         let cwd = xfer.current_working_directory()?;
         println!("{}", cwd);
     }
     else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
-        let cwd = xfer.cd(cd_opt.value_of("directory").unwrap()).expect("Unable to move in the requested folder.");
+        let _cwd = xfer.cd(cd_opt.value_of("directory").unwrap()).expect("Unable to move in the requested folder.");
     }
-    else if let Some(interactive_opt) = matches.subcommand_matches("--interactive") {
+    else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
         interact::start(xfer);
     }
 

@@ -183,7 +183,7 @@ fn main() {
     // Read the tokens
     if matches.is_present("getToken") {
         for token in matches.values_of("getToken").unwrap() {
-            let mut token = SnapshotFlag::from_str(token).unwrap();
+            let token = SnapshotFlag::from_str(token).unwrap();
             println!("{:?} => {}", &token, sna.get_value(&token));
         }
         return;

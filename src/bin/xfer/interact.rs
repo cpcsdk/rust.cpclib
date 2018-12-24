@@ -32,7 +32,7 @@ pub fn treat_line(xfer: &CpcXfer, line: &str) {
            },
 
 
-           XferCommand::Ls(path) => {
+           XferCommand::Ls(_path) => {
                 let content = xfer.current_folder_content();
                 if content.is_err() {
                        eprintln!("{}", content.err().unwrap());
