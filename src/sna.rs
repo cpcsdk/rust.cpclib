@@ -36,6 +36,12 @@ use std::fmt;
 
 */
 
+#[derive(Copy, Clone)]
+pub enum SnapshotVersion {
+    V1,
+    V2,
+    V3
+}
 
 
 /// Encode a flag of the snaphot
@@ -715,28 +721,35 @@ impl Snapshot {
     /// Save the snapshot V3 on disc
     #[deprecated]
     pub fn save_sna(&self, fname:&str) -> Result<(), std::io::Error>{
-        self.save(fname)
+        self.save(fname, SnapshotVersion::V2)
     }
 
-    pub fn save(&self, fname:&str) -> Result<(), std::io::Error>{
+    pub fn save(&self, fname:&str, version: SnapshotVersion) -> Result<(), std::io::Error>{
         let mut buffer = File::create(fname)?;
-        self.write(&mut buffer)
+        self.write(&mut buffer, version)
     }
 
 
-    pub fn write(&self, buffer: &mut File)  -> Result<(), std::io::Error> {
+    /// We are currently only able to build a V2 version.
+    pub fn write(&self, buffer: &mut File, version: SnapshotVersion)  -> Result<(), std::io::Error> {
 
+        // TODO properly check the difference between V2 and V3
         // Write header and main memory
-        buffer.write_all(&self.header)?;
+         buffer.write_all(&self.header)?; // buggy vor something else than V2 of course
         buffer.write_all(&self.memory)?;
 
         // TODO add extra memory ?
 
-        // Save the chucks
-        for chunck in self.chuncks.iter() {
-           buffer.write_all(chunck.code())?;
-           buffer.write_all(&chunck.size_as_array())?;
-           buffer.write_all(chunck.data())?;
+        // Save the chuncks in the V3 version
+        match version {
+            SnapshotVersion::V3 => {
+                for chunck in self.chuncks.iter() {
+                    buffer.write_all(chunck.code())?;
+                    buffer.write_all(&chunck.size_as_array())?;
+                    buffer.write_all(chunck.data())?;
+                }
+            },
+            _ => ()
         }
 
         //TODO add the chuncks

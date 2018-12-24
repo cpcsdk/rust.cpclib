@@ -104,7 +104,7 @@ impl AmsdosFileType {
 }
 
 
-
+/// Bridget the the CPC Wifi card
 pub struct CpcXfer {
     hostname: String,
 }
@@ -218,6 +218,14 @@ impl CpcXfer {
         easy.perform().unwrap();
     }
 
+    /// Directly sends the SNA to the M4
+    pub fn upload_and_run_sna(&self, sna: &crate::sna::Snapshot){
+        let file = tempfile::NamedTempFile::new().expect("Unable to build a temporary file");
+        let path = file.into_temp_path();
+        let path = path.to_str().unwrap();
+        sna.save(path, crate::sna::SnapshotVersion::V2);
+        self.upload_and_run(path,None);
+    }
 
 	pub fn upload_and_run<P>(&self, path: P, header: Option<(AmsdosFileType, u16, u16)>)
 		where P:AsRef<Path> {
