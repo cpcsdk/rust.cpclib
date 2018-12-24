@@ -191,16 +191,16 @@ fn convert(matches: &ArgMatches) {
             Output::CPCMemoryStandard(memory, pal) => {
                 palette = Some(pal);
                 code = Some(assemble(standard_display_code(output_mode)));
-                sna.add_data(memory.to_vec(), 0xc000)
+                sna.add_data(&memory.to_vec(), 0xc000)
                     .expect("Unable to add the image in the snapshot");
             },
 
             Output::CPCMemoryOverscan(memory1, memory2, pal) => {
                 palette = Some(pal);
                 code = Some(assemble(fullscreen_display_code(output_mode, 96/2, palette.as_ref().unwrap())));
-                sna.add_data(memory1.to_vec(), 0x8000)
+                sna.add_data(&memory1.to_vec(), 0x8000)
                     .expect("Unable to add the image in the snapshot");
-                sna.add_data(memory2.to_vec(), 0xc000)
+                sna.add_data(&memory2.to_vec(), 0xc000)
                     .expect("Unable to add the image in the snapshot");
             }
 
@@ -208,7 +208,7 @@ fn convert(matches: &ArgMatches) {
         };
 
 
-        sna.add_data(code.unwrap(), 0x4000);
+        sna.add_data(&code.unwrap(), 0x4000);
         sna.set_value(SnapshotFlag::Z80_PC, 0x4000).unwrap();
         sna.set_value(SnapshotFlag::GA_PAL(Some(16)), 0x54).unwrap();
         for i in 0..16 {

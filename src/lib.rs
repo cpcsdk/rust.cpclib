@@ -69,7 +69,7 @@ pub mod sna;
 pub mod disc;
 
 
-#[cfg(feature = "xferlib")]
+#[cfg(any(feature = "xferlib", feature = "xfer"))]
 pub mod xfer;
 
 

@@ -65,7 +65,7 @@ required-features = ["snapshot"]
 [[bin]]
 name = "xfer"
 path = "src/bin/xfer/main.rs"
-required-features = ["xfer", "xferlib"]
+required-features = ["xfer"]
 
 [[bin]]
 name = "imgconverter"
