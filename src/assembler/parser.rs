@@ -776,6 +776,7 @@ named!(
         tag_no_case!("DI") => { |_| Mnemonic::Di } |
         tag_no_case!("EI") => { |_| Mnemonic::Ei } |
         tag_no_case!("EXX") => { |_| Mnemonic::Exx } |
+        tag_no_case!("HALT") => {|_| Mnemonic::Halt } |
         tag_no_case!("LDI") => { |_| Mnemonic::Ldi } |
         tag_no_case!("LDD") => { |_| Mnemonic::Ldd } |
         tag_no_case!("NOPS2") => { |_| Mnemonic::Nops2 } |
