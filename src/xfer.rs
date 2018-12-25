@@ -183,11 +183,11 @@ impl CpcXfer {
         if m4_path.len() >255 {
             panic!("{} path is too long (should be limited to 255 chars)", m4_path);
         }
-        let file_contents = fs::read(local_fname).expect("Unable to read PC file");
+        let _file_contents = fs::read(local_fname).expect("Unable to read PC file");
 
 
         let local_fname = match header {
-            Some(header) => {
+            Some(_header) => {
                 unimplemented!();
                 // Need to build header and compute checksum
                 // Need to inject header
