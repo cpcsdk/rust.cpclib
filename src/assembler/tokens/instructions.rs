@@ -23,6 +23,8 @@ pub enum Mnemonic {
     Ld,
     Ldd,
     Ldi,
+    Lddr,
+    Ldir,
     Nop,
     Nops2, // Fake instruction that generate a breakpoint on winape
     Out,
@@ -53,6 +55,8 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Ld => write!(f, "LD"),
             Mnemonic::Ldi => write!(f, "LDI"),
             Mnemonic::Ldd => write!(f, "LDD"),
+            Mnemonic::Ldir => write!(f, "LDIR"),
+            Mnemonic::Lddr => write!(f, "LDDR"),
             Mnemonic::Nop => write!(f, "NOP"),
             Mnemonic::Nops2 => write!(f, "DB 0xed, 0xff ; Winape Breakpoint"),
             Mnemonic::Out => write!(f, "OUT"),
