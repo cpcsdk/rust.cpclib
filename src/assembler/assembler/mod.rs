@@ -388,6 +388,8 @@ fn visit_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<Da
 /// assemble
 pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<DataAccess> , sym: &mut SymbolsTable) -> Result<Bytes, String> {
     match mnemonic{
+        Mnemonic::And | Mnemonic::Or | Mnemonic::Xor 
+            => assemble_logical_operator(mnemonic, arg1.as_ref().unwrap(), sym),
         &Mnemonic::Add | &Mnemonic::Adc
             => assemble_add_or_adc(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), sym),
         &Mnemonic::Dec | &Mnemonic::Inc
@@ -921,6 +923,59 @@ fn assemble_push(arg1: &DataAccess) -> Result<Bytes, String>{
 }
 
 
+fn assemble_logical_operator(mnemonic: &Mnemonic, arg1: &DataAccess, sym : &SymbolsTable)-> Result<Bytes, String>{
+    let mut bytes = Bytes::new();
+
+    let memory_code = || {
+        match mnemonic {
+            Mnemonic::And => 0xA6,
+            Mnemonic::Or =>  0xB6,
+            Mnemonic::Xor=>  0xAE,
+            _ => unreachable!()
+        }
+    };
+
+    match *arg1 {
+        DataAccess::Register8(ref reg) => {
+            let base = match mnemonic {
+                Mnemonic::And => 0b10100000,
+                Mnemonic::Or =>  0b10110000,
+                Mnemonic::Xor => 0b10101000,
+                _ => unreachable!()
+            };
+            bytes.push(base + register8_to_code(reg));
+        },
+
+        DataAccess::Expression(ref exp) => {
+            let base = match mnemonic {
+                Mnemonic::And => 0xE6,
+                Mnemonic::Or =>  0xF6,
+                Mnemonic::Xor => 0xAE,
+                _ => unreachable!()
+            };
+            let value = exp.resolve(sym)? & 0xff;
+            bytes.push(base);
+            bytes.push(value as u8);
+        },
+
+        DataAccess::MemoryRegister16(Register16::Hl) => {
+            bytes.push(memory_code());
+        },
+
+        DataAccess::IndexRegister16WithIndex(ref reg, ref oper, ref exp) => {
+
+            let value = exp.resolve(sym)? & 0xff;
+            assert_eq!(oper, &Oper::Add); // XXX todo thing if it is not the case
+            bytes.push(indexed_register16_to_code(reg));
+            bytes.push(memory_code());
+            bytes.push(value as u8);
+        }
+        _ => unreachable!()
+    }
+
+    Ok(bytes)
+}
+
 fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, String>{
     let mut bytes = Bytes::new();
     let is_add = match mnemonic {
@@ -1278,6 +1333,31 @@ mod test {
     }
 
 
+    #[test]
+    pub fn test_assemble_logical_operator() {
+        let operators = [
+            Mnemonic::And, 
+            Mnemonic::Or, 
+            Mnemonic::Xor
+        ];
+        let operands = [
+            DataAccess::Register8(Register8::A),
+            DataAccess::Expression(0.into()),
+            DataAccess::MemoryRegister16(Register16::Hl),
+            DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, Oper::Add, 2.into())
+        ];
+
+        for operator in operators.iter() {
+            for operand in operands.iter() {
+                let token = Token::OpCode(
+                    operator.clone(), 
+                    Some(operand.clone()), 
+                    None
+                );
+                visit_tokens(&[token]);
+            }
+        }
+    }
 
     #[test]
     pub fn test_count() {
