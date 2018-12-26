@@ -46,6 +46,7 @@ pub enum SnapshotVersion {
 
 /// Encode a flag of the snaphot
 #[derive(PartialEq, Debug, Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum SnapshotFlag {
     Z80_AF,
     Z80_F,
