@@ -241,6 +241,7 @@ named!(
 named!(
     parse_token <CompleteStr<'_>, Token>,
         alt_complete!(
+            parse_logical_operator |
             parse_add_or_adc |
             parse_djnz |
             parse_ld |
@@ -404,6 +405,29 @@ named!(
         (
             Token::Protect(start, end)
         )
+    )
+);
+
+/// TODO treat all the cases
+named!(
+    pub parse_logical_operator<CompleteStr<'_>, Token>, do_parse!(
+        operator: alt_complete!(
+            value!(Mnemonic::And, tag_no_case!("AND")) |
+            value!(Mnemonic::Or, tag_no_case!("Or")) |
+            value!(Mnemonic::Xor, tag_no_case!("Xor")) 
+        ) >>
+
+        space1 >>
+
+        register8: parse_register8 >>
+
+        (
+            Token::OpCode(
+                operator,
+                Some(register8),
+                None
+            )
+        )          
     )
 );
 

@@ -521,6 +521,27 @@ mod tests {
         assert_eq!(tokens.len(), 1);
     }
 
+
+    #[test]
+    fn test_logical_operators() {
+
+        let operators = [
+            "xor", "and", "or"
+        ];
+        let registers = [
+            "a", "b", "c", "d", "e", "h", "l"
+        ];
+
+        for op in operators.iter() {
+            for reg in registers.iter() {
+                let code = format!(" {} {}", op,reg);
+                let line1 = CompleteStr(&code);
+                let tokens = get_val(parse_z80_line(line1));
+                assert_eq!(tokens.len(), 1);
+            }
+        }
+    }
+
     #[test]
     fn test_ret() {
         let line1 = CompleteStr("   RET");

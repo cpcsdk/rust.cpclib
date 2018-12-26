@@ -10,6 +10,7 @@ use crate::assembler::parser::*;
 pub enum Mnemonic {
     Adc,
     Add,
+    And,
     Dec,
     Di,
     Djnz,
@@ -27,21 +28,24 @@ pub enum Mnemonic {
     Ldir,
     Nop,
     Nops2, // Fake instruction that generate a breakpoint on winape
+    Or,
     Out,
     Push,
     Pop,
     Rra,
     Res,
     Ret,
-    Set
+    Set,
+    Xor
 }
 
 
 impl fmt::Display for Mnemonic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
+        match self {
             Mnemonic::Adc=> write!(f, "ADC"),
             Mnemonic::Add=> write!(f, "ADD"),
+            Mnemonic::And => write!(f, "AND"),
             Mnemonic::Dec => write!(f, "DEC"),
             Mnemonic::Di => write!(f, "DI"),
             Mnemonic::Djnz => write!(f, "DJNZ"),
@@ -60,12 +64,14 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Nop => write!(f, "NOP"),
             Mnemonic::Nops2 => write!(f, "DB 0xed, 0xff ; Winape Breakpoint"),
             Mnemonic::Out => write!(f, "OUT"),
+            Mnemonic::Or => write!(f, "OR"),
             Mnemonic::Push => write!(f, "PUSH"),
             Mnemonic::Pop => write!(f, "POP"),
             Mnemonic::Rra => write!(f, "RRA"),
             Mnemonic::Res => write!(f, "RES"),
             Mnemonic::Ret => write!(f, "RET"),
             Mnemonic::Set => write!(f, "SET"),
+            Mnemonic::Xor => write!(f, "XOR"),
         }
     }
 }
