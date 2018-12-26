@@ -223,6 +223,28 @@ impl Token {
         }
     }
 
+    /// Unroll the tokens when in a repetition loop
+    /// TODO return an iterator in order to not produce the vector each time
+    pub fn unroll(&self, sym: & SymbolsTable) -> Option<Result<Vec<&Token>, String>> {
+        match self {
+            Token::Repeat(ref expr, ref tokens) => {
+                match expr.resolve(sym) {
+                    Ok(count) => {
+                        let mut res =  Vec::with_capacity(count as usize * tokens.len());
+                        for i in 0..count {
+                            // TODO add a specific token to control the loop counter (and change the return type)
+                            for t in tokens.iter() {
+                                res.push(t);
+                            }
+                        }
+                        Some(Ok(res))
+                    },
+                    Err(msg) => Some(Err(msg))
+                }
+            },
+            _ => None
+        }
+    }
 
 
     /// Dummy version that assemble without taking into account the context

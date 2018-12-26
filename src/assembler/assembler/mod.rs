@@ -229,7 +229,7 @@ impl Env {
             panic!("Unable to compute size now");
         }
         else {
-            (self.outputadr - self.codeadr) as u16
+            (self.outputadr - self.startadr.unwrap()) as u16
         }
     }
 
@@ -279,6 +279,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
         &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => visit_opcode(&mnemonic, &arg1, &arg2, env),
         &Token::Comment(_) => Ok(()), // Nothing to do for a comment
         &Token::Label(ref label) => visit_label(label, env),
+        &Token::Repeat(_, _) => visit_repeat(token, env),
         _ => panic!("Not treated {:?}", token)
     }
 }
@@ -301,6 +302,21 @@ fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), String>{
     }
     Ok(())
 }
+
+/// When visiting a repetition, we unroll the loop and stream the tokens
+pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), String> 
+{
+    let tokens = rept.unroll(env.symbols()).unwrap()?;
+
+    for token in tokens.iter() {
+        visit_token(token, env)?;
+    }
+
+    Ok(())
+}
+
+
+
 
 pub fn assemble_db_or_dw(token: &Token, sym: &SymbolsTable) -> Result<Bytes, String> {
     let mut bytes = Bytes::new();
@@ -352,9 +368,8 @@ pub fn assemble_align(expr: &Expr, sym: &SymbolsTable) -> Result<Bytes, String> 
     println!("Expression {}, current {}, hole {}", expression, current, hole);
     // and return it
     Ok(bytes)
-
-
 }
+
 
 
 /// Assemble the opcode and inject in the environement
@@ -403,6 +418,7 @@ pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Op
             => assemble_res_or_set(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ret
             => assemble_ret(arg1),
+        _ => Err(format!("Unable to assembler opcode {:?}", mnemonic))
     }
 }
 
@@ -1227,6 +1243,40 @@ mod test {
             &DataAccess::Expression(Expr::Value(0x1234)),
             &SymbolsTable::default()
         ).unwrap();
+    }
+
+
+    #[test]
+    pub fn test_repeat() {
+        let tokens = vec![
+            Token::Org(0.into()),
+            Token::Repeat(
+                10.into(),
+                vec![Token::OpCode(Mnemonic::Nop, None, None)])
+        ];
+
+        let count = visit_tokens(&tokens).unwrap().size();
+        assert_eq!(count, 10);
+    }
+
+    #[test]
+    pub fn test_count() {
+        let tokens = vec![
+            Token::Org(0.into()),
+            Token::OpCode(Mnemonic::Nop, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None)
+        ];
+
+        let count = visit_tokens(&tokens).unwrap().size();
+        assert_eq!(count, 10);
     }
 
     #[test]
