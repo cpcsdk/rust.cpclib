@@ -571,6 +571,21 @@ mod tests {
 
 
     #[test]
+    fn test_lddr() {
+        let line1 = CompleteStr(" LDDR");
+        let tokens = get_val(parse_z80_line(line1));
+        assert_eq!(tokens.len(), 1);
+    }
+
+#[test]
+    fn test_ldir() {
+        let line1 = CompleteStr(" ldir");
+        let tokens = get_val(parse_z80_line(line1));
+        assert_eq!(tokens.len(), 1);
+    }
+
+
+    #[test]
     fn test_in() {
 
         for reg in ["A", "B", "C", "D", "E", "H", "L"].iter() {
