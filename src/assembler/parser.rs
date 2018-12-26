@@ -1,4 +1,4 @@
-use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending};
+use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending,eol};
 use nom::types::{CompleteStr};
 use nom::{multispace};
 use nom::{InputLength, InputIter};
@@ -19,14 +19,12 @@ named! (
 //        opt!(line_ending) >>
 
         // Get optional code
-        tmp:many0!(
+        tmp: many0!(
                 parse_z80_line
         ) >>
 
 //        // Skip empty end
 //        many0!(parse_empty_line) >>
-
-        eof!() >>
 
         ({
             let mut res: Vec<Token> = Vec::new();
@@ -81,6 +79,31 @@ named!(
         )
     );
 
+
+named!(
+    pub parse_repeat<CompleteStr<'_>, Token>, do_parse!(
+        space1 >>
+        tag_no_case!("REPEAT") >>
+        space1 >>
+        count: expr >>
+        inner: opt!(parse_z80_code) >> 
+        multispace >>
+        tag_no_case!("ENDREPEAT") >>
+        space0 >>
+
+        (
+            Token::Repeat(
+                count, 
+                if inner.is_some() {
+                    inner.unwrap()
+                }
+                else {
+                    Vec::new()
+                }
+            )
+        )
+    )
+);
 
 named!(
     pub parse_empty_line<CompleteStr<'_>, Vec<Token>>, do_parse!(
@@ -943,29 +966,40 @@ pub fn parse_str(code: &str) -> Result<Vec<Token>, String> {
 // XXX Code greatly inspired from https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs
 
 named!(parens< CompleteStr<'_>, Expr >, delimited!(
-    delimited!(opt!(multispace), tag!("("), opt!(multispace)),
+    delimited!(space0, tag!("("), space0),
     map!(map!(expr, Box::new), Expr::Paren),
-    delimited!(opt!(multispace), tag!(")"), opt!(multispace))
+    delimited!(space0, tag!(")"), space0)
   )
 );
 
 //TODO add stuff to manipulate any kind of data (value/label)
 named!(pub factor< CompleteStr<'_>, Expr >, alt_complete!(
-    // Manahge functions
+    // Manage functions
     parse_hi_or_lo
     // manage values
     | map!(
-        delimited!(opt!(multispace), alt_complete!(hex_u16 | dec_u16 | bin_u16), opt!(multispace)),
+        delimited!(
+            space0, 
+            alt_complete!(hex_u16 | dec_u16 | bin_u16), 
+            space0
+        ),
         |d:u16| {Expr::Value(d as i32)}
         )
     // manage $
    | map!(
-        delimited!(opt!(multispace), tag!("$"), opt!(multispace)),
+        delimited!(
+            space0, 
+            tag!("$"), 
+            space0
+        ),
         |_x|{Expr::Label(String::from("$"))}
     )
     // manage labels
    | map!(
-        delimited!(opt!(multispace), parse_label , opt!(multispace)),
+        delimited!(
+            space0, 
+            parse_label , 
+            space0),
         Expr::Label
     )
   | parens

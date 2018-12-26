@@ -87,6 +87,9 @@ pub enum Token {
     Org(Expr),
     Protect(Expr, Expr),
 
+    /// Duplicate the token stream
+    Repeat(Expr, Vec<Token>),
+
     MacroCall(String) // TODO add parameters
 }
 
@@ -103,43 +106,49 @@ impl fmt::Display for Token {
                 .join(",")
         };
 
-        match self {
-            &Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2)) if &Mnemonic::Out == mne
+        match *self {
+            Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2)) if &Mnemonic::Out == mne
                 => write!(f, "{} (C), {}", mne, arg2),
 
-            &Token::Align(ref expr)
+            Token::Align(ref expr)
                 => write!(f, "ALIGN {}", expr),
-            &Token::Assert(ref expr)
+            Token::Assert(ref expr)
                 => write!(f, "ASSERT {}", expr),
-            &Token::Label(ref string)
+            Token::Label(ref string)
                 => write!(f, "{}", string),
-            &Token::Comment(ref string)
+            Token::Comment(ref string)
                 => write!(f, " ; {}", string),
-            &Token::OpCode(ref mne, None, None)
+            Token::OpCode(ref mne, None, None)
                 => write!(f, "{}", mne),
-            &Token::OpCode(ref mne, Some(ref arg1), None)
+            Token::OpCode(ref mne, Some(ref arg1), None)
                 => write!(f, "{} {}", mne, arg1),
 
-            &Token::OpCode(ref mne, None, Some(ref arg2)) // JP/JR without flags
-                => write!(f, "{} {}", mne, arg2),
-            &Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2))
+            Token::OpCode(ref mne, None, Some(ref arg2)) // JP/JR without flags
+               => write!(f, "{} {}", mne, arg2),
+            Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2))
                 => write!(f, "{} {}, {}", mne, arg1, arg2),
-            &Token::Org(ref expr)
+            Token::Org(ref expr)
                 => write!(f, "ORG {}", expr),
-            &Token::Defs(ref expr)
+            Token::Defs(ref expr)
                 => write!(f, "DEFS {}", expr),
-            &Token::Db(ref exprs)
+            Token::Db(ref exprs)
                 => write!(f, "DB {}", expr_list_to_string(exprs)),
-            &Token::Dw(ref exprs)
+            Token::Dw(ref exprs)
                 => write!(f, "DW {}", expr_list_to_string(exprs)),
-            &Token::Equ(ref name, ref expr)
+            Token::Equ(ref name, ref expr)
                 => write!(f, "{} EQU {}", name, expr),
-            &Token::Include(ref fname)
+            Token::Include(ref fname)
                 => write!(f, "INCLUDE \"{}\"", fname),
-            &Token::Protect(ref exp1, ref exp2)
+            Token::Protect(ref exp1, ref exp2)
                 => write!(f, "PROTECT {}, {}", exp1, exp2),
-
-            &Token::MacroCall(ref name)
+            Token::Repeat(ref exp, ref code) => {
+                write!(f, "REPEAT {}\n", exp)?;
+                for token in code.iter() {
+                    write!(f, "\t{}\n", token)?;
+                }
+                write!(f, "\tENDREPEAT")
+            },
+            Token::MacroCall(ref name)
                 => write!(f, "{}", name)
 
         }

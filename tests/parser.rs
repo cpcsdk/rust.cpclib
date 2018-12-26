@@ -583,7 +583,27 @@ mod tests {
         let tokens = get_val(parse_z80_line(line1));
         assert_eq!(tokens.len(), 1);
     }
+    #[test]
+    fn test_empty_repeat() {
+        let z80 = "  repeat 5
+            endrepeat
+            ";
+        let res = parse_repeat(CompleteStr(z80));
+        assert!(res.is_ok());
+    }
 
+
+
+    #[test]
+    fn test_repeat() {
+        let z80 = "  repeat 5
+                db 0
+                db 1
+            endrepeat
+            ";
+        let res = parse_repeat(CompleteStr(z80));
+        assert!(res.is_ok());
+    }
 
     #[test]
     fn test_in() {
