@@ -1260,6 +1260,26 @@ mod test {
     }
 
     #[test]
+    pub fn test_double_repeat() {
+        let tokens = vec![
+            Token::Org(0.into()),
+            Token::Repeat(
+                10.into(),
+                vec![
+                    Token::Repeat(
+                        10.into(),
+                        vec![Token::OpCode(Mnemonic::Nop, None, None)])
+                ]
+            )
+        ];
+
+        let count = visit_tokens(&tokens).unwrap().size();
+        assert_eq!(count, 100);
+    }
+
+
+
+    #[test]
     pub fn test_count() {
         let tokens = vec![
             Token::Org(0.into()),
