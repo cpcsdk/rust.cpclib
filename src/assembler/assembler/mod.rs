@@ -88,10 +88,12 @@ impl SymbolsTable {
         }
     }
 
+    /// Update `$` value
     pub fn set_current_address(&mut self, address: u16) {
         self.map.insert(String::from("$"), Symbol::Integer(address as _));
     }
 
+    /// Set the given symbol to $ value
     pub fn set_symbol_to_current_address(&mut self, label: &String) -> Result<(), String> {
 
         self.current_address()
@@ -100,6 +102,14 @@ impl SymbolsTable {
                 ()
                 }
             )
+    }
+
+    /// Set the given symbol to the given value
+    pub fn set_symbol_to_value(&mut self, label: &String, value: i32) {
+        self.map.insert(
+            label.clone(), 
+            Symbol::Integer(value as _)
+        );
     }
 
     /// TODO return the symbol instead of the int
@@ -279,8 +289,22 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
         &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => visit_opcode(&mnemonic, &arg1, &arg2, env),
         &Token::Comment(_) => Ok(()), // Nothing to do for a comment
         &Token::Label(ref label) => visit_label(label, env),
+        &Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         &Token::Repeat(_, _) => visit_repeat(token, env),
         _ => panic!("Not treated {:?}", token)
+    }
+}
+
+
+fn visit_equ(label: &String, exp: &Expr, env: &mut Env) -> Result<(), String> {
+    if env.symbols().contains_symbol(label) {
+        Err(format!("Symbol \"{}\" already present in symbols table", label))
+    }
+    else {
+        let value = exp.resolve(env.symbols())?;
+        env.symbols_mut()
+            .set_symbol_to_value(label, value) ; // XXX set to the expression instead ?
+        Ok(())
     }
 }
 
