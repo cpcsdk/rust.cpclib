@@ -261,13 +261,17 @@ pub mod mode0 {
     }
 
 
-    /// Convert a vector of pens into a vector of bytes
+    /// Convert a vector of pens into a vector of bytes.
+    /// In case of an odd number of pens, the last one is forced to be 0
     pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
-        assert!(pens.len() % 2 == 0);
-
         let mut res = Vec::with_capacity(pens.len());
         for idx in 0..(pens.len()/2) {
             res.push(pens_to_byte(&pens[idx*2+0], &pens[idx*2+1]));
+        }
+
+        // last pen is 0 if needed
+        if pens.len() % 2 == 1 {
+            res.push(pens_to_byte(&pens[pens.len()-1], &0.into()));
         }
 
         res
