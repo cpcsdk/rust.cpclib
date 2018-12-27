@@ -649,6 +649,91 @@ mod tests {
         assert!(res.is_ok());
     }
 
+
+    #[test]
+    fn test_repeat2() {
+        let z80="\trepeat screen_height
+		; Content for a single line runs on 128 nops
+		pop hl ; 0 1
+		xor a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 2 3
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 4 5
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 6 7
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 8 9
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 10 11
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 12 13
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 14 15
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+    endr";
+        let res = parse_repeat(CompleteStr(z80));
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().0.len(), 0);
+    }
+
+
+    #[test]
+    fn test_repeat3() {
+        let z80="\trepeat screen_height
+		; Content for a single line runs on 128 nops
+		pop hl ; 0 1
+		xor a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 2 3
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 4 5
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 6 7
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 8 9
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 10 11
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 12 13
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+		pop hl ; 14 15
+		inc a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+    endr";
+        let res = parse_z80_code(CompleteStr(z80));
+        println!("{:?}", res);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().0.len(), 0);
+    }
+
     #[test]
     fn test_in() {
 

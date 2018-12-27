@@ -74,6 +74,7 @@ named!(
     pub parse_z80_line<CompleteStr<'_>, Vec<Token>>,
         alt_complete!(
             parse_empty_line |
+            parse_repeat => {|repeat| vec![repeat]} |
             parse_z80_line_label_only |
             parse_z80_line_complete
         )
@@ -82,9 +83,11 @@ named!(
 
 named!(
     pub parse_repeat<CompleteStr<'_>, Token>, do_parse!(
-        space1 >>
+        opt!(multispace) >>
         alt!(
-            tag_no_case!("REPEAT") | tag_no_case!("REPT") | tag_no_case!("REP")
+            tag_no_case!("REPEAT") | 
+            tag_no_case!("REPT") | 
+            tag_no_case!("REP")
          ) >>
         space1 >>
         count: expr >>
