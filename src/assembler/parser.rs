@@ -1003,7 +1003,7 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 
 /// Produce the stream of tokens. In case of error, return an explanatory string
 pub fn parse_str(code: &str) -> Result<Vec<Token>, String> {
-    match parse_z80_str(code) {
+    match parse_z80_code(code.into()) {
         Err(e) => Err(format!("Error while assembling: {:?}", e)),
         Ok((_, parsed)) => {
             Ok(parsed)

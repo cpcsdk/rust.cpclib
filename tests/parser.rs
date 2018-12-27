@@ -734,6 +734,25 @@ mod tests {
         assert_eq!(res.unwrap().0.len(), 0);
     }
 
+
+    #[test]
+    fn test_repeat4() {
+        let z80="
+        defs 10
+
+        repeat screen_height
+		; Content for a single line runs on 128 nops
+		pop hl ; 0 1
+		xor a : out (c), a : out (c), l
+		inc a : out (c), a : out (c), h
+
+    endr";
+        let res = parse_z80_code(CompleteStr(z80));
+        println!("{:?}", res);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().0.len(), 0);
+    }
+
     #[test]
     fn test_in() {
 
