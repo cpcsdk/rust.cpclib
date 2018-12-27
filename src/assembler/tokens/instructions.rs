@@ -78,6 +78,14 @@ impl fmt::Display for Mnemonic {
     }
 }
 
+/// Stable ticker serves to count nops with the assembler !
+#[derive(Debug, Clone, PartialEq)]
+pub enum StableTickerAction {
+    /// Start of the ticker with its name that will contains its duration
+    Start(String),
+    Stop
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Label(String),
@@ -98,6 +106,7 @@ pub enum Token {
     /// Duplicate the token stream
     Repeat(Expr, Vec<Token>),
 
+    StableTicker(StableTickerAction),
     MacroCall(String) // TODO add parameters
 }
 
@@ -155,6 +164,17 @@ impl fmt::Display for Token {
                     write!(f, "\t{}\n", token)?;
                 }
                 write!(f, "\tENDREPEAT")
+            },
+            Token::StableTicker(ref ticker) 
+                => {
+                    match ticker {
+                        StableTickerAction::Start(ref label) => {
+                            write!(f, "STABLETICKER START {}", label)
+                        },
+                        StableTickerAction::Stop => {
+                            write!(f, "STABLETICKER STOP")
+                        }
+                    }
             },
             Token::MacroCall(ref name)
                 => write!(f, "{}", name)

@@ -291,11 +291,45 @@ named!(
             parse_defs |
             parse_include |
             parse_db_or_dw |
-            parse_protect
+            parse_protect |
+            parse_stable_ticker
         )
 
     );
 
+named!(
+    parse_stable_ticker <CompleteStr<'_>, Token>,
+    alt!(
+        parse_stable_ticker_start |
+        parse_stable_ticker_stop
+    )
+);
+
+named!(
+    parse_stable_ticker_start <CompleteStr<'_>, Token>,
+    do_parse!(
+        tag_no_case!("stableticker") >>
+        space1 >>
+        tag_no_case!("start") >>
+        space1 >>
+        name: parse_label >>
+        (
+            Token::StableTicker(StableTickerAction::Start(name))
+        )
+    )
+);
+
+named!(
+    parse_stable_ticker_stop <CompleteStr<'_>, Token>,
+    do_parse!(
+        tag_no_case!("stableticker") >>
+        space1 >>
+        tag_no_case!("stop") >>
+        (
+            Token::StableTicker(StableTickerAction::Stop)
+        )
+    )
+);
 
 named!(
     pub parse_ld <CompleteStr<'_>, Token>,
