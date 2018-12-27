@@ -1795,6 +1795,31 @@ mod test {
         assert_eq!(val.unwrap(), 2);
     }
 
+     #[test]
+    pub fn test_duration () {
+        let tokens = vec![
+            Token::OpCode(
+                Mnemonic::Ld,
+                Some(DataAccess::Register8(Register8::A)),
+                Some(DataAccess::Expression(Expr::Duration(
+                        Box::new(Token::OpCode(
+                            Mnemonic::Inc, 
+                            Some(DataAccess::Register16(Register16::Hl)), 
+                            None
+                        ))
+                    )
+                ))
+            ),
+        ];
+
+        let env = visit_tokens(&tokens);
+        assert!(env.is_ok());
+        let env = env.unwrap();
+        let bytes = env.memory(0, 2);
+        assert_eq!(bytes[1], 2);
+
+    }   
+
     #[test]
     pub fn test_bytes() {
         let mut m = Bytes::new();
