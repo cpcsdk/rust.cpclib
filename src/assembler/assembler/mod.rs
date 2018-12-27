@@ -202,8 +202,8 @@ impl SymbolsTable {
         }
     }
 
-    pub fn contains_symbol(&self, key:&String) -> bool {
-        self.map.contains_key(key)
+    pub fn contains_symbol<S: AsRef<str>>(&self, key:S) -> bool {
+        self.map.contains_key(&key.as_ref().to_owned())
     }
 }
 
@@ -1705,14 +1705,14 @@ mod test {
             &mut env
         );
         assert!(res.is_ok());
-        assert!(!env.symbols().contains_symbol(&"hello".into()));
+        assert!(!env.symbols().contains_symbol("hello"));
         let res = visit_token(
             &Token::Label("hello".into()),
             &mut env
         );
         assert!(res.is_ok());
-        assert!(env.symbols().contains_symbol(&"hello".into()));
-        assert_eq!(env.symbols().value(&"hello".into()), 0x4000.into());
+        assert!(env.symbols().contains_symbol("hello"));
+        assert_eq!(env.symbols().value("hello"), 0x4000.into());
     }
 
     #[test]
