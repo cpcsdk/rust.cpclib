@@ -359,13 +359,17 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     pub fn ld_16_16(){
-        // XXX Currently do not panic as de can be considered has being a label
-        // XXX Do we allow that ? The parse knows de is not a register but a label
-        // XXX Do we forbid labels with the same name as a register ? => Probably better
         let code = CompleteStr(" ld hl, de");
-        let _tokens = get_val(parse_z80_line(code));
+        let tokens = get_val(parse_z80_line(code));
+        assert_matches!(
+            tokens[0],
+            Token::OpCode(
+                Mnemonic::Ld,
+                Some(DataAccess::Register16(_)),
+                Some(DataAccess::Register16(_))
+            )
+        );
     }
 
     #[test]
