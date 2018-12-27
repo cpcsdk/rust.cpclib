@@ -175,6 +175,10 @@ impl SymbolsTable {
         );
     }
 
+    pub fn update_symbol_to_value(&mut self, label: &String, value: i32) {
+        *(self.map.get_mut(label).unwrap()) = Symbol::Integer(value as _);
+    }
+
     /// TODO return the symbol instead of the int
     pub fn value(&self, key:&String) -> Option<i32> {
 
@@ -433,8 +437,7 @@ impl Env {
                 Ok(())
             },
             (true, AssemblingPass::SecondPass) => {
-                /// XXX I'm pretty sure there are some cases where the value MUST stay the same and an error should be raised if it is not the case
-               self.symbols_mut().set_symbol_to_value(
+               self.symbols_mut().update_symbol_to_value(
                    &label.to_owned(), value);
                    Ok(())
             },
@@ -495,24 +498,23 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
 
 
 fn visit_equ(label: &String, exp: &Expr, env: &mut Env) -> Result<(), String> {
-    if env.symbols().contains_symbol(label) {
+    if env.symbols().contains_symbol(label) && env.pass.is_first_pass() {
         Err(format!("Symbol \"{}\" already present in symbols table", label))
     }
     else {
-        let value = exp.resolve(env.symbols())?;
-        env.symbols_mut()
-            .set_symbol_to_value(label, value) ; // XXX set to the expression instead ?
-        Ok(())
+        let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
+        env.add_symbol_to_symbol_table(label, value)
     }
 }
 
 
 fn visit_label(label: &String, env: &mut Env) -> Result<(), String> {
+    let value = env.symbols().current_address().unwrap();
     if env.pass.is_first_pass() &&  env.symbols().contains_symbol(label) {
         Err(format!("Symbol \"{}\" already present in symbols table", label))
     }
     else {
-        env.symbols_mut().set_symbol_to_current_address(label)
+        env.add_symbol_to_symbol_table(label, value as _)
     }
 }
 
