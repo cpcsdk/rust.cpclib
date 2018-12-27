@@ -278,14 +278,17 @@ impl Env {
     fn start_new_pass(&mut self) {
         self.pass = self.pass.clone().next_pass();
 
-        self.startadr = None;
-        self.outputadr = 0;
-        self.codeadr = 0;
-        self.maxptr = 0xffff;
-        self.activebank = 0;
-        self.mem = [[0;0x10000];1];
-        self.iorg = 0;
-        self.org_zones = Vec::new();
+        if !self.pass.is_finished() {
+            // environnement is not reset when assembling is finished
+            self.startadr = None;
+            self.outputadr = 0;
+            self.codeadr = 0;
+            self.maxptr = 0xffff;
+            self.activebank = 0;
+            self.mem = [[0;0x10000];1];
+            self.iorg = 0;
+            self.org_zones = Vec::new();
+        }
     }
 
     pub fn output_address(&self) -> usize {
@@ -441,7 +444,7 @@ impl Env {
                    &label.to_owned(), value);
                    Ok(())
             },
-            (_,_) => unreachable!()
+            (_,_) => panic!("add_symbol_to_symbol_table / unmnaged case {}, {}, {} {}", self.pass, label ,already_present, value)
         }
     }
 
@@ -456,8 +459,13 @@ pub fn visit_tokens_all_passes(tokens: &[Token]) -> Result<Env, String> {
 
     let mut env = Env::default();
 
-    while !env.pass.is_finished() {
+    loop {
         env.start_new_pass();
+
+        if env.pass.is_finished() {
+            break
+        }
+
         for token in tokens.iter() {
             visit_token(token, &mut env)?;
         }
