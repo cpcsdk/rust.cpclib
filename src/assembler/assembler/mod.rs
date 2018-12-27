@@ -180,7 +180,9 @@ impl SymbolsTable {
     }
 
     /// TODO return the symbol instead of the int
-    pub fn value(&self, key:&String) -> Option<i32> {
+    pub fn value<S: AsRef<str>>(&self, key: S) -> Option<i32> {
+
+        let key: String = key.as_ref().to_owned();
 
         let key = key.trim();
         let res = self.map.get(key);

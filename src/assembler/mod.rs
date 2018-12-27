@@ -27,6 +27,24 @@ pub fn assemble(code: &str) -> Result<Vec<u8>, String> {
 	Ok(env.produced_bytes())
 }
 
+pub fn assemble_and_table(code: &str) -> Result< (Vec<u8>, assembler::SymbolsTable), String> {
+
+	let tokens = match parser::parse_str(code.into()) {
+			Err(e) => return Err(e),
+			Ok(tokens) => tokens
+	};
+	
+	let env = match assembler::visit_tokens_all_passes(&tokens) {
+		Err(e) => return Err(e),
+		Ok(env) => env
+	};
+
+	Ok((
+		env.produced_bytes(),
+		env.symbols().clone()
+	))
+}
+
 #[cfg(test)]
 mod test_super {
 	use super::*;
