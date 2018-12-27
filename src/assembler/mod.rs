@@ -19,7 +19,7 @@ pub fn assemble(code: &str) -> Result<Vec<u8>, String> {
 			Ok(tokens) => tokens
 	};
 	
-	let env = match assembler::visit_tokens(&tokens) {
+	let env = match assembler::visit_tokens_all_passes(&tokens) {
 		Err(e) => return Err(e),
 		Ok(env) => env
 	};
