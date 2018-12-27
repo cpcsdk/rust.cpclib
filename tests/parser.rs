@@ -622,6 +622,17 @@ mod tests {
         assert!(res.is_ok());
     }
 
+    #[test]
+    fn test_empty_rep() {
+        let z80 = "  rep 5
+            endrepeat
+            ";
+        let res = parse_repeat(CompleteStr(z80));
+        assert!(res.is_ok());
+    }
+
+
+
 
     #[test]
     fn test_repeat() {
@@ -820,7 +831,13 @@ mod tests {
         assert_eq!(tokens.len(), 1);
 
 
-        let code = " ASSERT 1 < 0x10000";
+
+    }
+
+    #[test]
+    #[should_panic]
+    fn assert_test_should_assemble_later() {
+        let code = " ASSERT 1 < 0x10000"; // ATM such number is not parsed
         eprintln!("RES: {:?}", parse_z80_str(code));
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
