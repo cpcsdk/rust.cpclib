@@ -263,26 +263,28 @@ impl Token {
 
     /// Assemble the symbol taking into account some context, but never modify this context
     pub fn to_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<Bytes, String> {
+
+        let mut env = &mut crate::assembler::assembler::Env::with_table(table);
                 match self {
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2)
                 => assemble_opcode(
                     mnemonic, 
                     arg1, 
                     arg2, 
-                    &mut crate::assembler::assembler::Env::with_table(table) // Modification to the environment are lost
+                    env // Modification to the environment are lost
                 ),
 
             &Token::Equ(_, _)
                 => Ok(Bytes::new()),
 
             &Token::Dw(_) | &Token::Db(_)
-                => assemble_db_or_dw(self, table),
+                => assemble_db_or_dw(self, env),
 
             &Token::Label(_) | &Token::Comment(_) | &Token::Org(_) | &Token::Assert(_)
                 => Ok(Bytes::new()),
 
             &Token::Defs(ref expr)
-                => assemble_defs(expr, table),
+                => assemble_defs(expr, env),
 
             &Token::Align(ref expr)
                 => assemble_align(expr, table),

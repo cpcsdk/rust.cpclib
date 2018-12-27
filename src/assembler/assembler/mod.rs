@@ -310,15 +310,25 @@ impl Env {
 
     /// Output one byte
     /// (RASM ___internal_output)
-    pub fn output(&mut self, v: u8) {
+    pub fn output(&mut self, v: u8) -> Result<(), String> {
         if self.outputadr <= self.maxptr {
             self.mem[self.activebank][self.outputadr] = v;
             self.outputadr += 1; // XXX will fail at 0xffff
             self.codeadr += 1;
+            Ok(())
         }
         else {
-            panic!("Output exceeed limit");
+            Err("Output exceeded limits" .to_owned())
         }
+    }
+
+
+    /// TODO test if we will oversize the limit
+    pub fn output_bytes(&mut self, bytes: &[u8]) -> Result<(), String> {
+        for b in bytes.iter() {
+            self.output(*b)?;
+        }
+        Ok(())
     }
 
 
@@ -455,13 +465,14 @@ pub fn visit_tokens(tokens: &[Token]) -> Result<Env, String> {
 pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
     env.update_dollar();
     match token {
-        &Token::Org(ref address) => visit_org(address, env),
-        &Token::Db(_) | &Token::Dw(_) => visit_db_or_dw(token, env),
-        &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => visit_opcode(&mnemonic, &arg1, &arg2, env),
-        &Token::Comment(_) => Ok(()), // Nothing to do for a comment
-        &Token::Label(ref label) => visit_label(label, env),
-        &Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
-        &Token::Repeat(_, _) => visit_repeat(token, env),
+        Token::Org(ref address) => visit_org(address, env),
+        Token::Db(_) | &Token::Dw(_) => visit_db_or_dw(token, env),
+        Token::Defs(_) => visit_defs(token, env),
+        Token::OpCode(ref mnemonic, ref arg1, ref arg2) => visit_opcode(&mnemonic, &arg1, &arg2, env),
+        Token::Comment(_) => Ok(()), // Nothing to do for a comment
+        Token::Label(ref label) => visit_label(label, env),
+        Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
+        Token::Repeat(_, _) => visit_repeat(token, env),
         _ => panic!("Not treated {:?}", token)
     }
 }
@@ -489,13 +500,20 @@ fn visit_label(label: &String, env: &mut Env) -> Result<(), String> {
     }
 }
 
+fn visit_defs(token: &Token, env: &mut Env) -> Result<(), String>{
+    match token {
+        Token::Defs(expr) => {
+            let bytes = assemble_defs(expr, env)?;
+            env.output_bytes(&bytes)
+        },
+        _ => unreachable!()
+    }
+}
+
 // TODO refactor code with assemble_opcode or other functions manipulating bytes
 fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), String>{
-    let bytes = assemble_db_or_dw(token, env.symbols())?;
-    for b in bytes.iter() {
-        env.output(*b);
-    }
-    Ok(())
+    let bytes = assemble_db_or_dw(token, env)?;
+    env.output_bytes(&bytes)
 }
 
 /// When visiting a repetition, we unroll the loop and stream the tokens
@@ -511,21 +529,31 @@ pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), String>
 }
 
 
+pub fn assemble_defs(expr: &Expr, env: &Env) -> Result<Bytes, String> {
+    let count = env.resolve_expr_must_never_fail(expr)?;
+    let mut bytes = Bytes::with_capacity(count as usize);
 
+    for _i in 0..count {
+        bytes.push(0);
+    }
 
-pub fn assemble_db_or_dw(token: &Token, sym: &SymbolsTable) -> Result<Bytes, String> {
+    Ok(bytes)
+
+}
+
+pub fn assemble_db_or_dw(token: &Token, env: &Env) -> Result<Bytes, String> {
     let mut bytes = Bytes::new();
 
     let (ref exprs, mask) = {
         match token {
             &Token::Db(ref exprs) => (exprs, 0xff),
             &Token::Dw(ref exprs) => (exprs, 0xffff),
-            _ => panic!("impossible case")
+            _ => unreachable!()
         }
     };
 
-    for expr in exprs.iter() {
-        let val = expr.resolve(sym).unwrap() & mask;
+    for exp in exprs.iter() {
+        let val = env.resolve_expr_may_fail_in_first_pass(exp)? & mask;
         if mask == 0xff {
             add_byte(&mut bytes, val as u8);
         }
@@ -535,7 +563,6 @@ pub fn assemble_db_or_dw(token: &Token, sym: &SymbolsTable) -> Result<Bytes, Str
     }
 
     Ok(bytes)
-
 }
 
 
@@ -1346,18 +1373,6 @@ fn assemble_res_or_set(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
 }
 
 
-pub fn assemble_defs(expr: &Expr, sym: &SymbolsTable) -> Result<Bytes, String> {
-    let count = expr.resolve(sym)?;
-    let mut bytes = Bytes::with_capacity(count as usize);
-
-    for _i in 0..count {
-        bytes.push(0);
-    }
-
-    Ok(bytes)
-
-}
-
 
 fn indexed_register16_to_code(reg: &IndexRegister16) -> u8 {
     match reg {
@@ -1461,7 +1476,7 @@ mod test {
             &Mnemonic::Jp,
             &Some(DataAccess::FlagTest(FlagTest::Z)),
             &DataAccess::Expression(Expr::Value(0x1234)),
-            &SymbolsTable::default()
+            &Env::default()
             ).unwrap();
         assert_eq!(res.len(), 3);
         assert_eq!(res[0], 0b11001010);
