@@ -613,7 +613,7 @@ pub fn assemble_opcode(
         &Mnemonic::Out
             => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Jr | &Mnemonic::Jp
-            => assemble_jr_or_jp(mnemonic, arg1, &arg2.as_ref().unwrap(), sym),
+            => assemble_jr_or_jp(mnemonic, arg1, &arg2.as_ref().unwrap(), env),
         &Mnemonic::Pop
             => assemble_pop(arg1.as_ref().unwrap()),
         &Mnemonic::Push
@@ -776,21 +776,25 @@ fn assemble_ret(arg1: &Option<DataAccess>) -> Result<Bytes, String> {
 
 /// arg1 contains the tests
 /// arg2 contains the information
-fn assemble_jr_or_jp(mne: &Mnemonic, arg1: &Option<DataAccess>, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, String>{
+fn assemble_jr_or_jp(
+    mne: &Mnemonic, 
+    arg1: &Option<DataAccess>, 
+    arg2: &DataAccess , 
+    env: &Env) -> Result<Bytes, String>{
     let mut bytes = Bytes::new();
 
     // check if it is jp or jr
     let is_jr = match mne {
         &Mnemonic::Jr => true,
         &Mnemonic::Jp => false,
-        _ =>panic!()
+        _ => unreachable!()
     };
 
     // compute the flag code if any
     let flag_code = if arg1.is_some() {
         match arg1.as_ref() {
             Some(&DataAccess::FlagTest(ref test)) => Some(flag_test_to_code(test)),
-            _ => panic!("Wrong argument")
+            _ => return Err(format!("Wrong flag argument {:?}", arg1))
         }
     } else {
         None
@@ -799,9 +803,9 @@ fn assemble_jr_or_jp(mne: &Mnemonic, arg1: &Option<DataAccess>, arg2: &DataAcces
     // Treat address
     match arg2 {
         &DataAccess::Expression(ref e) => {
-            let address = e.resolve(sym)?;
+            let address = env.resolve_expr_may_fail_in_first_pass(e)?;
             if is_jr {
-                let relative =absolute_to_relative(address, 2, sym);
+                let relative =absolute_to_relative(address, 2, env.symbols());
                 if flag_code.is_some(){
                     // jr - flag
                     add_byte(&mut bytes, 0b00100000 | (flag_code.unwrap() << 3));
