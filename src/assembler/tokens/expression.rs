@@ -3,13 +3,18 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
 use crate::assembler::assembler::{SymbolsTable};
+use crate::assembler::tokens::Token;
+use crate::assembler::tokens::listing::ListingElement;
 
-///TODO add the ability to manipulate value of different symbol
+/// Expression nodes.
 #[derive(PartialEq, Eq, Clone)]
 pub enum Expr {
-// types to manipulate
+    /// 32 bits integer value (should be able to include any integer value manipulated by the assember.
   Value(i32),
+  /// Label
   Label(String),
+  /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
+  Duration(Box<Token>),
 
   // Arithmetic operations
   Add(Box<Expr>, Box<Expr>),
@@ -97,7 +102,14 @@ impl Expr {
                 else {
                     Err(format!("{} not found in symbol table", label))
                 }
-            }
+            },
+
+            Duration(ref token) => {
+                let duration = token.estimated_duration()?;
+                let duration = duration as i32;
+                Ok(duration)
+            },
+
 
             Add(ref left, ref right) => oper(left, right, Oper::Add),
             Sub(ref left, ref right) => oper(left, right, Oper::Sub),
@@ -193,6 +205,8 @@ impl Display for Expr {
     match self {
       &Value(val) => write!(format, "0x{:x}", val),
       &Label(ref label) => write!(format, "{}", label),
+      &Duration(ref token) => write!(format, "DURATION({})", token),
+
 
       &Add(ref left, ref right) => write!(format, "{} + {}", left, right),
       &Sub(ref left, ref right) => write!(format, "{} - {}", left, right),
@@ -221,6 +235,7 @@ impl Debug for Expr {
     match *self {
       Value(val) => write!(format, "{}", val),
       Label(ref label) => write!(format, "{}", label),
+      Duration(ref token) => write!(format, "DURATION({:?})", token),
 
       Add(ref left, ref right) => write!(format, "({:?} + {:?})", left, right),
       Sub(ref left, ref right) => write!(format, "({:?} - {:?})", left, right),

@@ -788,6 +788,18 @@ mod tests {
     }
 
     #[test]
+    fn test_duration() {
+        let code = "
+            ld hl, duration(inc hl)
+            ld a, duration(ld a, label)
+        ";
+        let res = parse_z80_code(code.into());
+        println!("{:?}", &res);
+        assert!(res.is_ok());
+        assert_eq!(0, res.unwrap().0.len());
+    }
+
+    #[test]
     fn fn_test_asm_prog1() {
 
         let code = "  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";

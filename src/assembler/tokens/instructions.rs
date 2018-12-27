@@ -79,14 +79,14 @@ impl fmt::Display for Mnemonic {
 }
 
 /// Stable ticker serves to count nops with the assembler !
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StableTickerAction {
     /// Start of the ticker with its name that will contains its duration
     Start(String),
     Stop
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     Label(String),
     Comment(String),
