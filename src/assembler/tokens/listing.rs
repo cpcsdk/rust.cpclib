@@ -7,11 +7,10 @@ use crate::assembler::assembler::SymbolsTable;
 /// The ListingElement trati contains the public method any memeber of a listing should contain
 pub trait ListingElement {
     /// Estimate the duration of the token
-    fn estimated_duration(&self) -> usize;
+    fn estimated_duration(&self) -> Result<usize, String>;
 
     /// Return the number of bytes of the token
     fn number_of_bytes(&self) -> Result<usize, String>;
-
 
     /// Return the number of bytes given the context (needed for Align)
     fn number_of_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<usize, String>;
@@ -101,7 +100,7 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
         else {
             self.listing
                 .iter()
-                .map(|token|{token.estimated_duration()})
+                .map(|token|{token.estimated_duration().unwrap()})
                 .sum()
         }
     }

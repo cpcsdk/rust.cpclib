@@ -6,10 +6,8 @@ use crate::assembler::assembler::SymbolsTable;
 impl ListingElement for Token {
     /// Returns an estimation of the duration.
     /// This estimation may be wrong for instruction having several states.
-    /// Current version is dumbly simplified : we consider the duration is equal to the size of the
-    /// instruction. This is flase of course.
-    fn estimated_duration(&self) -> usize {
-        match self {
+    fn estimated_duration(&self) -> Result<usize, String> {
+        let duration = match self {
             &Token::Comment(_) | &Token::Label(_)  => 0,
             &Token::Protect(_, _) => 0,
             &Token::Defs(ref expr) => expr.eval().ok().unwrap() as usize, // XXX will not work when variables are used
@@ -174,8 +172,9 @@ impl ListingElement for Token {
                     _ => panic!("Duration not set for {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                 }
             }
-            _ => 0
-        }
+            _ => return Err(format!("Duration computation for {} not yet coded", self))
+        };
+        Ok(duration)
     }
 
 
@@ -371,32 +370,32 @@ mod tests {
 
     #[test]
     fn fixup_duration() {
-        assert_eq!(Token::try_from(" di").unwrap().estimated_duration(), 1);
-        assert_eq!(Token::try_from(" add a,c ").unwrap().estimated_duration(), 1);
-        assert_eq!(Token::try_from(" ld l, a").unwrap().estimated_duration(), 1);
-        assert_eq!(Token::try_from(" ld b, e").unwrap().estimated_duration(), 1);
-        assert_eq!(Token::try_from(" ld e, b").unwrap().estimated_duration(), 1);
-        assert_eq!(Token::try_from(" exx").unwrap().estimated_duration(), 1);
-        assert_eq!(Token::try_from(" push bc").unwrap().estimated_duration(), 4);
-        assert_eq!(Token::try_from(" pop bc").unwrap().estimated_duration(), 3);
-        assert_eq!(Token::try_from(" push ix").unwrap().estimated_duration(), 5);
-        assert_eq!(Token::try_from(" pop ix").unwrap().estimated_duration(), 4);
-        assert_eq!(Token::try_from(" ld b, nnn").unwrap().estimated_duration(), 2);
-        assert_eq!(Token::try_from(" ld e, (hl)").unwrap().estimated_duration(), 2);
-        assert_eq!(Token::try_from(" ld d, (hl)").unwrap().estimated_duration(), 2);
-        assert_eq!(Token::try_from(" ld a, (hl)").unwrap().estimated_duration(), 2);
-        assert_eq!(Token::try_from(" ld a, (dd)").unwrap().estimated_duration(), 4);
-        assert_eq!(Token::try_from(" ld hl, (dd)").unwrap().estimated_duration(), 5);
-        assert_eq!(Token::try_from(" ld de, (dd)").unwrap().estimated_duration(), 6);
-        assert_eq!(Token::try_from(" ld a, (ix+0)").unwrap().estimated_duration(), 5);
-        assert_eq!(Token::try_from(" ld l, (ix+0)").unwrap().estimated_duration(), 5);
-        assert_eq!(Token::try_from(" ldi").unwrap().estimated_duration(), 5);
-        assert_eq!(Token::try_from(" inc c").unwrap().estimated_duration(), 1);
-        assert_eq!(Token::try_from(" inc l").unwrap().estimated_duration(), 1);
-        assert_eq!(Token::try_from(" dec c").unwrap().estimated_duration(), 1);
-        assert_eq!(Token::try_from(" out (c), d").unwrap().estimated_duration(), 4);
-        assert_eq!(Token::try_from(" out (c), c").unwrap().estimated_duration(), 4);
-        assert_eq!(Token::try_from(" out (c), e").unwrap().estimated_duration(), 4);
-        assert_eq!(Token::try_from(" ld b, 0x7f").unwrap().estimated_duration(), 2);
+        assert_eq!(Token::try_from(" di").unwrap().estimated_duration().unwrap(), 1);
+        assert_eq!(Token::try_from(" add a,c ").unwrap().estimated_duration().unwrap(), 1);
+        assert_eq!(Token::try_from(" ld l, a").unwrap().estimated_duration().unwrap(), 1);
+        assert_eq!(Token::try_from(" ld b, e").unwrap().estimated_duration().unwrap(), 1);
+        assert_eq!(Token::try_from(" ld e, b").unwrap().estimated_duration().unwrap(), 1);
+        assert_eq!(Token::try_from(" exx").unwrap().estimated_duration().unwrap(), 1);
+        assert_eq!(Token::try_from(" push bc").unwrap().estimated_duration().unwrap(), 4);
+        assert_eq!(Token::try_from(" pop bc").unwrap().estimated_duration().unwrap(), 3);
+        assert_eq!(Token::try_from(" push ix").unwrap().estimated_duration().unwrap(), 5);
+        assert_eq!(Token::try_from(" pop ix").unwrap().estimated_duration().unwrap(), 4);
+        assert_eq!(Token::try_from(" ld b, nnn").unwrap().estimated_duration().unwrap(), 2);
+        assert_eq!(Token::try_from(" ld e, (hl)").unwrap().estimated_duration().unwrap(), 2);
+        assert_eq!(Token::try_from(" ld d, (hl)").unwrap().estimated_duration().unwrap(), 2);
+        assert_eq!(Token::try_from(" ld a, (hl)").unwrap().estimated_duration().unwrap(), 2);
+        assert_eq!(Token::try_from(" ld a, (dd)").unwrap().estimated_duration().unwrap(), 4);
+        assert_eq!(Token::try_from(" ld hl, (dd)").unwrap().estimated_duration().unwrap(), 5);
+        assert_eq!(Token::try_from(" ld de, (dd)").unwrap().estimated_duration().unwrap(), 6);
+        assert_eq!(Token::try_from(" ld a, (ix+0)").unwrap().estimated_duration().unwrap(), 5);
+        assert_eq!(Token::try_from(" ld l, (ix+0)").unwrap().estimated_duration().unwrap(), 5);
+        assert_eq!(Token::try_from(" ldi").unwrap().estimated_duration().unwrap(), 5);
+        assert_eq!(Token::try_from(" inc c").unwrap().estimated_duration().unwrap(), 1);
+        assert_eq!(Token::try_from(" inc l").unwrap().estimated_duration().unwrap(), 1);
+        assert_eq!(Token::try_from(" dec c").unwrap().estimated_duration().unwrap(), 1);
+        assert_eq!(Token::try_from(" out (c), d").unwrap().estimated_duration().unwrap(), 4);
+        assert_eq!(Token::try_from(" out (c), c").unwrap().estimated_duration().unwrap(), 4);
+        assert_eq!(Token::try_from(" out (c), e").unwrap().estimated_duration().unwrap(), 4);
+        assert_eq!(Token::try_from(" ld b, 0x7f").unwrap().estimated_duration().unwrap(), 2);
     }
 }

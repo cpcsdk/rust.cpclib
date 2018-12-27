@@ -104,6 +104,51 @@ impl AssemblingPass {
 
 }
 
+/// Manage the stack of stable counters. 
+/// They are updated each time an opcode is visited
+#[derive(Default)]
+struct StableTickerCounters {
+    counters: Vec<(String, usize)>
+}
+
+impl StableTickerCounters {
+    /// Check if a counter with the same name already exists
+    pub fn has_counter<S: AsRef<str>>(&self, name: S) -> bool {
+        let name = name.as_ref().to_owned();
+        self.counters.iter()
+            .any( |(s, _)| {
+                s == &name
+            })
+    }
+
+    /// Add a new counter if no counter has the same name
+    pub fn add_counter<S: AsRef<str>>(&mut self, name: S) -> Result<(), String> {
+        let name : String= name.as_ref().to_owned();
+        if self.has_counter(&name) {
+            return Err(format!("A counter named `{}` already exists", name));
+        }
+        self.counters.push((
+            name,
+            0
+        ));
+        Ok(())
+    }
+
+    /// Release the latest counter (if exists)
+    pub fn release_last_counter(&mut self) -> Option<(String, usize)> {
+        self.counters.pop()
+    }
+
+    /// Update each opened counters by count
+    pub fn update_counters(&mut self, count: usize) {
+        self.counters.iter_mut()
+            .for_each(|(_, local_count)|{
+                *local_count = *local_count + count;
+            });
+    }
+}
+
+
 #[derive(Default, Debug)]
 struct OrgZone {
     ibank: usize,
@@ -212,6 +257,9 @@ pub struct Env {
     /// Current pass
    pass: AssemblingPass, 
 
+   /// Stable counter of nops
+   stable_counters: StableTickerCounters,
+
     /// Start adr to use to write binary files. No use when working with snapshots.
     /// When working with binary file only 64K can be generated, not more
     startadr: Option<usize>,
@@ -250,6 +298,7 @@ impl Default for Env {
     {
         Env{
             pass: AssemblingPass::Uninitialized,
+            stable_counters: StableTickerCounters::default(),
 
             startadr: None,
             outputadr: 0,
@@ -290,6 +339,7 @@ impl Env {
             self.mem = [[0;0x10000];1];
             self.iorg = 0;
             self.org_zones = Vec::new();
+            self.stable_counters = StableTickerCounters::default();
         }
     }
 
@@ -499,11 +549,17 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
         Token::Org(ref address) => visit_org(address, env),
         Token::Db(_) | &Token::Dw(_) => visit_db_or_dw(token, env),
         Token::Defs(_) => visit_defs(token, env),
-        Token::OpCode(ref mnemonic, ref arg1, ref arg2) => visit_opcode(&mnemonic, &arg1, &arg2, env),
+        Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
+            visit_opcode(&mnemonic, &arg1, &arg2, env)?;
+            let duration = token.estimated_duration()?;
+            env.stable_counters.update_counters(duration);
+            Ok(())
+        },
         Token::Comment(_) => Ok(()), // Nothing to do for a comment
         Token::Label(ref label) => visit_label(label, env),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Repeat(_, _) => visit_repeat(token, env),
+        Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         _ => panic!("Not treated {:?}", token)
     }
 }
@@ -566,6 +622,27 @@ pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), String>
     }
 
     Ok(())
+}
+
+
+/// Manage the stable ticker stuff.
+/// - Start: register a counter
+/// - Stop: store counter count
+pub fn visit_stableticker(ticker: &StableTickerAction, env: &mut Env) -> Result<(), String> {
+    match ticker {
+        StableTickerAction::Start(ref name) => {
+            env.stable_counters.add_counter(name)?;
+            Ok(())
+        },
+        StableTickerAction::Stop => {
+            match env.stable_counters.release_last_counter() {
+                None => Err(format!("No active counter.")),
+                Some((label, count)) => {
+                    env.add_symbol_to_symbol_table(&label, count as _)
+                }
+            }
+        }
+    }
 }
 
 
