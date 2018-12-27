@@ -669,9 +669,11 @@ pub fn assemble_opcode(
             => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ld
             => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
-        &Mnemonic::Ldi | &Mnemonic::Ldd | 
+        Mnemonic::Ldi | Mnemonic::Ldd | 
         Mnemonic::Ldir | Mnemonic::Lddr |
-        &Mnemonic::Ei | &Mnemonic::Di | &Mnemonic::Exx | &Mnemonic::Halt | &Mnemonic::Rra
+        Mnemonic::Ei | Mnemonic::Di | 
+        Mnemonic::ExAf | Mnemonic::Exx | 
+        Mnemonic::Halt | &Mnemonic::Rra
             => assemble_no_arg(mnemonic),
         &Mnemonic::Nop
             => assemble_nop(),
@@ -726,6 +728,9 @@ fn assemble_no_arg(mnemonic: &Mnemonic) -> Result<Bytes, String> {
         }
         Mnemonic::Di => {
             &[0xF3]
+        },
+        Mnemonic::ExAf => {
+            &[0x08]
         },
         Mnemonic::Exx => {
             &[0xD9]
