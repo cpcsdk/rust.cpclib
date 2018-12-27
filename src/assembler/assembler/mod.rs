@@ -1617,7 +1617,7 @@ mod test {
     #[test]
     pub fn test_two_passes() {
         let tokens = vec![
-            Token::Org(0.into()),
+            Token::Org(0x123.into()),
             Token::OpCode(
                 Mnemonic::Ld, 
                 Some(DataAccess::Register16(Register16::Hl)),
@@ -1629,12 +1629,20 @@ mod test {
         assert!(env.is_err());
 
         let env = visit_tokens_all_passes(&tokens);
-        println!("{:?}", &env);
         assert!(env.is_ok());
         let env = env.ok().unwrap();
 
         let count = env.size();
         assert_eq!(count, 3);
+
+        assert_eq!(
+            env.symbols().value(&"test".to_owned()).unwrap(),
+            0x123+3
+        );
+        let buffer = env.memory(0x123, 3);
+        assert_eq!(buffer[1], 0x23+3);
+        assert_eq!(buffer[2], 0x1);
+
     }
 
 
