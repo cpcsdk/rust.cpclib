@@ -792,6 +792,7 @@ mod tests {
         let code = "
             ld hl, duration(inc hl)
             ld a, duration(ld a, label)
+            defs  duration(inc hl) + thing
         ";
         let res = parse_z80_code(code.into());
         println!("{:?}", &res);

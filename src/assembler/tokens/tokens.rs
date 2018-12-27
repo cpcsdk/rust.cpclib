@@ -29,9 +29,22 @@ impl ListingElement for Token {
                         }
                     },
 
+                    &Mnemonic::And | &Mnemonic::Or | &Mnemonic::Xor => {
+                        match arg1 {
+                            &Some(DataAccess::Register8(_)) => 1,
+                            &Some(DataAccess::IndexRegister8(_)) => 2,
+                            &Some(DataAccess::Expression(_)) => 2,
+                            &Some(DataAccess::MemoryRegister16(_)) => 2,
+                            &Some(DataAccess::IndexRegister16WithIndex(_, _, _)) => 5,
+                            _ => unreachable!()
+                        }
+                    },
+
 
                     /// XXX Not stable timing
                     &Mnemonic::Djnz => 3, // or 4
+
+                    &Mnemonic::ExAf => 1, 
 
                     &Mnemonic::Inc | &Mnemonic::Dec => {
                         match arg1 {
@@ -55,6 +68,27 @@ impl ListingElement for Token {
                             &Some(DataAccess::FlagTest(_)) => {
                                 match arg2 {
                                     &Some(DataAccess::Expression(_)) => 3,
+                                    _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                                }
+                            },
+
+                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                        }
+                    },
+
+                    // Always give the fastest
+                    &Mnemonic::Jr => {
+                       match arg1 {
+                            &None => {
+                                match arg2 {
+                                    &Some(DataAccess::Expression(_)) => 3,
+                                    _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                                }
+                            },
+
+                            &Some(DataAccess::FlagTest(_)) => {
+                                match arg2 {
+                                    &Some(DataAccess::Expression(_)) => 2, // or 3
                                     _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                                 }
                             },

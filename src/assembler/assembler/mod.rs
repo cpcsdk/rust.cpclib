@@ -1817,7 +1817,6 @@ mod test {
         let env = env.unwrap();
         let bytes = env.memory(0, 2);
         assert_eq!(bytes[1], 2);
-
     }   
 
     #[test]

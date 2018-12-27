@@ -1081,7 +1081,8 @@ named!(parens< CompleteStr<'_>, Expr >, delimited!(
 //TODO add stuff to manipulate any kind of data (value/label)
 named!(pub factor< CompleteStr<'_>, Expr >, alt_complete!(
     // Manage functions
-    parse_hi_or_lo | parse_duration
+    parse_hi_or_lo  
+    | delimited!(space0, parse_duration, space0) 
     // manage values
     | map!(
         delimited!(
