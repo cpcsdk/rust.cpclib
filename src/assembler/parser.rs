@@ -251,6 +251,7 @@ named!(
 named!(
     parse_token <CompleteStr<'_>, Token>,
         alt_complete!(
+            parse_ex_af |
             parse_logical_operator |
             parse_add_or_adc |
             parse_djnz |
@@ -267,6 +268,20 @@ named!(
     );
 
 
+named!(
+    parse_ex_af <CompleteStr<'_>, Token>, do_parse!(
+        tag_no_case!("EX") >>
+        space1 >>
+        tag_no_case!("AF") >>
+        space0 >>
+        char!(',') >>
+        space0 >>
+        tag_no_case!("AF'") >>
+        (
+            Token::OpCode(Mnemonic::ExAf, None, None)
+        )
+    )
+);
 named!(
     parse_directive <CompleteStr<'_>, Token>,
         alt_complete!(
@@ -863,7 +878,7 @@ named!(
         tag_no_case!("LDD") => { |_| Mnemonic::Ldd } |
         tag_no_case!("NOPS2") => { |_| Mnemonic::Nops2 } |
         tag_no_case!("NOP") => { |_| Mnemonic::Nop } |
-        tag_no_case!("RRA") => {|_| Mnemonic::Rra }
+        tag_no_case!("RRA") => {|_| Mnemonic::Rra } 
       )
     >> (Token::OpCode(res, None, None) )
     )
