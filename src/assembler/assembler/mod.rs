@@ -146,6 +146,14 @@ impl StableTickerCounters {
                 *local_count = *local_count + count;
             });
     }
+
+    pub fn len(&self) -> usize {
+        self.counters.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 
@@ -551,8 +559,11 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
         Token::Defs(_) => visit_defs(token, env),
         Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
             visit_opcode(&mnemonic, &arg1, &arg2, env)?;
-            let duration = token.estimated_duration()?;
-            env.stable_counters.update_counters(duration);
+            // Compute duration only if it is necessary
+            if ! env.stable_counters.is_empty(){
+                let duration = token.estimated_duration()?;
+                env.stable_counters.update_counters(duration);
+            }
             Ok(())
         },
         Token::Comment(_) => Ok(()), // Nothing to do for a comment
