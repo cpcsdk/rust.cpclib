@@ -280,7 +280,30 @@ named!(
 
 
 named!(
-    pub parse_ld <CompleteStr<'_>, Token>, do_parse!(
+    pub parse_ld <CompleteStr<'_>, Token>,
+    alt!(
+        parse_ld_fake | 
+        parse_ld_normal
+    )
+);
+
+named!(
+    pub parse_ld_fake <CompleteStr<'_>, Token>, do_parse!(
+        tag_no_case!("LD") >>
+        space1 >>
+        dst: parse_register16 >>
+        opt!(space1) >>
+        tag!(",") >>
+        opt!(space1) >>
+        src: parse_register16 >>
+         (
+             Token::OpCode(Mnemonic::Ld, Some(dst), Some(src))
+         )
+    )
+);
+
+named!(
+    pub parse_ld_normal <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("LD") >>
         space >>
         dst: return_error!(
