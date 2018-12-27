@@ -1688,6 +1688,26 @@ mod test {
     }
 
     #[test]
+    pub fn test_stableticker() {
+        let tokens = vec![
+            Token::StableTicker(StableTickerAction::Start("myticker".to_owned())),
+            Token::OpCode(
+                Mnemonic::Inc, 
+                Some(DataAccess::Register16(Register16::Hl)), 
+                None),
+            Token::StableTicker(StableTickerAction::Stop)
+        ];
+
+        let env = visit_tokens(&tokens);
+        assert!(env.is_ok());
+        let env = env.unwrap();
+
+        let val = env.symbols().value("myticker");
+        assert!(val.is_some());
+        assert_eq!(val.unwrap(), 2);
+    }
+
+    #[test]
     pub fn test_bytes() {
         let mut m = Bytes::new();
 
