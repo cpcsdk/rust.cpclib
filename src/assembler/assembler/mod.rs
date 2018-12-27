@@ -952,14 +952,33 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
     }
 
     else if let &DataAccess::Register16(ref dst) = arg1 {
-        let dst = register16_to_code_with_sp(dst);
+        let dst_code = register16_to_code_with_sp(dst);
 
         match arg2 {
             &DataAccess::Expression(ref exp) => {
                 let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xffff) as u16;
 
-                add_byte(&mut bytes, 0b00000001 | (dst << 4) );
+                add_byte(&mut bytes, 0b00000001 | (dst_code << 4) );
                 add_word(&mut bytes, val);
+            }
+
+            // Fake instruction splitted in 2 bits operations
+            &DataAccess::Register16(ref src) => {
+                println!("{:?}, {:?}", dst.split(), src.split());
+                let bytes_high = assemble_ld(
+                    &DataAccess::Register8(dst.high().unwrap()),
+                    &DataAccess::Register8(src.high().unwrap()),
+                    env
+                ).unwrap();
+                let bytes_low = assemble_ld(
+                    &DataAccess::Register8(dst.low().unwrap()),
+                    &DataAccess::Register8(src.low().unwrap()),
+                    env
+                ).unwrap();
+
+                bytes.extend_from_slice(&bytes_low);
+                bytes.extend_from_slice(&bytes_high);
+
             }
 
             _ => {}
@@ -1547,6 +1566,15 @@ mod test {
         ).unwrap();
     }
 
+    #[test]
+    pub fn test_ld_R16_R16() {
+        let res = assemble_ld(
+            &DataAccess::Register16(Register16::De),
+            &DataAccess::Register16(Register16::Hl),
+            &Env::default()
+        ).unwrap();
+        assert_eq!(res.len(), 2);
+    }
 
     #[test]
     pub fn test_repeat() {

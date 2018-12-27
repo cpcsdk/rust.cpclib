@@ -22,6 +22,36 @@ impl fmt::Display for Register16 {
     }
 }
 
+impl Register16 {
+    /// Return the high 8bit register if exists
+    pub fn high(&self) -> Option<Register8> {
+        match self {
+            Register16::Af => Some(Register8::A),
+            Register16::Hl => Some(Register8::H),
+            Register16::De => Some(Register8::D),
+            Register16::Bc => Some(Register8::B),
+            Register16::Sp => None
+        }
+    }
+
+    /// Return the low 8bit register if exists
+    pub fn low(&self) -> Option<Register8> {
+        match self {
+            Register16::Af => None,
+            Register16::Hl => Some(Register8::L),
+            Register16::De => Some(Register8::E),
+            Register16::Bc => Some(Register8::C),
+            Register16::Sp => None
+        }
+    }
+
+    pub fn split(&self) -> (Option<Register8>, Option<Register8>) {
+        (
+            self.low(),
+            self.high()
+        )
+    }
+}
 
 
 #[derive(Debug, PartialEq, Eq, Clone)]
