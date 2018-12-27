@@ -434,7 +434,8 @@ impl Env {
             (false, AssemblingPass::SecondPass) => {
                 Err(format!("Label {} is not present in the symbol table in pass {}", label, self.pass))
             },
-            (false, AssemblingPass::FirstPass) => {
+            (false, AssemblingPass::FirstPass) | 
+            (false, AssemblingPass::Uninitialized) => {
                 self.symbols_mut().set_symbol_to_value(
                     &label.to_owned(), value);
                 Ok(())

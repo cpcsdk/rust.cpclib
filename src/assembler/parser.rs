@@ -83,12 +83,19 @@ named!(
 named!(
     pub parse_repeat<CompleteStr<'_>, Token>, do_parse!(
         space1 >>
-        tag_no_case!("REPEAT") >>
+        alt!(
+            tag_no_case!("REPEAT") | tag_no_case!("REPT") | tag_no_case!("REP")
+         ) >>
         space1 >>
         count: expr >>
         inner: opt!(parse_z80_code) >> 
         multispace >>
-        tag_no_case!("ENDREPEAT") >>
+        alt!(
+            tag_no_case!("ENDREPEAT") 
+            | tag_no_case!("ENDREPT") 
+            | tag_no_case!("ENDREP")
+            | tag_no_case!("ENDR")
+         ) >>
         space0 >>
 
         (

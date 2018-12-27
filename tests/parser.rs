@@ -613,6 +613,14 @@ mod tests {
         assert!(res.is_ok());
     }
 
+    #[test]
+    fn test_empty_rept() {
+        let z80 = "  rept 5
+            endrepeat
+            ";
+        let res = parse_repeat(CompleteStr(z80));
+        assert!(res.is_ok());
+    }
 
 
     #[test]
