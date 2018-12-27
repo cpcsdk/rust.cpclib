@@ -3,7 +3,7 @@ use smallvec;
 use crate::assembler::tokens::*;
 use std::collections::HashMap;
 use smallvec::SmallVec;
-
+use std::fmt;
 /// Use smallvec to put stuff on the stack not the heap and (hope so) spead up assembling
 const MAX_SIZE:usize = 4;
 pub type Bytes =  SmallVec<[u8; MAX_SIZE]>;
@@ -38,10 +38,73 @@ const DD:u8 = 0xdd;
 const FD:u8 = 0xfd;
 
 ///! Lots of things will probably be inspired from RASM
-
 type Bank = [u8; 0x10000];
 
-#[derive(Default)]
+
+/// Several passes are needed to properly assemble a source file.
+/// This structure allows to code which pass is going to be analysed.
+/// First pass consists in collecting the various labels to manipulate and so on. Some labels stay unknown at this moment.
+/// Second pass serves to get the final values
+#[derive(Clone, Copy, Debug)]
+enum AssemblingPass {
+    Uninitialized,
+    FirstPass,
+    SecondPass,
+    Finished
+}
+impl fmt::Display for AssemblingPass{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let content = match self {
+            AssemblingPass::Uninitialized => "Uninitialized",
+            AssemblingPass::FirstPass => "1",
+            AssemblingPass::SecondPass => "2",
+            AssemblingPass::Finished => "Finished"
+        };
+        write!(f, "{}", content)
+    }
+}
+
+impl AssemblingPass {
+    fn is_uninitialized(&self) -> bool {
+        match self {
+            AssemblingPass::Uninitialized => true,
+            _ => false
+        }
+    }
+
+    fn is_finished(&self) -> bool {
+        match self {
+            AssemblingPass::Finished => true,
+            _ => false
+        }
+    }
+
+    fn is_first_pass(&self) -> bool {
+        match self {
+            AssemblingPass::FirstPass => true,
+            _ => false
+        }
+    }
+
+    fn is_second_pass(&self) -> bool {
+        match self {
+            AssemblingPass::SecondPass => true,
+            _ => false
+        }
+    }
+
+    fn next_pass(self) -> AssemblingPass {
+        match self {
+            AssemblingPass::Uninitialized => AssemblingPass::FirstPass,
+            AssemblingPass::FirstPass => AssemblingPass::SecondPass,
+            AssemblingPass::SecondPass => AssemblingPass::Finished,
+            AssemblingPass::Finished => panic!()
+        }
+    }
+
+}
+
+#[derive(Default, Debug)]
 struct OrgZone {
     ibank: usize,
     protect: bool,
@@ -49,12 +112,12 @@ struct OrgZone {
     _memend: usize
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Symbol {
     Integer(i32)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SymbolsTable {
     map: HashMap<String, Symbol>,
     dummy: bool
@@ -128,7 +191,6 @@ impl SymbolsTable {
                 Some(1)
             }
             else {
-                eprintln!("'{}' not found {}", key, self.dummy);
                 None
             }
         }
@@ -141,6 +203,9 @@ impl SymbolsTable {
 
 /// Environment of the assembly
 pub struct Env {
+    /// Current pass
+   pass: AssemblingPass, 
+
     /// Start adr to use to write binary files. No use when working with snapshots.
     /// When working with binary file only 64K can be generated, not more
     startadr: Option<usize>,
@@ -166,6 +231,11 @@ pub struct Env {
 
     symbols: SymbolsTable
 }
+impl fmt::Debug for Env{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Env{{ pass: {:?}, symbols {:?} }}", self.pass, self.symbols())
+    }
+}
 
 
 impl Default for Env {
@@ -173,6 +243,8 @@ impl Default for Env {
     fn default() -> Env
     {
         Env{
+            pass: AssemblingPass::Uninitialized,
+
             startadr: None,
             outputadr: 0,
             codeadr: 0,
@@ -189,6 +261,28 @@ impl Default for Env {
 }
 
 impl Env {
+    /// Create an environment that embeds a copy of the given table and is configured to be in the latest pass
+    pub fn with_table(symbols: &SymbolsTable) -> Env {
+        let mut env = Env::default();
+        env.symbols = symbols.clone();
+        env.pass = AssemblingPass::SecondPass;
+        env
+    }
+
+    /// Start a new pass by cleaning up datastructures.
+    /// The only thing to keep is the symbol table
+    fn start_new_pass(&mut self) {
+        self.pass = self.pass.clone().next_pass();
+
+        self.startadr = None;
+        self.outputadr = 0;
+        self.codeadr = 0;
+        self.maxptr = 0xffff;
+        self.activebank = 0;
+        self.mem = [[0;0x10000];1];
+        self.iorg = 0;
+        self.org_zones = Vec::new();
+    }
 
     pub fn output_address(&self) -> usize {
         self.outputadr
@@ -266,8 +360,85 @@ impl Env {
     pub fn symbols_mut(&mut self) -> &mut SymbolsTable {
         &mut self.symbols
     }
+
+
+    /// Compute the expression thanks to the symbol table of the environment.
+    /// If the expression is not solvable in first pass, 0 is returned.
+    /// If the expression is not solvable in second pass, an error is returned
+    fn resolve_expr_may_fail_in_first_pass(&self, exp: &Expr) -> Result<i32, String> {
+        match exp.resolve(self.symbols()) {
+            Ok(value) => Ok(value),
+            Err(e) => {
+                if self.pass.is_first_pass() {
+                    Ok(0)
+                }
+                else {
+                    Err(format!("Impossible to evaluate {} at pass {}. {}", exp, self.pass, e))
+                }
+            }
+        }
+    }
+
+    /// Compute the expression thanks to the symbol table of the environment.
+    /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
+    fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<i32, String> {
+        match exp.resolve(self.symbols()) {
+            Ok(value) => Ok(value),
+            Err(e) => Err(format!("Impossible to evaluate {} at pass {}. {}", exp, self.pass, e))
+        }
+    }
+
+    /// Add a symbol to the symbol table.
+    /// In pass 1: the label MUST be absent
+    /// In pass 2: the label MUST be present and of the same value
+    fn add_symbol_to_symbol_table(&mut self, label: &str, value: i32) -> Result<(), String> {
+        let already_present = self.symbols().contains_symbol(&label.to_owned());
+
+        match (already_present, self.pass) {
+            (true, AssemblingPass::FirstPass) => {
+                Err(format!("Label {} already present in pass {}", label, self.pass))
+            },
+            (false, AssemblingPass::SecondPass) => {
+                Err(format!("Label {} is not present in the symbol table in pass {}", label, self.pass))
+            },
+            (false, AssemblingPass::FirstPass) => {
+                self.symbols_mut().set_symbol_to_value(
+                    &label.to_owned(), value);
+                Ok(())
+            },
+            (true, AssemblingPass::SecondPass) => {
+                /// XXX I'm pretty sure there are some cases where the value MUST stay the same and an error should be raised if it is not the case
+               self.symbols_mut().set_symbol_to_value(
+                   &label.to_owned(), value);
+                   Ok(())
+            },
+            (_,_) => unreachable!()
+        }
+    }
+
+
 }
 
+
+
+
+/// Visit the tokens during several passes
+pub fn visit_tokens_all_passes(tokens: &[Token]) -> Result<Env, String> {
+
+    let mut env = Env::default();
+
+    while !env.pass.is_finished() {
+        env.start_new_pass();
+        for token in tokens.iter() {
+            visit_token(token, &mut env)?;
+        }
+    }
+
+    Ok(env)
+}
+
+/// Visit the tokens during a single pass. Is deprecated in favor to the mulitpass version
+#[deprecated]
 pub fn visit_tokens(tokens: &[Token]) -> Result<Env, String> {
 
     let mut env = Env::default();
@@ -310,7 +481,7 @@ fn visit_equ(label: &String, exp: &Expr, env: &mut Env) -> Result<(), String> {
 
 
 fn visit_label(label: &String, env: &mut Env) -> Result<(), String> {
-    if env.symbols().contains_symbol(label) {
+    if env.pass.is_first_pass() &&  env.symbols().contains_symbol(label) {
         Err(format!("Symbol \"{}\" already present in symbols table", label))
     }
     else {
@@ -400,7 +571,7 @@ pub fn assemble_align(expr: &Expr, sym: &SymbolsTable) -> Result<Bytes, String> 
 fn visit_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<DataAccess> , env: &mut Env) -> Result<(), String>{
 
     // TODO update $ in the symbol table
-    let bytes = assemble_opcode(mnemonic, arg1, arg2, env.symbols_mut())?;
+    let bytes = assemble_opcode(mnemonic, arg1, arg2, env)?;
     for b in bytes.iter() {
         env.output(*b);
     }
@@ -410,7 +581,14 @@ fn visit_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<Da
 
 /// Assemble an opcode and returns the generated bytes or the error message if it is impossible to
 /// assemble
-pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<DataAccess> , sym: &mut SymbolsTable) -> Result<Bytes, String> {
+pub fn assemble_opcode(
+    mnemonic: &Mnemonic, 
+    arg1: &Option<DataAccess>, 
+    arg2: &Option<DataAccess>,
+    env: &mut Env 
+   ) -> Result<Bytes, String> {
+    let sym = env.symbols_mut();
+    // TODO use env instead of the symbol table for each call
     match mnemonic{
         Mnemonic::And | Mnemonic::Or | Mnemonic::Xor 
             => assemble_logical_operator(mnemonic, arg1.as_ref().unwrap(), sym),
@@ -423,7 +601,7 @@ pub fn assemble_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Op
         &Mnemonic::In
             => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ld
-            => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
+            => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
         &Mnemonic::Ldi | &Mnemonic::Ldd | 
         Mnemonic::Ldir | Mnemonic::Lddr |
         &Mnemonic::Ei | &Mnemonic::Di | &Mnemonic::Exx | &Mnemonic::Halt | &Mnemonic::Rra
@@ -673,7 +851,7 @@ fn assemble_djnz(arg1: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, String>
 }
 
 
-fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, String>{
+fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes, String>{
     let mut bytes = Bytes::new();
 
     if let &DataAccess::Register8(ref dst) = arg1 {
@@ -689,7 +867,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
             },
 
             &DataAccess::Expression(ref exp) => {
-                let val = (exp.resolve(sym)? & 0xff) as u8;
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
 
                 bytes.push(0b00000110 | (dst<<3));
                 bytes.push(val);
@@ -697,7 +875,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
             }
 
             &DataAccess::IndexRegister16WithIndex(ref reg, ref op, ref exp) => {
-                let mut val = exp.resolve(sym)?;
+                let mut val = env.resolve_expr_may_fail_in_first_pass(exp)?;
                 if let &Oper::Sub = op {
                     val = -val;
                 }
@@ -721,7 +899,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
 
         match arg2 {
             &DataAccess::Expression(ref exp) => {
-                let val = (exp.resolve(sym)? & 0xffff) as u16;
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xffff) as u16;
 
                 add_byte(&mut bytes, 0b00000001 | (dst << 4) );
                 add_word(&mut bytes, val);
@@ -736,7 +914,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
 
         match arg2 {
             &DataAccess::Expression(ref exp) => {
-                let val = (exp.resolve(sym)? & 0xffff) as u16;
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xffff) as u16;
 
                 add_byte(&mut bytes, code);
                 add_byte(&mut bytes, 0x21);
@@ -744,7 +922,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
             },
 
             &DataAccess::Memory(ref exp) => {
-                let val = (exp.resolve(sym)? & 0xffff) as u16;
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xffff) as u16;
 
                 add_byte(&mut bytes, code);
                 add_byte(&mut bytes, 0x2a);
@@ -783,7 +961,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Res
 
 
     else if let &DataAccess::Memory(ref exp) = arg1 {
-        let address = exp.resolve(sym)?;
+        let address = env.resolve_expr_may_fail_in_first_pass(exp)?;
 
         match arg2 {
             &DataAccess::IndexRegister16(IndexRegister16::Ix) => {
@@ -1305,7 +1483,7 @@ mod test {
         let res = assemble_ld(
             &DataAccess::Register16(Register16::De),
             &DataAccess::Expression(Expr::Value(0x1234)),
-            &SymbolsTable::default()
+            &Env::default()
         ).unwrap();
         assert_eq!(res.len(), 3);
         assert_eq!(res[0], 0x11);
@@ -1320,7 +1498,7 @@ mod test {
         let _res = assemble_ld(
             &DataAccess::Register16(Register16::Af),
             &DataAccess::Expression(Expr::Value(0x1234)),
-            &SymbolsTable::default()
+            &Env::default()
         ).unwrap();
     }
 
@@ -1434,6 +1612,29 @@ mod test {
         assert!(res.is_ok());
         assert!(env.symbols().contains_symbol(&"hello".into()));
         assert_eq!(env.symbols().value(&"hello".into()), 0x4000.into());
+    }
+
+    #[test]
+    pub fn test_two_passes() {
+        let tokens = vec![
+            Token::Org(0.into()),
+            Token::OpCode(
+                Mnemonic::Ld, 
+                Some(DataAccess::Register16(Register16::Hl)),
+                Some(DataAccess::Expression(Expr::Label("test".to_string())))
+            ),
+            Token::Label("test".to_string())
+        ];
+        let env = visit_tokens(&tokens);
+        assert!(env.is_err());
+
+        let env = visit_tokens_all_passes(&tokens);
+        println!("{:?}", &env);
+        assert!(env.is_ok());
+        let env = env.ok().unwrap();
+
+        let count = env.size();
+        assert_eq!(count, 3);
     }
 
 

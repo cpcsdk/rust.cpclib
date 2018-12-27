@@ -261,11 +261,16 @@ impl Token {
         self.to_bytes_with_context(table)
     }
 
-    /// Assemble the symbol taking into account some context
+    /// Assemble the symbol taking into account some context, but never modify this context
     pub fn to_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<Bytes, String> {
                 match self {
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2)
-                => assemble_opcode(mnemonic, arg1, arg2, table),
+                => assemble_opcode(
+                    mnemonic, 
+                    arg1, 
+                    arg2, 
+                    &mut crate::assembler::assembler::Env::with_table(table) // Modification to the environment are lost
+                ),
 
             &Token::Equ(_, _)
                 => Ok(Bytes::new()),
