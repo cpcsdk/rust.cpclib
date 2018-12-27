@@ -398,6 +398,22 @@ impl Env {
         }
     }
 
+
+    /// Compute the relative address. Is authorized to fail at first pass
+    fn absolute_to_relative_may_fail_in_first_pass(&self, address: i32, opcode_delta: i32) -> Result<u8, String> {
+        match absolute_to_relative(address, opcode_delta, self.symbols()) {
+            Ok(value) => Ok(value),
+            Err(e) => {
+                if self.pass.is_first_pass() {
+                    Ok(0)
+                }
+                else {
+                    Err(format!("Impossible to compute relative address {} at pass {}", address, e))
+                }
+            }
+        }
+    }
+
     /// Add a symbol to the symbol table.
     /// In pass 1: the label MUST be absent
     /// In pass 2: the label MUST be present and of the same value
@@ -624,7 +640,7 @@ pub fn assemble_opcode(
         &Mnemonic::Dec | &Mnemonic::Inc
             => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap()),
         &Mnemonic::Djnz
-            => assemble_djnz(arg1.as_ref().unwrap(), sym),
+            => assemble_djnz(arg1.as_ref().unwrap(), env),
         &Mnemonic::In
             => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ld
@@ -761,21 +777,20 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, String>{
 
 
 /// Converts an absolute address to a relative one (relative to $)
-pub fn absolute_to_relative(address: i32, opcode_delta: i32, sym: &SymbolsTable) -> u8 {
+pub fn absolute_to_relative(address: i32, opcode_delta: i32, sym: &SymbolsTable) -> Result<u8, String> {
     match sym.current_address() {
-        Err(msg) => panic!("Unable to compute the relative address {}", msg),
+        Err(msg) => Err(format!("Unable to compute the relative address {}", msg)),
         Ok(root) => {
             let delta = (address - (root as i32)) - opcode_delta;
             if delta > 128 || delta < -127 {
-                panic!(
+                Err(format!(
                     "Address 0x{:x} relative to 0x{:x} is too far {}",
                     address, root, delta
-                );
+                ))
             }
             else {
                 let res = (delta & 0xff) as u8;
-                println!("{:x} {:x} {:x} {:x}", address, root, delta, res);
-                res
+                Ok(res)
             }
         }
     }
@@ -832,7 +847,7 @@ fn assemble_jr_or_jp(
         &DataAccess::Expression(ref e) => {
             let address = env.resolve_expr_may_fail_in_first_pass(e)?;
             if is_jr {
-                let relative =absolute_to_relative(address, 2, env.symbols());
+                let relative = env.absolute_to_relative_may_fail_in_first_pass(address, 2)?;
                 if flag_code.is_some(){
                     // jr - flag
                     add_byte(&mut bytes, 0b00100000 | (flag_code.unwrap() << 3));
@@ -863,12 +878,12 @@ fn assemble_jr_or_jp(
     Ok(bytes)
 }
 
-fn assemble_djnz(arg1: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, String> {
+fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, String> {
 
     if let &DataAccess::Expression(ref expr) = arg1 {
         let mut bytes = Bytes::new();
-        let address = expr.resolve(sym)?;
-        let relative = absolute_to_relative(address, 1, sym);
+        let address = env.resolve_expr_may_fail_in_first_pass(expr)?;
+        let relative = env.absolute_to_relative_may_fail_in_first_pass(address, 1)?;
 
         bytes.push(0x10);
         bytes.push(relative);
