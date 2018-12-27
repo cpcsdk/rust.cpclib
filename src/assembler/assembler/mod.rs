@@ -493,6 +493,7 @@ pub fn visit_tokens(tokens: &[Token]) -> Result<Env, String> {
 pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
     env.update_dollar();
     match token {
+        Token::Assert(ref exp) => visit_assert(exp, env),
         Token::Org(ref address) => visit_org(address, env),
         Token::Db(_) | &Token::Dw(_) => visit_db_or_dw(token, env),
         Token::Defs(_) => visit_defs(token, env),
@@ -503,6 +504,16 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
         Token::Repeat(_, _) => visit_repeat(token, env),
         _ => panic!("Not treated {:?}", token)
     }
+}
+
+fn visit_assert(exp: &Expr, env: &mut Env) -> Result<(), String> {
+    if env.pass.is_second_pass() {
+        let value = env.resolve_expr_must_never_fail(exp)?;
+        if value == 0 {
+            return Err(format!("Assertion failure: {}", exp));
+        }
+    }
+    Ok(())
 }
 
 
@@ -1527,6 +1538,21 @@ mod test {
         assert_eq!(res[0], 0b11001010);
         assert_eq!(res[1], 0x34);
         assert_eq!(res[2], 0x12);
+    }
+
+    #[test]
+    pub fn test_assert() {
+        let mut env = Env::default();
+        env.start_new_pass();
+        env.start_new_pass();
+        assert!(env.pass.is_second_pass());
+
+        assert!(
+            visit_assert(&Expr::Equal(Box::new(0.into()), Box::new(0.into())), &mut env)
+                .is_ok());
+        assert!(
+            visit_assert(&Expr::Equal(Box::new(1.into()), Box::new(0.into())),& mut env)
+                .is_err());
     }
 
     #[test]
