@@ -773,9 +773,12 @@ impl Snapshot {
     /// Add the memory content at the required posiiton
     ///
     /// ```
+    /// use cpclib::sna::Snapshot;
+    /// 
     /// let mut sna = Snapshot::default();
     /// let data = vec![0,2,3,5];
     /// sna.add_data(&data, 0x4000);
+    /// ```
     pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError>{
 
         if address + data.len() > 0x10000*2 {
