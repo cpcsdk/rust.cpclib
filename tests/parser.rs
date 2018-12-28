@@ -800,6 +800,59 @@ mod tests {
         assert_eq!(0, res.unwrap().0.len());
     }
 
+
+    #[test]
+    fn test_opcode() {
+        let code = "
+            ld a, opcode(inc a)
+        ";
+        let res = parse_z80_code(code.into());
+        assert!(res.is_ok());
+        assert_eq!(0, res.unwrap().0.len());
+
+        let code = "
+            ld hl, opcode(inc a)
+        ";
+        let res = parse_z80_code(code.into());
+        assert!(res.is_ok());
+        assert_eq!(0, res.unwrap().0.len());
+
+        let code = "
+            ld a, opcode(ldd)
+        ";
+        let res = parse_z80_code(code.into());
+        assert!(res.is_ok()); // Failure is detected in the assembler pass not the parser pass
+        assert_eq!(0, res.unwrap().0.len());
+
+        let code = "
+            ld hl, opcode(ldd)
+        ";
+        let res = parse_z80_code(code.into());
+        assert!(res.is_ok());
+        assert_eq!(0, res.unwrap().0.len());
+
+        let code = "
+INC_L equ opcode(inc l)
+INC_H equ opcode(inc h)
+        ";
+        let res = parse_z80_code(code.into());
+        println!("{:?}", res);
+        assert!(res.is_ok());
+        assert_eq!(0, res.unwrap().0.len());
+
+
+        let code = "
+INC_L equ opcode(inc l)
+INC_H equ opcode(inc h)
+        ld a, INC_L
+        ld (hl), a
+        ";
+        let res = parse_z80_code(code.into());
+        println!("{:?}", res);
+        assert!(res.is_ok());
+        assert_eq!(0, res.unwrap().0.len());
+    }
+
     #[test]
     fn fn_test_asm_prog1() {
 

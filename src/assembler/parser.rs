@@ -1081,8 +1081,9 @@ named!(parens< CompleteStr<'_>, Expr >, delimited!(
 //TODO add stuff to manipulate any kind of data (value/label)
 named!(pub factor< CompleteStr<'_>, Expr >, alt_complete!(
     // Manage functions
-    parse_hi_or_lo  
-    | delimited!(space0, parse_duration, space0) 
+      delimited!(space0, parse_hi_or_lo, space0)
+    | delimited!(space0, parse_duration, space0)
+    | delimited!(space0, parse_assemble, space0)
     // manage values
     | map!(
         delimited!(
@@ -1189,6 +1190,17 @@ named!(pub parse_duration <CompleteStr<'_>, Expr>, do_parse!(
     tag!(")") >>
     (
         Expr::Duration(Box::new(token))
+    )
+));
+
+named!(pub parse_assemble <CompleteStr<'_>, Expr>, do_parse!(
+    tag_no_case!("opcode(") >>
+    space0 >>
+    token: parse_token >>
+    space0 >>
+    tag!(")") >>
+    (
+        Expr::OpCode(Box::new(token))
     )
 ));
 

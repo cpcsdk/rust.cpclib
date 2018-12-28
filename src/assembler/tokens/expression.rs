@@ -15,6 +15,8 @@ pub enum Expr {
   Label(String),
   /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
   Duration(Box<Token>),
+  /// This expression node represents an opcode that needs to be assembled in order to produce its binary representation
+  OpCode(Box<Token>),
 
   // Arithmetic operations
   Add(Box<Expr>, Box<Expr>),
@@ -108,6 +110,16 @@ impl Expr {
                 let duration = token.estimated_duration()?;
                 let duration = duration as i32;
                 Ok(duration)
+            },
+
+            OpCode(ref token) => {
+                let bytes = token.to_bytes()?;
+                match bytes.len() {
+                    0 => Err(format!("{} is assembled with 0 bytes", token)),
+                    1 => Ok(bytes[0] as _),
+                    2 => Ok(bytes[0] as i32 * 256 + bytes[1] as i32),
+                    val => Err(format!("{} is assembled with {} bytes", token, val))
+                }
             },
 
 
@@ -206,6 +218,7 @@ impl Display for Expr {
       &Value(val) => write!(format, "0x{:x}", val),
       &Label(ref label) => write!(format, "{}", label),
       &Duration(ref token) => write!(format, "DURATION({})", token),
+      &OpCode(ref token) => write!(format, "OPCODE({})", token),
 
 
       &Add(ref left, ref right) => write!(format, "{} + {}", left, right),
@@ -236,6 +249,7 @@ impl Debug for Expr {
       Value(val) => write!(format, "{}", val),
       Label(ref label) => write!(format, "{}", label),
       Duration(ref token) => write!(format, "DURATION({:?})", token),
+      OpCode(ref token) => write!(format, "OPCODE({:?})", token),
 
       Add(ref left, ref right) => write!(format, "({:?} + {:?})", left, right),
       Sub(ref left, ref right) => write!(format, "({:?} - {:?})", left, right),
