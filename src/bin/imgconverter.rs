@@ -230,7 +230,7 @@ fn convert(matches: &ArgMatches) {
                                 .tempfile()
                                 .expect("Unable to create the temporary file");
 
-                sna.write(f.as_file_mut())
+                sna.write(f.as_file_mut(), cpclib::sna::SnapshotVersion::V2)
                 .expect("Unable to write the sna in the temporary file");
 
                 let xfer = CpcXfer::new(sub_m4.value_of("CPCM4").unwrap());
@@ -238,7 +238,7 @@ fn convert(matches: &ArgMatches) {
                 let tmp_file_name = f.path().to_str().unwrap();
                 xfer.upload_and_run(
                     tmp_file_name,
-                    None)
+                    None).expect("An error occured while transfering the snapshot");
             }
         }
 

@@ -141,18 +141,21 @@ impl CpcXfer {
 
     /// Reset the M4
     pub fn reset_m4(&self)  -> Result<(), XferError>{
-        self.simple_query(&[("mres","")])
+        self.simple_query(&[("mres","")])?;
+        Ok(())
     }
 
     /// Reset the Cpc
     pub fn reset_cpc(&self)  -> Result<(), XferError>{
-        self.simple_query(&[("cres","")])
+        self.simple_query(&[("cres","")])?;
+        Ok(())
     }
 
     /// Run the file from the current selected path
     /// TODO debug this
    pub fn run_rom_current_path(&self, fname: &str) -> Result<(), XferError> {
-       self.simple_query(&[("run", fname)])
+       self.simple_query(&[("run", fname)])?;
+       Ok(())
    }
 
     /// Run the file whose complete path is provided
@@ -165,11 +168,12 @@ impl CpcXfer {
 
     /// Remove the file whose complete path is provided
     pub fn rm(&self, path: &str) -> Result<(), XferError> {
-       self.simple_query(&[("rm", path)])
+       self.simple_query(&[("rm", path)])?;
+       Ok(())
     }
 
     /// upload a file on the M4
-    pub fn upload<P>(&self, path: P, m4_path: &str, header: Option<(AmsdosFileType, u16, u16)>) -> -> Result<(), XferError>
+    pub fn upload<P>(&self, path: P, m4_path: &str, header: Option<(AmsdosFileType, u16, u16)>) -> Result<(), XferError>
 	where P: AsRef<Path> {
 		self.upload_impl(path.as_ref(), m4_path, header)
 	}
