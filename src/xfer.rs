@@ -20,6 +20,8 @@ use custom_error::custom_error;
 
 custom_error!{pub XferError
     ConnectionError{source: Error} = "There is a connection error with the Cpc Wifi.",
+    ConnectionError2{source: reqwest::Error} = "There is a connection error with the Cpc Wifi.",
+
     CdError{from: String, to: String} = @ {
         format!(
             "Unable to move in {}. Current working directory is {}.", 
@@ -138,45 +140,41 @@ impl CpcXfer {
     }
 
     /// Reset the M4
-    pub fn reset_m4(&self) {
+    pub fn reset_m4(&self)  -> Result<(), XferError>{
         self.simple_query(&[("mres","")])
-            .expect("Unable to reset the M4");
     }
 
     /// Reset the Cpc
-    pub fn reset_cpc(&self) {
+    pub fn reset_cpc(&self)  -> Result<(), XferError>{
         self.simple_query(&[("cres","")])
-            .expect("Unable to reset the M4");
     }
 
     /// Run the file from the current selected path
     /// TODO debug this
-   pub fn run_rom_current_path(&self, fname: &str) {
+   pub fn run_rom_current_path(&self, fname: &str) -> Result<(), XferError> {
        self.simple_query(&[("run", fname)])
-        .expect("Unable to run the given file");
    }
 
     /// Run the file whose complete path is provided
-    pub fn run(&self, path: &str)  {
-       let absolute = self.absolute_path(path).unwrap();
-       self.simple_query(&[("run2", &absolute)])
-        .expect("Unable to run the given file");
+    pub fn run(&self, path: &str)  -> Result<(), XferError> {
+       let absolute = self.absolute_path(path)?;
+       self.simple_query(&[("run2", &absolute)])?;
+       Ok(())
     }
 
 
     /// Remove the file whose complete path is provided
-    pub fn rm(&self, path: &str) {
+    pub fn rm(&self, path: &str) -> Result<(), XferError> {
        self.simple_query(&[("rm", path)])
-        .expect("Unable to delete the given file");
     }
 
     /// upload a file on the M4
-    pub fn upload<P>(&self, path: P, m4_path: &str, header: Option<(AmsdosFileType, u16, u16)>)
+    pub fn upload<P>(&self, path: P, m4_path: &str, header: Option<(AmsdosFileType, u16, u16)>) -> -> Result<(), XferError>
 	where P: AsRef<Path> {
-		self.upload_impl(path.as_ref(), m4_path, header);
+		self.upload_impl(path.as_ref(), m4_path, header)
 	}
 
-    pub fn upload_impl(&self, path: &Path, m4_path: &str, header: Option< (AmsdosFileType, u16, u16)>) {
+    pub fn upload_impl(&self, path: &Path, m4_path: &str, header: Option< (AmsdosFileType, u16, u16)>) -> Result<(), XferError> {
 
 		let local_fname = path.to_str().unwrap();
 
@@ -213,29 +211,37 @@ impl CpcXfer {
             .filename(&destination)
             .add().unwrap();
         let mut easy = Easy::new();
-        easy.url(&self.uri("files.shtml")).unwrap();
-        easy.httppost(form).unwrap();
-        easy.perform().unwrap();
+        easy.url(&self.uri("files.shtml"))?;
+        easy.httppost(form)?;
+        easy.perform()?;
+
+        Ok(())
     }
 
     /// Directly sends the SNA to the M4
-    pub fn upload_and_run_sna(&self, sna: &crate::sna::Snapshot){
+    /// XXX does not seem to work
+    pub fn upload_and_run_sna(&self, sna: &crate::sna::Snapshot)-> Result<(), XferError> {
         let file = tempfile::NamedTempFile::new().expect("Unable to build a temporary file");
         let path = file.into_temp_path();
         let path = path.to_str().unwrap();
-        sna.save(path, crate::sna::SnapshotVersion::V2);
-        self.upload_and_run(path,None);
+        sna.save(path, crate::sna::SnapshotVersion::V2).expect("Unable to save the snapshot");
+        self.upload_and_run(path,None)?;
+
+        // sleep a bit to be sure the file is not deleted
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        Ok(())
     }
 
-	pub fn upload_and_run<P>(&self, path: P, header: Option<(AmsdosFileType, u16, u16)>)
-		where P:AsRef<Path> {
-			self.upload_and_run_impl(path.as_ref(), header);
+	pub fn upload_and_run<P: AsRef<Path>>(&self, path: P, header: Option<(AmsdosFileType, u16, u16)>) -> Result<(), XferError> {
+			self.upload_and_run_impl(path.as_ref(), header)
 	}
 
-	fn upload_and_run_impl(&self, path: &Path, header: Option<(AmsdosFileType, u16, u16)>) {
+	fn upload_and_run_impl(&self, path: &Path, header: Option<(AmsdosFileType, u16, u16)>) -> Result<(), XferError>
+ {
 
-			self.upload_impl(path, "/tmp", header);
-			self.run(&format!("/tmp/{}", path.file_name().unwrap().to_str().unwrap()));
+			self.upload_impl(path, "/tmp", header)?;
+			self.run(&format!("/tmp/{}", path.file_name().unwrap().to_str().unwrap()))?;
+            Ok(())
 	}
 
 
@@ -324,17 +330,18 @@ impl CpcXfer {
     }
 
 
-    fn ls_request(&self, folder: &str) {
+    fn ls_request(&self, folder: &str)  -> Result<(), XferError>{
         let mut easy = Easy::new();
         let folder = easy.url_encode(folder.as_bytes());
-        easy.get(true).unwrap();
+        easy.get(true)?;
         let url = format!(
             "{}?ls={}",
             self.uri("config.cgi"),
             folder
             );
-        easy.url(&url).unwrap();
-        easy.perform().unwrap();
+        easy.url(&url)?;
+        easy.perform()?;
+        Ok(())
     }
 
 }
