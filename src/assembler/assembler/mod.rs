@@ -221,9 +221,9 @@ impl SymbolsTable {
     }
 
     /// Set the given symbol to the given value
-    pub fn set_symbol_to_value(&mut self, label: &String, value: i32) {
+    pub fn set_symbol_to_value<S: AsRef<str>>(&mut self, label: S, value: i32) {
         self.map.insert(
-            label.clone(), 
+            label.as_ref().into(), 
             Symbol::Integer(value as _)
         );
     }
@@ -290,8 +290,8 @@ pub struct Env {
 
     iorg: usize,
     org_zones: Vec<OrgZone>,
+    symbols: SymbolsTable,
 
-    symbols: SymbolsTable
 }
 impl fmt::Debug for Env{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -318,13 +318,14 @@ impl Default for Env {
             iorg: 0,
             org_zones: Vec::new(),
 
-            symbols: SymbolsTable::default()
+            symbols: SymbolsTable::default(),
         }
     }
 }
 
 impl Env {
-    /// Create an environment that embeds a copy of the given table and is configured to be in the latest pass
+    /// Create an environment that embeds a copy of the given table and is configured to be in the latest pass.
+    /// Mainly used for tests.
     pub fn with_table(symbols: &SymbolsTable) -> Env {
         let mut env = Env::default();
         env.symbols = symbols.clone();
@@ -517,8 +518,15 @@ impl Env {
 
 /// Visit the tokens during several passes
 pub fn visit_tokens_all_passes(tokens: &[Token]) -> Result<Env, String> {
+    let table = SymbolsTable::default();
+    visit_tokens_all_passes_with_table(tokens, &table)
+}
 
+
+
+pub fn visit_tokens_all_passes_with_table(tokens: &[Token], table: &SymbolsTable) -> Result<Env, String> {
     let mut env = Env::default();
+    env.symbols = table.clone(); // XXX cannot use with_table as it setup pass 2
 
     loop {
         env.start_new_pass();
