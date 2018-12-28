@@ -43,6 +43,17 @@ pub enum SnapshotVersion {
     V3
 }
 
+impl SnapshotVersion {
+    pub fn is_v3(&self) -> bool {
+        if let SnapshotVersion::V3 = self {
+            true
+        }
+        else {
+            false
+        }
+    }
+}
+
 
 /// Encode a flag of the snaphot
 #[derive(PartialEq, Debug, Copy, Clone)]
@@ -657,6 +668,8 @@ impl SnapshotChunk {
 const PAGE_SIZE:usize = 0x4000;
 const HEADER_SIZE:usize = 256;
 
+
+/// Snapshot V3 representation. Can be saved in snapshot V1 or v2.
 pub struct Snapshot {
     header: [u8; HEADER_SIZE],
     memory: [u8; PAGE_SIZE*8],
@@ -734,12 +747,38 @@ impl Snapshot {
     /// We are currently only able to build a V2 version.
     pub fn write(&self, buffer: &mut File, version: SnapshotVersion)  -> Result<(), std::io::Error> {
 
-        // TODO properly check the difference between V2 and V3
-        // Write header and main memory
-         buffer.write_all(&self.header)?; // buggy vor something else than V2 of course
-        buffer.write_all(&self.memory)?;
+        // get a proper header
+        let header: [u8; HEADER_SIZE] = {
+            let mut header = self.header.clone();
+            match version {
+                SnapshotVersion::V1 => {
+                    header[0x10] = 1;
+                    for idx in 0x6d..=0xff{
+                       header[idx] = 0;
+                    }
+                },
+                SnapshotVersion::V2 => {
+                    header[0x10] = 2;
+                    for idx in 0x75..=0xff{
+                       header[idx] = 0;
+                    }
+                },
+                SnapshotVersion::V3 => {
+                    header[0x10] = 3;
+                }
 
-        // TODO add extra memory ?
+            };
+            header
+        };
+        buffer.write_all(&header)?;
+
+        // Write memory
+        if version.is_v3() && !self.chuncks.is_empty(){
+            panic!("Need to implement the compressed memory block format");
+        }
+        else {
+            buffer.write_all(&self.memory)?;
+        }
 
         // Save the chuncks in the V3 version
         match version {
