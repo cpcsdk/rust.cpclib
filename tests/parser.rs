@@ -93,6 +93,8 @@ mod tests {
     fn test_expr() {
         let formula = "0xbd00 + 0x20 + 0b00001100";
         let res = expr(CompleteStr(formula));
+        assert!(res.is_ok());
+        println!("{:?}", res);
          assert_eq!(
              res.ok().unwrap().1.eval().unwrap(), 
              0xbd00 + 0x20 + 0b00001100);

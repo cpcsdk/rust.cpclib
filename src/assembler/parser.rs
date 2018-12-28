@@ -1088,7 +1088,7 @@ named!(pub factor< CompleteStr<'_>, Expr >, alt_complete!(
     | map!(
         delimited!(
             space0, 
-            alt_complete!(hex_u16 | dec_u16 | bin_u16), 
+            alt_complete!(hex_u16 | bin_u16 | dec_u16), 
             space0
         ),
         |d:u16| {Expr::Value(d as i32)}
