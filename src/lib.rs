@@ -35,6 +35,8 @@ extern crate custom_error;
 #[macro_use]
 extern crate arrayref;
 
+#[macro_use] extern crate serde_derive;
+extern crate serde;
 
 
 

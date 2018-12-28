@@ -7,6 +7,9 @@ use std::ops::Add;
 use std::fmt::{Formatter, Debug, Result} ;
 use num::Integer;
 use crate::image::Mode;
+ use serde::{Serializer, Deserializer};
+use serde::{Serialize, Deserialize};
+use serde::ser::SerializeSeq;
 
 const INK0:im::Rgba<u8> = im::Rgba{data:[0, 0, 0, 255]};
 const INK1:im::Rgba<u8> = im::Rgba{data: [0x00, 0x00, 0x80, 255]};
@@ -106,7 +109,7 @@ pub const INKS_GA_VALUE : [u8;27] = [
         ];
 
 
-#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Ink {
     value: u8
 }
@@ -291,7 +294,7 @@ pub const INKS:[Ink; NB_INKS as usize] = [
     Ink{value: 26},
 ];
 
-#[derive(Eq,  PartialEq, Hash, Clone, Copy, Debug)]
+#[derive(Eq,  PartialEq, Hash, Clone, Copy, Debug, Serialize, Deserialize)]
 /// Represents a Pen. There a 16 pens + the border in the Amstrad CPC
 pub struct Pen {
     value: u8
@@ -450,6 +453,33 @@ macro_rules! palette {
             palette
         }
     };
+}
+
+
+impl Serialize for Palette
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    {
+        let mut seq = serializer.serialize_seq(Some(17))?;
+        for i in 0..17 {
+            let entry = self.get(i.into());
+            seq.serialize_element(entry)?;
+        }
+        seq.end()
+    }
+}
+
+
+impl<'de> Deserialize<'de> for Palette 
+{
+
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Palette, D::Error>
+    {
+        let inks: Vec<Ink> = Vec::<Ink>::deserialize(deserializer)?;
+        let palette: Palette = inks.into();
+        Ok(palette)
+        
+    }
 }
 
 impl Palette {
