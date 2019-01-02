@@ -10,7 +10,12 @@ impl ListingElement for Token {
         let duration = match self {
             &Token::Comment(_) | &Token::Label(_)  => 0,
             &Token::Protect(_, _) => 0,
-            &Token::Defs(ref expr) => expr.eval().ok().unwrap() as usize, // XXX will not work when variables are used
+            &Token::Defs(ref expr, ref value) => {
+                if value.is_some() {
+                    unimplemented!(); // A disassembler is needed there to get the instruction
+                }
+                expr.eval().ok().unwrap() as usize
+            }, 
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 match mnemonic {
 
@@ -321,7 +326,7 @@ impl Listing {
     /// Add a list of bytes to the listing
     pub fn add_bytes(&mut self, bytes: &[u8]) {
         let exp = bytes.iter().map(|pu8|{Expr::Value(*pu8 as _)}).collect::<Vec<_>>();
-        let tok = Token::Db(exp);
+        let tok = Token::Defb(exp);
         self.push(tok);
     }
 
@@ -366,11 +371,11 @@ impl Listing {
 
 
             let mut current_size = 0;
-            if let  &Token::Org(ref expr) = token {
+            if let  &Token::Org(ref expr, _) = token {
                 current_address = Some(expr.resolve(&sym)? as usize);
                 println!("Set address to {:?}", current_address);
             }
-            else if let &Token::Align(ref _expr) = token {
+            else if let &Token::Align(ref _expr, _) = token {
                 if current_address.is_none() {
                     return Err("Unable to guess align size if current address is unknown".to_owned())
                 }

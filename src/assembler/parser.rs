@@ -109,7 +109,8 @@ named!(
                 }
                 else {
                     Vec::new()
-                }
+                },
+                None
             )
         )
     )
@@ -409,17 +410,23 @@ named!(
 named!(
   pub parse_db_or_dw <CompleteStr<'_>, Token>, do_parse!(
     is_db: alt!(
-        tag_no_case!("DB") => {|_| {true}} |
-        tag_no_case!("DW") => {|_| {false}}
+        alt!(
+            tag_no_case!("DB") |
+            tag_no_case!("DEFB") 
+         )  => {|_| {true}} |
+        alt!(
+            tag_no_case!("DW") |
+            tag_no_case!("DEFW")
+         ) => {|_| {false}}
     ) >>
     many1!(space) >>
     expr: expr_list >>
     ({
         if is_db {
-            Token::Db(expr)
+            Token::Defb(expr)
         }
         else {
-            Token::Dw(expr)
+            Token::Defw(expr)
         }
     })
   )
@@ -454,7 +461,7 @@ named!(
             expr
         ) >>
         (
-            Token::Assert(expr)
+            Token::Assert(expr, None)
         )
     )
 );
@@ -469,7 +476,7 @@ named!(
             expr
         ) >>
         (
-            Token::Align(expr)
+            Token::Align(expr, None)
         )
     )
 );
@@ -884,7 +891,7 @@ named!(
         tag_no_case!("ORG") >>
         space >>
         val: expr >>
-        (Token::Org(val))
+        (Token::Org(val, None))
     )
 );
 
@@ -894,7 +901,7 @@ named!(
         tag_no_case!("DEFS") >>
         space >>
         val: expr >>
-        (Token::Defs(val))
+        (Token::Defs(val, None))
         )
     );
 

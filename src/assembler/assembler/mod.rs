@@ -561,10 +561,10 @@ pub fn visit_tokens(tokens: &[Token]) -> Result<Env, String> {
 pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
     env.update_dollar();
     match token {
-        Token::Assert(ref exp) => visit_assert(exp, env),
-        Token::Org(ref address) => visit_org(address, env),
-        Token::Db(_) | &Token::Dw(_) => visit_db_or_dw(token, env),
-        Token::Defs(_) => visit_defs(token, env),
+        Token::Assert(ref exp, ref txt) => visit_assert(exp, txt.as_ref(), env),
+        Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
+        Token::Defb(_) | &Token::Defw(_) => visit_db_or_dw(token, env),
+        Token::Defs(_, _) => visit_defs(token, env),
         Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
             visit_opcode(&mnemonic, &arg1, &arg2, env)?;
             // Compute duration only if it is necessary
@@ -577,17 +577,21 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
         Token::Comment(_) => Ok(()), // Nothing to do for a comment
         Token::Label(ref label) => visit_label(label, env),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
-        Token::Repeat(_, _) => visit_repeat(token, env),
+        Token::Repeat(_, _, _) => visit_repeat(token, env),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         _ => panic!("Not treated {:?}", token)
     }
 }
 
-fn visit_assert(exp: &Expr, env: &mut Env) -> Result<(), String> {
+fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> Result<(), String> {
     if env.pass.is_second_pass() {
         let value = env.resolve_expr_must_never_fail(exp)?;
         if value == 0 {
-            return Err(format!("Assertion failure: {}", exp));
+            return Err(format!(
+                "Assertion failure: {}\n\t{}", 
+                if txt.is_some() {&txt.unwrap()} else {""}, 
+                exp
+            ));
         }
     }
     Ok(())
@@ -617,8 +621,8 @@ fn visit_label(label: &String, env: &mut Env) -> Result<(), String> {
 
 fn visit_defs(token: &Token, env: &mut Env) -> Result<(), String>{
     match token {
-        Token::Defs(expr) => {
-            let bytes = assemble_defs(expr, env)?;
+        Token::Defs(expr, fill) => {
+            let bytes = assemble_defs(expr, fill.as_ref(), env)?;
             env.output_bytes(&bytes)
         },
         _ => unreachable!()
@@ -665,12 +669,19 @@ pub fn visit_stableticker(ticker: &StableTickerAction, env: &mut Env) -> Result<
 }
 
 
-pub fn assemble_defs(expr: &Expr, env: &Env) -> Result<Bytes, String> {
+pub fn assemble_defs(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Bytes, String> {
     let count = env.resolve_expr_must_never_fail(expr)?;
     let mut bytes = Bytes::with_capacity(count as usize);
+    let value = if fill.is_none() {
+        0
+    }
+    else {
+        let value = env.resolve_expr_may_fail_in_first_pass(fill.unwrap())?;
+        (value & 0xff) as u8
+    };
 
     for _i in 0..count {
-        bytes.push(0);
+        bytes.push(value);
     }
 
     Ok(bytes)
@@ -682,8 +693,8 @@ pub fn assemble_db_or_dw(token: &Token, env: &Env) -> Result<Bytes, String> {
 
     let (ref exprs, mask) = {
         match token {
-            &Token::Db(ref exprs) => (exprs, 0xff),
-            &Token::Dw(ref exprs) => (exprs, 0xffff),
+            &Token::Defb(ref exprs) => (exprs, 0xff),
+            &Token::Defw(ref exprs) => (exprs, 0xffff),
             _ => unreachable!()
         }
     };
@@ -704,10 +715,16 @@ pub fn assemble_db_or_dw(token: &Token, env: &Env) -> Result<Bytes, String> {
 
 
 /// Assemble align directive. It can only work if current address is known...
-pub fn assemble_align(expr: &Expr, sym: &SymbolsTable) -> Result<Bytes, String> {
-    let expression = expr.resolve(sym)? as u16;
-    let current = sym.current_address()?;
-
+pub fn assemble_align(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Bytes, String> {
+    let expression = env.resolve_expr_must_never_fail(expr)? as u16;
+    let current = env.symbols().current_address()?;
+    let value = if fill.is_none() {
+        0
+    }
+    else {
+        let value = env.resolve_expr_may_fail_in_first_pass(fill.unwrap())?;
+        (value & 0xff) as u8
+    };
 
 
     // compute the number of 0 to put
@@ -720,10 +737,9 @@ pub fn assemble_align(expr: &Expr, sym: &SymbolsTable) -> Result<Bytes, String> 
     let hole = (until-current) as usize;
     let mut bytes = Bytes::with_capacity(hole);
     for _i in 0..hole {
-        bytes.push(0);
+        bytes.push(value);
     }
 
-    println!("Expression {}, current {}, hole {}", expression, current, hole);
     // and return it
     Ok(bytes)
 }
@@ -791,7 +807,11 @@ pub fn assemble_opcode(
     }
 }
 
-fn visit_org(address: &Expr, env: &mut Env) -> Result<(), String>{
+fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(), String>{
+    if address2.is_some() {
+        unimplemented!();
+    }
+
     let adr = env.eval(address)?;
 
     // TODO Check overlapping region
@@ -1651,10 +1671,10 @@ mod test {
         assert!(env.pass.is_second_pass());
 
         assert!(
-            visit_assert(&Expr::Equal(Box::new(0.into()), Box::new(0.into())), &mut env)
+            visit_assert(&Expr::Equal(Box::new(0.into()), Box::new(0.into())), None, &mut env)
                 .is_ok());
         assert!(
-            visit_assert(&Expr::Equal(Box::new(1.into()), Box::new(0.into())),& mut env)
+            visit_assert(&Expr::Equal(Box::new(1.into()), Box::new(0.into())), None, & mut env)
                 .is_err());
     }
 
@@ -1708,10 +1728,11 @@ mod test {
     #[test]
     pub fn test_repeat() {
         let tokens = vec![
-            Token::Org(0.into()),
+            Token::Org(0.into(), None),
             Token::Repeat(
                 10.into(),
-                vec![Token::OpCode(Mnemonic::Nop, None, None)])
+                vec![Token::OpCode(Mnemonic::Nop, None, None)],
+                None)
         ];
 
         let count = visit_tokens(&tokens).unwrap().size();
@@ -1721,14 +1742,16 @@ mod test {
     #[test]
     pub fn test_double_repeat() {
         let tokens = vec![
-            Token::Org(0.into()),
+            Token::Org(0.into(), None),
             Token::Repeat(
                 10.into(),
                 vec![
                     Token::Repeat(
                         10.into(),
-                        vec![Token::OpCode(Mnemonic::Nop, None, None)])
-                ]
+                        vec![Token::OpCode(Mnemonic::Nop, None, None)],
+                        None)
+                ],
+                None
             )
         ];
 
@@ -1766,7 +1789,7 @@ mod test {
     #[test]
     pub fn test_count() {
         let tokens = vec![
-            Token::Org(0.into()),
+            Token::Org(0.into(), None),
             Token::OpCode(Mnemonic::Nop, None, None),
             Token::OpCode(Mnemonic::Nop, None, None),
             Token::OpCode(Mnemonic::Nop, None, None),
@@ -1876,7 +1899,7 @@ mod test {
     pub fn test_labels() {
         let mut env = Env::default();
         let res = visit_token(
-            &Token::Org(0x4000.into()),
+            &Token::Org(0x4000.into(), None),
             &mut env
         );
         assert!(res.is_ok());
@@ -1893,7 +1916,7 @@ mod test {
     #[test]
     pub fn test_two_passes() {
         let tokens = vec![
-            Token::Org(0x123.into()),
+            Token::Org(0x123.into(), None),
             Token::OpCode(
                 Mnemonic::Ld, 
                 Some(DataAccess::Register16(Register16::Hl)),
@@ -1925,9 +1948,9 @@ mod test {
 	#[test]
 	fn test_read_bytes() {
         let tokens = vec![
-            Token::Org(0x100.into()),
-            Token::Db(vec![1.into(), 2.into()]),
-            Token::Db(vec![3.into(), 4.into()]),
+            Token::Org(0x100.into(), None),
+            Token::Defb(vec![1.into(), 2.into()]),
+            Token::Defb(vec![3.into(), 4.into()]),
         ];
 
         let env = visit_tokens(&tokens).unwrap();

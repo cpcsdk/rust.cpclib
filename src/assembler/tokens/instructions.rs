@@ -87,27 +87,74 @@ pub enum StableTickerAction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CrunchType {
+    LZ48,
+    LZ49,
+    LZ4,
+    LZX7,
+    LZEXO
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SaveType {
+    Amsdos,
+    Dsk
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     Label(String),
     Comment(String),
 
     OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>),
 
-    Align(Expr),
-    Assert(Expr),
-    Defs(Expr),
-    Db(Vec<Expr>),
-    Dw(Vec<Expr>),
+    Align(Expr, Option<Expr>),
+    Assert(Expr, Option<String>),
+    Bank(Expr),
+    Bankset(Expr),
+    Breakpoint(Option<Expr>),
+    BuildCpr,
+    BuildSna(crate::sna::SnapshotVersion),
+    Break,
+    CrunchedSection(CrunchType, Vec<Token>),
+    CrunchedBinary(CrunchType, String),
+    Defs(Expr, Option<Expr>),
+    Defb(Vec<Expr>),
+    Defw(Vec<Expr>),
     Equ(String, Expr),
+    If(Vec<(Expr, Vec<Token>)>, Option<Vec<Token>>),
     Include(String),
-    Org(Expr),
+    Incbin(String, Option<Expr>, Option<Expr>, Option<Expr>, Option<Expr>),
+    Let(String, Expr),
+    Limit(Expr),
+    Macro(String, Vec<String>, String), // Content of the macro is parsed on use
+    Org(Expr, Option<Expr>),
     Protect(Expr, Expr),
 
     /// Duplicate the token stream
-    Repeat(Expr, Vec<Token>),
+    Repeat(Expr, Vec<Token>, Option<String>),
+    RepeatUntil(Expr, Vec<Token>),
+    Rorg(Expr),
+    Run(Expr, Option<Expr>),
 
+    Save{
+        filename: String, 
+        address: Expr, 
+        size: Expr, 
+        save_type: Option<SaveType>,
+        dsk_filename: Option<String>,
+        side: Option<Expr>
+   },
+   SetCrtc(Expr),
+   SetCPC(Expr),
+    Str(Vec<u8>),
     StableTicker(StableTickerAction),
-    MacroCall(String) // TODO add parameters
+    Struct(String, Vec<(String, Token)>),
+    Switch(Vec<(Expr, Vec<Token>)>),
+    Undef(String),
+    While(Expr, Vec<Token>),
+
+    MacroCall(String, Vec<String>)
 }
 
 
@@ -127,10 +174,14 @@ impl fmt::Display for Token {
             Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2)) if &Mnemonic::Out == mne
                 => write!(f, "{} (C), {}", mne, arg2),
 
-            Token::Align(ref expr)
+            Token::Align(ref expr, None)
                 => write!(f, "ALIGN {}", expr),
-            Token::Assert(ref expr)
+            Token::Align(ref expr, Some(ref fill))
+                => write!(f, "ALIGN {}, {}", expr, fill),
+            Token::Assert(ref expr, None)
                 => write!(f, "ASSERT {}", expr),
+            Token::Assert(ref expr, Some(ref text))
+                => write!(f, "ASSERT {}, {}", expr, text),
             Token::Label(ref string)
                 => write!(f, "{}", string),
             Token::Comment(ref string)
@@ -144,13 +195,17 @@ impl fmt::Display for Token {
                => write!(f, "{} {}", mne, arg2),
             Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2))
                 => write!(f, "{} {}, {}", mne, arg1, arg2),
-            Token::Org(ref expr)
+            Token::Org(ref expr, None)
                 => write!(f, "ORG {}", expr),
-            Token::Defs(ref expr)
+            Token::Org(ref expr, Some(ref expr2))
+                => write!(f, "ORG {}, {}", expr, expr2),
+            Token::Defs(ref expr, None)
                 => write!(f, "DEFS {}", expr),
-            Token::Db(ref exprs)
+            Token::Defs(ref expr, Some(ref expr2))
+                => write!(f, "DEFS {}, {}", expr, expr2),
+            Token::Defb(ref exprs)
                 => write!(f, "DB {}", expr_list_to_string(exprs)),
-            Token::Dw(ref exprs)
+            Token::Defw(ref exprs)
                 => write!(f, "DW {}", expr_list_to_string(exprs)),
             Token::Equ(ref name, ref expr)
                 => write!(f, "{} EQU {}", name, expr),
@@ -158,8 +213,13 @@ impl fmt::Display for Token {
                 => write!(f, "INCLUDE \"{}\"", fname),
             Token::Protect(ref exp1, ref exp2)
                 => write!(f, "PROTECT {}, {}", exp1, exp2),
-            Token::Repeat(ref exp, ref code) => {
-                write!(f, "REPEAT {}\n", exp)?;
+            Token::Repeat(ref exp, ref code, ref label) => {
+                if label.is_some() {
+                    write!(f, "REPEAT {}, {}\n", exp, label.as_ref().unwrap())?;
+                }
+                else {
+                    write!(f, "REPEAT {}\n", exp)?;
+                }
                 for token in code.iter() {
                     write!(f, "\t{}\n", token)?;
                 }
@@ -176,8 +236,12 @@ impl fmt::Display for Token {
                         }
                     }
             },
-            Token::MacroCall(ref name)
-                => write!(f, "{}", name)
+            Token::MacroCall(ref name, ref args)
+                => {
+                    write!(f, "{} {}", name, args.clone().join(", "))?;
+                    Ok(())
+            },
+            _ => unimplemented!()
 
         }
     }
@@ -246,7 +310,7 @@ impl Token {
 
     pub fn expr(&self) -> Option<&Expr> {
         match self {
-          &Token::Org(ref expr)  |  &Token::Equ(_, ref expr)=> Some(expr),
+          &Token::Org(ref expr, _)  |  &Token::Equ(_, ref expr)=> Some(expr),
             _ => None
         }
     }
@@ -255,7 +319,7 @@ impl Token {
     /// TODO return an iterator in order to not produce the vector each time
     pub fn unroll(&self, sym: & SymbolsTable) -> Option<Result<Vec<&Token>, String>> {
         match self {
-            Token::Repeat(ref expr, ref tokens) => {
+            Token::Repeat(ref expr, ref tokens, ref counter_label) => {
                 match expr.resolve(sym) {
                     Ok(count) => {
                         let mut res =  Vec::with_capacity(count as usize * tokens.len());
@@ -299,17 +363,17 @@ impl Token {
             &Token::Equ(_, _)
                 => Ok(Bytes::new()),
 
-            &Token::Dw(_) | &Token::Db(_)
+            &Token::Defw(_) | &Token::Defb(_)
                 => assemble_db_or_dw(self, env),
 
-            &Token::Label(_) | &Token::Comment(_) | &Token::Org(_) | &Token::Assert(_)
+            &Token::Label(_) | &Token::Comment(_) | &Token::Org(_, _) | &Token::Assert(_, _)
                 => Ok(Bytes::new()),
 
-            &Token::Defs(ref expr)
-                => assemble_defs(expr, env),
+            &Token::Defs(ref expr, ref fill)
+                => assemble_defs(expr, fill.as_ref(), env),
 
-            &Token::Align(ref expr)
-                => assemble_align(expr, table),
+            &Token::Align(ref expr, ref fill)
+                => assemble_align(expr, fill.as_ref(), env),
 
             // Protect directive does not produce any bytes
             &Token::Protect(_, _)

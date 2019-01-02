@@ -36,7 +36,7 @@ use std::fmt;
 
 */
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum SnapshotVersion {
     V1,
     V2,

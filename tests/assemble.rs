@@ -17,8 +17,8 @@ mod tests {
     pub fn test_visit() {
         let mut env = Env::default();
 
-        visit_token(&Token::Org(Expr::Value(10)), &mut env);
-        visit_token(&Token::Db(vec![Expr::Value(10), Expr::Value(5)]), &mut env);
+        visit_token(&Token::Org(Expr::Value(10), None), &mut env);
+        visit_token(&Token::Defb(vec![Expr::Value(10), Expr::Value(5)]), &mut env);
         visit_token(&Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::A)), Some(DataAccess::Register8(Register8::L))), &mut env);
     }
 
@@ -46,7 +46,7 @@ mod tests {
     #[test]
     pub fn test_assemble() {
         let tokens = vec![
-            Token::Org(Expr::Value(10)),
+            Token::Org(Expr::Value(10), None),
             Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::A)), Some(DataAccess::Register8(Register8::L)))
         ];
 

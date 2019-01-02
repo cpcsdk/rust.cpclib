@@ -221,56 +221,56 @@ mod tests {
 
         let tokens = get_val(parse_z80_line(CompleteStr(" ORG 0x1000")));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0], Token::Org(_));
+        assert_matches!(tokens[0], Token::Org(_, None));
 
         let tokens = get_val(parse_z80_line(CompleteStr(" ORG 0x1000 ")));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0], Token::Org(_));
+        assert_matches!(tokens[0], Token::Org(_, None));
 
         let tokens = get_val(parse_z80_line(CompleteStr("\tORG 0x1000")));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0], Token::Org(_));
+        assert_matches!(tokens[0], Token::Org(_, None));
 
         let tokens = get_val(parse_z80_line(CompleteStr("    ORG 0x1000")));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0], Token::Org(_));
+        assert_matches!(tokens[0], Token::Org(_, None));
 
 
         let tokens = get_val(parse_z80_line(CompleteStr(" ORG 0x1000; test")));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0], Token::Org(_));
+        assert_matches!(tokens[0], Token::Org(_, None));
 
 
         let tokens = get_val(parse_z80_line(CompleteStr(" ORG 0x1000 ; test")));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0], Token::Org(_));
+        assert_matches!(tokens[0], Token::Org(_, None));
 
 
 
         let tokens = get_val(parse_z80_line(CompleteStr("label ORG 0x1000")));
         assert_eq!(tokens.len(), 2);
         assert_matches!(tokens[0], Token::Label(_));
-        assert_matches!(tokens[1], Token::Org(_));
+        assert_matches!(tokens[1], Token::Org(_, _));
 
 
         let tokens = get_val(parse_z80_line(CompleteStr("label ORG 0x1000 : ORG 0x000 : ORG 10")));
         assert_eq!(tokens.len(), 4);
         assert_matches!(tokens[0], Token::Label(_));
-        assert_matches!(tokens[1], Token::Org(_));
-        assert_matches!(tokens[2], Token::Org(_));
+        assert_matches!(tokens[1], Token::Org(_, _));
+        assert_matches!(tokens[2], Token::Org(_, _));
 
 
         let tokens = get_val(parse_z80_line(CompleteStr("label ORG 0x1000 : ORG 0x000 : ORG 10 ; fdfs")));
         assert_eq!(tokens.len(), 5);
         assert_matches!(tokens[0], Token::Label(_));
-        assert_matches!(tokens[1], Token::Org(_));
-        assert_matches!(tokens[2], Token::Org(_));
+        assert_matches!(tokens[1], Token::Org(_, _));
+        assert_matches!(tokens[2], Token::Org(_, _));
 
 
         let tokens = get_val(parse_z80_line(CompleteStr("label ORG 0x1000 ; : ORG 0x000 : ORG 10 ; fdfs")));
         assert_eq!(tokens.len(), 3);
         assert_matches!(tokens[0], Token::Label(_));
-        assert_matches!(tokens[1], Token::Org(_));
+        assert_matches!(tokens[1], Token::Org(_, _));
     }
 
 
