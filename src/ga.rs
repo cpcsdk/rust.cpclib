@@ -437,7 +437,7 @@ where Ink: From<T>, T:Copy
 macro_rules! palette {
     ( $( $x:expr ),* ) => {
         {
-            extern crate cpc;
+            extern crate cpclib as cpc;
             use cpc::ga;
             let mut palette = ga::Palette::default();
             let mut idx = 0;
