@@ -5,6 +5,7 @@ use crate::assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_def
 use crate::assembler::tokens::expression::*;
 use crate::assembler::tokens::data_access::*;
 use crate::assembler::parser::*;
+use crate::assembler::tokens::Listing;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Mnemonic {
@@ -116,13 +117,13 @@ pub enum Token {
     BuildCpr,
     BuildSna(crate::sna::SnapshotVersion),
     Break,
-    CrunchedSection(CrunchType, Vec<Token>),
+    CrunchedSection(CrunchType, Listing),
     CrunchedBinary(CrunchType, String),
     Defs(Expr, Option<Expr>),
     Defb(Vec<Expr>),
     Defw(Vec<Expr>),
     Equ(String, Expr),
-    If(Vec<(Expr, Vec<Token>)>, Option<Vec<Token>>),
+    If(Vec<(Expr, Listing)>, Option<Listing>),
     Include(String),
     Incbin(String, Option<Expr>, Option<Expr>, Option<Expr>, Option<Expr>),
     Let(String, Expr),
@@ -132,8 +133,8 @@ pub enum Token {
     Protect(Expr, Expr),
 
     /// Duplicate the token stream
-    Repeat(Expr, Vec<Token>, Option<String>),
-    RepeatUntil(Expr, Vec<Token>),
+    Repeat(Expr, Listing, Option<String>),
+    RepeatUntil(Expr, Listing),
     Rorg(Expr),
     Run(Expr, Option<Expr>),
 
@@ -150,9 +151,9 @@ pub enum Token {
     Str(Vec<u8>),
     StableTicker(StableTickerAction),
     Struct(String, Vec<(String, Token)>),
-    Switch(Vec<(Expr, Vec<Token>)>),
+    Switch(Vec<(Expr, Listing)>),
     Undef(String),
-    While(Expr, Vec<Token>),
+    While(Expr, Listing),
 
     MacroCall(String, Vec<String>)
 }

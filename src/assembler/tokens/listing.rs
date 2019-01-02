@@ -22,7 +22,7 @@ pub trait ListingElement {
 
 
 /// A listing is simply a list of things similar to token
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaseListing<T: Clone + ListingElement> {
 
     /// Ordered list of the tokens
@@ -33,6 +33,14 @@ pub struct BaseListing<T: Clone + ListingElement> {
 
 
 
+impl<T: Clone + ListingElement> From<Vec<T>> for BaseListing<T> {
+    fn from(listing: Vec<T>) -> BaseListing<T> {
+        BaseListing::<T> {
+            listing,
+            duration: None
+        }
+    }
+}
 
 
 impl<T: Clone + ListingElement> Deref for BaseListing<T> {

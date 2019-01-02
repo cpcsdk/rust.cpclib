@@ -1731,7 +1731,7 @@ mod test {
             Token::Org(0.into(), None),
             Token::Repeat(
                 10.into(),
-                vec![Token::OpCode(Mnemonic::Nop, None, None)],
+                vec![Token::OpCode(Mnemonic::Nop, None, None)].into(),
                 None)
         ];
 
@@ -1748,9 +1748,9 @@ mod test {
                 vec![
                     Token::Repeat(
                         10.into(),
-                        vec![Token::OpCode(Mnemonic::Nop, None, None)],
+                        vec![Token::OpCode(Mnemonic::Nop, None, None)].into(),
                         None)
-                ],
+                ].into(),
                 None
             )
         ];

@@ -12,7 +12,7 @@ use crate::assembler::tokens::*;
     }
 
 named! (
-    pub parse_z80_code <CompleteStr<'_>, Vec<Token>>,
+    pub parse_z80_code <CompleteStr<'_>, Listing>,
     do_parse!(
 //        // Skip empty beginning
 //       many0!(parse_empty_line) >>
@@ -34,7 +34,7 @@ named! (
                 res.append(&mut (list.clone()) );
             }
          //   println!("Opcodes: {:?}", &res);
-            res
+            res.into()
         })
         )
     );
@@ -42,7 +42,7 @@ named! (
 
 /// For an unknwon reason, the parse_z80_code function fails when there is no comment...
 /// This one is a workaround as still as the other is not fixed
-pub fn parse_z80_str(code: &str) -> Result< (CompleteStr<'_>, Vec<Token>), Err<CompleteStr<'_>>> {
+pub fn parse_z80_str(code: &str) -> Result< (CompleteStr<'_>, Listing), Err<CompleteStr<'_>>> {
     let mut tokens = Vec::new();
     let mut rest = None;
     let src = "<str>";
@@ -63,8 +63,7 @@ pub fn parse_z80_str(code: &str) -> Result< (CompleteStr<'_>, Vec<Token>), Err<C
 
 
     }
-    //TODO vérifier que c'est totallement assemblé
-    Ok((rest.unwrap(), tokens))
+    Ok((rest.unwrap(), tokens.into()))
 }
 
 
@@ -105,10 +104,10 @@ named!(
             Token::Repeat(
                 count, 
                 if inner.is_some() {
-                    inner.unwrap()
+                    inner.unwrap().into()
                 }
                 else {
-                    Vec::new()
+                    Vec::new().into()
                 },
                 None
             )
@@ -1058,7 +1057,7 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 */
 
 /// Produce the stream of tokens. In case of error, return an explanatory string
-pub fn parse_str(code: &str) -> Result<Vec<Token>, String> {
+pub fn parse_str(code: &str) -> Result<Listing, String> {
     match parse_z80_code(code.into()) {
         Err(e) => Err(format!("Error while parsing: {:?}", e)),
         Ok((remaining, parsed)) => {
