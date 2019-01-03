@@ -155,7 +155,7 @@ pub enum Token {
     Undef(String),
     While(Expr, Listing),
 
-    MacroCall(String, Vec<String>)
+    MacroCall(String, Vec<String>) // String are used in order to not be limited to expression and allow opcode/registers use
 }
 
 

@@ -235,7 +235,7 @@ named!(
 named!(
     parse_include <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("INCLUDE") >>
-        many1!(space) >>
+        space1 >>
         fname: delimited!(
             tag!("\""),
             parse_label, // TODO really write file stuff
@@ -243,6 +243,18 @@ named!(
         ) >>
         (
             Token::Include(fname)
+        )
+    )
+);
+
+
+named!(
+    parse_undef <CompleteStr<'_>, Token>,  do_parse!(
+        tag_no_case!("UNDEF") >>
+        space1 >>
+        label: parse_label >>
+        (
+            Token::Undef(label)
         )
     )
 );
@@ -292,7 +304,8 @@ named!(
             parse_include |
             parse_db_or_dw |
             parse_protect |
-            parse_stable_ticker
+            parse_stable_ticker |
+            parse_undef
         )
 
     );
@@ -308,7 +321,8 @@ named!(
 named!(
     parse_stable_ticker_start <CompleteStr<'_>, Token>,
     do_parse!(
-        tag_no_case!("stableticker") >>
+        opt!(tag_no_case!("stable")) >>
+        tag_no_case!("ticker") >>
         space1 >>
         tag_no_case!("start") >>
         space1 >>
@@ -322,7 +336,8 @@ named!(
 named!(
     parse_stable_ticker_stop <CompleteStr<'_>, Token>,
     do_parse!(
-        tag_no_case!("stableticker") >>
+        opt!(tag_no_case!("stable")) >>
+        tag_no_case!("ticker") >>
         space1 >>
         tag_no_case!("stop") >>
         (

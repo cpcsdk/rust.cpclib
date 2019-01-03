@@ -255,6 +255,11 @@ impl SymbolsTable {
         }
     }
 
+    /// Remove the given symbol name from the table. (used by undef)
+    pub fn remove_symbol<S: AsRef<str>>(&mut self, key: S) -> Option<Symbol> {
+        self.map.remove(key.as_ref().into())
+    }
+
     pub fn contains_symbol<S: AsRef<str>>(&self, key:S) -> bool {
         self.map.contains_key(&key.as_ref().to_owned())
     }
@@ -509,8 +514,33 @@ impl Env {
             (_,_) => panic!("add_symbol_to_symbol_table / unmnaged case {}, {}, {} {}", self.pass, label ,already_present, value)
         }
     }
+}
 
 
+impl Env {
+    fn visit_label(&mut self, label: &str) -> Result<(), String> {
+        // If the current address is not set up, we force it to be 0
+        let value = match self.symbols().current_address() {
+            Ok(address) => address,
+            Err(_)=> 0
+        };
+
+        // A label cannot be defined multiple times
+        if self.pass.is_first_pass() &&  self.symbols().contains_symbol(label) {
+            Err(format!("Symbol \"{}\" already present in symbols table", label))
+        }
+        else {
+            self.add_symbol_to_symbol_table(label, value as _)
+        }
+    }
+
+    pub fn visit_undef(&mut self, label: &str) -> Result<(), String> {
+        match self.symbols_mut().remove_symbol(label)
+        {
+            Some(_) => Ok(()),
+            None => Err(format!("Unknown symbol `{}`", label))
+        }
+    }
 }
 
 
@@ -575,10 +605,11 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
             Ok(())
         },
         Token::Comment(_) => Ok(()), // Nothing to do for a comment
-        Token::Label(ref label) => visit_label(label, env),
+        Token::Label(ref label) => env.visit_label(label),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Repeat(_, _, _) => visit_repeat(token, env),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
+        Token::Undef(ref label) => env.visit_undef(label),
         _ => panic!("Not treated {:?}", token)
     }
 }
@@ -598,24 +629,13 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> Result<(), S
 }
 
 
-fn visit_equ(label: &String, exp: &Expr, env: &mut Env) -> Result<(), String> {
+fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), String> {
     if env.symbols().contains_symbol(label) && env.pass.is_first_pass() {
         Err(format!("Symbol \"{}\" already present in symbols table", label))
     }
     else {
         let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
         env.add_symbol_to_symbol_table(label, value)
-    }
-}
-
-
-fn visit_label(label: &String, env: &mut Env) -> Result<(), String> {
-    let value = env.symbols().current_address().unwrap();
-    if env.pass.is_first_pass() &&  env.symbols().contains_symbol(label) {
-        Err(format!("Symbol \"{}\" already present in symbols table", label))
-    }
-    else {
-        env.add_symbol_to_symbol_table(label, value as _)
     }
 }
 
@@ -1677,6 +1697,19 @@ mod test {
             visit_assert(&Expr::Equal(Box::new(1.into()), Box::new(0.into())), None, & mut env)
                 .is_err());
     }
+
+    #[test]
+    pub fn test_undef() {
+        let mut env = Env::default();
+        env.start_new_pass();
+
+        env.visit_label("toto").unwrap();
+        assert!(env.symbols().contains_symbol("toto"));
+        env.visit_undef("toto").unwrap();
+        assert!(!env.symbols().contains_symbol("toto"));
+        assert!(env.visit_undef("toto").is_err());
+    }
+
 
     #[test]
     pub fn test_inc_dec() {
