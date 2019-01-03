@@ -1,6 +1,6 @@
 [package]
 name = "cpclib"
-version = "0.2.8-beta"
+version = "0.2.9-beta"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
