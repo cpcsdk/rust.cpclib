@@ -101,15 +101,18 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
 
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
-    pub fn estimated_duration(&self) -> usize {
-        if self.duration.is_some() {
-            self.duration.unwrap()
-        }
-        else {
-            self.listing
-                .iter()
-                .map(|token|{token.estimated_duration().unwrap()})
-                .sum()
+    pub fn estimated_duration(&self) -> Result<usize, String> {
+        match self.duration {
+           Some (duration) 
+                => Ok(duration),
+            None 
+                => {
+                    let mut duration = 0;
+                    for token in self.listing.iter() {
+                        duration = duration.max(token.estimated_duration()?);
+                    }
+                Ok(duration)
+            }
         }
     }
 
