@@ -2,6 +2,41 @@
 
 use crate::assembler::tokens::*;
 
+
+pub fn out_c_b() -> Token {
+    out_c_register8(Register8::B)
+}
+pub fn out_c_c() -> Token {
+    out_c_register8(Register8::C)
+}
+pub fn out_c_d() -> Token {
+    out_c_register8(Register8::D)
+}
+pub fn out_c_e() -> Token {
+    out_c_register8(Register8::E)
+}
+pub fn out_c_h() -> Token {
+    out_c_register8(Register8::H)
+}
+pub fn out_c_l() -> Token {
+    out_c_register8(Register8::L)
+}
+pub fn out_c_a() -> Token {
+    out_c_register8(Register8::A)
+}
+
+
+
+
+pub fn out_c_register8(reg:Register8) -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Out,
+        Register8::C.into(),
+        reg.into()
+    )
+}
+
+
 pub fn push_af() -> Token {
     push_or_pop(Mnemonic::Push, Register16::Af)
 }
@@ -114,13 +149,56 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
     )
 }
 
+
+pub fn ld_d_mem_hl() -> Token {
+    ld_register8_mem_hl(Register8::D)
+}
+
+pub fn ld_e_mem_hl() -> Token {
+    ld_register8_mem_hl(Register8::E)
+}
+
+pub fn ld_register8_mem_hl(reg: Register8) -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Ld,
+        reg.into(),
+        DataAccess::MemoryRegister16(Register16::Hl)
+    )
+}
+
+
+pub fn ld_mem_hl_d() -> Token {
+    ld_mem_hl_register8(Register8::D)
+}
+
 pub fn ld_mem_hl_e() -> Token {
+    ld_mem_hl_register8(Register8::E)
+}
+
+pub fn ld_mem_hl_b() -> Token {
+    ld_mem_hl_register8(Register8::B)
+}
+
+pub fn ld_mem_hl_c() -> Token {
+    ld_mem_hl_register8(Register8::C)
+}
+
+pub fn ld_mem_hl_h() -> Token {
+    ld_mem_hl_register8(Register8::H)
+}
+
+pub fn ld_mem_hl_l() -> Token {
+    ld_mem_hl_register8(Register8::L)
+}
+
+pub fn ld_mem_hl_register8(reg: Register8) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
         DataAccess::MemoryRegister16(Register16::Hl),
-        Register8::E.into()
+        reg.into()
     )
 }
+
 
 
 /// Build a token that represents a mnemonic without any argument

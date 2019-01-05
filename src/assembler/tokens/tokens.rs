@@ -480,5 +480,19 @@ mod tests {
             2
         );
 
+        assert_eq!(
+            ld_e_mem_hl().estimated_duration().unwrap(),
+            2
+        );
+
+        assert_eq!(
+            ld_d_mem_hl().estimated_duration().unwrap(),
+            2
+        );
+
+        assert_eq!(
+            out_c_d().estimated_duration().unwrap(),
+            4
+        );
     }
 }
