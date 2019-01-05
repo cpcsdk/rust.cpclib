@@ -36,10 +36,9 @@ pub fn pop_hl() -> Token {
 
 #[inline]
 fn push_or_pop(op: Mnemonic, reg: Register16) -> Token {
-    Token::OpCode(
+    token_for_opcode_one_arg(
         op,
-        Some(DataAccess::Register16(Register16::De)),
-        None
+        reg.into()
     )
 }
 
@@ -79,6 +78,44 @@ pub fn breakpoint_winape() -> Token {
     Token::Defb(vec![Expr::Value(0xed), Expr::Value(0xff)])
 }
 
+pub fn breakpoint_snapshot() -> Token {
+    Token::Breakpoint(None)
+}
+
+
+pub fn jp_label(label: &str) -> Token {
+    token_for_opcode_one_arg(
+        Mnemonic::Jp,
+        label.into()
+    )
+}
+
+/// Build a token that represents a mnemonic without any argument
+pub fn token_for_opcode_no_arg(mne: Mnemonic) -> Token {
+    Token::OpCode(
+        mne,
+        None,
+        None
+    )
+}
+
+/// Build a token that represents a mnemonic with only one argument
+pub fn token_for_opcode_one_arg(mne: Mnemonic, data1: DataAccess) -> Token {
+    Token::OpCode(
+        mne,
+        Some(data1),
+        None
+    )
+}
+
+/// Build a token that represents a mnemonic with two arguments
+pub fn token_for_opcode_two_args(mne: Mnemonic, data1: DataAccess, data2: DataAccess) -> Token {
+    Token::OpCode(
+        mne,
+        Some(data1),
+        Some(data2)
+    )
+}
 
 
 

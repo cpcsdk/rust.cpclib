@@ -178,42 +178,58 @@ impl fmt::Display for Token {
             Token::Align(ref expr, None)
                 => write!(f, "ALIGN {}", expr),
             Token::Align(ref expr, Some(ref fill))
+
                 => write!(f, "ALIGN {}, {}", expr, fill),
             Token::Assert(ref expr, None)
                 => write!(f, "ASSERT {}", expr),
             Token::Assert(ref expr, Some(ref text))
                 => write!(f, "ASSERT {}, {}", expr, text),
+
+            Token::Breakpoint(None)
+                => write!(f, "BREAKPOINT"),
+            Token::Breakpoint(Some(ref expr))
+                 => write!(f, "BREAKPOINT {}", expr),
+
             Token::Label(ref string)
                 => write!(f, "{}", string),
+
             Token::Comment(ref string)
                 => write!(f, " ; {}", string),
+
             Token::OpCode(ref mne, None, None)
                 => write!(f, "{}", mne),
             Token::OpCode(ref mne, Some(ref arg1), None)
                 => write!(f, "{} {}", mne, arg1),
-
             Token::OpCode(ref mne, None, Some(ref arg2)) // JP/JR without flags
                => write!(f, "{} {}", mne, arg2),
             Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2))
                 => write!(f, "{} {}, {}", mne, arg1, arg2),
+
             Token::Org(ref expr, None)
                 => write!(f, "ORG {}", expr),
             Token::Org(ref expr, Some(ref expr2))
                 => write!(f, "ORG {}, {}", expr, expr2),
+
             Token::Defs(ref expr, None)
                 => write!(f, "DEFS {}", expr),
             Token::Defs(ref expr, Some(ref expr2))
                 => write!(f, "DEFS {}, {}", expr, expr2),
+
             Token::Defb(ref exprs)
                 => write!(f, "DB {}", expr_list_to_string(exprs)),
+
             Token::Defw(ref exprs)
                 => write!(f, "DW {}", expr_list_to_string(exprs)),
+
             Token::Equ(ref name, ref expr)
                 => write!(f, "{} EQU {}", name, expr),
+
             Token::Include(ref fname)
                 => write!(f, "INCLUDE \"{}\"", fname),
+
             Token::Protect(ref exp1, ref exp2)
                 => write!(f, "PROTECT {}, {}", exp1, exp2),
+
             Token::Repeat(ref exp, ref code, ref label) => {
                 if label.is_some() {
                     write!(f, "REPEAT {}, {}\n", exp, label.as_ref().unwrap())?;
@@ -226,6 +242,7 @@ impl fmt::Display for Token {
                 }
                 write!(f, "\tENDREPEAT")
             },
+
             Token::StableTicker(ref ticker) 
                 => {
                     match ticker {
@@ -237,6 +254,7 @@ impl fmt::Display for Token {
                         }
                     }
             },
+
             Token::MacroCall(ref name, ref args)
                 => {
                     write!(f, "{} {}", name, args.clone().join(", "))?;
@@ -376,8 +394,8 @@ impl Token {
             &Token::Align(ref expr, ref fill)
                 => assemble_align(expr, fill.as_ref(), env),
 
-            // Protect directive does not produce any bytes
-            &Token::Protect(_, _)
+            // Protect and breakpoint directives do not produce any bytes
+            Token::Protect(_, _) | Token::Breakpoint(_)
                 => Ok(Bytes::new()),
 
             _

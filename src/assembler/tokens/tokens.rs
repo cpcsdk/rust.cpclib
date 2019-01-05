@@ -8,17 +8,18 @@ impl ListingElement for Token {
     /// This estimation may be wrong for instruction having several states.
     fn estimated_duration(&self) -> Result<usize, String> {
         let duration = match self {
-            &Token::Comment(_) | 
-                &Token::Label(_) |
-                &Token::Equ(_, _) |
-                &Token::Protect(_, _) => 0,
-            &Token::Defs(ref expr, ref value) => {
+            Token::Breakpoint(_) |
+            Token::Comment(_) | 
+                Token::Label(_) |
+                Token::Equ(_, _) |
+                Token::Protect(_, _) => 0,
+            Token::Defs(ref expr, ref value) => {
                 if value.is_some() {
                     unimplemented!(); // A disassembler is needed there to get the instruction
                 }
                 expr.eval().ok().unwrap() as usize
             }, 
-            &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
+            Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 match mnemonic {
 
                     &Mnemonic::Add => {

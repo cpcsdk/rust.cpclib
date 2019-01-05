@@ -25,6 +25,44 @@ pub enum DataAccess {
 }
 
 
+impl From<&str> for DataAccess {
+    fn from(txt: &str) -> DataAccess {
+        DataAccess::Expression(txt.into())
+    }
+}
+
+impl From<Register8> for DataAccess {
+    fn from(reg: Register8) -> DataAccess {
+        DataAccess::Register8(reg)
+    }
+}
+
+impl From<Register16> for DataAccess {
+    fn from(reg: Register16) -> DataAccess {
+        DataAccess::Register16(reg)
+    }
+}
+
+
+impl From<IndexRegister8> for DataAccess {
+    fn from(reg: IndexRegister8) -> DataAccess {
+        DataAccess::IndexRegister8(reg)
+    }
+}
+
+impl From<IndexRegister16> for DataAccess {
+    fn from(reg: IndexRegister16) -> DataAccess {
+        DataAccess::IndexRegister16(reg)
+    }
+}
+
+impl From<FlagTest> for DataAccess {
+    fn from(test: FlagTest) -> DataAccess {
+        DataAccess::FlagTest(test)
+    }
+}
+
+
 
 impl fmt::Display for DataAccess {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

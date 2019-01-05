@@ -299,6 +299,7 @@ named!(
         alt_complete!(
             parse_assert |
             parse_align |
+            parse_breakpoint |
             parse_org |
             parse_defs |
             parse_include |
@@ -309,6 +310,23 @@ named!(
         )
 
     );
+
+named!(
+    parse_breakpoint <CompleteStr<'_>, Token>,
+    do_parse!(
+        tag_no_case!("BREAKPOINT") >>
+        exp: opt!(
+                preceded!(
+                space1,
+                expr
+            )
+        ) >>
+        (
+            Token::Breakpoint(exp)
+        )
+    )
+);
+
 
 named!(
     parse_stable_ticker <CompleteStr<'_>, Token>,
