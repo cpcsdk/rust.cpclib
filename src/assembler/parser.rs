@@ -951,6 +951,8 @@ named!(
         tag_no_case!("LDD") => { |_| Mnemonic::Ldd } |
         tag_no_case!("NOPS2") => { |_| Mnemonic::Nops2 } |
         tag_no_case!("NOP") => { |_| Mnemonic::Nop } |
+        tag_no_case!("OUTD") => { |_| Mnemonic::Outd } |
+        tag_no_case!("OUTI") => { |_| Mnemonic::Outi } |
         tag_no_case!("RRA") => {|_| Mnemonic::Rra } 
       )
     >> (Token::OpCode(res, None, None) )

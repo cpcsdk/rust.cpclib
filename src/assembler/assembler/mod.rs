@@ -803,6 +803,7 @@ pub fn assemble_opcode(
             => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
         Mnemonic::Ldi | Mnemonic::Ldd | 
         Mnemonic::Ldir | Mnemonic::Lddr |
+        Mnemonic::Outi | Mnemonic::Outd |
         Mnemonic::Ei | Mnemonic::Di | 
         Mnemonic::ExAf | Mnemonic::Exx | 
         Mnemonic::Halt | &Mnemonic::Rra
@@ -876,7 +877,13 @@ fn assemble_no_arg(mnemonic: &Mnemonic) -> Result<Bytes, String> {
         },
         Mnemonic::Halt => {
             &[0x76]
-        }
+        },
+        Mnemonic::Outd => {
+            &[0xED, 0xAB]
+        },
+        Mnemonic::Outi => {
+            &[0xED, 0xA3]
+        },
         Mnemonic::Rra => {
             &[0x1f]
         },

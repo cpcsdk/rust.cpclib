@@ -177,7 +177,9 @@ impl ListingElement for Token {
                             &Some(DataAccess::Expression(_)) => 3,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
+
+                    Mnemonic::Outi | Mnemonic::Outd => 5,
 
                     &Mnemonic::Pop => {
                         match arg1 {

@@ -32,6 +32,8 @@ pub enum Mnemonic {
     Nops2, // Fake instruction that generate a breakpoint on winape
     Or,
     Out,
+    Outi,
+    Outd,
     Push,
     Pop,
     Rra,
@@ -67,6 +69,8 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Nop => write!(f, "NOP"),
             Mnemonic::Nops2 => write!(f, "DB 0xed, 0xff ; Winape Breakpoint"),
             Mnemonic::Out => write!(f, "OUT"),
+            Mnemonic::Outi => write!(f, "OUTI"),
+            Mnemonic::Outd => write!(f, "OUTD"),
             Mnemonic::Or => write!(f, "OR"),
             Mnemonic::Push => write!(f, "PUSH"),
             Mnemonic::Pop => write!(f, "POP"),
