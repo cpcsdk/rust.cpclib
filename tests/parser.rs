@@ -1013,6 +1013,28 @@ INC_H equ opcode(inc h)
     }
 
     #[test]
+    fn print_test() {
+        let code = " PRINT 1";
+        let tokens = get_val(parse_z80_str(code));
+        assert_eq!(tokens.len(), 1);
+
+        let code = " PRINT 1-1";
+        let tokens = get_val(parse_z80_str(code));
+        assert_eq!(tokens.len(), 1);
+
+
+        let code = " PRINT 1 - 1";
+        let tokens = get_val(parse_z80_str(code));
+        assert_eq!(tokens.len(), 1);
+
+        let code = " PRINT zoomscroller_inject_for_step0_line_1 - zoomscroller_inject_for_step0_line_0";
+        let tokens = get_val(parse_z80_str(code));
+        assert_eq!(tokens.len(), 1);
+    }
+
+
+
+    #[test]
     fn assert_test() {
         let code = " ASSERT 1";
         let tokens = get_val(parse_z80_str(code));

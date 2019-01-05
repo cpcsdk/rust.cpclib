@@ -534,12 +534,26 @@ impl Env {
         }
     }
 
+    /// Remove the given variable from the table of symbols
     pub fn visit_undef(&mut self, label: &str) -> Result<(), String> {
         match self.symbols_mut().remove_symbol(label)
         {
             Some(_) => Ok(()),
             None => Err(format!("Unknown symbol `{}`", label))
         }
+    }
+
+    /// Print the evaluation of the expression in the 2nd pass
+    pub fn visit_print(&self, exp: &Expr) -> Result<(), String>  {
+        if self.pass.is_second_pass() {
+            let text = format!(
+                "{} = {}",
+                exp,
+                self.resolve_expr_must_never_fail(exp)?
+            );
+            println!("{}", text);
+        }
+        Ok(())
     }
 }
 
@@ -607,6 +621,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
         Token::Comment(_) => Ok(()), // Nothing to do for a comment
         Token::Label(ref label) => env.visit_label(label),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
+        Token::Print(ref exp) => env.visit_print(exp),
         Token::Repeat(_, _, _) => visit_repeat(token, env),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),

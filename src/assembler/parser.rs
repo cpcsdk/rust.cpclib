@@ -304,6 +304,7 @@ named!(
             parse_defs |
             parse_include |
             parse_db_or_dw |
+            parse_print |
             parse_protect |
             parse_stable_ticker |
             parse_undef
@@ -513,15 +514,25 @@ named!(
     )
 );
 
+named!(
+    pub parse_print <CompleteStr<'_>, Token>, do_parse!(
+        tag_no_case!("PRINT") >>
+        space1 >>
+        exp: expr >>
+        (
+            Token::Print(exp)
+        )
+    )
+);
 
 named!(
     pub parse_protect <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("PROTECT") >>
-        many1!(space) >>
+        space1 >>
         start: expr >>
-        many0!(space) >>
+        space0 >>
         tag!(",") >>
-        many0!(space) >>
+        space0 >>
         end: expr >>
         (
             Token::Protect(start, end)

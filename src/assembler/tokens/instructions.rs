@@ -134,6 +134,7 @@ pub enum Token {
     Limit(Expr),
     Macro(String, Vec<String>, String), // Content of the macro is parsed on use
     Org(Expr, Option<Expr>),
+    Print(Expr),
     Protect(Expr, Expr),
 
     /// Duplicate the token stream
@@ -230,6 +231,9 @@ impl fmt::Display for Token {
 
             Token::Include(ref fname)
                 => write!(f, "INCLUDE \"{}\"", fname),
+
+            Token::Print(ref exp)
+                => write!(f, "PRINT {}", exp),
 
             Token::Protect(ref exp1, ref exp2)
                 => write!(f, "PROTECT {}, {}", exp1, exp2),
@@ -399,7 +403,7 @@ impl Token {
                 => assemble_align(expr, fill.as_ref(), env),
 
             // Protect and breakpoint directives do not produce any bytes
-            Token::Protect(_, _) | Token::Breakpoint(_)
+            Token::Protect(_, _) | Token::Breakpoint(_) | Token::Print(_)
                 => Ok(Bytes::new()),
 
             _
