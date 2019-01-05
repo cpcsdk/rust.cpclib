@@ -335,8 +335,8 @@ impl Listing {
     }
 
     /// Add additional tokens, that need to be parsed from a string, to the listing
-    pub fn add_code(&mut self, code: &str) -> Result<(), String> {
-        let res = parser::parse_z80_str(code);
+    pub fn add_code<S: AsRef<str> + core::fmt::Display>(&mut self, code: S) -> Result<(), String> {
+        let res = parser::parse_z80_str(code.as_ref());
 
         let tokens = match res {
             Ok((_res, local_tokens)) => {
