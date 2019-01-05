@@ -280,9 +280,9 @@ mod test {
     #[test]
     fn test_listing () {
         let mut listing = Listing::from_str("   nop").expect("unable to assemble");
-        assert_eq!(listing.estimated_duration(), 1);
+        assert_eq!(listing.estimated_duration().unwrap(), 1);
         listing.set_duration(100);
-        assert_eq!(listing.estimated_duration(), 100);
+        assert_eq!(listing.estimated_duration().unwrap(), 100);
     }
 
 
@@ -291,12 +291,39 @@ mod test {
     fn test_duration() {
          let listing = Listing::from_str("
             pop de      ; 3
+        ").expect("Unable to assemble this code");
+        println!("{}", listing);
+        assert_eq!(listing.estimated_duration().unwrap(), 3);
+
+
+         let listing = Listing::from_str("
+            inc l       ; 1
+        ").expect("Unable to assemble this code");
+        println!("{}", listing);
+        assert_eq!(listing.estimated_duration().unwrap(), 1);
+
+
+         let listing = Listing::from_str("
+            ld (hl), e  ; 2
+        ").expect("Unable to assemble this code");
+        println!("{}", listing);
+        assert_eq!(listing.estimated_duration().unwrap(), 2);
+
+
+         let listing = Listing::from_str("
+            ld (hl), d  ; 2
+        ").expect("Unable to assemble this code");
+        println!("{}", listing);
+        assert_eq!(listing.estimated_duration().unwrap(), 2);
+
+         let listing = Listing::from_str("
+            pop de      ; 3
             inc l       ; 1
             ld (hl), e  ; 2
             inc l       ; 1
             ld (hl), d  ; 2
         ").expect("Unable to assemble this code");
         println!("{}", listing);
-        assert_eq!(listing.estimated_duration(), (3+1+2+1+2));
+        assert_eq!(listing.estimated_duration().unwrap(), (3+1+2+1+2));
     }
 }

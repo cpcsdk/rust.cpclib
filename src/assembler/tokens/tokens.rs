@@ -410,6 +410,7 @@ impl Listing {
 mod tests {
     use crate::assembler::tokens::*;
     use std::convert::TryFrom;
+    use crate::assembler::builder::*;
 
     #[test]
     fn fixup_duration() {
@@ -440,5 +441,42 @@ mod tests {
         assert_eq!(Token::try_from(" out (c), c").unwrap().estimated_duration().unwrap(), 4);
         assert_eq!(Token::try_from(" out (c), e").unwrap().estimated_duration().unwrap(), 4);
         assert_eq!(Token::try_from(" ld b, 0x7f").unwrap().estimated_duration().unwrap(), 2);
+    }
+
+
+
+    #[test]
+    fn test_timing2() {
+
+        assert_eq!(
+            exx().estimated_duration().unwrap(),
+            1
+        );
+
+        assert_eq!(
+            pop_de().estimated_duration().unwrap(),
+            3
+        );
+
+        assert_eq!(
+            inc_l().estimated_duration().unwrap(),
+            1
+        );
+
+        assert_eq!(
+            jp_label("XX").estimated_duration().unwrap(),
+            3
+        );
+
+        assert_eq!(
+            ld_l_mem_ix(14.into()).estimated_duration().unwrap(),
+            5
+        );
+
+        assert_eq!(
+            ld_mem_hl_e().estimated_duration().unwrap(),
+            2
+        );
+
     }
 }

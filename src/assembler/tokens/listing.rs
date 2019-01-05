@@ -79,25 +79,15 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
        & self.listing
     }
 
-
-
-
     /// Add a new token to the listing
     pub fn add(&mut self, token:T) {
         self.listing.push(token);
     }
 
-
-
     /// Consume another listing by injecting it
     pub fn inject_listing(&mut self, other: &Self) {
         self.listing.extend_from_slice(&other.listing);
     }
-
-
-
-
-
 
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
@@ -109,9 +99,9 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
                 => {
                     let mut duration = 0;
                     for token in self.listing.iter() {
-                        duration = duration.max(token.estimated_duration()?);
+                        duration = duration + token.estimated_duration()?;
                     }
-                Ok(duration)
+                Ok(duration as usize)
             }
         }
     }

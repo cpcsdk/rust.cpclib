@@ -90,6 +90,39 @@ pub fn jp_label(label: &str) -> Token {
     )
 }
 
+pub fn exx() -> Token {
+    token_for_opcode_no_arg(Mnemonic::Exx)
+}
+
+pub fn inc_l() -> Token {
+    inc_register8(Register8::L)
+}
+
+pub fn inc_register8(reg: Register8) -> Token {
+    token_for_opcode_one_arg(
+        Mnemonic::Inc,
+        reg.into()
+    )
+}
+
+/// I have clear doubt that  this exists really
+pub fn ld_l_mem_ix(expr: Expr) -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Ld,
+        Register8::L.into(),
+        DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, Oper::Add, expr)
+    )
+}
+
+pub fn ld_mem_hl_e() -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Ld,
+        DataAccess::MemoryRegister16(Register16::Hl),
+        Register8::E.into()
+    )
+}
+
+
 /// Build a token that represents a mnemonic without any argument
 pub fn token_for_opcode_no_arg(mne: Mnemonic) -> Token {
     Token::OpCode(
@@ -125,7 +158,6 @@ pub fn token_for_opcode_two_args(mne: Mnemonic, data1: DataAccess, data2: DataAc
         Some(data2)
     )
 }
-
 
 
 

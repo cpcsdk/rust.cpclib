@@ -24,6 +24,11 @@ pub enum DataAccess {
     FlagTest(FlagTest)
 }
 
+impl From<Expr> for DataAccess {
+    fn from(exp: Expr) -> DataAccess {
+        DataAccess::Expression(exp)
+    }
+}
 
 impl From<&str> for DataAccess {
     fn from(txt: &str) -> DataAccess {
