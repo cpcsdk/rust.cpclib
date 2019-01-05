@@ -84,7 +84,7 @@ pub fn breakpoint_snapshot() -> Token {
 
 
 pub fn jp_label(label: &str) -> Token {
-    token_for_opcode_one_arg(
+    token_for_opcode_latest_arg(
         Mnemonic::Jp,
         label.into()
     )
@@ -105,6 +105,15 @@ pub fn token_for_opcode_one_arg(mne: Mnemonic, data1: DataAccess) -> Token {
         mne,
         Some(data1),
         None
+    )
+}
+
+/// Build a token that represents a mnemonic with only one argument BUT positionned in the last position (for jp for example)
+pub fn token_for_opcode_latest_arg(mne: Mnemonic, data2: DataAccess) -> Token {
+    Token::OpCode(
+        mne,
+        None,
+        Some(data2)
     )
 }
 
