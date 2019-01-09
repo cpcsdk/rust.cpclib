@@ -787,7 +787,7 @@ fn visit_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<Da
     // TODO update $ in the symbol table
     let bytes = assemble_opcode(mnemonic, arg1, arg2, env)?;
     for b in bytes.iter() {
-        env.output(*b);
+        env.output(*b)?;
     }
 
     Ok(())

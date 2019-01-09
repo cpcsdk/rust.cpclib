@@ -21,6 +21,26 @@ use cpclib::assembler::assembler::visit_tokens;
 use cpclib::xfer::CpcXfer;
 
 
+fn standard_linker_code() -> &'static str {
+    "   org 0x1000
+        di
+        ld sp, $
+        ld hl, image
+        ld de, 0xc000
+        call lz4_uncrunch
+        ld hl, code
+        ld de, 0x4000
+        ld bc, code_end - code
+        ldir
+
+code
+    ; TODO add the code
+code_end
+image
+    ; todo add crunched image
+    "
+}
+
 // Produce the code that display a standard screen
 fn standard_display_code(mode: u8) -> String {
     let code = match mode {
@@ -157,7 +177,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
 }
 
 
-fn convert(matches: &ArgMatches) {
+fn convert(matches: &ArgMatches) -> Result<(), String>{
     let input_file = matches.value_of("SOURCE").unwrap();
     let output_mode = matches.value_of("MODE").unwrap().parse::<u8>().unwrap();
     let mut transformations = TransformationsList::new();
@@ -173,48 +193,63 @@ fn convert(matches: &ArgMatches) {
         None, 
         output_mode.into(), 
         transformations,
-        &output_format);
+        &output_format)?;
 
     println!("Expected {:?}", & output_format);
     println!("Conversion  {:?}", &conversion);
 
+    // Make the conversion before feeding sna or dsk
+    let (palette, code) = match &conversion {
+        Output::CPCMemoryStandard(memory, pal) => {
+            (pal, assemble(standard_display_code(output_mode)))
+        },
+
+        Output::CPCMemoryOverscan(memory1, memory2, pal) => {
+            let code = assemble(
+                fullscreen_display_code(
+                    output_mode, 
+                    96/2, 
+                    &pal)
+            );
+            (pal, code)
+        }
+
+        _ => unreachable!()
+    };
+
     let sub_sna = matches.subcommand_matches("sna");
     let sub_m4 = matches.subcommand_matches("m4");
+    let sub_dsk = matches.subcommand_matches("dsk");
 
+    if sub_dsk.is_some() {
+        // TODO create the linker
+
+    }
     if sub_sna.is_some() || sub_m4.is_some() {
         // Create a snapshot with a standard screen
         let mut sna = Snapshot::default();
-        let mut palette: Option<Palette> = None;
-        let mut code = None;
 
-        match conversion {
-            Output::CPCMemoryStandard(memory, pal) => {
-                palette = Some(pal);
-                code = Some(assemble(standard_display_code(output_mode)));
+        match &conversion {
+            Output::CPCMemoryStandard(memory, _) => {
                 sna.add_data(&memory.to_vec(), 0xc000)
                     .expect("Unable to add the image in the snapshot");
             },
-
-            Output::CPCMemoryOverscan(memory1, memory2, pal) => {
-                palette = Some(pal);
-                code = Some(assemble(fullscreen_display_code(output_mode, 96/2, palette.as_ref().unwrap())));
+            Output::CPCMemoryOverscan(memory1, memory2, _) => {
                 sna.add_data(&memory1.to_vec(), 0x8000)
                     .expect("Unable to add the image in the snapshot");
                 sna.add_data(&memory2.to_vec(), 0xc000)
                     .expect("Unable to add the image in the snapshot");
             }
-
             _ => unreachable!()
         };
 
-
-        sna.add_data(&code.unwrap(), 0x4000);
+        sna.add_data(&code, 0x4000).unwrap();
         sna.set_value(SnapshotFlag::Z80_PC, 0x4000).unwrap();
         sna.set_value(SnapshotFlag::GA_PAL(Some(16)), 0x54).unwrap();
         for i in 0..16 {
             sna.set_value(
                 SnapshotFlag::GA_PAL(Some(i)),
-                palette.as_ref().unwrap().get((i as i32).into()).gate_array() as u16
+                palette.get((i as i32).into()).gate_array() as u16
             ).unwrap();
         }
 
@@ -243,6 +278,8 @@ fn convert(matches: &ArgMatches) {
         }
 
     }
+
+    Ok(())
 }
 
 fn main() {
@@ -251,13 +288,14 @@ fn main() {
                     .version("0.1")
                     .author("Krusty/Benediction")
                     .about("Simple CPC image conversion tool")
+
                     .subcommand(
                         SubCommand::with_name("sna")
                             .about("Generate a snapshot with the converted image.")
                             .arg(
                                 Arg::with_name("SNA")
                                     .takes_value(true)
-                                    .help("Filename to generate")
+                                    .help("snapshot filename to generate")
                                     .required(true)
                                     .validator(|sna| {
                                         match sna.to_lowercase().ends_with("sna") {
@@ -266,6 +304,23 @@ fn main() {
                                         }
                                     })  
                             )
+                    )
+
+                    .subcommand(
+                        SubCommand::with_name("dsk")
+                        .about("Generate a DSK with an executable of the converted image.")
+                        .arg(
+                            Arg::with_name("DSK")
+                            .takes_value(true)
+                            .help("dsk filename to generate")
+                            .required(true)
+                            .validator(|dsk|{
+                                match dsk.to_lowercase().ends_with("dsk") {
+                                    true => Ok(()),
+                                    false => Err(format!("{} has not a dsk extention.", dsk))
+                                }
+                            })
+                        )
                     )
 
                     .arg(
@@ -340,8 +395,17 @@ fn main() {
     }
     .get_matches();
 
+    println!("ff");
 
-    convert(&matches);
+    if matches.subcommand_matches("m4").is_none() && 
+        matches.subcommand_matches("dsk").is_none() && 
+        matches.subcommand_matches("sna").is_none() {
+        eprintln!("[ERROR] you have not specified any action to do.");
+        std::process::exit(exitcode::USAGE);
+    }
+
+    convert(&matches).expect("Unable to make the conversion");
+
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
 
         if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
@@ -370,7 +434,14 @@ fn main() {
                         match event {
                             DebouncedEvent::Write(_) => {
                                 println!("Image modified. Launch new conversion");
-                                convert(&matches);
+                                
+                                match convert(&matches) {
+
+                                    Err(e) => {
+                                        eprintln!("[ERROR] Unable to convert the image {}", e);
+                                    },
+                                    Ok(_) => {}
+                                };
                             }
                             _ => {}
                         }

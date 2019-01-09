@@ -410,7 +410,7 @@ impl<'a> ImageConverter<'a> {
             palette: Option<Palette>, 
             mode: Mode, 
             transformations: TransformationsList,
-            output: &'a OutputFormat) -> Output
+            output: &'a OutputFormat) -> Result<Output, String>
     where P: AsRef<Path>
     {
         Self::convert_impl(input_file.as_ref(), palette, mode, transformations,  output)        
@@ -421,7 +421,7 @@ impl<'a> ImageConverter<'a> {
         palette: Option<Palette>, 
         mode: Mode, 
         transformations: TransformationsList,
-        output: &'a OutputFormat) -> Output
+        output: &'a OutputFormat) -> Result<Output, String>
     {
         let mut converter = ImageConverter {
             palette,
@@ -435,12 +435,12 @@ impl<'a> ImageConverter<'a> {
                 let mut matrix = converter.load_color_matrix(input_file);
                 matrix.double_horizontally();
                 let sprite = matrix.as_sprite(mode, None);
-                Output::LinearEncodedChuncky{
+                Ok(Output::LinearEncodedChuncky{
                     data: sprite.to_linear_vec(),
                     palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set 
                     byte_width: sprite.byte_width() as _, 
                     height: sprite.height() as _
-                }
+                })
             },
             _ => {
                 let sprite = converter.load_sprite(input_file);
@@ -449,7 +449,7 @@ impl<'a> ImageConverter<'a> {
         }
     }
 
-    pub fn import(sprite: &Sprite, output: &'a OutputFormat) -> Output {
+    pub fn import(sprite: &Sprite, output: &'a OutputFormat) -> Result<Output, String> {
         let mut converter = ImageConverter {
             palette: None,
             mode: Mode::Mode0, // TODO make the mode optional,
@@ -483,7 +483,7 @@ impl<'a> ImageConverter<'a> {
 
 
     /// Manage the conversion on the given sprite
-    fn apply_sprite_conversion(&mut self, sprite: & Sprite) -> Output {
+    fn apply_sprite_conversion(&mut self, sprite: & Sprite) -> Result<Output, String> {
         let output = self.output.clone();
 
         match output {
@@ -501,31 +501,31 @@ impl<'a> ImageConverter<'a> {
 
     /// Produce the linearized version of the sprite.
     /// TODO add size constraints to keep a small part of the sprite
-    fn linearize_sprite(&mut self, sprite: &Sprite) -> Output {
-        Output::LinearEncodedSprite{
+    fn linearize_sprite(&mut self, sprite: &Sprite) -> Result<Output, String> {
+        Ok(Output::LinearEncodedSprite{
             data: sprite.to_linear_vec(),
             palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set 
             byte_width: sprite.byte_width() as _, 
             height: sprite.height() as _
-        }
+        })
     }
 
 
 
     /// Manage the creation of the memory blocks
     /// XXX Warning, overscan is wrongly used, it is more fullscreen with 2 pages
-    fn build_memory_blocks(&mut self, sprite: & Sprite, dim: CPCScreenDimension, displayAddress: DisplayAddress) -> Output {
+    fn build_memory_blocks(&mut self, sprite: & Sprite, dim: CPCScreenDimension, displayAddress: DisplayAddress) -> Result<Output, String> {
 
         let screen_width = dim.width(&sprite.mode().unwrap()) as u32;
         let screen_height = dim.height() as u32;
 
         // Check if the destination is compatible
         if screen_width < sprite.pixel_width() {
-            panic!(
+            return Err(format!(
                 "The image width ({}) is larger than the cpc screen width ({})",
                 sprite.pixel_width(),
                 screen_width
-            );
+            ));
         }
         else if screen_width > sprite.pixel_width() {
             eprintln!(
@@ -536,11 +536,11 @@ impl<'a> ImageConverter<'a> {
         }
 
         if screen_height < sprite.height() {
-            panic!(
+            return Err(format!(
                 "The image height ({}) is larger than the cpc screen height ({})",
                 sprite.height(),
                 screen_height
-            );
+            ));
         }
         else if  screen_height > sprite.height() {
             eprintln!(
@@ -561,7 +561,7 @@ impl<'a> ImageConverter<'a> {
         let mut used_pages = HashSet::new();
         let is_overscan = dim.use_two_banks();
         if !is_overscan && displayAddress.is_overscan() {
-            panic!("Image requires an overscan configuration for R12/R13")
+            return Err(format!("Image requires an overscan configuration for R12/R13={:?}", displayAddress));
         }
 
         
@@ -622,16 +622,16 @@ impl<'a> ImageConverter<'a> {
                             }).collect::<Vec<_>>();
 
         if is_overscan && used_pages.len() != 2 {
-            panic!("An overscan screen is requested but {} pages has been feed", used_pages.len());
+            return Err(format!("An overscan screen is requested but {} pages has been feed", used_pages.len()));
         }
 
         // Generate the right output format
         let palette = sprite.palette().unwrap();
         if is_overscan {
-            Output::CPCMemoryOverscan(used_pages[0], used_pages[1], palette)
+            Ok(Output::CPCMemoryOverscan(used_pages[0], used_pages[1], palette))
         }
         else {
-            Output::CPCMemoryStandard(used_pages[0], palette)
+            Ok(Output::CPCMemoryStandard(used_pages[0], palette))
         }
     }
 
