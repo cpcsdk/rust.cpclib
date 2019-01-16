@@ -66,10 +66,10 @@ fn get_unique_colors(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>)  -> HashSet<im
 }
 
 
-/// Browse the image and returnes the palette to use
+/// Browse the image and returns the palette to use
 fn extract_palette(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> Palette {
     let colors = get_unique_colors(img);
-    let mut p = Palette::default();
+    let mut p = Palette::empty();
 
     assert!(colors.len()<=16);
 
@@ -226,7 +226,7 @@ impl ColorMatrix {
 
     /// Returns the palette used (as soon as there is less than 16 inks)
     pub fn extract_palette(&self) -> Palette {
-        let mut p = Palette::default();
+        let mut p = Palette::empty();
         for (idx, color) in flatten(self.data.iter()).unique().enumerate() {
             if idx >= 16 {
                 panic!("[ERROR] your picture uses more than 16 different colors");

@@ -395,11 +395,12 @@ impl Clone for Palette {
 impl Debug for Palette{
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         for i in 0..16 {
-            write!(f, "{} => {:?}", i, self.values.get(&Pen::from(i)))?;
+            writeln!(f, "{} => {:?}", i, self.values.get(&Pen::from(i)))?;
         }
         Ok(())
     }
 }
+
 
 impl Default for Palette {
     /// Create a new palette.
@@ -498,6 +499,34 @@ impl Palette {
         }
     }
 
+    /// Create an empty Palette.
+    /// An empty palette does not contains all the inks and must make crash most of the code that has been previously written !
+    pub fn empty() -> Palette {
+        Palette {
+            values: Default::default()
+        }
+    }
+
+
+    /// Verifies if the palette contains the required pen
+    pub fn contains_pen(&self, pen: &Pen) -> bool {
+        self.values.contains_key(pen)
+    }
+
+    pub fn contains_border(&self) -> bool {
+        self.contains_pen(&Pen::from(16))
+    }
+
+    /// Provides the next unused pen if there is one
+    pub fn next_unused_pen(&self) -> Option<Pen> {
+        for i in 0..16 {
+            let pen = i.into();
+            if ! self.contains_pen(&pen) {
+                return Some(pen);
+            }
+        }
+        None
+    }
 
     pub fn to_gate_array(&self) -> [u8; NB_PENS as usize] {
         let mut res = [0 as u8; NB_PENS as usize];
@@ -507,9 +536,67 @@ impl Palette {
         res
     }
 
-    /// Get the ink of the requested pen
+    /// Add the inks if not present in empty slots of the palette as soon as it is possible. Returns the number of inks added a,d the number of inks impossible to add because of the lack of space.
+    pub fn add_novel_inks_except_in_border(&mut self, inks: &[Ink]) -> (usize, usize) {
+        let mut counter_added = 0;
+        let mut counter_impossible = 0;
+
+        for ink in inks {
+            // skip if already present
+            if self.contains_ink(ink) {continue}
+
+            match self.next_unused_pen() {
+                None => {
+                    counter_impossible+=1
+                },
+                Some(pen) => {
+                    self.set(&pen, ink.clone());
+                }
+            }
+
+        }
+        
+        (counter_added, counter_impossible)
+    }
+
+    /// Returns the list of inks contained in the palette with the border
+    pub fn inks_with_border(&self) -> Vec<Ink> {
+        self.values.iter()
+            .map(|(_, i)|{i.clone()})
+            .collect::<Vec<Ink>>()
+    }
+
+    /// Returns the list of inks contained in the palette without taking into account the border
+    pub fn inks(&self) -> Vec<Ink> {
+        self.values.iter()
+            .filter(|(&p, _)|{p.number()!=16})
+            .map(|(_, i)|{i.clone()})
+            .collect::<Vec<Ink>>()
+    }
+
+    /// Returns all the set pens (without the border)
+    pub fn pens_with_border(&self) -> Vec<Pen> {
+        self.values.iter()
+            .map(|(p, _)|{p.clone()})
+            .collect::<Vec<Pen>>()
+    }
+
+    /// Returns all the set pens (without the border)
+    pub fn pens(&self) -> Vec<Pen> {
+        self.values.iter()
+            .filter(|(&p, _)|{p.number()!=16})
+            .map(|(p, _)|{p.clone()})
+            .collect::<Vec<Pen>>()
+    }
+
+    /// Get the ink of the requested pen. Pen MUST be present
     pub fn get(&self, pen: &Pen) -> &Ink {
         self.values.get(pen).expect("Wrong pen")
+    }
+
+    // Get the ink of the border
+    pub fn get_border(&self) -> &Ink {
+        self.values.get(&Pen::from(16)).expect("Border unavailable")
     }
 
     /// Change the ink of the specified pen
@@ -517,22 +604,23 @@ impl Palette {
         self.values.insert(pen.clone(), ink);
     }
 
+    pub fn set_border(&mut self, ink: Ink) {
+        self.values.insert(Pen::from(16), ink);
+    }
+
 
     /// Get the pen that corresponds to the required ink.
     /// Ink 16 (border) is never tested
     pub fn get_pen_for_ink(&self, expected: &Ink) -> Option<Pen> {
-        let mut res = None;
+        self.values.iter()
+            .filter(|(&p, _)|{p.number()!=16})
+            .find(|(_, i)|{*i==expected})
+            .map(|(p, _)|{p.clone()})
+    }
 
-        for i in 0..16 {
-            let pen = Pen::from(i);
-            let ink = self.values.get(&pen).unwrap();
-            if ink == expected && i != 16 {
-                res = Some(pen);
-                break;
-            }
-        }
-
-        res
+    /// Returns true if the palette contains the inks in one of its pens (except border)
+    pub fn contains_ink(&self, expected: &Ink) -> bool {
+        self.get_pen_for_ink(expected).is_some()
     }
 
     /// Replicate the firsts 4 pens in order to manage special texture that contains both mode 0
@@ -567,8 +655,14 @@ impl Into<Vec<u8>> for &Palette {
 
     fn into(self) -> Vec<u8> {
         let mut vec = Vec::with_capacity(16);
-        for pen in 0..16 {
-            vec.push(self.get(pen.into()).into());
+        for pen in 0..17 {
+            let pen = Pen::from(pen);
+            if self.contains_pen(&pen) {
+                vec.push(self.get(&pen).into());
+            }
+            else {
+                vec.push(0x54); // No pens => ink black
+            }
         }
         vec
     }

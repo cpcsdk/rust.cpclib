@@ -277,6 +277,19 @@ pub mod mode0 {
         res
     }
 
+    // Convert a vector of bytes as a vector of pens
+    pub fn bytes_to_pens(bytes: &[u8]) -> Vec<Pen> {
+        let mut res = Vec::with_capacity(bytes.len()*2);
+ 
+        for &byte in bytes {
+            let (pen1, pen2) = byte_to_pens(byte);
+            res.push(pen1);
+            res.push(pen2);
+        }
+
+        res
+    }
+
 
     /// Returns a pen that corresponds to first argument in mode 0 and second in mode3
     pub fn mix_mode0_mode3(p0: &Pen, p3: &Pen) -> Pen {
