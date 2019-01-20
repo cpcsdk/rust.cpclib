@@ -302,6 +302,10 @@ impl AmsdosManager {
 	}
 }
 
+
+
+
+
 /// http://www.cpcwiki.eu/index.php/AMSDOS_Header
 pub struct AmsdosHeader {
 	content: [u8; 128]
@@ -466,5 +470,45 @@ impl AmsdosHeader {
 
 	pub fn as_bytes(&self) -> &[u8; 128] {
 		&self.content
+	}
+}
+
+
+
+
+/// Encode an amsdos file. 
+/// Warning content may be larger than the real size of the file. It is up to the user to remove the extra_space
+pub struct AmsdosFile {
+	header: AmsdosHeader,
+	content: Vec<u8>
+}
+
+
+impl AmsdosFile {
+
+	pub fn binary_file_from_buffer(
+		filename: &AmsdosFileName, 
+		loading_address: u16, 
+		execution_address: u16, 
+		data: &[u8]) -> AmsdosFile {
+
+		let header = AmsdosHeader::build_header(
+			filename, 
+			AmsdosFileType::Binary,
+			loading_address, 
+			execution_address, 
+			data);
+		let content = data.to_vec();
+
+		AmsdosFile {
+			header,
+			content
+		}
+	}
+
+	/// Return an iterator on the full content of the file: header + content + extra  bytes
+	pub fn full_content(&self) -> impl Iterator<Item=&u8> {
+		self.header.as_bytes().iter()
+			.chain(self.content.iter())
 	}
 }
