@@ -59,6 +59,7 @@ xfer = ["clap", "rustyline"]
 snapshot = ["clap", "built", "time", "semver"]
 imgconverter = ["clap", 'notify', "exitcode"]
 dskmanager = ["clap"]
+hideur = ["clap"]
 
 [[bin]]
 name = "snapshot"
@@ -80,4 +81,9 @@ required-features = ["imgconverter"]
 name = "dskmanager"
 path = "src/bin/dsk_manager.rs"
 required-features = ["dskmanager"]
+
+[[bin]]
+name = "hideur"
+path = "src/bin/hideur.rs"
+required-features = ["hideur"]
 

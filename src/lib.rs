@@ -79,3 +79,21 @@ pub mod xfer;
 // Some reexports
 pub use crate::ga::{Ink, Palette, Pen};
 pub use crate::disc::edsk::ExtendedDsk;
+
+
+
+pub mod util {
+	/**
+	 * Convert a string to its unsigned 32 bits representation (to access to extra memory)
+	 */
+	pub fn string_to_nb(source: &str) -> u32 {
+		let error =format!("Unable to read the value: {}", source);
+		if source.starts_with("0x") {
+			u32::from_str_radix(&source[2..], 16).expect(&error)
+		}
+		else {
+			source.parse::<u32>().expect(&error)
+		}
+	}
+
+}

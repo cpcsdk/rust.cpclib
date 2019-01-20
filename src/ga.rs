@@ -669,6 +669,16 @@ impl Into<Vec<u8>> for &Palette {
 }
 
 
+
+impl Into<Vec<u8>> for Palette {
+    fn into(self) -> Vec<u8> {
+        (&self).into()
+    }
+}
+
+
+
+
 #[cfg(test)]
 mod tests {
     use crate::ga;

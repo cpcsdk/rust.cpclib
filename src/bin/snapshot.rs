@@ -22,21 +22,7 @@ extern crate built;
 extern crate time;
 extern crate semver;
 
-
-/**
- * Convert a string to its unsigned 32 bits representation (to access to extra memory)
- */
-fn string_to_nb(source: &str) -> u32 {
-    let error =format!("Unable to read the value: {}", source);
-    if source.starts_with("0x") {
-        u32::from_str_radix(&source[2..], 16).expect(&error)
-    }
-    else {
-        source.parse::<u32>().expect(&error)
-    }
-}
-
-
+use cpclib::util::string_to_nb;
 
 fn main() {
     eprintln!("[WARNING] This is still a draft version that implement still few functionnalities");
