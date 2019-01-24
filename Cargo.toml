@@ -12,23 +12,24 @@ keywords = ["amstrad", "demo", "z80", "dsk" ,"sna"]
 categories = ["command-line-utilities", "development-tools", "emulators"]
 
 [dependencies]
-num="0.1.42"
-vecmath = "0.3.1"
-matches = "0.1.8"
-lazy_static= "1.2.0"
-memchr = "2.1.1"
-smallvec = "0.6.6"
-itertools="0.7.8"
+arrayref="0.3.5"
 bitsets = "0.1.1"
 bitfield = "0.13.1"
 bitflags = "1.0.4"
-image = "0.20.1"
 custom_error = "1.3.0"
-arrayref="0.3.5"
+delegate = "0.2.0"
+itertools="0.7.8"
+image = "0.20.1"
+lazy_static= "1.2.0"
+matches = "0.1.8"
+memchr = "2.1.1"
+num="0.1.42"
 slice-of-array="0.2.1"
-tempfile="3.0.4"
 serde = "1.0"
 serde_derive = "1.0"
+smallvec = "0.6.6"
+tempfile="3.0.4"
+vecmath = "0.3.1"
 
 path-absolutize = {version="1.1.3", optional=true}
 curl = {version="0.4.19", optional=true}

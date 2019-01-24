@@ -8,7 +8,7 @@ use std::fs::File;
 use std::string::ToString;
 use itertools::zip;
 
-
+use delegate::delegate;
 
 pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {
 		let mut n=0;
@@ -200,6 +200,14 @@ impl TrackInformation {
 		self.number_of_sectors
 	}
 
+	/// Fail if the track has no sector
+	pub fn min_sector(&self) -> u8 {
+		self.sector_information_list.sectors()
+			.iter().map(|s|{s.sector_information_bloc.sector_id})
+			.min()
+			.unwrap()
+	}
+
 	/// Compute the sum of data contained by all the sectors.
 	/// Only serves for debug purposes
 	pub fn data_sum(&self) -> usize {
@@ -306,13 +314,12 @@ impl TrackInformation {
 			.sum()
 	}
 
-	pub fn sector(&self, sector: u8) -> Option<&Sector> {
-		self.sector_information_list.sector(sector)
+	delegate! {
+		target self.sector_information_list {
+			pub fn sector(&self, sector_id: u8) -> Option<&Sector>;
+			pub fn sector_mut(&mut self, sector_id: u8) -> Option<&mut Sector>;
+		}
 	}
-
-
-
-	
 }
 
 
@@ -442,13 +449,16 @@ impl SectorInformation {
 }
 
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default)] 
 pub struct SectorInformationList {
 	//sectors: Vec<Sector>
 	pub(crate) sectors: Vec<Sector>,
 }
 
 impl SectorInformationList {
+	pub fn sectors(&self) -> &[Sector] {
+		&self.sectors
+	}
 
 	/// Return the number of sectors
 	pub fn len(&self) -> usize {
@@ -516,6 +526,16 @@ impl SectorInformationList {
 				sector.sector_information_bloc.sector_id == sector_id
 			})
 	}
+
+	/// Returns the sector that correspond to the requested id
+	pub fn sector_mut(&mut self, sector_id: u8) -> Option<&mut Sector> {
+		self.sectors.iter_mut()
+			.find(|sector|{
+				sector.sector_information_bloc.sector_id == sector_id
+			})
+	}
+
+
 
 /// Fill the information list with sectors corresponding to the provided arguments
 	pub fn fill_with(
@@ -587,6 +607,32 @@ impl Sector  {
 
 	pub fn values(&self) -> &[u8] {
 		&self.values
+	}
+
+	pub fn values_mut(&mut self) ->&mut[u8] {
+		&mut self.values
+	}
+
+	/// Set all the values stored in the sector
+	pub fn set_values(&mut self, data: &[u8]) -> Result<(), String> {
+		if (data.len() as u16) < self.len() {
+			return Err(format!(
+				"You cannot insert {} bytes in a sector of size {}.", 
+				data.len(), 
+				self.len())
+			);
+		}
+
+		if (data.len() as u16) > self.len() {
+			return Err(format!(
+				"Smaller data of {} bytes to put in a sector of size {}.", 
+				data.len(), 
+				self.len())
+			);
+		}
+
+		self.values[..].clone_from_slice(data);
+		Ok(())
 	}
 }
 
@@ -715,21 +761,6 @@ impl ExtendedDsk {
 		self.disc_information_bloc.number_of_sides
 	}
 
-	/// Search and returns the appropriate sector
-	/// TODO use get_track_information
-	pub fn sector(&self, track: u8, sector: u8, side: u8) -> Option<&Sector> {
-
-		let idx = if self.disc_information_bloc.is_double_sided() {
-			track as usize * 2 + side as usize
-		}
-		else {
-			assert_eq!(side, 0);
-			track as usize
-		};
-
-		self.track_list.list[idx].sector(sector)
-	}
-
 
 	pub fn get_track_information(&self, side: Side, track: u8) -> Option<&TrackInformation> {
 		let idx = self.get_track_idx(side, track);
@@ -738,10 +769,21 @@ impl ExtendedDsk {
 
 
 	pub fn get_track_information_mut(&mut self, side: Side, track: u8) -> Option<&mut TrackInformation> {
-		let idx = self.get_track_idx(side, track);
+		let idx = self.get_track_idx(side.into(), track);
 		self.track_list.list.get_mut(idx)
 	}
 
+	/// Search and returns the appropriate sector
+	pub fn sector<S: Into<Side>>(&self,side: S, track: u8, sector_id: u8) -> Option<&Sector> {
+		self.get_track_information(side.into(), track)
+			.and_then(|track|{track.sector(sector_id)})
+	}
+
+	/// Search and returns the appropriate mutable sector 
+	pub fn sector_mut<S: Into<Side>>(&mut self,side: S, track: u8, sector_id: u8) -> Option<&mut Sector> {
+		self.get_track_information_mut(side.into(), track)
+			.and_then(|track|{track.sector_mut(sector_id)})
+	}
 
 	fn get_track_idx(&self, side: Side, track: u8) -> usize {
 		if self.disc_information_bloc.is_double_sided() {
@@ -761,17 +803,17 @@ impl ExtendedDsk {
 	}
 
 	/// Return the concatenated values of several consecutive sectors
-	pub fn sectors_bytes(&self, track: u8, sector: u8, nb_sectors: u8, side: u8) -> Option<Vec<u8>> {
+	pub fn sectors_bytes<S: Into<Side>>(&self, side: S, track: u8, sector_id: u8, nb_sectors: u8) -> Option<Vec<u8>> {
 		let mut res = Vec::new();
+		let side = side.into();
 
 		for count in 0..nb_sectors {
-			match self.sector(track, sector+count, side) {
+			match self.sector(side.clone(), track, sector_id+count) {
 				None => return None,
 				Some(s) => {
 					res.extend(s.values.iter())
 				}
 			}
-
 		}
 
 		Some(res)
@@ -787,4 +829,15 @@ impl ExtendedDsk {
 			.sum()
 	}
 
+	/// Returns all the tracks
+	pub fn tracks(&self) -> &[TrackInformation] {
+		&self.track_list.list
+	}
+
+	/// Return the smallest sector id over all tracks
+	pub fn min_sector<S: Into<Side>>(&self, size: S) -> u8 {
+		self.tracks().iter()
+			.map(|t|{t.min_sector()})
+			.min().unwrap()
+	}
 }

@@ -47,3 +47,25 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
 	}
 	edsk
 }
+
+
+impl From<DiscConfig> for ExtendedDsk {
+	fn from(config: DiscConfig) -> ExtendedDsk {
+		build_disc_from_cfg(&config)
+	}
+}
+
+impl From<&DiscConfig> for ExtendedDsk {
+	fn from(config: &DiscConfig) -> ExtendedDsk {
+		build_disc_from_cfg(config)
+	}
+}
+
+pub fn single_side_data_dsk() -> ExtendedDsk {
+	DiscConfig::single_side_data_format().into()
+}
+
+pub fn single_side_data42_dsk() -> ExtendedDsk {
+	DiscConfig::single_side_data42_format().into()
+}
+

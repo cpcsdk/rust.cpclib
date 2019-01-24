@@ -32,6 +32,44 @@ mod tests {
 		assert_eq!(
 			dsk.get_track_information(cpclib::disc::edsk::Side::SideA, 41).unwrap().data_sum(),
 			329484);
+
+
+		// Check catalgo access
+
+		assert!(
+			dsk.sector(0, 0, 0xc1).is_some()
+		);
+		assert!(
+			dsk.sector(0, 0, 0xc2).is_some()
+		);
+		assert!(
+			dsk.sector(0, 0, 0xc3).is_some()
+		);
+		assert!(
+			dsk.sector(0, 0, 0xc4).is_some()
+		);
+
+		assert!(dsk.sectors_bytes(
+			0, // track
+			0xc1,  // sector
+			4, //nb sector
+			0.into()).is_some());
+
+		assert!(dsk.sectors_bytes(
+			0, // track
+			0xc1,  // sector
+			4, //nb sector
+			1.into()).is_none());
+
+		assert!(dsk.sectors_bytes(
+			0, // track
+			0xc1,  // sector
+			4, //nb sector
+			2.into()).is_none());
+
+
+
+
 	}
 
 	#[test]

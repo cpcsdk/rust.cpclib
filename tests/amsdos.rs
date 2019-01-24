@@ -11,8 +11,25 @@ mod tests {
 	#[test]
 	fn list_catalog() {
 		let dsk = cpclib::disc::edsk::ExtendedDsk::open("./tests/dsk/pirate.dsk").unwrap();
-		let amsdos = cpclib::disc::amsdos::AmsdosManager::new(dsk, 0);
+		let amsdos = cpclib::disc::amsdos::AmsdosManager::new_from_disc(dsk, 0);
 		amsdos.print_catalog();
+	}
+
+	#[test]
+	fn empty_catalog() {
+		use cpclib::disc::cfg::DiscConfig;
+		use cpclib::disc::amsdos::AmsdosManager;
+
+		let dsk = DiscConfig::single_side_data_format().into();
+		let manager = AmsdosManager::new_from_disc(dsk, 0);
+		let catalog = manager.catalog();
+
+		println!("{:?}", catalog);
+
+		assert_eq!(
+			catalog.used_entries().count(),
+			0
+		);
 
 	}
 
@@ -81,9 +98,11 @@ mod tests {
 			&filename, 
 			0x3210, 
 			0x1234, 
-			&content);
+			&content)
+			.unwrap();
 		
-		let obtained_result= file.full_content().map(|&b|{b}).collect::<Vec<_>>();
+		let obtained_result= file.full_content()
+								.map(|&b|{b}).collect::<Vec<_>>();
 		assert_eq!(
 			obtained_result.len(),
 			result.len()
@@ -93,6 +112,48 @@ mod tests {
 			result.to_vec()
 		);
 
+	}
 
+
+	#[test]
+	fn add_file() {
+		use cpclib::disc::cfg::DiscConfig;
+		use cpclib::disc::amsdos::AmsdosManager;
+
+		let dsk = DiscConfig::single_side_data_format().into();
+		let mut manager = AmsdosManager::new_from_disc(dsk, 0);
+		let catalog = manager.catalog();
+
+		assert_eq!(
+			catalog.used_entries().count(),
+			0
+		);
+
+		assert_eq!(
+			catalog.free_entries().count(),
+			64
+		);
+
+		let filename = AmsdosFileName::new(
+			0,
+			"test",
+			"bin"
+		).unwrap();
+		let file = AmsdosFile::binary_file_from_buffer(
+			&filename, 
+			0x3210, 
+			0x1234, 
+			&[0x41, 0x42, 0x43, 0x0a]).unwrap();
+			manager.add_file(file, false, false).expect("Unable to add file");
+		let catalog = manager.catalog();
+
+
+		println!("{:?}", catalog);
+	 	assert_eq!(
+			catalog.used_entries().count(),
+			1
+		);
+
+	}
 
 }
