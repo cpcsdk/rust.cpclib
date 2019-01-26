@@ -111,8 +111,79 @@ mod tests {
 			obtained_result,
 			result.to_vec()
 		);
-
 	}
+
+	#[test]
+	fn test_filename() {
+		let fname1 =  AmsdosFileName::new(
+			0,
+			"test",
+			"bin"
+		).unwrap();
+
+		let fname2:AmsdosFileName = "test.bin".into();
+
+		assert_eq!(fname1, fname2);
+		assert_eq!(fname1.extension(), "bin");
+		assert_eq!(fname2.name(), "test");
+		assert_eq!(fname2.user(), 0);
+	}
+
+	#[test]
+	fn test_filename_bytes() {
+		let bytes  = [0x00,0x2D,0x47,0x57,0x2D,0x46,0x52,0x20,0x20,0x42,0x41,0x53];
+		let filename = AmsdosFileName::from_slice(&bytes);
+		let result = filename.to_entry_format(false, false);
+
+		println!("{:?}\n{:?}", &bytes, &result);
+		assert_eq!(
+			filename.user(),
+			0
+		);
+		assert_eq!(
+			filename.name(),
+			"-GW-FR"
+		);
+		assert_eq!(
+			filename.extension(),
+			"BAS"
+		);
+		assert_eq!(
+			filename.filename(),
+			"-GW-FR.BAS"
+		);
+		assert_eq!(
+			bytes,
+			result
+		);
+	}
+
+
+	#[test]
+	fn test_entry() {
+		let bytes = [0x00,0x2D,0x47,0x57,0x2D,0x46,0x52,0x20,0x20,0x42,0x41,0x53,0x00,0x00,0x00,0x06,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00];
+		let entry = AmsdosEntry::from_buffer(0, &bytes);
+		let file_results = entry.amsdos_filename().to_entry_format(false, false);
+		let results = entry.as_bytes();
+
+
+		println!("Expected:\t{:?}\nObtained:\t{:?}", &bytes[..12], &file_results);
+
+		assert_eq!(
+			&bytes[..12],
+			&file_results
+		);
+
+		println!("Expected:\t{:?}\nObtained:\t{:?}", &bytes, &results);
+
+	
+
+		assert_eq!(
+			&bytes,
+			&results
+		);
+	}
+
 
 
 	#[test]
@@ -139,12 +210,52 @@ mod tests {
 			"test",
 			"bin"
 		).unwrap();
+		assert_eq!(
+			&filename,
+			&AmsdosFileName::from("test.bin")
+		);
+
+
+
 		let file = AmsdosFile::binary_file_from_buffer(
 			&filename, 
 			0x3210, 
 			0x1234, 
 			&[0x41, 0x42, 0x43, 0x0a]).unwrap();
-			manager.add_file(file, false, false).expect("Unable to add file");
+			manager.add_file(&file, false, false).expect("Unable to add file");
+
+		assert_eq!(
+			& file.header().amsdos_filename().filename(),
+			"test.bin"
+		);
+		assert_eq!(
+			& file.header().amsdos_filename(),
+			& filename
+		);
+		assert_eq!(
+			file.header().execution_address(),
+			0x1234
+		);
+		assert_eq!(
+			file.header().loading_address(),
+			0x3210
+		);
+
+		let catalog_data = manager.disc().sectors_bytes(0, 0, 0xc1, 4).unwrap();
+		let entry_data = &catalog_data[..32];
+		let entry = AmsdosEntry::from_slice(0, &entry_data); 
+		println!("{:?}", entry_data);
+		println!("{:?}", entry);
+		assert_eq!(
+			entry_data[0],
+			entry.amsdos_filename().user()
+		);
+		assert_eq!(
+			entry.amsdos_filename().user(),
+			0
+		);
+
+
 		let catalog = manager.catalog();
 
 
@@ -152,6 +263,32 @@ mod tests {
 	 	assert_eq!(
 			catalog.used_entries().count(),
 			1
+		);
+		let entry = catalog.used_entries().next().unwrap();
+		assert_eq!(
+			entry.amsdos_filename(),
+			&AmsdosFileName::from("test.bin")
+		);
+
+
+		// TODO find a way to pass filename by reference
+		let file2 = manager.get_file(filename);
+		assert!(file2.is_some());
+		let file2 = file2.unwrap();
+		assert!(file2.header().is_checksum_valid());
+		assert_eq!(
+			&file.header(),
+			&file2.header()
+		);
+
+		assert_eq!(
+			&file.content().len(),
+			&file2.content().len()
+		);
+
+		assert_eq!(
+			&file.content(),
+			&file2.content()
 		);
 
 	}

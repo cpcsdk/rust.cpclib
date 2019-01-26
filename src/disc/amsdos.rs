@@ -20,6 +20,7 @@ pub enum AmsdosError {
 /// - the user
 /// - the filename (up to 8 chars)
 /// - the extension (up to 3 chars)
+#[derive(Clone)]
 pub struct AmsdosFileName {
 	user: u8,
 	name: String,
@@ -31,6 +32,15 @@ impl std::fmt::Debug for AmsdosFileName {
 		write!(f, "{}:{}.{}", self.user(), self.name, self.extension)
 	}
 }
+
+impl PartialEq for AmsdosFileName{
+	fn eq(&self, other: &AmsdosFileName) -> bool {
+		self.user == other.user &&
+		self.name.to_uppercase() == other.name.to_uppercase() &&
+		self.extension.to_uppercase() == other.extension.to_uppercase()
+    }
+}
+
 
 impl AmsdosFileName {
 	pub fn filename_header_format(&self) -> [u8;8] {
@@ -47,6 +57,10 @@ impl AmsdosFileName {
 			content[i] = *c;
 		}
 		content
+	}
+
+	pub fn from_slice(slice: &[u8]) -> AmsdosFileName {
+		Self::from_entry_format(array_ref!(slice, 0, 12))
 	}
 
 	/// Create an amsdos filename from a catalog entry buffer
@@ -87,6 +101,18 @@ impl AmsdosFileName {
 		self.user
 	}
 
+	pub fn name(&self) -> &str {
+		&self.name
+	}
+
+	pub fn extension(&self) -> &str {
+		&self.extension
+	}
+
+	pub fn filename(&self) -> String {
+		format!("{}.{}", self.name(), self.extension())
+	}
+
 	pub fn new(user: u8, filename: &str, extension: &str) -> Result<AmsdosFileName, String> {
 
 		let filename = filename.trim();
@@ -116,6 +142,29 @@ impl AmsdosFileName {
 			extension: extension.to_owned()/*.to_uppercase()*/,
 		})
 
+	}
+}
+
+// TODO use tryfrom asap
+impl From<&str> for AmsdosFileName {
+
+	/// Make a filename conversion by considering the following format is used: user:name.extension
+	fn from(content: &str) -> AmsdosFileName {
+		let (user, rest) = match content.find(':') {
+			None => (0, content),
+			Some(1) => (
+				u8::from_str_radix(&content[..1], 10).unwrap(),
+				&content[2..]
+			),
+			_ => unreachable!()
+		};
+
+		let (filename, extension ) = match rest.find('.') {
+			None => (rest, ""),
+			Some(idx) => (&rest[..idx], &rest[(idx+1)..])
+		};
+
+		AmsdosFileName::new(user, filename, extension).unwrap()
 	}
 }
 
@@ -216,12 +265,12 @@ impl BlocIdx {
 	pub fn sector(&self) -> u8 {
 		(( (self.value() as u16) << 1) % 9) as u8
 	}
-
-
 }
 
+
+
 // http://www.cpc-power.com/cpcarchives/index.php?page=articles&num=92
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AmsdosEntry {
 	/// Location of the entry in the catalog
 	idx: u8,
@@ -235,11 +284,26 @@ pub struct AmsdosEntry {
 }
 
 impl AmsdosEntry {
+
+	/// Check if the given filename corresponds to the entry
+	pub fn belongs_to(&self, filename: &AmsdosFileName) -> bool {
+		&self.file_name == filename
+	}
+
+	pub fn amsdos_filename(&self) -> &AmsdosFileName {
+		&self.file_name
+	}
+
+	pub fn from_slice(idx: u8, slice: &[u8]) -> AmsdosEntry {
+		Self::from_buffer(idx, array_ref!(slice, 0, 32))
+	}
+
+	/// Create the entry from its 32 bytes
 	pub fn from_buffer(idx: u8, buffer: &[u8;32]) -> AmsdosEntry  {
 		AmsdosEntry {
 			idx,
 			file_name: AmsdosFileName::from_entry_format(
-				array_ref!(buffer, 1,1+8+3)
+				array_ref!(buffer, 0, 12)
 			),
 			read_only: buffer[1+8+0].bit(7),
 			system: buffer[1+8+1].bit(7),
@@ -256,6 +320,11 @@ impl AmsdosEntry {
 				array_blocs
 			}
 		}
+	}
+
+	/// Returns the list of used blocs by tis entry
+	pub fn used_blocs(&self) -> &[BlocIdx] {
+		&self.blocs[..(self.nb_pages as usize)]
 	}
 
 	pub fn as_bytes(&self) -> [u8; 32] {
@@ -305,9 +374,17 @@ impl AmsdosEntry {
 }
 
 /// Encode the catalog of an existing disc
-#[derive(Debug)]
 pub struct AmsdosEntries {
 	entries: Vec<AmsdosEntry>	
+}
+
+impl std::fmt::Debug for AmsdosEntries {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		for entry in self.used_entries() {
+			write!(f, "{:?}", entry)?;
+		}
+		Ok(())
+	}
 }
 
 impl AmsdosEntries {
@@ -346,6 +423,19 @@ impl AmsdosEntries {
 			.filter(|&entry|{
 				entry.is_erased() || entry.nb_pages == 0
 			})
+	}
+
+	/// Return all the entries that correspond to a given file
+	pub fn for_file(&self, filename: &AmsdosFileName)-> impl Iterator<Item = & AmsdosEntry> 
+	{
+		let filename: AmsdosFileName = filename.clone();
+		self.entries.iter()
+			.filter(move |&entry|{
+				entry.nb_pages > 0 &&
+				entry.belongs_to(&filename)
+			})
+
+
 	}
 
 	/// Returns one available entry or None if there is no entry
@@ -407,6 +497,14 @@ const DATA_SECTOR_SIZE: usize = 512;
 
 
 
+/// Minimal information needed to access to twe two sectors of a given bloc
+struct BlocAccessInformation{
+	track1: u8,
+	sector1_id: u8,
+	track2: u8,
+	sector2_id:u8
+}
+
 
 
 /// http://cpctech.cpc-live.com/docs/manual/s968se09.pdf
@@ -418,6 +516,9 @@ pub struct AmsdosManager {
 }
 
 impl AmsdosManager {
+	pub fn disc(&self) -> &ExtendedDsk {
+		&self.disc
+	}
 
 	pub fn new_from_disc<S: Into<Side>>(disc: ExtendedDsk, side: S) -> AmsdosManager {
 		AmsdosManager {
@@ -480,12 +581,37 @@ impl AmsdosManager {
 			data)
 	}
 
+	/// Return the file if it exists
+	pub fn get_file<F: Into<AmsdosFileName>>(&self, filename: F) -> Option<AmsdosFile> {
+		// Collect the entries for the given file
+		let entries = {
+			let filename = filename.into();
+			let entries = self.catalog().for_file(&filename)
+							.map(|e|{e.clone()})
+							.collect::<Vec<_>>();
+			if entries.len() == 0 {
+				return None
+			}
+			entries
+		};
+
+		// Retreive the binary data
+		let content = entries.iter().flat_map(|entry|{
+									self.read_entry(entry)
+							})
+							.collect::<Vec<u8>>();
+		let mut file = AmsdosFile::from_buffer(&content);
+		file.shrink_content_to_fit_header_size();
+
+		Some(file)
+	}
+
 	/// Add the given amsdos file to the disc
 	/// Code is greatly inspired by idsk with no special verifications.
 	/// In case of error, the disk is in a broken state => part of the file may be stored...
 	pub fn add_file(
 		&mut self, 
-		file: AmsdosFile, 
+		file: &AmsdosFile, 
 		is_system: bool, 
 		is_read_only: bool) -> Result<(), AmsdosError> {
 
@@ -597,16 +723,12 @@ impl AmsdosManager {
 		bytes.copy_from_slice(entry.as_bytes().as_ref());
 	}
 
-	/// Write bloc content on disc. One bloc use 2 sectors
-	/// Implementation is stolen to iDSK
-	pub fn update_bloc(&mut self, bloc_idx: BlocIdx, content: &[u8]) {
-		// More tests are needed to check if it can work without that
-		assert_eq!(
-			content.len(),
-			DATA_SECTOR_SIZE*2
-		);
 
-		// Compute the information to access the sector
+
+	/// Returns the appropriate information to access the bloc
+	/// Blindly stolen to iDSK
+	fn bloc_access_information(&self, bloc_idx: BlocIdx) -> BlocAccessInformation {
+		// Compute the information to access the first sector
 		let sector_pos = bloc_idx.sector();
 		let min_sector = self.disc.get_track_information(self.side, 0)
 								.unwrap()
@@ -626,29 +748,90 @@ impl AmsdosManager {
 			unimplemented!("Need to format track");
 		}
 
-		// Copy in first sector
-		let mut sector = self.disc.sector_mut(
-			self.side,
-		 	track,
-		 	sector_pos + min_sector).unwrap();
-		sector.set_values(&content[0..DATA_SECTOR_SIZE]).unwrap();
+		let track1 = track;
+		let sector1_id = sector_pos + min_sector;
 
-		// Copy in second sector
+		// Compute the information to access the second sector
 		// TODO set this knowledge in edsk
-		let (sector_pos, track) = {
+		let (sector2_id, track2) = {
 			if sector_pos > 8 {
-				(0, track+1)
+				(0 + min_sector, track+1)
 			}
 			else {
-				(sector_pos+1, track)
+				(sector_pos+1+min_sector, track)
 			}
 		};
 
+		BlocAccessInformation {
+			track1,
+			sector1_id,
+			track2,
+			sector2_id
+		}
+	}
+
+	/// Write bloc content on disc. One bloc use 2 sectors
+	/// Implementation is stolen to iDSK
+	pub fn update_bloc(&mut self, bloc_idx: BlocIdx, content: &[u8]) {
+		// More tests are needed to check if it can work without that
+		assert_eq!(
+			content.len(),
+			DATA_SECTOR_SIZE*2
+		);
+
+		let access_info = self.bloc_access_information(bloc_idx);
+
+		// Copy in first sector
 		let mut sector = self.disc.sector_mut(
 			self.side,
-		 	track,
-		 	sector_pos + min_sector).unwrap();
+		 	access_info.track1,
+		 	access_info.sector1_id).unwrap();
+		sector.set_values(&content[0..DATA_SECTOR_SIZE]).unwrap();
+
+		// Copy in second sector
+		let mut sector = self.disc.sector_mut(
+			self.side,
+		 	access_info.track2,
+		 	access_info.sector2_id).unwrap();
 		sector.set_values(&content[DATA_SECTOR_SIZE..2*DATA_SECTOR_SIZE]).unwrap();
+	}
+
+	/// Read the content of the given bloc
+	pub fn read_bloc(&self, bloc_idx: BlocIdx) -> Vec<u8> {
+		let access_info = self.bloc_access_information(bloc_idx);
+
+		let sector1_data = self.disc.sector(
+								self.side, 
+								access_info.track1, 
+								access_info.sector1_id).unwrap()
+								.values();
+
+		let sector2_data = self.disc.sector(
+								self.side, 
+								access_info.track2, 
+								access_info.sector2_id).unwrap()
+								.values();
+
+
+		let mut content = sector1_data.to_vec();
+		content.extend_from_slice(sector2_data);
+
+		assert_eq!(
+			content.len(),
+			DATA_SECTOR_SIZE*2
+		);
+
+		content
+	}
+
+
+	/// Read the content of the given entry
+	pub fn read_entry(&self, entry: &AmsdosEntry) -> Vec<u8> {
+		entry.used_blocs().iter()
+				.flat_map(|bloc_idx| {
+					self.read_bloc(*bloc_idx)
+				})
+				.collect::<Vec<u8>>()
 	}
 }
 
@@ -657,6 +840,7 @@ impl AmsdosManager {
 
 
 /// http://www.cpcwiki.eu/index.php/AMSDOS_Header
+#[derive(Clone)]
 pub struct AmsdosHeader {
 	content: [u8; 128]
 }
@@ -672,6 +856,15 @@ impl std::fmt::Debug for AmsdosHeader {
 		Ok(())
 	}
 }
+
+impl PartialEq for AmsdosHeader {
+	fn eq(&self, other: &AmsdosHeader) -> bool {
+		self.content.as_ref() == other.content.as_ref()
+    }
+
+}
+
+
 
 impl AmsdosHeader {
 	/// XXX currently untested
@@ -694,6 +887,12 @@ impl AmsdosHeader {
 		content.update_checksum();
 
 		content
+	}
+
+	pub fn from_buffer(buffer: &[u8]) -> AmsdosHeader {
+		AmsdosHeader {
+			content: *array_ref!(buffer, 0, 128)
+		}
 	}
 
 	pub fn set_user(&mut self, user: u8) -> &mut Self {
@@ -818,6 +1017,11 @@ impl AmsdosHeader {
 		self.content[0..=66].iter().map(|&b|{b as u16}).sum::<u16>()
 	}
 
+	/// Checks if the stored checksum correspond to the expected checksum
+	pub fn is_checksum_valid(&self) -> bool {
+		self.checksum() == self.compute_checksum()
+	}
+
 	pub fn as_bytes(&self) -> &[u8; 128] {
 		&self.content
 	}
@@ -826,7 +1030,8 @@ impl AmsdosHeader {
 
 
 
-/// Encode an amsdos file. 
+/// Encode an amsdos file.
+#[derive(Clone, PartialEq, Debug)]
 pub struct AmsdosFile {
 	header: AmsdosHeader,
 	content: Vec<u8>
@@ -834,6 +1039,7 @@ pub struct AmsdosFile {
 
 impl AmsdosFile {
 
+	/// Create a binary file and add build the header accordingly to the arguments
 	pub fn binary_file_from_buffer(
 		filename: &AmsdosFileName, 
 		loading_address: u16, 
@@ -858,6 +1064,15 @@ impl AmsdosFile {
 		})
 	}
 
+	/// Create a file form its header and content
+	pub fn from_buffer(data: &[u8]) -> AmsdosFile {
+		let (header_bytes, content_bytes) = data.split_at(128);
+		AmsdosFile {
+			header: AmsdosHeader::from_buffer(header_bytes),
+			content: content_bytes.to_vec()
+		}
+	}
+
 	pub fn amsdos_filename(&self) -> AmsdosFileName {
 		self.header.amsdos_filename()
 	}
@@ -866,5 +1081,21 @@ impl AmsdosFile {
 	pub fn full_content(&self) -> impl Iterator<Item=&u8> {
 		self.header.as_bytes().iter()
 			.chain(self.content.iter())
+	}
+
+	pub fn header(&self) -> &AmsdosHeader {
+		&self.header
+	}
+
+	pub fn content(&self) -> &[u8] {
+		self.content.as_ref()
+	}
+
+	/// Files are read from disc by chunks of the size of 2 sectors. 
+	/// This method removes the extra unecessary bytes.
+	pub fn shrink_content_to_fit_header_size(&mut self) {
+		let size = self.header.file_length() as usize;
+		assert!(size <= self.content.len());
+		self.content.resize(size, 0);
 	}
 }
