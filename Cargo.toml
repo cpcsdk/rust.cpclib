@@ -31,6 +31,7 @@ smallvec = "0.6.6"
 tempfile="3.0.4"
 vecmath = "0.3.1"
 dbg = "1.0.4"
+num_enum = "0.1.1"
 
 path-absolutize = {version="1.1.3", optional=true}
 curl = {version="0.4.19", optional=true}
@@ -62,6 +63,7 @@ snapshot = ["clap", "built", "time", "semver"]
 imgconverter = ["clap", 'notify', "exitcode"]
 dskmanager = ["clap"]
 hideur = ["clap"]
+basic = ["clap"]
 
 [[bin]]
 name = "snapshot"
@@ -89,3 +91,7 @@ name = "hideur"
 path = "src/bin/hideur.rs"
 required-features = ["hideur"]
 
+[[bin]]
+name = "locomotive"
+path = "src/bin/locomotive.rs"
+required-features = ["basic"]

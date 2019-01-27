@@ -241,7 +241,7 @@ mod tests {
 			0x3210
 		);
 
-		let catalog_data = manager.disc().sectors_bytes(0, 0, 0xc1, 4).unwrap();
+		let catalog_data = manager.dsk().sectors_bytes(0, 0, 0xc1, 4).unwrap();
 		let entry_data = &catalog_data[..32];
 		let entry = AmsdosEntry::from_slice(0, &entry_data); 
 		println!("{:?}", entry_data);

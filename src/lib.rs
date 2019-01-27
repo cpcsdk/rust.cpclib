@@ -61,6 +61,9 @@ pub mod asm;
 /// Z80 tokens manipulations. Useable
 pub mod assembler;
 
+// Basic program manipulation. WIP
+pub mod basic;
+
 /// Z80 emulation. WIP
 pub mod z80emu;
 

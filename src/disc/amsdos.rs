@@ -486,7 +486,7 @@ impl AmsdosEntries {
 	pub fn used_entries(&self) -> impl Iterator<Item = &AmsdosEntry> {
 		self.entries.iter()
 			.filter(|&entry|{
-				entry.nb_pages > 0
+				entry.nb_pages > 0 && !entry.is_erased()
 			})
 	}
 
