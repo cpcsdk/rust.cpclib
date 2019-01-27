@@ -13,6 +13,10 @@ use itertools::Itertools;
 use std::fmt;
 use crate::disc::edsk::*;
 
+use std::path::Path;
+use std::io::Read;
+use std::fs::File;
+
 const DATA_FORMAT_CFG: &str = "
 NbTrack = 40
 NbSide = 1
@@ -60,6 +64,7 @@ impl From<&str> for DiscConfig {
 	}
 }
 
+
 impl DiscConfig {
 	pub fn single_side_data_format() -> DiscConfig {
 		DATA_FORMAT_CFG.into()
@@ -67,6 +72,16 @@ impl DiscConfig {
 
 	pub fn single_side_data42_format() -> DiscConfig {
 		DATA_FORMAT42_CFG.into()
+	}
+
+	/// Create a configuration from the provided file
+	pub fn new<P: AsRef<Path>>(p: P) -> std::io::Result<DiscConfig> {
+		let mut content = String::new();
+		let mut f = File::open(p.as_ref())?;
+		f.read_to_string(&mut content)?;
+
+		Ok(content.as_str().into())
+
 	}
 }
 
@@ -85,9 +100,11 @@ impl fmt::Display for DiscConfig {
 }
 
 impl DiscConfig {
-	pub fn track_information_for_track(&self, side: Side, track: u8) -> Option<&TrackGroup> {
+	/// SideA or SideB for a two sided dsk. Unspecified for a single sided disc
+	pub fn track_information_for_track<S: Into<Side>>(&self, side: S, track: u8) -> Option<&TrackGroup> {
+		let side = side.into();
 		self.track_groups.iter()
-			.find(|info| {
+			.find(move |info| {
 				info.side == side &&
 				info.tracks.iter().any(|&val|{val == track})
 			}
@@ -125,6 +142,7 @@ pub struct TrackGroup {
 
 impl fmt::Display for TrackGroup {
 
+
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			let side_info = match self.side {
 				Side::SideA => "-A",
@@ -150,6 +168,24 @@ impl TrackGroup {
 	/// Return the sector size in the format expected by a DSK
 	pub fn sector_size_dsk_format(&self) -> u8 {
 		convert_real_sector_size_to_fdc_sector_size(self.sector_size)
+	}
+
+
+	pub fn sector_size_human_readable(&self) -> u16 {
+		self.sector_size
+	}
+
+	pub fn gap3(&self) -> u8 {
+		self.gap3
+	}
+
+	#[deprecated]
+	pub fn nb_sectors(&self) -> usize {
+		self.number_of_sectors()
+	}
+
+	pub fn number_of_sectors(&self) -> usize {
+		self.sector_id.len()
 	}
 	
 }

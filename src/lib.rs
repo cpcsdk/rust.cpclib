@@ -38,7 +38,7 @@ extern crate arrayref;
 #[macro_use] extern crate serde_derive;
 extern crate serde;
 
-
+#[macro_use] extern crate dbg;
 
 /// Screen emulation. Unknown state ;)
 pub mod screen;

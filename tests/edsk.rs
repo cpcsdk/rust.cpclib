@@ -4,6 +4,8 @@
 mod tests {
 
 
+
+
 	fn test_single_dsk(dsk:&cpclib::disc::edsk::ExtendedDsk) {
 		let track = dsk.get_track_information(cpclib::disc::edsk::Side::SideA, 0).unwrap();
 		assert_eq!(track.number_of_sectors(), 9);
@@ -118,5 +120,23 @@ mod tests {
 		dsk1.save(tmp_file);
 		let _ds2 = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
 
+	}
+
+	#[test]
+	fn sector_size() {
+		use cpclib::disc::edsk::convert_real_sector_size_to_fdc_sector_size;
+		use cpclib::disc::edsk::convert_fdc_sector_size_to_real_sector_size;
+			
+		for real_human_size in [256, 512, 1024, 2048].iter() {
+			let computed_fdc_size = 
+				convert_real_sector_size_to_fdc_sector_size(*real_human_size);
+			let computed_human_size =
+				convert_fdc_sector_size_to_real_sector_size(computed_fdc_size);
+
+			assert_eq!(
+				*real_human_size,
+				computed_human_size
+			);
+		}
 	}
 }

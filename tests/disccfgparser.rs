@@ -290,4 +290,116 @@ fn parse_single_sided_cfg() {
 		_ => unreachable!()
 	}
 }
+
+	#[test]
+	fn test_build() {
+
+		let cfg = cpclib::disc::cfg::DiscConfig::from(SINGLE_SIDED);
+		println!("{:?}", cfg);
+		let track_info = cfg.track_information_for_track(3, 0).unwrap();
+		assert_eq!(
+			track_info.sector_size_human_readable(),
+			512
+		);
+		assert_eq!(
+			track_info.gap3(),
+			0x4e
+		);
+		assert_eq!(
+			track_info.nb_sectors(),
+			9
+		);
+
+		let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
+		let mut buffer = Vec::new();
+		dsk.to_buffer(&mut buffer);
+		let strbuffer = String::from_utf8_lossy(&buffer).to_owned();
+		println!("{}", &strbuffer);
+
+		// Check that the 1st track info is at the right place
+		let loc =strbuffer.find("Track-Info").unwrap();
+		assert_eq!(
+			loc,
+			0x100
+		);
+
+		assert_eq!(
+			dsk.nb_tracks(),
+			42
+		);
+
+		let check_track = |track_nb, sector_size, sectors_id: &[u8]| {
+			let number_of_sectors = sectors_id.len() as u8;
+			let track = dsk.get_track_information(3, track_nb).unwrap();
+			println!("{:?}", track);
+			assert_eq!(
+				track.number_of_sectors(),
+				number_of_sectors
+			);
+			assert_eq!(
+				track.sector_size_human_readable(),
+				sector_size
+			);
+
+			// Check taht the track contains the right number of sectors
+			for sector_id in sectors_id.iter() {
+				assert!(
+					track.sector(*sector_id).is_some()
+				)
+			}
+
+		};
+
+		check_track(
+			0,
+			512, // sector size
+			&[0xc1,0xc6,0xc2,0xc7,0xc3,0xc8,0xc4,0xc9,0xc5], // sectors ids
+		); 
+
+
+		for track in &[1, 11, 21, 31, 41] {
+			check_track(
+				*track,
+				512, // sector size
+				&[ 0xb1,0xb2,0xb3,0xb4,0xb5,0xb6,0xb7,0xb8,0xb9,0xba]
+			); 
+		}
+
+		let mut buffer = Vec::new();
+		dsk.to_buffer(&mut buffer);
+
+		let disc_info = dbg!(cpclib::disc::edsk::DiscInformation::from_buffer(&buffer[..256]));
+		assert_eq!(
+			disc_info.number_of_tracks(),
+			42
+		);
+		assert_eq!(
+			disc_info.tracks_size_table().len(),
+			42
+		);
+
+		let track0 = dbg!(cpclib::disc::edsk::TrackInformation::from_buffer(&buffer[256..]));
+		assert_eq!(
+			track0.number_of_sectors(),
+			9
+		);
+
+		assert!(disc_info.track_length_at_idx(0)%256 ==0);
+
+		//let track1 = dbg!(cpclib::disc::edsk::TrackInformation::from_buffer(&buffer[(256 + disc_info.track_length_at_idx(0)) as usize ..]));
+
+
+		let amsdos = cpclib::disc::amsdos::AmsdosManager::new_from_disc(dsk.clone(), 0);
+		let catalog = amsdos.catalog();
+		let nb_entries = catalog.used_entries().count();
+		assert_eq!(0, nb_entries);
+
+
+		let dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
+		assert_eq!(
+			dsk,
+			dsk2
+		)
+
+	}
 }

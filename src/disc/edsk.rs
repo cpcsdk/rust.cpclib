@@ -12,7 +12,7 @@ use delegate::delegate;
 
 pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {
 		let mut n=0;
-		while size!=0x80 {
+		while size > 0x80 {
 			size = size >> 1;
 			n += 1
 		}
@@ -66,16 +66,33 @@ impl Into<u8> for &Side {
 }
 
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct DiscInformation {
 	pub(crate) creator_name: String, 
 	pub(crate) number_of_tracks: u8, 
 	pub(crate) number_of_sides: u8, 
-	pub(crate) track_size_table: Vec<u8> // XXX dor standard DSK only one value is provided It should be duplicated there
+	pub(crate) track_size_table: Vec<u8> // XXX for standard DSK only one value is provided It should be duplicated there
 }
 
 
 impl DiscInformation {
+
+	pub fn creator_name(&self) -> &str {
+		&self.creator_name
+	}
+
+	pub fn number_of_tracks(&self) -> u8 {
+		self.number_of_tracks
+	}
+
+	pub fn number_of_sides(&self) -> u8 {
+		self.number_of_sides
+	}
+
+	pub fn tracks_size_table(&self) -> &[u8] {
+		&self.track_size_table
+	}
+
 	fn creator_name_as_bytes(&self) -> [u8;14] {
 		let mut data = [0 as u8; 14];
 		for (idx,byte) in self.creator_name.as_bytes()[0..14].iter().enumerate() {
@@ -84,7 +101,8 @@ impl DiscInformation {
 		data
 	}
 
-	fn from_buffer(buffer: &[u8]) -> DiscInformation {
+	// TODO manage the case of standard dsk
+	pub fn from_buffer(buffer: &[u8]) -> DiscInformation {
 		assert_eq!(buffer.len(), 256);
 		assert_eq!(
 			String::from_utf8_lossy(&buffer[..34]).to_ascii_uppercase(),
@@ -94,8 +112,7 @@ impl DiscInformation {
 		let creator_name = String::from_utf8_lossy(&buffer[0x22..=0x2f]);
 		let number_of_tracks = buffer[0x30];
 		let number_of_sides = buffer[0x31];
-		let track_size_table = &buffer[0x34..(0x34+number_of_tracks*number_of_sides+1)as usize];
-
+		let track_size_table = &buffer[0x34..(0x34+number_of_tracks*number_of_sides)as usize];
 
 		assert!( number_of_sides == 1 || number_of_sides == 2);
 
@@ -162,7 +179,7 @@ impl DiscInformation {
 		self.track_length(track, side) > 0
 	}
 
-	fn track_length_at_idx(&self, idx: usize) -> u16 {
+	pub fn track_length_at_idx(&self, idx: usize) -> u16 {
 		256 * u16::from(self.track_size_table[idx])
 	}
 
@@ -181,7 +198,7 @@ impl DiscInformation {
 
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct TrackInformation {
 	pub(crate) track_number: u8,
 	pub(crate) side_number: u8,
@@ -192,12 +209,32 @@ pub struct TrackInformation {
 	pub(crate) data_rate: DataRate,
 	pub(crate) recording_mode: RecordingMode,
 	pub(crate) sector_information_list: SectorInformationList,
+	/// The size taken by the track + header in the dsk. This is a duplicated information obtained in the DiscInformation bloc
+	pub(crate) track_size: u16
 }
 
 impl TrackInformation {
 
+	pub fn sector_size(&self) -> u8 {
+		self.sector_size
+	}
+
+	pub fn sector_size_human_readable(&self) -> u16 {
+		convert_fdc_sector_size_to_real_sector_size(self.sector_size)
+	}
+
+
+
 	pub fn number_of_sectors(&self) -> u8 {
 		self.number_of_sectors
+	}
+
+	pub fn gap3_length(&self) -> u8 {
+		self.gap3_length
+	}
+
+	pub fn filler_byte(&self) -> u8 {
+		self.filler_byte
 	}
 
 	/// Fail if the track has no sector
@@ -223,9 +260,11 @@ impl TrackInformation {
 	}
 
 	pub fn from_buffer(buffer: &[u8]) -> TrackInformation {
-		assert_eq!(
-			String::from_utf8_lossy(&buffer[..0xc]).to_ascii_uppercase(), "Track-info\r\n".to_ascii_uppercase());
+		if 	String::from_utf8_lossy(&buffer[..0xc]).to_ascii_uppercase() != "Track-info\r\n".to_ascii_uppercase() {
+			panic!("Track buffer does not seem coherent\n{:?}", buffer);
+		}
 		
+		let track_size = buffer.len() as u16;
 		let track_number = buffer[0x10];
 		let side_number = buffer[0x11];
 		let sector_size =  buffer[0x14];
@@ -249,17 +288,24 @@ impl TrackInformation {
 			data_rate,
 			recording_mode,
 			sector_information_list,
+			track_size
 		};
 
-		println!("Size: {}", track_info.total_size());
-
+		assert!(track_info.track_size != 0);
 		track_info
 
 	}
 
 
-	fn to_buffer(&self, buffer: &mut Vec<u8>) {
+	pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
 		let start_size = buffer.len();
+
+		// low byte MUST be null
+		assert_eq!(
+			start_size % 256,
+			0
+		);
+
 		buffer.extend_from_slice(&"Track-Info\r\n".as_bytes()[..12]);
 		assert_eq!(buffer.len()-start_size, 12);
 
@@ -298,12 +344,14 @@ impl TrackInformation {
 				buffer.extend_from_slice(&s.values);
 			});
 
+		// Ensure the size is correct
+		let added_bytes = (buffer.len() - start_size) as u16;
+		assert!(added_bytes <=  self.track_size);
+		let missing_bytes = self.track_size - added_bytes;
+		if missing_bytes != 0 {
+			buffer.resize(buffer.len() + missing_bytes as usize, 0);
+		}
 
-		while buffer.len()%256 != 0 {
-			buffer.push(0);
-		}	
-		let _added_bytes = buffer.len() - start_size;
-		// TODO check if the number of added bytes corresponds
 	}
 
 	pub fn total_size(&self) -> usize {
@@ -323,7 +371,7 @@ impl TrackInformation {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DataRate {
 	Unknown = 0,
 	SingleOrDoubleDensity = 1,
@@ -362,7 +410,7 @@ impl Into<u8> for DataRate {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RecordingMode {
 	Unknown = 0,
 	FM = 1,
@@ -401,7 +449,7 @@ impl Into<u8> for RecordingMode {
 	}
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct SectorInformation {
 	/// track (equivalent to C parameter in NEC765 commands)
 	pub(crate) track: u8,
@@ -421,7 +469,7 @@ pub struct SectorInformation {
 
 
 impl SectorInformation {
-	fn from_buffer(buffer : &[u8]) -> SectorInformation {
+	pub fn from_buffer(buffer : &[u8]) -> SectorInformation {
 		let info = SectorInformation {
 			track: buffer[0x00],
 			side: buffer[0x01],
@@ -434,7 +482,7 @@ impl SectorInformation {
 		info
 	}
 
-	fn to_buffer(&self, buffer: &mut Vec<u8>) {
+	pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
 		buffer.push(self.track);
 		buffer.push(self.side);
 		buffer.push(self.sector_id);
@@ -449,7 +497,7 @@ impl SectorInformation {
 }
 
 
-#[derive(Debug, Default)] 
+#[derive(Debug, Default, PartialEq, Clone)] 
 pub struct SectorInformationList {
 	//sectors: Vec<Sector>
 	pub(crate) sectors: Vec<Sector>,
@@ -474,7 +522,7 @@ impl SectorInformationList {
 		self.sectors.push(sector);
 	}
 
-	fn from_buffer(buffer: &[u8], number_of_sectors: u8) -> SectorInformationList {
+	pub fn from_buffer(buffer: &[u8], number_of_sectors: u8) -> SectorInformationList {
 
 		let mut list_info = Vec::new();
 		let mut list_data = Vec::new();
@@ -492,12 +540,11 @@ impl SectorInformationList {
 		// Get the data
 		consummed_bytes = 256 - 0x18; // Skip the unused bytes
 		for sector in list_info.iter() {
-			let current_sector_size = sector.data_length as usize;
-			let current_buffer = &buffer[consummed_bytes.. current_sector_size + consummed_bytes];
+			let current_sector_size =sector.data_length as usize;
+			let current_buffer = &buffer[consummed_bytes .. consummed_bytes + current_sector_size];
+			println!("************************ {:?} {} {:?}", sector, current_sector_size, & current_buffer);
 			list_data.push(current_buffer.to_vec());
 			consummed_bytes += current_sector_size;
-
-			println!("sector sum {}", current_buffer.iter().map(|val|{*val as usize}).sum::<usize>());
 		}
 
 
@@ -551,13 +598,15 @@ impl SectorInformationList {
 			let mut sector= Sector::default();
 
 
+
 			sector.sector_information_bloc.track = track_number;
 			sector.sector_information_bloc.sector_size = sector_size;
-			sector.sector_information_bloc.data_length = 0;
 			sector.sector_information_bloc.sector_id = ids[idx];
 			sector.sector_information_bloc.side = heads[idx];
 
+
 			sector.values.resize(convert_fdc_sector_size_to_real_sector_size(sector.sector_information_bloc.sector_size as _) as _, 0);
+			sector.sector_information_bloc.data_length = sector.values.len() as u16;
 
 			self.add_sector(sector);
 		}
@@ -582,7 +631,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Sector {
 	pub(crate) sector_information_bloc: SectorInformation,
 	pub(crate) values: Vec<u8>
@@ -636,27 +685,31 @@ impl Sector  {
 	}
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Debug, Clone)]
 pub struct TrackInformationList {
 	pub(crate) list: Vec<TrackInformation>
 }
 
 
 impl TrackInformationList {
-	fn from_buffer_and_disc_information(buffer: &[u8], disc_info: &DiscInformation) -> TrackInformationList {
+	fn from_buffer_and_disc_information(
+		buffer: &[u8], 
+		disc_info: &DiscInformation) -> TrackInformationList {
 
 		let mut consummed_bytes:usize = 0;
 		let mut list = Vec::new();
 
 		for track_number in 0..disc_info.number_of_tracks{
 			for side_nb in 0..disc_info.number_of_sides {
-				let current_track_size = disc_info.track_length(track_number, side_nb) as usize;
-				assert!(current_track_size>255);
-				println!("Track: {} - Side: {} - Length: 0x{:x}/{}", track_number, side_nb, current_track_size, current_track_size);
-				let track_buffer = &buffer[consummed_bytes as usize ..(consummed_bytes+current_track_size) as usize];
+				// Size of the track data + header
+				let current_track_size = disc_info.track_length(
+					track_number, 
+					side_nb) as usize;
+				// TODO treat the case of unformatted tracks
+				let track_buffer = &buffer[
+					consummed_bytes as usize ..
+					(consummed_bytes+current_track_size) as usize];
 				list.push(TrackInformation::from_buffer(track_buffer));
-
-
 				consummed_bytes += current_track_size;
 			}
 		}
@@ -668,7 +721,7 @@ impl TrackInformationList {
 
 	fn to_buffer(&self, buffer: &mut Vec<u8>) {
 		for track in self.list.iter() {
-			track.to_buffer(buffer);
+			let added_bytes = track.to_buffer(buffer);
 		}
 	}
 
@@ -693,7 +746,7 @@ impl TrackInformationList {
 }
 
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Debug, Clone)]
 pub struct ExtendedDsk {
 	pub(crate) disc_information_bloc: DiscInformation,
 	pub(crate) track_list: TrackInformationList
@@ -713,15 +766,19 @@ impl ExtendedDsk {
 			buffer
 		};
 
+		Ok(Self::from_buffer(&buffer))
+	}
+
+	pub fn from_buffer(buffer: &[u8]) -> ExtendedDsk {
 		let disc_info = DiscInformation::from_buffer(&buffer[..256]);
 
 		println!("Disc info {:?} / total {} / nb_tracks {}", disc_info, disc_info.total_tracks_lengths(), disc_info.number_of_distinct_tracks());
 		let track_list = TrackInformationList::from_buffer_and_disc_information(&buffer[256..], & disc_info);
 
-		Ok(ExtendedDsk {
+		ExtendedDsk {
 			disc_information_bloc: disc_info,
 			track_list
-		})
+		}
 	}
 
 
@@ -735,7 +792,7 @@ impl ExtendedDsk {
 	}
 
 	/// Write the dsk in the buffer
-	fn to_buffer(&self, buffer: &mut Vec<u8>) {
+	pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
 		self.disc_information_bloc.to_buffer(buffer);
 		self.track_list.to_buffer( buffer);
 	}
@@ -762,8 +819,8 @@ impl ExtendedDsk {
 	}
 
 
-	pub fn get_track_information(&self, side: Side, track: u8) -> Option<&TrackInformation> {
-		let idx = self.get_track_idx(side, track);
+	pub fn get_track_information<S: Into<Side>>(&self, side: S, track: u8) -> Option<&TrackInformation> {
+		let idx = self.get_track_idx(side.into(), track);
 		self.track_list.list.get(idx)
 	}
 
@@ -832,6 +889,11 @@ impl ExtendedDsk {
 	/// Returns all the tracks
 	pub fn tracks(&self) -> &[TrackInformation] {
 		&self.track_list.list
+	}
+
+	/// Returns the number of tracks
+	pub fn nb_tracks(&self) -> usize {
+		self.tracks().len()
 	}
 
 	/// Return the smallest sector id over all tracks

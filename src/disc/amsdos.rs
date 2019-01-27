@@ -20,43 +20,51 @@ pub enum AmsdosError {
 /// - the user
 /// - the filename (up to 8 chars)
 /// - the extension (up to 3 chars)
+/// It does not contain property information
 #[derive(Clone)]
 pub struct AmsdosFileName {
 	user: u8,
-	name: String,
-	extension: String
+	name: [u8;8],
+	extension: [u8;3]
 }
 
 impl std::fmt::Debug for AmsdosFileName {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "{}:{}.{}", self.user(), self.name, self.extension)
+		write!(f, "{}:{}.{}", self.user(), self.name(), self.extension())
 	}
 }
 
 impl PartialEq for AmsdosFileName{
 	fn eq(&self, other: &AmsdosFileName) -> bool {
 		self.user == other.user &&
-		self.name.to_uppercase() == other.name.to_uppercase() &&
-		self.extension.to_uppercase() == other.extension.to_uppercase()
+		self.name().to_uppercase() == other.name().to_uppercase() &&
+		self.extension().to_uppercase() == other.extension().to_uppercase()
     }
 }
 
 
 impl AmsdosFileName {
-	pub fn filename_header_format(&self) -> [u8;8] {
+	pub fn filename_header_format(&self) -> &[u8;8] {
+		/*
 		let mut content = [' ' as u8;8];
+		println!("*{:?}*", self.name);
 		for (i, c) in self.name.as_bytes().iter().enumerate() {
 			content[i] = *c;
 		}
 		content
+		*/
+		&self.name
 	}
 
-	pub fn extension_header_format(&self) -> [u8;3] {
+	pub fn extension_header_format(&self) -> &[u8;3] {
+		/*
 		let mut content = [' ' as u8;3];
 		for (i, c) in self.extension.as_bytes().iter().enumerate() {
 			content[i] = *c;
 		}
 		content
+		*/
+		&self.extension
 	}
 
 	pub fn from_slice(slice: &[u8]) -> AmsdosFileName {
@@ -65,16 +73,21 @@ impl AmsdosFileName {
 
 	/// Create an amsdos filename from a catalog entry buffer
 	pub fn from_entry_format(buffer: &[u8;12]) -> AmsdosFileName {
-		let user = buffer[0];
-		let name = &buffer[1..9];
+		let user: u8 = buffer[0];
+		let name: [u8;8] = array_ref!(buffer, 1, 8).clone();
 		// Remove bit 7 of each char
-		let extension = buffer[9..].iter().map(|&c|{c&0b01111111}).collect::<Vec<_>>();
+		let mut extension: [u8;3] = array_ref!(buffer, 9, 3).clone();
+		extension.iter_mut().for_each(|b|{
+			*b = *b & 0b01111111
+		});
 
-		AmsdosFileName {
+		let fname = AmsdosFileName {
 			user,
-			name: String::from_utf8_lossy(name).trim().to_owned(),
-			extension: String::from_utf8_lossy(&extension).trim().to_owned()
-		}
+			name,
+			extension
+		};
+
+		fname
 	}
 
 	/// Build a filename compatible with the catalog entry format
@@ -101,16 +114,20 @@ impl AmsdosFileName {
 		self.user
 	}
 
-	pub fn name(&self) -> &str {
-		&self.name
+	pub fn name(&self) -> String {
+		String::from_utf8_lossy(&self.name).into_owned().trim().to_owned()
 	}
 
-	pub fn extension(&self) -> &str {
-		&self.extension
+	pub fn extension(&self) -> String {
+		String::from_utf8_lossy(&self.extension).into_owned().trim().to_owned()
 	}
 
 	pub fn filename(&self) -> String {
 		format!("{}.{}", self.name(), self.extension())
+	}
+
+	pub fn filename_with_user(&self) -> String {
+		format!("{}:{}.{}", self.user(), self.name(), self.extension())
 	}
 
 	pub fn new(user: u8, filename: &str, extension: &str) -> Result<AmsdosFileName, String> {
@@ -135,11 +152,27 @@ impl AmsdosFileName {
 			return Err(format!("{} contains non ascii characters", extension));
 		}
 
+		let name = {
+			let mut encoded_filename = [' ' as u8; 8];
+			for (idx,c) in filename.as_bytes().iter().enumerate() {
+				encoded_filename[idx] = *c
+			}
+			encoded_filename
+		};
+
+		let extension = {
+			let mut encoded_extension = [' ' as u8; 3];
+			for (idx,c) in extension.as_bytes().iter().enumerate() {
+				encoded_extension[idx] = *c
+			}
+			encoded_extension
+		};
+
 		//TODO see if upercase is needed
 		Ok(AmsdosFileName{
 			user,
-			name: filename.to_owned()/*.to_uppercase()*/,
-			extension: extension.to_owned()/*.to_uppercase()*/,
+			name,
+			extension
 		})
 
 	}
@@ -283,7 +316,22 @@ pub struct AmsdosEntry {
 	blocs: [BlocIdx;16]
 }
 
+impl std::fmt::Display for AmsdosEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		let fname = self.amsdos_filename().filename_with_user();
+		let size = self.used_space();
+
+		write!(f, "{} {}K", fname, size)
+
+    }
+}
+
 impl AmsdosEntry {
+
+	/// Provide the size, in Kb, eaten by the file on disc
+	pub fn used_space(&self) -> usize {
+		(self.nb_pages as usize * DATA_SECTOR_SIZE  as usize * 2) / 1024
+	}
 
 	/// Check if the given filename corresponds to the entry
 	pub fn belongs_to(&self, filename: &AmsdosFileName) -> bool {
@@ -365,8 +413,8 @@ impl AmsdosEntry {
 		format!(
 			"{}:{}.{}",
 			self.file_name.user,
-			self.file_name.name,
-			self.file_name.extension
+			self.file_name.name(),
+			self.file_name.extension()
 		)
 	} 
 
@@ -388,6 +436,27 @@ impl std::fmt::Debug for AmsdosEntries {
 }
 
 impl AmsdosEntries {
+	/// Generate a binary version that can be used to export the catalog
+	pub fn as_bytes(&self) -> [u8; 64*32] {
+		let mut content = [0; 64*32];
+		for i in 0..64 {
+			content[i*32 .. (i+1)*32].copy_from_slice(&self.entries[i].as_bytes());
+		}
+		content
+	}
+
+	/// Manually create the catalog from a byte slice. Usefull to manipulate catarts
+	pub fn from_slice(slice: &[u8]) -> AmsdosEntries {
+		let mut entries = Vec::new();
+		for i in 0..64 {
+			entries.push(
+				AmsdosEntry::from_slice(i as _, &slice[i*32..(i+1)*32])
+			)
+		}
+		AmsdosEntries {
+			entries
+		}
+	}
 
 	/// Returns all the entries of the catalog
 	pub fn all_entries(&self) -> impl Iterator<Item = &AmsdosEntry> {
@@ -549,6 +618,13 @@ impl AmsdosManager {
 		AmsdosEntries {
 			entries
 		}
+	}
+
+	/// Rewrite the whole catalog
+	pub fn set_catalog(&mut self, entries: &AmsdosEntries) {
+		let entries = entries.as_bytes();
+		println!("{}", entries.len() as f32/32.0);
+
 	}
 
     /// Print the catalog on screen
@@ -920,7 +996,7 @@ impl AmsdosHeader {
 	}
 
 
-	pub fn set_filename(&mut self, filename: [u8; 8])  -> &mut Self{
+	pub fn set_filename(&mut self, filename: &[u8; 8])  -> &mut Self{
 		for (idx, val) in filename.iter().enumerate() {
 			self.content[1+idx]	= *val;
 		}
@@ -934,7 +1010,7 @@ impl AmsdosHeader {
 			.collect::<String>()
 	}
 
-	pub fn set_extension(&mut self, extension: [u8; 3]) -> &mut Self{
+	pub fn set_extension(&mut self, extension: &[u8; 3]) -> &mut Self{
 		for (idx, val) in extension.iter().enumerate() {
 			self.content[9+idx]	= *val;
 		}

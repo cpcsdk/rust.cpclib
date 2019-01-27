@@ -7,23 +7,30 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
 	let mut edsk = ExtendedDsk::default();
 
 	// Feed the disc info table
-	edsk.disc_information_bloc.creator_name = "EXTENDED CPC DSK File\r\nDisk-Info\r\n".to_string();
+	edsk.disc_information_bloc.creator_name = "RUST CPC - BND".to_string();
+	assert_eq!(
+		edsk.disc_information_bloc.creator_name.len(),
+		14);
 	edsk.disc_information_bloc.number_of_sides = cfg.nb_sides;
 	edsk.disc_information_bloc.number_of_tracks = cfg.nb_tracks;
 	edsk.disc_information_bloc.track_size_table = cfg.track_idx_iterator()
-								.map(|idx|{
-									(cfg.track_information_for_track(
-										*idx.0, idx.1)
-									.unwrap_or_else(||panic!("Unable to acquire information for track {:?}", idx))
-									.sector_size / 256) as u8
-								})
-								.collect::<Vec<_>>();
+					.map(|idx|{
+						let info = cfg.track_information_for_track(
+							*idx.0, idx.1)
+						.unwrap_or_else(||panic!("Unable to acquire information for track {:?}", idx));
+						let sectors_size = info.sector_size as usize * info.number_of_sectors();
+						let header_size = 256;
+						let encoded_size = ((sectors_size + header_size) /  256) as u8;
+						encoded_size
+					})
+					.collect::<Vec<_>>();
 
 	/// Create the empty tracks -- to be filled in the next loop
 	for (side, track_idx) in cfg.track_idx_iterator() {
 		let mut track = edsk.track_list.add_empty_track();
 		track.track_number = track_idx;
 		track.side_number = side.into();
+		track.track_size = edsk.disc_information_bloc.track_size_table[track_idx as usize] as u16 * 256;
 	}
 	
 
