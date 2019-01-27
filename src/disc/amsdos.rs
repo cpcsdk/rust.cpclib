@@ -232,6 +232,7 @@ impl std::fmt::Debug for AmsdosFileType{
 #[derive(Debug, Copy, Clone, Ord, Eq)]
 pub enum BlocIdx {
 	Empty,
+	Deleted,// TODO find a real name
 	Index(std::num::NonZeroU8)
 }
 
@@ -245,6 +246,7 @@ impl From<u8> for BlocIdx {
 	fn from(val: u8) -> BlocIdx {
 		match val {
 			0 => BlocIdx::Empty,
+			0xe5 => BlocIdx::Deleted,
 			val => BlocIdx::Index(
 				unsafe{std::num::NonZeroU8::new_unchecked(val)}
 			)
@@ -256,6 +258,7 @@ impl Into<u8> for &BlocIdx {
 	fn into(self) -> u8 {
 		match self {
 			BlocIdx::Empty => 0,
+			BlocIdx::Deleted => 0xe5,
 			BlocIdx::Index(ref val) => val.get()
 		}
 	}
@@ -280,8 +283,8 @@ impl PartialEq for BlocIdx {
 impl BlocIdx {
 	pub fn is_valid(&self) -> bool {
 		match self {
-			BlocIdx::Empty => false,
-			BlocIdx::Index(_) => true
+			BlocIdx::Index(_) => true,
+			_ => false
 		}
 	}
 
@@ -303,7 +306,7 @@ impl BlocIdx {
 
 
 // http://www.cpc-power.com/cpcarchives/index.php?page=articles&num=92
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AmsdosEntry {
 	/// Location of the entry in the catalog
 	idx: u8,
@@ -422,6 +425,7 @@ impl AmsdosEntry {
 }
 
 /// Encode the catalog of an existing disc
+#[derive(PartialEq)]
 pub struct AmsdosEntries {
 	entries: Vec<AmsdosEntry>	
 }
@@ -585,8 +589,12 @@ pub struct AmsdosManager {
 }
 
 impl AmsdosManager {
-	pub fn disc(&self) -> &ExtendedDsk {
+	pub fn dsk(&self) -> &ExtendedDsk {
 		&self.disc
+	}
+
+	pub fn dsk_mut(&mut self) -> &mut ExtendedDsk {
+		&mut self.disc
 	}
 
 	pub fn new_from_disc<S: Into<Side>>(disc: ExtendedDsk, side: S) -> AmsdosManager {
@@ -629,9 +637,10 @@ impl AmsdosManager {
 
 	/// Rewrite the whole catalog
 	pub fn set_catalog(&mut self, entries: &AmsdosEntries) {
-		let entries = entries.as_bytes();
-		println!("{}", entries.len() as f32/32.0);
-
+		assert_eq!(64, entries.entries.len());
+		for entry in entries.entries.iter() {
+			self.update_entry(entry);
+		}
 	}
 
     /// Print the catalog on screen
@@ -759,7 +768,7 @@ impl AmsdosManager {
 				nb_pages: entry_nb_pages as u8,
 				blocs
 			};
-			self.update_entry(new_entry)
+			self.update_entry(&new_entry)
 		}
 		Ok(())
 	}
@@ -784,7 +793,7 @@ impl AmsdosManager {
 	/// Write the entry information on disc AFTER the sectors has been set up.
 	/// Panic if dsk is invalid
 	/// Still stolen to iDSK
-	pub fn update_entry(&mut self, entry: AmsdosEntry) {
+	pub fn update_entry(&mut self, entry: &AmsdosEntry) {
 		// compute the track/sector
 		let min_sect = self.disc.min_sector(self.side);
 		let sector_id = (entry.idx >> 4) + min_sect;
@@ -796,13 +805,14 @@ impl AmsdosManager {
 		else {
 			0
 		}; // XXX why ?
-	
+
 		let mut sector = self.disc.sector_mut(
 			self.side,
 			track, 
 			sector_id).unwrap();
 		let idx_in_sector:usize = ((entry.idx & 15)  << 5) as usize;
-		let mut bytes = &mut sector.values_mut()[idx_in_sector..(idx_in_sector+AmsdosEntry::len())];
+		let mut bytes = &mut (sector.values_mut()[idx_in_sector..(idx_in_sector+AmsdosEntry::len())]);
+
 		bytes.copy_from_slice(entry.as_bytes().as_ref());
 	}
 

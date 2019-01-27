@@ -70,11 +70,17 @@ fn main() -> std::io::Result<()> {
                                .long("list")
                                .short("l")
                            )
+                           .arg(
+                               Arg::with_name("CATART")
+                               .help("[unimplemented] Display the catart version")
+                               .long("--catart")
+                           )
                            .group(
                                ArgGroup::with_name("command")
                                 .arg("IMPORT")
                                 .arg("EXPORT")
                                 .arg("LIST")
+                                .arg("CATART")
                                 .required(true)
                            )
                        )
@@ -124,10 +130,11 @@ fn main() -> std::io::Result<()> {
 
     // Manipulate the catalog of a disc
     if let Some(sub) = matches.subcommand_matches("catalog") {
-        let dsk = ExtendedDsk::open(dsk_fname)
+        let mut dsk = ExtendedDsk::open(dsk_fname)
                               .expect(&format!("Unable to open the file {}", dsk_fname));
         eprintln!("WIP - We assume side 0 is chosen");
 
+        // Import the catalog from one file in one existing disc
         if let Some(fname) = sub.value_of("IMPORT") {
             let mut f = File::open(fname)?;
             let mut bytes = Vec::new();
@@ -136,10 +143,35 @@ fn main() -> std::io::Result<()> {
             if size != 64*32 {
                 eprintln!("Catalog size uses {} bytes wheras it should be {}", size, 64*32);
             }
+
+            for idx in 0..4 {
+                let mut sector = dsk.sector_mut(0, 0, idx + 0xc1).expect("Wrong format");
+                let idx = idx as usize;
+                sector.set_values(&bytes[idx*512..(idx+1)*512]);
+            }
+
+            dsk.save(dsk_fname)?;
+
+    /*
+        // TODO find why this method DOES NOT WORK
+            // Generate the entry for this catart
            let  entries = AmsdosEntries::from_slice(&bytes);
+
+           // And inject it in the disc
            let mut manager = AmsdosManager::new_from_disc(dsk, 0);
            manager.set_catalog(&entries);
+
+           let copy = manager.catalog();
+           assert_eq!(
+               copy,
+               entries
+           );
+           manager.dsk_mut().save(dsk_fname)?;
+    */
+           // override the disc
         }
+
+        // Export the catalog of an existing disc in a file
         else if let Some(fname) = sub.value_of("EXPORT") {
             eprintln!("WIP - We assume the format of the Track 0 is similar to Amsdos one");
 
