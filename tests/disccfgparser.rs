@@ -394,7 +394,6 @@ fn parse_single_sided_cfg() {
 		let nb_entries = catalog.used_entries().count();
 		assert_eq!(0, nb_entries);
 
-
 		let dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
 		assert_eq!(
 			dsk,

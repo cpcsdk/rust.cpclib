@@ -542,7 +542,6 @@ impl SectorInformationList {
 		for sector in list_info.iter() {
 			let current_sector_size =sector.data_length as usize;
 			let current_buffer = &buffer[consummed_bytes .. consummed_bytes + current_sector_size];
-			println!("************************ {:?} {} {:?}", sector, current_sector_size, & current_buffer);
 			list_data.push(current_buffer.to_vec());
 			consummed_bytes += current_sector_size;
 		}
@@ -590,7 +589,8 @@ impl SectorInformationList {
 		ids: &[u8], 
 		heads: &[u8], 
 		track_number: u8, 
-		sector_size: u8) {
+		sector_size: u8,
+		filler_byte: u8) {
 		assert_eq!(ids.len(), heads.len());
 		assert_eq!(self.len(), 0);
 
@@ -604,8 +604,8 @@ impl SectorInformationList {
 			sector.sector_information_bloc.sector_id = ids[idx];
 			sector.sector_information_bloc.side = heads[idx];
 
-
-			sector.values.resize(convert_fdc_sector_size_to_real_sector_size(sector.sector_information_bloc.sector_size as _) as _, 0);
+			let data_size =  convert_fdc_sector_size_to_real_sector_size(sector.sector_information_bloc.sector_size as _) as usize;
+			sector.values.resize(data_size, filler_byte);
 			sector.sector_information_bloc.data_length = sector.values.len() as u16;
 
 			self.add_sector(sector);

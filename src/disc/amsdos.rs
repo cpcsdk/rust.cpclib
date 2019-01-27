@@ -596,6 +596,13 @@ impl AmsdosManager {
 		}
 	}
 
+
+	/// Format the disc. Currently it only modifies the catalog
+	pub fn format(&mut self) {
+		let mut catalog = self.catalog();
+		unimplemented!();
+	}
+
 	/// Return the entries of the Amsdos catalog
 	/// Panic if dsk is not compatible
 	pub fn catalog(&self) -> AmsdosEntries {

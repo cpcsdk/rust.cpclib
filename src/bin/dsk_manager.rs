@@ -4,7 +4,7 @@ extern crate cpclib;
 use std::fs::File;
 use std::io::{Read, Write};
 
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App, SubCommand, ArgGroup};
 
 
 use cpclib::disc::edsk::ExtendedDsk;
@@ -20,16 +20,31 @@ fn main() -> std::io::Result<()> {
                            Arg::with_name("DSK_FILE")
                             .help("DSK file to manipulate")
                             .required(true)
+                            .index(1)
                        )
                        .subcommand(
                            SubCommand::with_name("format")
                             .about("Format a dsk")
                             .arg(
-                                Arg::with_name("FORMAT_DESCRIPTION")
+                                Arg::with_name("FORMAT_FILE")
                                     .help("Provide a file that describes the format of the disc")
                                     .long("description")
                                     .short("d")
                                     .takes_value(true)
+                            )
+                            .arg(
+                                Arg::with_name("FORMAT_NAME")
+                                    .help("Provide the name of a format that can be used")
+                                    .short("f")
+                                    .long("format")
+                                    .takes_value(true)
+                                    .possible_values(&["data", "data42"])
+                            )
+                            .group(
+                                ArgGroup::with_name("command")
+                                    .arg("FORMAT_FILE")
+                                    .arg("FORMAT_NAME")
+                                    .required(true)
                             )
                        )
                        .subcommand(
@@ -39,21 +54,28 @@ fn main() -> std::io::Result<()> {
                                Arg::with_name("IMPORT")
                                 .help("Import an existing catalog in the dsk. All entries are thus erased")
                                 .long("import")
+                                .short("-i")
                                 .takes_value(true)
-                                .conflicts_with("EXPORT")
-                                .conflicts_with("LIST")
                            )
                            .arg(
                                Arg::with_name("EXPORT")
                                 .help("Export the catalog in a specific file")
                                 .long("export")
+                                .short("-e")
                                 .takes_value(true)
-                                .conflicts_with("LIST")
                            )
                            .arg(
                                Arg::with_name("LIST")
                                .help("Display the catalog on screen")
                                .long("list")
+                               .short("l")
+                           )
+                           .group(
+                               ArgGroup::with_name("command")
+                                .arg("IMPORT")
+                                .arg("EXPORT")
+                                .arg("LIST")
+                                .required(true)
                            )
                        )
                        .subcommand(
@@ -100,6 +122,7 @@ fn main() -> std::io::Result<()> {
 
     let dsk_fname = matches.value_of("DSK_FILE").unwrap();
 
+    // Manipulate the catalog of a disc
     if let Some(sub) = matches.subcommand_matches("catalog") {
         let dsk = ExtendedDsk::open(dsk_fname)
                               .expect(&format!("Unable to open the file {}", dsk_fname));
@@ -129,7 +152,8 @@ fn main() -> std::io::Result<()> {
             let manager = AmsdosManager::new_from_disc(dsk, 0);
             let catalog = manager.catalog();
             let entries = catalog.visible_entries().collect::<Vec<_>>();
-            println!("Dsk {}", dsk_fname);
+            /// TODO manage files instead of entries
+            println!("Dsk {} -- {} files", dsk_fname, entries.len());
             for entry in entries.iter(){
                 println!("{}", entry.to_string());
             }
@@ -140,14 +164,32 @@ fn main() -> std::io::Result<()> {
         
     }
 
+    // Manage the formating of a disc
     else if let Some(sub) = matches.subcommand_matches("format") {
-        if let Some(desc_fname) = sub.value_of("FORMAT_DESCRIPTION") {
-            let cfg = cpclib::disc::cfg::DiscConfig::new(desc_fname)?;
-            let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
-            dsk.save(dsk_fname)?;
-        }
-    }
+        use cpclib::disc::cfg::DiscConfig;
 
+        // Retrieve the format description
+        let cfg = if let Some(desc_fname) = sub.value_of("FORMAT_FILE") {
+             cpclib::disc::cfg::DiscConfig::new(desc_fname)?
+        }
+        else if let Some(desc) = sub.value_of("FORMAT_NAME") {
+            match desc {
+                "data42" => DiscConfig::single_side_data42_format(),
+                "data"   => DiscConfig::single_side_data_format(),
+                _ =>  unreachable!()
+            }
+        }
+        else {
+            unreachable!();
+        };
+
+        // Make the dsk based on the format
+        let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
+        dsk.save(dsk_fname)?;
+    }
+    else {
+        eprintln!("Missing command\n{}", matches.usage());
+    }
 
     Ok(())
 }
