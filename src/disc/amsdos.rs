@@ -327,7 +327,7 @@ pub struct AmsdosEntry {
 	read_only: bool,
 	system: bool,
 	num_page: u8,
-	nb_pages: u8,
+	nb_blocs: u8,
 	blocs: [BlocIdx;16]
 }
 
@@ -345,7 +345,7 @@ impl AmsdosEntry {
 
 	/// Provide the size, in Kb, eaten by the file on disc
 	pub fn used_space(&self) -> usize {
-		(self.nb_pages as usize * DATA_SECTOR_SIZE  as usize * 2) / 1024
+		(self.nb_blocs as usize * DATA_SECTOR_SIZE  as usize * 2) / 1024
 	}
 
 	/// Check if the given filename corresponds to the entry
@@ -371,7 +371,7 @@ impl AmsdosEntry {
 			read_only: buffer[1+8+0].bit(7),
 			system: buffer[1+8+1].bit(7),
 			num_page: buffer[12],
-			nb_pages: buffer[15],
+			nb_blocs: buffer[15],
 			blocs: {
 				let blocs = buffer[16..].iter()
 					.map(|&b|{BlocIdx::from(b)})
@@ -387,7 +387,7 @@ impl AmsdosEntry {
 
 	/// Returns the list of used blocs by tis entry
 	pub fn used_blocs(&self) -> &[BlocIdx] {
-		&self.blocs[..(self.nb_pages as usize)]
+		&self.blocs[..(self.nb_blocs as usize)]
 	}
 
 	pub fn as_bytes(&self) -> [u8; 32] {
@@ -398,7 +398,7 @@ impl AmsdosEntry {
 							self.read_only).as_ref()
 		);
 		bytes[12] = self.num_page;
-		bytes[15] = self.nb_pages;
+		bytes[15] = self.nb_blocs;
 		bytes[16..].copy_from_slice(
 			&self.blocs.iter()
 				.map(|b|->u8{b.into()})
@@ -498,7 +498,7 @@ impl AmsdosEntries {
 	pub fn used_entries(&self) -> impl Iterator<Item = &AmsdosEntry> {
 		self.entries.iter()
 			.filter(|&entry|{
-				entry.nb_pages > 0 && !entry.is_erased()
+				entry.nb_blocs > 0 && !entry.is_erased()
 			})
 	}
 
@@ -506,7 +506,7 @@ impl AmsdosEntries {
 	pub fn free_entries(&self) -> impl Iterator<Item = &AmsdosEntry> {
 		self.entries.iter()
 			.filter(|&entry|{
-				entry.is_erased() || entry.nb_pages == 0
+				entry.is_erased() || entry.nb_blocs == 0
 			})
 	}
 
@@ -516,7 +516,7 @@ impl AmsdosEntries {
 		let filename: AmsdosFileName = filename.clone();
 		self.entries.iter()
 			.filter(move |&entry|{
-				entry.nb_pages > 0 &&
+				entry.nb_blocs > 0 &&
 				entry.belongs_to(&filename)
 			})
 
@@ -539,6 +539,7 @@ impl AmsdosEntries {
 	pub fn available_blocs(&self) -> Vec<BlocIdx> {
 		// first 2 blocs are not available if we trust idsk. So  Ido the same
 		let mut set = (2..=255).map(|b|{BlocIdx::from(b)})
+						.filter(|b| {b.is_valid()}) // TODO I'm pretty sure there is womething wrong there with the erased value
 						.collect::<std::collections::BTreeSet<BlocIdx>>();
 		let used = self.used_entries()
 			.flat_map(|e|{e.blocs.iter()})
@@ -725,7 +726,7 @@ impl AmsdosManager {
 
 		let mut file_pos = 0;
 		let file_size = content.len();
-		let mut nb_pages = 0;
+		let mut nb_entries = 0;
 		println!("File size {} bytes", file_size);
 		while file_pos < file_size {
 			println!("File pos {}", file_pos);
@@ -735,9 +736,8 @@ impl AmsdosManager {
 			};
 
 			println!("Select entry {}", entry_idx);
-
-			let entry_num_page = nb_pages;
-			nb_pages += 1;
+			let entry_num_page = nb_entries;
+			nb_entries += 1;
 
 			let page_size = {
 				let mut size = (file_size - file_pos + 127) >> 7; 
@@ -746,10 +746,9 @@ impl AmsdosManager {
 				}
 				size
 			};
-			let entry_nb_pages = page_size;
 
 			// Get the blocs idx AND store the associated Kb on disc
-			let nb_blocs = (entry_nb_pages + 7) >> 3;
+			let nb_blocs = (page_size + 7) >> 3;
 			let blocs = {
 				let mut blocs = [BlocIdx::default(); 16];
 				for b in 0..nb_blocs {
@@ -757,6 +756,7 @@ impl AmsdosManager {
 						Some(bloc_idx) => bloc_idx,
 						None => return Err(AmsdosError::NoBlocAvailable)
 					};
+					assert!(bloc_idx.is_valid());
 					blocs[b] = bloc_idx;
 					println!("Select bloc{:?}", bloc_idx);
 					self.update_bloc(
@@ -777,7 +777,7 @@ impl AmsdosManager {
 				read_only: is_read_only,
 				system: is_system,
 				num_page: entry_num_page,
-				nb_pages: entry_nb_pages as u8,
+				nb_blocs: nb_blocs as u8,
 				blocs
 			};
 			self.update_entry(&new_entry)
@@ -833,6 +833,8 @@ impl AmsdosManager {
 	/// Returns the appropriate information to access the bloc
 	/// Blindly stolen to iDSK
 	fn bloc_access_information(&self, bloc_idx: BlocIdx) -> BlocAccessInformation {
+		assert!(bloc_idx.is_valid());
+
 		// Compute the information to access the first sector
 		let sector_pos = bloc_idx.sector();
 		let min_sector = self.disc.get_track_information(self.side, 0)
@@ -850,7 +852,10 @@ impl AmsdosManager {
 		};
 
 		if track > self.disc.nb_tracks_per_side() - 1 {
-			unimplemented!("Need to format track");
+			unimplemented!(
+				"Need to format track. [{:?}] => {} > {}", 
+				bloc_idx,
+				track, self.disc.nb_tracks_per_side() - 1);
 		}
 
 		let track1 = track;
@@ -878,6 +883,8 @@ impl AmsdosManager {
 	/// Write bloc content on disc. One bloc use 2 sectors
 	/// Implementation is stolen to iDSK
 	pub fn update_bloc(&mut self, bloc_idx: BlocIdx, content: &[u8]) {
+		assert!(bloc_idx.is_valid());
+
 		// More tests are needed to check if it can work without that
 		assert_eq!(
 			content.len(),
@@ -903,6 +910,7 @@ impl AmsdosManager {
 
 	/// Read the content of the given bloc
 	pub fn read_bloc(&self, bloc_idx: BlocIdx) -> Vec<u8> {
+		assert!(bloc_idx.is_valid());
 		let access_info = self.bloc_access_information(bloc_idx);
 
 		let sector1_data = self.disc.sector(
