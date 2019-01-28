@@ -11,23 +11,30 @@ use crate::basic::tokens::*;
 named!(
 	pub parse_basic_program<CompleteStr<'_>, BasicProgram>, do_parse!(
 		lines: fold_many0!(
-			parse_basic_line,
+			parse_basic_inner_line,
 			Vec::new(),
 			|mut acc:Vec<_>, item|{
 				acc.push(item);
 				acc
 			}
 		) >>
-		(
+		last: opt!(parse_basic_line) >>
+		opt!(line_ending) >>
+		( {
+			let mut lines = lines.clone();
+			if let Some(line) = last {
+				lines.push(line);
+			}
 			BasicProgram::new(lines)
+		  }
 		)
 	)
 );
 
+/// Parse a line
 named!(
 	pub parse_basic_line<CompleteStr<'_>, BasicLine>, do_parse!(
 		line_number: dec_u16 >>
-		space1 >>
 		tokens: fold_many0!(
 			parse_token,
 			Vec::new(),
@@ -36,8 +43,6 @@ named!(
 				acc
 			}
 		) >>
-		space0 >>
-		line_ending >>
 		(
 			BasicLine::new(
 				line_number,
@@ -46,6 +51,19 @@ named!(
 		)
 	)
 );
+
+/// Parse a line BUT expect an end of line char
+named!(
+	pub parse_basic_inner_line<CompleteStr<'_>, BasicLine>, do_parse!(
+		line: parse_basic_line >>
+		line_ending >>
+		(
+			line
+		)
+	)
+);
+
+
 
 /// Parse any token
 named!(
@@ -239,10 +257,11 @@ mod test {
     }
 
 	fn check_line_tokenisation(code: &str) {
-		let res = parse_basic_line(code.into());
+		let res = parse_basic_inner_line(code.into());
 		match res {
 			Ok((res, line)) => {
 				println!("{:?}", &line);
+				println!("{:?}", &res);
 				assert_eq!(res.len(), 0, "Line as not been completly consummed");
             },
             Err(e) => {

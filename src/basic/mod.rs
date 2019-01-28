@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 
 /// Basic line of code representation
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BasicLine {
 	line_number: u16,
 	tokens: Vec<tokens::BasicToken>
@@ -122,7 +122,12 @@ mod test {
 
 	#[test]
 	fn test_parse() {
-		let code = "10 call &0: 20 call &0";
+		let code = "10 call &0: call &0\n";
 		BasicProgram::parse(code).expect("Unable to produce basic tokens");
+
+		let code = "10 call &0: call &0";
+		BasicProgram::parse(code).expect("Unable to produce basic tokens");
+
+
 	}
 }
