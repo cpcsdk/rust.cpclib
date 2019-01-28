@@ -116,6 +116,12 @@ fn main() -> std::io::Result<()> {
 				exec, 
 				&content)
 		},
+		AmsdosFileType::Basic => {
+			AmsdosManager::compute_basic_header(
+				&filename,
+				&content
+			)
+		},
 		_ => unimplemented!()
 	};
 

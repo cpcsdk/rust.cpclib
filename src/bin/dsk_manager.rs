@@ -85,6 +85,25 @@ fn main() -> std::io::Result<()> {
                            )
                        )
                        .subcommand(
+                           SubCommand::with_name("add")
+                           .about("Add files in the disc in an Amsdos way")
+                           .arg(
+                               Arg::with_name("INPUT_FILES")
+                                .help("The files to add. They MUST have a header")
+                                .takes_value(true)
+                                .multiple(true)
+                                .required(true)
+                            )
+                            .arg(
+                                Arg::with_name("SYSTEM")
+                                .help("Indicates if the files are system files")
+                            )
+                            .arg(
+                                Arg::with_name("READ_ONLY")
+                                .help("Indicates if the files are read only")
+                            )
+                       )
+                       .subcommand(
                            SubCommand::with_name("put")
                            .about("Add files in the disc in a sectorial way")
                            .arg(
@@ -196,6 +215,37 @@ fn main() -> std::io::Result<()> {
         
     }
 
+    // Add files in an Amsdos compatible disc
+    else if let Some(sub) = matches.subcommand_matches("add") {
+
+        // Get the input dsk
+       let dsk = ExtendedDsk::open(dsk_fname)
+                              .expect(&format!("Unable to open the file {}", dsk_fname));
+        let mut manager = AmsdosManager::new_from_disc(dsk, 0);
+
+        // Get the common parameters
+        let is_system = sub.is_present("SYSTEM");
+        let is_read_only = sub.is_present("READ_ONLY");
+
+        // loop over all the files to add them
+        for fname in matches.values_of("INPUT_FILES").unwrap() {
+            let ams_file = match AmsdosFile::open_valid(fname) {
+                Ok(ams_file) => {
+                    println!("{:?} added", ams_file.amsdos_filename());
+                    ams_file
+                },
+                Err(e) => {
+                    panic!("Unable to load {}: {:?}", fname, e);
+                }
+            };
+
+            manager.add_file(&ams_file, is_system, is_read_only);
+        }
+
+        // Save the dsk on disc
+        manager.dsk().save(dsk_fname)?;
+    }
+
     // Manage the formating of a disc
     else if let Some(sub) = matches.subcommand_matches("format") {
         use cpclib::disc::cfg::DiscConfig;
@@ -219,6 +269,8 @@ fn main() -> std::io::Result<()> {
         let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
         dsk.save(dsk_fname)?;
     }
+
+
     else {
         eprintln!("Missing command\n{}", matches.usage());
     }

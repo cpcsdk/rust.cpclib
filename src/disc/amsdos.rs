@@ -5,16 +5,28 @@ use arrayref;
 use bitfield::Bit;
 use slice_of_array::prelude::*;
 
+use std::fs::File;
+use std::path::Path;
+use std::io::Read;
+
 use std::iter::Iterator;
+
 use crate::disc::edsk::Side;
 
 #[derive(Debug)]
 pub enum AmsdosError {
 	NoEntriesAvailable,
 	NoBlocAvailable,
-	FileLargerThan64Kb
+	FileLargerThan64Kb,
+	InvalidHeader,
+	IO(std::io::Error)
 }
 
+impl std::convert::From<std::io::Error> for AmsdosError {
+	fn from(err: std::io::Error) -> AmsdosError {
+		AmsdosError::IO(err)
+	}
+}
 
 /// The AmsdosFileName structure is used to encode several informations
 /// - the user
@@ -653,8 +665,7 @@ impl AmsdosManager {
 		}
 	}
 
-
-
+	/// Generate a header for a basic file
 	pub fn compute_basic_header(filename: &AmsdosFileName, data: &[u8]) -> AmsdosHeader {
 		AmsdosHeader::build_header(
 			filename, 
@@ -664,6 +675,7 @@ impl AmsdosManager {
 			data)
 	}
 
+	/// Generate a header for binary file
 	pub fn compute_binary_header(filename: &AmsdosFileName, loading_address: u16, execution_address: u16, data: &[u8]) -> AmsdosHeader {
 		AmsdosHeader::build_header(
 			filename, 
@@ -1157,12 +1169,27 @@ impl AmsdosFile {
 		})
 	}
 
-	/// Create a file form its header and content
+	/// Create a file from its header and content
 	pub fn from_buffer(data: &[u8]) -> AmsdosFile {
 		let (header_bytes, content_bytes) = data.split_at(128);
 		AmsdosFile {
 			header: AmsdosHeader::from_buffer(header_bytes),
 			content: content_bytes.to_vec()
+		}
+	}
+
+	/// Read a file from disc and success if there is no io error and if the header if correct
+	pub fn open_valid<P: AsRef<Path>>(path: P) -> Result<AmsdosFile, AmsdosError> {
+		let mut f = File::open(path.as_ref())?;
+		let mut content = Vec::new();
+		f.read_to_end(&mut content)?;
+
+		let ams_file = Self::from_buffer(&content);
+		if ams_file.header().is_checksum_valid() {
+			Ok(ams_file)
+		}
+		else {
+			Err(AmsdosError::InvalidHeader)
 		}
 	}
 
@@ -1182,6 +1209,11 @@ impl AmsdosFile {
 
 	pub fn content(&self) -> &[u8] {
 		self.content.as_ref()
+	}
+
+	/// Returns the header + the content
+	pub fn as_bytes(&self) -> Vec<u8> {
+		self.full_content().map(|&b|{b}).collect()
 	}
 
 	/// Files are read from disc by chunks of the size of 2 sectors. 
