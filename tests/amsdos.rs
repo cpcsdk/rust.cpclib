@@ -50,7 +50,7 @@ mod tests {
 ];
 		let header = &result[0..128];
 
-		let filename = AmsdosFileName::new(
+		let filename = AmsdosFileName::new_incorrect_case(
 			0,
 			"test",
 			"bin"
@@ -89,7 +89,7 @@ mod tests {
 ];
 		let header = &result[0..128];
 
-		let filename = AmsdosFileName::new(
+		let filename = AmsdosFileName::new_incorrect_case(
 			0,
 			"test",
 			"bin"
@@ -115,17 +115,17 @@ mod tests {
 
 	#[test]
 	fn test_filename() {
-		let fname1 =  AmsdosFileName::new(
+		let fname1 =  AmsdosFileName::new_correct_case(
 			0,
 			"test",
 			"bin"
 		).unwrap();
 
-		let fname2:AmsdosFileName = "test.bin".into();
+		let fname2:AmsdosFileName = "TEST.BIN".into();
 
 		assert_eq!(fname1, fname2);
-		assert_eq!(fname1.extension(), "bin");
-		assert_eq!(fname2.name(), "test");
+		assert_eq!(fname1.extension(), "BIN");
+		assert_eq!(fname2.name(), "TEST");
 		assert_eq!(fname2.user(), 0);
 	}
 
@@ -205,7 +205,7 @@ mod tests {
 			64
 		);
 
-		let filename = AmsdosFileName::new(
+		let filename = AmsdosFileName::new_correct_case(
 			0,
 			"test",
 			"bin"
@@ -226,7 +226,7 @@ mod tests {
 
 		assert_eq!(
 			& file.header().amsdos_filename().filename(),
-			"test.bin"
+			"TEST.BIN"
 		);
 		assert_eq!(
 			& file.header().amsdos_filename(),

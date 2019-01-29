@@ -142,7 +142,44 @@ impl AmsdosFileName {
 		format!("{}:{}.{}", self.user(), self.name(), self.extension())
 	}
 
-	pub fn new(user: u8, filename: &str, extension: &str) -> Result<AmsdosFileName, String> {
+	// A filename can only contains the chars a-z A-Z 0-9 ! " # $ & ' +  @ ^ ' } {
+	// when typed in the CPC. However, onmy upper case is used in the discs. So lowercase is not allowedthere
+	pub fn is_valid(&self) -> bool {
+		self.name().bytes().all(Self::is_valid_char) && 
+			self.extension().bytes().all(Self::is_valid_char) &&
+			self.user() <= 16
+	}
+
+	pub fn is_valid_char(char: u8) -> bool {
+	/*	(char >= 'a' as u8 && char <= 'z' as u8) ||*/
+		(char >= 'A' as u8 && char <= 'Z' as u8) ||
+		(char >= '0' as u8 && char <= '9' as u8) ||
+		char == '!' as u8 ||
+		char == '"' as u8 ||
+		char == '#' as u8 ||
+		char == '$' as u8 ||
+		char == '&' as u8 ||
+		char == '+' as u8 ||
+		char == '@' as u8 ||
+		char == '^' as u8 ||
+		char == '\'' as u8 ||
+		char == '{' as u8 ||
+		char == '}' as u8 ||
+		char == ' ' as u8  // by definition ' ' is already used to fill space
+	}
+
+
+	// Build a AmsdosFileName ensurinf the case is correct
+	pub fn new_correct_case(user: u8, filename: &str, extension: &str) -> Result<AmsdosFileName, String> {
+		Self::new_incorrect_case(
+			user, 
+			&filename.to_ascii_uppercase(), 
+			&extension.to_ascii_uppercase()
+		)
+	}
+
+	// Build a AmsdosFileName without checking case
+	pub fn new_incorrect_case(user: u8, filename: &str, extension: &str) -> Result<AmsdosFileName, String> {
 
 		let filename = filename.trim();
 		let extension = extension.trim();
@@ -209,7 +246,7 @@ impl From<&str> for AmsdosFileName {
 			Some(idx) => (&rest[..idx], &rest[(idx+1)..])
 		};
 
-		AmsdosFileName::new(user, filename, extension).unwrap()
+		AmsdosFileName::new_correct_case(user, filename, extension).unwrap()
 	}
 }
 
@@ -671,7 +708,7 @@ impl AmsdosManager {
 		AmsdosHeader::build_header(
 			filename, 
 			AmsdosFileType::Basic,
-			0x0000, 
+			0x0170, 
 			0x0000, 
 			data)
 	}
@@ -1025,7 +1062,7 @@ impl AmsdosHeader {
 	}
 
 	pub fn amsdos_filename(&self) -> AmsdosFileName {
-		AmsdosFileName::new(
+		AmsdosFileName::new_incorrect_case(
 			self.user(),
 			&self.filename(),
 			&self.extension()

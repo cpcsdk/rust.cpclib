@@ -97,7 +97,7 @@ fn main() -> std::io::Result<()> {
 			}
 		};
 
-		AmsdosFileName::new(
+		AmsdosFileName::new_correct_case(
 			user,
 			filename,
 			extension

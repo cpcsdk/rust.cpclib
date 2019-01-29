@@ -18,14 +18,6 @@ impl BasicLine {
 		self.line_number
 	}
 
-	/// Produces the end line
-	pub fn end_line() -> BasicLine {
-		BasicLine {
-			line_number: 0,
-			tokens: Vec::new()
-		}
-	}
-
 	/// Create a line with its content
 	pub fn new(line_number: u16, tokens: &[tokens::BasicToken]) -> BasicLine {
 		BasicLine {
@@ -104,14 +96,16 @@ impl BasicProgram {
 		);
 	}
 
-
+	/// Generate the byte stream for the gien program
 	pub fn as_bytes(&self) -> Vec<u8> {
-		unimplemented!("[ERROR] we have to add the latest line");
-		self.lines.iter()
-			.flat_map(|(k,v)|{
+		let mut bytes = self.lines.iter()
+			.map(|(k,v)|{v})
+			.flat_map(|v|{
 				v.as_bytes()
 			})
-			.collect::<Vec<u8>>()
+			.collect::<Vec<u8>>();
+		bytes.resize(bytes.len()+2, 0);
+		bytes
 	}
 }
 
@@ -121,13 +115,24 @@ mod test {
  	use crate::basic::*;
 
 	#[test]
-	fn test_parse() {
+	fn parse_complete() {
 		let code = "10 call &0: call &0\n";
 		BasicProgram::parse(code).expect("Unable to produce basic tokens");
 
 		let code = "10 call &0: call &0";
 		BasicProgram::parse(code).expect("Unable to produce basic tokens");
+	}
 
+	#[test]
+	fn parse_correct() {
+		let code = "10 CALL &0";
+		let prog = BasicProgram::parse(code).unwrap();
+		let bytes = prog.as_bytes();
+		let expected = vec![10, 0, 10, 0, 131,  32,  28,   0,   0,   0,   0,   0];
 
+		assert_eq!(
+			bytes,
+			expected
+		);
 	}
 }

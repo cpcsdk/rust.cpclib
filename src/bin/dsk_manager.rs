@@ -97,10 +97,19 @@ fn main() -> std::io::Result<()> {
                             .arg(
                                 Arg::with_name("SYSTEM")
                                 .help("Indicates if the files are system files")
+                                .long("system")
+                                .short("s")
                             )
                             .arg(
                                 Arg::with_name("READ_ONLY")
                                 .help("Indicates if the files are read only")
+                                .long("read_only")
+                                .short("r")
+                            )
+                            .arg(
+                                Arg::with_name("AS_AMSDOS")
+                                .help("[unimplemented] Uses the same strategy as amsdos when adding a file: add .???, delete .BAK, rename other as .BAK, rename .??? with real extension")
+                                .long("secure")
                             )
                        )
                        .subcommand(
@@ -160,7 +169,7 @@ fn main() -> std::io::Result<()> {
             let size = f.read_to_end(&mut bytes)?;
 
             if size != 64*32 {
-                eprintln!("Catalog size uses {} bytes wheras it should be {}", size, 64*32);
+                eprintln!("Catalog size uses {} bytes whereas it should be {}", size, 64*32);
             }
 
             for idx in 0..4 {
@@ -228,9 +237,12 @@ fn main() -> std::io::Result<()> {
         let is_read_only = sub.is_present("READ_ONLY");
 
         // loop over all the files to add them
-        for fname in matches.values_of("INPUT_FILES").unwrap() {
+        for fname in sub.values_of("INPUT_FILES").unwrap() {
             let ams_file = match AmsdosFile::open_valid(fname) {
                 Ok(ams_file) => {
+                    if ! ams_file.amsdos_filename().is_valid() {
+                        panic!("Invalid amsdos filename ! {:?}", ams_file.amsdos_filename());
+                    }
                     println!("{:?} added", ams_file.amsdos_filename());
                     ams_file
                 },

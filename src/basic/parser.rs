@@ -35,6 +35,7 @@ named!(
 named!(
 	pub parse_basic_line<CompleteStr<'_>, BasicLine>, do_parse!(
 		line_number: dec_u16 >>
+		char!(' ') >> 
 		tokens: fold_many0!(
 			parse_token,
 			Vec::new(),
