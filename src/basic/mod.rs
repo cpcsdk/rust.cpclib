@@ -48,6 +48,10 @@ impl BasicLine {
 
 		content
 	}
+
+	pub fn tokens(&self) -> &[BasicToken] {
+		&self.tokens
+	}
 }
 
 pub struct BasicProgram {
@@ -135,4 +139,5 @@ mod test {
 			expected
 		);
 	}
+
 }

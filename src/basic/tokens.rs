@@ -377,7 +377,8 @@ pub enum BasicToken {
 	/// Encode a variable set
 	Variable(String, BasicValue),
 	/// Encode a constant. The first field can only take ValueIntegerDecimal8bits, ValueIntegerDecimal16bits, ValueIntegerBinary16bits, ValueIntegerHexadecimal16bits
-	Constant(BasicTokenNoPrefix, BasicValue)
+	Constant(BasicTokenNoPrefix, BasicValue),
+	Comment(BasicTokenNoPrefix, Vec<u8>)
 }
 
 impl BasicToken {

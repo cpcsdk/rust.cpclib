@@ -69,6 +69,7 @@ named!(
 /// Parse any token
 named!(
 	pub parse_token<CompleteStr<'_>, BasicToken>, alt!(
+		parse_rem |
 		parse_simple_instruction |
 		parse_prefixed_instruction |
 		parse_basic_value |
@@ -76,7 +77,21 @@ named!(
 	)
 );
 
-// TODO add ascii char parsing (for invalid basic... and comments)
+
+named!(
+	pub parse_rem<CompleteStr<'_>, BasicToken>, do_parse!(
+		sym: alt!(
+			tag_no_case!("REM") => 
+				{|_|{BasicTokenNoPrefix::Rem}} |
+			char!('\'') => 
+				{|_| {BasicTokenNoPrefix::SymbolQuote}}
+		) >>
+		list: take_till!(|ch|{ch==':' ||ch=='\n'}) >>
+		(
+			BasicToken::Comment(sym, list.as_bytes().to_vec())
+		)
+	)
+);
 
 /// Parse the instructions that do not need a prefix byte
 /// TODO Add all the other variants
@@ -257,13 +272,14 @@ mod test {
         assert!(dec_u16(CompleteStr("10")).is_ok());
     }
 
-	fn check_line_tokenisation(code: &str) {
+	fn check_line_tokenisation(code: &str) -> BasicLine{
 		let res = parse_basic_inner_line(code.into());
 		match res {
 			Ok((res, line)) => {
 				println!("{:?}", &line);
 				println!("{:?}", &res);
 				assert_eq!(res.len(), 0, "Line as not been completly consummed");
+				line
             },
             Err(e) => {
 				panic!("{}", e);
@@ -296,5 +312,17 @@ mod test {
 		check_token_tokenisation("call");
 		check_token_tokenisation("abs");
 		check_token_tokenisation(":");
+	}
+
+	#[test]
+	fn test_comment() {
+		check_token_tokenisation("REM fldsfksjfksjkg");
+		check_token_tokenisation("' fldsfksjfksjkg");
+
+		let line = check_line_tokenisation("10 REM fldsfksjfksjkg:CALL\n");
+		assert_eq!(
+			3,
+			line.tokens().len()
+		)
 	}
 }
