@@ -1,21 +1,21 @@
 
-//#[macro_use]
-//extern crate pretty_assertions;
+#[macro_use]
+extern crate pretty_assertions;
 
 #[cfg(test)]
 mod tests {
 	use cpclib::disc::amsdos::*;
 	use cpclib::disc::edsk::ExtendedDsk;
-	use cpclib::disc::cfg::DiscConfig;
+	use cpclib::disc::cfg::*;
 
 
 	#[test]
 	fn test_format() {
 		let empty_expected = ExtendedDsk::open("./tests/dsk/empty.dsk").unwrap();
-		let empty_obtained = DiscConfig::single_side_data_format().into();
+		let empty_obtained = ExtendedDsk::from(DiscConfig::single_side_data_format());
 		assert_eq!(
-			empty_expected,
-			empty_obtained
+			empty_expected.to_cfg(),
+			empty_obtained.to_cfg()
 		);
 	}
 
