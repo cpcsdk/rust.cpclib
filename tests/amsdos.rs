@@ -1,12 +1,23 @@
 
-#[macro_use]
-extern crate pretty_assertions;
+//#[macro_use]
+//extern crate pretty_assertions;
 
 #[cfg(test)]
 mod tests {
 	use cpclib::disc::amsdos::*;
+	use cpclib::disc::edsk::ExtendedDsk;
+	use cpclib::disc::cfg::DiscConfig;
 
 
+	#[test]
+	fn test_format() {
+		let empty_expected = ExtendedDsk::open("./tests/dsk/empty.dsk").unwrap();
+		let empty_obtained = DiscConfig::single_side_data_format().into();
+		assert_eq!(
+			empty_expected,
+			empty_obtained
+		);
+	}
 
 	#[test]
 	fn list_catalog() {

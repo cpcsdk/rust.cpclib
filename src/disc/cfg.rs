@@ -43,7 +43,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0
 
 
 /// Disk format configuration.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct DiscConfig {
 	/// Number of tracks in the disc
 	pub(crate) nb_tracks: u8,
@@ -124,7 +124,7 @@ impl DiscConfig {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TrackGroup {
 	/// Identifier of the tracks molded from this configuration
 	pub(crate) tracks: Vec<u8>,
@@ -192,11 +192,11 @@ impl TrackGroup {
 
 
 impl TrackInformationList {
-	pub fn to_cfg(&self) -> Vec<TrackGroup> {
+	pub fn to_cfg(&self, double_sided: bool) -> Vec<TrackGroup> {
 		
 		
 		let mut single = self.list.iter()
-			.map(|t|{t.to_cfg()})
+			.map(|t|{t.to_cfg(double_sided)})
 			.collect::<Vec<_>>();
 
 		// elements need to be sorted before using group_by
@@ -250,10 +250,16 @@ impl TrackInformationList {
 }
 
 
+/// Extend TrackInformation with the ability to extract its configuration
 impl TrackInformation {
-	pub fn to_cfg(&self) -> TrackGroup {
+	pub fn to_cfg(&self, double_sided: bool) -> TrackGroup {
 		let tracks = vec![self.track_number];
-		let side:Side = self.side_number.into();
+		let side:Side = if double_sided {
+			self.side_number.into()
+		}
+		else {
+			Side::Unspecified
+		};
 		let sector_size = convert_fdc_sector_size_to_real_sector_size(self.sector_size); 
 		let gap3 = self.gap3_length;
 
@@ -285,16 +291,21 @@ impl TrackInformation {
 }
 
 impl ExtendedDsk {
+	/// Generate a configuration from the dsk
 	pub fn to_cfg(&self) -> DiscConfig {
 		DiscConfig {
 			nb_tracks: self.nb_tracks_per_side(),
 			nb_sides: self.nb_sides(),
-			track_groups: self.track_list.to_cfg()
+			track_groups: self.track_list.to_cfg(2 == self.nb_sides())
 		}
 	}
 }
 
-
+impl From<&ExtendedDsk> for DiscConfig {
+	fn from(dsk: &ExtendedDsk) -> DiscConfig {
+		dsk.to_cfg()
+	}
+}
 
 
 named!(value<CompleteStr<'_>, u16>,

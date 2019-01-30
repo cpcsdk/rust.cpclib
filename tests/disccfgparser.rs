@@ -227,6 +227,23 @@ fn test_data() {
 }
 
 #[test]
+fn dsk_to_cfg() {
+		use cpclib::disc::cfg::*;
+
+		let cfg = cpclib::disc::cfg::DiscConfig::from(SINGLE_SIDED);
+
+		let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
+		let cfg2 = (&dsk).into();
+
+		println!("{:?}", &cfg);
+		println!("{:?}", &cfg2);
+		assert_eq!(
+			cfg,
+			cfg2
+		);
+}
+
+#[test]
 fn parse_double_sided_cfg() {
 	let parsed = cpclib::disc::cfg::parse_config(DOUBLE_SIDED.into());
 	assert!(parsed.is_ok());

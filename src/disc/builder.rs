@@ -1,5 +1,5 @@
 use crate::disc::cfg::DiscConfig;
-use crate::disc::edsk::ExtendedDsk;
+use crate::disc::edsk::{ExtendedDsk, Side};
 
 
 /// Generate an edsk from the given configuration
@@ -29,7 +29,11 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
 	for (side, track_idx) in cfg.track_idx_iterator() {
 		let mut track = edsk.track_list.add_empty_track();
 		track.track_number = track_idx;
-		track.side_number = side.into();
+		track.side_number = match *side {
+			Side::Unspecified => Side::SideA,
+			Side::SideA => Side::SideA,
+			Side::SideB => Side::SideA,
+		}.into();
 		track.track_size = edsk.disc_information_bloc.track_size_table[track_idx as usize] as u16 * 256;
 	}
 	
