@@ -1261,6 +1261,10 @@ impl AmsdosFile {
 		let mut content = Vec::new();
 		f.read_to_end(&mut content)?;
 
+		if content.len() < 128 {
+			return Err(AmsdosError::InvalidHeader);
+		}
+
 		let ams_file = Self::from_buffer(&content);
 		if ams_file.header().is_checksum_valid() {
 			Ok(ams_file)
