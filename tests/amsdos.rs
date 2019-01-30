@@ -10,12 +10,55 @@ mod tests {
 
 
 	#[test]
-	fn test_format() {
+	fn new_data() {
 		let empty_expected = ExtendedDsk::open("./tests/dsk/empty.dsk").unwrap();
 		let empty_obtained = ExtendedDsk::from(DiscConfig::single_side_data_format());
 		assert_eq!(
 			empty_expected.to_cfg(),
 			empty_obtained.to_cfg()
+		);
+	}
+
+	#[test]
+	fn get_onebasic_file() {
+		let onefile = ExtendedDsk::open("./tests/dsk/onefile.dsk").unwrap();
+		let manager = AmsdosManager::new_from_disc(onefile, 0);
+		let file = manager.get_file("test.bas").unwrap();
+		assert!(file.header().is_checksum_valid());
+
+		let file2 = AmsdosFile::basic_file_from_buffer(
+			&"test.bas".into(),
+			file.content()
+		).unwrap();
+
+		assert_eq!(
+			file.header(),
+			file2.header()
+		);
+
+		assert_eq!(
+			file.content(),
+			file2.content()
+		);
+
+		let empty_obtained = ExtendedDsk::from(DiscConfig::single_side_data_format());
+		let mut manager2 = AmsdosManager::new_from_disc(empty_obtained, 0);
+		manager2.add_file(&file2, false, false).unwrap();
+
+		assert_eq!(
+			manager.catalog(),
+			manager2.catalog(),
+		);
+
+		let file3 = manager.get_file("test.bas").unwrap();
+		assert_eq!(
+			file.header(),
+			file3.header()
+		);
+
+		assert_eq!(
+			file.content(),
+			file3.content()
 		);
 	}
 

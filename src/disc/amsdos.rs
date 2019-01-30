@@ -364,7 +364,9 @@ pub struct AmsdosEntry {
 	read_only: bool,
 	system: bool,
 	num_page: u8,
-	nb_blocs: u8,
+	/// Encoded page size
+	page_size: u8,
+	/// list of block indexes
 	blocs: [BlocIdx;16]
 }
 
@@ -382,7 +384,7 @@ impl AmsdosEntry {
 
 	/// Provide the size, in Kb, eaten by the file on disc
 	pub fn used_space(&self) -> usize {
-		(self.nb_blocs as usize * DATA_SECTOR_SIZE  as usize * 2) / 1024
+		(self.nb_blocs() as usize * DATA_SECTOR_SIZE  as usize * 2) / 1024
 	}
 
 	/// Check if the given filename corresponds to the entry
@@ -408,7 +410,7 @@ impl AmsdosEntry {
 			read_only: buffer[1+8+0].bit(7),
 			system: buffer[1+8+1].bit(7),
 			num_page: buffer[12],
-			nb_blocs: buffer[15],
+			page_size: buffer[15],
 			blocs: {
 				let blocs = buffer[16..].iter()
 					.map(|&b|{BlocIdx::from(b)})
@@ -424,7 +426,12 @@ impl AmsdosEntry {
 
 	/// Returns the list of used blocs by tis entry
 	pub fn used_blocs(&self) -> &[BlocIdx] {
-		&self.blocs[..(self.nb_blocs as usize)]
+		&self.blocs[..(self.nb_blocs() as usize)]
+	}
+
+	/// Compute the real number of blocs to read
+	pub fn nb_blocs(&self) -> usize {
+		(self.page_size as usize + 7) >> 3
 	}
 
 	pub fn as_bytes(&self) -> [u8; 32] {
@@ -435,7 +442,7 @@ impl AmsdosEntry {
 							self.read_only).as_ref()
 		);
 		bytes[12] = self.num_page;
-		bytes[15] = self.nb_blocs;
+		bytes[15] = self.page_size;
 		bytes[16..].copy_from_slice(
 			&self.blocs.iter()
 				.map(|b|->u8{b.into()})
@@ -535,7 +542,7 @@ impl AmsdosEntries {
 	pub fn used_entries(&self) -> impl Iterator<Item = &AmsdosEntry> {
 		self.entries.iter()
 			.filter(|&entry|{
-				entry.nb_blocs > 0 && !entry.is_erased()
+				entry.page_size > 0 && !entry.is_erased()
 			})
 	}
 
@@ -543,7 +550,7 @@ impl AmsdosEntries {
 	pub fn free_entries(&self) -> impl Iterator<Item = &AmsdosEntry> {
 		self.entries.iter()
 			.filter(|&entry|{
-				entry.is_erased() || entry.nb_blocs == 0
+				entry.is_erased() || entry.page_size== 0
 			})
 	}
 
@@ -553,7 +560,7 @@ impl AmsdosEntries {
 		let filename: AmsdosFileName = filename.clone();
 		self.entries.iter()
 			.filter(move |&entry|{
-				entry.nb_blocs > 0 &&
+				entry.page_size > 0 &&
 				entry.belongs_to(&filename)
 			})
 
@@ -737,6 +744,8 @@ impl AmsdosManager {
 			entries
 		};
 
+		println!("{:?}", &entries);
+
 		// Retreive the binary data
 		let content = entries.iter().flat_map(|entry|{
 									self.read_entry(entry)
@@ -814,7 +823,7 @@ impl AmsdosManager {
 				read_only: is_read_only,
 				system: is_system,
 				num_page: entry_num_page,
-				nb_blocs: nb_blocs as u8,
+				page_size: page_size as u8,
 				blocs
 			};
 			self.update_entry(&new_entry)
@@ -979,7 +988,7 @@ impl AmsdosManager {
 	pub fn read_entry(&self, entry: &AmsdosEntry) -> Vec<u8> {
 		entry.used_blocs().iter()
 				.flat_map(|bloc_idx| {
-					self.read_bloc(*bloc_idx)
+						self.read_bloc(*bloc_idx)
 				})
 				.collect::<Vec<u8>>()
 	}
@@ -1009,7 +1018,7 @@ impl std::fmt::Debug for AmsdosHeader {
 
 impl PartialEq for AmsdosHeader {
 	fn eq(&self, other: &AmsdosHeader) -> bool {
-		self.content.as_ref() == other.content.as_ref()
+		self.content[..68] == other.content[..68]
     }
 
 }
@@ -1213,6 +1222,29 @@ impl AmsdosFile {
 			content
 		})
 	}
+
+	pub fn basic_file_from_buffer(
+		filename: &AmsdosFileName,
+		data: &[u8]) -> Result<AmsdosFile, AmsdosError> {
+		
+		if data.len() > 0x10000 /*TODO shorten the limit*/ {
+			return Err(AmsdosError::FileLargerThan64Kb);
+		}
+
+		let header = AmsdosHeader::build_header(
+				filename, 
+				AmsdosFileType::Basic,
+				0x0170, 
+				0x0000, 
+				data);
+		let content = data.to_vec();
+
+		Ok(AmsdosFile {
+			header,
+			content
+		})
+	}
+
 
 	/// Create a file from its header and content
 	pub fn from_buffer(data: &[u8]) -> AmsdosFile {
