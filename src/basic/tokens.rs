@@ -1,6 +1,7 @@
 
 use num_enum::IntoPrimitive;
 use num_enum::CustomTryInto;
+use std::fmt;
 
 #[derive(IntoPrimitive, CustomTryInto, Copy, Clone, PartialEq, Debug)]
 #[repr(u8)]
@@ -243,6 +244,25 @@ pub enum BasicTokenNoPrefix {
 	AdditionalTokenMarker
 }
 
+
+impl fmt::Display for BasicTokenNoPrefix{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let tag = match self {
+			Self::Call => "CALL",
+			Self::Print => "PRINT",
+			Self::Rem => "REM",
+
+			Self::SymbolQuote => "'",
+			Self::StatementSeparator => ":",
+
+			Self::CharSpace => " ",
+
+			_=> unimplemented!("{:?}", self)
+		};
+		write!(f, "{}", tag)
+	}
+} 
+
 impl From<u8> for BasicTokenNoPrefix {
 	fn from(val: u8) -> BasicTokenNoPrefix {
 		val.try_into_BasicTokenNoPrefix().unwrap()
@@ -316,6 +336,16 @@ pub enum BasicTokenPrefixed {
 	Vpos = 0x7f
 }
 
+impl fmt::Display for BasicTokenPrefixed {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let tag = match self {
+			Self::Abs => "ABS",
+			_=> unimplemented!("{}", self)
+		};
+		write!(f, "{}", tag)
+	}
+}
+
 impl From<u8> for BasicTokenPrefixed {
 	fn from(val: u8) -> BasicTokenPrefixed {
 		val.try_into_BasicTokenPrefixed().unwrap()
@@ -363,6 +393,30 @@ impl BasicValue {
 			_ => unimplemented!()
 		}
 	}
+
+	/// Return the integer value when it is an integer
+	pub fn as_integer(&self) -> Option<u16> {
+		match self {
+			Self::Integer(ref low, ref high) => {
+				Some( (*low) as u16 + 256* (*high) as u16 )
+			},
+			_ => None
+		}
+	}
+
+	pub fn int_hexdecimal_representation(&self) -> Option<String> {
+		self.as_integer()
+			.map(|i|{
+				format!("&{:X}", i)
+			})
+	}
+
+	pub fn int_decimal_representation(&self) -> Option<String> {
+		self.as_integer()
+			.map(|i|{
+				format!("{}", i)
+			})
+	}
 }
 
 /// Represents any kind of token
@@ -379,6 +433,38 @@ pub enum BasicToken {
 	/// Encode a constant. The first field can only take ValueIntegerDecimal8bits, ValueIntegerDecimal16bits, ValueIntegerBinary16bits, ValueIntegerHexadecimal16bits
 	Constant(BasicTokenNoPrefix, BasicValue),
 	Comment(BasicTokenNoPrefix, Vec<u8>)
+}
+
+impl fmt::Display for BasicToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match self {
+			BasicToken::SimpleToken(ref tok) => {
+				write!(f, "{}", tok.to_string())?;
+			},
+			BasicToken::PrefixedToken(ref tok) => {
+				write!(f, "{}", tok.to_string())?;
+			},
+			BasicToken::Comment(ref tok, ref comment) => {
+				write!(f, "{}", tok.to_string())?;
+				write!(f, "{},", String::from_utf8(comment.to_vec()).unwrap())?;
+			},
+			BasicToken::Constant(ref kind, ref constant) => {
+				let repr = match kind {
+					BasicTokenNoPrefix::ValueIntegerHexadecimal16bits => {
+						constant.int_hexdecimal_representation().unwrap()
+					},
+					BasicTokenNoPrefix::ValueIntegerDecimal16bits => {
+						constant.int_decimal_representation().unwrap()
+					},
+					_ => unimplemented!("{:?}", kind)
+				};
+				write!(f, "{}", repr)?;
+			}
+			_ => unimplemented!("{:?}", self)
+		}
+
+		Ok(())
+	}
 }
 
 impl BasicToken {
@@ -410,6 +496,12 @@ impl BasicToken {
 				data.extend_from_slice(&constant.as_bytes());
 				data
 			},
+
+			BasicToken::Comment(ref comment_type, ref comment) => {
+				let mut data = vec![comment_type.value()];
+				data.extend_from_slice(&comment);
+				data
+			}
 
 			_ => unimplemented!()
 		}

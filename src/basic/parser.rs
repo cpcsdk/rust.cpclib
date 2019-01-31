@@ -34,7 +34,7 @@ named!(
 /// Parse a line
 named!(
 	pub parse_basic_line<CompleteStr<'_>, BasicLine>, do_parse!(
-		line_number: dec_u16 >>
+		line_number: dec_u16_inner >>
 		char!(' ') >> 
 		tokens: fold_many0!(
 			parse_token,
@@ -98,7 +98,8 @@ named!(
 named!(
 	pub parse_simple_instruction<CompleteStr<'_>, BasicToken>, do_parse!(
 		token: alt!(
-			tag_no_case!("CALL") => {|_| BasicTokenNoPrefix::Call} 
+			tag_no_case!("CALL") => {|_| BasicTokenNoPrefix::Call} |
+			tag_no_case!("PRINT") => {|_| BasicTokenNoPrefix::Print} 
 		) >>
 		(
 			BasicToken::SimpleToken(token)
@@ -189,7 +190,8 @@ named!(
 
 named!(
 	pub parse_basic_value<CompleteStr<'_>, BasicToken>, alt!(
-		parse_hexadecimal_value_16bits
+		parse_hexadecimal_value_16bits |
+		parse_decimal_value_16bits
 	)
 );
 
@@ -207,7 +209,17 @@ named!(
         )
     );
 
-
+named!(
+    pub parse_decimal_value_16bits<CompleteStr<'_>, BasicToken>, do_parse!(
+        val: dec_u16_inner >>
+        (
+			BasicToken::Constant(
+				BasicTokenNoPrefix::ValueIntegerDecimal16bits,
+				BasicValue::new_integer(val)
+			)
+		)
+        )
+    );
 
 /// XXX stolen to the asm parser
 #[inline]
@@ -237,7 +249,7 @@ pub fn hex_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
 
 /// XXX stolen to the asm parser
 #[inline]
-pub fn dec_u16(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
+pub fn dec_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
     match is_a!(input, &b"0123456789"[..]) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
@@ -269,7 +281,7 @@ mod test {
 
 	#[test]
 	fn check_number() {
-        assert!(dec_u16(CompleteStr("10")).is_ok());
+        assert!(dec_u16_inner(CompleteStr("10")).is_ok());
     }
 
 	fn check_line_tokenisation(code: &str) -> BasicLine{
