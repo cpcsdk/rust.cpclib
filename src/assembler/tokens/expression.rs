@@ -51,6 +51,17 @@ impl From<i32> for Expr {
     }
 }
 
+/*
+// Currently impossible because of conflict with i32
+impl<S:AsRef<str>> From<S> for Expr {
+    fn from(src: S) -> Expr {
+        Expr::Label(s.as_ref().to_string())
+    }
+}
+*/
+
+
+
 
 impl Expr {
 

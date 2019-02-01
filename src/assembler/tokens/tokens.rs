@@ -444,7 +444,7 @@ mod tests {
         assert_eq!(Token::try_from(" out (c), e").unwrap().estimated_duration().unwrap(), 4);
         assert_eq!(Token::try_from(" ld b, 0x7f").unwrap().estimated_duration().unwrap(), 2);
 
-        assert!(Token::Basic(Vec::new(), "".to_owned()).estimated_duration().is_err());
+        assert!(Token::Basic(None, "".to_owned()).estimated_duration().is_err());
     }
 
 

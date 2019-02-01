@@ -119,7 +119,6 @@ named!(
 
 
 /// Parse a Basic bloc.
-/// TODO add the optional arguments of the list of variables to replace
 named!(
     pub parse_basic<CompleteStr<'_>, Token>, do_parse!(
         opt!(multispace) >>
@@ -147,7 +146,7 @@ named!(
         space0 >>
         (
             Token::Basic(
-                Vec::new(),
+                args,
                 basic.to_string()
             )
         )

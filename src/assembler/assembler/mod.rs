@@ -1,9 +1,12 @@
 use smallvec;
 
 use crate::assembler::tokens::*;
+use crate::basic::*;
+
 use std::collections::HashMap;
 use smallvec::SmallVec;
 use std::fmt;
+
 /// Use smallvec to put stuff on the stack not the heap and (hope so) spead up assembling
 const MAX_SIZE:usize = 4;
 pub type Bytes =  SmallVec<[u8; MAX_SIZE]>;
@@ -606,6 +609,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
     env.update_dollar();
     match token {
         Token::Assert(ref exp, ref txt) => visit_assert(exp, txt.as_ref(), env),
+        Token::Basic(ref variables, ref code) => env.visit_basic(variables.as_ref(), code),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | &Token::Defw(_) => visit_db_or_dw(token, env),
         Token::Defs(_, _) => visit_defs(token, env),
@@ -668,6 +672,41 @@ fn visit_defs(token: &Token, env: &mut Env) -> Result<(), String>{
 fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), String>{
     let bytes = assemble_db_or_dw(token, env)?;
     env.output_bytes(&bytes)
+}
+
+impl Env {
+    pub fn visit_basic(&mut self, variables: Option<&Vec<String>>, code: &str) -> Result<(), String> {
+        let bytes = self.assemble_basic(variables, code)?;
+        self.output_bytes(&bytes)
+    }
+
+    pub fn assemble_basic(&mut self, variables: Option<&Vec<String>>, code: &str) -> Result<Vec<u8>, String> {
+
+        // Build the final basic code by replacing variables by value
+        // Hexadecimal is used to ensure a consistent 2 bytes representation
+        let basic_src = {
+            let mut basic = code.to_owned();
+            match variables {
+                None => {},
+                Some(arguments) => {
+                    for argument in arguments {
+                        let key = format!("{{{}}}", argument);
+                        let value = format!("&{:X}", self.resolve_expr_may_fail_in_first_pass(
+                            &Expr::from(argument.as_ref()))?);
+                        basic = basic.replace(
+                            &key,
+                            &value
+                        );
+                    }
+                }
+            }
+            basic
+        };
+
+        // build the basic tokens
+        let basic = BasicProgram::parse(basic_src)?;
+        Ok(basic.as_bytes())
+    }
 }
 
 /// When visiting a repetition, we unroll the loop and stream the tokens
@@ -1880,6 +1919,42 @@ mod test {
         assert!(val.is_some());
         assert_eq!(val.unwrap(), 2);
     }
+
+    #[test]
+    pub fn basic_no_variable() {
+        let tokens = vec![
+            Token::Basic(None, "10 PRINT &DEAD".to_owned())
+        ];
+
+        let env = visit_tokens(&tokens);
+        println!("{:?}", env);
+        assert!(env.is_ok());
+    }
+
+    #[test]
+    pub fn basic_variable_unset() {
+        let tokens = vec![
+            Token::Basic(Some(vec!["STUFF".to_owned()]), "10 PRINT {STUFF}".to_owned())
+        ];
+
+        let env = visit_tokens(&tokens);
+        println!("{:?}", env);
+        assert!(env.is_err());
+    }
+
+    #[test]
+    pub fn basic_variable_set() {
+        let tokens = vec![
+            Token::Label("STUFF".to_owned()),
+            Token::Basic(Some(vec!["STUFF".to_owned()]), "10 PRINT {STUFF}".to_owned())
+        ];
+
+        let env = visit_tokens(&tokens);
+        println!("{:?}", env);
+        assert!(env.is_ok());
+    }
+
+
 
      #[test]
     pub fn test_duration () {
