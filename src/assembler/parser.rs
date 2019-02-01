@@ -1,9 +1,10 @@
-use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending,eol};
+use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending,eol, alphanumeric1};
 use nom::types::{CompleteStr};
 use nom::{multispace};
 use nom::{InputLength, InputIter};
 use crate::assembler::tokens::*;
-    use std::iter;
+
+use std::iter;
 
 
     pub mod error_code {
@@ -74,6 +75,7 @@ named!(
         alt_complete!(
             parse_empty_line |
             parse_repeat => {|repeat| vec![repeat]} |
+            parse_basic => {|basic| vec![basic]}|
             parse_z80_line_label_only |
             parse_z80_line_complete
         )
@@ -114,6 +116,44 @@ named!(
         )
     )
 );
+
+
+/// Parse a Basic bloc.
+/// TODO add the optional arguments of the list of variables to replace
+named!(
+    pub parse_basic<CompleteStr<'_>, Token>, do_parse!(
+        opt!(multispace) >>
+        tag_no_case!("LOCOMOTIVE") >>
+        space0 >>
+        args: opt!(
+            separated_nonempty_list!(
+                preceded!(
+                    space0, 
+                    char!(',')
+                ),
+                preceded!(
+                    space0,
+                    map!(
+                        alphanumeric1,
+                        |s|{s.to_string()}
+                    )
+                )    
+            )
+        ) >>
+        space0 >>
+        opt!(tag!("\r")) >>
+        tag!("\n") >>
+        basic: take_until_and_consume!("ENDLOCOMOTIVE") >>
+        space0 >>
+        (
+            Token::Basic(
+                Vec::new(),
+                basic.to_string()
+            )
+        )
+    )
+);
+
 
 named!(
     pub parse_empty_line<CompleteStr<'_>, Vec<Token>>, do_parse!(

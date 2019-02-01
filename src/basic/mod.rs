@@ -62,6 +62,10 @@ impl BasicLine {
 	pub fn tokens(&self) -> &[BasicToken] {
 		&self.tokens
 	}
+
+	pub fn len(&self) -> usize {
+		self.tokens().len()
+	}
 }
 
 /// Encode a complete basic program
