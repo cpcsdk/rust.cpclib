@@ -75,7 +75,7 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
        &mut self.listing
     }
 
-    pub fn listing(& self) -> & Vec<T> {
+    pub fn listing(& self) -> &[T] {
        & self.listing
     }
 

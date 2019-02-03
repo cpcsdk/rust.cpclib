@@ -424,7 +424,7 @@ named!(
 
         (
             Token::If(
-                vec![],
+                vec![(cond, code)],
                 None
             )
         )

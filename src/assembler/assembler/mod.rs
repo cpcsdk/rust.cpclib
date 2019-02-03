@@ -10,6 +10,7 @@ use crate::assembler::AssemblerError;
 
 use failure::Error;
 
+use itertools::Itertools;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE:usize = 4;
@@ -540,6 +541,17 @@ impl Env {
 
 
 impl Env {
+
+    /// Visit all the tokens of the listing
+    pub fn visit_listing(&mut self, listing: &Listing) -> Result<(), AssemblerError> {
+
+        for token in listing.listing().iter() {
+            visit_token(token, self)?;
+        }
+
+        Ok(())
+    }
+
     fn visit_label(&mut self, label: &str) -> Result<(), AssemblerError> {
         // If the current address is not set up, we force it to be 0
         let value = match self.symbols().current_address() {
@@ -554,6 +566,30 @@ impl Env {
         else {
             self.add_symbol_to_symbol_table(label, value as _)
         }
+    }
+
+
+    /// Manage a IF .. XXX ELSEIF YYY ELSE ZZZ structure
+    fn visit_if(&mut self, cases: &Vec<(Expr, Listing)>, other: Option<&Listing>) -> Result<(), AssemblerError> {
+        assert!(cases.len() > 0);
+
+        // Test all the if cases until reaching one != 0
+        for case in cases.iter() {
+            println!("{:?}", case);
+            /// TODO add a 3rd pass to manage this case
+            let value = self.resolve_expr_must_never_fail(&case.0)?;
+            if value != 0 {
+                self.visit_listing(&case.1)?;
+                return Ok(());
+            }
+        }
+
+        // Test the else if any
+        match other {
+            Some(listing) => self.visit_listing(listing),
+            None => Ok(())
+        }
+
     }
 
     /// Remove the given variable from the table of symbols
@@ -624,6 +660,8 @@ pub fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
 }
 
 
+
+
 /// TODO org is a directive, not an opcode => need to change that
 pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
     env.update_dollar();
@@ -643,6 +681,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
             Ok(())
         },
         Token::Comment(_) => Ok(()), // Nothing to do for a comment
+        Token::If(ref cases, ref other) => env.visit_if(cases, other.as_ref()),
         Token::Label(ref label) => env.visit_label(label),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Print(ref exp) => env.visit_print(exp),
