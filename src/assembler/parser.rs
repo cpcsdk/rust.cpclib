@@ -355,12 +355,11 @@ named!(
             parse_ex_af |
             parse_logical_operator |
             parse_add_or_adc |
-            parse_call |
             parse_djnz |
             parse_ld |
             parse_inc_dec |
             parse_out | parse_in |
-            parse_jp_or_jr |
+            parse_call_jp_or_jr |
             parse_opcode_no_arg |
             parse_push_n_pop |
             parse_res_set |
@@ -846,34 +845,14 @@ named!(// TODO manage other out formats
     )
 );
 
-
 /// TODO remove multispace
+/// TODO reduce the flag space for jr
 named!(
-    parse_call <CompleteStr<'_>, Token>, do_parse!(
-        tag_no_case!("CALL") >>
-        space >>
-        flag_test:opt!(terminated!(parse_flag_test, delimited!(opt!(multispace), tag!(","), opt!(multispace)) )) >>
-        dst: expr  >>
-        ({
-
-            let flag_test = if flag_test.is_some() {
-                Some(DataAccess::FlagTest(flag_test.unwrap()))
-            }
-            else {
-                None
-            };
-            Token::OpCode(Mnemonic::Call, flag_test, Some(DataAccess::Expression(dst)))
-        })
-        )
-    );
-
-
-/// TODO remove multispace
-named!(
-    parse_jp_or_jr <CompleteStr<'_>, Token>, do_parse!(
-        jp_or_jr: alt_complete!(
+    parse_call_jp_or_jr <CompleteStr<'_>, Token>, do_parse!(
+        call_jp_or_jr: alt_complete!(
             value!(Mnemonic::Jp, tag_no_case!("JP")) |
-            value!(Mnemonic::Jr, tag_no_case!("JR"))
+            value!(Mnemonic::Jr, tag_no_case!("JR")) |
+            value!(Mnemonic::Call, tag_no_case!("CALL"))
             ) >>
         space >>
         flag_test:opt!(terminated!(parse_flag_test, delimited!(opt!(multispace), tag!(","), opt!(multispace)) )) >>
@@ -886,7 +865,7 @@ named!(
             else {
                 None
             };
-            Token::OpCode(jp_or_jr, flag_test, Some(DataAccess::Expression(dst)))
+            Token::OpCode(call_jp_or_jr, flag_test, Some(DataAccess::Expression(dst)))
         })
         )
     );

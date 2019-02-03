@@ -948,8 +948,8 @@ pub fn assemble_opcode(
             => assemble_nops2(),
         &Mnemonic::Out
             => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
-        &Mnemonic::Jr | &Mnemonic::Jp
-            => assemble_jr_or_jp(mnemonic, arg1, &arg2.as_ref().unwrap(), env),
+        Mnemonic::Jr | Mnemonic::Jp | Mnemonic::Call
+            => assemble_call_jr_or_jp(mnemonic, arg1, &arg2.as_ref().unwrap(), env),
         &Mnemonic::Pop
             => assemble_pop(arg1.as_ref().unwrap()),
         &Mnemonic::Push
@@ -1124,21 +1124,27 @@ fn assemble_ret(arg1: &Option<DataAccess>) -> Result<Bytes, AssemblerError> {
 
 /// arg1 contains the tests
 /// arg2 contains the information
-fn assemble_jr_or_jp(
+fn assemble_call_jr_or_jp(
     mne: &Mnemonic, 
     arg1: &Option<DataAccess>, 
     arg2: &DataAccess , 
     env: &Env) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
-    // check if it is jp or jr
     let is_jr = match mne {
-        &Mnemonic::Jr => true,
-        &Mnemonic::Jp => false,
+        Mnemonic::Jr => true,
+        Mnemonic::Jp | Mnemonic::Call => false,
+        _ => unreachable!()
+    };
+
+    let is_call = match mne {
+        Mnemonic::Call => true,
+        Mnemonic::Jp | Mnemonic::Jr => false,
         _ => unreachable!()
     };
 
     // compute the flag code if any
+    // TODO raise an error if the flag test for jr is wrong
     let flag_code = if arg1.is_some() {
         match arg1.as_ref() {
             Some(&DataAccess::FlagTest(ref test)) => Some(flag_test_to_code(test)),
@@ -1164,6 +1170,13 @@ fn assemble_jr_or_jp(
                 }
                 add_byte(&mut bytes, relative);
             }
+            else if is_call {
+                match flag_code {
+                    Some(flag) => add_byte(&mut bytes, 0b11000100 | (flag << 3)),
+                    None => add_byte(&mut bytes, 0xCD)
+                }
+                add_word(&mut bytes, address as u16);
+            }
             else {
                 if flag_code.is_some() {
                     // jp - flag
@@ -1177,7 +1190,7 @@ fn assemble_jr_or_jp(
             }
         },
         _ => {
-            return Err(format!("JP parameter {:?} not treated", arg2).into());
+            return Err(format!("Parameter {:?} not treated", arg2).into());
         }
     };
 
@@ -1782,12 +1795,13 @@ fn register16_to_code_with_indexed(reg: &DataAccess) -> u8 {
 
 
 fn flag_test_to_code(flag: &FlagTest) -> u8 {
-
     match flag {
         &FlagTest::NZ => 0b000,
         &FlagTest::Z =>  0b001,
         &FlagTest::NC => 0b010,
         &FlagTest::C =>  0b011,
+
+        // the following flags are not used for jr
         &FlagTest::PO => 0b100,
         &FlagTest::PE => 0b101,
         &FlagTest::P =>  0b110,
@@ -1812,7 +1826,7 @@ mod test {
 
     #[test]
     fn test_jump() {
-        let res = assemble_jr_or_jp(
+        let res = assemble_call_jr_or_jp(
             &Mnemonic::Jp,
             &Some(DataAccess::FlagTest(FlagTest::Z)),
             &DataAccess::Expression(Expr::Value(0x1234)),
