@@ -8,6 +8,10 @@ use crate::assembler::parser::*;
 use crate::assembler::tokens::Listing;
 use crate::assembler::AssemblerError;
 
+use std::fs::File;
+use std::io::Read;
+use failure::ResultExt;
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Mnemonic {
     Adc,
@@ -134,7 +138,8 @@ pub enum Token {
     Equ(String, Expr),
     /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
     If(Vec<(Expr, Listing)>, Option<Listing>),
-    Include(String),
+    /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
+    Include(String, Option<Listing>),
     Incbin(String, Option<Expr>, Option<Expr>, Option<Expr>, Option<Expr>),
     Let(String, Expr),
     Limit(Expr),
@@ -235,7 +240,7 @@ impl fmt::Display for Token {
             Token::Equ(ref name, ref expr)
                 => write!(f, "{} EQU {}", name, expr),
 
-            Token::Include(ref fname)
+            Token::Include(ref fname, _)
                 => write!(f, "INCLUDE \"{}\"", fname),
 
             Token::Print(ref exp)
@@ -374,6 +379,38 @@ impl Token {
         }
     }
 
+    /// Modify the few tokens that need to read files
+    /// TODO add search path
+    pub fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
+        match self {
+            Token::Include(ref fname, ref mut listing) if listing.is_none() => {
+
+                match ctx.get_path_for(fname) {
+                    None => {
+                        return Err(AssemblerError::IOError{
+                            msg: format!("{:?} not found", fname)
+                        });
+                    },
+                    Some(ref fname) => {
+                        // TODO search the file
+                        let mut f = File::open(&fname)
+                                    .map_err(|e|{
+                                        AssemblerError::IOError{msg: format!("Unable to open {:?}", fname )}})?;
+                        let mut content = String::new();
+                        f.read_to_string(&mut content)
+                                    .map_err(|e|{AssemblerError::IOError{msg: e.to_string()}})?;
+                        
+                        let mut new_ctx = ctx.clone();
+                        new_ctx.set_current_filename(fname);
+                        listing.replace(parse_str_with_context(&content, &new_ctx)?);
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
 
     /// Dummy version that assemble without taking into account the context
     /// TODO find a way to not build a symbol table each time

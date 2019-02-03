@@ -2,6 +2,9 @@ use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending,eol, alpha
 use nom::types::{CompleteStr};
 use nom::{multispace};
 use nom::{InputLength, InputIter};
+
+use std::path::{PathBuf, Path};
+
 use crate::assembler::tokens::*;
 
 use std::iter;
@@ -12,22 +15,85 @@ use crate::assembler::AssemblerError;
         pub const INVALID_ARGUMENT:u32 = 129;
     }
 
-/// Produce the stream of tokens. In case of error, return an explanatory string
-pub fn parse_str(code: &str) -> Result<Listing, AssemblerError> {
+
+/// Context information that can guide the parser
+#[derive(Default, Clone, Debug)]
+pub struct ParserContext{
+    /// Filename that is currently parsed
+    current_filename: Option<PathBuf>,
+    /// Search path to find files
+    search_path: Vec<PathBuf>
+}
+
+impl ParserContext {
+    pub fn set_current_filename<P:Into<PathBuf>>(&mut self, file: P) {
+        self.current_filename = Some(
+            file.into().canonicalize().unwrap()
+        )
+    }
+
+    /// Add a search path and ensure it is ABSOLUTE
+    pub fn add_search_path<P:Into<PathBuf>>(&mut self, path: P) {
+        self.search_path.push(path.into().canonicalize().unwrap())
+    }
+
+    /// Add the folder that contains the given file. Panic if there are issues with the filename
+    pub fn add_search_path_from_file<P:Into<PathBuf>>(&mut self, file: P) {
+        let path = file.into().canonicalize().unwrap().parent().unwrap().to_owned();
+        self.add_search_path(path);
+    }
+
+    /// Return the real path name that correspond to the requested file
+    pub fn get_path_for<P:Into<PathBuf>>(&self, fname: P) -> Option<PathBuf> {
+        let fname = fname.into();
+
+        // We expect the file to exists if no search_path is provided        
+        if self.search_path.is_empty() {
+            if fname.is_file() {
+                return Some(fname);
+            }
+            else {
+                return None;
+            }
+        }
+        else {
+            // loop over all possibilities
+            for search in self.search_path.iter() {
+                let current_path = search.join(fname.clone());
+                if current_path.is_file() {
+                    return Some(current_path);
+                }
+            }
+        }
+
+        // No file found
+        None
+    }
+
+}
+
+/// Produce the stream of tokens. In case of error, return an explanatory string.
+/// In case of success loop over all the tokens in order to expand those that read files
+pub fn parse_str_with_context(code: &str, ctx: &ParserContext) -> Result<Listing, AssemblerError> {
     match parse_z80_code(code.into()) {
         Err(e) => Err(AssemblerError::SyntaxError{error: format!("Error while parsing: {:?}", e)}),
-        Ok((remaining, parsed)) => {
+        Ok((remaining, mut parsed)) => {
             if remaining.len() > 0 {
                 Err(AssemblerError::BugInParser{error:format!("Bug in the parser. The remaining source has not been assembled:\n{}", remaining)})
             }
             else {
+               for token in parsed.listing_mut().iter_mut() {
+                   token.read_referenced_file(ctx)?;
+               }
                Ok(parsed)
-
             }
         }
     }
 }
 
+pub fn parse_str(code :&str) -> Result<Listing, AssemblerError> {
+    parse_str_with_context(code, &Default::default())
+}
 
 
 
@@ -325,13 +391,16 @@ named!(
     parse_include <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("INCLUDE") >>
         space1 >>
-        fname: delimited!(
-            tag!("\""),
-            parse_label, // TODO really write file stuff
-            tag!("\"")
+        fname: alt!(
+            preceded!(
+                tag!("\""),
+                take_until_and_consume1!("\"")) |
+            preceded!(
+                tag!("'"),
+                take_until_and_consume1!("'"))
         ) >>
         (
-            Token::Include(fname)
+            Token::Include(fname.to_string(), None)
         )
     )
 );
