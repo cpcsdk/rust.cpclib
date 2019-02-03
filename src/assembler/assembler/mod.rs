@@ -681,6 +681,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
             Ok(())
         },
         Token::Comment(_) => Ok(()), // Nothing to do for a comment
+        Token::Include(_, ref listing) => env.visit_listing(listing.as_ref().unwrap()),
         Token::If(ref cases, ref other) => env.visit_if(cases, other.as_ref()),
         Token::Label(ref label) => env.visit_label(label),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
