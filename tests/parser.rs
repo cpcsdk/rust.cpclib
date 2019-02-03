@@ -902,6 +902,19 @@ INC_H equ opcode(inc h)
     }
 
     #[test]
+    fn test_basic_inclusion2() {
+        let code = CompleteStr("        LOCOMOTIVE toto_1, titi_2
+10 ' fkdslfslkf
+20 call {toto_1}
+30 call {titi_2}
+        ENDLOCOMOTIVE");
+
+
+        let tokens = get_val(parse_z80_code(code));
+        assert_eq!(tokens.len(), 1);
+    }
+
+    #[test]
     fn test_real_case() {
 
 
