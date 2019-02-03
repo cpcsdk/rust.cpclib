@@ -95,11 +95,11 @@ named!(
             parse_empty_line |
             parse_repeat => {|repeat| vec![repeat]} |
             parse_basic => {|basic| vec![basic]}|
+            parse_conditional => {|cond| vec![cond]}|
             parse_z80_line_label_only |
             parse_z80_line_complete
         )
     );
-
 
 named!(
     pub parse_repeat<CompleteStr<'_>, Token>, do_parse!(
@@ -221,6 +221,8 @@ named!(
         )
     );
 
+
+// TODO add an argument o manage cases like '... : ENDIF' 
 named!(
     pub parse_z80_line_complete <CompleteStr<'_>, Vec<Token>>, do_parse!(
         opt!(line_ending) >>
@@ -353,6 +355,7 @@ named!(
             parse_ex_af |
             parse_logical_operator |
             parse_add_or_adc |
+            parse_call |
             parse_djnz |
             parse_ld |
             parse_inc_dec |
@@ -398,6 +401,37 @@ named!(
         )
 
     );
+
+
+
+/// Parse if expression.
+/// TODO finish the implementation in order to have ELSEIF and ELSE branches
+named!(
+    pub parse_conditional<CompleteStr<'_>, Token>, do_parse!(
+        tag_no_case!("IF") >>
+
+        space1 >>
+        cond: expr >>
+        space0 >>
+        
+        alt!(eol | tag!(":")) >>
+
+        code: parse_z80_code >>
+
+        alt!( space1 | delimited!(space0, tag!(":"), space0)) >>
+
+        tag_no_case!("ENDIF") >>
+
+        (
+            Token::If(
+                vec![],
+                None
+            )
+        )
+    )    
+);
+
+
 
 named!(
     parse_breakpoint <CompleteStr<'_>, Token>,
@@ -813,6 +847,28 @@ named!(// TODO manage other out formats
 );
 
 
+/// TODO remove multispace
+named!(
+    parse_call <CompleteStr<'_>, Token>, do_parse!(
+        tag_no_case!("CALL") >>
+        space >>
+        flag_test:opt!(terminated!(parse_flag_test, delimited!(opt!(multispace), tag!(","), opt!(multispace)) )) >>
+        dst: expr  >>
+        ({
+
+            let flag_test = if flag_test.is_some() {
+                Some(DataAccess::FlagTest(flag_test.unwrap()))
+            }
+            else {
+                None
+            };
+            Token::OpCode(Mnemonic::Call, flag_test, Some(DataAccess::Expression(dst)))
+        })
+        )
+    );
+
+
+/// TODO remove multispace
 named!(
     parse_jp_or_jr <CompleteStr<'_>, Token>, do_parse!(
         jp_or_jr: alt_complete!(

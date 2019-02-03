@@ -13,6 +13,7 @@ pub enum Mnemonic {
     Adc,
     Add,
     And,
+    Call,
     Dec,
     Di,
     Djnz,
@@ -51,6 +52,7 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Adc=> write!(f, "ADC"),
             Mnemonic::Add=> write!(f, "ADD"),
             Mnemonic::And => write!(f, "AND"),
+            Mnemonic::Call => write!(f, "CALL"),
             Mnemonic::Dec => write!(f, "DEC"),
             Mnemonic::Di => write!(f, "DI"),
             Mnemonic::Djnz => write!(f, "DJNZ"),
@@ -130,6 +132,7 @@ pub enum Token {
     Defb(Vec<Expr>),
     Defw(Vec<Expr>),
     Equ(String, Expr),
+    /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
     If(Vec<(Expr, Listing)>, Option<Listing>),
     Include(String),
     Incbin(String, Option<Expr>, Option<Expr>, Option<Expr>, Option<Expr>),
