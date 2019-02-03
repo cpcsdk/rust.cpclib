@@ -36,10 +36,13 @@ mod tests {
 
 
 
-    fn get_val<T>(res: IResult<CompleteStr<'_>, T>) -> T {
+    fn get_val<T: core::fmt::Debug>(res: IResult<CompleteStr<'_>, T>) -> T {
         match res {
             Err(e) => panic!("{:?}", e),
-            Ok( (_, val) )=> {
+            Ok( (rest, val) )=> {
+                if rest.len() != 0 {
+                    panic!("{:?} not assembled/ {:?}", rest, val);
+                }
                 val
             }
         }
@@ -912,6 +915,46 @@ INC_H equ opcode(inc h)
 
         let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 1);
+    }
+
+
+    #[test]
+    fn test_if() {
+        let code = CompleteStr("IF expression
+        ld a, b
+        ld a, b
+        ld a, b
+    ENDIF");
+        println!("{:?}", parse_conditional(code));
+        let tokens = get_val(parse_conditional(code));
+
+
+        let code = CompleteStr("IF expression
+        ld a, b : ld a, b : ld a, b
+    ENDIF");
+        println!("{:?}", parse_conditional(code));
+        let tokens = get_val(parse_conditional(code));
+
+        let code = CompleteStr("IF expression : ld a, b : ld a, b : ld a, b
+    ENDIF");
+        println!("{:?}", parse_conditional(code));
+        let tokens = get_val(parse_conditional(code));
+
+        // TODO modify the parser to handle this case
+        /*
+        let code = CompleteStr("IF expression : ld a, b : ld a, b : ld a, b : ENDIF");
+        println!("{:?}", parse_conditional(code));
+        let tokens = get_val(parse_conditional(code));
+        */
+
+        let code = CompleteStr("IF expression
+        ld a, b
+        ld a, b
+        call label
+        ld a, b
+    ENDIF");
+
+        let tokens = get_val(parse_conditional(code));
     }
 
     #[test]
