@@ -95,7 +95,7 @@ named!(
             parse_empty_line |
             parse_repeat => {|repeat| vec![repeat]} |
             parse_basic => {|basic| vec![basic]}|
-            parse_conditional => {|cond| vec![cond]}|
+            preceded!(space1, parse_conditional) => {|cond| vec![cond]}|
             parse_z80_line_label_only |
             parse_z80_line_complete
         )

@@ -955,6 +955,20 @@ INC_H equ opcode(inc h)
     ENDIF");
 
         let tokens = get_val(parse_conditional(code));
+
+        let code = CompleteStr("\tIF expression
+        ld a, b
+        ld a, b
+        call label
+        ld a, b
+    ENDIF");
+        let tokens = get_val(parse_z80_code(code));
+
+        let code = CompleteStr("\t	if ENABLE_CATART_DISPLAY
+		call crtc_display_catart_if_needed
+	endif
+    ");
+        let tokens = get_val(parse_z80_code(code));
     }
 
     #[test]
