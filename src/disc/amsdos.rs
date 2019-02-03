@@ -228,10 +228,11 @@ impl AmsdosFileName {
 }
 
 // TODO use tryfrom asap
-impl From<&str> for AmsdosFileName {
+impl<S:AsRef<str>> From<S> for AmsdosFileName {
 
 	/// Make a filename conversion by considering the following format is used: user:name.extension
-	fn from(content: &str) -> AmsdosFileName {
+	fn from(content: S) -> AmsdosFileName {
+		let content = content.as_ref();
 		let (user, rest) = match content.find(':') {
 			None => (0, content),
 			Some(1) => (

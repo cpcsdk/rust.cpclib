@@ -6,6 +6,8 @@ use parser::parse_basic_program;
 use std::collections::BTreeMap;
 use std::fmt;
 
+pub struct BasicError;
+
 /// Basic line of code representation
 #[derive(Debug, Clone)]
 pub struct BasicLine {
@@ -68,7 +70,16 @@ impl BasicLine {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub enum BasicProgramLineIdx {
+	/// The basic line is indexed by its position in the listing
+	Index(usize),
+	/// The basic line is indexed by its real number
+	Number(u16)
+}
+
 /// Encode a complete basic program
+#[derive(Debug, Clone)]
 pub struct BasicProgram {
 	lines: BTreeMap<u16, BasicLine>
 }
@@ -101,9 +112,9 @@ impl BasicProgram {
 	pub fn parse<S:AsRef<str>>(code: S) -> Result<BasicProgram, String> {
 		match parse_basic_program(code.as_ref().into()) {
 			Ok((res, prog)) => {
-				if res.len() != 0 {
+				if res.trim().len() != 0 {
 					Err(
-						format!("Basic content has not been totally parsed: {}", res)
+						format!("Basic content has not been totally parsed: `{}`", res)
 					)
 				}
 				else {
@@ -124,15 +135,44 @@ impl BasicProgram {
 		);
 	}
 
+	pub fn get_line_mut(&mut self, idx: BasicProgramLineIdx) -> Option<&mut BasicLine> {
+		unimplemented!()
+	}
+
+
+	pub fn get_line(&mut self, idx: BasicProgramLineIdx) -> Option<& BasicLine> {
+		unimplemented!()
+	}
+
+	pub fn is_first_line(&self, idx: BasicProgramLineIdx) -> bool {
+		unimplemented!()
+	}
+
+	pub fn previous_idx(&self, idx:BasicProgramLineIdx) -> BasicProgramLineIdx {
+		unimplemented!()
+	}
+
+	/// https://cpcrulez.fr/applications_protect-protection_logiciel_n42_ACPC.htm
+	pub fn hide_line(&mut self, idx: BasicProgramLineIdx) -> Result<(), BasicError> {
+		if self.is_first_line(idx) {
+			unimplemented!("Need to set the number at 0")
+		}
+		else {
+			unimplemented!("Need to add the lenght of the current line to the previous line")
+		}
+	}
+
 	/// Generate the byte stream for the gien program
 	pub fn as_bytes(&self) -> Vec<u8> {
+		eprintln!("{:?}", self);
+		dbg!(self);
 		let mut bytes = self.lines.iter()
 			.map(|(k,v)|{v})
 			.flat_map(|v|{
 				v.as_bytes()
 			})
 			.collect::<Vec<u8>>();
-		bytes.resize(bytes.len()+2, 0);
+		bytes.resize(bytes.len()+3, 0);
 		bytes
 	}
 }
@@ -168,10 +208,10 @@ mod test {
 
 	#[test]
 	fn parse_correct() {
-		let code = "10 CALL &0";
+		let code = "10 CALL &1234";
 		let prog = BasicProgram::parse(code).unwrap();
 		let bytes = prog.as_bytes();
-		let expected = vec![10, 0, 10, 0, 131,  32,  28,   0,   0,   0,   0,   0];
+		let expected = vec![10, 0, 10, 0, 131,  32,  28,   0x34,   0x12,   0,   0,   0, 0];
 
 		assert_eq!(
 			bytes,

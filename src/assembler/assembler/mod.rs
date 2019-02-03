@@ -6,16 +6,20 @@ use crate::basic::*;
 use std::collections::HashMap;
 use smallvec::SmallVec;
 use std::fmt;
+use crate::assembler::AssemblerError;
 
-/// Use smallvec to put stuff on the stack not the heap and (hope so) spead up assembling
+use failure::Error;
+
+
+/// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE:usize = 4;
 pub type Bytes =  SmallVec<[u8; MAX_SIZE]>;
 
 
 /// Add the encoding of an indexed structure
-fn add_index(m: &mut Bytes, idx: i32) -> Result<(), String>{
+fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError>{
     if idx < -127 || idx > 128 {
-        Err(format!("Index error {}", idx))
+        Err(format!("Index error {}", idx).into())
     }
     else {
         let val = (idx & 0xff) as u8;
@@ -125,10 +129,10 @@ impl StableTickerCounters {
     }
 
     /// Add a new counter if no counter has the same name
-    pub fn add_counter<S: AsRef<str>>(&mut self, name: S) -> Result<(), String> {
+    pub fn add_counter<S: AsRef<str>>(&mut self, name: S) -> Result<(), AssemblerError> {
         let name : String= name.as_ref().to_owned();
         if self.has_counter(&name) {
-            return Err(format!("A counter named `{}` already exists", name));
+            return Err(format!("A counter named `{}` already exists", name).into());
         }
         self.counters.push((
             name,
@@ -200,10 +204,10 @@ impl SymbolsTable {
     }
 
     /// Return the current addres if it is known or return an error
-    pub fn current_address(&self) -> Result<u16, String> {
+    pub fn current_address(&self) -> Result<u16, AssemblerError> {
         match self.value(&"$".to_owned()) {
             Some(address) => Ok(address as u16),
-            None => Err("Current assembling address is unknown".to_owned())
+            None => Err(AssemblerError::UnknownAssemblingAddress)
         }
     }
 
@@ -213,7 +217,7 @@ impl SymbolsTable {
     }
 
     /// Set the given symbol to $ value
-    pub fn set_symbol_to_current_address(&mut self, label: &String) -> Result<(), String> {
+    pub fn set_symbol_to_current_address(&mut self, label: &String) -> Result<(), AssemblerError> {
 
         self.current_address()
             .map(|val| {
@@ -383,24 +387,39 @@ impl Env {
         self.memory(self.startadr.unwrap() as _, self.outputadr - self.startadr.unwrap())
     }
 
+    /// Returns the address of the 1st written byte
+    pub fn loading_address(&self) -> Option<usize> {
+        self.startadr
+    }
+
+    /// Returns the address from when to start the program
+    /// TODO really configure this address
+    pub fn execution_address(&self) -> Option<usize> {
+        self.startadr
+    }
+
+
 
     /// Output one byte
     /// (RASM ___internal_output)
-    pub fn output(&mut self, v: u8) -> Result<(), String> {
+    pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
         if self.outputadr <= self.maxptr {
+
+            eprintln!("==> 0x{:X} = 0x{:X}", self.outputadr, v);
+
             self.mem[self.activebank][self.outputadr] = v;
             self.outputadr += 1; // XXX will fail at 0xffff
             self.codeadr += 1;
             Ok(())
         }
         else {
-            Err("Output exceeded limits" .to_owned())
+            Err("Output exceeded limits" .to_owned().into())
         }
     }
 
 
     /// TODO test if we will oversize the limit
-    pub fn output_bytes(&mut self, bytes: &[u8]) -> Result<(), String> {
+    pub fn output_bytes(&mut self, bytes: &[u8]) -> Result<(), AssemblerError> {
         for b in bytes.iter() {
             self.output(*b)?;
         }
@@ -425,15 +444,15 @@ impl Env {
 
 
     /// Evaluate the expression according to the current state of the environment
-    pub fn eval(&self, expr: &Expr) -> Result<usize, String> {
+    pub fn eval(&self, expr: &Expr) -> Result<usize, AssemblerError> {
         if expr.is_context_independant() {
-            match expr.eval() {
+            match expr.eval()  {
                 Ok(val) => Ok(val as usize),
-                Err(e) => Err(String::from(e))
+                Err(err) => Err(err)
             }
         }
         else {
-            Err(String::from("Not yet implemented"))
+            Err(String::from("Not yet implemented").into())
         }
     }
 
@@ -451,7 +470,7 @@ impl Env {
     /// Compute the expression thanks to the symbol table of the environment.
     /// If the expression is not solvable in first pass, 0 is returned.
     /// If the expression is not solvable in second pass, an error is returned
-    fn resolve_expr_may_fail_in_first_pass(&self, exp: &Expr) -> Result<i32, String> {
+    fn resolve_expr_may_fail_in_first_pass(&self, exp: &Expr) -> Result<i32, AssemblerError> {
         match exp.resolve(self.symbols()) {
             Ok(value) => Ok(value),
             Err(e) => {
@@ -459,7 +478,7 @@ impl Env {
                     Ok(0)
                 }
                 else {
-                    Err(format!("Impossible to evaluate {} at pass {}. {}", exp, self.pass, e))
+                    Err(format!("Impossible to evaluate {} at pass {}. {}", exp, self.pass, e).into())
                 }
             }
         }
@@ -467,16 +486,16 @@ impl Env {
 
     /// Compute the expression thanks to the symbol table of the environment.
     /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
-    fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<i32, String> {
+    fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<i32, AssemblerError> {
         match exp.resolve(self.symbols()) {
             Ok(value) => Ok(value),
-            Err(e) => Err(format!("Impossible to evaluate {} at pass {}. {}", exp, self.pass, e))
+            Err(e) => Err(format!("Impossible to evaluate {} at pass {}. {}", exp, self.pass, e).into())
         }
     }
 
 
     /// Compute the relative address. Is authorized to fail at first pass
-    fn absolute_to_relative_may_fail_in_first_pass(&self, address: i32, opcode_delta: i32) -> Result<u8, String> {
+    fn absolute_to_relative_may_fail_in_first_pass(&self, address: i32, opcode_delta: i32) -> Result<u8, AssemblerError> {
         match absolute_to_relative(address, opcode_delta, self.symbols()) {
             Ok(value) => Ok(value),
             Err(e) => {
@@ -484,7 +503,7 @@ impl Env {
                     Ok(0)
                 }
                 else {
-                    Err(format!("Impossible to compute relative address {} at pass {}", address, e))
+                    Err(format!("Impossible to compute relative address {} at pass {}", address, e).into())
                 }
             }
         }
@@ -493,15 +512,15 @@ impl Env {
     /// Add a symbol to the symbol table.
     /// In pass 1: the label MUST be absent
     /// In pass 2: the label MUST be present and of the same value
-    fn add_symbol_to_symbol_table(&mut self, label: &str, value: i32) -> Result<(), String> {
+    fn add_symbol_to_symbol_table(&mut self, label: &str, value: i32) -> Result<(), AssemblerError> {
         let already_present = self.symbols().contains_symbol(&label.to_owned());
 
         match (already_present, self.pass) {
             (true, AssemblingPass::FirstPass) => {
-                Err(format!("Label {} already present in pass {}", label, self.pass))
+                Err(format!("Label {} already present in pass {}", label, self.pass).into())
             },
             (false, AssemblingPass::SecondPass) => {
-                Err(format!("Label {} is not present in the symbol table in pass {}", label, self.pass))
+                Err(format!("Label {} is not present in the symbol table in pass {}", label, self.pass).into())
             },
             (false, AssemblingPass::FirstPass) | 
             (false, AssemblingPass::Uninitialized) => {
@@ -521,7 +540,7 @@ impl Env {
 
 
 impl Env {
-    fn visit_label(&mut self, label: &str) -> Result<(), String> {
+    fn visit_label(&mut self, label: &str) -> Result<(), AssemblerError> {
         // If the current address is not set up, we force it to be 0
         let value = match self.symbols().current_address() {
             Ok(address) => address,
@@ -530,7 +549,7 @@ impl Env {
 
         // A label cannot be defined multiple times
         if self.pass.is_first_pass() &&  self.symbols().contains_symbol(label) {
-            Err(format!("Symbol \"{}\" already present in symbols table", label))
+            Err(format!("Symbol \"{}\" already present in symbols table", label).into())
         }
         else {
             self.add_symbol_to_symbol_table(label, value as _)
@@ -538,16 +557,16 @@ impl Env {
     }
 
     /// Remove the given variable from the table of symbols
-    pub fn visit_undef(&mut self, label: &str) -> Result<(), String> {
+    pub fn visit_undef(&mut self, label: &str) -> Result<(), AssemblerError> {
         match self.symbols_mut().remove_symbol(label)
         {
             Some(_) => Ok(()),
-            None => Err(format!("Unknown symbol `{}`", label))
+            None => Err(format!("Unknown symbol `{}`", label).into())
         }
     }
 
     /// Print the evaluation of the expression in the 2nd pass
-    pub fn visit_print(&self, exp: &Expr) -> Result<(), String>  {
+    pub fn visit_print(&self, exp: &Expr) -> Result<(), AssemblerError>  {
         if self.pass.is_second_pass() {
             let text = format!(
                 "{} = {}",
@@ -563,15 +582,16 @@ impl Env {
 
 
 
-/// Visit the tokens during several passes
-pub fn visit_tokens_all_passes(tokens: &[Token]) -> Result<Env, String> {
+/// Visit the tokens during several passes without providing a specific symbol table.
+pub fn visit_tokens_all_passes(tokens: &[Token]) -> Result<Env, AssemblerError> {
     let table = SymbolsTable::default();
     visit_tokens_all_passes_with_table(tokens, &table)
 }
 
 
 
-pub fn visit_tokens_all_passes_with_table(tokens: &[Token], table: &SymbolsTable) -> Result<Env, String> {
+/// Visit the tokens during several passes by providing a specific symbol table.
+pub fn visit_tokens_all_passes_with_table(tokens: &[Token], table: &SymbolsTable) -> Result<Env, AssemblerError> {
     let mut env = Env::default();
     env.symbols = table.clone(); // XXX cannot use with_table as it setup pass 2
 
@@ -592,7 +612,7 @@ pub fn visit_tokens_all_passes_with_table(tokens: &[Token], table: &SymbolsTable
 
 /// Visit the tokens during a single pass. Is deprecated in favor to the mulitpass version
 #[deprecated]
-pub fn visit_tokens(tokens: &[Token]) -> Result<Env, String> {
+pub fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
 
     let mut env = Env::default();
 
@@ -605,7 +625,7 @@ pub fn visit_tokens(tokens: &[Token]) -> Result<Env, String> {
 
 
 /// TODO org is a directive, not an opcode => need to change that
-pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
+pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
     env.update_dollar();
     match token {
         Token::Assert(ref exp, ref txt) => visit_assert(exp, txt.as_ref(), env),
@@ -633,7 +653,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), String>{
     }
 }
 
-fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> Result<(), String> {
+fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> Result<(), AssemblerError> {
     if env.pass.is_second_pass() {
         let value = env.resolve_expr_must_never_fail(exp)?;
         if value == 0 {
@@ -641,16 +661,16 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> Result<(), S
                 "Assertion failure: {}\n\t{}", 
                 if txt.is_some() {&txt.unwrap()} else {""}, 
                 exp
-            ));
+            ).into());
         }
     }
     Ok(())
 }
 
 
-fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), String> {
+fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
     if env.symbols().contains_symbol(label) && env.pass.is_first_pass() {
-        Err(format!("Symbol \"{}\" already present in symbols table", label))
+        Err(format!("Symbol \"{}\" already present in symbols table", label).into())
     }
     else {
         let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
@@ -658,7 +678,7 @@ fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), String> {
     }
 }
 
-fn visit_defs(token: &Token, env: &mut Env) -> Result<(), String>{
+fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
     match token {
         Token::Defs(expr, fill) => {
             let bytes = assemble_defs(expr, fill.as_ref(), env)?;
@@ -669,22 +689,31 @@ fn visit_defs(token: &Token, env: &mut Env) -> Result<(), String>{
 }
 
 // TODO refactor code with assemble_opcode or other functions manipulating bytes
-fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), String>{
+fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
     let bytes = assemble_db_or_dw(token, env)?;
     env.output_bytes(&bytes)
 }
 
 impl Env {
-    pub fn visit_basic(&mut self, variables: Option<&Vec<String>>, code: &str) -> Result<(), String> {
+    pub fn visit_basic(&mut self, variables: Option<&Vec<String>>, code: &str) -> Result<(), AssemblerError> {
         let bytes = self.assemble_basic(variables, code)?;
+
+        // If the basic directive is the VERY first thing to output,
+        // we assume startadr is 0x170 as for any basic program
+        if self.startadr.is_none() {
+            self.outputadr = 0x170;
+            self.codeadr = self.outputadr;
+            self.startadr = Some(self.outputadr);
+        }
+
         self.output_bytes(&bytes)
     }
 
-    pub fn assemble_basic(&mut self, variables: Option<&Vec<String>>, code: &str) -> Result<Vec<u8>, String> {
+    pub fn assemble_basic(&mut self, variables: Option<&Vec<String>>, code: &str) -> Result<Vec<u8>, AssemblerError> {
 
         // Build the final basic code by replacing variables by value
         // Hexadecimal is used to ensure a consistent 2 bytes representation
-        let basic_src = {
+        let basic_src = dbg!( {
             let mut basic = code.to_owned();
             match variables {
                 None => {},
@@ -701,7 +730,7 @@ impl Env {
                 }
             }
             basic
-        };
+        });
 
         // build the basic tokens
         let basic = BasicProgram::parse(basic_src)?;
@@ -710,7 +739,7 @@ impl Env {
 }
 
 /// When visiting a repetition, we unroll the loop and stream the tokens
-pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), String> 
+pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), AssemblerError> 
 {
     let tokens = rept.unroll(env.symbols()).unwrap()?;
 
@@ -725,7 +754,7 @@ pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), String>
 /// Manage the stable ticker stuff.
 /// - Start: register a counter
 /// - Stop: store counter count
-pub fn visit_stableticker(ticker: &StableTickerAction, env: &mut Env) -> Result<(), String> {
+pub fn visit_stableticker(ticker: &StableTickerAction, env: &mut Env) -> Result<(), AssemblerError> {
     match ticker {
         StableTickerAction::Start(ref name) => {
             env.stable_counters.add_counter(name)?;
@@ -733,7 +762,7 @@ pub fn visit_stableticker(ticker: &StableTickerAction, env: &mut Env) -> Result<
         },
         StableTickerAction::Stop => {
             match env.stable_counters.release_last_counter() {
-                None => Err(format!("No active counter.")),
+                None => Err(format!("No active counter.").into()),
                 Some((label, count)) => {
                     env.add_symbol_to_symbol_table(&label, count as _)
                 }
@@ -743,7 +772,7 @@ pub fn visit_stableticker(ticker: &StableTickerAction, env: &mut Env) -> Result<
 }
 
 
-pub fn assemble_defs(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Bytes, String> {
+pub fn assemble_defs(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Bytes, AssemblerError> {
     let count = env.resolve_expr_must_never_fail(expr)?;
     let mut bytes = Bytes::with_capacity(count as usize);
     let value = if fill.is_none() {
@@ -762,7 +791,7 @@ pub fn assemble_defs(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Byte
 
 }
 
-pub fn assemble_db_or_dw(token: &Token, env: &Env) -> Result<Bytes, String> {
+pub fn assemble_db_or_dw(token: &Token, env: &Env) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
     let (ref exprs, mask) = {
@@ -789,7 +818,7 @@ pub fn assemble_db_or_dw(token: &Token, env: &Env) -> Result<Bytes, String> {
 
 
 /// Assemble align directive. It can only work if current address is known...
-pub fn assemble_align(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Bytes, String> {
+pub fn assemble_align(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Bytes, AssemblerError> {
     let expression = env.resolve_expr_must_never_fail(expr)? as u16;
     let current = env.symbols().current_address()?;
     let value = if fill.is_none() {
@@ -821,7 +850,7 @@ pub fn assemble_align(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Byt
 
 
 /// Assemble the opcode and inject in the environement
-fn visit_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<DataAccess> , env: &mut Env) -> Result<(), String>{
+fn visit_opcode(mnemonic: &Mnemonic, arg1: &Option<DataAccess>, arg2: &Option<DataAccess> , env: &mut Env) -> Result<(), AssemblerError>{
 
     // TODO update $ in the symbol table
     let bytes = assemble_opcode(mnemonic, arg1, arg2, env)?;
@@ -839,7 +868,7 @@ pub fn assemble_opcode(
     arg1: &Option<DataAccess>, 
     arg2: &Option<DataAccess>,
     env: &mut Env 
-   ) -> Result<Bytes, String> {
+   ) -> Result<Bytes, AssemblerError> {
     let sym = env.symbols_mut();
     // TODO use env instead of the symbol table for each call
     match mnemonic{
@@ -878,11 +907,11 @@ pub fn assemble_opcode(
             => assemble_res_or_set(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ret
             => assemble_ret(arg1),
-        _ => Err(format!("Unable to assembler opcode {:?}", mnemonic))
+        _ => Err(format!("Unable to assembler opcode {:?}", mnemonic).into())
     }
 }
 
-fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(), String>{
+fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(), AssemblerError>{
     if address2.is_some() {
         unimplemented!();
     }
@@ -903,7 +932,7 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
 }
 
 
-fn assemble_no_arg(mnemonic: &Mnemonic) -> Result<Bytes, String> {
+fn assemble_no_arg(mnemonic: &Mnemonic) -> Result<Bytes, AssemblerError> {
     let bytes : &[u8] = match mnemonic {
         Mnemonic::Ldi => {
             &[0xED, 0xA0]
@@ -942,14 +971,14 @@ fn assemble_no_arg(mnemonic: &Mnemonic) -> Result<Bytes, String> {
             &[0x1f]
         },
         _ => {
-            return Err(format!("{} not treated", mnemonic));
+            return Err(format!("{} not treated", mnemonic).into());
         }
     };
 
     Ok(Bytes::from_slice(bytes))
 }
 
-fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, String>{
+fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
     let is_inc = match mne {
@@ -994,7 +1023,7 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, String>{
             );
         }
         _ => {
-            return Err(format!("Inc/dec not implemented for {:?}", arg1));
+            return Err(format!("Inc/dec not implemented for {:?}", arg1).into());
         }
     }
 
@@ -1003,16 +1032,16 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, String>{
 
 
 /// Converts an absolute address to a relative one (relative to $)
-pub fn absolute_to_relative(address: i32, opcode_delta: i32, sym: &SymbolsTable) -> Result<u8, String> {
+pub fn absolute_to_relative(address: i32, opcode_delta: i32, sym: &SymbolsTable) -> Result<u8, AssemblerError> {
     match sym.current_address() {
-        Err(msg) => Err(format!("Unable to compute the relative address {}", msg)),
+        Err(msg) => Err(format!("Unable to compute the relative address {}", msg).into()),
         Ok(root) => {
             let delta = (address - (root as i32)) - opcode_delta;
             if delta > 128 || delta < -127 {
                 Err(format!(
                     "Address 0x{:x} relative to 0x{:x} is too far {}",
                     address, root, delta
-                ))
+                ).into())
             }
             else {
                 let res = (delta & 0xff) as u8;
@@ -1022,7 +1051,7 @@ pub fn absolute_to_relative(address: i32, opcode_delta: i32, sym: &SymbolsTable)
     }
 }
 
-fn assemble_ret(arg1: &Option<DataAccess>) -> Result<Bytes, String> {
+fn assemble_ret(arg1: &Option<DataAccess>) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
     if arg1.is_some() {
@@ -1032,7 +1061,7 @@ fn assemble_ret(arg1: &Option<DataAccess>) -> Result<Bytes, String> {
                 bytes.push(0b11000000 | (flag << 3));
             },
             _ => {
-                return Err(format!("Wrong argument for ret {:?}", arg1));
+                return Err(format!("Wrong argument for ret {:?}", arg1).into());
             }
         };
     } else {
@@ -1048,7 +1077,7 @@ fn assemble_jr_or_jp(
     mne: &Mnemonic, 
     arg1: &Option<DataAccess>, 
     arg2: &DataAccess , 
-    env: &Env) -> Result<Bytes, String>{
+    env: &Env) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
     // check if it is jp or jr
@@ -1062,7 +1091,7 @@ fn assemble_jr_or_jp(
     let flag_code = if arg1.is_some() {
         match arg1.as_ref() {
             Some(&DataAccess::FlagTest(ref test)) => Some(flag_test_to_code(test)),
-            _ => return Err(format!("Wrong flag argument {:?}", arg1))
+            _ => return Err(format!("Wrong flag argument {:?}", arg1).into())
         }
     } else {
         None
@@ -1097,14 +1126,14 @@ fn assemble_jr_or_jp(
             }
         },
         _ => {
-            return Err(format!("JP parameter {:?} not treated", arg2));
+            return Err(format!("JP parameter {:?} not treated", arg2).into());
         }
     };
 
     Ok(bytes)
 }
 
-fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, String> {
+fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> {
 
     if let &DataAccess::Expression(ref expr) = arg1 {
         let mut bytes = Bytes::new();
@@ -1117,13 +1146,13 @@ fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, String> {
         return Ok(bytes)
     }
     else {
-        return Err("DJNZ must be followed by an expression".to_owned());
+        return Err("DJNZ must be followed by an expression".to_owned().into());
     }
 
 }
 
 
-fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes, String>{
+fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
     if let &DataAccess::Register8(ref dst) = arg1 {
@@ -1162,7 +1191,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 add_byte(&mut bytes, 0b01000110 | (dst<<3));
             }
 
-            _ => return Err(format!("LD not properly implemented for '{:?}, {:?}'", arg1, arg2))
+            _ => return Err(format!("LD not properly implemented for '{:?}, {:?}'", arg1, arg2).into())
         }
     }
 
@@ -1281,7 +1310,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
     if bytes.len() == 0
     {
-        Err(format!("LD not properly implemented for '{:?}, {:?}'", arg1, arg2))
+        Err(format!("LD not properly implemented for '{:?}, {:?}'", arg1, arg2).into())
     }
     else {
         Ok(bytes)
@@ -1289,14 +1318,14 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 }
 
 
-fn assemble_nop() -> Result<Bytes, String> {
+fn assemble_nop() -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
     bytes.push(0);
     Ok(bytes)
 }
 
 
-fn assemble_nops2() -> Result<Bytes, String> {
+fn assemble_nops2() -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
     bytes.push(0xed);
     bytes.push(0xff);
@@ -1305,7 +1334,7 @@ fn assemble_nops2() -> Result<Bytes, String> {
 
 
 
-fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, String>{
+fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, AssemblerError>{
    let mut bytes = Bytes::new();
 
     match arg1 {
@@ -1332,14 +1361,14 @@ fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Resu
 
     if bytes.len() == 0
     {
-        Err(format!("IN not properly implemented for '{:?}, {:?}'", arg1, arg2))
+        Err(format!("IN not properly implemented for '{:?}, {:?}'", arg1, arg2).into())
     }
     else {
         Ok(bytes)
     }
 }
 
-fn assemble_out(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, String>{
+fn assemble_out(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
     match arg1 {
@@ -1366,7 +1395,7 @@ fn assemble_out(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Res
 
     if bytes.len() == 0
     {
-        Err(format!("OUT not properly implemented for '{:?}, {:?}'", arg1, arg2))
+        Err(format!("OUT not properly implemented for '{:?}, {:?}'", arg1, arg2).into())
     }
     else {
         Ok(bytes)
@@ -1374,7 +1403,7 @@ fn assemble_out(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Res
 }
 
 
-fn assemble_pop(arg1: &DataAccess) -> Result<Bytes, String>{
+fn assemble_pop(arg1: &DataAccess) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
     match arg1 {
@@ -1387,7 +1416,7 @@ fn assemble_pop(arg1: &DataAccess) -> Result<Bytes, String>{
             bytes.push(0xe1);
         },
         _ => {
-            return Err(format!("Pop not implemented for {:?}", arg1));
+            return Err(format!("Pop not implemented for {:?}", arg1).into());
         }
     }
 
@@ -1395,7 +1424,7 @@ fn assemble_pop(arg1: &DataAccess) -> Result<Bytes, String>{
 }
 
 
-fn assemble_push(arg1: &DataAccess) -> Result<Bytes, String>{
+fn assemble_push(arg1: &DataAccess) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
     match arg1 {
@@ -1408,7 +1437,7 @@ fn assemble_push(arg1: &DataAccess) -> Result<Bytes, String>{
             bytes.push(0xe5);
         },
         _ => {
-            return Err(format!("Pop not implemented for {:?}", arg1));
+            return Err(format!("Pop not implemented for {:?}", arg1).into());
         }
     }
 
@@ -1416,7 +1445,7 @@ fn assemble_push(arg1: &DataAccess) -> Result<Bytes, String>{
 }
 
 
-fn assemble_logical_operator(mnemonic: &Mnemonic, arg1: &DataAccess, sym : &SymbolsTable)-> Result<Bytes, String>{
+fn assemble_logical_operator(mnemonic: &Mnemonic, arg1: &DataAccess, sym : &SymbolsTable)-> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
     let memory_code = || {
@@ -1469,7 +1498,7 @@ fn assemble_logical_operator(mnemonic: &Mnemonic, arg1: &DataAccess, sym : &Symb
     Ok(bytes)
 }
 
-fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, String>{
+fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
     let is_add = match mnemonic {
         &Mnemonic::Add => true,
@@ -1568,7 +1597,7 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
 
                 &DataAccess::IndexRegister16(ref reg2) => {
                     if reg1 != reg2 {
-                        return Err(String::from("Unable to add differetn indexed registers"));
+                        return Err(String::from("Unable to add differetn indexed registers").into());
                     }
 
                     bytes.push(indexed_register16_to_code(reg1));
@@ -1593,7 +1622,7 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
 
 
     if 0 == bytes.len() {
-        Err(format!("{:?} not implemented for {:?} {:?}", mnemonic, arg1, arg2))
+        Err(format!("{:?} not implemented for {:?} {:?}", mnemonic, arg1, arg2).into())
     }
     else {
         Ok(bytes)
@@ -1601,7 +1630,7 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
 
 }
 
-fn assemble_res_or_set(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, String>{
+fn assemble_res_or_set(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
     let is_res = match mnemonic {
         &Mnemonic::Res => true,
@@ -1612,7 +1641,7 @@ fn assemble_res_or_set(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
     // Get the bit of interest
     let bit = match arg1 {
         &DataAccess::Expression(ref e) => e.resolve(sym)? as u8,
-        _ => return Err(format!("unable to get the number of bits"))
+        _ => return Err(format!("unable to get the number of bits").into())
     };
 
     // Apply it to the right thing
@@ -1624,7 +1653,7 @@ fn assemble_res_or_set(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
                        | register8_to_code(reg));
         },
         _ => {
-            return Err(format!("Res not implemented for {:?}", arg2));
+            return Err(format!("Res not implemented for {:?}", arg2).into());
         }
     };
 

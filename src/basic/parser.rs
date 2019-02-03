@@ -99,6 +99,7 @@ named!(
 	pub parse_simple_instruction<CompleteStr<'_>, BasicToken>, do_parse!(
 		token: alt!(
 			tag_no_case!("CALL") => {|_| BasicTokenNoPrefix::Call} |
+			tag_no_case!("INPUT") => {|_| BasicTokenNoPrefix::Input} |
 			tag_no_case!("PRINT") => {|_| BasicTokenNoPrefix::Print} 
 		) >>
 		(
@@ -282,6 +283,40 @@ mod test {
 	#[test]
 	fn check_number() {
         assert!(dec_u16_inner(CompleteStr("10")).is_ok());
+
+		match hex_u16_inner("1234".into()) {
+			Ok((res, value)) => {
+				println!("{:?}", &res);
+				println!("{:x}", &value);
+				assert_eq!(0x1234, value);
+			}
+			Err(e) => {
+				panic!("{}", e);
+			}
+		}
+
+		match parse_hexadecimal_value_16bits("&1234".into()) {
+			Ok((res, value)) => {
+				println!("{:?}", &res);
+				println!("{:?}", &value);
+				let bytes = value.as_bytes();
+				assert_eq!(
+					bytes[0],
+					BasicTokenNoPrefix::ValueIntegerHexadecimal16bits as u8
+				);
+				assert_eq!(
+					bytes[1],
+					0x34
+				);
+				assert_eq!(
+					bytes[2],
+					0x12
+				);
+			}
+			Err(e) => {
+				panic!("{}", e);
+			}
+		}
     }
 
 	fn check_line_tokenisation(code: &str) -> BasicLine{

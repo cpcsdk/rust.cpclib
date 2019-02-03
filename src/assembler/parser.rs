@@ -5,12 +5,31 @@ use nom::{InputLength, InputIter};
 use crate::assembler::tokens::*;
 
 use std::iter;
-
+use crate::assembler::AssemblerError;
 
     pub mod error_code {
         pub const ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION:u32 = 128;
         pub const INVALID_ARGUMENT:u32 = 129;
     }
+
+/// Produce the stream of tokens. In case of error, return an explanatory string
+pub fn parse_str(code: &str) -> Result<Listing, AssemblerError> {
+    match parse_z80_code(code.into()) {
+        Err(e) => Err(AssemblerError::SyntaxError{error: format!("Error while parsing: {:?}", e)}),
+        Ok((remaining, parsed)) => {
+            if remaining.len() > 0 {
+                Err(AssemblerError::BugInParser{error:format!("Bug in the parser. The remaining source has not been assembled:\n{}", remaining)})
+            }
+            else {
+               Ok(parsed)
+
+            }
+        }
+    }
+}
+
+
+
 
 named! (
     pub parse_z80_code <CompleteStr<'_>, Listing>,
@@ -1140,23 +1159,6 @@ pub fn parse_file(fname: String) -> Vec<Token> {
     parse_binary_stream(fname.to_bytes())
 }
 */
-
-/// Produce the stream of tokens. In case of error, return an explanatory string
-pub fn parse_str(code: &str) -> Result<Listing, String> {
-    match parse_z80_code(code.into()) {
-        Err(e) => Err(format!("Error while parsing: {:?}", e)),
-        Ok((remaining, parsed)) => {
-            if remaining.len() > 0 {
-                Err(format!("Bug in the parser. The remaining source has not been assembled:\n{}", remaining))
-            }
-            else {
-               Ok(parsed)
-
-            }
-        }
-    }
-}
-
 
 
 

@@ -369,8 +369,7 @@ pub enum BasicValue {
 }
 
 impl BasicValue {
-	pub fn new_integer(value: u16) -> BasicValue {
-		let word = value & 0xff;
+	pub fn new_integer(word: u16) -> BasicValue {
 		BasicValue::Integer(
 			(word % 256) as u8,
 			(word / 256) as u8

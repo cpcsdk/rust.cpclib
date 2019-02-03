@@ -11,33 +11,81 @@ pub mod assembler;
 pub mod builder;
 
 
-/// Assemble a piece of code and returns the associated list of bytes
-pub fn assemble(code: &str) -> Result<Vec<u8>, String> {
+#[derive(Debug, Fail)]
+pub enum AssemblerError {
+    #[fail(display = "Assembling bug: {}", msg)]
+    BugInAssembler {
+        msg: String,
+    },
+    #[fail(display = "Parser bug: {}", error)]
+    BugInParser {
+        error: String,
+    },
 
-	let tokens = match parser::parse_str(code.into()) {
-			Err(e) => return Err(e),
-			Ok(tokens) => tokens
-	};
-	
-	let env = match assembler::visit_tokens_all_passes(&tokens) {
-		Err(e) => return Err(e),
-		Ok(env) => env
-	};
+	// TODO add more information
+    #[fail(display = "Syntax error: {}", error)]
+    SyntaxError {
+        error: String
+	},
+
+	// TODO add more information
+    #[fail(display = "Assembling error: {}", msg)]
+    AssemblingError {
+        msg: String
+    },
+    
+	// TODO remove this case and dispatch it everywhere else
+	#[fail(display = "To be sorted error: {}", msg)]
+	GenericError {
+		msg: String
+	},
+
+	#[fail(display = "Unknown symbol: {}", symbol)]
+	UnknownSymbol {
+		symbol: String
+	},
+
+	#[fail(display = "Current assembling address is unknown.")]
+	UnknownAssemblingAddress,
+
+	#[fail(display = "Unable to resolve expression {}.", expression)]
+	ExpressionUnresolvable {
+		expression: crate::assembler::tokens::expression::Expr
+	}
+}
+
+
+impl From<String> for AssemblerError {
+    fn from(msg: String) -> AssemblerError {
+        AssemblerError::GenericError{
+            msg
+        }
+    }
+}
+
+impl From<&String> for AssemblerError {
+    fn from(msg: &String) -> AssemblerError {
+        AssemblerError::GenericError{
+            msg: msg.to_string()
+        }
+    }
+}
+
+
+
+/// Assemble a piece of code and returns the associated list of bytes
+pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
+
+	let tokens = parser::parse_str(code.into())?;
+	let env = assembler::visit_tokens_all_passes(&tokens)?;
 
 	Ok(env.produced_bytes())
 }
 
-pub fn assemble_and_table(code: &str) -> Result< (Vec<u8>, assembler::SymbolsTable), String> {
+pub fn assemble_and_table(code: &str) -> Result< (Vec<u8>, assembler::SymbolsTable), AssemblerError > {
 
-	let tokens = match parser::parse_str(code.into()) {
-			Err(e) => return Err(e),
-			Ok(tokens) => tokens
-	};
-	
-	let env = match assembler::visit_tokens_all_passes(&tokens) {
-		Err(e) => return Err(e),
-		Ok(env) => env
-	};
+	let tokens = parser::parse_str(code.into())?;
+	let env = assembler::visit_tokens_all_passes(&tokens)?;
 
 	Ok((
 		env.produced_bytes(),
@@ -45,17 +93,12 @@ pub fn assemble_and_table(code: &str) -> Result< (Vec<u8>, assembler::SymbolsTab
 	))
 }
 
-pub fn assemble_with_table(code: &str, table: &assembler::SymbolsTable) -> Result< (Vec<u8>, assembler::SymbolsTable), String> {
+pub fn assemble_with_table(code: &str, table: &assembler::SymbolsTable) -> Result< (Vec<u8>, assembler::SymbolsTable), AssemblerError> {
 
-	let tokens = match parser::parse_str(code.into()) {
-			Err(e) => return Err(e),
-			Ok(tokens) => tokens
-	};
-	
-	let env = match assembler::visit_tokens_all_passes_with_table(&tokens, table) {
-		Err(e) => return Err(e),
-		Ok(env) => env
-	};
+	let tokens = parser::parse_str(code.into())?;
+	let env = assembler::visit_tokens_all_passes_with_table(
+		&tokens, 
+		table)?;
 
 	Ok((
 		env.produced_bytes(),

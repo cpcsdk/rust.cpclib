@@ -6,6 +6,7 @@ use crate::assembler::tokens::expression::*;
 use crate::assembler::tokens::data_access::*;
 use crate::assembler::parser::*;
 use crate::assembler::tokens::Listing;
+use crate::assembler::AssemblerError;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Mnemonic {
@@ -346,38 +347,41 @@ impl Token {
 
     /// Unroll the tokens when in a repetition loop
     /// TODO return an iterator in order to not produce the vector each time
-    pub fn unroll(&self, sym: & SymbolsTable) -> Option<Result<Vec<&Token>, String>> {
-        match self {
-            Token::Repeat(ref expr, ref tokens, ref counter_label) => {
-                match expr.resolve(sym) {
-                    Ok(count) => {
-                        let mut res =  Vec::with_capacity(count as usize * tokens.len());
-                        for i in 0..count {
-                            // TODO add a specific token to control the loop counter (and change the return type)
-                            for t in tokens.iter() {
-                                res.push(t);
-                            }
-                        }
-                        Some(Ok(res))
-                    },
-                    Err(msg) => Some(Err(msg))
+    pub fn unroll(&self, sym: & SymbolsTable) -> 
+        Option<Result<Vec<&Token>, AssemblerError>> {
+        if let Token::Repeat(ref expr, ref tokens, ref counter_label) = self {
+            let count: Result<i32, AssemblerError> = expr.resolve(sym);
+            if count.is_err() {
+                return Some(Err(count.err().unwrap()));
+            }
+            else {
+                let count = count.unwrap();
+                let mut res =  Vec::with_capacity(count as usize * tokens.len());
+                for i in 0..count {
+                    // TODO add a specific token to control the loop counter (and change the return type)
+                    for t in tokens.iter() {
+                        res.push(t);
+                    }
                 }
-            },
-            _ => None
+                return Some(Ok(res));
+            }
+        }
+        else {
+            None
         }
     }
 
 
     /// Dummy version that assemble without taking into account the context
     /// TODO find a way to not build a symbol table each time
-    pub fn to_bytes(&self) -> Result<Bytes, String> {
+    pub fn to_bytes(&self) -> Result<Bytes, AssemblerError> {
         let mut table = SymbolsTable::laxist();
         let table = &mut table;
         self.to_bytes_with_context(table)
     }
 
     /// Assemble the symbol taking into account some context, but never modify this context
-    pub fn to_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<Bytes, String> {
+    pub fn to_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<Bytes, AssemblerError> {
 
         let mut env = &mut crate::assembler::assembler::Env::with_table(table);
                 match self {
@@ -409,7 +413,7 @@ impl Token {
                 => Ok(Bytes::new()),
 
             _
-                => Err(format!("Currently unable to generate bytes for {}", self))
+                => Err(format!("Currently unable to generate bytes for {}", self).into())
         }
     }
 }

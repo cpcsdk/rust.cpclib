@@ -18,29 +18,22 @@
 //! Why releasing it publicly whereas no-one else will use it ? ;) Just because it is simpler to manage public crates with cargo. There is nothing secret here, and I welcome any contribution.
 
 
-#[macro_use]
-extern crate bitfield;
-#[macro_use]
-extern crate bitflags;
-#[macro_use]
-extern crate nom;
+#[macro_use] extern crate bitfield;
+#[macro_use] extern crate bitflags;
+#[macro_use] extern crate nom;
 
 #[cfg(feature = "xferlib")]
 extern crate curl;
 #[cfg(feature = "xferlib")]
 extern crate reqwest;
 
-#[macro_use]
-extern crate custom_error;
-
-#[macro_use]
-extern crate arrayref;
+#[macro_use] extern crate arrayref;
 
 #[macro_use] extern crate serde_derive;
 extern crate serde;
 
 #[macro_use] extern crate dbg;
-
+#[macro_use] extern crate failure;
 /// Screen emulation. Unknown state ;)
 pub mod screen;
 

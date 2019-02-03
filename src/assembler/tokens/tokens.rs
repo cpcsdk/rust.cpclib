@@ -2,6 +2,8 @@ use crate::assembler::tokens::*;
 use crate::assembler::tokens::listing::*;
 use std::str::FromStr;
 use crate::assembler::assembler::SymbolsTable;
+use crate::assembler::AssemblerError;
+
 
 impl ListingElement for Token {
     /// Returns an estimation of the duration.
@@ -337,27 +339,16 @@ impl Listing {
     }
 
     /// Add additional tokens, that need to be parsed from a string, to the listing
-    pub fn add_code<S: AsRef<str> + core::fmt::Display>(&mut self, code: S) -> Result<(), String> {
-        let res = parser::parse_z80_str(code.as_ref());
-
-        let tokens = match res {
-            Ok((_res, local_tokens)) => {
-                Ok(local_tokens)
-            },
-            Err(e) => {
-                Err(e)
-            }
-        };
-
-
-        if tokens.is_ok() {
-            self.mut_listing().extend_from_slice(&tokens.ok().unwrap());
-            Ok(())
-        }
-        else {
-            Err(format!("Unable to assemble '{}'", code))
-        }
-
+    pub fn add_code<S: AsRef<str> + core::fmt::Display>(&mut self, code: S) -> Result<(), AssemblerError> {
+        parser::parse_z80_str(code.as_ref())
+            .map_err(|e|{
+                AssemblerError::SyntaxError {
+                    error: e.to_string()
+                }
+            })
+            .map(|(_res, local_tokens)|{
+                self.mut_listing().extend_from_slice(&local_tokens);
+            })
     }
 
 
@@ -365,7 +356,7 @@ impl Listing {
 
     /// Compute the size of the listing.
     /// The listing has a size only if its tokens has a size
-    pub fn number_of_bytes(&self) -> Result<usize, String> {
+    pub fn number_of_bytes(&self) -> Result<usize, AssemblerError> {
         let mut count = 0;
         let mut current_address : Option<usize>= None;
         let mut sym = SymbolsTable::default();
@@ -383,7 +374,7 @@ impl Listing {
             }
             else if let &Token::Align(ref _expr, _) = token {
                 if current_address.is_none() {
-                    return Err("Unable to guess align size if current address is unknown".to_owned())
+                    return Err("Unable to guess align size if current address is unknown".to_owned().into())
                 }
 
                 current_size = token.number_of_bytes_with_context(&mut sym)?;

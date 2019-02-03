@@ -11,12 +11,12 @@ use std::iter::Enumerate;
 use memchr;
 
 
-mod tokens;
-mod listing;
-mod expression;
-mod registers;
-mod data_access;
-mod instructions;
+pub(crate) mod tokens;
+pub(crate) mod listing;
+pub(crate) mod expression;
+pub(crate) mod registers;
+pub(crate) mod data_access;
+pub(crate) mod instructions;
 
 pub use self::tokens::*;
 pub use self::listing::*;

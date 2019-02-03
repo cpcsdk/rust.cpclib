@@ -5,6 +5,7 @@ use std::fmt::{Debug, Display, Formatter};
 use crate::assembler::assembler::{SymbolsTable};
 use crate::assembler::tokens::Token;
 use crate::assembler::tokens::listing::ListingElement;
+use crate::assembler::AssemblerError;
 
 /// Expression nodes.
 #[derive(PartialEq, Eq, Clone)]
@@ -66,16 +67,16 @@ impl<S:AsRef<str>> From<S> for Expr {
 impl Expr {
 
     /// Simple evaluation without context => can only evaluate number based operations.
-    pub fn eval(&self) -> Result<i32, String> {
+    pub fn eval(&self) -> Result<i32, AssemblerError> {
         let sym = SymbolsTable::default();
         self.resolve(&sym)
     }
 
 
-    pub fn resolve(&self, sym: &SymbolsTable) -> Result<i32, String> {
+    pub fn resolve(&self, sym: &SymbolsTable) -> Result<i32, AssemblerError> {
         use self::Expr::*;
 
-        let oper = |left: &Expr, right: &Expr, oper:Oper| -> Result<i32, String>{
+        let oper = |left: &Expr, right: &Expr, oper:Oper| -> Result<i32, AssemblerError>{
             let res_left = left.resolve(sym);
             let res_right = right.resolve(sym);
 
@@ -97,9 +98,9 @@ impl Expr {
 
                     }
                 },
-                (Err(a), Ok(_b))  => Err(format!("Unable to make the operation {:?}: {}", oper, a)),
-                (Ok(_a), Err(b))  => Err(format!("Unable to make the operation {:?}: {}", oper, b)),
-                (Err(a), Err(b))  => Err(format!("Unable to make the operation {:?}: {} & {}", oper, a, b))
+                (Err(a), Ok(_b))  => Err(format!("Unable to make the operation {:?}: {}", oper, a).into()),
+                (Ok(_a), Err(b))  => Err(format!("Unable to make the operation {:?}: {}", oper, b).into()),
+                (Err(a), Err(b))  => Err(format!("Unable to make the operation {:?}: {} & {}", oper, a, b).into())
             }
 
         };
@@ -113,7 +114,7 @@ impl Expr {
                     Ok(val.unwrap())
                 }
                 else {
-                    Err(format!("{} not found in symbol table", label))
+                    Err(format!("{} not found in symbol table", label).into())
                 }
             },
 
@@ -126,10 +127,10 @@ impl Expr {
             OpCode(ref token) => {
                 let bytes = token.to_bytes()?;
                 match bytes.len() {
-                    0 => Err(format!("{} is assembled with 0 bytes", token)),
+                    0 => Err(format!("{} is assembled with 0 bytes", token).into()),
                     1 => Ok(bytes[0] as _),
                     2 => Ok(bytes[0] as i32 * 256 + bytes[1] as i32),
-                    val => Err(format!("{} is assembled with {} bytes", token, val))
+                    val => Err(format!("{} is assembled with {} bytes", token, val).into())
                 }
             },
 
