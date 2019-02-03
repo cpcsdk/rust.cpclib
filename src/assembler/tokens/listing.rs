@@ -71,7 +71,12 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
 
     /// Write access to listing. Should not exist but I do not know how to access to private firlds
     /// from trait implementation
+    #[deprecated]
     pub fn mut_listing(&mut self) -> &mut Vec<T> {
+       &mut self.listing
+    }
+
+    pub fn listing_mut(&mut self) -> &mut Vec<T> {
        &mut self.listing
     }
 

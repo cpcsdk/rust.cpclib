@@ -45,6 +45,11 @@ pub enum AssemblerError {
 		symbol: String
 	},
 
+	#[fail(display = "IO error: {}", msg)]
+	IOError {
+		msg: String,
+	},
+
 	#[fail(display = "Current assembling address is unknown.")]
 	UnknownAssemblingAddress,
 

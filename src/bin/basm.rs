@@ -12,7 +12,7 @@ use std::fmt;
 use cpclib::assembler::*;
 use cpclib::disc::amsdos::{AmsdosFileName, AmsdosManager};
 use cpclib::assembler::tokens::Listing;
-use cpclib::assembler::parser::parse_str;
+use cpclib::assembler::parser::*;
 use cpclib::assembler::assembler::Env;
 use cpclib::assembler::AssemblerError;
 
@@ -66,15 +66,20 @@ impl From<AssemblerError> for BasmError {
 /// Parse the given code.
 /// TODO read options to configure the search path
 fn parse (matches: &ArgMatches) -> Result<Listing, BasmError> {
+	let filename = matches.value_of("INPUT").unwrap();
 
 	let code = {
-		let mut f = File::open(matches.value_of("INPUT").unwrap())?;
+		let mut f = File::open(filename)?;
 		let mut content = String::new();
 		f.read_to_string(&mut content);
 		content
 	};
 
-	parse_str(&code)
+	let mut context = ParserContext::default();
+	context.set_current_filename(&filename);
+	context.add_search_path_from_file(&filename);
+
+	parse_str_with_context(&code, &context)
 		.map_err(|e|{e.into()})
 }
 
