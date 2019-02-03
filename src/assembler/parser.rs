@@ -161,17 +161,46 @@ named!(
         space0 >>
         opt!(tag!("\r")) >>
         tag!("\n") >>
+        hidden_lines: opt!(
+                    terminated!(
+                        preceded!(
+                            opt!(multispace),
+                            parse_basic_hide_lines
+                        ),
+                        multispace
+                    )
+        ) >>
         basic: take_until_and_consume!("ENDLOCOMOTIVE") >>
         space0 >>
         (
             Token::Basic(
                 args,
+                hidden_lines,
                 basic.to_string()
             )
         )
     )
 );
 
+named!(
+    pub parse_basic_hide_lines<CompleteStr<'_>, Vec<u16>>, do_parse!(
+        tag_no_case!("HIDE_LINES") >>
+        space1 >>
+        lines: separated_nonempty_list!(
+            preceded!(
+                space0,
+                char!(',')
+            ),
+            preceded!(
+                space0,
+                dec_u16
+            )
+        ) >>
+        (
+            lines
+        )
+    )
+);
 
 named!(
     pub parse_empty_line<CompleteStr<'_>, Vec<Token>>, do_parse!(

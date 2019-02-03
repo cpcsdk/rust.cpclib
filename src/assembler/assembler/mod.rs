@@ -629,7 +629,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
     env.update_dollar();
     match token {
         Token::Assert(ref exp, ref txt) => visit_assert(exp, txt.as_ref(), env),
-        Token::Basic(ref variables, ref code) => env.visit_basic(variables.as_ref(), code),
+        Token::Basic(ref variables, ref hidden_lines, ref code) => env.visit_basic(variables.as_ref(), hidden_lines.as_ref(), code),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | &Token::Defw(_) => visit_db_or_dw(token, env),
         Token::Defs(_, _) => visit_defs(token, env),
@@ -695,8 +695,12 @@ fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
 }
 
 impl Env {
-    pub fn visit_basic(&mut self, variables: Option<&Vec<String>>, code: &str) -> Result<(), AssemblerError> {
-        let bytes = self.assemble_basic(variables, code)?;
+    pub fn visit_basic(
+        &mut self, 
+        variables: Option<&Vec<String>>, 
+        hidden_lines: Option<&Vec<u16>>,
+        code: &str) -> Result<(), AssemblerError> {
+        let bytes = self.assemble_basic(variables, hidden_lines, code)?;
 
         // If the basic directive is the VERY first thing to output,
         // we assume startadr is 0x170 as for any basic program
@@ -709,7 +713,11 @@ impl Env {
         self.output_bytes(&bytes)
     }
 
-    pub fn assemble_basic(&mut self, variables: Option<&Vec<String>>, code: &str) -> Result<Vec<u8>, AssemblerError> {
+    pub fn assemble_basic(
+        &mut self,
+        variables: Option<&Vec<String>>,
+        hidden_lines: Option<&Vec<u16>>,
+        code: &str) -> Result<Vec<u8>, AssemblerError> {
 
         // Build the final basic code by replacing variables by value
         // Hexadecimal is used to ensure a consistent 2 bytes representation
@@ -733,7 +741,11 @@ impl Env {
         });
 
         // build the basic tokens
-        let basic = BasicProgram::parse(basic_src)?;
+        let mut basic = BasicProgram::parse(basic_src)?;
+        if hidden_lines.is_some() {
+            basic.hide_lines(hidden_lines.unwrap
+        ());
+        }
         Ok(basic.as_bytes())
     }
 }
@@ -1952,7 +1964,7 @@ mod test {
     #[test]
     pub fn basic_no_variable() {
         let tokens = vec![
-            Token::Basic(None, "10 PRINT &DEAD".to_owned())
+            Token::Basic(None, None,  "10 PRINT &DEAD".to_owned())
         ];
 
         let env = visit_tokens(&tokens);
@@ -1963,7 +1975,7 @@ mod test {
     #[test]
     pub fn basic_variable_unset() {
         let tokens = vec![
-            Token::Basic(Some(vec!["STUFF".to_owned()]), "10 PRINT {STUFF}".to_owned())
+            Token::Basic(Some(vec!["STUFF".to_owned()]), None, "10 PRINT {STUFF}".to_owned())
         ];
 
         let env = visit_tokens(&tokens);
@@ -1975,7 +1987,7 @@ mod test {
     pub fn basic_variable_set() {
         let tokens = vec![
             Token::Label("STUFF".to_owned()),
-            Token::Basic(Some(vec!["STUFF".to_owned()]), "10 PRINT {STUFF}".to_owned())
+            Token::Basic(Some(vec!["STUFF".to_owned()]), None, "10 PRINT {STUFF}".to_owned())
         ];
 
         let env = visit_tokens(&tokens);

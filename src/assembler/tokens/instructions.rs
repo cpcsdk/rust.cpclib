@@ -118,8 +118,8 @@ pub enum Token {
     Assert(Expr, Option<String>),
     Bank(Expr),
     Bankset(Expr),
-    /// Basic code which tokens will be included in the code (imported variables, code)
-    Basic(Option<Vec<String>>, String),
+    /// Basic code which tokens will be included in the code (imported variables, lines to hide,  code)
+    Basic(Option<Vec<String>>, Option<Vec<u16>>, String),
     Breakpoint(Option<Expr>),
     BuildCpr,
     BuildSna(crate::sna::SnapshotVersion),
