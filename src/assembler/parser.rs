@@ -152,7 +152,7 @@ named!(
                 preceded!(
                     space0,
                     map!(
-                        alphanumeric1,
+                        parse_label,
                         |s|{s.to_string()}
                     )
                 )    
