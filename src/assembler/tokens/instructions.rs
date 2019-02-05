@@ -151,7 +151,8 @@ pub enum Token {
     /// Duplicate the token stream
     Repeat(Expr, Listing, Option<String>),
     RepeatUntil(Expr, Listing),
-    Rorg(Expr),
+    /// Set the value of $ to Expr
+    Rorg(Expr, Listing),
     Run(Expr, Option<Expr>),
 
     Save{

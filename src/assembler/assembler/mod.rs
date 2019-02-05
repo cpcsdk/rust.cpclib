@@ -365,13 +365,19 @@ impl Env {
         }
     }
 
+    /// Return the address where the next byte will be written
     pub fn output_address(&self) -> usize {
         self.outputadr
     }
 
+    /// Return the address of dollar
+    pub fn code_address(&self) -> usize {
+        self.codeadr
+    }
+
     ///. Update the value of $ in the symbol table in order to take the current  output address
     pub fn update_dollar(&mut self) {
-        self.symbols.set_current_address(self.output_address() as _);
+        self.symbols.set_current_address(self.code_address() as _);
     }
 
     /// Produce the memory for the required limits
@@ -518,7 +524,8 @@ impl Env {
 
         match (already_present, self.pass) {
             (true, AssemblingPass::FirstPass) => {
-                Err(format!("Label {} already present in pass {}", label, self.pass).into())
+                Err(AssemblerError::SymbolAlreadyExists{symbol:label.to_string
+                ()})
             },
             (false, AssemblingPass::SecondPass) => {
                 Err(format!("Label {} is not present in the symbol table in pass {}", label, self.pass).into())
@@ -534,7 +541,7 @@ impl Env {
                    &label.to_owned(), value);
                    Ok(())
             },
-            (_,_) => panic!("add_symbol_to_symbol_table / unmnaged case {}, {}, {} {}", self.pass, label ,already_present, value)
+            (_,_) => panic!("add_symbol_to_symbol_table / unmanaged case {}, {}, {} {}", self.pass, label ,already_present, value)
         }
     }
 }
@@ -613,6 +620,14 @@ impl Env {
         }
         Ok(())
     }
+
+    /// Continue to assemble at the right place, but change the value of $ to the specified one
+    pub fn visit_rorg(&mut self, exp: &Expr, listing: &Listing) -> Result<(), AssemblerError> {
+        let backup = self.codeadr;
+        self.visit_listing(listing)?;
+        self.codeadr = backup;
+        Ok(())
+    }
 }
 
 
@@ -687,6 +702,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Print(ref exp) => env.visit_print(exp),
         Token::Repeat(_, _, _) => visit_repeat(token, env),
+        Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
         _ => panic!("Not treated {:?}", token)
@@ -2137,6 +2153,35 @@ mod test {
         assert!(res.is_ok());
         assert!(env.symbols().contains_symbol("hello"));
         assert_eq!(env.symbols().value("hello"), 0x4000.into());
+    }
+
+
+    /// Check if  label already exists
+    #[test]
+    pub fn label_exists() {
+        let res = visit_tokens_all_passes(
+            &[
+                Token::Org(0x4000.into(), None),
+                Token::Label("hello".into()),
+                Token::Label("hello".into())
+            ]
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    pub fn test_rorg() {
+        let res = visit_tokens_all_passes(
+            &[
+                Token::Org(0x4000.into(), None),
+                Token::Rorg(0x8000.into(), vec![
+                    Token::Defb(
+                        vec![Expr::Label("$".to_owned())]
+                    )
+                ].into())
+            ]
+        );
+        assert!(res.is_ok());
     }
 
     #[test]
