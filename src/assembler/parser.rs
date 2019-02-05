@@ -6,7 +6,7 @@ use nom::{InputLength, InputIter};
 use std::path::{PathBuf, Path};
 
 use crate::assembler::tokens::*;
-
+use either::*;
 use std::iter;
 use crate::assembler::AssemblerError;
 
@@ -748,7 +748,10 @@ named!(
     pub parse_print <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("PRINT") >>
         space1 >>
-        exp: expr >>
+        exp: alt!(
+            expr => {|e|{Left(e)}} |
+            delimited!(tag_no_case!("\""), take_until!("\""), tag_no_case!("\""))=> {|s:CompleteStr<'_>|{Right(s.to_string())}}
+        ) >>
         (
             Token::Print(exp)
         )

@@ -11,6 +11,7 @@ use crate::assembler::AssemblerError;
 use std::fs::File;
 use std::io::Read;
 use failure::ResultExt;
+use either::*;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Mnemonic {
@@ -145,7 +146,7 @@ pub enum Token {
     Limit(Expr),
     Macro(String, Vec<String>, String), // Content of the macro is parsed on use
     Org(Expr, Option<Expr>),
-    Print(Expr),
+    Print(Either<Expr, String>),
     Protect(Expr, Expr),
 
     /// Duplicate the token stream
