@@ -1119,7 +1119,7 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn assert_test() {
-        let code = " ASSERT 1";
+        let code = " ASSERT 1\n";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
 
@@ -1138,10 +1138,15 @@ INC_H equ opcode(inc h)
         eprintln!("RES: {:?}", parse_z80_str(code));
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
+    }
 
+    #[test]
+    fn rorg() {
+        let code = "\tRORG 1\n\tREND";
+        let tokens = get_val(parse_rorg(code.into()));
 
-
-
+        let code = "\tRORG 1\n\tdb 5\n\tREND";
+        let tokens = get_val(parse_rorg(code.into()));
     }
 
     #[test]

@@ -46,6 +46,11 @@ pub enum AssemblerError {
 		msg: String
 	},
 
+	#[fail(display = "Symbol `{}`already present on the symbol table", symbol)]
+	SymbolAlreadyExists {
+		symbol: String
+	},
+
 	#[fail(display = "Unknown symbol: {}", symbol)]
 	UnknownSymbol {
 		symbol: String

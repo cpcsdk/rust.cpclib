@@ -161,11 +161,46 @@ named!(
             parse_empty_line |
             parse_repeat => {|repeat| vec![repeat]} |
             parse_basic => {|basic| vec![basic]}|
+            parse_rorg => {|rorg| vec![rorg]}|
             preceded!(space1, parse_conditional) => {|cond| vec![cond]}|
             parse_z80_line_label_only |
             parse_z80_line_complete
         )
     );
+
+
+
+named!(
+    pub parse_rorg <CompleteStr<'_>, Token>, do_parse!(
+        opt!(multispace) >>
+        alt!(
+            tag_no_case!("PHASE") |
+            tag_no_case!("RORG")
+        ) >>
+        space1 >>
+        exp: expr >>
+        space0 >>
+        eol >>
+        inner: opt!(parse_z80_code) >> 
+        multispace >>
+        alt!(
+            tag_no_case!("DEPHASE") |
+            tag_no_case!("REND")
+        ) >>
+        (
+            Token::Rorg(exp,
+                if inner.is_some() {
+                    inner.unwrap().into()
+                }
+                else {
+                    Vec::new().into()
+                }
+            )
+        )
+    )
+);
+
+
 
 named!(
     pub parse_repeat<CompleteStr<'_>, Token>, do_parse!(
@@ -677,7 +712,7 @@ named!(
 named!(
     pub parse_assert <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("ASSERT") >>
-        many1!(space) >>
+        space1 >>
         expr: return_error!(
             ErrorKind::Custom(error_code::ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION),
             expr
