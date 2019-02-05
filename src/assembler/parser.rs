@@ -682,6 +682,12 @@ named!(
             ErrorKind::Custom(error_code::ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION),
             expr
         ) >>
+        comment: opt!(
+            preceded!(
+                delimited!(space0, tag!(","), space0),
+                delimited!(tag!("\""), take_until!("\""), tag!("\""))
+            )
+        ) >>
         (
             Token::Assert(expr, None)
         )
