@@ -697,11 +697,12 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> Result<(), A
     if env.pass.is_second_pass() {
         let value = env.resolve_expr_must_never_fail(exp)?;
         if value == 0 {
-            return Err(format!(
-                "Assertion failure: {}\n\t{}", 
-                if txt.is_some() {&txt.unwrap()} else {""}, 
-                exp
-            ).into());
+            return Err(
+                AssemblerError::AssertionFailed{
+                    msg: (if txt.is_some() {&txt.unwrap()} else {""}).to_owned(),
+                    test: exp.to_string()
+                }
+            );
         }
     }
     Ok(())

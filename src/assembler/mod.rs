@@ -40,6 +40,12 @@ pub enum AssemblerError {
 		msg: String
 	},
 
+	#[fail(display = "Assertion failed -- {}: {}", test, msg)]
+	AssertionFailed {
+		test: String,
+		msg: String
+	},
+
 	#[fail(display = "Unknown symbol: {}", symbol)]
 	UnknownSymbol {
 		symbol: String

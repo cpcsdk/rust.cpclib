@@ -689,7 +689,7 @@ named!(
             )
         ) >>
         (
-            Token::Assert(expr, None)
+            Token::Assert(expr, comment.map(|s|{s.to_string()}))
         )
     )
 );
