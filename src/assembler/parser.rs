@@ -441,6 +441,26 @@ named!(
 );
 
 
+/// TODO add the missing optional parameters
+named!(
+    parse_incbin <CompleteStr<'_>, Token>, do_parse!(
+        tag_no_case!("INCBIN") >>
+        space1 >>
+        fname: alt!(
+            preceded!(
+                tag!("\""),
+                take_until_and_consume1!("\"")) |
+            preceded!(
+                tag!("'"),
+                take_until_and_consume1!("'"))
+        ) >>
+        (
+            Token::Incbin(fname.to_string(), None, None, None, None, None)
+        )
+    )
+);
+
+
 named!(
     parse_undef <CompleteStr<'_>, Token>,  do_parse!(
         tag_no_case!("UNDEF") >>
@@ -496,6 +516,7 @@ named!(
             parse_org |
             parse_defs |
             parse_include |
+            parse_incbin |
             parse_db_or_dw |
             parse_print |
             parse_protect |

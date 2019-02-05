@@ -141,7 +141,7 @@ pub enum Token {
     If(Vec<(Expr, Listing)>, Option<Listing>),
     /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
     Include(String, Option<Listing>),
-    Incbin(String, Option<Expr>, Option<Expr>, Option<Expr>, Option<Expr>),
+    Incbin(String, Option<Expr>, Option<Expr>, Option<Expr>, Option<Expr>, Option<Vec<u8>>),
     Let(String, Expr),
     Limit(Expr),
     Macro(String, Vec<String>, String), // Content of the macro is parsed on use
@@ -382,7 +382,7 @@ impl Token {
     }
 
     /// Modify the few tokens that need to read files
-    /// TODO add search path
+    /// TODO refactor file reading of filename search
     pub fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
         match self {
             Token::Include(ref fname, ref mut listing) if listing.is_none() => {
@@ -394,7 +394,6 @@ impl Token {
                         });
                     },
                     Some(ref fname) => {
-                        // TODO search the file
                         let mut f = File::open(&fname)
                                     .map_err(|e|{
                                         AssemblerError::IOError{msg: format!("Unable to open {:?}", fname )}})?;
@@ -407,7 +406,28 @@ impl Token {
                         listing.replace(parse_str_with_context(&content, &new_ctx)?);
                     }
                 }
-            }
+            },
+
+            Token::Incbin(ref fname, _, _, _, _, ref mut data) if data.is_none() => {
+                //TODO manage the optional arguments
+                match ctx.get_path_for(fname) {
+                    None => {
+                         return Err(AssemblerError::IOError{
+                            msg: format!("{:?} not found", fname)
+                        });                       
+                    },
+                    Some(ref fname) => {
+                        let mut f = File::open(&fname)
+                                    .map_err(|e|{
+                                        AssemblerError::IOError{msg: format!("Unable to open {:?}", fname )}})?;
+                        let mut content = Vec::new();
+                        f.read_to_end(&mut content)
+                                    .map_err(|e|{AssemblerError::IOError{msg: e.to_string()}})?;
+                        data.replace(content);
+                    }
+                }
+
+            },
             _ => {}
         }
 
