@@ -9,6 +9,7 @@ use std::fmt;
 use crate::assembler::AssemblerError;
 
 use failure::Error;
+use either::*;
 
 use itertools::Itertools;
 
@@ -609,13 +610,20 @@ impl Env {
     }
 
     /// Print the evaluation of the expression in the 2nd pass
-    pub fn visit_print(&self, exp: &Expr) -> Result<(), AssemblerError>  {
+    pub fn visit_print(&self, info: Either<&Expr, &String>) -> Result<(), AssemblerError>  {
         if self.pass.is_second_pass() {
-            let text = format!(
-                "{} = {}",
-                exp,
-                self.resolve_expr_must_never_fail(exp)?
-            );
+            let text = match info {
+                Left(ref exp) => {
+                    format!(
+                        "{} = {}",
+                        exp,
+                        self.resolve_expr_must_never_fail(exp)?
+                    )
+                },
+                Right(string) => {
+                    string.clone()
+                }
+            };
             println!("{}", text);
         }
         Ok(())
@@ -700,7 +708,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
         Token::If(ref cases, ref other) => env.visit_if(cases, other.as_ref()),
         Token::Label(ref label) => env.visit_label(label),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
-        Token::Print(ref exp) => env.visit_print(exp),
+        Token::Print(ref exp) => env.visit_print(exp.as_ref()),
         Token::Repeat(_, _, _) => visit_repeat(token, env),
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
