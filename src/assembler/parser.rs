@@ -1251,7 +1251,7 @@ named!(
 
 named!(
     pub hex_u16 <CompleteStr<'_>, u16>, do_parse!(
-        tag_no_case!( "0x") >>
+        alt!(tag_no_case!("0x") | tag!("#") | tag!("&")) >>
         val: hex_u16_inner >>
         (val)
         )
