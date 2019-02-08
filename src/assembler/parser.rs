@@ -79,6 +79,7 @@ pub fn parse_str_with_context(code: &str, ctx: &ParserContext) -> Result<Listing
         Err(e) => Err(AssemblerError::SyntaxError{error: format!("Error while parsing: {:?}", e)}),
         Ok((remaining, mut parsed)) => {
             if remaining.len() > 0 {
+                eprintln!("{:?}", parsed);
                 Err(AssemblerError::BugInParser{error:format!("Bug in the parser. The remaining source has not been assembled:\n{}", remaining)})
             }
             else {
@@ -158,6 +159,7 @@ pub fn parse_z80_str(code: &str) -> Result< (CompleteStr<'_>, Listing), Err<Comp
 named!(
     pub parse_z80_line<CompleteStr<'_>, Vec<Token>>,
         alt_complete!(
+            many1!(eol) => {|_|{Vec::new()}} |
             parse_empty_line |
             parse_repeat => {|repeat| vec![repeat]} |
             parse_basic => {|basic| vec![basic]}|
@@ -612,9 +614,9 @@ named!(
 
 named!(
     pub parse_ld <CompleteStr<'_>, Token>,
-    alt!(
-        parse_ld_fake | 
-        parse_ld_normal
+        alt!(
+            parse_ld_fake  |
+            parse_ld_normal
     )
 );
 
@@ -627,6 +629,7 @@ named!(
         tag!(",") >>
         opt!(space1) >>
         src: parse_register16 >>
+        not!(alphanumeric1)>>
          (
              Token::OpCode(Mnemonic::Ld, Some(dst), Some(src))
          )
@@ -635,8 +638,9 @@ named!(
 
 named!(
     pub parse_ld_normal <CompleteStr<'_>, Token>, do_parse!(
+        opt!(multispace) >>
         tag_no_case!("LD") >>
-        space >>
+        space1 >>
         dst: return_error!(
             ErrorKind::Custom(error_code::INVALID_ARGUMENT),
             alt_complete!( parse_reg_address |
@@ -647,9 +651,9 @@ named!(
                            parse_indexregister8 |
                            parse_address)
         ) >>
-        opt!(space) >>
+        space0 >>
         tag!(",") >>
-        opt!(space) >>
+        space0 >>
         // src possibilities depend on dst
         src: return_error!(
             ErrorKind::Custom(error_code::INVALID_ARGUMENT),
@@ -661,7 +665,6 @@ named!(
             )
         )
          >>
-
         (Token::OpCode(Mnemonic::Ld, Some(dst), Some(src)))
         )
     );
@@ -773,6 +776,7 @@ named!(
             expr => {|e|{Left(e)}} |
             delimited!(tag_no_case!("\""), take_until!("\""), tag_no_case!("\""))=> {|s:CompleteStr<'_>|{Right(s.to_string())}}
         ) >>
+        space0 >>
         (
             Token::Print(exp)
         )
@@ -834,10 +838,18 @@ named!(
         many1!(space) >>
 
         first: alt_complete!(
-            value!( DataAccess::Register8(Register8::A), tag_no_case!("A")) |
-            value!( DataAccess::Register16(Register16::Hl), tag_no_case!("HL")) |
-            value!( DataAccess::IndexRegister16(IndexRegister16::Ix), tag_no_case!("IX")) |
-            value!( DataAccess::IndexRegister16(IndexRegister16::Iy), tag_no_case!("IY"))
+            value!(
+                DataAccess::Register8(Register8::A), 
+                tag_no_case!("A")) |
+            value!(
+                DataAccess::Register16(Register16::Hl), 
+                tag_no_case!("HL")) |
+            value!(
+                DataAccess::IndexRegister16(IndexRegister16::Ix), 
+                tag_no_case!("IX")) |
+            value!(
+                DataAccess::IndexRegister16(IndexRegister16::Iy), 
+                tag_no_case!("IY"))
         ) >>
 
         opt!(space) >>
@@ -845,14 +857,37 @@ named!(
         opt!(space) >>
 
         second: alt_complete!(
-            cond_reduce!(first.is_register8(), alt_complete!(parse_register8 | parse_hl_address | parse_indexregister_with_index | parse_expr)) | // Case for A
-            cond_reduce!(first.is_register16(), alt_complete!(parse_register16 | parse_register_sp)) | // Case for HL XXX AF is accepted whereas it is not the case in real life
-            cond_reduce!(first.is_indexregister16(), alt_complete!(
-                    value!(DataAccess::Register16(Register16::De), tag_no_case!("DE")) |
-                    value!(DataAccess::Register16(Register16::Bc), tag_no_case!("BC")) |
-                    value!(DataAccess::Register16(Register16::Sp), tag_no_case!("SP")) |
-                    value!(DataAccess::IndexRegister16(IndexRegister16::Ix), tag_no_case!("IX")) |
-                    value!(DataAccess::IndexRegister16(IndexRegister16::Iy), tag_no_case!("IY"))
+            cond_reduce!(
+                first.is_register8(), 
+                alt_complete!(
+                    parse_register8 | 
+                    parse_indexregister8 | 
+                    parse_hl_address | 
+                    parse_indexregister_with_index | 
+                    parse_expr)) | // Case for A
+            cond_reduce!(
+                first.is_register16(), 
+                alt_complete!(
+                    parse_register16 | 
+                    parse_register_sp)) | // Case for HL XXX AF is accepted whereas it is not the case in real life
+            cond_reduce!(
+                first.is_indexregister16(), 
+                alt_complete!(
+                    value!(
+                        DataAccess::Register16(Register16::De), 
+                        tag_no_case!("DE")) |
+                    value!(
+                        DataAccess::Register16(Register16::Bc), 
+                        tag_no_case!("BC")) |
+                    value!(
+                        DataAccess::Register16(Register16::Sp), 
+                        tag_no_case!("SP")) |
+                    value!(
+                        DataAccess::IndexRegister16(IndexRegister16::Ix),
+                         tag_no_case!("IX")) |
+                    value!(
+                        DataAccess::IndexRegister16(IndexRegister16::Iy),
+                        tag_no_case!("IY"))
                     )
             )
         ) >>
@@ -1029,7 +1064,7 @@ named!(
 */
 
 named!(
-    parse_register16 <CompleteStr<'_>, DataAccess>, do_parse!(
+    pub parse_register16 <CompleteStr<'_>, DataAccess>, do_parse!(
         reg: alt_complete!(
             tag_no_case!("AF") => { |_| Register16::Af} |
             tag_no_case!("HL") => { |_| Register16::Hl} |
@@ -1043,7 +1078,7 @@ named!(
 
 
 named!(
-    parse_register8 <CompleteStr<'_>, DataAccess>, do_parse!(
+    pub parse_register8 <CompleteStr<'_>, DataAccess>, do_parse!(
         reg: alt_complete!(
             tag_no_case!("A") => { |_| Register8::A} |
             tag_no_case!("H") => { |_| Register8::H} |
@@ -1060,7 +1095,7 @@ named!(
 );
 
 named!(
-    parse_indexregister8 <CompleteStr<'_>, DataAccess>, do_parse!(
+    pub parse_indexregister8 <CompleteStr<'_>, DataAccess>, do_parse!(
         reg: alt_complete!(
             tag_no_case!("IXH") => { |_| IndexRegister8::Ixh} |
             tag_no_case!("IXL") => { |_| IndexRegister8::Ixl} |
@@ -1235,19 +1270,6 @@ named!(
     );
 
 
-    // TODO foribd label with the same name as a register or mnemonic
-named!(
-    pub parse_label <CompleteStr<'_>, String>, do_parse!(
-        first: one_of!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.") >> // XXX The inclusion of . is probably problematic
-        middle: is_a!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.") >>
-        (
-            format!("{}{}",
-                    first as char,
-                    middle.iter_elements().collect::<String>()
-                   )
-        )
-        )
-    );
 
 named!(
     pub hex_u16 <CompleteStr<'_>, u16>, do_parse!(
@@ -1271,6 +1293,39 @@ named!( comment<CompleteStr<'_>, Token>,
 
 // Usefull later for db
 named!(string_between_quotes<CompleteStr<'_>, CompleteStr<'_>>, delimited!(char!('\"'), is_not!("\""), char!('\"')));
+
+
+
+
+pub fn parse_label (input: CompleteStr<'_>) -> IResult<CompleteStr<'_>,  String> {
+    // Get the label
+    match do_parse!(input, 
+        first: one_of!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.") >> // XXX The inclusion of . is probably problematic
+        middle: is_a!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.") >>
+        (
+            format!("{}{}",
+                    first as char,
+                    middle.iter_elements().collect::<String>()
+            )
+
+        )
+    ){
+        Err(e) => Err(e),
+        Ok((remaining, label)) => {
+            let impossible = [
+                "af", "hl", "de", "bc", "ix", "iy", "ixl", "ixh"
+            ];
+            if impossible.iter().any(|val| val == &label.to_lowercase()) {
+                Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+            }
+            else {
+                Ok((remaining, label))
+            }
+        }
+    }
+
+}
+
 
 #[inline]
 pub fn dec_u16(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {

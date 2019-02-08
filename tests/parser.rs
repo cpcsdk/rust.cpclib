@@ -193,6 +193,9 @@ mod tests {
         let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 1);
 
+        let code = CompleteStr("demo_system_binary_start \n");
+        let tokens = get_val(parse_z80_code(code));
+        assert_eq!(tokens.len(), 1);
 
     }
 
@@ -367,6 +370,7 @@ mod tests {
     pub fn ld_16_16(){
         let code = CompleteStr(" ld hl, de");
         let tokens = get_val(parse_z80_line(code));
+        println!("{:?}", tokens);
         assert_matches!(
             tokens[0],
             Token::OpCode(
@@ -507,6 +511,18 @@ mod tests {
         assert_eq!(tokens.len(), 1);
     }
 
+    #[test]
+    fn registers()  {
+        for reg in ["A", "B", "C", "D", "E", "H", "L"].iter() {
+            let line = CompleteStr(reg);
+            get_val(parse_register8(line));
+        }
+
+        for reg in ["IXL", "IXH", "IYL", "IYH"].iter() {
+            let line = CompleteStr(reg);
+            get_val(parse_indexregister8(line));
+        }
+    }
 
     #[test]
     fn test_add() {
@@ -514,6 +530,7 @@ mod tests {
         let _tokens = get_val(parse_z80_line(line1));
 
         let line1 = CompleteStr("   ADD A, IXL");
+        println!("{:?}", parse_z80_line(line1));
         let tokens = get_val(parse_z80_line(line1));
         assert_eq!(tokens.len(), 1);
 
@@ -1150,6 +1167,25 @@ INC_H equ opcode(inc h)
     }
 
     #[test]
+    fn ld() {
+        let code = "LD HL, 0";
+        let tokens = get_val(parse_ld(code.into()));
+
+        let code = "LD HL, label";
+        let tokens = get_val(parse_ld(code.into()));
+
+
+        let code = "LD HL, label_with_underscore";
+        let tokens = get_val(parse_ld(code.into()));
+
+        let code = "\tld hl, label_with_underscore";
+        let tokens = get_val(parse_z80_code(code.into()));
+
+        let code = "\n\tld hl, label_with_underscore";
+        let tokens = get_val(parse_z80_code(code.into()));
+    }
+
+    #[test]
     #[should_panic]
     fn assert_test_should_assemble_later() {
         let code = " ASSERT 1 < 0x10000"; // ATM such number is not parsed
@@ -1177,9 +1213,12 @@ INC_H equ opcode(inc h)
         assert_eq!(token.mnemonic().unwrap(), &Mnemonic::Ld);
         assert_eq!(token.mnemonic_arg1().unwrap(), &DataAccess::Register8(Register8::A));
         assert_eq!(token.mnemonic_arg2().unwrap(), &DataAccess::Memory(Expr::Label("DD".into())));
+    }
 
+    #[test]
+    fn real_world_source_failures() {
 
-
-
+        get_val(parse_label("demosystem_binary_start".into()));
+        get_val(parse_ld("ld hl, demosystem_binary_start".into()));
     }
 }
