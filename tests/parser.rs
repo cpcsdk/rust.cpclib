@@ -1113,6 +1113,20 @@ INC_H equ opcode(inc h)
     }
 
     #[test]
+    fn quoted_string() {
+        let code = "\"file.asm\"";
+        let tokens = get_val(string_between_quotes(code.into()));
+        assert_eq!(tokens.to_string(), "file.asm".to_owned());
+
+        let msg = "TODO -- Set the real address (in c7 space)";
+        let code = format!("\"{}\"", &msg);
+        let tokens = get_val(string_between_quotes(code.as_str().into()));
+        assert_eq!(
+            &tokens.to_string(), 
+            msg);
+    }
+
+    #[test]
     fn print_test() {
         let code = " PRINT 1";
         let tokens = get_val(parse_z80_str(code));
@@ -1130,6 +1144,11 @@ INC_H equ opcode(inc h)
         let code = " PRINT zoomscroller_inject_for_step0_line_1 - zoomscroller_inject_for_step0_line_0";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
+
+
+        get_val(parse_print("PRINT \"TODO -- Set the real address (in c7 space)\"".into()));
+
+      get_val(parse_z80_code("\tPRINT \"TODO -- Set the real address (in c7 space)\"\n".into()));
     }
 
 
@@ -1215,10 +1234,13 @@ INC_H equ opcode(inc h)
         assert_eq!(token.mnemonic_arg2().unwrap(), &DataAccess::Memory(Expr::Label("DD".into())));
     }
 
+
+
     #[test]
     fn real_world_source_failures() {
 
         get_val(parse_label("demosystem_binary_start".into()));
         get_val(parse_ld("ld hl, demosystem_binary_start".into()));
+        get_val(parse_z80_code("\tprint \"TODO -- Set the real address (in c7 space)\"\n\tld hl, demosystem_binary_start\n\tld de, 0xDEAD\n\tld bc, demosystem_binary_stop - demosystem_binary_start\n".into()));
     }
 }
