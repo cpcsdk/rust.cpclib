@@ -774,7 +774,7 @@ named!(
         space1 >>
         exp: alt!(
             expr => {|e|{Left(e)}} |
-            delimited!(tag_no_case!("\""), take_until!("\""), tag_no_case!("\""))=> {|s:CompleteStr<'_>|{Right(s.to_string())}}
+            string_between_quotes => {|s:CompleteStr<'_>|{Right(s.to_string())}}
         ) >>
         space0 >>
         (
@@ -1292,7 +1292,7 @@ named!( comment<CompleteStr<'_>, Token>,
 );
 
 // Usefull later for db
-named!(string_between_quotes<CompleteStr<'_>, CompleteStr<'_>>, delimited!(char!('\"'), is_not!("\""), char!('\"')));
+named!(pub string_between_quotes<CompleteStr<'_>, CompleteStr<'_>>, delimited!(char!('\"'), is_not!("\""), char!('\"')));
 
 
 
