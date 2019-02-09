@@ -488,7 +488,7 @@ named!(
             parse_call_jp_or_jr |
             parse_opcode_no_arg |
             parse_push_n_pop |
-            parse_res_set |
+            parse_res_set_bit |
             parse_shifts |
             parse_ret
         )
@@ -680,9 +680,10 @@ named!(
     );
 
 named!(
-    pub parse_res_set <CompleteStr<'_>, Token>, do_parse!(
+    pub parse_res_set_bit <CompleteStr<'_>, Token>, do_parse!(
         res_or_set: alt!(
             tag_no_case!("RES") => { |_|Mnemonic::Res} |
+            tag_no_case!("BIT") => { |_|Mnemonic::Bit} |
             tag_no_case!("SET") => { |_|Mnemonic::Set}
         ) >>
         many1!(space) >>
