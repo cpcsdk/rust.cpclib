@@ -523,12 +523,21 @@ named!(
             parse_print |
             parse_protect |
             parse_stable_ticker |
-            parse_undef
+            parse_undef |
+            parse_noarg_directive
         )
 
     );
 
 
+
+named!(
+    pub parse_noarg_directive <CompleteStr<'_>, Token>,
+    alt_complete!(
+        value!(Token::List, tag_no_case!("list")) |
+        value!(Token::NoList, tag_no_case!("nolist"))
+    )
+);
 
 /// Parse if expression.
 /// TODO finish the implementation in order to have ELSEIF and ELSE branches

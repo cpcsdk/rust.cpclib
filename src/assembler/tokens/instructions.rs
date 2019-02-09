@@ -143,8 +143,10 @@ pub enum Token {
     Include(String, Option<Listing>),
     Incbin(String, Option<Expr>, Option<Expr>, Option<Expr>, Option<Expr>, Option<Vec<u8>>),
     Let(String, Expr),
+    List,
     Limit(Expr),
     Macro(String, Vec<String>, String), // Content of the macro is parsed on use
+    NoList,
     Org(Expr, Option<Expr>),
     Print(Either<Expr, String>),
     Protect(Expr, Expr),
