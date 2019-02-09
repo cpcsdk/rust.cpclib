@@ -95,7 +95,8 @@ impl Z80 {
             &DataAccess::Register8(_) => Some(self.get_register_8(access).value() as _),
             &DataAccess::MemoryRegister16(_) => None,
             &DataAccess::Expression(ref expr) => self.eval_expr(expr),
-            &DataAccess::FlagTest(_) => panic!()
+            &DataAccess::FlagTest(_) => panic!(),
+            _ => unimplemented!()
         }
     }
 

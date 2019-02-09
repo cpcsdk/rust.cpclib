@@ -986,6 +986,11 @@ INC_H equ opcode(inc h)
 	endif
     ");
         let tokens = get_val(parse_z80_code(code));
+
+
+        get_val(parse_z80_code("
+        \n\tif FDC_Is_Musical_Loader\r\n\t\tei\r\n\telse\r\n\t\tdi\r\n\tendif\n
+        ".into()));
     }
 
     #[test]
@@ -1202,6 +1207,11 @@ INC_H equ opcode(inc h)
 
         let code = "\n\tld hl, label_with_underscore";
         let tokens = get_val(parse_z80_code(code.into()));
+
+
+		let code = "ld i,a";
+        let tokens = get_val(parse_ld(code.into()));
+
     }
 
     #[test]
@@ -1259,5 +1269,20 @@ FDC_GetST3
 	call FDC_PutFDC
 	jr FDC_GetFDC
         ".into()));
+
+
+        get_val(parse_z80_code("
+        	if FDC_Is_Musical_Loader
+		call FDC_GotoTrack_NoWait
+		ld a,5
+		ld i,a	
+		ei
+		ld a,1
+		ld (FDC_RS_Is_Interruption_On + 1),a
+		call FDC_WaitEnd
+	else
+		call FDC_GotoTrack
+	endif
+    ".into()));
     }
 }

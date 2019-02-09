@@ -1,4 +1,4 @@
-use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending,eol, alphanumeric1};
+use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending,eol, alphanumeric1, alphanumeric};
 use nom::types::{CompleteStr};
 use nom::{multispace};
 use nom::{InputLength, InputIter};
@@ -555,7 +555,23 @@ named!(
 
         code: parse_z80_code >>
 
+
+        r#else: opt!(
+            preceded!(
+                delimited!(
+                    space0, 
+                    tag_no_case!("ELSE"), 
+                    alt!( 
+                        terminated!(space0, eol) | 
+                        tag!(":")
+                    )
+                ),
+                parse_z80_code
+            )
+        ) >>
+
         alt!( space1 | delimited!(space0, tag!(":"), space0)) >>
+
 
         tag_no_case!("ENDIF") >>
 
@@ -647,6 +663,8 @@ named!(
     )
 );
 
+
+
 named!(
     pub parse_ld_normal <CompleteStr<'_>, Token>, do_parse!(
         opt!(multispace) >>
@@ -660,6 +678,7 @@ named!(
                            parse_register8 |
                            parse_indexregister16 |
                            parse_indexregister8 |
+                           parse_register_i |
                            parse_address)
         ) >>
         space0 >>
@@ -669,10 +688,28 @@ named!(
         src: return_error!(
             ErrorKind::Custom(error_code::INVALID_ARGUMENT),
             alt_complete!(
-                cond_reduce!(dst.is_register16() | dst.is_indexregister16(), alt_complete!(parse_address | parse_expr)) |
-                cond_reduce!(dst.is_register8(), alt_complete!(parse_indexregister_with_index | parse_hl_address | parse_address | parse_expr | parse_register8)) |
-                cond_reduce!(dst.is_memory(), alt_complete!(parse_register16 | parse_register8 | parse_register_sp)) |
-                cond_reduce!(dst.is_address_in_register16(), parse_register8)
+                cond_reduce!(
+                    dst.is_register16() | dst.is_indexregister16(),
+                    alt_complete!(parse_address | parse_expr)
+                ) |
+                cond_reduce!(
+                    dst.is_register8(), 
+                    alt_complete!(
+                        parse_indexregister_with_index | parse_hl_address | parse_address | parse_expr | parse_register8)
+                ) |
+                cond_reduce!(
+                    dst.is_memory(), 
+                    alt_complete!(
+                        parse_register16 | parse_register8 | parse_register_sp)
+                ) |
+                cond_reduce!(
+                    dst.is_address_in_register16(), 
+                    parse_register8
+                ) |
+                cond_reduce!(
+                    dst.is_register_i(),
+                    parse_register_a
+                )
             )
         )
          >>
@@ -687,14 +724,20 @@ named!(
             tag_no_case!("BIT") => { |_|Mnemonic::Bit} |
             tag_no_case!("SET") => { |_|Mnemonic::Set}
         ) >>
-        many1!(space) >>
+
+        space1 >>
+
         bit: parse_expr >>
-        many0!(space) >>
-        tag!(",") >>
-        many0!(space) >>
-        dst: parse_register8 >> // TODO add other kinds
+
+        delimited!(space0, tag!(","), space0) >>
+
+        operand: alt!(
+            parse_register8 |
+            parse_hl_address |
+            parse_indexregister_with_index
+        )>> 
         (
-            Token::OpCode(res_or_set, Some(bit), Some(dst))
+            Token::OpCode(res_or_set, Some(bit), Some(operand))
         )
     )
 );
@@ -906,17 +949,12 @@ named!(
 
         first: alt_complete!(
             value!(
-                DataAccess::Register8(Register8::A), 
-                tag_no_case!("A")) |
+                DataAccess::Register8(Register8::A),
+                parse_register_a ) |
             value!(
                 DataAccess::Register16(Register16::Hl), 
-                tag_no_case!("HL")) |
-            value!(
-                DataAccess::IndexRegister16(IndexRegister16::Ix), 
-                tag_no_case!("IX")) |
-            value!(
-                DataAccess::IndexRegister16(IndexRegister16::Iy), 
-                tag_no_case!("IY"))
+                parse_register_hl) |
+            parse_indexregister16
         ) >>
 
         opt!(space) >>
@@ -1131,35 +1169,99 @@ named!(
 */
 
 named!(
-    pub parse_register16 <CompleteStr<'_>, DataAccess>, do_parse!(
-        reg: alt_complete!(
-            tag_no_case!("AF") => { |_| Register16::Af} |
-            tag_no_case!("HL") => { |_| Register16::Hl} |
-            tag_no_case!("DE") => { |_| Register16::De} |
-            tag_no_case!("BC") => { |_| Register16::Bc}
-            )
-        >>
-        (DataAccess::Register16(reg))
-    )
+    pub parse_register16 <CompleteStr<'_>, DataAccess>,
+        alt_complete!(
+            parse_register_hl |
+            parse_register_bc |
+            parse_register_de |
+            parse_register_af
+        ) 
 );
 
 
 named!(
-    pub parse_register8 <CompleteStr<'_>, DataAccess>, do_parse!(
-        reg: alt_complete!(
-            tag_no_case!("A") => { |_| Register8::A} |
-            tag_no_case!("H") => { |_| Register8::H} |
-            tag_no_case!("D") => { |_| Register8::D} |
-            tag_no_case!("B") => { |_| Register8::B} |
-
-            tag_no_case!("L") => { |_| Register8::L} |
-            tag_no_case!("E") => { |_| Register8::E} |
-            tag_no_case!("C") => { |_| Register8::C}
-            )
-        >>
-        (DataAccess::Register8(reg))
-    )
+    pub parse_register8 <CompleteStr<'_>, DataAccess>, 
+        alt_complete!(
+            parse_register_a |
+            parse_register_b |
+            parse_register_c |
+            parse_register_d |
+            parse_register_e |
+            parse_register_h |
+            parse_register_l
+        )
 );
+
+
+named!(
+    pub parse_register_i <CompleteStr<'_>, DataAccess> , 
+    value!(DataAccess::SpecialRegisterI, preceded!(tag_no_case!("I"), not!(alphanumeric)))
+);
+
+named!(
+    pub parse_register_r <CompleteStr<'_>, DataAccess> , 
+    value!(DataAccess::SpecialRegisterR, preceded!(tag_no_case!("R"), not!(alphanumeric)))
+);
+
+
+
+macro_rules! parse_any_register8 {
+    ($name: ident, $char:expr, $reg:expr) => {
+        named!(
+            pub $name <CompleteStr<'_>, DataAccess> , 
+            value!(DataAccess::Register8($reg), preceded!(tag_no_case!($char), not!(alphanumeric)))
+        );          
+};
+}
+
+parse_any_register8!(parse_register_a, "A", Register8::A);
+parse_any_register8!(parse_register_b, "B", Register8::B);
+parse_any_register8!(parse_register_c, "C", Register8::C);
+parse_any_register8!(parse_register_d, "d", Register8::D);
+parse_any_register8!(parse_register_e, "e", Register8::E);
+parse_any_register8!(parse_register_h, "h", Register8::H);
+parse_any_register8!(parse_register_l, "l", Register8::L);
+
+
+named!(
+    parse_register_sp <CompleteStr<'_>, DataAccess>, do_parse!(
+        preceded!(tag_no_case!("SP"), not!(alphanumeric)) >>
+        (DataAccess::Register16(Register16::Sp))
+        )
+    );
+
+named!(
+    parse_register_hl <CompleteStr<'_>, DataAccess>, do_parse!(
+        preceded!(tag_no_case!("HL"), not!(alphanumeric)) >>
+        (DataAccess::Register16(Register16::Hl))
+        )
+    );
+
+named!(
+    parse_register_bc <CompleteStr<'_>, DataAccess>, do_parse!(
+        preceded!(tag_no_case!("BC"), not!(alphanumeric)) >>
+        (DataAccess::Register16(Register16::Bc))
+        )
+    );
+
+named!(
+    parse_register_de <CompleteStr<'_>, DataAccess>, do_parse!(
+        preceded!(tag_no_case!("DE"), not!(alphanumeric)) >>
+        (DataAccess::Register16(Register16::De))
+        )
+    );
+
+named!(
+    parse_register_af <CompleteStr<'_>, DataAccess>, do_parse!(
+        preceded!(tag_no_case!("AF"), not!(alphanumeric)) >>
+        (DataAccess::Register16(Register16::Af))
+        )
+    );
+
+
+
+
+
 
 named!(
     pub parse_indexregister8 <CompleteStr<'_>, DataAccess>, do_parse!(
@@ -1215,12 +1317,6 @@ named!(
 );
 
 
-named!(
-    parse_register_sp <CompleteStr<'_>, DataAccess>, do_parse!(
-        tag_no_case!("SP") >>
-        (DataAccess::Register16(Register16::Sp))
-        )
-    );
 
 /// Parse an address access `(expression)`
 named!(

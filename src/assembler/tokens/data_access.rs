@@ -21,7 +21,11 @@ pub enum DataAccess {
     /// Represents an address
     Memory(Expr),
     /// Represnts the test of bit flag
-    FlagTest(FlagTest)
+    FlagTest(FlagTest),
+    /// Special register I
+    SpecialRegisterI,
+    /// Special register R
+    SpecialRegisterR
 }
 
 impl From<Expr> for DataAccess {
@@ -89,7 +93,11 @@ impl fmt::Display for DataAccess {
             &DataAccess::Memory(ref exp) =>
                 write!(f, "({})", exp),
             &DataAccess::FlagTest(ref test) =>
-                write!(f, "{}", test)
+                write!(f, "{}", test),
+            &DataAccess::SpecialRegisterI =>
+                write!(f, "I"),
+            &DataAccess::SpecialRegisterR =>
+                write!(f, "R")
         }
     }
 }
@@ -100,6 +108,27 @@ impl DataAccess {
         match self {
             &DataAccess::Expression(ref expr) => Some(expr),
             _ => None
+        }
+    }
+
+    pub fn is_register_a(&self) -> bool {
+        match self {
+            DataAccess::Register8(Register8::A) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_register_i(&self) -> bool {
+        match self {
+            DataAccess::SpecialRegisterI => true,
+            _ => false
+        }
+    }
+
+    pub fn is_register_r(&self) -> bool {
+        match self {
+            DataAccess::SpecialRegisterR => true,
+            _ => false
         }
     }
 
