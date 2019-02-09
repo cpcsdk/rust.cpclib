@@ -98,9 +98,9 @@ impl Expr {
 
                     }
                 },
-                (Err(a), Ok(_b))  => Err(format!("Unable to make the operation {:?}: {}", oper, a).into()),
-                (Ok(_a), Err(b))  => Err(format!("Unable to make the operation {:?}: {}", oper, b).into()),
-                (Err(a), Err(b))  => Err(format!("Unable to make the operation {:?}: {} & {}", oper, a, b).into())
+                (Err(a), Ok(_b))  => Err(format!("Unable to make the operation {:?}: {:?}", oper, a).into()),
+                (Ok(_a), Err(b))  => Err(format!("Unable to make the operation {:?}: {:?}", oper, b).into()),
+                (Err(a), Err(b))  => Err(format!("Unable to make the operation {:?}: {:?} & {:?}", oper, a, b).into())
             }
 
         };

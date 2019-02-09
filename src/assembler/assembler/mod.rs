@@ -610,7 +610,7 @@ impl Env {
                     Ok(0)
                 }
                 else {
-                    Err(format!("Impossible to evaluate {} at pass {}. {}", exp, self.pass, e).into())
+                    Err(format!("Impossible to evaluate {:?} at pass {:?}. {:?}", exp, self.pass, e).into())
                 }
             }
         }
@@ -621,7 +621,7 @@ impl Env {
     fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<i32, AssemblerError> {
         match exp.resolve(self.symbols()) {
             Ok(value) => Ok(value),
-            Err(e) => Err(format!("Impossible to evaluate {} at pass {}. {}", exp, self.pass, e).into())
+            Err(e) => Err(format!("Impossible to evaluate {:?} at pass {:?}. {:?}", exp, self.pass, e).into())
         }
     }
 
@@ -635,7 +635,7 @@ impl Env {
                     Ok(0)
                 }
                 else {
-                    Err(format!("Impossible to compute relative address {} at pass {}", address, e).into())
+                    Err(format!("Impossible to compute relative address {:?} at pass {:?}", address, e).into())
                 }
             }
         }
@@ -1246,7 +1246,7 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, Assemble
 /// Converts an absolute address to a relative one (relative to $)
 pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(address: i32, opcode_delta: i32, sym: T) -> Result<u8, AssemblerError> {
     match sym.as_ref().current_address() {
-        Err(msg) => Err(format!("Unable to compute the relative address {}", msg).into()),
+        Err(msg) => Err(format!("Unable to compute the relative address {:?}", msg).into()),
         Ok(root) => {
             let delta = (address - (root as i32)) - opcode_delta;
             if delta > 128 || delta < -127 {
