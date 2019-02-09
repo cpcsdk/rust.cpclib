@@ -1273,7 +1273,7 @@ named!(
 
 named!(
     pub parse_value <CompleteStr<'_>, Expr>, do_parse!(
-        val: alt_complete!(hex_u16 | dec_u16) >>
+        val: alt_complete!(hex_u16 | dec_u16 | bin_u16) >>
         (Expr::Value(val as i32))
         )
     );
@@ -1363,7 +1363,7 @@ pub fn dec_u16(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
 
 named!(
 pub bin_u16<CompleteStr<'_>, u16>, do_parse!(
-    tag_no_case!("0b") >>
+    alt!( tag_no_case!("0b") | tag_no_case!("%")) >>
     value: fold_many1!( 
         alt!(
             tag!("0") => {|_|{0 as u16}} |
