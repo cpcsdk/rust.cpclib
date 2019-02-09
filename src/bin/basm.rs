@@ -86,11 +86,16 @@ fn parse (matches: &ArgMatches) -> Result<Listing, BasmError> {
 /// Assemble the given code
 /// TODO use options to configure the base symbole table
 fn assemble(matches: &ArgMatches, listing: &Listing) -> Result<Env, BasmError> {
-	let listing = dbg!(listing);
-	crate::assembler::visit_tokens_all_passes_with_table(
+	let mut options = AssemblingOptions::default();
+
+	options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
+
+	// TODO add symbols if any
+
+	crate::assembler::visit_tokens_all_passes_with_options(
 		&listing.listing(),
-		&crate::assembler::SymbolsTable::default())
-		.map_err(|e|{e.into()})
+		&options
+	).map_err(|e|{e.into()})
 }
 
 /// Save the provided result
@@ -184,6 +189,12 @@ fn main() {
 							.long("binary")
 							.alias("header")
 							.alias("binaryheader")
+					)
+					.arg(
+						Arg::with_name("CASE_INSENSITIVE")
+							.help("Configure the assembler to be case insensitive")
+							.long("case-insensitive")
+							.short("i") 
 					)
 					.group(
 						ArgGroup::with_name("HEADER")

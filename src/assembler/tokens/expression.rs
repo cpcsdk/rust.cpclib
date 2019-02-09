@@ -2,7 +2,7 @@
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
-use crate::assembler::assembler::{SymbolsTable};
+use crate::assembler::assembler::{SymbolsTableCaseDependent};
 use crate::assembler::tokens::Token;
 use crate::assembler::tokens::listing::ListingElement;
 use crate::assembler::AssemblerError;
@@ -68,12 +68,12 @@ impl Expr {
 
     /// Simple evaluation without context => can only evaluate number based operations.
     pub fn eval(&self) -> Result<i32, AssemblerError> {
-        let sym = SymbolsTable::default();
+        let sym = SymbolsTableCaseDependent::default();
         self.resolve(&sym)
     }
 
 
-    pub fn resolve(&self, sym: &SymbolsTable) -> Result<i32, AssemblerError> {
+    pub fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError> {
         use self::Expr::*;
 
         let oper = |left: &Expr, right: &Expr, oper:Oper| -> Result<i32, AssemblerError>{
@@ -109,12 +109,14 @@ impl Expr {
             Value(val) => Ok(val),
 
             Label(ref label) => {
-                let val = sym.value(label);
-                if val.is_some() {
-                    Ok(val.unwrap())
-                }
-                else {
-                    Err(format!("{} not found in symbol table", label).into())
+                match sym.value(label) {
+                    Some(val) => Ok(val),
+                    None => {
+                        Err(AssemblerError::UnknownSymbol{
+                            symbol: label.to_owned(),
+                            closest: sym.closest_symbol(label)
+                        })
+                    }
                 }
             },
 
