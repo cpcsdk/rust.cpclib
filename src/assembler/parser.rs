@@ -748,9 +748,10 @@ named!(
         tag_no_case!("CP") >>
         space1 >>
         operand:  alt!(
-            parse_expr |
+            parse_register8 |
             parse_hl_address |
-            parse_indexregister_with_index
+            parse_indexregister_with_index |
+            parse_expr 
         ) >>
         (
             Token::OpCode(
@@ -1418,7 +1419,8 @@ named!(
         tag_no_case!("NOP") => { |_| Mnemonic::Nop } |
         tag_no_case!("OUTD") => { |_| Mnemonic::Outd } |
         tag_no_case!("OUTI") => { |_| Mnemonic::Outi } |
-        tag_no_case!("RRA") => {|_| Mnemonic::Rra } 
+        tag_no_case!("RRA") => {|_| Mnemonic::Rra } |
+        value!(Mnemonic::Scf, tag_no_case!("SCF"))
       )
     >> (Token::OpCode(res, None, None) )
     )
