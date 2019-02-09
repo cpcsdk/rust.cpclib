@@ -1242,5 +1242,22 @@ INC_H equ opcode(inc h)
         get_val(parse_label("demosystem_binary_start".into()));
         get_val(parse_ld("ld hl, demosystem_binary_start".into()));
         get_val(parse_z80_code("\tprint \"TODO -- Set the real address (in c7 space)\"\n\tld hl, demosystem_binary_start\n\tld de, 0xDEAD\n\tld bc, demosystem_binary_stop - demosystem_binary_start\n".into()));
+
+
+        get_val(parse_z80_code("
+        ;This code is not used here, but can be useful to test the ST3 register of the FDC.
+;Ret=A=ST3.
+FDC_GetST3
+	ld a,%00000100
+	call FDC_PutFDC
+	ld a,(FDC_Head)
+	sla a
+	sla a
+	ld b,a
+	ld a,(FDC_Drive)
+	or b
+	call FDC_PutFDC
+	jr FDC_GetFDC
+        ".into()));
     }
 }

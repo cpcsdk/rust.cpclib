@@ -489,6 +489,7 @@ named!(
             parse_opcode_no_arg |
             parse_push_n_pop |
             parse_res_set |
+            parse_shifts |
             parse_ret
         )
 
@@ -827,6 +828,35 @@ named!(
                 None
             )
         )          
+    )
+);
+
+
+named!(
+    pub parse_shifts <CompleteStr<'_>, Token>, do_parse! (
+        operator: alt!(
+            value!(Mnemonic::Sla, tag_no_case!("SLA")) |
+            value!(Mnemonic::Sra, tag_no_case!("SRA")) |
+            value!(Mnemonic::Srl, tag_no_case!("SRL")) 
+        ) >>
+
+        space1 >>
+
+        operand: alt!(
+            parse_register8 |
+            parse_hl_address |
+            parse_indexregister_with_index
+        ) >>
+
+        (
+            Token::OpCode(
+                operator,
+                Some(operand),
+                None
+            )
+        )
+
+
     )
 );
 
