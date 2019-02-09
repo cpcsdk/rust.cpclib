@@ -47,6 +47,9 @@ pub enum Mnemonic {
     Res,
     Ret,
     Set,
+    Sla,
+    Sra,
+    Srl,
     Xor
 }
 
@@ -86,6 +89,9 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Res => write!(f, "RES"),
             Mnemonic::Ret => write!(f, "RET"),
             Mnemonic::Set => write!(f, "SET"),
+            Mnemonic::Sla => write!(f, "SLA"),
+            Mnemonic::Sra => write!(f, "SRA"),
+            Mnemonic::Srl => write!(f, "SRL"),
             Mnemonic::Xor => write!(f, "XOR"),
         }
     }
