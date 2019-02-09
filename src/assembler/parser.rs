@@ -481,6 +481,7 @@ named!(
             parse_ex_af |
             parse_logical_operator |
             parse_add_or_adc |
+            parse_cp |
             parse_djnz |
             parse_ld |
             parse_inc_dec |
@@ -698,6 +699,25 @@ named!(
     )
 );
 
+
+named!(
+    pub parse_cp <CompleteStr<'_>, Token>, do_parse!(
+        tag_no_case!("CP") >>
+        space1 >>
+        operand:  alt!(
+            parse_expr |
+            parse_hl_address |
+            parse_indexregister_with_index
+        ) >>
+        (
+            Token::OpCode(
+                Mnemonic::Cp,
+                Some(operand),
+                None
+            )
+        )
+    )
+);
 
 named!(
   pub parse_db_or_dw <CompleteStr<'_>, Token>, do_parse!(
