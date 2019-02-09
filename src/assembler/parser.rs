@@ -819,12 +819,19 @@ named!(
 
         space1 >>
 
-        register8: parse_register8 >>
+
+         operand: alt!(
+            parse_register8 |
+            parse_hl_address |
+            parse_indexregister_with_index |
+            parse_expr
+        ) >>
+
 
         (
             Token::OpCode(
                 operator,
-                Some(register8),
+                Some(operand),
                 None
             )
         )          
