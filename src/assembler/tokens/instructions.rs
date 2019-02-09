@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use std::fmt;
 
-use crate::assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,assemble_align,Bytes,SymbolsTable};
+use crate::assembler::assembler::{assemble_opcode,assemble_db_or_dw,assemble_defs,assemble_align,Bytes,SymbolsTableCaseDependent};
 use crate::assembler::tokens::expression::*;
 use crate::assembler::tokens::data_access::*;
 use crate::assembler::parser::*;
@@ -357,7 +357,7 @@ impl Token {
 
     /// Unroll the tokens when in a repetition loop
     /// TODO return an iterator in order to not produce the vector each time
-    pub fn unroll(&self, sym: & SymbolsTable) -> 
+    pub fn unroll(&self, sym: & SymbolsTableCaseDependent) -> 
         Option<Result<Vec<&Token>, AssemblerError>> {
         if let Token::Repeat(ref expr, ref tokens, ref counter_label) = self {
             let count: Result<i32, AssemblerError> = expr.resolve(sym);
@@ -437,15 +437,15 @@ impl Token {
     /// Dummy version that assemble without taking into account the context
     /// TODO find a way to not build a symbol table each time
     pub fn to_bytes(&self) -> Result<Bytes, AssemblerError> {
-        let mut table = SymbolsTable::laxist();
+        let mut table = SymbolsTableCaseDependent::laxist();
         let table = &mut table;
         self.to_bytes_with_context(table)
     }
 
     /// Assemble the symbol taking into account some context, but never modify this context
-    pub fn to_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<Bytes, AssemblerError> {
+    pub fn to_bytes_with_context(&self, table: &mut SymbolsTableCaseDependent) -> Result<Bytes, AssemblerError> {
 
-        let mut env = &mut crate::assembler::assembler::Env::with_table(table);
+        let mut env = &mut crate::assembler::assembler::Env::with_table_case_dependent(table);
                 match self {
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2)
                 => assemble_opcode(

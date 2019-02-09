@@ -1,7 +1,7 @@
 use crate::assembler::tokens::*;
 use crate::assembler::tokens::listing::*;
 use std::str::FromStr;
-use crate::assembler::assembler::SymbolsTable;
+use crate::assembler::assembler::SymbolsTableCaseDependent;
 use crate::assembler::AssemblerError;
 
 
@@ -240,7 +240,7 @@ impl ListingElement for Token {
 
 
     /// Return the number of bytes of the token given the provided context
-    fn number_of_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<usize, String> {
+    fn number_of_bytes_with_context(&self, table: &mut SymbolsTableCaseDependent) -> Result<usize, String> {
         let bytes = self.to_bytes_with_context(table);
         if bytes.is_ok() {
             Ok(bytes.ok().unwrap().len())
@@ -359,7 +359,7 @@ impl Listing {
     pub fn number_of_bytes(&self) -> Result<usize, AssemblerError> {
         let mut count = 0;
         let mut current_address : Option<usize>= None;
-        let mut sym = SymbolsTable::default();
+        let mut sym = SymbolsTableCaseDependent::default();
 
         for token in self.listing().iter() {
             if current_address.is_some() {

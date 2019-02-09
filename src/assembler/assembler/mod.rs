@@ -7,10 +7,11 @@ use std::collections::HashMap;
 use smallvec::SmallVec;
 use std::fmt;
 use crate::assembler::AssemblerError;
+use crate::assembler::AssemblingOptions;
 
 use failure::Error;
 use either::*;
-
+use delegate::delegate;
 use itertools::Itertools;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
@@ -219,12 +220,14 @@ impl SymbolsTable {
     }
 
     /// Set the given symbol to $ value
-    pub fn set_symbol_to_current_address(&mut self, label: &String) -> Result<(), AssemblerError> {
+    pub fn set_symbol_to_current_address<S: AsRef<str>>(&mut self, label: S) -> Result<(), AssemblerError> {
 
         self.current_address()
             .map(|val| {
-                self.map.insert(label.clone(), Symbol::Integer(val as i32));
-                ()
+                self.map.insert(
+                    label.as_ref().to_owned(), 
+                    Symbol::Integer(val as i32)
+                );
                 }
             )
     }
@@ -237,8 +240,8 @@ impl SymbolsTable {
         );
     }
 
-    pub fn update_symbol_to_value(&mut self, label: &String, value: i32) {
-        *(self.map.get_mut(label).unwrap()) = Symbol::Integer(value as _);
+    pub fn update_symbol_to_value<S: AsRef<str>>(&mut self, label: S, value: i32) {
+        *(self.map.get_mut(label.as_ref()).unwrap()) = Symbol::Integer(value as _);
     }
 
     /// TODO return the symbol instead of the int
@@ -259,6 +262,7 @@ impl SymbolsTable {
                 Some(1)
             }
             else {
+ //               eprintln!("Symbol table content {:?}", &self.map);
                 None
             }
         }
@@ -271,6 +275,118 @@ impl SymbolsTable {
 
     pub fn contains_symbol<S: AsRef<str>>(&self, key:S) -> bool {
         self.map.contains_key(&key.as_ref().to_owned())
+    }
+
+    /// Returns the closest symbol
+    pub fn closest_symbol<S: AsRef<str>>(&self, symbol: S) -> Option<String> {
+        self.map.keys()
+            .map(move |symbol2| {
+                (strsim::levenshtein(symbol2, symbol.as_ref()), symbol2)
+            })
+            .min()
+            .map(
+              |(distance, symbol2)| {
+                  symbol2.to_owned()
+              }
+            )
+    }
+}
+
+/// Wrapper around the symbols table in order to easily manage the fact that the assembler is case dependent or independant
+#[derive(Debug, Clone)]
+pub struct SymbolsTableCaseDependent {
+    table: SymbolsTable,
+    case_sensitive: bool
+}
+
+/// By default, the assembler is case sensitive
+impl Default for SymbolsTableCaseDependent {
+    fn default() -> SymbolsTableCaseDependent {
+        SymbolsTableCaseDependent {
+            table: Default::default(),
+            case_sensitive: true
+        }
+    }
+}
+
+impl AsRef<SymbolsTable> for SymbolsTableCaseDependent {
+    fn as_ref(&self) -> &SymbolsTable {
+        &self.table
+    }
+}
+
+impl SymbolsTableCaseDependent {
+    fn new(table: SymbolsTable, case_sensitive: bool) -> SymbolsTableCaseDependent {
+        SymbolsTableCaseDependent {
+            table,
+            case_sensitive
+        }
+    }
+
+    /// Build a laxists vesion of the table : do not care of case and absences of symboles
+    pub fn laxist() -> SymbolsTableCaseDependent {
+        SymbolsTableCaseDependent::new(
+            SymbolsTable::laxist(),
+            false
+        )
+    }
+
+    /// Modify the symbol value depending on the case confurigration (do nothing, or set uppercase)
+    fn normalize_symbol<S: AsRef<str> >(&self, symbol: S) -> String {
+
+
+        let new = if self.case_sensitive {
+            symbol.as_ref().to_owned()
+        }
+        else {
+            symbol.as_ref().to_uppercase()
+        };
+
+
+
+        eprintln!("[{}] {:?} => {:?} ", self.case_sensitive, symbol.as_ref(), new);
+
+        new
+    }
+
+    #[deprecated(note="Symbol table should be manipulated from the options. It sould be better to rewrite code.")]
+    fn set_table(&mut self, table: SymbolsTable) {
+        self.table = table
+    }
+
+
+    pub fn set_symbol_to_current_address<S: AsRef<str>>(&mut self, symbol: S) -> Result<(), AssemblerError> {
+        self.table.set_symbol_to_current_address(self.normalize_symbol(symbol))
+    }
+
+    pub fn set_symbol_to_value<S: AsRef<str>>(&mut self, symbol: S, value: i32) {
+        self.table.set_symbol_to_value(self.normalize_symbol(symbol), value)
+    }
+
+    pub fn update_symbol_to_value<S: AsRef<str>>(&mut self, symbol: S, value: i32) {
+        self.table.update_symbol_to_value(self.normalize_symbol(symbol), value)
+    }
+
+    pub fn value<S: AsRef<str>>(&self, symbol: S) -> Option<i32> {
+        self.table.value(self.normalize_symbol(symbol))
+     }
+
+    pub fn remove_symbol<S: AsRef<str>>(&mut self, symbol: S) -> Option<Symbol> {
+         self.table.remove_symbol(self.normalize_symbol(symbol))
+     }
+
+    pub fn contains_symbol<S: AsRef<str>>(&self, symbol:S) -> bool {
+        self.table.contains_symbol(self.normalize_symbol(symbol
+        ))
+    }
+
+
+    delegate! {
+        target self.table {
+            pub fn current_address(&self) -> Result<u16, AssemblerError>;
+            pub fn set_current_address(&mut self, address: u16);
+            pub fn closest_symbol<S: AsRef<str>>(&self, symbol: S) -> Option<String>;
+        }
     }
 }
 
@@ -304,7 +420,7 @@ pub struct Env {
 
     iorg: usize,
     org_zones: Vec<OrgZone>,
-    symbols: SymbolsTable,
+    symbols: SymbolsTableCaseDependent,
 
 }
 impl fmt::Debug for Env{
@@ -332,7 +448,7 @@ impl Default for Env {
             iorg: 0,
             org_zones: Vec::new(),
 
-            symbols: SymbolsTable::default(),
+            symbols: Default::default(),
         }
     }
 }
@@ -341,6 +457,13 @@ impl Env {
     /// Create an environment that embeds a copy of the given table and is configured to be in the latest pass.
     /// Mainly used for tests.
     pub fn with_table(symbols: &SymbolsTable) -> Env {
+        let mut env = Env::default();
+        env.symbols.set_table(symbols.clone());
+        env.pass = AssemblingPass::SecondPass;
+        env
+    }
+
+    pub fn with_table_case_dependent(symbols: &SymbolsTableCaseDependent) -> Env {
         let mut env = Env::default();
         env.symbols = symbols.clone();
         env.pass = AssemblingPass::SecondPass;
@@ -392,7 +515,9 @@ impl Env {
 
     /// Returns the stream of bytes produces
     pub fn produced_bytes(&self) -> Vec<u8> {
-        self.memory(self.startadr.unwrap() as _, self.outputadr - self.startadr.unwrap())
+        // assume we start at 0 if never provided
+        let startadr = self.startadr.or(Some(0)).unwrap();
+        self.memory( startadr as _, self.outputadr - startadr)
     }
 
     /// Returns the address of the 1st written byte
@@ -465,12 +590,11 @@ impl Env {
     }
 
 
-
-    pub fn symbols(&self) -> &SymbolsTable {
+    pub fn symbols(&self) -> &SymbolsTableCaseDependent {
         &self.symbols
     }
 
-    pub fn symbols_mut(&mut self) -> &mut SymbolsTable {
+    pub fn symbols_mut(&mut self) -> &mut SymbolsTableCaseDependent {
         &mut self.symbols
     }
 
@@ -647,16 +771,22 @@ impl Env {
 
 /// Visit the tokens during several passes without providing a specific symbol table.
 pub fn visit_tokens_all_passes(tokens: &[Token]) -> Result<Env, AssemblerError> {
-    let table = SymbolsTable::default();
-    visit_tokens_all_passes_with_table(tokens, &table)
+    let options = AssemblingOptions::default();
+    visit_tokens_all_passes_with_options(tokens, &options)
 }
 
 
 
 /// Visit the tokens during several passes by providing a specific symbol table.
-pub fn visit_tokens_all_passes_with_table(tokens: &[Token], table: &SymbolsTable) -> Result<Env, AssemblerError> {
+pub fn visit_tokens_all_passes_with_options(
+    tokens: &[Token], 
+    options: &AssemblingOptions) -> Result<Env, AssemblerError> {
+
     let mut env = Env::default();
-    env.symbols = table.clone(); // XXX cannot use with_table as it setup pass 2
+    env.symbols = SymbolsTableCaseDependent::new(
+        options.symbols().clone(),
+        options.case_sensitive()
+    );
 
     loop {
         env.start_new_pass();
@@ -1114,8 +1244,8 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, Assemble
 
 
 /// Converts an absolute address to a relative one (relative to $)
-pub fn absolute_to_relative(address: i32, opcode_delta: i32, sym: &SymbolsTable) -> Result<u8, AssemblerError> {
-    match sym.current_address() {
+pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(address: i32, opcode_delta: i32, sym: T) -> Result<u8, AssemblerError> {
+    match sym.as_ref().current_address() {
         Err(msg) => Err(format!("Unable to compute the relative address {}", msg).into()),
         Ok(root) => {
             let delta = (address - (root as i32)) - opcode_delta;
@@ -1429,7 +1559,7 @@ fn assemble_nops2() -> Result<Bytes, AssemblerError> {
 
 
 
-fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, AssemblerError>{
+fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTableCaseDependent) -> Result<Bytes, AssemblerError>{
    let mut bytes = Bytes::new();
 
     match arg1 {
@@ -1463,7 +1593,7 @@ fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Resu
     }
 }
 
-fn assemble_out(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTable) -> Result<Bytes, AssemblerError>{
+fn assemble_out(arg1: &DataAccess, arg2: &DataAccess, sym: &SymbolsTableCaseDependent) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
     match arg1 {
@@ -1540,7 +1670,7 @@ fn assemble_push(arg1: &DataAccess) -> Result<Bytes, AssemblerError>{
 }
 
 
-fn assemble_logical_operator(mnemonic: &Mnemonic, arg1: &DataAccess, sym : &SymbolsTable)-> Result<Bytes, AssemblerError>{
+fn assemble_logical_operator(mnemonic: &Mnemonic, arg1: &DataAccess, sym : &SymbolsTableCaseDependent)-> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
     let memory_code = || {
@@ -1593,7 +1723,7 @@ fn assemble_logical_operator(mnemonic: &Mnemonic, arg1: &DataAccess, sym : &Symb
     Ok(bytes)
 }
 
-fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, AssemblerError>{
+fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTableCaseDependent) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
     let is_add = match mnemonic {
         &Mnemonic::Add => true,
@@ -1725,7 +1855,7 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
 
 }
 
-fn assemble_res_or_set(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTable) -> Result<Bytes, AssemblerError>{
+fn assemble_res_or_set(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess , sym: &SymbolsTableCaseDependent) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
     let is_res = match mnemonic {
         &Mnemonic::Res => true,

@@ -1,6 +1,6 @@
 use std::ops::Deref;
 use std::ops::DerefMut;
-use crate::assembler::assembler::SymbolsTable;
+use crate::assembler::assembler::SymbolsTableCaseDependent;
 
 
 
@@ -13,7 +13,7 @@ pub trait ListingElement {
     fn number_of_bytes(&self) -> Result<usize, String>;
 
     /// Return the number of bytes given the context (needed for Align)
-    fn number_of_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<usize, String>;
+    fn number_of_bytes_with_context(&self, table: &mut SymbolsTableCaseDependent) -> Result<usize, String>;
 }
 
 
