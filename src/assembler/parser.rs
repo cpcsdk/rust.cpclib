@@ -1420,7 +1420,11 @@ named!(
         tag_no_case!("OUTD") => { |_| Mnemonic::Outd } |
         tag_no_case!("OUTI") => { |_| Mnemonic::Outi } |
         tag_no_case!("RRA") => {|_| Mnemonic::Rra } |
-        value!(Mnemonic::Scf, tag_no_case!("SCF"))
+        value!(Mnemonic::Scf, tag_no_case!("SCF")) |
+        value!(Mnemonic::Ind, tag_no_case!("IND")) |
+        value!(Mnemonic::Indr, tag_no_case!("INDR")) |
+        value!(Mnemonic::Ini, tag_no_case!("INI")) |
+        value!(Mnemonic::Inir, tag_no_case!("INIR"))
       )
     >> (Token::OpCode(res, None, None) )
     )
