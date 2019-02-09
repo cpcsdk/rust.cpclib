@@ -423,6 +423,7 @@ mod tests {
         assert_eq!(Token::try_from(" ld a, (hl)").unwrap().estimated_duration().unwrap(), 2);
         assert_eq!(Token::try_from(" ld a, (dd)").unwrap().estimated_duration().unwrap(), 4);
         assert_eq!(Token::try_from(" ld hl, (dd)").unwrap().estimated_duration().unwrap(), 5);
+        println!("{:?}",Token::try_from(" ld de, (dd)").unwrap());
         assert_eq!(Token::try_from(" ld de, (dd)").unwrap().estimated_duration().unwrap(), 6);
         assert_eq!(Token::try_from(" ld a, (ix+0)").unwrap().estimated_duration().unwrap(), 5);
         assert_eq!(Token::try_from(" ld l, (ix+0)").unwrap().estimated_duration().unwrap(), 5);
