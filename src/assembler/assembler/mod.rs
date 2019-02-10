@@ -1110,7 +1110,10 @@ pub fn assemble_opcode(
         Mnemonic::Outi | Mnemonic::Outd |
         Mnemonic::Ei | Mnemonic::Di | 
         Mnemonic::ExAf | Mnemonic::Exx | 
-        Mnemonic::Halt | Mnemonic::Rra |
+        Mnemonic::Halt | 
+        Mnemonic::Ind | Mnemonic::Indr |
+        Mnemonic::Ini | Mnemonic::Inir |
+        Mnemonic::Rra |
         Mnemonic::Scf
             => assemble_no_arg(mnemonic),
         &Mnemonic::Nop
@@ -1186,6 +1189,10 @@ fn assemble_no_arg(mnemonic: &Mnemonic) -> Result<Bytes, AssemblerError> {
         Mnemonic::Halt => {
             &[0x76]
         },
+        Mnemonic::Ind => &[0xED, 0xAA],&
+        Mnemonic::Indr => &[0xED, 0xBA],&
+        Mnemonic::Ini => &[0xED, 0xA2],&
+        Mnemonic::Inir => &[0xED, 0xB2],&
         Mnemonic::Outd => {
             &[0xED, 0xAB]
         },
