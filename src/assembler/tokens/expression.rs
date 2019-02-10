@@ -26,6 +26,11 @@ pub enum Expr {
   Div(Box<Expr>, Box<Expr>),
   Mod(Box<Expr>, Box<Expr>),
 
+  // Binary operations
+  BinaryAnd(Box<Expr>, Box<Expr>),
+  BinaryOr(Box<Expr>, Box<Expr>),
+  BinaryXor(Box<Expr>, Box<Expr>),
+
   Neg(Box<Expr>),
 
   Paren(Box<Expr>),
@@ -95,6 +100,10 @@ impl Expr {
                         Oper::Div => Ok(a/b),
                         Oper::Mod => Ok(a%b),
 
+                        Oper::BinaryAnd => Ok(a&b),
+                        Oper::BinaryOr => Ok(a|b),
+                        Oper::BinaryXor => Ok(a^b),
+
                         Oper::Equal => Ok( (a == b) as i32),
 
                         Oper::LowerOrEqual => Ok( (a <= b) as i32),
@@ -150,6 +159,11 @@ impl Expr {
             Div(ref left, ref right) => oper(left, right, Oper::Div),
             Mod(ref left, ref right) => oper(left, right, Oper::Mod),
 
+
+            BinaryAnd(ref left, ref right) => oper(left, right, Oper::BinaryAnd),
+            BinaryOr(ref left, ref right) => oper(left, right, Oper::BinaryOr),
+            BinaryXor(ref left, ref right) => oper(left, right, Oper::BinaryXor),
+
             Neg(ref e) => e.resolve(sym).map(|result|{-result}),
 
             Equal(ref left, ref right) => oper(left, right, Oper::Equal),
@@ -201,6 +215,10 @@ pub enum Oper {
   Div,
   Mod,
 
+  BinaryAnd,
+  BinaryOr,
+  BinaryXor,
+
   Equal,
   LowerOrEqual,
   GreaterOrEqual,
@@ -225,6 +243,10 @@ impl Display for Oper {
             &Mul => write!(format, "*"),
             &Div => write!(format, "/"),
             &Mod => write!(format, "%"),
+
+            BinaryAnd => write!(format, "&"),
+            BinaryOr => write!(format, "|"),
+            BinaryXor => write!(format, "^"),
 
             &Equal => write!(format, "=="),
             &LowerOrEqual => write!(format, "<="),
@@ -251,6 +273,11 @@ impl Display for Expr {
       &Mul(ref left, ref right) => write!(format, "{} * {}", left, right),
       &Mod(ref left, ref right) => write!(format, "{} % {}", left, right),
       &Div(ref left, ref right) => write!(format, "{} / {}", left, right),
+
+
+      BinaryAnd(ref left, ref right) => write!(format, "{} {} {}", left, Oper::BinaryAnd, right),
+      BinaryOr(ref left, ref right) => write!(format, "{} {} {}", left, Oper::BinaryOr, right),
+      BinaryXor(ref left, ref right) => write!(format, "{} {} {}", left, Oper::BinaryXor, right),
 
       &Neg(ref e) => write!(format, "-({})", e),
 
@@ -283,6 +310,11 @@ impl Debug for Expr {
       Mul(ref left, ref right) => write!(format, "({:?} * {:?})", left, right),
       Mod(ref left, ref right) => write!(format, "({:?} % {:?})", left, right),
       Div(ref left, ref right) => write!(format, "({:?} / {:?})", left, right),
+
+
+      BinaryAnd(ref left, ref right) => write!(format, "({:?} & {:?})", left, right),
+      BinaryOr(ref left, ref right) => write!(format, "({:?} | {:?})", left, right),
+      BinaryXor(ref left, ref right) => write!(format, "({:?} ^ {:?})", left, right),
 
       Neg(ref e) => write!(format, "Neg({:?})", e),
 

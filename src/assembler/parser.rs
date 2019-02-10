@@ -1653,6 +1653,11 @@ fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
       Oper::Div => Expr::Div(Box::new(acc), Box::new(expr)),
       Oper::Mod => Expr::Mod(Box::new(acc), Box::new(expr)),
 
+
+      Oper::BinaryAnd => Expr::BinaryAnd(Box::new(acc), Box::new(expr)),
+      Oper::BinaryOr => Expr::BinaryOr(Box::new(acc), Box::new(expr)),
+      Oper::BinaryXor => Expr::BinaryXor(Box::new(acc), Box::new(expr)),
+
       Oper::Equal => Expr::Equal(Box::new(acc), Box::new(expr)),
       Oper::StrictlyGreater => Expr::StrictlyGreater(Box::new(acc), Box::new(expr)),
       Oper::StrictlyLower => Expr::StrictlyLower(Box::new(acc), Box::new(expr)),
@@ -1738,7 +1743,34 @@ named!(pub comp<CompleteStr<'_>, Expr>, do_parse!(
     remainder: many0!(
            alt_complete!(
              do_parse!(tag!("+") >> add: term >> (Oper::Add, add)) |
-             do_parse!(tag!("-") >> sub: term >> (Oper::Sub, sub))
+             do_parse!(tag!("-") >> sub: term >> (Oper::Sub, sub)) |
+
+             do_parse!(
+                 alt!( 
+                     terminated!(tag!("&"), not!(tag!("&"))) |
+                     tag_no_case!("AND")
+                 ) >> 
+                 and: term >> 
+                 (Oper::BinaryAnd, and)
+            ) |
+
+            do_parse!(
+                 alt!( 
+                     terminated!(tag!("|"), not!(tag!("|"))) |
+                     tag_no_case!("OR")
+                 ) >> 
+                 and: term >> 
+                 (Oper::BinaryAnd, and)
+            ) |
+
+             do_parse!(
+                 alt!( 
+                     terminated!(tag!("^"), not!(tag!("^"))) |
+                     tag_no_case!("XOR")
+                 ) >> 
+                 and: term >> 
+                 (Oper::BinaryAnd, and)
+            ) 
            )
          ) >>
     (fold_exprs(initial, remainder))
