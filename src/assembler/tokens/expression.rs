@@ -26,6 +26,8 @@ pub enum Expr {
   Div(Box<Expr>, Box<Expr>),
   Mod(Box<Expr>, Box<Expr>),
 
+  Neg(Box<Expr>),
+
   Paren(Box<Expr>),
 
   // Boolean operations
@@ -65,6 +67,10 @@ impl<S:AsRef<str>> From<S> for Expr {
 
 
 impl Expr {
+
+    pub fn neg(&self) -> Expr {
+        Expr::Neg(Box::new(self.clone()))
+    }
 
     /// Simple evaluation without context => can only evaluate number based operations.
     pub fn eval(&self) -> Result<i32, AssemblerError> {
@@ -108,6 +114,7 @@ impl Expr {
         match *self {
             Value(val) => Ok(val),
 
+
             Label(ref label) => {
                 match sym.value(label) {
                     Some(val) => Ok(val),
@@ -143,12 +150,17 @@ impl Expr {
             Div(ref left, ref right) => oper(left, right, Oper::Div),
             Mod(ref left, ref right) => oper(left, right, Oper::Mod),
 
+            Neg(ref e) => e.resolve(sym).map(|result|{-result}),
 
             Equal(ref left, ref right) => oper(left, right, Oper::Equal),
-            LowerOrEqual(ref left, ref right) => oper(left, right, Oper::LowerOrEqual),
-            GreaterOrEqual(ref left, ref right) => oper(left, right, Oper::GreaterOrEqual),
-            StrictlyGreater(ref left, ref right) => oper(left, right, Oper::StrictlyGreater),
-            StrictlyLower(ref left, ref right) => oper(left, right, Oper::StrictlyLower),
+            LowerOrEqual(ref left, ref right) 
+                => oper(left, right, Oper::LowerOrEqual),
+            GreaterOrEqual(ref left, ref right) 
+                => oper(left, right, Oper::GreaterOrEqual),
+            StrictlyGreater(ref left, ref right) 
+                => oper(left, right, Oper::StrictlyGreater),
+            StrictlyLower(ref left, ref right) 
+                => oper(left, right, Oper::StrictlyLower),
 
             Paren(ref e) => e.resolve(sym),
 
@@ -200,7 +212,6 @@ pub enum Oper {
 pub enum Function {
     Hi,
     Lo
-
 }
 
 
@@ -241,6 +252,8 @@ impl Display for Expr {
       &Mod(ref left, ref right) => write!(format, "{} % {}", left, right),
       &Div(ref left, ref right) => write!(format, "{} / {}", left, right),
 
+      &Neg(ref e) => write!(format, "-({})", e),
+
       &Paren(ref expr) => write!(format, "({})", expr),
 
 
@@ -270,6 +283,8 @@ impl Debug for Expr {
       Mul(ref left, ref right) => write!(format, "({:?} * {:?})", left, right),
       Mod(ref left, ref right) => write!(format, "({:?} % {:?})", left, right),
       Div(ref left, ref right) => write!(format, "({:?} / {:?})", left, right),
+
+      Neg(ref e) => write!(format, "Neg({:?})", e),
 
       Paren(ref expr) => write!(format, "[{:?}]", expr),
 

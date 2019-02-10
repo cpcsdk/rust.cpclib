@@ -145,7 +145,7 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
         Register8::L.into(),
-        DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, Oper::Add, expr)
+        DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, expr)
     )
 }
 

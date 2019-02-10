@@ -88,7 +88,7 @@ impl Z80 {
     fn get_value(&self, access: &DataAccess) -> Option<u16> {
         match access {
             &DataAccess::Memory(_) => None, // TODO read the value from memory
-            &DataAccess::IndexRegister16WithIndex(_, _, _) => None,
+            &DataAccess::IndexRegister16WithIndex(_, _) => None,
             &DataAccess::IndexRegister16(_) => Some(self.get_register_16(access).value() as _),
             &DataAccess::IndexRegister8(_) => Some(self.get_register_8(access).value() as _),
             &DataAccess::Register16(_) => Some(self.get_register_16(access).value() as _),

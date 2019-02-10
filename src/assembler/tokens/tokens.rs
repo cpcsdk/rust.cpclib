@@ -29,7 +29,7 @@ impl ListingElement for Token {
                             &Some(DataAccess::Register8(_)) => {
                                 match arg2 {
                                     &Some(DataAccess::Register8(_)) => 1,
-                                    &Some(DataAccess::IndexRegister16WithIndex(_, _, _)) => 5,
+                                    &Some(DataAccess::IndexRegister16WithIndex(_, _)) => 5,
                                     _ => 2,
                                 }
                             },
@@ -45,7 +45,7 @@ impl ListingElement for Token {
                             &Some(DataAccess::IndexRegister8(_)) => 2,
                             &Some(DataAccess::Expression(_)) => 2,
                             &Some(DataAccess::MemoryRegister16(_)) => 2,
-                            &Some(DataAccess::IndexRegister16WithIndex(_, _, _)) => 5,
+                            &Some(DataAccess::IndexRegister16WithIndex(_, _)) => 5,
                             _ => unreachable!()
                         }
                     },
@@ -125,7 +125,7 @@ impl ListingElement for Token {
                                     &Some(DataAccess::MemoryRegister16(Register16::Hl)) => 2,
                                     &Some(DataAccess::Expression(_)) => 2,
                                     &Some(DataAccess::Memory(_)) => 4,
-                                    &Some(DataAccess::IndexRegister16WithIndex(_, _, _))=> 5,
+                                    &Some(DataAccess::IndexRegister16WithIndex(_,_))=> 5,
                                     _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                                 }
 
@@ -203,7 +203,7 @@ impl ListingElement for Token {
                         match arg2 {
                             &Some(DataAccess::Register8(_)) => 2,
                             &Some(DataAccess::MemoryRegister16(_)) => 3, // XXX only HL
-                            &Some(DataAccess::IndexRegister16WithIndex(_, _, _)) => 7,
+                            &Some(DataAccess::IndexRegister16WithIndex(_, _)) => 7,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
                     },
