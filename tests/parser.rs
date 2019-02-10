@@ -1182,6 +1182,15 @@ INC_H equ opcode(inc h)
     }
 
     #[test]
+    fn test_db() {
+        let code = "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector".into();
+        get_val(parse_db_or_dw(code));
+
+        let code = "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector and %1111, Gfx1_bin_size".into();
+        get_val(parse_db_or_dw(code));
+    }
+
+    #[test]
     fn rorg() {
         let code = "\tRORG 1\n\tREND";
         let tokens = get_val(parse_rorg(code.into()));
