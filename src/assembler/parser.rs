@@ -1295,25 +1295,32 @@ named!(
 named!(
     parse_indexregister_with_index <CompleteStr<'_>, DataAccess>, do_parse!(
             tag!("(") >>
-            many0!(space) >>
+
+            space0 >>
 
             reg: parse_indexregister16 >>
 
-            many0!(space) >>
+            space0 >>
 
             op: alt_complete!(
                 value!(Oper::Add, tag!("+")) |
                 value!(Oper::Sub, tag!("-"))
             ) >>
 
-            many0!(space) >>
+            space0 >>
 
             expr: expr >>
 
-            many0!(space) >>
+            space0 >>
             tag!(")")
         >>
-        (DataAccess::IndexRegister16WithIndex(reg.get_indexregister16().unwrap(), op, expr))
+        ({
+            let target = reg.get_indexregister16().unwrap();
+            DataAccess::IndexRegister16WithIndex(
+                target,
+                expr
+            )
+        })
     )
 );
 

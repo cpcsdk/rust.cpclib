@@ -7,7 +7,7 @@ use crate::assembler::tokens::registers::*;
 /// Encode the way mnemonics access to data
 pub enum DataAccess {
     /// We are using an indexed register associated to its index
-    IndexRegister16WithIndex(IndexRegister16, Oper, Expr),
+    IndexRegister16WithIndex(IndexRegister16, Expr),
     IndexRegister16(IndexRegister16),
     IndexRegister8(IndexRegister8),
     /// Represents a standard 16 bits register
@@ -76,8 +76,8 @@ impl From<FlagTest> for DataAccess {
 impl fmt::Display for DataAccess {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            &DataAccess::IndexRegister16WithIndex(ref reg, ref op,  ref delta) =>
-                write!(f, "({} {} {})", reg, op, delta),
+            &DataAccess::IndexRegister16WithIndex(ref reg, ref delta) =>
+                write!(f, "({} {})", reg, delta),
             &DataAccess::IndexRegister16(ref reg) =>
                 write!(f, "{}", reg),
             &DataAccess::Register16(ref reg) =>

@@ -1400,7 +1400,7 @@ impl Env {
                 add_byte(&mut bytes, 0b01000110 + bit << 3);
             },
 
-            DataAccess::IndexRegister16WithIndex(_, _, _) => {
+            DataAccess::IndexRegister16WithIndex(_, _) => {
                 unimplemented!()
             },
 
@@ -1452,11 +1452,8 @@ impl Env {
                 }
             },
 
-            DataAccess::IndexRegister16WithIndex(ref reg, ref op, ref exp) => {
+            DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
                 let mut val = self.resolve_expr_may_fail_in_first_pass(exp)? as i32;
-                if let Oper::Sub = op {
-                    val = -val;
-                }
                 bytes.push(indexed_register16_to_code(reg));
                 add_byte(&mut bytes, 0xcb);
                 bytes.push((val & 0xff) as _);
@@ -1506,11 +1503,8 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
             }
 
-            &DataAccess::IndexRegister16WithIndex(ref reg, ref op, ref exp) => {
+            &DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
                 let mut val = env.resolve_expr_may_fail_in_first_pass(exp)?;
-                if let &Oper::Sub = op {
-                    val = -val;
-                }
 
                 add_index_register_code(&mut bytes, reg);
                 add_byte(&mut bytes, 0b01000110 | (dst <<3));
@@ -1843,10 +1837,9 @@ fn assemble_logical_operator(mnemonic: &Mnemonic, arg1: &DataAccess, sym : &Symb
             bytes.push(memory_code());
         },
 
-        DataAccess::IndexRegister16WithIndex(ref reg, ref oper, ref exp) => {
+        DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
 
             let value = exp.resolve(sym)? & 0xff;
-            assert_eq!(oper, &Oper::Add); // XXX todo thing if it is not the case
             bytes.push(indexed_register16_to_code(reg));
             bytes.push(memory_code());
             bytes.push(value as u8);
@@ -1878,22 +1871,12 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
                     }
                 },
 
-                &DataAccess::IndexRegister16WithIndex(ref reg, ref op, ref exp) => {
+                &DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
                     let val = exp.resolve(sym)? as i32;
-                    let val = match op {
-                        &Oper::Add => val,
-                        &Oper::Sub => -val,
-                        _ => panic!()
-                    };
 
                     // TODO check if the code is ok
                     bytes.push(indexed_register16_to_code(reg));
-                    if is_add {
-                        bytes.push(0b10000110);
-                    }
-                    else {
-                        bytes.push(0b10001110);
-                    }
+                    bytes.push(0b10000110);
                     add_index(&mut bytes, val)?;
 
                 },
@@ -2254,7 +2237,7 @@ mod test {
             DataAccess::Register8(Register8::A),
             DataAccess::Expression(0.into()),
             DataAccess::MemoryRegister16(Register16::Hl),
-            DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, Oper::Add, 2.into())
+            DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, 2.into())
         ];
 
         for operator in operators.iter() {
