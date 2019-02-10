@@ -1110,7 +1110,8 @@ pub fn assemble_opcode(
         Mnemonic::Outi | Mnemonic::Outd |
         Mnemonic::Ei | Mnemonic::Di | 
         Mnemonic::ExAf | Mnemonic::Exx | 
-        Mnemonic::Halt | &Mnemonic::Rra
+        Mnemonic::Halt | Mnemonic::Rra |
+        Mnemonic::Scf
             => assemble_no_arg(mnemonic),
         &Mnemonic::Nop
             => assemble_nop(),
@@ -1194,6 +1195,9 @@ fn assemble_no_arg(mnemonic: &Mnemonic) -> Result<Bytes, AssemblerError> {
         Mnemonic::Rra => {
             &[0x1f]
         },
+        Mnemonic::Scf => {
+            &[0x37]
+        }
         _ => {
             return Err(format!("{} not treated", mnemonic).into());
         }
