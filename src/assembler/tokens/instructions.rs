@@ -111,6 +111,30 @@ impl fmt::Display for Mnemonic {
     }
 }
 
+
+impl Mnemonic {
+    pub fn is_sla(&self) -> bool {
+        match self {
+            Mnemonic::Sla => true,
+            _ => false
+        }
+    }
+
+    pub fn is_sra(&self) -> bool {
+        match self {
+            Mnemonic::Sra => true,
+            _ => false
+        }
+    }
+
+    pub fn is_srl(&self) -> bool {
+        match self {
+            Mnemonic::Srl => true,
+            _ => false
+        }
+    }
+}
+
 /// Stable ticker serves to count nops with the assembler !
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StableTickerAction {

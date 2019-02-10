@@ -848,6 +848,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError>{
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
+        // ignored tokens
+        Token::List | Token::NoList => {Ok(())},
         _ => panic!("Not treated {:?}", token)
     }
 }
@@ -1088,6 +1090,10 @@ pub fn assemble_opcode(
             => assemble_logical_operator(mnemonic, arg1.as_ref().unwrap(), sym),
         &Mnemonic::Add | &Mnemonic::Adc
             => assemble_add_or_adc(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), sym),
+        &Mnemonic::Bit => env.assemble_bit(
+            arg1.as_ref().unwrap().expr().unwrap(), 
+            arg2.as_ref().unwrap()
+        ),
         &Mnemonic::Dec | &Mnemonic::Inc
             => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap()),
         &Mnemonic::Djnz
@@ -1119,7 +1125,10 @@ pub fn assemble_opcode(
             => assemble_res_or_set(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), sym),
         &Mnemonic::Ret
             => assemble_ret(arg1),
-        _ => Err(format!("Unable to assembler opcode {:?}", mnemonic).into())
+
+       Mnemonic::Sla | Mnemonic::Sra | Mnemonic::Srl 
+            => env.assemble_shift(mnemonic, arg1.as_ref().unwrap()),
+        _ => Err(format!("Unable to assemble opcode {:?}", mnemonic).into())
     }
 }
 
@@ -1376,10 +1385,107 @@ fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> 
 
 }
 
+impl Env {
+    pub fn assemble_bit(&mut self, arg1: &Expr, arg2: &DataAccess)-> Result<Bytes, AssemblerError>{
+    let mut bytes = Bytes::new();
+
+        let bit = (self.resolve_expr_may_fail_in_first_pass(arg1)? & 0xff) as u8;
+        if bit > 7 {
+            return Err(format!("BIT {}, {} is not possible", bit, arg2).into());
+        }
+
+        match arg2 {
+            DataAccess::MemoryRegister16(Register16::Hl) => {
+                add_byte(&mut bytes, 0xcb);
+                add_byte(&mut bytes, 0b01000110 + bit << 3);
+            },
+
+            DataAccess::IndexRegister16WithIndex(_, _, _) => {
+                unimplemented!()
+            },
+
+            DataAccess::Register8(ref reg) => {
+                add_byte(&mut bytes, 0xcb);
+                add_byte(&mut bytes, 0b01000000 + (bit<<3) + register8_to_code(reg))
+            }
+
+            _ => unimplemented!("aseemble_bit {:?} {:?}", arg1, arg2)
+
+        }
+
+        Ok(bytes)
+    }
+
+    pub fn assemble_shift(&mut self, mne: &Mnemonic, target: &DataAccess) -> Result<Bytes, AssemblerError> {
+        let mut bytes = Bytes::new();
+
+        match target {
+            DataAccess::Register8(ref reg) => {
+                add_byte(&mut bytes, 0xcb);
+                if mne.is_sla() {
+                    add_byte(&mut bytes, 0b00100000 + register8_to_code(reg));
+                }
+                else if mne.is_sra() {
+                    add_byte(&mut bytes, 0b00101000 + register8_to_code(reg));
+                }
+                else if mne.is_srl() {
+                    add_byte(&mut bytes, 0b00111000+ register8_to_code(reg));
+                }
+                else {
+                    unreachable!()
+                }
+            },
+
+            DataAccess::MemoryRegister16(Register16::Hl) => {
+                add_byte(&mut bytes, 0xcb);
+                if mne.is_sla() {
+                    add_byte(&mut bytes, 0x26);
+                }
+                else if mne.is_sra() {
+                    add_byte(&mut bytes, 0x2e);
+                }
+                else if mne.is_srl() {
+                    add_byte(&mut bytes, 0x3e);
+                }
+                else {
+                    unreachable!()
+                }
+            },
+
+            DataAccess::IndexRegister16WithIndex(ref reg, ref op, ref exp) => {
+                let mut val = self.resolve_expr_may_fail_in_first_pass(exp)? as i32;
+                if let Oper::Sub = op {
+                    val = -val;
+                }
+                bytes.push(indexed_register16_to_code(reg));
+                add_byte(&mut bytes, 0xcb);
+                bytes.push((val & 0xff) as _);
+                if mne.is_sla() {
+                    add_byte(&mut bytes, 0x26);
+                }
+                else if mne.is_sra() {
+                    add_byte(&mut bytes, 0x2e);
+                }
+                else if mne.is_srl() {
+                    add_byte(&mut bytes, 0x3e);
+                }
+                else {
+                    unreachable!()
+                }
+            },
+
+            _ => unreachable!()
+
+        }
+
+        Ok(bytes)
+    }
+}
 
 fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError>{
     let mut bytes = Bytes::new();
 
+    // Destination is 8bits register
     if let &DataAccess::Register8(ref dst) = arg1 {
         let dst = register8_to_code(dst);
         match arg2 {
@@ -1416,10 +1522,18 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 add_byte(&mut bytes, 0b01000110 | (dst<<3));
             }
 
+            &DataAccess::Memory(ref expr) => {
+                // dst is A
+                let mut val = env.resolve_expr_may_fail_in_first_pass(expr)?;
+                add_byte(&mut bytes, 0x3a);
+                add_word(&mut bytes, val as _);
+            }
+
             _ => return Err(format!("LD not properly implemented for '{:?}, {:?}'", arg1, arg2).into())
         }
     }
 
+    // Destination is 16 bits register
     else if let &DataAccess::Register16(ref dst) = arg1 {
         let dst_code = register16_to_code_with_sp(dst);
 
@@ -1448,12 +1562,27 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 bytes.extend_from_slice(&bytes_low);
                 bytes.extend_from_slice(&bytes_high);
 
+            },
+
+            DataAccess::Memory(ref expr) => {
+                let val = (env.resolve_expr_may_fail_in_first_pass(expr)? & 0xffff) as u16;
+
+                if let Register16::Hl = dst {
+                    add_byte(&mut bytes, 0x2a);
+                    add_word(&mut bytes, val);
+                }
+                else {
+                    add_byte(&mut bytes, 0xED);
+                    add_byte(&mut bytes, (register16_to_code_with_sp(dst) << 4) + 0b01001011);
+                    add_word(&mut bytes, val);
+                }
             }
 
             _ => {}
         }
     }
 
+    // Distinatin is 16 bits indexed register
     else if let &DataAccess::IndexRegister16(ref dst) = arg1 {
         let code = indexed_register16_to_code(dst);
 
@@ -1478,6 +1607,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
         }
     }
 
+    // Destination is memory indexed by register
     else if let &DataAccess::MemoryRegister16(ref dst) = arg1 {
         // Want to store in memory pointed by register
         match dst {
@@ -1504,7 +1634,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
         }
     }
 
-
+    // Destination is memory
     else if let &DataAccess::Memory(ref exp) = arg1 {
         let address = env.resolve_expr_may_fail_in_first_pass(exp)?;
 
@@ -1526,6 +1656,10 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             &DataAccess::Register16(ref reg) => {
                 bytes.push(0xED);
                 bytes.push(0b01000011 |  (register16_to_code_with_sp(reg)));
+                add_word(&mut bytes, address as _);
+            },
+            &DataAccess::Register8(Register8::A) => {
+                bytes.push(0x32);
                 add_word(&mut bytes, address as _);
             }
 
@@ -1752,6 +1886,7 @@ fn assemble_add_or_adc(mnemonic: &Mnemonic, arg1: &DataAccess, arg2: &DataAccess
                         _ => panic!()
                     };
 
+                    // TODO check if the code is ok
                     bytes.push(indexed_register16_to_code(reg));
                     if is_add {
                         bytes.push(0b10000110);
@@ -1931,7 +2066,6 @@ fn register16_to_code_with_af(reg: &Register16) -> u8 {
 }
 
 fn register16_to_code_with_sp(reg: &Register16) -> u8 {
-
     match reg {
         &Register16::Bc => 0b00,
         &Register16::De => 0b01,
