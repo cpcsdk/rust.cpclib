@@ -9,7 +9,7 @@ pub mod mode1 {
         Pixel0 = 0,
         Pixel1 = 1,
         Pixel2 = 2,
-        Pixel3 = 3
+        Pixel3 = 3,
     }
 
     /// Signification of the bits in the byte
@@ -25,7 +25,6 @@ pub mod mode1 {
         Pixel0Bit0 = 7,
     }
 
-
     /// Convert the pen value to its byte representation at the proper place
     pub fn pen_to_pixel_byte(pen: Pen, pixel: PixelPosition) -> u8 {
         let pen = if pen.number() > 3 {
@@ -36,13 +35,21 @@ pub mod mode1 {
         };
 
         // Bits of interest (attention order is good when reading it, not using it...)
-        let bits_position:[u8;2] = {
+        let bits_position: [u8; 2] = {
             let mut pos = match pixel {
                 // pixel pos [0,1,2,3]            bit1 idx                        bit0 idx
-                PixelPosition::Pixel0 => [BitMapping::Pixel0Bit1 as u8, BitMapping::Pixel0Bit0 as u8],
-                PixelPosition::Pixel1 => [BitMapping::Pixel1Bit1 as u8, BitMapping::Pixel1Bit0 as u8],
-                PixelPosition::Pixel2 => [BitMapping::Pixel2Bit1 as u8, BitMapping::Pixel2Bit0 as u8],
-                PixelPosition::Pixel3 => [BitMapping::Pixel3Bit1 as u8, BitMapping::Pixel3Bit0 as u8],
+                PixelPosition::Pixel0 => {
+                    [BitMapping::Pixel0Bit1 as u8, BitMapping::Pixel0Bit0 as u8]
+                }
+                PixelPosition::Pixel1 => {
+                    [BitMapping::Pixel1Bit1 as u8, BitMapping::Pixel1Bit0 as u8]
+                }
+                PixelPosition::Pixel2 => {
+                    [BitMapping::Pixel2Bit1 as u8, BitMapping::Pixel2Bit0 as u8]
+                }
+                PixelPosition::Pixel3 => {
+                    [BitMapping::Pixel3Bit1 as u8, BitMapping::Pixel3Bit0 as u8]
+                }
             };
             pos.reverse(); // reverse because reading order is opposite to storage order
             pos
@@ -52,126 +59,116 @@ pub mod mode1 {
         let byte_bit0: u8 = bits_position[0];
         let byte_bit1: u8 = bits_position[1];
 
-        let pen_bit0 : u8 = pen.number() & (1 << 0);
-        let pen_bit1 : u8 = (pen.number() & (1 << 1)) >> 1;
+        let pen_bit0: u8 = pen.number() & (1 << 0);
+        let pen_bit1: u8 = (pen.number() & (1 << 1)) >> 1;
 
-        pen_bit1 * (1<<byte_bit1) + pen_bit0 * (1<<byte_bit0)
+        pen_bit1 * (1 << byte_bit1) + pen_bit0 * (1 << byte_bit0)
     }
 
     /// Convert the 4 pens in a row (from left to right)
     pub fn pens_to_byte(pen0: Pen, pen1: Pen, pen2: Pen, pen3: Pen) -> u8 {
-          pen_to_pixel_byte(pen0, PixelPosition::Pixel0)
-        + pen_to_pixel_byte(pen1, PixelPosition::Pixel1)
-        + pen_to_pixel_byte(pen2, PixelPosition::Pixel2)
-        + pen_to_pixel_byte(pen3, PixelPosition::Pixel3)
+        pen_to_pixel_byte(pen0, PixelPosition::Pixel0)
+            + pen_to_pixel_byte(pen1, PixelPosition::Pixel1)
+            + pen_to_pixel_byte(pen2, PixelPosition::Pixel2)
+            + pen_to_pixel_byte(pen3, PixelPosition::Pixel3)
     }
-
-
 
     /// Convert a vector of pens into a vector of bytes
     pub fn pens_to_vec(pens: &Vec<Pen>) -> Vec<u8> {
         assert!(pens.len() % 4 == 0);
 
-
         let mut res = Vec::new();
-        for idx in 0..(pens.len()/4) {
+        for idx in 0..(pens.len() / 4) {
             res.push(pens_to_byte(
-                    pens[idx*4+0],
-                    pens[idx*4+1],
-                    pens[idx*4+2],
-                    pens[idx*4+3]
-                    )
-                );
+                pens[idx * 4 + 0],
+                pens[idx * 4 + 1],
+                pens[idx * 4 + 2],
+                pens[idx * 4 + 3],
+            ));
         }
 
         res
     }
 
+    /*
+     * Initial python code to backport
+    def get_mode1_pixel0_byte_encoded(pen):
+        """Compute the byte fraction for the required pixel.
+        Order of pixels : 0 1 2 3
+        """
+        pen = int(pen)
+        assert pen < 4
 
+        byte = 0
 
-/*
- * Initial python code to backport
-def get_mode1_pixel0_byte_encoded(pen):
-    """Compute the byte fraction for the required pixel.
-    Order of pixels : 0 1 2 3
-    """
-    pen = int(pen)
-    assert pen < 4
+        if pen & 1:
+            byte = byte + (2**7)
+        if pen & 2:
+            byte = byte + (2**3)
 
-    byte = 0
+        return byte
 
-    if pen & 1:
-        byte = byte + (2**7)
-    if pen & 2:
-        byte = byte + (2**3)
+    def get_mode1_pixel1_byte_encoded(pen):
+        """Compute the byte fraction for the required pixel.
+        Order of pixels : 0 1 2 3
+        """
+        pen = int(pen)
+        assert pen < 4
 
-    return byte
+        byte = 0
 
-def get_mode1_pixel1_byte_encoded(pen):
-    """Compute the byte fraction for the required pixel.
-    Order of pixels : 0 1 2 3
-    """
-    pen = int(pen)
-    assert pen < 4
+        if pen & 1:
+            byte = byte + (2**6)
+        if pen & 2:
+            byte = byte + (2**2)
 
-    byte = 0
+        return byte
 
-    if pen & 1:
-        byte = byte + (2**6)
-    if pen & 2:
-        byte = byte + (2**2)
+    def get_mode1_pixel2_byte_encoded(pen):
+        """Compute the byte fraction for the required pixel.
+        Order of pixels : 0 1 2 3
+        """
+        pen = int(pen)
+        assert pen < 4
 
-    return byte
+        byte = 0
 
-def get_mode1_pixel2_byte_encoded(pen):
-    """Compute the byte fraction for the required pixel.
-    Order of pixels : 0 1 2 3
-    """
-    pen = int(pen)
-    assert pen < 4
+        if pen & 1:
+            byte = byte + (2**5)
+        if pen & 2:
+            byte = byte + (2**1)
 
-    byte = 0
+        return byte
 
-    if pen & 1:
-        byte = byte + (2**5)
-    if pen & 2:
-        byte = byte + (2**1)
+    def get_mode1_pixel3_byte_encoded(pen):
+        """Compute the byte fraction for the required pixel.
+        Order of pixels : 0 1 2 3
+        """
+        pen = int(pen)
+        assert pen < 4
 
-    return byte
+        byte = 0
 
-def get_mode1_pixel3_byte_encoded(pen):
-    """Compute the byte fraction for the required pixel.
-    Order of pixels : 0 1 2 3
-    """
-    pen = int(pen)
-    assert pen < 4
+        if pen & 1:
+            byte = byte + (2**4)
+        if pen & 2:
+            byte = byte + (2**0)
 
-    byte = 0
+        return byte
 
-    if pen & 1:
-        byte = byte + (2**4)
-    if pen & 2:
-        byte = byte + (2**0)
-
-    return byte
-
-*/
-
+    */
 
 }
 
-
-
 pub mod mode0 {
     use crate::ga::Pen;
-
 
     /// Pixel ordering in a byte
     /// [Pixel0(), Pixel1()]
     #[repr(u8)]
     pub enum PixelPosition {
         Pixel0 = 0,
-        Pixel1 = 1
+        Pixel1 = 1,
     }
 
     /// Signification of the bites in the byte
@@ -184,17 +181,16 @@ pub mod mode0 {
         Pixel1Bit2 = 4,
         Pixel0Bit2 = 5,
         Pixel1Bit0 = 6,
-        Pixel0Bit0 = 7
+        Pixel0Bit0 = 7,
     }
-
 
     /// For a given byte, returns the left and right represented pixels
     /// TODO rewrite using BitMapping and factorizing code
-    pub fn byte_to_pens(b:u8) -> (Pen, Pen) {
+    pub fn byte_to_pens(b: u8) -> (Pen, Pen) {
         let mut pen0 = 0;
         for pos in [7, 3, 5, 1].iter().rev() {
             pen0 *= 2;
-            if (b & 1<<*pos as u8) != 0 {
+            if (b & 1 << *pos as u8) != 0 {
                 pen0 += 1;
             }
         }
@@ -202,57 +198,53 @@ pub mod mode0 {
         let mut pen1 = 0;
         for pos in [6, 2, 4, 0].iter().rev() {
             pen1 *= 2;
-            if (b & 1<<*pos as u8) != 0 {
+            if (b & 1 << *pos as u8) != 0 {
                 pen1 += 1;
             }
         }
 
-         (pen0.into(), pen1.into())
+        (pen0.into(), pen1.into())
     }
 
     pub fn pen_to_pixel_byte(pen: &Pen, pixel: PixelPosition) -> u8 {
-        assert!(pen.number()<16, format!("{} >=16", pen.number()));
+        assert!(pen.number() < 16, format!("{} >=16", pen.number()));
 
-        let bits_position:[u8;4] = {
+        let bits_position: [u8; 4] = {
             let mut pos = match pixel {
                 // pixel pos [0, 1]      bit3  bit2 bit1 bit0
-                PixelPosition::Pixel0 =>
-                    [
+                PixelPosition::Pixel0 => [
                     BitMapping::Pixel0Bit3 as u8,
                     BitMapping::Pixel0Bit2 as u8,
                     BitMapping::Pixel0Bit1 as u8,
                     BitMapping::Pixel0Bit0 as u8,
-                    ],
+                ],
 
-                    PixelPosition::Pixel1 =>
-                        [
-                        BitMapping::Pixel1Bit3 as u8,
-                        BitMapping::Pixel1Bit2 as u8,
-                        BitMapping::Pixel1Bit1 as u8,
-                        BitMapping::Pixel1Bit0 as u8,
-                        ]
+                PixelPosition::Pixel1 => [
+                    BitMapping::Pixel1Bit3 as u8,
+                    BitMapping::Pixel1Bit2 as u8,
+                    BitMapping::Pixel1Bit1 as u8,
+                    BitMapping::Pixel1Bit0 as u8,
+                ],
             };
             pos.reverse();
             pos
         };
-
 
         let byte_bit0: u8 = bits_position[0];
         let byte_bit1: u8 = bits_position[1];
         let byte_bit2: u8 = bits_position[2];
         let byte_bit3: u8 = bits_position[3];
 
-        let pen_bit0 : u8 = (pen.number() & (1 << 0)) >> 0;
-        let pen_bit1 : u8 = (pen.number() & (1 << 1)) >> 1;
-        let pen_bit2 : u8 = (pen.number() & (1 << 2)) >> 2;
-        let pen_bit3 : u8 = (pen.number() & (1 << 3)) >> 3;
+        let pen_bit0: u8 = (pen.number() & (1 << 0)) >> 0;
+        let pen_bit1: u8 = (pen.number() & (1 << 1)) >> 1;
+        let pen_bit2: u8 = (pen.number() & (1 << 2)) >> 2;
+        let pen_bit3: u8 = (pen.number() & (1 << 3)) >> 3;
 
-        pen_bit3 * (1<<byte_bit3) +
-        pen_bit2 * (1<<byte_bit2) +
-        pen_bit1 * (1<<byte_bit1) +
-        pen_bit0 * (1<<byte_bit0)
+        pen_bit3 * (1 << byte_bit3)
+            + pen_bit2 * (1 << byte_bit2)
+            + pen_bit1 * (1 << byte_bit1)
+            + pen_bit0 * (1 << byte_bit0)
     }
-
 
     /// Convert the 2 pens in the corresponding byte
     pub fn pens_to_byte(pen0: &Pen, pen1: &Pen) -> u8 {
@@ -260,18 +252,17 @@ pub mod mode0 {
             + pen_to_pixel_byte(pen1, PixelPosition::Pixel1)
     }
 
-
     /// Convert a vector of pens into a vector of bytes.
     /// In case of an odd number of pens, the last one is forced to be 0
     pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
         let mut res = Vec::with_capacity(pens.len());
-        for idx in 0..(pens.len()/2) {
-            res.push(pens_to_byte(&pens[idx*2+0], &pens[idx*2+1]));
+        for idx in 0..(pens.len() / 2) {
+            res.push(pens_to_byte(&pens[idx * 2 + 0], &pens[idx * 2 + 1]));
         }
 
         // last pen is 0 if needed
         if pens.len() % 2 == 1 {
-            res.push(pens_to_byte(&pens[pens.len()-1], &0.into()));
+            res.push(pens_to_byte(&pens[pens.len() - 1], &0.into()));
         }
 
         res
@@ -279,8 +270,8 @@ pub mod mode0 {
 
     // Convert a vector of bytes as a vector of pens
     pub fn bytes_to_pens(bytes: &[u8]) -> Vec<Pen> {
-        let mut res = Vec::with_capacity(bytes.len()*2);
- 
+        let mut res = Vec::with_capacity(bytes.len() * 2);
+
         for &byte in bytes {
             let (pen1, pen2) = byte_to_pens(byte);
             res.push(pen1);
@@ -289,7 +280,6 @@ pub mod mode0 {
 
         res
     }
-
 
     /// Returns a pen that corresponds to first argument in mode 0 and second in mode3
     pub fn mix_mode0_mode3(p0: &Pen, p3: &Pen) -> Pen {
@@ -315,19 +305,16 @@ pub mod mode0 {
             (3, 2) => 14,
             (3, 3) => 3,
 
-            _ => panic!()
-        }
-        ).into()
+            _ => panic!(),
+        })
+        .into()
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
     use crate::ga::Pen;
     use crate::pixels::*;
-
 
     fn test_couple(a: u8, b: u8) {
         let pa: Pen = a.into();
@@ -338,7 +325,6 @@ mod tests {
 
         let b = mode0::pens_to_byte(&pa, &pb);
         let (pa2, pb2) = mode0::byte_to_pens(b);
-
 
         assert_eq!(pa2.number(), pa2.number());
         assert_eq!(pb2.number(), pb2.number());
@@ -352,7 +338,6 @@ mod tests {
             }
         }
     }
-
 
     #[test]
     fn bytes_to_pen() {

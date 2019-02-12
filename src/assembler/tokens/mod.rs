@@ -1,30 +1,21 @@
-use nom::{
-    AtEof,
-    Compare,
-    CompareResult,
-    FindSubstring,
-    InputIter,
-    InputLength,
-};
-use std::slice::Iter;
-use std::iter::Enumerate;
 use memchr;
+use nom::{AtEof, Compare, CompareResult, FindSubstring, InputIter, InputLength};
+use std::iter::Enumerate;
+use std::slice::Iter;
 
-
-pub(crate) mod tokens;
-pub(crate) mod listing;
-pub(crate) mod expression;
-pub(crate) mod registers;
 pub(crate) mod data_access;
+pub(crate) mod expression;
 pub(crate) mod instructions;
+pub(crate) mod listing;
+pub(crate) mod registers;
+pub(crate) mod tokens;
 
-pub use self::tokens::*;
-pub use self::listing::*;
-pub use self::expression::*;
-pub use self::registers::*;
 pub use self::data_access::*;
+pub use self::expression::*;
 pub use self::instructions::*;
-
+pub use self::listing::*;
+pub use self::registers::*;
+pub use self::tokens::*;
 
 /// Represent the type of the input elements.
 pub type InputElement = u8;
@@ -32,15 +23,10 @@ pub type InputElement = u8;
 /// Represent the type of the input.
 pub type Input<'a> = &'a [InputElement];
 
-
-use std::fmt;
 use crate::assembler::parser;
-
-
-
+use std::fmt;
 
 // Stolen code from https://github.com/tagua-vm/parser/blob/737e8625e51580cb6d8aaecea5b2f04fefbccaa5/source/tokens.rs
-
 
 /// A span is a set of meta information about a token.
 ///
@@ -60,7 +46,7 @@ pub struct Span<'a> {
     pub column: u32,
 
     /// The slice that is spanned.
-    slice: Input<'a>
+    slice: Input<'a>,
 }
 
 impl<'a> Span<'a> {
@@ -72,9 +58,9 @@ impl<'a> Span<'a> {
     pub fn new(input: Input<'a>) -> Self {
         Span {
             offset: 0,
-            line  : 1,
+            line: 1,
             column: 1,
-            slice : input
+            slice: input,
         }
     }
 
@@ -85,9 +71,9 @@ impl<'a> Span<'a> {
     pub fn new_at(input: Input<'a>, offset: usize, line: u32, column: u32) -> Self {
         Span {
             offset: offset,
-            line  : line,
+            line: line,
             column: column,
-            slice : input
+            slice: input,
         }
     }
 
@@ -138,13 +124,13 @@ impl<'a> AtEof for Span<'a> {
 /// This trait aims at iterating over the input.
 impl<'a> InputIter for Span<'a> {
     /// Type of an element of the span' slice.
-    type Item     = &'a InputElement;
+    type Item = &'a InputElement;
 
     /// Type of a raw element of the span' slice.
-    type RawItem  = InputElement;
+    type RawItem = InputElement;
 
     /// Type of the enumerator iterator.
-    type Iter     = Enumerate<Iter<'a, Self::RawItem>>;
+    type Iter = Enumerate<Iter<'a, Self::RawItem>>;
 
     /// Type of the iterator.
     type IterElem = Iter<'a, Self::RawItem>;
@@ -164,7 +150,9 @@ impl<'a> InputIter for Span<'a> {
     /// Find the byte position of an element in the slice of the span.
     ///
     fn position<P>(&self, predicate: P) -> Option<usize>
-        where P: Fn(Self::RawItem) -> bool {
+    where
+        P: Fn(Self::RawItem) -> bool,
+    {
         self.slice.iter().position(|x| predicate(*x))
     }
 
@@ -195,23 +183,23 @@ impl<'a, 'b> FindSubstring<Input<'b>> for Span<'a> {
         } else if substring_length == 1 {
             memchr::memchr(substring[0], self.slice)
         } else {
-            let max          = self.slice.len() - substring_length;
-            let mut offset   = 0;
+            let max = self.slice.len() - substring_length;
+            let mut offset = 0;
             let mut haystack = self.slice;
 
             while let Some(position) = memchr::memchr(substring[0], haystack) {
                 offset += position;
 
                 if offset > max {
-                    return None
+                    return None;
                 }
 
                 if &haystack[position..position + substring_length] == substring {
                     return Some(offset);
                 }
 
-                haystack  = &haystack[position + 1..];
-                offset   += 1;
+                haystack = &haystack[position + 1..];
+                offset += 1;
             }
 
             None
@@ -236,94 +224,122 @@ impl<'a, 'b> Compare<Input<'b>> for Span<'a> {
     }
 }
 
-
-
 #[cfg(test)]
 mod test {
-    use crate::assembler::tokens::{Token,Mnemonic,DataAccess,Expr, Register16, Register8, FlagTest, Listing, ListingElement};
+    use crate::assembler::tokens::{
+        DataAccess, Expr, FlagTest, Listing, ListingElement, Mnemonic, Register16, Register8, Token,
+    };
     use std::str::FromStr;
     #[test]
-    fn test_size (){
-
+    fn test_size() {
         assert_eq!(
-            Token::OpCode(Mnemonic::Jp, None, Some(DataAccess::Expression(Expr::Value(0))))
-                .number_of_bytes(),
+            Token::OpCode(
+                Mnemonic::Jp,
+                None,
+                Some(DataAccess::Expression(Expr::Value(0)))
+            )
+            .number_of_bytes(),
             Ok(3)
         );
 
         assert_eq!(
-            Token::OpCode(Mnemonic::Jr, None, Some(DataAccess::Expression(Expr::Value(0))))
-                .number_of_bytes(),
+            Token::OpCode(
+                Mnemonic::Jr,
+                None,
+                Some(DataAccess::Expression(Expr::Value(0)))
+            )
+            .number_of_bytes(),
             Ok(2)
         );
 
         assert_eq!(
-            Token::OpCode(Mnemonic::Jr, Some(DataAccess::FlagTest(FlagTest::NC)), Some(DataAccess::Expression(Expr::Value(0))))
-                .number_of_bytes(),
+            Token::OpCode(
+                Mnemonic::Jr,
+                Some(DataAccess::FlagTest(FlagTest::NC)),
+                Some(DataAccess::Expression(Expr::Value(0)))
+            )
+            .number_of_bytes(),
             Ok(2)
         );
 
         assert_eq!(
-            Token::OpCode(Mnemonic::Push, Some(DataAccess::Register16(Register16::De)), None)
-                .number_of_bytes(),
+            Token::OpCode(
+                Mnemonic::Push,
+                Some(DataAccess::Register16(Register16::De)),
+                None
+            )
+            .number_of_bytes(),
             Ok(1)
         );
 
         assert_eq!(
-            Token::OpCode(Mnemonic::Dec, Some(DataAccess::Register8(Register8::A)), None)
-                .number_of_bytes(),
+            Token::OpCode(
+                Mnemonic::Dec,
+                Some(DataAccess::Register8(Register8::A)),
+                None
+            )
+            .number_of_bytes(),
             Ok(1)
         );
     }
 
-
     #[test]
-    fn test_listing () {
+    fn test_listing() {
         let mut listing = Listing::from_str("   nop").expect("unable to assemble");
         assert_eq!(listing.estimated_duration().unwrap(), 1);
         listing.set_duration(100);
         assert_eq!(listing.estimated_duration().unwrap(), 100);
     }
 
-
-
     #[test]
     fn test_duration() {
-         let listing = Listing::from_str("
+        let listing = Listing::from_str(
+            "
             pop de      ; 3
-        ").expect("Unable to assemble this code");
+        ",
+        )
+        .expect("Unable to assemble this code");
         println!("{}", listing);
         assert_eq!(listing.estimated_duration().unwrap(), 3);
 
-
-         let listing = Listing::from_str("
+        let listing = Listing::from_str(
+            "
             inc l       ; 1
-        ").expect("Unable to assemble this code");
+        ",
+        )
+        .expect("Unable to assemble this code");
         println!("{}", listing);
         assert_eq!(listing.estimated_duration().unwrap(), 1);
 
-
-         let listing = Listing::from_str("
+        let listing = Listing::from_str(
+            "
             ld (hl), e  ; 2
-        ").expect("Unable to assemble this code");
+        ",
+        )
+        .expect("Unable to assemble this code");
         println!("{}", listing);
         assert_eq!(listing.estimated_duration().unwrap(), 2);
 
-
-         let listing = Listing::from_str("
+        let listing = Listing::from_str(
+            "
             ld (hl), d  ; 2
-        ").expect("Unable to assemble this code");
+        ",
+        )
+        .expect("Unable to assemble this code");
         println!("{}", listing);
         assert_eq!(listing.estimated_duration().unwrap(), 2);
 
-         let listing = Listing::from_str("
+        let listing = Listing::from_str(
+            "
             pop de      ; 3
             inc l       ; 1
             ld (hl), e  ; 2
             inc l       ; 1
             ld (hl), d  ; 2
-        ").expect("Unable to assemble this code");
+        ",
+        )
+        .expect("Unable to assemble this code");
         println!("{}", listing);
-        assert_eq!(listing.estimated_duration().unwrap(), (3+1+2+1+2));
+        assert_eq!(listing.estimated_duration().unwrap(), (3 + 1 + 2 + 1 + 2));
     }
 }

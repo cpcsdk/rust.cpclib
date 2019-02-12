@@ -1,25 +1,23 @@
 extern crate clap;
 extern crate notify;
 
-use clap::{App, Arg, SubCommand, ArgMatches};
+use clap::{App, Arg, ArgMatches, SubCommand};
 use std::path::Path;
 use tempfile::Builder;
 
-use notify::{RecommendedWatcher, Watcher, RecursiveMode, DebouncedEvent};
+use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-
-use cpclib::imageconverter::*;
-use cpclib::image::*;
-use cpclib::sna::*;
-use cpclib::ga::{Pen, Palette};
-use cpclib::assembler::parser::parse_z80_str;
 use cpclib::assembler::assembler::visit_tokens;
+use cpclib::assembler::parser::parse_z80_str;
+use cpclib::ga::{Palette, Pen};
+use cpclib::image::*;
+use cpclib::imageconverter::*;
+use cpclib::sna::*;
 
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
-
 
 fn standard_linker_code() -> &'static str {
     "   org 0x1000
@@ -47,36 +45,41 @@ fn standard_display_code(mode: u8) -> String {
         0 => 0x8c,
         1 => 0x8d,
         2 => 0x8e,
-        _ => unreachable!()
+        _ => unreachable!(),
     };
-    format!("
+    format!(
+        "
         org 0x4000
         di
         ld bc, 0x7f00 + 0x{:x}
         out (c), c
         jp $
-    ", code)
+    ",
+        code
+    )
 }
-
 
 fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> String {
     let code = match mode {
         0 => 0x8c,
         1 => 0x8d,
         2 => 0x8e,
-        _ => unreachable!()
+        _ => unreachable!(),
     };
 
     let r12 = 0x20 + 0b00001100;
 
-
     let mut palette_code = String::new();
     palette_code += "\tld bc, 0x7f00\n";
     for i in 0..16 {
-        palette_code += &format!("\tld a, {}\n\t out (c), c\n\tout (c), a\n\t inc c\n", palette.get((i as i32).into()).gate_array());
+        palette_code += &format!(
+            "\tld a, {}\n\t out (c), c\n\tout (c), a\n\t inc c\n",
+            palette.get((i as i32).into()).gate_array()
+        );
     }
 
-    let code = format!("
+    let code = format!(
+        "
         org 0x4000
 
         di
@@ -131,8 +134,9 @@ vsync_loop
 
 
         jp frame_loop
-    ", code, crtc_width, r12, palette_code);
-
+    ",
+        code, crtc_width, r12, palette_code
+    );
 
     code
 }
@@ -150,34 +154,29 @@ fn assemble(z80: String) -> Vec<u8> {
     let mem = env.memory(start_code, code_size);
 
     mem
-
 }
-
 
 fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     if matches.is_present("OVERSCAN") {
-        OutputFormat::CPCMemory{
+        OutputFormat::CPCMemory {
             outputDimension: CPCScreenDimension::overscan(),
-            displayAddress: DisplayCRTCAddress::new_overscan_from_page(2)
+            displayAddress: DisplayCRTCAddress::new_overscan_from_page(2),
         }
-    }
-    else if matches.is_present("FULLSCREEN") {
-        OutputFormat::CPCMemory{
+    } else if matches.is_present("FULLSCREEN") {
+        OutputFormat::CPCMemory {
             outputDimension: CPCScreenDimension::overscan(),
-            displayAddress: DisplayCRTCAddress::new_overscan_from_page(2)
+            displayAddress: DisplayCRTCAddress::new_overscan_from_page(2),
         }
-    }
-    else {
+    } else {
         // assume it is a standard screen
-        OutputFormat::CPCMemory{
+        OutputFormat::CPCMemory {
             outputDimension: CPCScreenDimension::standard(),
-            displayAddress: DisplayCRTCAddress::new_standard_from_page(3)
+            displayAddress: DisplayCRTCAddress::new_standard_from_page(3),
         }
     }
 }
 
-
-fn convert(matches: &ArgMatches) -> Result<(), String>{
+fn convert(matches: &ArgMatches) -> Result<(), String> {
     let input_file = matches.value_of("SOURCE").unwrap();
     let output_mode = matches.value_of("MODE").unwrap().parse::<u8>().unwrap();
     let mut transformations = TransformationsList::new();
@@ -186,35 +185,30 @@ fn convert(matches: &ArgMatches) -> Result<(), String>{
         transformations = transformations.skip_odd_pixels();
     }
 
-
     let output_format = get_output_format(&matches);
     let conversion = ImageConverter::convert(
-        input_file, 
-        None, 
-        output_mode.into(), 
+        input_file,
+        None,
+        output_mode.into(),
         transformations,
-        &output_format)?;
+        &output_format,
+    )?;
 
-    println!("Expected {:?}", & output_format);
+    println!("Expected {:?}", &output_format);
     println!("Conversion  {:?}", &conversion);
 
     // Make the conversion before feeding sna or dsk
     let (palette, code) = match &conversion {
         Output::CPCMemoryStandard(memory, pal) => {
             (pal, assemble(standard_display_code(output_mode)))
-        },
+        }
 
         Output::CPCMemoryOverscan(memory1, memory2, pal) => {
-            let code = assemble(
-                fullscreen_display_code(
-                    output_mode, 
-                    96/2, 
-                    &pal)
-            );
+            let code = assemble(fullscreen_display_code(output_mode, 96 / 2, &pal));
             (pal, code)
         }
 
-        _ => unreachable!()
+        _ => unreachable!(),
     };
 
     let sub_sna = matches.subcommand_matches("sna");
@@ -233,14 +227,14 @@ fn convert(matches: &ArgMatches) -> Result<(), String>{
             Output::CPCMemoryStandard(memory, _) => {
                 sna.add_data(&memory.to_vec(), 0xc000)
                     .expect("Unable to add the image in the snapshot");
-            },
+            }
             Output::CPCMemoryOverscan(memory1, memory2, _) => {
                 sna.add_data(&memory1.to_vec(), 0x8000)
                     .expect("Unable to add the image in the snapshot");
                 sna.add_data(&memory2.to_vec(), 0xc000)
                     .expect("Unable to add the image in the snapshot");
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         sna.add_data(&code, 0x4000).unwrap();
@@ -249,41 +243,39 @@ fn convert(matches: &ArgMatches) -> Result<(), String>{
         for i in 0..16 {
             sna.set_value(
                 SnapshotFlag::GA_PAL(Some(i)),
-                palette.get((i as i32).into()).gate_array() as u16
-            ).unwrap();
+                palette.get((i as i32).into()).gate_array() as u16,
+            )
+            .unwrap();
         }
 
         if let Some(sub_sna) = sub_sna {
             let sna_fname = sub_sna.value_of("SNA").unwrap();
-            sna.save_sna(sna_fname).expect("Unable to save the snapshot");
-        }
-        else if let Some(sub_m4) = sub_m4 {
+            sna.save_sna(sna_fname)
+                .expect("Unable to save the snapshot");
+        } else if let Some(sub_m4) = sub_m4 {
             #[cfg(feature = "xferlib")]
             {
                 let mut f = Builder::new()
-                                .suffix(".sna")
-                                .tempfile()
-                                .expect("Unable to create the temporary file");
+                    .suffix(".sna")
+                    .tempfile()
+                    .expect("Unable to create the temporary file");
 
                 sna.write(f.as_file_mut(), cpclib::sna::SnapshotVersion::V2)
-                .expect("Unable to write the sna in the temporary file");
+                    .expect("Unable to write the sna in the temporary file");
 
                 let xfer = CpcXfer::new(sub_m4.value_of("CPCM4").unwrap());
 
                 let tmp_file_name = f.path().to_str().unwrap();
-                xfer.upload_and_run(
-                    tmp_file_name,
-                    None).expect("An error occured while transfering the snapshot");
+                xfer.upload_and_run(tmp_file_name, None)
+                    .expect("An error occured while transfering the snapshot");
             }
         }
-
     }
 
     Ok(())
 }
 
 fn main() {
-
     let args = App::new("CPC image conversion tool")
                     .version("0.1")
                     .author("Krusty/Benediction")
@@ -397,9 +389,10 @@ fn main() {
 
     println!("ff");
 
-    if matches.subcommand_matches("m4").is_none() && 
-        matches.subcommand_matches("dsk").is_none() && 
-        matches.subcommand_matches("sna").is_none() {
+    if matches.subcommand_matches("m4").is_none()
+        && matches.subcommand_matches("dsk").is_none()
+        && matches.subcommand_matches("sna").is_none()
+    {
         eprintln!("[ERROR] you have not specified any action to do.");
         std::process::exit(exitcode::USAGE);
     }
@@ -407,7 +400,6 @@ fn main() {
     convert(&matches).expect("Unable to make the conversion");
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
-
         if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
             println!("Watching for file modification...");
             // Create a channel to receive the events.
@@ -415,36 +407,33 @@ fn main() {
 
             // Automatically select the best implementation for your platform.
             // You can also access each implementation directly e.g. INotifyWatcher.
-            let mut watcher: RecommendedWatcher = 
-                Watcher::new(tx, Duration::from_secs(2))
-                .unwrap();
+            let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2)).unwrap();
 
             // Add a path to be watched. All files and directories at that path and
             // below will be monitored for changes.
-            watcher.watch(
-                matches.value_of("SOURCE").unwrap(), 
-                RecursiveMode::NonRecursive
-            ).expect("Unable to watch the file");
+            watcher
+                .watch(
+                    matches.value_of("SOURCE").unwrap(),
+                    RecursiveMode::NonRecursive,
+                )
+                .expect("Unable to watch the file");
 
             // This is a simple loop, but you may want to use more complex logic here,
             // for example to handle I/O.
             loop {
                 match rx.recv() {
-                    Ok(event) => {
-                        match event {
-                            DebouncedEvent::Write(_) => {
-                                println!("Image modified. Launch new conversion");
-                                
-                                match convert(&matches) {
+                    Ok(event) => match event {
+                        DebouncedEvent::Write(_) => {
+                            println!("Image modified. Launch new conversion");
 
-                                    Err(e) => {
-                                        eprintln!("[ERROR] Unable to convert the image {}", e);
-                                    },
-                                    Ok(_) => {}
-                                };
-                            }
-                            _ => {}
+                            match convert(&matches) {
+                                Err(e) => {
+                                    eprintln!("[ERROR] Unable to convert the image {}", e);
+                                }
+                                Ok(_) => {}
+                            };
                         }
+                        _ => {}
                     },
                     Err(e) => println!("watch error: {:?}", e),
                 }

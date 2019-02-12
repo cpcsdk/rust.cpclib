@@ -1,4 +1,4 @@
-mod z80;
 mod emul;
+mod z80;
 
-pub use self::z80::{Z80, HasValue};
+pub use self::z80::{HasValue, Z80};

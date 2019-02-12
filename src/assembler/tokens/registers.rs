@@ -1,13 +1,12 @@
 use std::fmt;
 
-
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub enum Register16 {
     Af,
     Hl,
     De,
     Bc,
-    Sp
+    Sp,
 }
 impl fmt::Display for Register16 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -16,7 +15,7 @@ impl fmt::Display for Register16 {
             &Register16::Bc => "BC",
             &Register16::De => "DE",
             &Register16::Hl => "HL",
-            &Register16::Sp => "SP"
+            &Register16::Sp => "SP",
         };
         write!(f, "{}", code)
     }
@@ -30,7 +29,7 @@ impl Register16 {
             Register16::Hl => Some(Register8::H),
             Register16::De => Some(Register8::D),
             Register16::Bc => Some(Register8::B),
-            Register16::Sp => None
+            Register16::Sp => None,
         }
     }
 
@@ -41,23 +40,19 @@ impl Register16 {
             Register16::Hl => Some(Register8::L),
             Register16::De => Some(Register8::E),
             Register16::Bc => Some(Register8::C),
-            Register16::Sp => None
+            Register16::Sp => None,
         }
     }
 
     pub fn split(&self) -> (Option<Register8>, Option<Register8>) {
-        (
-            self.low(),
-            self.high()
-        )
+        (self.low(), self.high())
     }
 }
 
-
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum IndexRegister16{
+pub enum IndexRegister16 {
     Ix,
-    Iy
+    Iy,
 }
 
 impl fmt::Display for IndexRegister16 {
@@ -65,7 +60,7 @@ impl fmt::Display for IndexRegister16 {
         use self::*;
         let code = match self {
             &IndexRegister16::Ix => "IX",
-            &IndexRegister16::Iy => "IY"
+            &IndexRegister16::Iy => "IY",
         };
         write!(f, "{}", code)
     }
@@ -79,21 +74,18 @@ pub enum Register8 {
     D,
     E,
     H,
-    L
-
+    L,
 }
 
 impl Register8 {
-
     pub fn is_high(&self) -> bool {
         match self {
             &Register8::A | &Register8::B | &Register8::D | &Register8::H => true,
-            _ => false
+            _ => false,
         }
     }
 
-
-    pub fn is_low(&self) -> bool  {
+    pub fn is_low(&self) -> bool {
         !self.is_high()
     }
 
@@ -108,7 +100,6 @@ impl Register8 {
             &Register8::L => Some(Register8::H),
         }
     }
-
 
     /// Return the 16bit register than contains this one
     pub fn complete(&self) -> Register16 {
@@ -134,22 +125,19 @@ impl fmt::Display for Register8 {
             &Register8::D => "D",
             &Register8::E => "E",
             &Register8::H => "H",
-            &Register8::L => "L"
+            &Register8::L => "L",
         };
         write!(f, "{}", code)
     }
 }
-
-
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IndexRegister8 {
     Ixh,
     Ixl,
     Iyh,
-    Iyl
+    Iyl,
 }
-
 
 impl fmt::Display for IndexRegister8 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -158,13 +146,13 @@ impl fmt::Display for IndexRegister8 {
             &IndexRegister8::Ixh => "IXH",
             &IndexRegister8::Ixl => "IXL",
             &IndexRegister8::Iyh => "IYH",
-            &IndexRegister8::Iyl => "IYL"
+            &IndexRegister8::Iyl => "IYL",
         };
         write!(f, "{}", code)
     }
 }
 
-        /*
+/*
 #[derive(Debug, PartialEq, Eq)]
 pub struct Label;
 
@@ -185,7 +173,7 @@ pub enum FlagTest {
     PO,
     PE,
     P,
-    M
+    M,
 }
 
 impl fmt::Display for FlagTest {
@@ -198,10 +186,8 @@ impl fmt::Display for FlagTest {
             &FlagTest::PO => "PO",
             &FlagTest::PE => "PE",
             &FlagTest::P => "P",
-            &FlagTest::M => "M"
+            &FlagTest::M => "M",
         };
         write!(f, "{}", code)
     }
 }
-
-
