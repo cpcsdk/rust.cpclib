@@ -7,6 +7,8 @@ use crate::assembler::tokens::Token;
 use crate::assembler::tokens::listing::ListingElement;
 use crate::assembler::AssemblerError;
 
+use num;
+
 /// Expression nodes.
 #[derive(PartialEq, Eq, Clone)]
 pub enum Expr {
@@ -52,14 +54,26 @@ impl From<&str> for Expr {
         Expr::Label(src.to_string())
     }
 }
-
 impl From<i32> for Expr {
     fn from(src: i32) -> Expr {
         Expr::Value(src)
     }
 }
+impl From<u8> for Expr {
+    fn from(src: u8) -> Expr {
+        Expr::Value(src as _)
+    }
+}
+
+
 
 /*
+impl<N: num::ToPrimitive> From<N> for Expr {
+    fn from(src: N) -> Expr {
+        Expr::Value(num.to_i32().unwrap())
+    }
+}
+
 // Currently impossible because of conflict with i32
 impl<S:AsRef<str>> From<S> for Expr {
     fn from(src: S) -> Expr {

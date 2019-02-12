@@ -66,11 +66,15 @@ impl Into<u8> for &Side {
 }
 
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct DiscInformation {
+	#[get = "pub"]
 	pub(crate) creator_name: String, 
+	#[get = "pub"]
 	pub(crate) number_of_tracks: u8, 
+	#[get = "pub"]
 	pub(crate) number_of_sides: u8, 
+	#[get = "pub"]
 	pub(crate) track_size_table: Vec<u8> // XXX for standard DSK only one value is provided It should be duplicated there
 }
 
@@ -198,16 +202,25 @@ impl DiscInformation {
 
 }
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct TrackInformation {
+	#[get = "pub"]
 	pub(crate) track_number: u8,
+	#[get = "pub"]
 	pub(crate) side_number: u8,
+	#[get = "pub"]
 	pub(crate) sector_size: u8, // XXX check if really needed to be stored
+	#[get = "pub"]
 	pub(crate) number_of_sectors: u8,
+	#[get = "pub"]
 	pub(crate) gap3_length: u8,
+	#[get = "pub"]
 	pub(crate) filler_byte: u8,
+	#[get = "pub"]
 	pub(crate) data_rate: DataRate,
+	#[get = "pub"]
 	pub(crate) recording_mode: RecordingMode,
+	#[get = "pub"]
 	pub(crate) sector_information_list: SectorInformationList,
 	/// The size taken by the track + header in the dsk. This is a duplicated information obtained in the DiscInformation bloc
 	pub(crate) track_size: u16
@@ -215,26 +228,32 @@ pub struct TrackInformation {
 
 impl TrackInformation {
 
+	#[deprecated(note="Note sure it should be used as each sector store this information and different sizes are possible")]
 	pub fn sector_size(&self) -> u8 {
 		self.sector_size
 	}
 
+	#[deprecated(note="Note sure it should be used as each sector store this information and different sizes are possible")]
 	pub fn sector_size_human_readable(&self) -> u16 {
 		convert_fdc_sector_size_to_real_sector_size(self.sector_size)
 	}
 
 
 
-	pub fn number_of_sectors(&self) -> u8 {
-		self.number_of_sectors
-	}
 
-	pub fn gap3_length(&self) -> u8 {
-		self.gap3_length
-	}
 
-	pub fn filler_byte(&self) -> u8 {
-		self.filler_byte
+	/// Returns the ID of the sector following this one
+	pub fn next_sector_id(&self, sector: u8) -> Option<u8> {
+		for idx in 0..(self.number_of_sectors()-1) {
+			let current_sector = &self.sector_information_list.sectors[idx as usize];
+			let next_sector = &self.sector_information_list.sectors[idx as usize+1];
+
+			if *current_sector.sector_id() == sector {
+				return Some(*next_sector.sector_id())
+			}
+		}
+
+		None
 	}
 
 	/// Fail if the track has no sector
@@ -449,26 +468,36 @@ impl Into<u8> for RecordingMode {
 	}
 }
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct SectorInformation {
 	/// track (equivalent to C parameter in NEC765 commands)
+	#[get = "pub"]
 	pub(crate) track: u8,
 	/// side (equivalent to H parameter in NEC765 commands)
+	#[get = "pub"]
 	pub(crate) side: u8,
 	/// sector ID (equivalent to R parameter in NEC765 commands)
+	#[get = "pub"]
 	pub(crate) sector_id: u8,
 	/// sector size (equivalent to N parameter in NEC765 commands)
+	#[get = "pub"]
 	pub(crate) sector_size: u8,
 	/// FDC status register 1 (equivalent to NEC765 ST1 status register)
+	#[get = "pub"]
 	pub(crate) fdc_status_register_1: u8,
 	/// FDC status register 2 (equivalent to NEC765 ST2 status register)
+	#[get = "pub"]
 	pub(crate) fdc_status_register_2: u8,
 	/// actual data length in bytes
+	#[get = "pub"]
 	pub(crate) data_length: u16, // in bytes, little endian notation
 }
 
 
 impl SectorInformation {
+
+
+
 	pub fn from_buffer(buffer : &[u8]) -> SectorInformation {
 		let info = SectorInformation {
 			track: buffer[0x00],
@@ -598,7 +627,6 @@ impl SectorInformationList {
 			let mut sector= Sector::default();
 
 
-
 			sector.sector_information_bloc.track = track_number;
 			sector.sector_information_bloc.sector_size = sector_size;
 			sector.sector_information_bloc.sector_id = ids[idx];
@@ -633,7 +661,9 @@ bitflags! {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Sector {
+	#[get]
 	pub(crate) sector_information_bloc: SectorInformation,
+	#[get]
 	pub(crate) values: Vec<u8>
 }
 
@@ -643,6 +673,7 @@ impl Sector  {
 	pub fn len(&self) -> u16 {
 		self.values.len() as u16
 	}
+
 
 	pub fn is_empty(&self) -> bool {
 		self.len() == 0
@@ -683,6 +714,14 @@ impl Sector  {
 		self.values[..].clone_from_slice(data);
 		Ok(())
 	}
+
+
+	delegate! {
+		target self.sector_information_bloc {
+			pub fn sector_id(&self) -> &u8;
+		}
+	}
+	
 }
 
 #[derive(Default, PartialEq, Debug, Clone)]
@@ -741,6 +780,19 @@ impl TrackInformationList {
 			})
 	}
 
+	/// Returns the track following this one
+	pub fn next_track(&self, track: &TrackInformation) -> Option<&TrackInformation> {
+		for idx in 0..(self.list.len()-1) {
+			let current_track = &self.list[idx];
+			let next_track = &self.list[idx+1];
+
+			if current_track as *const _ == track as *const _ {
+				return Some(next_track);
+			}
+		}
+
+		None
+	}
 
 
 }
@@ -781,6 +833,69 @@ impl ExtendedDsk {
 		}
 	}
 
+	/// Add the file in consecutive sectors
+	pub fn add_file_sequentially(
+		&mut self,
+		side: u8,
+		track: u8,
+		sector: u8, 
+		buffer: &[u8]) -> Result<(u8, u8, u8), String>  {
+
+		let mut pos = (
+			side,
+			track,
+			sector
+		);
+		let mut consummed = 0;
+		while consummed < buffer.len() {
+			let mut current_sector = self.sector_mut(
+				pos.0.clone(), 
+				pos.1.clone(), 
+				pos.2.clone()
+			).ok_or("Sector not found".to_owned())?;
+
+			let sector_size = current_sector.len() as usize;
+			let current_data = &buffer[consummed .. consummed+sector_size];
+			current_sector.set_values(current_data)?;
+			consummed += sector_size;
+
+			let next_pos = self.next_position(
+				pos.0.clone(), 
+				pos.1.clone(), 
+				pos.2.clone()
+			).ok_or("No more position available".to_owned())?;
+			pos = next_pos;
+		}
+
+		Ok(pos)
+	}
+
+	/// Compute the next sector position if possible
+	/// XXX check if side should be the logic or physical one
+	/// XXX the two behaviors are mixed there ...
+	fn next_position(&self, side: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
+
+		// Retrieve the current track and exit if does not exist
+		let current_track = self.get_track_information(
+			side.clone(), /// Physical
+			track
+		)?;
+
+		// Return the next sector if exist
+		if let Some(next_sector) = current_track.next_sector_id(sector.clone()) {
+			return Some((side.clone(), track.clone(), next_sector));
+		}
+
+		// Search the next track
+		let next_track = self.track_list.next_track(&current_track)?;
+
+		Some((
+			*next_track.side_number(), // XXX  logical
+			*next_track.track_number(),
+			next_track.min_sector()
+		))
+
+	}
 
 	/// Save the dsk in a file one disc
 	pub fn save<P>(&self, path: P) -> io::Result<()>
