@@ -18,9 +18,6 @@ pub trait ListingElement {
 
 
 
-
-
-
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaseListing<T: Clone + ListingElement> {

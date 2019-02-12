@@ -2,6 +2,8 @@
 #![feature(try_from)] 
 #![feature(type_alias_enum_variants)]
 #![feature(type_ascription)] 
+#![feature(custom_attribute)]
+
 
 // Notes for later when clippy will work:
 // https://rust-lang.github.io/rust-clippy/master/index.html#identity_op must be deactivated
@@ -35,6 +37,10 @@ extern crate serde;
 
 #[macro_use] extern crate dbg;
 #[macro_use] extern crate failure;
+
+
+#[macro_use] extern crate getset;
+
 /// Screen emulation. Unknown state ;)
 pub mod screen;
 

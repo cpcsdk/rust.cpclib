@@ -1,7 +1,19 @@
 ///! Utility code to build more easily tokens to manipulate in code generators
 
 use crate::assembler::tokens::*;
+use crate::assembler::tokens::expression::*;
 
+pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {
+    Token::Equ(label.as_ref().to_owned(), expr.into())
+}
+
+pub fn label<S: AsRef<str>>(label: S) -> Token {
+    Token::Label(label.as_ref().to_owned())
+}
+
+pub fn comment<S: AsRef<str>>(label: S) -> Token {
+    Token::Comment(label.as_ref().to_owned())
+}
 
 pub fn out_c_b() -> Token {
     out_c_register8(Register8::B)
@@ -25,9 +37,6 @@ pub fn out_c_a() -> Token {
     out_c_register8(Register8::A)
 }
 
-
-
-
 pub fn out_c_register8(reg:Register8) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Out,
@@ -35,7 +44,6 @@ pub fn out_c_register8(reg:Register8) -> Token {
         reg.into()
     )
 }
-
 
 pub fn push_af() -> Token {
     push_or_pop(Mnemonic::Push, Register16::Af)

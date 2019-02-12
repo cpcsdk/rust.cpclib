@@ -3,7 +3,8 @@ extern crate cpclib;
 
 use std::fs::File;
 use std::io::{Read, Write};
-
+use std::str::FromStr;
+use std::path::Path;
 use clap::{Arg, App, SubCommand, ArgGroup};
 
 
@@ -223,9 +224,63 @@ fn main() -> std::io::Result<()> {
         }
         
     }
+    else if let Some(sub) = matches.subcommand_matches("put") {
+        use cpclib::assembler::builder;
+        use cpclib::assembler::tokens::*;
 
-    // Add files in an Amsdos compatible disc
+        /// Add files in a sectorial way
+        let mut track = u8::from_str(sub.value_of("TRACK").unwrap())
+                            .expect("Wrong track format");
+        let mut sector = u8::from_str(sub.value_of("SECTOR").unwrap())
+                            .expect("Wrong track format");
+        let mut side = u8::from_str(sub.value_of("SIDE").unwrap())
+                            .expect("Wrong track format");
+        let export = sub.value_of("Z80_EXPORT").unwrap();
+
+        let mut dsk = ExtendedDsk::open(dsk_fname)
+                              .expect(&format!("Unable to open the file {}", dsk_fname));
+
+        let mut listing = Listing::new();
+        for file in sub.values_of("FILES").unwrap() {
+            // get the file
+            let mut f = File::open(file)?;
+            let mut content = Vec::new();
+            f.read_to_end(&mut content)?;
+
+            let next_position = dsk.add_file_sequentially(
+                side.clone(),
+                track.clone(),
+                sector.clone(),
+                &content
+            ).expect(&format!("Unable to add {}", file));
+
+            let mut base_label = Path::new(file)
+                                        .file_name().unwrap()
+                                        .to_str().unwrap()
+                                        .replace(".", "_");
+            listing.add(
+                builder::equ(
+                    format!("{}_side", &base_label),
+                    side.clone() as u8
+                )
+            );
+            listing.add(builder::equ(
+                format!("{}_track", &base_label),
+                track.clone() as u8)
+            );
+            listing.add(builder::equ(
+                format!("{}_sector", &base_label),
+                sector.clone() as u8)
+            );
+
+            side = next_position.0;
+            track = next_position.1;
+            sector = next_position.2;
+        }
+    }
+
     else if let Some(sub) = matches.subcommand_matches("add") {
+        // Add files in an Amsdos compatible disc
 
         // Get the input dsk
        let dsk = ExtendedDsk::open(dsk_fname)
@@ -258,8 +313,8 @@ fn main() -> std::io::Result<()> {
         manager.dsk().save(dsk_fname)?;
     }
 
-    // Manage the formating of a disc
     else if let Some(sub) = matches.subcommand_matches("format") {
+        // Manage the formating of a disc
         use cpclib::disc::cfg::DiscConfig;
 
         // Retrieve the format description
