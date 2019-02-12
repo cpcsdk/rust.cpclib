@@ -2,49 +2,45 @@
 
 use image as im;
 
-use std::path::Path;
-use std::collections::HashSet;
-use itertools::Itertools;
-use std::fmt::Debug;
 use bitfield::BitRange;
+use itertools::Itertools;
+use std::collections::HashSet;
+use std::fmt::Debug;
+use std::path::Path;
 
-use crate::image::*;
 use crate::ga::*;
-
+use crate::image::*;
 
 #[derive(Clone)]
 /// List of all the possible transformations applicable to a ColorMAtrix
 pub enum Transformation {
     /// When using mode 0, do not read all the pixels lines
-    SkipOddPixels
+    SkipOddPixels,
 }
-
 
 impl Transformation {
     pub fn apply(&self, matrix: ColorMatrix) -> ColorMatrix {
         match self {
-           Transformation::SkipOddPixels => {
-               let mut res = matrix.clone();
-               res.remove_odd_columns();
-               res
-           }
+            Transformation::SkipOddPixels => {
+                let mut res = matrix.clone();
+                res.remove_odd_columns();
+                res
+            }
         }
-    } 
+    }
 }
-
-
 
 /// Container of transformations
 #[derive(Clone)]
 pub struct TransformationsList {
-    transformations: Vec<Transformation>
+    transformations: Vec<Transformation>,
 }
 
 impl TransformationsList {
     /// Create an empty list of transformations
     pub fn new() -> Self {
         TransformationsList {
-            transformations: Vec::new()
+            transformations: Vec::new(),
         }
     }
 
@@ -52,9 +48,7 @@ impl TransformationsList {
     pub fn skip_odd_pixels(self) -> Self {
         let mut transformations = self.transformations.clone();
         transformations.push(Transformation::SkipOddPixels);
-        TransformationsList {
-            transformations
-        }
+        TransformationsList { transformations }
     }
 
     /// Apply ALL the transformation (in order of addition)
@@ -67,7 +61,6 @@ impl TransformationsList {
     }
 }
 
-
 /// Encode the screen dimension in CRTC measures
 #[derive(Clone)]
 pub struct CPCScreenDimension {
@@ -76,11 +69,10 @@ pub struct CPCScreenDimension {
     /// Number of chars in height
     verticalDisplayed: u8,
     /// Number of pixel line per char line
-    maximumRasterAddress: u8
+    maximumRasterAddress: u8,
 }
 
-impl Debug for CPCScreenDimension{
-
+impl Debug for CPCScreenDimension {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(
             fmt,
@@ -94,22 +86,22 @@ impl Debug for CPCScreenDimension{
 }
 
 impl CPCScreenDimension {
-
     /// Return screen dimension for a standard screen
     pub fn standard() -> Self {
         CPCScreenDimension {
-            horizontalDisplayed: 80/2,
-            verticalDisplayed: 25, /// Unsure of this value
-            maximumRasterAddress: 7
+            horizontalDisplayed: 80 / 2,
+            verticalDisplayed: 25,
+            /// Unsure of this value
+            maximumRasterAddress: 7,
         }
     }
 
     /// Return the screen dimension for a standard overscan screen
     pub fn overscan() -> Self {
         CPCScreenDimension {
-            horizontalDisplayed: 96/2,
+            horizontalDisplayed: 96 / 2,
             verticalDisplayed: 36,
-            maximumRasterAddress: 7
+            maximumRasterAddress: 7,
         }
     }
 
@@ -118,10 +110,9 @@ impl CPCScreenDimension {
         CPCScreenDimension {
             horizontalDisplayed,
             verticalDisplayed,
-            maximumRasterAddress
+            maximumRasterAddress,
         }
     }
-
 
     /// Number of lines to display a char
     pub fn nbLinesPerChar(&self) -> u8 {
@@ -129,7 +120,7 @@ impl CPCScreenDimension {
     }
 
     /// Number of chars used to vertically encode the screen
-    pub fn nbCharLines(&self) -> u8{
+    pub fn nbCharLines(&self) -> u8 {
         self.verticalDisplayed
     }
 
@@ -139,7 +130,7 @@ impl CPCScreenDimension {
 
     /// Number of chars used to horizontally encode the screen
     pub fn nbByteColumns(&self) -> u8 {
-        self.nbWordColumns()*2
+        self.nbWordColumns() * 2
     }
 
     /// Height of the screen in pixels
@@ -156,8 +147,6 @@ impl CPCScreenDimension {
     pub fn use_two_banks(&self) -> bool {
         self.nbByteColumns() as u16 * self.height() > 0x4000
     }
-
-
 }
 
 /// Manage the display address contained in R12-R13
@@ -172,16 +161,15 @@ impl DisplayAddress {
     const OFFSET_END: usize = 0;
 
     const BUFFER_START: usize = 11;
-    const BUFFER_END : usize = 10;
+    const BUFFER_END: usize = 10;
 
     const PAGE_START: usize = 13;
     const PAGE_END: usize = 12;
 
-
     /// Create the display address
     pub fn new_from(val: u16) -> DisplayAddress {
         assert!(val < 0b1100000000000000);
-        DisplayAddress(val) 
+        DisplayAddress(val)
     }
 
     pub fn new(page: u16, is_overscan: bool, offset: u16) -> DisplayAddress {
@@ -212,8 +200,9 @@ impl DisplayAddress {
         self.0.bit_range(Self::OFFSET_START, Self::OFFSET_END)
     }
 
-    pub fn set_offset(&mut self, offset:u16) {
-        self.0.set_bit_range(Self::OFFSET_START, Self::OFFSET_END, offset)
+    pub fn set_offset(&mut self, offset: u16) {
+        self.0
+            .set_bit_range(Self::OFFSET_START, Self::OFFSET_END, offset)
     }
 
     /// Return the buffer configuration
@@ -226,14 +215,14 @@ impl DisplayAddress {
     }
 
     pub fn set_buffer(&mut self, buffer: u16) {
-        self.0.set_bit_range(Self::BUFFER_START, Self::BUFFER_END, buffer)
+        self.0
+            .set_bit_range(Self::BUFFER_START, Self::BUFFER_END, buffer)
     }
 
     pub fn set_overscan(&mut self, is_overscan: bool) {
         if is_overscan {
             self.set_buffer(0b11);
-        }
-        else {
+        } else {
             self.set_buffer(0b00);
         }
     }
@@ -247,16 +236,16 @@ impl DisplayAddress {
         self.0.bit_range(Self::PAGE_START, Self::PAGE_END)
     }
 
-    pub fn set_page(&mut self, page:u16) {
+    pub fn set_page(&mut self, page: u16) {
         self.0.set_bit_range(Self::PAGE_START, Self::PAGE_END, page);
     }
 
     pub fn R12(&self) -> u8 {
-        self.0.bit_range(15, 8) 
+        self.0.bit_range(15, 8)
     }
 
     pub fn R13(&self) -> u8 {
-        self.0.bit_range(7, 0) 
+        self.0.bit_range(7, 0)
     }
 
     /// Return the page value
@@ -266,7 +255,7 @@ impl DisplayAddress {
             1 => 0x4000,
             2 => 0x8000,
             3 => 0xc000,
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -275,39 +264,43 @@ impl DisplayAddress {
         match self.buffer() {
             0 | 1 | 2 => false,
             3 => true,
-            _ => panic!()
+            _ => panic!(),
         }
-
     }
 
     /// Returns the CPC address of the first word.
-    pub fn address(&self) -> u16{
-        self.page_start() + self.offset()*2
+    pub fn address(&self) -> u16 {
+        self.page_start() + self.offset() * 2
     }
 
     /// Assume the object represent the character of interest and move to next one
     pub fn move_to_next_word(&mut self) {
         let was_overscan = self.is_overscan();
 
-        let expected_offset = self.offset()+1;
-        let truncated_expected_offset = expected_offset.bit_range(Self::OFFSET_START, Self::OFFSET_END);
+        let expected_offset = self.offset() + 1;
+        let truncated_expected_offset =
+            expected_offset.bit_range(Self::OFFSET_START, Self::OFFSET_END);
 
         // Move the offset of one char
         self.set_offset(truncated_expected_offset);
-if truncated_expected_offset != expected_offset {
-    println!("From {} to {} / {} / {:?}", expected_offset, truncated_expected_offset, self.is_overscan(), self);
-}
+        if truncated_expected_offset != expected_offset {
+            println!(
+                "From {} to {} / {} / {:?}",
+                expected_offset,
+                truncated_expected_offset,
+                self.is_overscan(),
+                self
+            );
+        }
         // In overscan screen, change the page
         if truncated_expected_offset != expected_offset && self.is_overscan() {
             println!("Change of page");
-            let val = self.page()+1;
+            let val = self.page() + 1;
             self.set_page(val);
         }
 
         assert_eq!(was_overscan, self.is_overscan());
     }
-
-
 }
 
 /// Specify the output format to be used
@@ -321,73 +314,70 @@ pub enum OutputFormat {
     LinearEncodedChuncky,
 
     /// CPC memory encoded. The binary can be directly included in a snapshot
-    CPCMemory{
+    CPCMemory {
         outputDimension: CPCScreenDimension,
-        displayAddress: DisplayAddress
+        displayAddress: DisplayAddress,
     },
 
     /// CPC memory encoded to be used with hardware splitting. The vector only contains the Variant CPCMemory
-    CPCSplittingMemory(Vec<OutputFormat>)
+    CPCSplittingMemory(Vec<OutputFormat>),
 }
 
 /// Embeds the conversion output
 /// There must be one implementation per OuputFormat
 pub enum Output {
-    LinearEncodedSprite{data: Vec<u8>, palette: Palette, byte_width: usize, height: usize},
+    LinearEncodedSprite {
+        data: Vec<u8>,
+        palette: Palette,
+        byte_width: usize,
+        height: usize,
+    },
 
-    LinearEncodedChuncky{data: Vec<u8>, palette: Palette, byte_width: usize, height: usize},
+    LinearEncodedChuncky {
+        data: Vec<u8>,
+        palette: Palette,
+        byte_width: usize,
+        height: usize,
+    },
 
     /// Result using one bank
     CPCMemoryStandard([u8; 0x4000], Palette),
 
-    /// Result using two banks 
-    CPCMemoryOverscan(
-        [u8; 0x4000], 
-        [u8; 0x4000], 
-        Palette
-    ),
+    /// Result using two banks
+    CPCMemoryOverscan([u8; 0x4000], [u8; 0x4000], Palette),
 
     /// Result using several chunks of memory
-    CPCSplittingMemory(Vec<Output>)
+    CPCSplittingMemory(Vec<Output>),
 }
 
-
 impl Debug for Output {
-
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
-            &Output::LinearEncodedSprite{
-                ref data, ref palette, ref byte_width,ref height} => {
-                writeln!(fmt, "LinearEncodedSprite")
-            },
-            &Output::LinearEncodedChuncky{ref data, ref palette, ref byte_width,ref height}=> {
-                writeln!(fmt, "LinearEncodedChuncky")
-            },
-            &Output::CPCMemoryStandard(_, _) => {
-               writeln!(fmt, "CPCMemoryStandard (16kb)")
-            },
-            &Output::CPCMemoryOverscan(_, _, _) => {
-                writeln!(fmt, "CPCMemoryStandard (32kb)")
-            },
-            &Output::CPCSplittingMemory(ref vec) =>{
-               writeln!(fmt, "CPCSplitterdMemory {:?}", &vec)
-            }
+            &Output::LinearEncodedSprite {
+                ref data,
+                ref palette,
+                ref byte_width,
+                ref height,
+            } => writeln!(fmt, "LinearEncodedSprite"),
+            &Output::LinearEncodedChuncky {
+                ref data,
+                ref palette,
+                ref byte_width,
+                ref height,
+            } => writeln!(fmt, "LinearEncodedChuncky"),
+            &Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
+            &Output::CPCMemoryOverscan(_, _, _) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
+            &Output::CPCSplittingMemory(ref vec) => writeln!(fmt, "CPCSplitterdMemory {:?}", &vec),
         }
     }
 }
 
-
-impl Output {
-
-}
-
+impl Output {}
 
 /// ImageConverter is able to make the conversion of images to several output format
 pub struct ImageConverter<'a> {
-
     // TODO add a crop area to not keep the complete image
-     // cropArea: Option<???>
-
+    // cropArea: Option<???>
     /// A palette can be specified
     palette: Option<Palette>,
 
@@ -399,35 +389,35 @@ pub struct ImageConverter<'a> {
 
     /// List of transformations
     transformations: TransformationsList,
-        
 }
 
 impl<'a> ImageConverter<'a> {
-
     /// Create the object that will be used to make the conversion
-    pub fn convert<P> (
-            input_file: P, 
-            palette: Option<Palette>, 
-            mode: Mode, 
-            transformations: TransformationsList,
-            output: &'a OutputFormat) -> Result<Output, String>
-    where P: AsRef<Path>
+    pub fn convert<P>(
+        input_file: P,
+        palette: Option<Palette>,
+        mode: Mode,
+        transformations: TransformationsList,
+        output: &'a OutputFormat,
+    ) -> Result<Output, String>
+    where
+        P: AsRef<Path>,
     {
-        Self::convert_impl(input_file.as_ref(), palette, mode, transformations,  output)        
+        Self::convert_impl(input_file.as_ref(), palette, mode, transformations, output)
     }
 
     fn convert_impl(
-        input_file: &Path, 
-        palette: Option<Palette>, 
-        mode: Mode, 
+        input_file: &Path,
+        palette: Option<Palette>,
+        mode: Mode,
         transformations: TransformationsList,
-        output: &'a OutputFormat) -> Result<Output, String>
-    {
+        output: &'a OutputFormat,
+    ) -> Result<Output, String> {
         let mut converter = ImageConverter {
             palette,
             mode,
             transformations,
-            output
+            output,
         };
 
         match output {
@@ -435,13 +425,13 @@ impl<'a> ImageConverter<'a> {
                 let mut matrix = converter.load_color_matrix(input_file);
                 matrix.double_horizontally();
                 let sprite = matrix.as_sprite(mode, None);
-                Ok(Output::LinearEncodedChuncky{
+                Ok(Output::LinearEncodedChuncky {
                     data: sprite.to_linear_vec(),
-                    palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set 
-                    byte_width: sprite.byte_width() as _, 
-                    height: sprite.height() as _
+                    palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set
+                    byte_width: sprite.byte_width() as _,
+                    height: sprite.height() as _,
                 })
-            },
+            }
             _ => {
                 let sprite = converter.load_sprite(input_file);
                 converter.apply_sprite_conversion(&sprite)
@@ -454,12 +444,11 @@ impl<'a> ImageConverter<'a> {
             palette: None,
             mode: Mode::Mode0, // TODO make the mode optional,
             output: output,
-            transformations: TransformationsList::new()
+            transformations: TransformationsList::new(),
         };
-      
+
         converter.apply_sprite_conversion(&sprite)
     }
-
 
     /// Load the initial image
     /// TODO make compatibility tests are alike
@@ -473,49 +462,47 @@ impl<'a> ImageConverter<'a> {
     }
 
     fn load_color_matrix(&self, input_file: &Path) -> ColorMatrix {
-        let img = im::open(input_file).expect(&format!("Unable to convert {:?} properly.", input_file));
-        let mat = ColorMatrix::convert(
-            &img.to_rgb(),
-            ConversionRule::AnyModeUseAllPixels
-        );
+        let img =
+            im::open(input_file).expect(&format!("Unable to convert {:?} properly.", input_file));
+        let mat = ColorMatrix::convert(&img.to_rgb(), ConversionRule::AnyModeUseAllPixels);
         self.transformations.apply(mat)
     }
 
-
     /// Manage the conversion on the given sprite
-    fn apply_sprite_conversion(&mut self, sprite: & Sprite) -> Result<Output, String> {
+    fn apply_sprite_conversion(&mut self, sprite: &Sprite) -> Result<Output, String> {
         let output = self.output.clone();
 
         match output {
-            OutputFormat::LinearEncodedSprite 
-                => self.linearize_sprite(sprite),
-            OutputFormat::CPCMemory{ref outputDimension, ref displayAddress}
-                => self.build_memory_blocks(sprite, outputDimension.clone(), displayAddress.clone()),
-            OutputFormat::CPCSplittingMemory(ref _vec)
-                => unimplemented!(),
+            OutputFormat::LinearEncodedSprite => self.linearize_sprite(sprite),
+            OutputFormat::CPCMemory {
+                ref outputDimension,
+                ref displayAddress,
+            } => self.build_memory_blocks(sprite, outputDimension.clone(), displayAddress.clone()),
+            OutputFormat::CPCSplittingMemory(ref _vec) => unimplemented!(),
 
-             _ => unreachable!()
+            _ => unreachable!(),
         }
-    } 
-
+    }
 
     /// Produce the linearized version of the sprite.
     /// TODO add size constraints to keep a small part of the sprite
     fn linearize_sprite(&mut self, sprite: &Sprite) -> Result<Output, String> {
-        Ok(Output::LinearEncodedSprite{
+        Ok(Output::LinearEncodedSprite {
             data: sprite.to_linear_vec(),
-            palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set 
-            byte_width: sprite.byte_width() as _, 
-            height: sprite.height() as _
+            palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set
+            byte_width: sprite.byte_width() as _,
+            height: sprite.height() as _,
         })
     }
 
-
-
     /// Manage the creation of the memory blocks
     /// XXX Warning, overscan is wrongly used, it is more fullscreen with 2 pages
-    fn build_memory_blocks(&mut self, sprite: & Sprite, dim: CPCScreenDimension, displayAddress: DisplayAddress) -> Result<Output, String> {
-
+    fn build_memory_blocks(
+        &mut self,
+        sprite: &Sprite,
+        dim: CPCScreenDimension,
+        displayAddress: DisplayAddress,
+    ) -> Result<Output, String> {
         let screen_width = dim.width(&sprite.mode().unwrap()) as u32;
         let screen_height = dim.height() as u32;
 
@@ -526,8 +513,7 @@ impl<'a> ImageConverter<'a> {
                 sprite.pixel_width(),
                 screen_width
             ));
-        }
-        else if screen_width > sprite.pixel_width() {
+        } else if screen_width > sprite.pixel_width() {
             eprintln!(
                 "[Warning] The image width ({}) is smaller than the cpc screen width ({})",
                 sprite.pixel_width(),
@@ -541,17 +527,16 @@ impl<'a> ImageConverter<'a> {
                 sprite.height(),
                 screen_height
             ));
-        }
-        else if  screen_height > sprite.height() {
+        } else if screen_height > sprite.height() {
             eprintln!(
                 "[Warning] The image height ({}) is smaller than the cpc screen height ({})",
                 sprite.height(),
                 screen_height
-            );   
+            );
         }
 
         // Simulate the memory
-        let mut pages  = [
+        let mut pages = [
             [0 as u8; 0x4000],
             [0 as u8; 0x4000],
             [0 as u8; 0x4000],
@@ -561,10 +546,12 @@ impl<'a> ImageConverter<'a> {
         let mut used_pages = HashSet::new();
         let is_overscan = dim.use_two_banks();
         if !is_overscan && displayAddress.is_overscan() {
-            return Err(format!("Image requires an overscan configuration for R12/R13={:?}", displayAddress));
+            return Err(format!(
+                "Image requires an overscan configuration for R12/R13={:?}",
+                displayAddress
+            ));
         }
 
-        
         let mut current_address = displayAddress.clone();
         used_pages.insert(current_address.page());
 
@@ -574,18 +561,18 @@ impl<'a> ImageConverter<'a> {
 
             // loop over the chars horiontally (2 bytes)
             for char_x in 0..dim.nbWordColumns() {
-               let char_x = char_x as usize;
- 
+                let char_x = char_x as usize;
+
                 // Loop over the lines of the current char (8 lines for a standard screen)
                 for line_in_char in 0..dim.nbLinesPerChar() {
                     let line_in_char = line_in_char as usize;
 
-                    // Loop over the bytes of the current char 
+                    // Loop over the bytes of the current char
                     for byte_nb in 0..2 {
-                       let byte_nb = byte_nb as usize;
+                        let byte_nb = byte_nb as usize;
 
-                        let x_coord = 2*char_x  + byte_nb;
-                        let y_coord = dim.nbLinesPerChar() as usize *char_y + line_in_char;
+                        let x_coord = 2 * char_x + byte_nb;
+                        let y_coord = dim.nbLinesPerChar() as usize * char_y + line_in_char;
 
                         let value = sprite.get_byte_safe(x_coord as _, y_coord as _);
                         //let value = Some(sprite.get_byte(x_coord as _, y_coord as _));
@@ -593,11 +580,12 @@ impl<'a> ImageConverter<'a> {
                         match value {
                             None => {
                                 //eprintln!("Unable to access byte in {}, {}", x_coord, y_coord);
-                            },
+                            }
                             Some(byte) => {
-
                                 let page = current_address.page() as usize;
-                                let address = current_address.offset() as usize *2 + byte_nb + line_in_char*0x800;
+                                let address = current_address.offset() as usize * 2
+                                    + byte_nb
+                                    + line_in_char * 0x800;
 
                                 pages[page][address] = byte;
                             }
@@ -609,35 +597,36 @@ impl<'a> ImageConverter<'a> {
                 current_address.move_to_next_word();
                 used_pages.insert(current_address.page());
             }
-
         }
 
         // By construction, the order should be good
         let used_pages = used_pages
-                            .iter()
-                            .sorted()
-                            .iter()
-                            .map(|idx| {
-                                pages[**idx as usize]
-                            }).collect::<Vec<_>>();
+            .iter()
+            .sorted()
+            .iter()
+            .map(|idx| pages[**idx as usize])
+            .collect::<Vec<_>>();
 
         if is_overscan && used_pages.len() != 2 {
-            return Err(format!("An overscan screen is requested but {} pages has been feed", used_pages.len()));
+            return Err(format!(
+                "An overscan screen is requested but {} pages has been feed",
+                used_pages.len()
+            ));
         }
 
         // Generate the right output format
         let palette = sprite.palette().unwrap();
         if is_overscan {
-            Ok(Output::CPCMemoryOverscan(used_pages[0], used_pages[1], palette))
-        }
-        else {
+            Ok(Output::CPCMemoryOverscan(
+                used_pages[0],
+                used_pages[1],
+                palette,
+            ))
+        } else {
             Ok(Output::CPCMemoryStandard(used_pages[0], palette))
         }
     }
-
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -648,7 +637,6 @@ mod tests {
         assert!(CPCScreenDimension::overscan().use_two_banks());
         assert!(!CPCScreenDimension::standard().use_two_banks());
     }
-
 
     #[test]
     fn manipulation_test() {
@@ -665,6 +653,5 @@ mod tests {
 
         address.move_to_next_word();
         assert_eq!(address.address(), 0x4002);
-
-      }
+    }
 }

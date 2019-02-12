@@ -1,11 +1,10 @@
+use crate::assembler::tokens::*;
+use num::integer::Integer;
+use std::fmt;
+use std::fmt::Debug;
 ///! Manage z80 CPU
 ///! Could be used to simulate or generate code
-
 use std::mem::swap;
-use std::fmt::Debug;
-use std::fmt;
-use num::integer::Integer;
-use crate::assembler::tokens::*;
 
 /// Common trait for Register 8 and 6 bits
 pub trait HasValue {
@@ -19,11 +18,11 @@ pub trait HasValue {
         self.value()
     }
     /// Change the stored value
-    fn set(&mut self, value:Self::ValueType);
+    fn set(&mut self, value: Self::ValueType);
 
     /// Add value to register
     // TODO return flags
-    fn add(&mut self, value:Self::ValueType);
+    fn add(&mut self, value: Self::ValueType);
 
     // TODO find a way to implement it here
     // TODO return flags
@@ -31,34 +30,32 @@ pub trait HasValue {
 }
 
 /// Represents an 8 bit register
-#[derive(Copy,Clone,Debug)]
-pub struct Register8{
-    val: u8
+#[derive(Copy, Clone, Debug)]
+pub struct Register8 {
+    val: u8,
 }
-
 
 /// By default a Register8 is set to 0
 /// TODO use an Unknown value ?
 impl Default for Register8 {
     fn default() -> Self {
-        Self{val:0}
+        Self { val: 0 }
     }
 }
 
-
 // TODO use macro for that
 impl HasValue for Register8 {
-    type ValueType=u8;
+    type ValueType = u8;
 
-    fn value(&self) -> Self::ValueType{
+    fn value(&self) -> Self::ValueType {
         self.val
     }
 
-    fn set(&mut self, value:Self::ValueType) {
+    fn set(&mut self, value: Self::ValueType) {
         self.val = value;
     }
 
-    fn add(&mut self, value:Self::ValueType) {
+    fn add(&mut self, value: Self::ValueType) {
         self.val = ((self.val as u16 + value as u16) & 256) as u8;
     }
 
@@ -67,35 +64,32 @@ impl HasValue for Register8 {
     }
 }
 
-
-
 /// Represents a 16 bits register by decomposing it in 2 8 bits registers
 #[derive(Copy, Clone, Default)]
 pub struct Register16 {
     low: Register8,
-    high: Register8
+    high: Register8,
 }
 
 impl Debug for Register16 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe {write!(f, "({:?}, {:?})", &self.high, &self.low)}
+        unsafe { write!(f, "({:?}, {:?})", &self.high, &self.low) }
     }
-
 }
 
 impl HasValue for Register16 {
-    type ValueType=u16;
+    type ValueType = u16;
 
-    fn value(&self) -> Self::ValueType{
-        256*self.high().value() as u16 + self.low().value() as u16
+    fn value(&self) -> Self::ValueType {
+        256 * self.high().value() as u16 + self.low().value() as u16
     }
 
-    fn set(&mut self, value:Self::ValueType) {
-        self.low_mut().set((value%256) as _);
-        self.high_mut().set((value/256) as _);
+    fn set(&mut self, value: Self::ValueType) {
+        self.low_mut().set((value % 256) as _);
+        self.high_mut().set((value / 256) as _);
     }
 
-    fn add(&mut self, value:Self::ValueType) {
+    fn add(&mut self, value: Self::ValueType) {
         let val = ((self.value() as u32 + value as u32) & 0xffff) as u16;
         self.set(val);
     }
@@ -105,9 +99,7 @@ impl HasValue for Register16 {
     }
 }
 
-
 impl Register16 {
-
     fn low(&self) -> &Register8 {
         &self.low
     }
@@ -124,7 +116,6 @@ impl Register16 {
         &mut self.high
     }
 }
-
 
 /// Highly simplify z80 model.
 /// TODO Add memory
@@ -152,181 +143,201 @@ pub struct Z80 {
     reg_hl_prime: Register16,
 }
 
-
 impl Z80 {
-
     // Immutable accessors
-    pub fn pc(& self)-> & Register16 {& self.reg_pc}
-    pub fn sp(& self)-> & Register16 {& self.reg_sp}
-
-    pub fn af(& self)-> & Register16 {& self.reg_af}
-
-    pub fn bc(& self)-> & Register16 {& self.reg_bc}
-    pub fn de(& self)-> & Register16 {& self.reg_de}
-    pub fn hl(& self)-> & Register16 {& self.reg_hl}
-
-    pub fn ix(& self)-> & Register16 {& self.reg_ix}
-    pub fn iy(& self)-> & Register16 {& self.reg_iy}
-
-    pub fn a(& self)-> & Register8 {
-       let tmp = self.af();
-       tmp.high()
+    pub fn pc(&self) -> &Register16 {
+        &self.reg_pc
     }
-    pub fn f(& self)-> & Register8 {
-       let tmp = self.af();
-       tmp.low()
+    pub fn sp(&self) -> &Register16 {
+        &self.reg_sp
     }
 
-
-    pub fn b(& self)-> & Register8 {
-       let tmp = self.bc();
-       tmp.high()
-    }
-    pub fn c(& self)-> & Register8 {
-       let tmp = self.bc();
-       tmp.low()
+    pub fn af(&self) -> &Register16 {
+        &self.reg_af
     }
 
-
-    pub fn d(& self)-> & Register8 {
-       let tmp = self.de();
-       tmp.high()
+    pub fn bc(&self) -> &Register16 {
+        &self.reg_bc
     }
-    pub fn e(& self)-> & Register8 {
-       let tmp = self.de();
-       tmp.low()
+    pub fn de(&self) -> &Register16 {
+        &self.reg_de
     }
-
-
-    pub fn h(& self)-> & Register8 {
-       let tmp = self.hl();
-       tmp.high()
-    }
-    pub fn l(& self)-> & Register8 {
-       let tmp = self.hl();
-       tmp.low()
+    pub fn hl(&self) -> &Register16 {
+        &self.reg_hl
     }
 
-    pub fn ixh(& self)-> & Register8 {
-       let tmp = self.ix();
-       tmp.high()
+    pub fn ix(&self) -> &Register16 {
+        &self.reg_ix
     }
-    pub fn ixl(& self)-> & Register8 {
-       let tmp = self.ix();
-       tmp.low()
+    pub fn iy(&self) -> &Register16 {
+        &self.reg_iy
     }
 
-    pub fn iyh(& self)-> & Register8 {
-       let tmp = self.iy();
-       tmp.high()
+    pub fn a(&self) -> &Register8 {
+        let tmp = self.af();
+        tmp.high()
     }
-    pub fn iyl(& self)-> & Register8 {
-       let tmp = self.iy();
-       tmp.low()
+    pub fn f(&self) -> &Register8 {
+        let tmp = self.af();
+        tmp.low()
     }
 
+    pub fn b(&self) -> &Register8 {
+        let tmp = self.bc();
+        tmp.high()
+    }
+    pub fn c(&self) -> &Register8 {
+        let tmp = self.bc();
+        tmp.low()
+    }
+
+    pub fn d(&self) -> &Register8 {
+        let tmp = self.de();
+        tmp.high()
+    }
+    pub fn e(&self) -> &Register8 {
+        let tmp = self.de();
+        tmp.low()
+    }
+
+    pub fn h(&self) -> &Register8 {
+        let tmp = self.hl();
+        tmp.high()
+    }
+    pub fn l(&self) -> &Register8 {
+        let tmp = self.hl();
+        tmp.low()
+    }
+
+    pub fn ixh(&self) -> &Register8 {
+        let tmp = self.ix();
+        tmp.high()
+    }
+    pub fn ixl(&self) -> &Register8 {
+        let tmp = self.ix();
+        tmp.low()
+    }
+
+    pub fn iyh(&self) -> &Register8 {
+        let tmp = self.iy();
+        tmp.high()
+    }
+    pub fn iyl(&self) -> &Register8 {
+        let tmp = self.iy();
+        tmp.low()
+    }
 
     // Mutable accessors
-    pub fn pc_mut(&mut self)-> &mut Register16 {&mut self.reg_pc}
-    pub fn sp_mut(&mut self)-> &mut Register16 {&mut self.reg_sp}
-
-    pub fn af_mut(&mut self)-> &mut Register16 {&mut self.reg_af}
-
-    pub fn bc_mut(&mut self)-> &mut Register16 {&mut self.reg_bc}
-    pub fn de_mut(&mut self)-> &mut Register16 {&mut self.reg_de}
-    pub fn hl_mut(&mut self)-> &mut Register16 {&mut self.reg_hl}
-
-    pub fn ix_mut(&mut self)-> &mut Register16 {&mut self.reg_ix}
-    pub fn iy_mut(&mut self)-> &mut Register16 {&mut self.reg_iy}
-
-    pub fn a_mut(&mut self)-> &mut Register8 {
-       let tmp = self.af_mut();
-       tmp.high_mut()
+    pub fn pc_mut(&mut self) -> &mut Register16 {
+        &mut self.reg_pc
     }
-    pub fn f_mut(&mut self)-> &mut Register8 {
-       let tmp = self.af_mut();
-       tmp.low_mut()
+    pub fn sp_mut(&mut self) -> &mut Register16 {
+        &mut self.reg_sp
     }
 
-
-    pub fn b_mut(&mut self)-> &mut Register8 {
-       let tmp = self.bc_mut();
-       tmp.high_mut()
-    }
-    pub fn c_mut(&mut self)-> &mut Register8 {
-       let tmp = self.bc_mut();
-       tmp.low_mut()
+    pub fn af_mut(&mut self) -> &mut Register16 {
+        &mut self.reg_af
     }
 
-
-    pub fn d_mut(&mut self)-> &mut Register8 {
-       let tmp = self.de_mut();
-       tmp.high_mut()
+    pub fn bc_mut(&mut self) -> &mut Register16 {
+        &mut self.reg_bc
     }
-    pub fn e_mut(&mut self)-> &mut Register8 {
-       let tmp = self.de_mut();
-       tmp.low_mut()
+    pub fn de_mut(&mut self) -> &mut Register16 {
+        &mut self.reg_de
     }
-
-
-    pub fn h_mut(&mut self)-> &mut Register8 {
-       let tmp = self.hl_mut();
-       tmp.high_mut()
-    }
-    pub fn l_mut(&mut self)-> &mut Register8 {
-       let tmp = self.hl_mut();
-       tmp.low_mut()
+    pub fn hl_mut(&mut self) -> &mut Register16 {
+        &mut self.reg_hl
     }
 
-    pub fn ixh_mut(&mut self)-> &mut Register8 {
-       let tmp = self.ix_mut();
-       tmp.high_mut()
+    pub fn ix_mut(&mut self) -> &mut Register16 {
+        &mut self.reg_ix
     }
-    pub fn ixl_mut(&mut self)-> &mut Register8 {
-       let tmp = self.ix_mut();
-       tmp.low_mut()
+    pub fn iy_mut(&mut self) -> &mut Register16 {
+        &mut self.reg_iy
     }
 
-    pub fn iyh_mut(&mut self)-> &mut Register8 {
-       let tmp = self.iy_mut();
-       tmp.high_mut()
+    pub fn a_mut(&mut self) -> &mut Register8 {
+        let tmp = self.af_mut();
+        tmp.high_mut()
     }
-    pub fn iyl_mut(&mut self)-> &mut Register8 {
-       let tmp = self.iy_mut();
-       tmp.low_mut()
+    pub fn f_mut(&mut self) -> &mut Register8 {
+        let tmp = self.af_mut();
+        tmp.low_mut()
     }
 
+    pub fn b_mut(&mut self) -> &mut Register8 {
+        let tmp = self.bc_mut();
+        tmp.high_mut()
+    }
+    pub fn c_mut(&mut self) -> &mut Register8 {
+        let tmp = self.bc_mut();
+        tmp.low_mut()
+    }
 
+    pub fn d_mut(&mut self) -> &mut Register8 {
+        let tmp = self.de_mut();
+        tmp.high_mut()
+    }
+    pub fn e_mut(&mut self) -> &mut Register8 {
+        let tmp = self.de_mut();
+        tmp.low_mut()
+    }
 
+    pub fn h_mut(&mut self) -> &mut Register8 {
+        let tmp = self.hl_mut();
+        tmp.high_mut()
+    }
+    pub fn l_mut(&mut self) -> &mut Register8 {
+        let tmp = self.hl_mut();
+        tmp.low_mut()
+    }
+
+    pub fn ixh_mut(&mut self) -> &mut Register8 {
+        let tmp = self.ix_mut();
+        tmp.high_mut()
+    }
+    pub fn ixl_mut(&mut self) -> &mut Register8 {
+        let tmp = self.ix_mut();
+        tmp.low_mut()
+    }
+
+    pub fn iyh_mut(&mut self) -> &mut Register8 {
+        let tmp = self.iy_mut();
+        tmp.high_mut()
+    }
+    pub fn iyl_mut(&mut self) -> &mut Register8 {
+        let tmp = self.iy_mut();
+        tmp.low_mut()
+    }
 
     pub fn ex_af_af_prime(&mut self) {
-        swap(& mut self.reg_af_prime, & mut self.reg_af);
+        swap(&mut self.reg_af_prime, &mut self.reg_af);
     }
 
     pub fn exx(&mut self) {
-        swap(& mut self.reg_hl_prime, & mut self.reg_hl);
-        swap(& mut self.reg_de_prime, & mut self.reg_de);
-        swap(& mut self.reg_bc_prime, & mut self.reg_bc);
+        swap(&mut self.reg_hl_prime, &mut self.reg_hl);
+        swap(&mut self.reg_de_prime, &mut self.reg_de);
+        swap(&mut self.reg_bc_prime, &mut self.reg_bc);
     }
 
-
-
     // To reduce copy paste/implementation errors, all manipulation are translated as token usage
-    pub fn copy_to_from(&mut self, to: crate::assembler::tokens::Register8, from: crate::assembler::tokens::Register8) {
+    pub fn copy_to_from(
+        &mut self,
+        to: crate::assembler::tokens::Register8,
+        from: crate::assembler::tokens::Register8,
+    ) {
         self.execute(&Token::OpCode(
-                        Mnemonic::Ld,
-                        Some(DataAccess::Register8(to)),
-                        Some(DataAccess::Register8(from)),
-                )
-        );
+            Mnemonic::Ld,
+            Some(DataAccess::Register8(to)),
+            Some(DataAccess::Register8(from)),
+        ));
     }
 }
 
-
 #[cfg(test)]
-mod tests{
-    use crate::z80emu::z80::{Z80, Register16, Register8};
+mod tests {
     use crate::z80emu::z80::HasValue;
+    use crate::z80emu::z80::{Register16, Register8, Z80};
 
     #[test]
     fn build_z80() {
@@ -343,8 +354,6 @@ mod tests{
         assert_eq!(B.value(), 22);
     }
 
-
-
     #[test]
     fn test_register16() {
         let mut BC = Register16::default();
@@ -356,22 +365,19 @@ mod tests{
         assert_eq!(BC.high().value(), 0);
         assert_eq!(BC.value(), 22);
 
-        BC.set(50*256);
+        BC.set(50 * 256);
         assert_eq!(BC.low().value(), 0);
         assert_eq!(BC.high().value(), 50);
-        assert_eq!(BC.value(), 50*256);
-
+        assert_eq!(BC.value(), 50 * 256);
 
         BC.set(0xffff);
         BC.add(1);
         assert_eq!(BC.value(), 0);
 
-
         BC.set(0x4000);
         BC.add(1);
         assert_eq!(BC.value(), 0x4001);
     }
-
 
     #[test]
     fn z80_registers() {
@@ -393,9 +399,7 @@ mod tests{
 
         z80.ex_af_af_prime();
         assert_eq!(z80.a().value(), 0x45);
-
     }
-
 
     #[test]
     fn eval() {
@@ -407,9 +411,21 @@ mod tests{
         z80.de_mut().set(0xc000);
         z80.a_mut().set(0);
 
-        let pop_bc = Token::OpCode(Mnemonic::Pop, Some(DataAccess::Register16(Register16::Bc)), None);
-        let ld_l_a = Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::L)), Some(DataAccess::Register8(Register8::A)));
-        let add_a_b = Token::OpCode(Mnemonic::Add,Some(DataAccess::Register8(Register8::A)), Some(DataAccess::Register8(Register8::B)));
+        let pop_bc = Token::OpCode(
+            Mnemonic::Pop,
+            Some(DataAccess::Register16(Register16::Bc)),
+            None,
+        );
+        let ld_l_a = Token::OpCode(
+            Mnemonic::Ld,
+            Some(DataAccess::Register8(Register8::L)),
+            Some(DataAccess::Register8(Register8::A)),
+        );
+        let add_a_b = Token::OpCode(
+            Mnemonic::Add,
+            Some(DataAccess::Register8(Register8::A)),
+            Some(DataAccess::Register8(Register8::B)),
+        );
         let ldi = Token::OpCode(Mnemonic::Ldi, None, None);
 
         assert_eq!(z80.pc().value(), 0x4000);

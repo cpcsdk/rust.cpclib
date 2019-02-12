@@ -1,12 +1,11 @@
 ///! Locomotive basic parser routines.
-
 use nom::types::CompleteStr;
-use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending,eol};
-use nom::InputLength;
 use nom::InputIter;
+use nom::InputLength;
+use nom::{eol, line_ending, space, space0, space1, Err, ErrorKind, IResult};
 
-use crate::basic::{BasicLine, BasicProgram};
 use crate::basic::tokens::*;
+use crate::basic::{BasicLine, BasicProgram};
 
 named!(
 	pub parse_basic_program<CompleteStr<'_>, BasicProgram>, do_parse!(
@@ -64,8 +63,6 @@ named!(
 	)
 );
 
-
-
 /// Parse any token
 named!(
 	pub parse_token<CompleteStr<'_>, BasicToken>, alt!(
@@ -76,7 +73,6 @@ named!(
 		parse_char
 	)
 );
-
 
 named!(
 	pub parse_rem<CompleteStr<'_>, BasicToken>, do_parse!(
@@ -107,7 +103,6 @@ named!(
 		)
 	)
 );
-
 
 /// TODO add the missing chars
 named!(
@@ -196,7 +191,6 @@ named!(
 	)
 );
 
-
 named!(
     pub parse_hexadecimal_value_16bits<CompleteStr<'_>, BasicToken>, do_parse!(
         tag_no_case!( "&") >>
@@ -265,7 +259,10 @@ pub fn dec_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
                     res = value + (res * 10);
                 }
                 if res > u16::max_value() as u32 {
-                    Err(::nom::Err::Error(error_position!(input, ErrorKind::Custom(0))))
+                    Err(::nom::Err::Error(error_position!(
+                        input,
+                        ErrorKind::Custom(0)
+                    )))
                 } else {
                     Ok((remaining, res as u16))
                 }
@@ -274,102 +271,91 @@ pub fn dec_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
     }
 }
 
-
-
 #[cfg(test)]
 mod test {
- 	use crate::basic::parser::*;
+    use crate::basic::parser::*;
 
-	#[test]
-	fn check_number() {
+    #[test]
+    fn check_number() {
         assert!(dec_u16_inner(CompleteStr("10")).is_ok());
 
-		match hex_u16_inner("1234".into()) {
-			Ok((res, value)) => {
-				println!("{:?}", &res);
-				println!("{:x}", &value);
-				assert_eq!(0x1234, value);
-			}
-			Err(e) => {
-				panic!("{}", e);
-			}
-		}
+        match hex_u16_inner("1234".into()) {
+            Ok((res, value)) => {
+                println!("{:?}", &res);
+                println!("{:x}", &value);
+                assert_eq!(0x1234, value);
+            }
+            Err(e) => {
+                panic!("{}", e);
+            }
+        }
 
-		match parse_hexadecimal_value_16bits("&1234".into()) {
-			Ok((res, value)) => {
-				println!("{:?}", &res);
-				println!("{:?}", &value);
-				let bytes = value.as_bytes();
-				assert_eq!(
-					bytes[0],
-					BasicTokenNoPrefix::ValueIntegerHexadecimal16bits as u8
-				);
-				assert_eq!(
-					bytes[1],
-					0x34
-				);
-				assert_eq!(
-					bytes[2],
-					0x12
-				);
-			}
-			Err(e) => {
-				panic!("{}", e);
-			}
-		}
+        match parse_hexadecimal_value_16bits("&1234".into()) {
+            Ok((res, value)) => {
+                println!("{:?}", &res);
+                println!("{:?}", &value);
+                let bytes = value.as_bytes();
+                assert_eq!(
+                    bytes[0],
+                    BasicTokenNoPrefix::ValueIntegerHexadecimal16bits as u8
+                );
+                assert_eq!(bytes[1], 0x34);
+                assert_eq!(bytes[2], 0x12);
+            }
+            Err(e) => {
+                panic!("{}", e);
+            }
+        }
     }
 
-	fn check_line_tokenisation(code: &str) -> BasicLine{
-		let res = parse_basic_inner_line(code.into());
-		match res {
-			Ok((res, line)) => {
-				println!("{:?}", &line);
-				println!("{:?}", &res);
-				assert_eq!(res.len(), 0, "Line as not been completly consummed");
-				line
-            },
-            Err(e) => {
-				panic!("{}", e);
+    fn check_line_tokenisation(code: &str) -> BasicLine {
+        let res = parse_basic_inner_line(code.into());
+        match res {
+            Ok((res, line)) => {
+                println!("{:?}", &line);
+                println!("{:?}", &res);
+                assert_eq!(res.len(), 0, "Line as not been completly consummed");
+                line
             }
-		}
-	}
-
-	fn check_token_tokenisation(code: &str) {
-		let res = parse_token(code.into());
-		match res {
-			Ok((res, line)) => {
-				println!("{} => {:?}", code, &line);
-				assert_eq!(res.len(), 0, "Line as not been completly consummed");
-            },
             Err(e) => {
-				panic!("{}", e);
+                panic!("{}", e);
             }
-		}
-	}
+        }
+    }
 
-	#[test]
-	fn test_lines() {
-		check_line_tokenisation("10 call &0\n");
-		check_line_tokenisation("10 call &0  \n");
-		check_line_tokenisation("10 call &0: call &0\n");
-	}
+    fn check_token_tokenisation(code: &str) {
+        let res = parse_token(code.into());
+        match res {
+            Ok((res, line)) => {
+                println!("{} => {:?}", code, &line);
+                assert_eq!(res.len(), 0, "Line as not been completly consummed");
+            }
+            Err(e) => {
+                panic!("{}", e);
+            }
+        }
+    }
 
-	#[test]
-	fn test_tokens() {
-		check_token_tokenisation("call");
-		check_token_tokenisation("abs");
-		check_token_tokenisation(":");
-	}
+    #[test]
+    fn test_lines() {
+        check_line_tokenisation("10 call &0\n");
+        check_line_tokenisation("10 call &0  \n");
+        check_line_tokenisation("10 call &0: call &0\n");
+    }
 
-	#[test]
-	fn test_comment() {
-		check_token_tokenisation("REM fldsfksjfksjkg");
-		check_token_tokenisation("' fldsfksjfksjkg");
+    #[test]
+    fn test_tokens() {
+        check_token_tokenisation("call");
+        check_token_tokenisation("abs");
+        check_token_tokenisation(":");
+    }
 
-		let line = check_line_tokenisation("10 REM fldsfksjfksjkg:CALL\n");
-		assert_eq!(
-			3,
-			line.tokens().len()
-		)
-	}
+    #[test]
+    fn test_comment() {
+        check_token_tokenisation("REM fldsfksjfksjkg");
+        check_token_tokenisation("' fldsfksjfksjkg");
+
+        let line = check_line_tokenisation("10 REM fldsfksjfksjkg:CALL\n");
+        assert_eq!(3, line.tokens().len())
+    }
 }

@@ -1,7 +1,6 @@
-///! Utility code to build more easily tokens to manipulate in code generators
-
-use crate::assembler::tokens::*;
 use crate::assembler::tokens::expression::*;
+///! Utility code to build more easily tokens to manipulate in code generators
+use crate::assembler::tokens::*;
 
 pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {
     Token::Equ(label.as_ref().to_owned(), expr.into())
@@ -37,12 +36,8 @@ pub fn out_c_a() -> Token {
     out_c_register8(Register8::A)
 }
 
-pub fn out_c_register8(reg:Register8) -> Token {
-    token_for_opcode_two_args(
-        Mnemonic::Out,
-        Register8::C.into(),
-        reg.into()
-    )
+pub fn out_c_register8(reg: Register8) -> Token {
+    token_for_opcode_two_args(Mnemonic::Out, Register8::C.into(), reg.into())
 }
 
 pub fn push_af() -> Token {
@@ -79,17 +74,14 @@ pub fn pop_hl() -> Token {
 
 #[inline]
 fn push_or_pop(op: Mnemonic, reg: Register16) -> Token {
-    token_for_opcode_one_arg(
-        op,
-        reg.into()
-    )
+    token_for_opcode_one_arg(op, reg.into())
 }
 
 pub fn push_ix() -> Token {
     Token::OpCode(
         Mnemonic::Push,
         Some(DataAccess::IndexRegister16(IndexRegister16::Ix)),
-        None
+        None,
     )
 }
 
@@ -97,7 +89,7 @@ pub fn push_iy() -> Token {
     Token::OpCode(
         Mnemonic::Push,
         Some(DataAccess::IndexRegister16(IndexRegister16::Iy)),
-        None
+        None,
     )
 }
 
@@ -105,7 +97,7 @@ pub fn pop_ix() -> Token {
     Token::OpCode(
         Mnemonic::Pop,
         Some(DataAccess::IndexRegister16(IndexRegister16::Ix)),
-        None
+        None,
     )
 }
 
@@ -113,7 +105,7 @@ pub fn pop_iy() -> Token {
     Token::OpCode(
         Mnemonic::Pop,
         Some(DataAccess::IndexRegister16(IndexRegister16::Iy)),
-        None
+        None,
     )
 }
 
@@ -125,12 +117,8 @@ pub fn breakpoint_snapshot() -> Token {
     Token::Breakpoint(None)
 }
 
-
 pub fn jp_label(label: &str) -> Token {
-    token_for_opcode_latest_arg(
-        Mnemonic::Jp,
-        label.into()
-    )
+    token_for_opcode_latest_arg(Mnemonic::Jp, label.into())
 }
 
 pub fn exx() -> Token {
@@ -142,10 +130,7 @@ pub fn inc_l() -> Token {
 }
 
 pub fn inc_register8(reg: Register8) -> Token {
-    token_for_opcode_one_arg(
-        Mnemonic::Inc,
-        reg.into()
-    )
+    token_for_opcode_one_arg(Mnemonic::Inc, reg.into())
 }
 
 /// I have clear doubt that  this exists really
@@ -153,10 +138,9 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
         Register8::L.into(),
-        DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, expr)
+        DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, expr),
     )
 }
-
 
 pub fn ld_d_mem_hl() -> Token {
     ld_register8_mem_hl(Register8::D)
@@ -170,10 +154,9 @@ pub fn ld_register8_mem_hl(reg: Register8) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
         reg.into(),
-        DataAccess::MemoryRegister16(Register16::Hl)
+        DataAccess::MemoryRegister16(Register16::Hl),
     )
 }
-
 
 pub fn ld_mem_hl_d() -> Token {
     ld_mem_hl_register8(Register8::D)
@@ -203,48 +186,26 @@ pub fn ld_mem_hl_register8(reg: Register8) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
         DataAccess::MemoryRegister16(Register16::Hl),
-        reg.into()
+        reg.into(),
     )
 }
 
-
-
 /// Build a token that represents a mnemonic without any argument
 pub fn token_for_opcode_no_arg(mne: Mnemonic) -> Token {
-    Token::OpCode(
-        mne,
-        None,
-        None
-    )
+    Token::OpCode(mne, None, None)
 }
 
 /// Build a token that represents a mnemonic with only one argument
 pub fn token_for_opcode_one_arg(mne: Mnemonic, data1: DataAccess) -> Token {
-    Token::OpCode(
-        mne,
-        Some(data1),
-        None
-    )
+    Token::OpCode(mne, Some(data1), None)
 }
 
 /// Build a token that represents a mnemonic with only one argument BUT positionned in the last position (for jp for example)
 pub fn token_for_opcode_latest_arg(mne: Mnemonic, data2: DataAccess) -> Token {
-    Token::OpCode(
-        mne,
-        None,
-        Some(data2)
-    )
+    Token::OpCode(mne, None, Some(data2))
 }
 
 /// Build a token that represents a mnemonic with two arguments
 pub fn token_for_opcode_two_args(mne: Mnemonic, data1: DataAccess, data2: DataAccess) -> Token {
-    Token::OpCode(
-        mne,
-        Some(data1),
-        Some(data2)
-    )
+    Token::OpCode(mne, Some(data1), Some(data2))
 }
-
-
-
-

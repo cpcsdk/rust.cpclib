@@ -1,37 +1,35 @@
 use bitsets;
 
+use std::fmt;
+use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::fs::File;
-use std::str::FromStr;
-use std::path::Path;
 use std::io::BufReader;
-use std::fmt;
-
+use std::path::Path;
+use std::str::FromStr;
 
 ///! Reimplementation of createsnapshot by Ramlaid/Arkos
 ///! in rust by Krusty/Benediction
 
-
 /**
  * Original options
- 
- 	{'i',"inSnapshot",0,1,1,"Load <$1> snapshot file"},
-	{'l',"loadFileData",0,0,2,"Load <$1> file data at <$2> address in snapshot memory (or use AMSDOS header load address if <$2> is negative)"},
-	{'p',"putData",0,0,2,"Put <$2> byte at <$1> address in snapshot memory"},
-	{'s',"setToken",0,0,2,"Set snapshot token <$1> to value <$2>\n\t\t"
-		"Use <$1>:<val> to set array value\n\t\t"
-		"ex '-s CRTC_REG:6 20' : Set CRTC register 6 to 20"},
-	{'x',"clearMemory",0,1,0,"Clear snapshot memory"},
-	{'r',"romDeconnect",0,1,0,"Disconnect lower and upper rom"},
-	{'e',"enableInterrupt",0,1,0,"Enable interrupt"},
-	{'d',"disableInterrupt",0,1,0,"Disable interrupt"},
-	{'c',"configFile",0,1,1,"Load a config file with createSnapshot option"},
-	{'t',"tokenList",0,1,0,"Display setable snapshot token ID"},
-	{'o',"output",0,0,3,"Output <$3> bytes of data from address <$2> to file <$1>"},
-	{'f',"fillData",0,0,3,"Fill snapshot from <$1> over <$2> bytes, with <$3> datas"},
-	{'g',"fillText",0,0,3,"Fill snapshot from <$1> over <$2> bytes, with <$3> text"},
-	{'j',"loadIniFile",0,1,1,"Load <$1> init file"},
+
+     {'i',"inSnapshot",0,1,1,"Load <$1> snapshot file"},
+    {'l',"loadFileData",0,0,2,"Load <$1> file data at <$2> address in snapshot memory (or use AMSDOS header load address if <$2> is negative)"},
+    {'p',"putData",0,0,2,"Put <$2> byte at <$1> address in snapshot memory"},
+    {'s',"setToken",0,0,2,"Set snapshot token <$1> to value <$2>\n\t\t"
+        "Use <$1>:<val> to set array value\n\t\t"
+        "ex '-s CRTC_REG:6 20' : Set CRTC register 6 to 20"},
+    {'x',"clearMemory",0,1,0,"Clear snapshot memory"},
+    {'r',"romDeconnect",0,1,0,"Disconnect lower and upper rom"},
+    {'e',"enableInterrupt",0,1,0,"Enable interrupt"},
+    {'d',"disableInterrupt",0,1,0,"Disable interrupt"},
+    {'c',"configFile",0,1,1,"Load a config file with createSnapshot option"},
+    {'t',"tokenList",0,1,0,"Display setable snapshot token ID"},
+    {'o',"output",0,0,3,"Output <$3> bytes of data from address <$2> to file <$1>"},
+    {'f',"fillData",0,0,3,"Fill snapshot from <$1> over <$2> bytes, with <$3> datas"},
+    {'g',"fillText",0,0,3,"Fill snapshot from <$1> over <$2> bytes, with <$3> text"},
+    {'j',"loadIniFile",0,1,1,"Load <$1> init file"},
 {'k',"saveIniFile",0,1,1,"Save <$1> init file"},
 
 */
@@ -40,20 +38,18 @@ use std::fmt;
 pub enum SnapshotVersion {
     V1,
     V2,
-    V3
+    V3,
 }
 
 impl SnapshotVersion {
     pub fn is_v3(&self) -> bool {
         if let SnapshotVersion::V3 = self {
             true
-        }
-        else {
+        } else {
             false
         }
     }
 }
-
 
 /// Encode a flag of the snaphot
 #[derive(PartialEq, Debug, Copy, Clone)]
@@ -126,11 +122,10 @@ pub enum SnapshotFlag {
     GA_VSC,
     GA_ISC,
     INT_REQ,
-
 }
 
 impl SnapshotFlag {
-    pub fn enumerate() -> [SnapshotFlag;67] {
+    pub fn enumerate() -> [SnapshotFlag; 67] {
         use self::SnapshotFlag::*;
 
         [
@@ -200,20 +195,18 @@ impl SnapshotFlag {
             CRTC_STATE,
             GA_VSC,
             GA_ISC,
-            INT_REQ]
+            INT_REQ,
+        ]
     }
 
     /// Return the location in the header for the flag (and its potential index)
     pub fn offset(&self) -> usize {
         use self::SnapshotFlag::*;
         match self {
-            &GA_PAL(ref idx) |
-            &CRTC_REG(ref idx) |
-            &PSG_REG(ref idx) |
-            &GA_MULTIMODE(ref idx)
-                => self.base() + idx.unwrap_or(0) * self.elem_size(),
-            _
-                => self.base()
+            &GA_PAL(ref idx) | &CRTC_REG(ref idx) | &PSG_REG(ref idx) | &GA_MULTIMODE(ref idx) => {
+                self.base() + idx.unwrap_or(0) * self.elem_size()
+            }
+            _ => self.base(),
         }
     }
 
@@ -221,27 +214,26 @@ impl SnapshotFlag {
         use self::SnapshotFlag::*;
 
         match self {
-            &GA_PAL(ref idx) |
-            &CRTC_REG(ref idx) |
-            &PSG_REG(ref idx) |
-            &GA_MULTIMODE(ref idx)
-            => idx.clone(),
-            _ => Some(0) // For standard stuff indice is considered to be 0
+            &GA_PAL(ref idx) | &CRTC_REG(ref idx) | &PSG_REG(ref idx) | &GA_MULTIMODE(ref idx) => {
+                idx.clone()
+            }
+            _ => Some(0), // For standard stuff indice is considered to be 0
         }
     }
 
-    pub fn set_indice(&mut self, indice: usize) -> Result<(), SnapshotError>{
+    pub fn set_indice(&mut self, indice: usize) -> Result<(), SnapshotError> {
         use self::SnapshotFlag::*;
         match self {
-            &mut GA_PAL(ref mut idx) |
-                &mut CRTC_REG(ref mut idx) |
-                &mut PSG_REG(ref mut idx) |
-                &mut GA_MULTIMODE(ref mut idx)
-                => {*idx = Some(indice); Ok(())},
-            _ => Err(SnapshotError::InvalidIndex)
+            &mut GA_PAL(ref mut idx)
+            | &mut CRTC_REG(ref mut idx)
+            | &mut PSG_REG(ref mut idx)
+            | &mut GA_MULTIMODE(ref mut idx) => {
+                *idx = Some(indice);
+                Ok(())
+            }
+            _ => Err(SnapshotError::InvalidIndex),
         }
     }
-
 
     /// Return the header base position that corresponds to the flag
     pub fn base(&self) -> usize {
@@ -325,7 +317,7 @@ impl SnapshotFlag {
             &CRTC_REG(_) => 18,
             &PSG_REG(_) => 16,
             &GA_MULTIMODE(_) => 6,
-            _ => 1
+            _ => 1,
         }
     }
 
@@ -333,81 +325,25 @@ impl SnapshotFlag {
     pub fn elem_size(&self) -> usize {
         use self::SnapshotFlag::*;
         match self {
-            &Z80_AF|
-                &Z80_BC|
-                &Z80_DE|
-                &Z80_HL|
-                &Z80_IX|
-                &Z80_IY|
-                &Z80_SP|
-                &Z80_PC|
-                &Z80_AFX|
-                &Z80_BCX|
-                &Z80_DEX|
-                &Z80_HLX|
-                &CRTC_STATE => 2,
+            &Z80_AF | &Z80_BC | &Z80_DE | &Z80_HL | &Z80_IX | &Z80_IY | &Z80_SP | &Z80_PC
+            | &Z80_AFX | &Z80_BCX | &Z80_DEX | &Z80_HLX | &CRTC_STATE => 2,
 
-                &Z80_F|
-                    &Z80_A|
-                    &Z80_C|
-                    &Z80_B|
-                    &Z80_E|
-                    &Z80_D|
-                    &Z80_L|
-                    &Z80_H|
-                    &Z80_R|
-                    &Z80_I|
-                    &Z80_IFF0|
-                    &Z80_IFF1|
-                    &Z80_IXL|
-                    &Z80_IXH|
-                    &Z80_IYL|
-                    &Z80_IYH|
-                    &Z80_IM|
-                    &Z80_FX|
-                    &Z80_AX|
-                    &Z80_CX|
-                    &Z80_BX|
-                    &Z80_EX|
-                    &Z80_DX|
-                    &Z80_LX|
-                    &Z80_HX|
-                    &GA_PEN|
-                    &GA_ROMCFG|
-                    &GA_RAMCFG|
-                    &CRTC_SEL|
-                    &ROM_UP|
-                    &PPI_A|
-                    &PPI_B|
-                    &PPI_C|
-                    &PPI_CTL|
-                    &PSG_SEL|
-                    &CPC_TYPE|
-                    &GA_VSC|
-                    &GA_ISC|
-                    &INT_REQ |
-                    &INT_NUM |
-                    &FDD_MOTOR |
-                    &FDD_TRACK |
-                    &PRNT_DATA |
-                    &CRTC_TYPE |
-                    &CRTC_HCC |
-                    &CRTC_CLC |
-                    &CRTC_RLC |
-                    &CRTC_VAC |
-                    &CRTC_VSWC |
-                    &CRTC_HSWC => 1,
-                    
+            &Z80_F | &Z80_A | &Z80_C | &Z80_B | &Z80_E | &Z80_D | &Z80_L | &Z80_H | &Z80_R
+            | &Z80_I | &Z80_IFF0 | &Z80_IFF1 | &Z80_IXL | &Z80_IXH | &Z80_IYL | &Z80_IYH
+            | &Z80_IM | &Z80_FX | &Z80_AX | &Z80_CX | &Z80_BX | &Z80_EX | &Z80_DX | &Z80_LX
+            | &Z80_HX | &GA_PEN | &GA_ROMCFG | &GA_RAMCFG | &CRTC_SEL | &ROM_UP | &PPI_A
+            | &PPI_B | &PPI_C | &PPI_CTL | &PSG_SEL | &CPC_TYPE | &GA_VSC | &GA_ISC | &INT_REQ
+            | &INT_NUM | &FDD_MOTOR | &FDD_TRACK | &PRNT_DATA | &CRTC_TYPE | &CRTC_HCC
+            | &CRTC_CLC | &CRTC_RLC | &CRTC_VAC | &CRTC_VSWC | &CRTC_HSWC => 1,
 
-                &GA_PAL(_) => 1,
-                &CRTC_REG(_) => 1,
-                &PSG_REG(_) => 1,
-                &GA_MULTIMODE(_) => 1,
+            &GA_PAL(_) => 1,
+            &CRTC_REG(_) => 1,
+            &PSG_REG(_) => 1,
+            &GA_MULTIMODE(_) => 1,
         }
     }
 
-
-    pub fn comment(&self) -> &str{
+    pub fn comment(&self) -> &str {
         use self::SnapshotFlag::*;
 
         match self {
@@ -487,16 +423,14 @@ impl FromStr for SnapshotFlag {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-
         let s = &s.to_uppercase();
 
         if s.contains(":") {
-
             let elems = s.split(':').collect::<Vec<_>>();
             let s = elems[0];
             let idx = match elems[1].parse::<usize>() {
                 Ok(idx) => idx,
-                Err(_) => return Err(String::from("Unable to parse index"))
+                Err(_) => return Err(String::from("Unable to parse index")),
             };
 
             let indexed_flag = match s {
@@ -504,23 +438,22 @@ impl FromStr for SnapshotFlag {
                 "CRTC_REG" => SnapshotFlag::CRTC_REG(Some(idx)),
                 "PSG_REG" => SnapshotFlag::PSG_REG(Some(idx)),
                 "GA_MULTIMODE" => SnapshotFlag::GA_MULTIMODE(Some(idx)),
-                _ => {return Err(String::from("Unable to convert string to a flag"));}
+                _ => {
+                    return Err(String::from("Unable to convert string to a flag"));
+                }
             };
 
             if indexed_flag.indice().unwrap() < indexed_flag.nb_elems() {
                 return Ok(indexed_flag);
-            }
-            else {
+            } else {
                 return Err(format!("Wrong index size {:?}", indexed_flag));
             }
-        }
-        else {
+        } else {
             match s.as_str() {
                 "GA_PAL" => Ok(SnapshotFlag::GA_PAL(None)),
                 "CRTC_REG" => Ok(SnapshotFlag::CRTC_REG(None)),
                 "PSG_REG" => Ok(SnapshotFlag::PSG_REG(None)),
                 "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(None)),
-
 
                 "Z80_AF" => Ok(SnapshotFlag::Z80_AF),
                 "Z80_F" => Ok(SnapshotFlag::Z80_F),
@@ -585,8 +518,7 @@ impl FromStr for SnapshotFlag {
                 "GA_VSC" => Ok(SnapshotFlag::GA_VSC),
                 "GA_ISC" => Ok(SnapshotFlag::GA_ISC),
                 "INT_REQ" => Ok(SnapshotFlag::INT_REQ),
-                _ => Err(String::from("Unable to convert string to a flag"))
-
+                _ => Err(String::from("Unable to convert string to a flag")),
             }
         }
     }
@@ -597,33 +529,25 @@ pub enum FlagValue {
     Byte(u8),
     Word(u16),
     Array(Vec<FlagValue>), // Restr$icted to Byte or Word
-
 }
 
-impl fmt::Display for FlagValue{
+impl fmt::Display for FlagValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            FlagValue::Byte(ref val) => {
-                write!(f, "0x{:x}", val)
-            },
-            FlagValue::Word(ref val) => {
-                write!(f, "0x{:x}", val)
-            }
-            FlagValue::Array(ref array) => {
-                write!(f, "[")
-                    .and_then(|_x|{
-                        write!(f, "{:?}",
-                        &array
-                            .iter()
-                            .map(|b|{format!("{}", b)})
-                            .collect::<Vec<_>>())
-                    })
-                    .and_then(|_x|{write!(f, "]")})
-            }
+            FlagValue::Byte(ref val) => write!(f, "0x{:x}", val),
+            FlagValue::Word(ref val) => write!(f, "0x{:x}", val),
+            FlagValue::Array(ref array) => write!(f, "[")
+                .and_then(|_x| {
+                    write!(
+                        f,
+                        "{:?}",
+                        &array.iter().map(|b| format!("{}", b)).collect::<Vec<_>>()
+                    )
+                })
+                .and_then(|_x| write!(f, "]")),
         }
     }
 }
-
 
 #[derive(Debug)]
 pub enum SnapshotError {
@@ -631,24 +555,24 @@ pub enum SnapshotError {
     NotEnougSpaceAvailable,
     InvalidValue,
     FlagDoesNotExists,
-    InvalidIndex
+    InvalidIndex,
 }
 
 pub struct SnapshotChunk {
-    code: [u8;4],
-    data: Vec<u8>   
+    code: [u8; 4],
+    data: Vec<u8>,
 }
 
 impl SnapshotChunk {
-    pub fn code(&self) -> &[u8;4] {
-            & (self.code)
+    pub fn code(&self) -> &[u8; 4] {
+        &(self.code)
     }
 
     pub fn size(&self) -> u32 {
-       self.data.len() as u32
+        self.data.len() as u32
     }
 
-    pub fn size_as_array(&self) -> [u8;4] {
+    pub fn size_as_array(&self) -> [u8; 4] {
         let mut size = self.size();
         let mut array = [0, 0, 0, 0];
 
@@ -665,53 +589,53 @@ impl SnapshotChunk {
     }
 }
 
-const PAGE_SIZE:usize = 0x4000;
-const HEADER_SIZE:usize = 256;
-
+const PAGE_SIZE: usize = 0x4000;
+const HEADER_SIZE: usize = 256;
 
 /// Snapshot V3 representation. Can be saved in snapshot V1 or v2.
 pub struct Snapshot {
     header: [u8; HEADER_SIZE],
-    memory: [u8; PAGE_SIZE*8],
+    memory: [u8; PAGE_SIZE * 8],
     memory_already_written: bitsets::DenseBitSet,
     chuncks: Vec<SnapshotChunk>,
 
     // nothing to do with the snapshot. Should be moved elsewhere
-    pub debug: bool
+    pub debug: bool,
 }
-
 
 impl Default for Snapshot {
     fn default() -> Snapshot {
-        Snapshot{
+        Snapshot {
             header: [
-                0x4D, 0x56, 0x20, 0x2D, 0x20, 0x53, 0x4E, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0xc0, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x14,
-                0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x0C,
-                0x8D, 0xC0, 0x00, 0x3F, 0x28, 0x2E, 0x8E, 0x26, 0x00, 0x19, 0x1E, 0x00, 0x07, 0x00, 0x00, 0x30,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x1E, 0x00, 0x82, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x02, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x32, 0x00, 0x08, 0x02, 0x00, 0x04, 0x00,
-                0x01, 0x00, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-                memory: [0; PAGE_SIZE*8],
-                chuncks: Vec::new(),
-                memory_already_written:  bitsets::DenseBitSet::with_capacity_and_state(PAGE_SIZE*8, 0),
-                debug: false
+                0x4D, 0x56, 0x20, 0x2D, 0x20, 0x53, 0x4E, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
+                0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x0C, 0x8D, 0xC0, 0x00, 0x3F, 0x28, 0x2E,
+                0x8E, 0x26, 0x00, 0x19, 0x1E, 0x00, 0x07, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0xFF, 0x1E, 0x00, 0x82, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x02, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x32, 0x00, 0x08, 0x02, 0x00, 0x04, 0x00, 0x01, 0x00, 0x02, 0x20, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+            ],
+            memory: [0; PAGE_SIZE * 8],
+            chuncks: Vec::new(),
+            memory_already_written: bitsets::DenseBitSet::with_capacity_and_state(PAGE_SIZE * 8, 0),
+            debug: false,
         }
     }
 }
 
-
 impl Snapshot {
-
     pub fn log<S: std::fmt::Display>(&self, msg: S) {
         if self.debug {
             println!("> {}", msg);
@@ -723,60 +647,57 @@ impl Snapshot {
 
         let mut f = File::open(filename).expect("file not found");
 
-        f.read_exact(&mut sna.header).expect("Unable to read snapshot header");
-        f.read_exact(&mut sna.memory).expect("Unable to read snapshot memory");
+        f.read_exact(&mut sna.header)
+            .expect("Unable to read snapshot header");
+        f.read_exact(&mut sna.memory)
+            .expect("Unable to read snapshot memory");
         eprintln!("[Warning] Current sna reader does not take care of chuncks");
 
         // TODO manage chuncks
         sna
     }
 
-
     /// Save the snapshot V3 on disc
     #[deprecated]
-    pub fn save_sna(&self, fname:&str) -> Result<(), std::io::Error>{
+    pub fn save_sna(&self, fname: &str) -> Result<(), std::io::Error> {
         self.save(fname, SnapshotVersion::V2)
     }
 
-    pub fn save(&self, fname:&str, version: SnapshotVersion) -> Result<(), std::io::Error>{
+    pub fn save(&self, fname: &str, version: SnapshotVersion) -> Result<(), std::io::Error> {
         let mut buffer = File::create(fname)?;
         self.write(&mut buffer, version)
     }
 
-
     /// We are currently only able to build a V2 version.
-    pub fn write(&self, buffer: &mut File, version: SnapshotVersion)  -> Result<(), std::io::Error> {
-
+    pub fn write(&self, buffer: &mut File, version: SnapshotVersion) -> Result<(), std::io::Error> {
         // get a proper header
         let header: [u8; HEADER_SIZE] = {
             let mut header = self.header.clone();
             match version {
                 SnapshotVersion::V1 => {
                     header[0x10] = 1;
-                    for idx in 0x6d..=0xff{
-                       header[idx] = 0;
+                    for idx in 0x6d..=0xff {
+                        header[idx] = 0;
                     }
-                },
+                }
                 SnapshotVersion::V2 => {
                     header[0x10] = 2;
-                    for idx in 0x75..=0xff{
-                       header[idx] = 0;
+                    for idx in 0x75..=0xff {
+                        header[idx] = 0;
                     }
-                },
+                }
                 SnapshotVersion::V3 => {
                     header[0x10] = 3;
                 }
-
             };
             header
         };
         buffer.write_all(&header)?;
 
         // Write memory
-        if version.is_v3() && !self.chuncks.is_empty(){
+        if version.is_v3() && !self.chuncks.is_empty() {
             panic!("Need to implement the compressed memory block format");
-        }
-        else {
+        } else {
             buffer.write_all(&self.memory)?;
         }
 
@@ -788,24 +709,24 @@ impl Snapshot {
                     buffer.write_all(&chunck.size_as_array())?;
                     buffer.write_all(chunck.data())?;
                 }
-            },
-            _ => ()
+            }
+            _ => (),
         }
 
         //TODO add the chuncks
         Ok(())
     }
 
-
-
-
     /// Add the content of a file at the required position
-    pub fn add_file(&mut self, fname:&str, address: usize) -> Result<(), SnapshotError>{
+    pub fn add_file(&mut self, fname: &str, address: usize) -> Result<(), SnapshotError> {
         let f = File::open(fname).unwrap();
-        let data:Vec<u8> = f.bytes().map(|byte| byte.unwrap()).collect();
+        let data: Vec<u8> = f.bytes().map(|byte| byte.unwrap()).collect();
         let size = data.len();
 
-        self.log(format!("Add {} in 0x{:x} (0x{:x} bytes)", fname, address, size));
+        self.log(format!(
+            "Add {} in 0x{:x} (0x{:x} bytes)",
+            fname, address, size
+        ));
         self.add_data(&data, address)
     }
 
@@ -813,17 +734,15 @@ impl Snapshot {
     ///
     /// ```
     /// use cpclib::sna::Snapshot;
-    /// 
+    ///
     /// let mut sna = Snapshot::default();
     /// let data = vec![0,2,3,5];
     /// sna.add_data(&data, 0x4000);
     /// ```
-    pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError>{
-
-        if address + data.len() > 0x10000*2 {
+    pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError> {
+        if address + data.len() > 0x10000 * 2 {
             Err(SnapshotError::NotEnougSpaceAvailable)
-        }
-        else {
+        } else {
             if address < 0x10000 && (address + data.len()) >= 0x10000 {
                 eprintln!("[Warning] Start of file is in main memory (0x{:x}) and  end of file is in extra banks (0x{:x}).", address, (address + data.len()));
             }
@@ -851,49 +770,48 @@ impl Snapshot {
     }
 
     /// Change the value of a flag
-    pub fn set_value(&mut self, flag: SnapshotFlag, value: u16) -> Result<(), SnapshotError>{
+    pub fn set_value(&mut self, flag: SnapshotFlag, value: u16) -> Result<(), SnapshotError> {
         let offset = flag.offset();
 
         match flag.elem_size() {
             1 => {
                 if value > 255 {
                     Err(SnapshotError::InvalidValue)
-                }
-                else {
+                } else {
                     self.header[offset] = value as u8;
                     Ok(())
                 }
-            },
+            }
 
             2 => {
-                self.header[offset + 0] = (value%256) as u8 ;
-                self.header[offset + 1] = (value/256) as u8 ;
+                self.header[offset + 0] = (value % 256) as u8;
+                self.header[offset + 1] = (value / 256) as u8;
                 Ok(())
             }
-            _ => panic!("Unable to handle size != 1 or 2")
+            _ => panic!("Unable to handle size != 1 or 2"),
         }
     }
 
     pub fn get_value(&self, flag: &SnapshotFlag) -> FlagValue {
-
         if flag.indice().is_some() {
             // Here we treate the case where we read only one value
             let offset = flag.offset();
             match flag.elem_size() {
                 1 => {
                     return FlagValue::Byte(self.header[offset]);
-                },
+                }
                 2 => {
-                    return FlagValue::Word( u16::from(self.header[offset+1])*256 + u16::from(self.header[offset]))
-                },
-                _ => panic!()
+                    return FlagValue::Word(
+                        u16::from(self.header[offset + 1]) * 256 + u16::from(self.header[offset]),
+                    );
+                }
+                _ => panic!(),
             };
-        }
-
-        else {
+        } else {
             // Here we treat the case where we read an array
-            let mut vals:Vec<FlagValue> = Vec::new();
-            for idx in 0..flag.nb_elems() { // By construction, >1
+            let mut vals: Vec<FlagValue> = Vec::new();
+            for idx in 0..flag.nb_elems() {
+                // By construction, >1
                 let mut flag2 = *flag;
                 flag2.set_indice(idx).unwrap();
                 vals.push(self.get_value(&flag2));
@@ -907,7 +825,4 @@ impl Snapshot {
             println!("{:?} => {}", &flag, &self.get_value(flag));
         }
     }
-
-
 }
-

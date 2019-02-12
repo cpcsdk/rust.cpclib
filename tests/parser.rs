@@ -1,6 +1,3 @@
-
-
-
 #[macro_use]
 extern crate matches;
 
@@ -8,15 +5,15 @@ extern crate matches;
 mod tests {
     use cpclib::assembler::parser::*;
     use cpclib::assembler::tokens::*;
-    use nom::types::{CompleteStr, CompleteByteSlice};
-    use nom::{ErrorKind, IResult, line_ending, space};
+    use nom::types::{CompleteByteSlice, CompleteStr};
+    use nom::{line_ending, space, ErrorKind, IResult};
 
     fn check_mnemonic(code: &str, mnemonic: Mnemonic) -> bool {
         match parse_org(CompleteStr(code)) {
             Err(e) => panic!("{:?}", e),
-            Ok( (_, opcode) )=> {
+            Ok((_, opcode)) => {
                 let mut res = false;
-                if let Token::OpCode(expected, _ , _) = opcode {
+                if let Token::OpCode(expected, _, _) = opcode {
                     res = expected == mnemonic
                 }
                 res
@@ -24,22 +21,17 @@ mod tests {
         }
     }
 
-
     fn get_opcode(code: &str) -> Token {
         match parse_org(CompleteStr(code)) {
             Err(e) => panic!("{:?}", e),
-            Ok( (_, opcode) )=> {
-                opcode
-            }
+            Ok((_, opcode)) => opcode,
         }
     }
-
-
 
     fn get_val<T: core::fmt::Debug>(res: IResult<CompleteStr<'_>, T>) -> T {
         match res {
             Err(e) => panic!("{:?}", e),
-            Ok( (rest, val) )=> {
+            Ok((rest, val)) => {
                 if rest.len() != 0 {
                     panic!("{:?} not assembled/ {:?}", rest, val);
                 }
@@ -48,11 +40,10 @@ mod tests {
         }
     }
 
-
     fn is_error<T>(res: IResult<CompleteStr<'_>, T>) -> bool {
         match res {
             Err(_e) => true,
-            Ok( (_,_)) => false
+            Ok((_, _)) => false,
         }
     }
 
@@ -66,9 +57,6 @@ mod tests {
         assert_eq!(get_val::<u16>(bin_u16(CompleteStr("0b101011"))), 0b101011);
     }
 
-
-
-
     #[test]
     fn test_hex_u16() {
         assert_eq!(get_val::<u16>(hex_u16(CompleteStr("0x123"))), 0x123);
@@ -80,17 +68,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_dec_u16_neg() {
-
         get_val::<u16>(dec_u16(CompleteStr("-1")));
     }
 
     #[test]
     #[should_panic]
     fn test_hex_u16_neg() {
-
         get_val::<u16>(hex_u16(CompleteStr("-0x0")));
     }
-
 
     #[test]
     fn test_expr() {
@@ -98,9 +83,10 @@ mod tests {
         let res = expr(CompleteStr(formula));
         assert!(res.is_ok());
         println!("{:?}", res);
-         assert_eq!(
-             res.ok().unwrap().1.eval().unwrap(), 
-             0xbd00 + 0x20 + 0b00001100);
+        assert_eq!(
+            res.ok().unwrap().1.eval().unwrap(),
+            0xbd00 + 0x20 + 0b00001100
+        );
     }
 
     #[test]
@@ -115,9 +101,6 @@ mod tests {
         get_val::<u16>(hex_u16(CompleteStr("0x10000")));
     }
 
-
-
-
     #[test]
     fn test_org_value_decimal() {
         let code = "ORG 123";
@@ -126,11 +109,7 @@ mod tests {
         assert!(opcode.org_expr().is_some());
         let arg1 = opcode.org_expr().unwrap();
         assert_eq!(arg1.eval().ok().unwrap(), 123);
-
     }
-
-
- 
 
     #[test]
     fn test_org_value_hexadecimal() {
@@ -143,35 +122,31 @@ mod tests {
         assert!(value.is_ok());
         //assert_matches!(arg1, &Expr::Value(0x123));
         assert_eq!(arg1.eval().ok().unwrap(), 0x123);
-
     }
-
-
 
     #[test]
     fn test_org_label() {
         let code = "ORG label\n";
 
-
         let opcode = get_opcode(code);
         assert!(opcode.org_expr().is_some());
         let arg1 = opcode.org_expr().unwrap();
         assert_eq!(arg1.is_context_independant(), false);
-
     }
-
-
-
 
     #[test]
     fn fn_test_label() {
         assert_eq!(parse_label(CompleteStr("label")).ok().unwrap().1, "label");
         assert_eq!(parse_label(CompleteStr("label")).ok().unwrap().1, "label");
-        assert_eq!(parse_label(CompleteStr("module.label")).ok().unwrap().1, "module.label");
-        assert_eq!(parse_label(CompleteStr("label15")).ok().unwrap().1, "label15");
+        assert_eq!(
+            parse_label(CompleteStr("module.label")).ok().unwrap().1,
+            "module.label"
+        );
+        assert_eq!(
+            parse_label(CompleteStr("label15")).ok().unwrap().1,
+            "label15"
+        );
         assert_eq!(parse_label(CompleteStr(".label")).ok().unwrap().1, ".label");
-
-
 
         let code = CompleteStr("label");
         let tokens = get_val(parse_z80_line_label_only(code));
@@ -196,17 +171,13 @@ mod tests {
         let code = CompleteStr("demo_system_binary_start \n");
         let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 1);
-
     }
-
 
     #[test]
     fn test_equ() {
         let code = CompleteStr("LABEL EQU VALUE");
         let tokens = get_val(parse_z80_line_label_only(code));
         assert_eq!(tokens.len(), 1);
-
-
     }
 
     #[test]
@@ -219,11 +190,8 @@ mod tests {
 
     #[test]
     fn fn_test_line() {
-
-
         let tokens = get_val(parse_z80_line(CompleteStr(" ")));
         assert_eq!(tokens.len(), 0);
-
 
         let tokens = get_val(parse_z80_line(CompleteStr(" ORG 0x1000")));
         assert_eq!(tokens.len(), 1);
@@ -241,44 +209,42 @@ mod tests {
         assert_eq!(tokens.len(), 1);
         assert_matches!(tokens[0], Token::Org(_, None));
 
-
         let tokens = get_val(parse_z80_line(CompleteStr(" ORG 0x1000; test")));
         assert_eq!(tokens.len(), 2);
         assert_matches!(tokens[0], Token::Org(_, None));
 
-
         let tokens = get_val(parse_z80_line(CompleteStr(" ORG 0x1000 ; test")));
         assert_eq!(tokens.len(), 2);
         assert_matches!(tokens[0], Token::Org(_, None));
-
-
 
         let tokens = get_val(parse_z80_line(CompleteStr("label ORG 0x1000")));
         assert_eq!(tokens.len(), 2);
         assert_matches!(tokens[0], Token::Label(_));
         assert_matches!(tokens[1], Token::Org(_, _));
 
-
-        let tokens = get_val(parse_z80_line(CompleteStr("label ORG 0x1000 : ORG 0x000 : ORG 10")));
+        let tokens = get_val(parse_z80_line(CompleteStr(
+            "label ORG 0x1000 : ORG 0x000 : ORG 10",
+        )));
         assert_eq!(tokens.len(), 4);
         assert_matches!(tokens[0], Token::Label(_));
         assert_matches!(tokens[1], Token::Org(_, _));
         assert_matches!(tokens[2], Token::Org(_, _));
 
-
-        let tokens = get_val(parse_z80_line(CompleteStr("label ORG 0x1000 : ORG 0x000 : ORG 10 ; fdfs")));
+        let tokens = get_val(parse_z80_line(CompleteStr(
+            "label ORG 0x1000 : ORG 0x000 : ORG 10 ; fdfs",
+        )));
         assert_eq!(tokens.len(), 5);
         assert_matches!(tokens[0], Token::Label(_));
         assert_matches!(tokens[1], Token::Org(_, _));
         assert_matches!(tokens[2], Token::Org(_, _));
 
-
-        let tokens = get_val(parse_z80_line(CompleteStr("label ORG 0x1000 ; : ORG 0x000 : ORG 10 ; fdfs")));
+        let tokens = get_val(parse_z80_line(CompleteStr(
+            "label ORG 0x1000 ; : ORG 0x000 : ORG 10 ; fdfs",
+        )));
         assert_eq!(tokens.len(), 3);
         assert_matches!(tokens[0], Token::Label(_));
         assert_matches!(tokens[1], Token::Org(_, _));
     }
-
 
     #[test]
     fn test_address() {
@@ -304,7 +270,6 @@ mod tests {
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 1);
 
-
         let code = CompleteStr(" ld (0xc9fb),de");
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 1);
@@ -313,17 +278,13 @@ mod tests {
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 1);
 
-
         let code = CompleteStr(" ld d, a");
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 1);
 
-
-
         let code = CompleteStr(" ld (hl), d");
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 1);
-
     }
 
     #[test]
@@ -331,7 +292,6 @@ mod tests {
         let code = CompleteStr(" jr $");
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 1);
-
 
         let code = CompleteStr(" jp 0xc9fb\n");
         let tokens = get_val(parse_z80_line(code));
@@ -352,13 +312,12 @@ mod tests {
         let code = CompleteStr(" jp nz, .other_lines + (9+4+1+2)     ; 4");
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0], Token::OpCode(Mnemonic::Jp, _, _,));
+        assert_matches!(tokens[0], Token::OpCode(Mnemonic::Jp, _, _));
     }
-
 
     #[test]
     #[should_panic]
-    pub fn ld_16_8(){
+    pub fn ld_16_8() {
         // XXX Currently do not panic as de can be considered has being a label
         // XXX Do we allow that ? The parse knows de is not a register but a label
         // XXX Do we forbid labels with the same name as a register ? => Probably better
@@ -367,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    pub fn ld_16_16(){
+    pub fn ld_16_16() {
         let code = CompleteStr(" ld hl, de");
         let tokens = get_val(parse_z80_line(code));
         println!("{:?}", tokens);
@@ -376,7 +335,7 @@ mod tests {
             Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register16(_)),
-                Some(DataAccess::Register16(_))
+                Some(DataAccess::Register16(_)),
             )
         );
     }
@@ -388,7 +347,6 @@ mod tests {
         let tokens = get_val(parse_z80_line_label_only(line1));
         assert_eq!(tokens.len(), 1);
     }
-
 
     #[test]
     pub fn test_unique_lines() {
@@ -407,8 +365,6 @@ mod tests {
         let line1 = CompleteStr("label1 ; blabla \n");
         let tokens = get_val(parse_z80_line_label_only(line1));
         assert_eq!(tokens.len(), 2);
-
-
 
         let line1 = CompleteStr("label1");
         let tokens = get_val(parse_z80_line(line1));
@@ -450,7 +406,6 @@ mod tests {
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 6);
 
-
         let code = CompleteStr("  org 0x100:di:ld hl, 0xc9fb:ld (0x38), hl :ei:jp $");
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 6);
@@ -463,9 +418,6 @@ mod tests {
         assert_eq!(tokens.len(), 1);
     }
 
-
-
-
     #[test]
     fn fn_test_empty() {
         let code = CompleteStr("\n\n");
@@ -475,8 +427,6 @@ mod tests {
         let code = CompleteStr("\n\n");
         let tokens = get_val(parse_empty_line(code));
         assert_eq!(tokens.len(), 0);
-
-
 
         let code = CompleteStr("");
         let tokens = get_val(parse_z80_code(code));
@@ -501,7 +451,6 @@ mod tests {
         let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 0);
 
-
         let code = CompleteStr("  ; comment \n");
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 1);
@@ -512,7 +461,7 @@ mod tests {
     }
 
     #[test]
-    fn registers()  {
+    fn registers() {
         for reg in ["A", "B", "C", "D", "E", "H", "L"].iter() {
             let line = CompleteStr(reg);
             get_val(parse_register8(line));
@@ -547,20 +496,14 @@ mod tests {
         assert_eq!(tokens.len(), 1);
     }
 
-
     #[test]
     fn test_logical_operators() {
-
-        let operators = [
-            "xor", "and", "or"
-        ];
-        let registers = [
-            "a", "b", "c", "d", "e", "h", "l"
-        ];
+        let operators = ["xor", "and", "or"];
+        let registers = ["a", "b", "c", "d", "e", "h", "l"];
 
         for op in operators.iter() {
             for reg in registers.iter() {
-                let code = format!(" {} {}", op,reg);
+                let code = format!(" {} {}", op, reg);
                 let line1 = CompleteStr(&code);
                 let tokens = get_val(parse_z80_line(line1));
                 assert_eq!(tokens.len(), 1);
@@ -574,11 +517,9 @@ mod tests {
         let tokens = get_val(parse_z80_line(line1));
         assert_eq!(tokens.len(), 1);
 
-
         let line1 = CompleteStr("   RET C");
         let tokens = get_val(parse_z80_line(line1));
         assert_eq!(tokens.len(), 1);
-
 
         let line1 = CompleteStr("   RET NC");
         let tokens = get_val(parse_z80_line(line1));
@@ -616,7 +557,6 @@ mod tests {
         assert_eq!(tokens.len(), 1);
     }
 
-
     #[test]
     fn test_lddr() {
         let line1 = CompleteStr(" LDDR");
@@ -624,7 +564,7 @@ mod tests {
         assert_eq!(tokens.len(), 1);
     }
 
-#[test]
+    #[test]
     fn test_ldir() {
         let line1 = CompleteStr(" ldir");
         let tokens = get_val(parse_z80_line(line1));
@@ -657,9 +597,6 @@ mod tests {
         assert!(res.is_ok());
     }
 
-
-
-
     #[test]
     fn test_repeat() {
         let z80 = "  repeat 5
@@ -671,10 +608,9 @@ mod tests {
         assert!(res.is_ok());
     }
 
-
     #[test]
     fn test_repeat2() {
-        let z80="\trepeat screen_height
+        let z80 = "\trepeat screen_height
 		; Content for a single line runs on 128 nops
 		pop hl ; 0 1
 		xor a : out (c), a : out (c), l
@@ -713,10 +649,9 @@ mod tests {
         assert_eq!(res.unwrap().0.len(), 0);
     }
 
-
     #[test]
     fn test_repeat3() {
-        let z80="\trepeat screen_height
+        let z80 = "\trepeat screen_height
 		; Content for a single line runs on 128 nops
 		pop hl ; 0 1
 		xor a : out (c), a : out (c), l
@@ -756,10 +691,9 @@ mod tests {
         assert_eq!(res.unwrap().0.len(), 0);
     }
 
-
     #[test]
     fn test_repeat4() {
-        let z80="
+        let z80 = "
         defs 10
 
         repeat screen_height
@@ -777,9 +711,8 @@ mod tests {
 
     #[test]
     fn test_in() {
-
         for reg in ["A", "B", "C", "D", "E", "H", "L"].iter() {
-            let content  =format!(" OUT (C), {}", reg);
+            let content = format!(" OUT (C), {}", reg);
             let line1 = CompleteStr(&content);
             let tokens = get_val(parse_z80_line(line1));
             assert_eq!(tokens.len(), 1);
@@ -822,7 +755,6 @@ mod tests {
         assert_eq!(0, res.unwrap().0.len());
     }
 
-
     #[test]
     fn test_opcode() {
         let code = "
@@ -862,7 +794,6 @@ INC_H equ opcode(inc h)
         assert!(res.is_ok());
         assert_eq!(0, res.unwrap().0.len());
 
-
         let code = "
 INC_L equ opcode(inc l)
 INC_H equ opcode(inc h)
@@ -877,18 +808,14 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn fn_test_asm_prog1() {
-
         let code = "  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 6);
-
-
 
         let code = "\n\n  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 6);
 
-
         let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 6);
@@ -897,8 +824,8 @@ INC_H equ opcode(inc h)
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 6);
 
-
-        let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
+        let code =
+            "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 6);
 
@@ -907,15 +834,15 @@ INC_H equ opcode(inc h)
         assert_eq!(tokens.len(), 7);
     }
 
-
     #[test]
     fn test_basic_inclusion() {
-        let code = CompleteStr("        LOCOMOTIVE toto, titi
+        let code = CompleteStr(
+            "        LOCOMOTIVE toto, titi
 10 ' fkdslfslkf
 20 call {toto}
 30 call {titi}
-        ENDLOCOMOTIVE");
-
+        ENDLOCOMOTIVE",
+        );
 
         let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 1);
@@ -923,37 +850,42 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn test_basic_inclusion2() {
-        let code = CompleteStr("        LOCOMOTIVE toto_1, titi_2
+        let code = CompleteStr(
+            "        LOCOMOTIVE toto_1, titi_2
 10 ' fkdslfslkf
 20 call {toto_1}
 30 call {titi_2}
-        ENDLOCOMOTIVE");
-
+        ENDLOCOMOTIVE",
+        );
 
         let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 1);
     }
 
-
     #[test]
     fn test_if() {
-        let code = CompleteStr("IF expression
+        let code = CompleteStr(
+            "IF expression
         ld a, b
         ld a, b
         ld a, b
-    ENDIF");
+    ENDIF",
+        );
         println!("{:?}", parse_conditional(code));
         let tokens = get_val(parse_conditional(code));
 
-
-        let code = CompleteStr("IF expression
+        let code = CompleteStr(
+            "IF expression
         ld a, b : ld a, b : ld a, b
-    ENDIF");
+    ENDIF",
+        );
         println!("{:?}", parse_conditional(code));
         let tokens = get_val(parse_conditional(code));
 
-        let code = CompleteStr("IF expression : ld a, b : ld a, b : ld a, b
-    ENDIF");
+        let code = CompleteStr(
+            "IF expression : ld a, b : ld a, b : ld a, b
+    ENDIF",
+        );
         println!("{:?}", parse_conditional(code));
         let tokens = get_val(parse_conditional(code));
 
@@ -964,41 +896,47 @@ INC_H equ opcode(inc h)
         let tokens = get_val(parse_conditional(code));
         */
 
-        let code = CompleteStr("IF expression
+        let code = CompleteStr(
+            "IF expression
         ld a, b
         ld a, b
         call label
         ld a, b
-    ENDIF");
+    ENDIF",
+        );
 
         let tokens = get_val(parse_conditional(code));
 
-        let code = CompleteStr("\tIF expression
+        let code = CompleteStr(
+            "\tIF expression
         ld a, b
         ld a, b
         call label
         ld a, b
-    ENDIF");
+    ENDIF",
+        );
         let tokens = get_val(parse_z80_code(code));
 
-        let code = CompleteStr("\t	if ENABLE_CATART_DISPLAY
+        let code = CompleteStr(
+            "\t	if ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
-    ");
+    ",
+        );
         let tokens = get_val(parse_z80_code(code));
 
-
-        get_val(parse_z80_code("
+        get_val(parse_z80_code(
+            "
         \n\tif FDC_Is_Musical_Loader\r\n\t\tei\r\n\telse\r\n\t\tdi\r\n\tendif\n
-        ".into()));
+        "
+            .into(),
+        ));
     }
 
     #[test]
     fn test_real_case() {
-
-
-
-        let code = CompleteStr("
+        let code = CompleteStr(
+            "
 .first_line
                     ; end code : 9 nops
     pop de              ; 4
@@ -1009,16 +947,14 @@ INC_H equ opcode(inc h)
     defs 64 - 4  ; 60
     dec a               ; 1
     jr nz, .other_lines ; 3
-    "
-    );
+    ",
+        );
 
         let tokens = get_val(parse_z80_code(code));
         println!("{:?}", tokens);
         assert_eq!(tokens.len(), 18);
 
-
-
-// XXX this one fails wereas it is the same than the previous one ! Only comments are removed
+        // XXX this one fails wereas it is the same than the previous one ! Only comments are removed
         let code = ".first_line
     pop de
     ld a, e
@@ -1030,13 +966,12 @@ INC_H equ opcode(inc h)
     jr nz, .other_lines";
 
         // assemble line per line
-        for line in code.split("\n").filter(|l| {l.len()>0}) {
+        for line in code.split("\n").filter(|l| l.len() > 0) {
             println!("=> {}", line);
             let line = CompleteStr(line);
             let tokens = get_val(parse_z80_line(line));
             assert_eq!(tokens.len(), 1);
         }
-
 
         // Assemble in a whole
         let tokens = get_val(parse_z80_str(code));
@@ -1044,40 +979,39 @@ INC_H equ opcode(inc h)
         assert_eq!(tokens.len(), 9);
     }
 
+    // XXX Stolen tests https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs to check if
+    // nothing is broken
 
-// XXX Stolen tests https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs to check if
-// nothing is broken
-
-#[test]
+    #[test]
     fn factor_test() {
         assert_eq!(
             factor(CompleteStr("  3  ")).map(|(i, x)| (i, format!("{:?}", x))),
             Ok((CompleteStr(""), String::from("3")))
-            );
+        );
     }
 
-#[test]
+    #[test]
     fn term_test() {
         assert_eq!(
             term(CompleteStr(" 3 *  5   ")).map(|(i, x)| (i, format!("{:?}", x))),
             Ok((CompleteStr(""), String::from("(3 * 5)")))
-            );
+        );
     }
 
-#[test]
+    #[test]
     fn expr_test() {
         assert_eq!(
             expr(CompleteStr(" 1 + 2 *  3 ")).map(|(i, x)| (i, format!("{:?}", x))),
             Ok((CompleteStr(""), String::from("(1 + (2 * 3))")))
-            );
+        );
         assert_eq!(
             expr(CompleteStr(" 1 + 2 *  3 / 4 - 5 ")).map(|(i, x)| (i, format!("{:?}", x))),
             Ok((CompleteStr(""), String::from("((1 + ((2 * 3) / 4)) - 5)")))
-            );
+        );
         assert_eq!(
             expr(CompleteStr(" 72 / 2 / 3 ")).map(|(i, x)| (i, format!("{:?}", x))),
             Ok((CompleteStr(""), String::from("((72 / 2) / 3)")))
-            );
+        );
     }
 
     #[test]
@@ -1085,20 +1019,16 @@ INC_H equ opcode(inc h)
         assert_eq!(
             expr(CompleteStr(" ( 1 + 2 ) *  3 ")).map(|(i, x)| (i, format!("{:?}", x))),
             Ok((CompleteStr(""), String::from("([(1 + 2)] * 3)")))
-            );
-
-
+        );
     }
-
 
     #[test]
     fn functions_test() {
         assert_eq!(
             expr(CompleteStr("lo(5)")).map(|(i, x)| (i, format!("{:?}", x))),
             Ok((CompleteStr(""), String::from("LO(5)")))
-            );
+        );
     }
-
 
     #[test]
     fn boolean_test() {
@@ -1108,13 +1038,11 @@ INC_H equ opcode(inc h)
         )
     }
 
-
     #[test]
     fn include_test() {
         let code = "  include \"file.asm\"";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
-
     }
 
     #[test]
@@ -1126,9 +1054,7 @@ INC_H equ opcode(inc h)
         let msg = "TODO -- Set the real address (in c7 space)";
         let code = format!("\"{}\"", &msg);
         let tokens = get_val(string_between_quotes(code.as_str().into()));
-        assert_eq!(
-            &tokens.to_string(), 
-            msg);
+        assert_eq!(&tokens.to_string(), msg);
     }
 
     #[test]
@@ -1141,29 +1067,29 @@ INC_H equ opcode(inc h)
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
 
-
         let code = " PRINT 1 - 1";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
 
-        let code = " PRINT zoomscroller_inject_for_step0_line_1 - zoomscroller_inject_for_step0_line_0";
+        let code =
+            " PRINT zoomscroller_inject_for_step0_line_1 - zoomscroller_inject_for_step0_line_0";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
 
+        get_val(parse_print(
+            "PRINT \"TODO -- Set the real address (in c7 space)\"".into(),
+        ));
 
-        get_val(parse_print("PRINT \"TODO -- Set the real address (in c7 space)\"".into()));
-
-      get_val(parse_z80_code("\tPRINT \"TODO -- Set the real address (in c7 space)\"\n".into()));
+        get_val(parse_z80_code(
+            "\tPRINT \"TODO -- Set the real address (in c7 space)\"\n".into(),
+        ));
     }
-
-
 
     #[test]
     fn assert_test() {
         let code = " ASSERT 1\n";
         let tokens = get_val(parse_z80_str(code));
         assert_eq!(tokens.len(), 1);
-
 
         let code = " ASSERT 1 == 2";
         eprintln!("RES: {:?}", parse_z80_str(code));
@@ -1186,7 +1112,8 @@ INC_H equ opcode(inc h)
         let code = "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector".into();
         get_val(parse_db_or_dw(code));
 
-        let code = "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector and %1111, Gfx1_bin_size".into();
+        let code =
+            "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector and %1111, Gfx1_bin_size".into();
         get_val(parse_db_or_dw(code));
     }
 
@@ -1207,7 +1134,6 @@ INC_H equ opcode(inc h)
         let code = "LD HL, label";
         let tokens = get_val(parse_ld(code.into()));
 
-
         let code = "LD HL, label_with_underscore";
         let tokens = get_val(parse_ld(code.into()));
 
@@ -1217,10 +1143,8 @@ INC_H equ opcode(inc h)
         let code = "\n\tld hl, label_with_underscore";
         let tokens = get_val(parse_z80_code(code.into()));
 
-
-		let code = "ld i,a";
+        let code = "ld i,a";
         let tokens = get_val(parse_ld(code.into()));
-
     }
 
     #[test]
@@ -1237,33 +1161,48 @@ INC_H equ opcode(inc h)
         let code = "  LD L, (IX + 0x0)";
         let token = &get_val(parse_z80_str(code))[0];
         assert_eq!(token.mnemonic().unwrap(), &Mnemonic::Ld);
-        assert_eq!(token.mnemonic_arg1().unwrap(), &DataAccess::Register8(Register8::L));
-        assert_eq!(token.mnemonic_arg2().unwrap(), &DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, Expr::Value(0)));
+        assert_eq!(
+            token.mnemonic_arg1().unwrap(),
+            &DataAccess::Register8(Register8::L)
+        );
+        assert_eq!(
+            token.mnemonic_arg2().unwrap(),
+            &DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, Expr::Value(0))
+        );
 
         let code = "  LD E, (HL)";
         let token = &get_val(parse_z80_str(code))[0];
         assert_eq!(token.mnemonic().unwrap(), &Mnemonic::Ld);
-        assert_eq!(token.mnemonic_arg1().unwrap(), &DataAccess::Register8(Register8::E));
-        assert_eq!(token.mnemonic_arg2().unwrap(), &DataAccess::MemoryRegister16(Register16::Hl));
+        assert_eq!(
+            token.mnemonic_arg1().unwrap(),
+            &DataAccess::Register8(Register8::E)
+        );
+        assert_eq!(
+            token.mnemonic_arg2().unwrap(),
+            &DataAccess::MemoryRegister16(Register16::Hl)
+        );
 
         let code = "  LD A, (DD)";
         let token = &get_val(parse_z80_str(code))[0];
         assert_eq!(token.mnemonic().unwrap(), &Mnemonic::Ld);
-        assert_eq!(token.mnemonic_arg1().unwrap(), &DataAccess::Register8(Register8::A));
-        assert_eq!(token.mnemonic_arg2().unwrap(), &DataAccess::Memory(Expr::Label("DD".into())));
+        assert_eq!(
+            token.mnemonic_arg1().unwrap(),
+            &DataAccess::Register8(Register8::A)
+        );
+        assert_eq!(
+            token.mnemonic_arg2().unwrap(),
+            &DataAccess::Memory(Expr::Label("DD".into()))
+        );
     }
-
-
 
     #[test]
     fn real_world_source_failures() {
-
         get_val(parse_label("demosystem_binary_start".into()));
         get_val(parse_ld("ld hl, demosystem_binary_start".into()));
         get_val(parse_z80_code("\tprint \"TODO -- Set the real address (in c7 space)\"\n\tld hl, demosystem_binary_start\n\tld de, 0xDEAD\n\tld bc, demosystem_binary_stop - demosystem_binary_start\n".into()));
 
-
-        get_val(parse_z80_code("
+        get_val(parse_z80_code(
+            "
         ;This code is not used here, but can be useful to test the ST3 register of the FDC.
 ;Ret=A=ST3.
 FDC_GetST3
@@ -1277,10 +1216,12 @@ FDC_GetST3
 	or b
 	call FDC_PutFDC
 	jr FDC_GetFDC
-        ".into()));
+        "
+            .into(),
+        ));
 
-
-        get_val(parse_z80_code("
+        get_val(parse_z80_code(
+            "
         	if FDC_Is_Musical_Loader
 		call FDC_GotoTrack_NoWait
 		ld a,5
@@ -1292,6 +1233,8 @@ FDC_GetST3
 	else
 		call FDC_GotoTrack
 	endif
-    ".into()));
+    "
+            .into(),
+        ));
     }
 }

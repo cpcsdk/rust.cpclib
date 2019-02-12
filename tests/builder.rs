@@ -1,9 +1,7 @@
-
-
 #[cfg(test)]
 mod test {
-    use cpclib::assembler::tokens::*;
     use cpclib::assembler::builder::*;
+    use cpclib::assembler::tokens::*;
 
     #[test]
     pub fn test_push() {
@@ -11,11 +9,10 @@ mod test {
         let de_expected = Token::OpCode(
             Mnemonic::Push,
             Some(DataAccess::Register16(Register16::De)),
-            None
-            );
+            None,
+        );
 
         assert_eq!(de_res, de_expected);
     }
 
 }
-

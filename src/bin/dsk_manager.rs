@@ -1,15 +1,14 @@
 extern crate clap;
 extern crate cpclib;
 
+use clap::{App, Arg, ArgGroup, SubCommand};
 use std::fs::File;
 use std::io::{Read, Write};
-use std::str::FromStr;
 use std::path::Path;
-use clap::{Arg, App, SubCommand, ArgGroup};
+use std::str::FromStr;
 
-
-use cpclib::disc::edsk::ExtendedDsk;
 use cpclib::disc::amsdos::*;
+use cpclib::disc::edsk::ExtendedDsk;
 
 // Still everything to do
 fn main() -> std::io::Result<()> {
@@ -159,8 +158,8 @@ fn main() -> std::io::Result<()> {
 
     // Manipulate the catalog of a disc
     if let Some(sub) = matches.subcommand_matches("catalog") {
-        let mut dsk = ExtendedDsk::open(dsk_fname)
-                              .expect(&format!("Unable to open the file {}", dsk_fname));
+        let mut dsk =
+            ExtendedDsk::open(dsk_fname).expect(&format!("Unable to open the file {}", dsk_fname));
         eprintln!("WIP - We assume side 0 is chosen");
 
         // Import the catalog from one file in one existing disc
@@ -169,37 +168,40 @@ fn main() -> std::io::Result<()> {
             let mut bytes = Vec::new();
             let size = f.read_to_end(&mut bytes)?;
 
-            if size != 64*32 {
-                eprintln!("Catalog size uses {} bytes whereas it should be {}", size, 64*32);
+            if size != 64 * 32 {
+                eprintln!(
+                    "Catalog size uses {} bytes whereas it should be {}",
+                    size,
+                    64 * 32
+                );
             }
 
             for idx in 0..4 {
                 let mut sector = dsk.sector_mut(0, 0, idx + 0xc1).expect("Wrong format");
                 let idx = idx as usize;
-                sector.set_values(&bytes[idx*512..(idx+1)*512]);
+                sector.set_values(&bytes[idx * 512..(idx + 1) * 512]);
             }
 
             dsk.save(dsk_fname)?;
 
-    /*
-        // TODO find why this method DOES NOT WORK
-            // Generate the entry for this catart
-           let  entries = AmsdosEntries::from_slice(&bytes);
+        /*
+            // TODO find why this method DOES NOT WORK
+                // Generate the entry for this catart
+               let  entries = AmsdosEntries::from_slice(&bytes);
 
-           // And inject it in the disc
-           let mut manager = AmsdosManager::new_from_disc(dsk, 0);
-           manager.set_catalog(&entries);
+               // And inject it in the disc
+               let mut manager = AmsdosManager::new_from_disc(dsk, 0);
+               manager.set_catalog(&entries);
 
-           let copy = manager.catalog();
-           assert_eq!(
-               copy,
-               entries
-           );
-           manager.dsk_mut().save(dsk_fname)?;
-    */
-           // override the disc
+               let copy = manager.catalog();
+               assert_eq!(
+                   copy,
+                   entries
+               );
+               manager.dsk_mut().save(dsk_fname)?;
+        */
+        // override the disc
         }
-
         // Export the catalog of an existing disc in a file
         else if let Some(fname) = sub.value_of("EXPORT") {
             eprintln!("WIP - We assume the format of the Track 0 is similar to Amsdos one");
@@ -208,37 +210,30 @@ fn main() -> std::io::Result<()> {
             let bytes = manager.catalog().as_bytes();
             let mut f = File::create(fname)?;
             f.write_all(&bytes)?;
-        }
-        else if sub.is_present("LIST") {
+        } else if sub.is_present("LIST") {
             let manager = AmsdosManager::new_from_disc(dsk, 0);
             let catalog = manager.catalog();
             let entries = catalog.visible_entries().collect::<Vec<_>>();
             /// TODO manage files instead of entries
             println!("Dsk {} -- {} files", dsk_fname, entries.len());
-            for entry in entries.iter(){
+            for entry in entries.iter() {
                 println!("{}", entry.to_string());
             }
-        }
-        else {
+        } else {
             panic!("Error - missing argument");
         }
-        
-    }
-    else if let Some(sub) = matches.subcommand_matches("put") {
+    } else if let Some(sub) = matches.subcommand_matches("put") {
         use cpclib::assembler::builder;
         use cpclib::assembler::tokens::*;
 
         /// Add files in a sectorial way
-        let mut track = u8::from_str(sub.value_of("TRACK").unwrap())
-                            .expect("Wrong track format");
-        let mut sector = u8::from_str(sub.value_of("SECTOR").unwrap())
-                            .expect("Wrong track format");
-        let mut side = u8::from_str(sub.value_of("SIDE").unwrap())
-                            .expect("Wrong track format");
+        let mut track = u8::from_str(sub.value_of("TRACK").unwrap()).expect("Wrong track format");
+        let mut sector = u8::from_str(sub.value_of("SECTOR").unwrap()).expect("Wrong track format");
+        let mut side = u8::from_str(sub.value_of("SIDE").unwrap()).expect("Wrong track format");
         let export = sub.value_of("Z80_EXPORT").unwrap();
 
-        let mut dsk = ExtendedDsk::open(dsk_fname)
-                              .expect(&format!("Unable to open the file {}", dsk_fname));
+        let mut dsk =
+            ExtendedDsk::open(dsk_fname).expect(&format!("Unable to open the file {}", dsk_fname));
 
         let mut listing = Listing::new();
         for file in sub.values_of("FILES").unwrap() {
@@ -247,44 +242,39 @@ fn main() -> std::io::Result<()> {
             let mut content = Vec::new();
             f.read_to_end(&mut content)?;
 
-            let next_position = dsk.add_file_sequentially(
-                side.clone(),
-                track.clone(),
-                sector.clone(),
-                &content
-            ).expect(&format!("Unable to add {}", file));
+            let next_position = dsk
+                .add_file_sequentially(side.clone(), track.clone(), sector.clone(), &content)
+                .expect(&format!("Unable to add {}", file));
 
             let mut base_label = Path::new(file)
-                                        .file_name().unwrap()
-                                        .to_str().unwrap()
-                                        .replace(".", "_");
-            listing.add(
-                builder::equ(
-                    format!("{}_side", &base_label),
-                    side.clone() as u8
-                )
-            );
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .replace(".", "_");
+            listing.add(builder::equ(
+                format!("{}_side", &base_label),
+                side.clone() as u8,
+            ));
             listing.add(builder::equ(
                 format!("{}_track", &base_label),
-                track.clone() as u8)
-            );
+                track.clone() as u8,
+            ));
             listing.add(builder::equ(
                 format!("{}_sector", &base_label),
-                sector.clone() as u8)
-            );
+                sector.clone() as u8,
+            ));
 
             side = next_position.0;
             track = next_position.1;
             sector = next_position.2;
         }
-    }
-
-    else if let Some(sub) = matches.subcommand_matches("add") {
+    } else if let Some(sub) = matches.subcommand_matches("add") {
         // Add files in an Amsdos compatible disc
 
         // Get the input dsk
-       let dsk = ExtendedDsk::open(dsk_fname)
-                              .expect(&format!("Unable to open the file {}", dsk_fname));
+        let dsk =
+            ExtendedDsk::open(dsk_fname).expect(&format!("Unable to open the file {}", dsk_fname));
         let mut manager = AmsdosManager::new_from_disc(dsk, 0);
 
         // Get the common parameters
@@ -295,12 +285,12 @@ fn main() -> std::io::Result<()> {
         for fname in sub.values_of("INPUT_FILES").unwrap() {
             let ams_file = match AmsdosFile::open_valid(fname) {
                 Ok(ams_file) => {
-                    if ! ams_file.amsdos_filename().is_valid() {
+                    if !ams_file.amsdos_filename().is_valid() {
                         panic!("Invalid amsdos filename ! {:?}", ams_file.amsdos_filename());
                     }
                     println!("{:?} added", ams_file.amsdos_filename());
                     ams_file
-                },
+                }
                 Err(e) => {
                     panic!("Unable to load {}: {:?}", fname, e);
                 }
@@ -311,34 +301,27 @@ fn main() -> std::io::Result<()> {
 
         // Save the dsk on disc
         manager.dsk().save(dsk_fname)?;
-    }
-
-    else if let Some(sub) = matches.subcommand_matches("format") {
+    } else if let Some(sub) = matches.subcommand_matches("format") {
         // Manage the formating of a disc
         use cpclib::disc::cfg::DiscConfig;
 
         // Retrieve the format description
         let cfg = if let Some(desc_fname) = sub.value_of("FORMAT_FILE") {
-             cpclib::disc::cfg::DiscConfig::new(desc_fname)?
-        }
-        else if let Some(desc) = sub.value_of("FORMAT_NAME") {
+            cpclib::disc::cfg::DiscConfig::new(desc_fname)?
+        } else if let Some(desc) = sub.value_of("FORMAT_NAME") {
             match desc {
                 "data42" => DiscConfig::single_side_data42_format(),
-                "data"   => DiscConfig::single_side_data_format(),
-                _ =>  unreachable!()
+                "data" => DiscConfig::single_side_data_format(),
+                _ => unreachable!(),
             }
-        }
-        else {
+        } else {
             unreachable!();
         };
 
         // Make the dsk based on the format
         let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
         dsk.save(dsk_fname)?;
-    }
-
-
-    else {
+    } else {
         eprintln!("Missing command\n{}", matches.usage());
     }
 

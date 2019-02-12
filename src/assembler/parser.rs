@@ -1,62 +1,65 @@
-use nom::{Err, ErrorKind, IResult, space, space1, space0, line_ending,eol, alphanumeric1, alphanumeric};
-use nom::types::{CompleteStr};
-use nom::{multispace};
-use nom::{InputLength, InputIter};
+use nom::multispace;
+use nom::types::CompleteStr;
+use nom::{
+    alphanumeric, alphanumeric1, eol, line_ending, space, space0, space1, Err, ErrorKind, IResult,
+};
+use nom::{InputIter, InputLength};
 
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 use crate::assembler::tokens::*;
+use crate::assembler::AssemblerError;
 use either::*;
 use std::iter;
-use crate::assembler::AssemblerError;
 
-    pub mod error_code {
-        pub const ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION:u32 = 128;
-        pub const INVALID_ARGUMENT:u32 = 129;
-    }
-
+pub mod error_code {
+    pub const ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION: u32 = 128;
+    pub const INVALID_ARGUMENT: u32 = 129;
+}
 
 /// Context information that can guide the parser
 #[derive(Default, Clone, Debug)]
-pub struct ParserContext{
+pub struct ParserContext {
     /// Filename that is currently parsed
     current_filename: Option<PathBuf>,
     /// Search path to find files
-    search_path: Vec<PathBuf>
+    search_path: Vec<PathBuf>,
 }
 
 impl ParserContext {
-    pub fn set_current_filename<P:Into<PathBuf>>(&mut self, file: P) {
-        self.current_filename = Some(
-            file.into().canonicalize().unwrap()
-        )
+    pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
+        self.current_filename = Some(file.into().canonicalize().unwrap())
     }
 
     /// Add a search path and ensure it is ABSOLUTE
-    pub fn add_search_path<P:Into<PathBuf>>(&mut self, path: P) {
+    pub fn add_search_path<P: Into<PathBuf>>(&mut self, path: P) {
         self.search_path.push(path.into().canonicalize().unwrap())
     }
 
     /// Add the folder that contains the given file. Panic if there are issues with the filename
-    pub fn add_search_path_from_file<P:Into<PathBuf>>(&mut self, file: P) {
-        let path = file.into().canonicalize().unwrap().parent().unwrap().to_owned();
+    pub fn add_search_path_from_file<P: Into<PathBuf>>(&mut self, file: P) {
+        let path = file
+            .into()
+            .canonicalize()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_owned();
         self.add_search_path(path);
     }
 
     /// Return the real path name that correspond to the requested file
-    pub fn get_path_for<P:Into<PathBuf>>(&self, fname: P) -> Option<PathBuf> {
+    pub fn get_path_for<P: Into<PathBuf>>(&self, fname: P) -> Option<PathBuf> {
         let fname = fname.into();
 
-        // We expect the file to exists if no search_path is provided        
+        // We expect the file to exists if no search_path is provided
         if self.search_path.is_empty() {
             if fname.is_file() {
                 return Some(fname);
-            }
-            else {
+            } else {
                 return None;
             }
-        }
-        else {
+        } else {
             // loop over all possibilities
             for search in self.search_path.iter() {
                 let current_path = search.join(fname.clone());
@@ -69,34 +72,37 @@ impl ParserContext {
         // No file found
         None
     }
-
 }
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
 /// In case of success loop over all the tokens in order to expand those that read files
 pub fn parse_str_with_context(code: &str, ctx: &ParserContext) -> Result<Listing, AssemblerError> {
     match parse_z80_code(code.into()) {
-        Err(e) => Err(AssemblerError::SyntaxError{error: format!("Error while parsing: {:?}", e)}),
+        Err(e) => Err(AssemblerError::SyntaxError {
+            error: format!("Error while parsing: {:?}", e),
+        }),
         Ok((remaining, mut parsed)) => {
             if remaining.len() > 0 {
                 eprintln!("{:?}", parsed);
-                Err(AssemblerError::BugInParser{error:format!("Bug in the parser. The remaining source has not been assembled:\n{}", remaining)})
-            }
-            else {
-               for token in parsed.listing_mut().iter_mut() {
-                   token.read_referenced_file(ctx)?;
-               }
-               Ok(parsed)
+                Err(AssemblerError::BugInParser {
+                    error: format!(
+                        "Bug in the parser. The remaining source has not been assembled:\n{}",
+                        remaining
+                    ),
+                })
+            } else {
+                for token in parsed.listing_mut().iter_mut() {
+                    token.read_referenced_file(ctx)?;
+                }
+                Ok(parsed)
             }
         }
     }
 }
 
-pub fn parse_str(code :&str) -> Result<Listing, AssemblerError> {
+pub fn parse_str(code: &str) -> Result<Listing, AssemblerError> {
     parse_str_with_context(code, &Default::default())
 }
-
-
 
 named! (
     pub parse_z80_code <CompleteStr<'_>, Listing>,
@@ -126,10 +132,9 @@ named! (
         )
     );
 
-
 /// For an unknwon reason, the parse_z80_code function fails when there is no comment...
 /// This one is a workaround as still as the other is not fixed
-pub fn parse_z80_str(code: &str) -> Result< (CompleteStr<'_>, Listing), Err<CompleteStr<'_>>> {
+pub fn parse_z80_str(code: &str) -> Result<(CompleteStr<'_>, Listing), Err<CompleteStr<'_>>> {
     let mut tokens = Vec::new();
     let mut rest = None;
     let src = "<str>";
@@ -140,20 +145,16 @@ pub fn parse_z80_str(code: &str) -> Result< (CompleteStr<'_>, Listing), Err<Comp
             Ok((res, local_tokens)) => {
                 tokens.extend_from_slice(&local_tokens);
                 rest = Some(res);
-            },
+            }
             Err(e) => {
                 let error_string = format!("Error at line {}: {}", line_number, line);
                 eprintln!("{}:{} ({}) {}", src, line_number, line, error_string);
                 return Err(e);
             }
         }
-
-
     }
     Ok((rest.unwrap(), tokens.into()))
 }
-
-
 
 // TODO find a way to not use the alternative stuff
 named!(
@@ -169,8 +170,6 @@ named!(
             parse_z80_line_complete
         )
     );
-
-
 
 named!(
     pub parse_rorg <CompleteStr<'_>, Token>, do_parse!(
@@ -201,8 +200,6 @@ named!(
         )
     )
 );
-
-
 
 named!(
     pub parse_repeat<CompleteStr<'_>, Token>, do_parse!(
@@ -238,7 +235,6 @@ named!(
         )
     )
 );
-
 
 /// Parse a Basic bloc.
 named!(
@@ -324,8 +320,7 @@ named!(
         )
     );
 
-
-// TODO add an argument o manage cases like '... : ENDIF' 
+// TODO add an argument o manage cases like '... : ENDIF'
 named!(
     pub parse_z80_line_complete <CompleteStr<'_>, Vec<Token>>, do_parse!(
         opt!(line_ending) >>
@@ -423,115 +418,92 @@ named!(
             )
         );
 
-
 named!(
-    parse_include <CompleteStr<'_>, Token>, do_parse!(
-        tag_no_case!("INCLUDE") >>
-        space1 >>
-        fname: alt!(
-            preceded!(
-                tag!("\""),
-                take_until_and_consume1!("\"")) |
-            preceded!(
-                tag!("'"),
-                take_until_and_consume1!("'"))
-        ) >>
-        (
-            Token::Include(fname.to_string(), None)
-        )
+    parse_include<CompleteStr<'_>, Token>,
+    do_parse!(
+        tag_no_case!("INCLUDE")
+            >> space1
+            >> fname:
+                alt!(
+                    preceded!(tag!("\""), take_until_and_consume1!("\""))
+                        | preceded!(tag!("'"), take_until_and_consume1!("'"))
+                )
+            >> (Token::Include(fname.to_string(), None))
     )
 );
-
 
 /// TODO add the missing optional parameters
 named!(
-    parse_incbin <CompleteStr<'_>, Token>, do_parse!(
-        tag_no_case!("INCBIN") >>
-        space1 >>
-        fname: alt!(
-            preceded!(
-                tag!("\""),
-                take_until_and_consume1!("\"")) |
-            preceded!(
-                tag!("'"),
-                take_until_and_consume1!("'"))
-        ) >>
-        (
-            Token::Incbin(fname.to_string(), None, None, None, None, None)
-        )
+    parse_incbin<CompleteStr<'_>, Token>,
+    do_parse!(
+        tag_no_case!("INCBIN")
+            >> space1
+            >> fname:
+                alt!(
+                    preceded!(tag!("\""), take_until_and_consume1!("\""))
+                        | preceded!(tag!("'"), take_until_and_consume1!("'"))
+                )
+            >> (Token::Incbin(fname.to_string(), None, None, None, None, None))
     )
 );
 
+named!(
+    parse_undef<CompleteStr<'_>, Token>,
+    do_parse!(tag_no_case!("UNDEF") >> space1 >> label: parse_label >> (Token::Undef(label)))
+);
 
 named!(
-    parse_undef <CompleteStr<'_>, Token>,  do_parse!(
-        tag_no_case!("UNDEF") >>
-        space1 >>
-        label: parse_label >>
-        (
-            Token::Undef(label)
-        )
+    parse_token<CompleteStr<'_>, Token>,
+    alt_complete!(
+        parse_ex_af
+            | parse_logical_operator
+            | parse_add_or_adc
+            | parse_cp
+            | parse_djnz
+            | parse_ld
+            | parse_inc_dec
+            | parse_out
+            | parse_in
+            | parse_call_jp_or_jr
+            | parse_opcode_no_arg
+            | parse_push_n_pop
+            | parse_res_set_bit
+            | parse_shifts
+            | parse_ret
     )
 );
 
-
 named!(
-    parse_token <CompleteStr<'_>, Token>,
-        alt_complete!(
-            parse_ex_af |
-            parse_logical_operator |
-            parse_add_or_adc |
-            parse_cp |
-            parse_djnz |
-            parse_ld |
-            parse_inc_dec |
-            parse_out | parse_in |
-            parse_call_jp_or_jr |
-            parse_opcode_no_arg |
-            parse_push_n_pop |
-            parse_res_set_bit |
-            parse_shifts |
-            parse_ret
-        )
-
-    );
-
-
-named!(
-    parse_ex_af <CompleteStr<'_>, Token>, do_parse!(
-        tag_no_case!("EX") >>
-        space1 >>
-        tag_no_case!("AF") >>
-        space0 >>
-        char!(',') >>
-        space0 >>
-        tag_no_case!("AF'") >>
-        (
-            Token::OpCode(Mnemonic::ExAf, None, None)
-        )
+    parse_ex_af<CompleteStr<'_>, Token>,
+    do_parse!(
+        tag_no_case!("EX")
+            >> space1
+            >> tag_no_case!("AF")
+            >> space0
+            >> char!(',')
+            >> space0
+            >> tag_no_case!("AF'")
+            >> (Token::OpCode(Mnemonic::ExAf, None, None))
     )
 );
 named!(
-    parse_directive <CompleteStr<'_>, Token>,
-        alt_complete!(
-            parse_assert |
-            parse_align |
-            parse_breakpoint |
-            parse_org |
-            parse_defs |
-            parse_include |
-            parse_incbin |
-            parse_db_or_dw |
-            parse_print |
-            parse_protect |
-            parse_stable_ticker |
-            parse_undef |
-            parse_noarg_directive
-        )
-
-    );
-
-
+    parse_directive<CompleteStr<'_>, Token>,
+    alt_complete!(
+        parse_assert
+            | parse_align
+            | parse_breakpoint
+            | parse_org
+            | parse_defs
+            | parse_include
+            | parse_incbin
+            | parse_db_or_dw
+            | parse_print
+            | parse_protect
+            | parse_stable_ticker
+            | parse_undef
+            | parse_noarg_directive
+    )
+);
 
 named!(
     pub parse_noarg_directive <CompleteStr<'_>, Token>,
@@ -584,58 +556,41 @@ named!(
     )    
 );
 
-
-
 named!(
-    parse_breakpoint <CompleteStr<'_>, Token>,
+    parse_breakpoint<CompleteStr<'_>, Token>,
     do_parse!(
-        tag_no_case!("BREAKPOINT") >>
-        exp: opt!(
-                preceded!(
-                space1,
-                expr
-            )
-        ) >>
-        (
-            Token::Breakpoint(exp)
-        )
-    )
-);
-
-
-named!(
-    parse_stable_ticker <CompleteStr<'_>, Token>,
-    alt!(
-        parse_stable_ticker_start |
-        parse_stable_ticker_stop
+        tag_no_case!("BREAKPOINT")
+            >> exp: opt!(preceded!(space1, expr))
+            >> (Token::Breakpoint(exp))
     )
 );
 
 named!(
-    parse_stable_ticker_start <CompleteStr<'_>, Token>,
+    parse_stable_ticker<CompleteStr<'_>, Token>,
+    alt!(parse_stable_ticker_start | parse_stable_ticker_stop)
+);
+
+named!(
+    parse_stable_ticker_start<CompleteStr<'_>, Token>,
     do_parse!(
-        opt!(tag_no_case!("stable")) >>
-        tag_no_case!("ticker") >>
-        space1 >>
-        tag_no_case!("start") >>
-        space1 >>
-        name: parse_label >>
-        (
-            Token::StableTicker(StableTickerAction::Start(name))
-        )
+        opt!(tag_no_case!("stable"))
+            >> tag_no_case!("ticker")
+            >> space1
+            >> tag_no_case!("start")
+            >> space1
+            >> name: parse_label
+            >> (Token::StableTicker(StableTickerAction::Start(name)))
     )
 );
 
 named!(
-    parse_stable_ticker_stop <CompleteStr<'_>, Token>,
+    parse_stable_ticker_stop<CompleteStr<'_>, Token>,
     do_parse!(
-        opt!(tag_no_case!("stable")) >>
-        tag_no_case!("ticker") >>
-        space1 >>
-        tag_no_case!("stop") >>
-        (
-            Token::StableTicker(StableTickerAction::Stop)
-        )
+        opt!(tag_no_case!("stable"))
+            >> tag_no_case!("ticker")
+            >> space1
+            >> tag_no_case!("stop")
+            >> (Token::StableTicker(StableTickerAction::Stop))
     )
 );
 
@@ -662,8 +617,6 @@ named!(
          )
     )
 );
-
-
 
 named!(
     pub parse_ld_normal <CompleteStr<'_>, Token>, do_parse!(
@@ -742,7 +695,6 @@ named!(
     )
 );
 
-
 named!(
     pub parse_cp <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("CP") >>
@@ -788,8 +740,6 @@ named!(
   )
 );
 
-
-
 named!(
     pub parse_djnz<CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("DJNZ") >>
@@ -798,7 +748,6 @@ named!(
         (Token::OpCode(Mnemonic::Djnz, Some(expr), None))
     )
 );
-
 
 named!(
     pub expr_list <CompleteStr<'_>, Vec<Expr>>,
@@ -827,7 +776,6 @@ named!(
         )
     )
 );
-
 
 named!(
     pub parse_align <CompleteStr<'_>, Token>, do_parse!(
@@ -902,7 +850,6 @@ named!(
         )          
     )
 );
-
 
 named!(
     pub parse_shifts <CompleteStr<'_>, Token>, do_parse! (
@@ -1018,7 +965,6 @@ named!(
     )
 );
 
-
 named!(
     pub parse_push_n_pop <CompleteStr<'_>, Token>, do_parse!(
         push_or_pop: alt_complete!(
@@ -1032,7 +978,6 @@ named!(
         )
     );
 
-
 named!(
     pub parse_ret <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("RET") >>
@@ -1042,9 +987,6 @@ named!(
         )
     )
 );
-
-
-
 
 named!(
     pub parse_inc_dec<CompleteStr<'_>, Token>, do_parse!(
@@ -1060,8 +1002,6 @@ named!(
         )
         )
     );
-
-
 
 named!(// TODO manage other out formats
     pub parse_out<CompleteStr<'_>, Token>, do_parse!(
@@ -1090,7 +1030,6 @@ named!(// TODO manage other out formats
 
     )
 );
-
 
 named!(// TODO manage other out formats
     pub parse_in<CompleteStr<'_>, Token>, do_parse!(
@@ -1123,41 +1062,45 @@ named!(// TODO manage other out formats
 /// TODO remove multispace
 /// TODO reduce the flag space for jr
 named!(
-    parse_call_jp_or_jr <CompleteStr<'_>, Token>, do_parse!(
-        call_jp_or_jr: alt_complete!(
-            value!(Mnemonic::Jp, tag_no_case!("JP")) |
-            value!(Mnemonic::Jr, tag_no_case!("JR")) |
-            value!(Mnemonic::Call, tag_no_case!("CALL"))
-            ) >>
-        space >>
-        flag_test:opt!(terminated!(parse_flag_test, delimited!(opt!(multispace), tag!(","), opt!(multispace)) )) >>
-        dst: expr  >>
-        ({
-
-            let flag_test = if flag_test.is_some() {
-                Some(DataAccess::FlagTest(flag_test.unwrap()))
-            }
-            else {
-                None
-            };
-            Token::OpCode(call_jp_or_jr, flag_test, Some(DataAccess::Expression(dst)))
-        })
-        )
-    );
+    parse_call_jp_or_jr<CompleteStr<'_>, Token>,
+    do_parse!(
+        call_jp_or_jr:
+            alt_complete!(
+                value!(Mnemonic::Jp, tag_no_case!("JP"))
+                    | value!(Mnemonic::Jr, tag_no_case!("JR"))
+                    | value!(Mnemonic::Call, tag_no_case!("CALL"))
+            )
+            >> space
+            >> flag_test:
+                opt!(terminated!(
+                    parse_flag_test,
+                    delimited!(opt!(multispace), tag!(","), opt!(multispace))
+                ))
+            >> dst: expr
+            >> ({
+                let flag_test = if flag_test.is_some() {
+                    Some(DataAccess::FlagTest(flag_test.unwrap()))
+                } else {
+                    None
+                };
+                Token::OpCode(call_jp_or_jr, flag_test, Some(DataAccess::Expression(dst)))
+            })
+    )
+);
 
 named!(
-    parse_flag_test <CompleteStr<'_>, FlagTest>,
-        alt_complete!(
-            value!(FlagTest::NZ, tag_no_case!("NZ")) |
-            value!(FlagTest::Z, tag_no_case!("Z"))|
-            value!(FlagTest::NC, tag_no_case!("NC"))|
-            value!(FlagTest::C, tag_no_case!("C"))|
-            value!(FlagTest::PO, tag_no_case!("PO")) |
-            value!(FlagTest::PE, tag_no_case!("PE")) |
-            value!(FlagTest::P, tag_no_case!("P")) |
-            value!(FlagTest::M, tag_no_case!("M"))
-        )
-    );
+    parse_flag_test<CompleteStr<'_>, FlagTest>,
+    alt_complete!(
+        value!(FlagTest::NZ, tag_no_case!("NZ"))
+            | value!(FlagTest::Z, tag_no_case!("Z"))
+            | value!(FlagTest::NC, tag_no_case!("NC"))
+            | value!(FlagTest::C, tag_no_case!("C"))
+            | value!(FlagTest::PO, tag_no_case!("PO"))
+            | value!(FlagTest::PE, tag_no_case!("PE"))
+            | value!(FlagTest::P, tag_no_case!("P"))
+            | value!(FlagTest::M, tag_no_case!("M"))
+    )
+);
 
 /*
 /// XXX to remove as soon as possible
@@ -1179,7 +1122,6 @@ named!(
         ) 
 );
 
-
 named!(
     pub parse_register8 <CompleteStr<'_>, DataAccess>, 
         alt_complete!(
@@ -1193,7 +1135,6 @@ named!(
         )
 );
 
-
 named!(
     pub parse_register_i <CompleteStr<'_>, DataAccess> , 
     value!(DataAccess::SpecialRegisterI, preceded!(tag_no_case!("I"), not!(alphanumeric)))
@@ -1204,14 +1145,12 @@ named!(
     value!(DataAccess::SpecialRegisterR, preceded!(tag_no_case!("R"), not!(alphanumeric)))
 );
 
-
-
 macro_rules! parse_any_register8 {
     ($name: ident, $char:expr, $reg:expr) => {
         named!(
-            pub $name <CompleteStr<'_>, DataAccess> , 
+            pub $name <CompleteStr<'_>, DataAccess> ,
             value!(DataAccess::Register8($reg), preceded!(tag_no_case!($char), not!(alphanumeric)))
-        );          
+        );
 };
 }
 
@@ -1223,46 +1162,45 @@ parse_any_register8!(parse_register_e, "e", Register8::E);
 parse_any_register8!(parse_register_h, "h", Register8::H);
 parse_any_register8!(parse_register_l, "l", Register8::L);
 
+named!(
+    parse_register_sp<CompleteStr<'_>, DataAccess>,
+    do_parse!(
+        preceded!(tag_no_case!("SP"), not!(alphanumeric))
+            >> (DataAccess::Register16(Register16::Sp))
+    )
+);
 
 named!(
-    parse_register_sp <CompleteStr<'_>, DataAccess>, do_parse!(
-        preceded!(tag_no_case!("SP"), not!(alphanumeric)) >>
-        (DataAccess::Register16(Register16::Sp))
-        )
-    );
+    parse_register_hl<CompleteStr<'_>, DataAccess>,
+    do_parse!(
+        preceded!(tag_no_case!("HL"), not!(alphanumeric))
+            >> (DataAccess::Register16(Register16::Hl))
+    )
+);
 
 named!(
-    parse_register_hl <CompleteStr<'_>, DataAccess>, do_parse!(
-        preceded!(tag_no_case!("HL"), not!(alphanumeric)) >>
-        (DataAccess::Register16(Register16::Hl))
-        )
-    );
+    parse_register_bc<CompleteStr<'_>, DataAccess>,
+    do_parse!(
+        preceded!(tag_no_case!("BC"), not!(alphanumeric))
+            >> (DataAccess::Register16(Register16::Bc))
+    )
+);
 
 named!(
-    parse_register_bc <CompleteStr<'_>, DataAccess>, do_parse!(
-        preceded!(tag_no_case!("BC"), not!(alphanumeric)) >>
-        (DataAccess::Register16(Register16::Bc))
-        )
-    );
+    parse_register_de<CompleteStr<'_>, DataAccess>,
+    do_parse!(
+        preceded!(tag_no_case!("DE"), not!(alphanumeric))
+            >> (DataAccess::Register16(Register16::De))
+    )
+);
 
 named!(
-    parse_register_de <CompleteStr<'_>, DataAccess>, do_parse!(
-        preceded!(tag_no_case!("DE"), not!(alphanumeric)) >>
-        (DataAccess::Register16(Register16::De))
-        )
-    );
-
-named!(
-    parse_register_af <CompleteStr<'_>, DataAccess>, do_parse!(
-        preceded!(tag_no_case!("AF"), not!(alphanumeric)) >>
-        (DataAccess::Register16(Register16::Af))
-        )
-    );
-
-
-
-
-
+    parse_register_af<CompleteStr<'_>, DataAccess>,
+    do_parse!(
+        preceded!(tag_no_case!("AF"), not!(alphanumeric))
+            >> (DataAccess::Register16(Register16::Af))
+    )
+);
 
 named!(
     pub parse_indexregister8 <CompleteStr<'_>, DataAccess>, do_parse!(
@@ -1278,53 +1216,34 @@ named!(
 );
 
 named!(
-    parse_indexregister16 <CompleteStr<'_>, DataAccess>, do_parse!(
+    parse_indexregister16<CompleteStr<'_>, DataAccess>,
+    do_parse!(
         reg: alt_complete!(
-            tag_no_case!("IX") => { |_| IndexRegister16::Ix} |
-            tag_no_case!("IY") => { |_| IndexRegister16::Iy}
-            )
-        >>
-        (DataAccess::IndexRegister16(reg))
+        tag_no_case!("IX") => { |_| IndexRegister16::Ix} |
+        tag_no_case!("IY") => { |_| IndexRegister16::Iy}
+        ) >> (DataAccess::IndexRegister16(reg))
     )
 );
-
-
-
 
 /// Parse the use of an indexed register as (IX + 5)
 named!(
-    parse_indexregister_with_index <CompleteStr<'_>, DataAccess>, do_parse!(
-            tag!("(") >>
-
-            space0 >>
-
-            reg: parse_indexregister16 >>
-
-            space0 >>
-
-            op: alt_complete!(
-                value!(Oper::Add, tag!("+")) |
-                value!(Oper::Sub, tag!("-"))
-            ) >>
-
-            space0 >>
-
-            expr: expr >>
-
-            space0 >>
-            tag!(")")
-        >>
-        ({
-            let target = reg.get_indexregister16().unwrap();
-            DataAccess::IndexRegister16WithIndex(
-                target,
-                expr
-            )
-        })
+    parse_indexregister_with_index<CompleteStr<'_>, DataAccess>,
+    do_parse!(
+        tag!("(")
+            >> space0
+            >> reg: parse_indexregister16
+            >> space0
+            >> op: alt_complete!(value!(Oper::Add, tag!("+")) | value!(Oper::Sub, tag!("-")))
+            >> space0
+            >> expr: expr
+            >> space0
+            >> tag!(")")
+            >> ({
+                let target = reg.get_indexregister16().unwrap();
+                DataAccess::IndexRegister16WithIndex(target, expr)
+            })
     )
 );
-
-
 
 /// Parse an address access `(expression)`
 named!(
@@ -1339,7 +1258,6 @@ named!(
     )
 
 );
-
 
 /// Parse (R16)
 named!(
@@ -1357,7 +1275,6 @@ named!(
 
 );
 
-
 /// Parse (HL)
 named!(
     pub parse_hl_address<CompleteStr<'_>, DataAccess>,
@@ -1373,11 +1290,6 @@ named!(
     )
 );
 
-
-
-
-
-
 /// Parse and expression and returns it inside a DataAccession::Expression
 named!(
     pub parse_expr <CompleteStr<'_>, DataAccess>,
@@ -1389,8 +1301,6 @@ named!(
         )
     );
 
-
-
 named!(
     pub parse_org <CompleteStr<'_>, Token>, do_parse!(
         tag_no_case!("ORG") >>
@@ -1399,7 +1309,6 @@ named!(
         (Token::Org(val, None))
     )
 );
-
 
 named!(
     pub parse_defs <CompleteStr<'_>, Token>, do_parse!(
@@ -1437,15 +1346,12 @@ named!(
     )
 );
 
-
 named!(
     pub parse_value <CompleteStr<'_>, Expr>, do_parse!(
         val: alt_complete!(hex_u16 | dec_u16 | bin_u16) >>
         (Expr::Value(val as i32))
         )
     );
-
-
 
 named!(
     pub hex_u16 <CompleteStr<'_>, u16>, do_parse!(
@@ -1455,27 +1361,22 @@ named!(
         )
     );
 
-
 /// Parse a comment that start by `;` and ends at the end of the line.
-named!( comment<CompleteStr<'_>, Token>,
-        map!(
-            preceded!(
-                tag!( ";" ),
-                take_till!( |ch| ch == '\n' )
-            ),
-            |string| {Token::Comment(string.iter_elements().collect::<String>())}
-        )
+named!(
+    comment<CompleteStr<'_>, Token>,
+    map!(
+        preceded!(tag!(";"), take_till!(|ch| ch == '\n')),
+        |string| Token::Comment(string.iter_elements().collect::<String>())
+    )
 );
 
 // Usefull later for db
 named!(pub string_between_quotes<CompleteStr<'_>, CompleteStr<'_>>, delimited!(char!('\"'), is_not!("\""), char!('\"')));
 
-
-
-
-pub fn parse_label (input: CompleteStr<'_>) -> IResult<CompleteStr<'_>,  String> {
+pub fn parse_label(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, String> {
     // Get the label
-    match do_parse!(input, 
+    match do_parse!(
+        input,
         first: one_of!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.") >> // XXX The inclusion of . is probably problematic
         middle: is_a!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.") >>
         (
@@ -1485,23 +1386,18 @@ pub fn parse_label (input: CompleteStr<'_>) -> IResult<CompleteStr<'_>,  String>
             )
 
         )
-    ){
+    ) {
         Err(e) => Err(e),
         Ok((remaining, label)) => {
-            let impossible = [
-                "af", "hl", "de", "bc", "ix", "iy", "ixl", "ixh"
-            ];
+            let impossible = ["af", "hl", "de", "bc", "ix", "iy", "ixl", "ixh"];
             if impossible.iter().any(|val| val == &label.to_lowercase()) {
                 Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
-            }
-            else {
+            } else {
                 Ok((remaining, label))
             }
         }
     }
-
 }
-
 
 #[inline]
 pub fn dec_u16(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
@@ -1519,7 +1415,10 @@ pub fn dec_u16(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
                     res = value + (res * 10);
                 }
                 if res > u16::max_value() as u32 {
-                    Err(::nom::Err::Error(error_position!(input, ErrorKind::Custom(0))))
+                    Err(::nom::Err::Error(error_position!(
+                        input,
+                        ErrorKind::Custom(0)
+                    )))
                 } else {
                     Ok((remaining, res as u16))
                 }
@@ -1547,8 +1446,6 @@ pub bin_u16<CompleteStr<'_>, u16>, do_parse!(
     >> (value)
 ));
 
-
-
 #[inline]
 pub fn hex_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
     match is_a!(input, &b"0123456789abcdefABCDEF"[..]) {
@@ -1574,8 +1471,6 @@ pub fn hex_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
     }
 }
 
-
-
 /*
 /// Parse an ASM file an returns the stream of tokens.
 pub fn parse_file(fname: String) -> Vec<Token> {
@@ -1589,21 +1484,15 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 }
 */
 
-
-
-
-
-
-
-
-
 // XXX Code greatly inspired from https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs
 
-named!(parens< CompleteStr<'_>, Expr >, delimited!(
-    delimited!(space0, tag!("("), space0),
-    map!(map!(expr, Box::new), Expr::Paren),
-    delimited!(space0, tag!(")"), space0)
-  )
+named!(
+    parens<CompleteStr<'_>, Expr>,
+    delimited!(
+        delimited!(space0, tag!("("), space0),
+        map!(map!(expr, Box::new), Expr::Paren),
+        delimited!(space0, tag!(")"), space0)
+    )
 );
 
 //TODO add stuff to manipulate any kind of data (value/label)
@@ -1644,27 +1533,26 @@ named!(pub factor< CompleteStr<'_>, Expr >, alt_complete!(
 );
 
 fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
-  remainder.into_iter().fold(initial, |acc, pair| {
-    let (oper, expr) = pair;
-    match oper {
-      Oper::Add => Expr::Add(Box::new(acc), Box::new(expr)),
-      Oper::Sub => Expr::Sub(Box::new(acc), Box::new(expr)),
-      Oper::Mul => Expr::Mul(Box::new(acc), Box::new(expr)),
-      Oper::Div => Expr::Div(Box::new(acc), Box::new(expr)),
-      Oper::Mod => Expr::Mod(Box::new(acc), Box::new(expr)),
+    remainder.into_iter().fold(initial, |acc, pair| {
+        let (oper, expr) = pair;
+        match oper {
+            Oper::Add => Expr::Add(Box::new(acc), Box::new(expr)),
+            Oper::Sub => Expr::Sub(Box::new(acc), Box::new(expr)),
+            Oper::Mul => Expr::Mul(Box::new(acc), Box::new(expr)),
+            Oper::Div => Expr::Div(Box::new(acc), Box::new(expr)),
+            Oper::Mod => Expr::Mod(Box::new(acc), Box::new(expr)),
 
+            Oper::BinaryAnd => Expr::BinaryAnd(Box::new(acc), Box::new(expr)),
+            Oper::BinaryOr => Expr::BinaryOr(Box::new(acc), Box::new(expr)),
+            Oper::BinaryXor => Expr::BinaryXor(Box::new(acc), Box::new(expr)),
 
-      Oper::BinaryAnd => Expr::BinaryAnd(Box::new(acc), Box::new(expr)),
-      Oper::BinaryOr => Expr::BinaryOr(Box::new(acc), Box::new(expr)),
-      Oper::BinaryXor => Expr::BinaryXor(Box::new(acc), Box::new(expr)),
-
-      Oper::Equal => Expr::Equal(Box::new(acc), Box::new(expr)),
-      Oper::StrictlyGreater => Expr::StrictlyGreater(Box::new(acc), Box::new(expr)),
-      Oper::StrictlyLower => Expr::StrictlyLower(Box::new(acc), Box::new(expr)),
-      Oper::LowerOrEqual => Expr::LowerOrEqual(Box::new(acc), Box::new(expr)),
-      Oper::GreaterOrEqual => Expr::GreaterOrEqual(Box::new(acc), Box::new(expr)),
-    }
-  })
+            Oper::Equal => Expr::Equal(Box::new(acc), Box::new(expr)),
+            Oper::StrictlyGreater => Expr::StrictlyGreater(Box::new(acc), Box::new(expr)),
+            Oper::StrictlyLower => Expr::StrictlyLower(Box::new(acc), Box::new(expr)),
+            Oper::LowerOrEqual => Expr::LowerOrEqual(Box::new(acc), Box::new(expr)),
+            Oper::GreaterOrEqual => Expr::GreaterOrEqual(Box::new(acc), Box::new(expr)),
+        }
+    })
 }
 
 named!(pub term< CompleteStr<'_>, Expr >, do_parse!(
@@ -1714,7 +1602,6 @@ named!(pub   parse_hi_or_lo <CompleteStr<'_>, Expr>, do_parse!(
     )
 );
 
-
 named!(pub parse_duration <CompleteStr<'_>, Expr>, do_parse!(
     tag_no_case!("duration(") >>
     space0 >>
@@ -1736,7 +1623,6 @@ named!(pub parse_assemble <CompleteStr<'_>, Expr>, do_parse!(
         Expr::OpCode(Box::new(token))
     )
 ));
-
 
 named!(pub comp<CompleteStr<'_>, Expr>, do_parse!(
     initial: term >>
@@ -1777,17 +1663,16 @@ named!(pub comp<CompleteStr<'_>, Expr>, do_parse!(
     )
 );
 
-
-
-
 pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr<'_>>) -> String {
-
     use nom::InputLength;
 
     let mut error_string;
 
-    if let ::nom::Err::Failure(::nom::simple_errors::Context::Code(remaining, ErrorKind::Custom(_))) = e {
-
+    if let ::nom::Err::Failure(::nom::simple_errors::Context::Code(
+        remaining,
+        ErrorKind::Custom(_),
+    )) = e
+    {
         let bytes = orig.as_bytes();
         let complete_size = orig.len();
         let remaining_size = remaining.input_len();
@@ -1801,25 +1686,27 @@ pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr<'_>>) -> Strin
         };
         let line_start = {
             let mut idx = error_position;
-            while idx >0 &&  bytes[idx-1] != b'\n' {
+            while idx > 0 && bytes[idx - 1] != b'\n' {
                 idx -= 1;
             }
             idx
         };
 
-
         let line = &orig[line_start..line_end];
-        let line_idx = orig[..(error_position)].bytes().filter(|b| *b == b'\n').count(); // way too slow I guess
+        let line_idx = orig[..(error_position)]
+            .bytes()
+            .filter(|b| *b == b'\n')
+            .count(); // way too slow I guess
         let column_idx = error_position - line_start;
         let error_description = "Error because";
         let empty = iter::repeat(" ").take(column_idx).collect::<String>();
-        error_string = format!("{}:{}:{} {}\n{}\n{}^", "fname", line_idx, column_idx, error_description, line, empty);
-    }
-    else {
+        error_string = format!(
+            "{}:{}:{} {}\n{}\n{}^",
+            "fname", line_idx, column_idx, error_description, line, empty
+        );
+    } else {
         error_string = String::from("Unknown error");
     }
 
     error_string
-
-
 }

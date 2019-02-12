@@ -74,42 +74,35 @@ fn main() -> Result<(), cpc::xfer::XferError> {
         )
         .get_matches();
 
-
     // TODO manage the retreival of env var
     let hostname = matches.value_of("CPCADDR").unwrap();
     let xfer = cpc::xfer::CpcXfer::new(hostname);
 
     if matches.is_present("-r") {
         xfer.reset_m4();
-    }
-    else if matches.is_present("-s") {
+    } else if matches.is_present("-s") {
         xfer.reset_cpc();
-    }
-    else if let Some(y_opt) =  matches.subcommand_matches("-y")  {
+    } else if let Some(y_opt) = matches.subcommand_matches("-y") {
         let fname = y_opt.value_of("fname").unwrap();
         xfer.upload_and_run(fname, None);
-    }
-    else if let Some(x_opt) = matches.subcommand_matches("-x") {
+    } else if let Some(x_opt) = matches.subcommand_matches("-x") {
         let fname = x_opt.value_of("fname").unwrap();
         xfer.run(fname); /*.expect("Unable to launch file on CPC.");*/
-    }
-    else if let Some(_ls_opt) = matches.subcommand_matches("--ls") {
+    } else if let Some(_ls_opt) = matches.subcommand_matches("--ls") {
         let content = xfer.current_folder_content()?;
         for file in content.files() {
             println!("{:?}", file);
         }
-    }
-    else if let Some(_pwd_opt) = matches.subcommand_matches("--pwd") {
+    } else if let Some(_pwd_opt) = matches.subcommand_matches("--pwd") {
         let cwd = xfer.current_working_directory()?;
         println!("{}", cwd);
-    }
-    else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
-        let _cwd = xfer.cd(cd_opt.value_of("directory").unwrap()).expect("Unable to move in the requested folder.");
-    }
-    else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
+    } else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
+        let _cwd = xfer
+            .cd(cd_opt.value_of("directory").unwrap())
+            .expect("Unable to move in the requested folder.");
+    } else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
         interact::start(xfer);
     }
-
 
     Ok(())
 }

@@ -1,33 +1,36 @@
-
 extern crate bitsets;
 
+use std::fmt;
+use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::fs::File;
-use std::str::FromStr;
-use std::path::Path;
 use std::io::BufReader;
-use std::fmt;
+use std::path::Path;
+use std::str::FromStr;
 
 use cpclib::sna::*;
 
 extern crate clap;
-use clap::{Arg, App, SubCommand};
+use clap::{App, Arg, SubCommand};
 
 pub mod built_info {
-include!(concat!(env!("OUT_DIR"), "/built.rs"));
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
 extern crate built;
-extern crate time;
 extern crate semver;
+extern crate time;
 
 use cpclib::util::string_to_nb;
 
 fn main() {
     eprintln!("[WARNING] This is still a draft version that implement still few functionnalities");
 
-    let desc_before = format!("Profile {} compiled: {}", built_info::PROFILE, built_info::BUILT_TIME_UTC);
+    let desc_before = format!(
+        "Profile {} compiled: {}",
+        built_info::PROFILE,
+        built_info::BUILT_TIME_UTC
+    );
     let matches = App::new("createSnapshot")
                           .version(built_info::PKG_VERSION)
                           .author("Krusty/Benediction")
@@ -97,69 +100,63 @@ fn main() {
                                .long("flags"))
                           .get_matches();
 
-
-
-
     // Display all tokens
     if matches.is_present("flags") {
         for flag in SnapshotFlag::enumerate().into_iter() {
-            println!("{:?} / {:?} bytes.{}", flag, flag.elem_size(), flag.comment());
+            println!(
+                "{:?} / {:?} bytes.{}",
+                flag,
+                flag.elem_size(),
+                flag.comment()
+            );
         }
         return;
     }
 
-
-    let mut sna = if matches.is_present("inSnapshot"){
+    let mut sna = if matches.is_present("inSnapshot") {
         let fname = matches.value_of("inSnapshot").unwrap();
         let path = Path::new(&fname);
         Snapshot::load(path)
-    }
-    else {
+    } else {
         Snapshot::default()
     };
 
     // Activate the debug mode
     sna.debug = matches.is_present("debug");
 
-
-
     if matches.is_present("info") {
         sna.print_info();
         return;
     }
 
-
     // Manage the files insertion
     if matches.is_present("load") {
         let loads = matches.values_of("load").unwrap().collect::<Vec<_>>();
-        for i in 0..(loads.len()/2) {
-            let fname = loads[i*2+0];
-            let place = loads[i*2+1];
+        for i in 0..(loads.len() / 2) {
+            let fname = loads[i * 2 + 0];
+            let place = loads[i * 2 + 1];
 
             let address = {
                 if place.starts_with("0x") {
                     u32::from_str_radix(&place[2..], 16).unwrap()
-                }
-                else if place.starts_with("0") {
-                    u32::from_str_radix(&place[1..],8).unwrap()
-                }
-                else {
+                } else if place.starts_with("0") {
+                    u32::from_str_radix(&place[1..], 8).unwrap()
+                } else {
                     place.parse::<u32>().unwrap()
                 }
             };
-            sna.add_file(fname, address as usize).expect("Unable to add file");
+            sna.add_file(fname, address as usize)
+                .expect("Unable to add file");
         }
     }
-
-
 
     // Patch memory
     if matches.is_present("putData") {
         let data = matches.values_of("putData").unwrap().collect::<Vec<_>>();
 
-        for i in 0..(data.len()/2) {
-            let address = string_to_nb(data[i*2+0]);
-            let value = string_to_nb(data[i*2+1]);
+        for i in 0..(data.len() / 2) {
+            let address = string_to_nb(data[i * 2 + 0]);
+            let value = string_to_nb(data[i * 2 + 1]);
             assert!(value < 0x100);
 
             sna.set_memory(address, value as u8);
@@ -178,19 +175,20 @@ fn main() {
     // Set the tokens
     if matches.is_present("setToken") {
         let loads = matches.values_of("setToken").unwrap().collect::<Vec<_>>();
-        for i in 0..(loads.len()/2) {
-
+        for i in 0..(loads.len() / 2) {
             // Read the parameters from the command line
-            let token = loads[i*2+0];
+            let token = loads[i * 2 + 0];
             let (token, _index) = if token.contains(":") {
                 let elems = token.split(":").collect::<Vec<_>>();
-                (elems[0], Some(elems[1].parse::<usize>().expect("Unable to read indice")))
-            }
-            else {
+                (
+                    elems[0],
+                    Some(elems[1].parse::<usize>().expect("Unable to read indice")),
+                )
+            } else {
                 (token, None)
             };
             let value = {
-                let source =loads[i*2+1];
+                let source = loads[i * 2 + 1];
                 string_to_nb(source)
             };
 
@@ -198,13 +196,13 @@ fn main() {
             let token = SnapshotFlag::from_str(token).unwrap();
             sna.set_value(token, value as u16);
 
-
-            sna.log(format!("Token {:?} set at value {} (0x{:x})", token, value, value));
+            sna.log(format!(
+                "Token {:?} set at value {} (0x{:x})",
+                token, value, value
+            ));
         }
     }
 
-
     let fname = matches.value_of("OUTPUT").unwrap();
     sna.save_sna(&fname).expect("Unable to save the snapshot");
-
 }
