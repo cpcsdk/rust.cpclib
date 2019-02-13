@@ -476,6 +476,13 @@ impl Token {
                         data.replace(content);
                     }
                 }
+            },
+
+            // Rorg may embed some instructions that read files
+            Token::Rorg(_, ref mut listing) => {
+                for token in listing.iter_mut() {
+                    token.read_referenced_file(ctx)?;
+                }
             }
             _ => {}
         }
