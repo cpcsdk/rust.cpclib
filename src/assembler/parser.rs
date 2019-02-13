@@ -513,15 +513,48 @@ named!(
     )
 );
 
+
+const IF_CODE: u8 = 0;
+const IFNOT_CODE: u8 = 1;
+const IFDEF_CODE: u8 = 2;
+const IFNDEF_CODE: u8 = 3;
+
 /// Parse if expression.
 /// TODO finish the implementation in order to have ELSEIF and ELSE branches
 named!(
     pub parse_conditional<CompleteStr<'_>, Token>, do_parse!(
-        tag_no_case!("IF") >>
 
-        space1 >>
-        cond: expr >>
-        space0 >>
+        // Gest the kind of test to do
+        test_kind: alt!(
+            value!(IF_CODE, tag_no_case!("IF")) |
+            value!(IFNOT_CODE, tag_no_case!("IFNOT")) |
+            value!(IFDEF_CODE, tag_no_case!("IFDEF")) |
+            value!(IFNDEF_CODE, tag_no_case!("IFNDEF"))
+         ) >>
+
+        // Get the corresponding test
+        cond: delimited!(
+            space1, 
+            alt!(
+                cond_reduce!(
+                    test_kind == IF_CODE,
+                    map!(expr, |e|{TestKind::True(e)})
+                ) |
+                cond_reduce!(
+                    test_kind == IFNOT_CODE,
+                    map!(expr, |e|{TestKind::False(e)})
+                ) |
+                cond_reduce!(
+                    test_kind == IFDEF_CODE,
+                    map!(parse_label, |l|{TestKind::LabelExists(l)})
+                ) |
+                cond_reduce!(
+                    test_kind == IFNDEF_CODE,
+                    map!(parse_label, |l|{TestKind::LabelDoesNotExist(l)})
+                )
+            ), 
+            space0
+        ) >>
         
         alt!(eol | tag!(":")) >>
 
