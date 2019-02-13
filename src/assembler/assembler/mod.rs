@@ -684,19 +684,47 @@ impl Env {
     /// Manage a IF .. XXX ELSEIF YYY ELSE ZZZ structure
     fn visit_if(
         &mut self,
-        cases: &Vec<(Expr, Listing)>,
+        cases: &Vec<(TestKind, Listing)>,
         other: Option<&Listing>,
     ) -> Result<(), AssemblerError> {
         assert!(cases.len() > 0);
 
         // Test all the if cases until reaching one != 0
         for case in cases.iter() {
-            println!("{:?}", case);
-            /// TODO add a 3rd pass to manage this case
-            let value = self.resolve_expr_must_never_fail(&case.0)?;
-            if value != 0 {
-                self.visit_listing(&case.1)?;
-                return Ok(());
+            match case {
+                // Expression must be true
+                (TestKind::True(ref exp), ref listing) => {
+                    let value = self.resolve_expr_must_never_fail(exp)?;
+                    if value != 0 {
+                        self.visit_listing(listing)?;
+                        return Ok(());
+                    }
+                },
+
+                // Expression must be false
+                (TestKind::False(ref exp), ref listing) => {
+                    let value = self.resolve_expr_must_never_fail(exp)?;
+                    if value == 0 {
+                        self.visit_listing(listing)?;
+                        return Ok(());
+                    }
+                },
+
+                // Label must exist
+                (TestKind::LabelExists(ref label), ref listing) => {
+                    if self.symbols().contains_symbol(label) {
+                        self.visit_listing(listing)?;
+                        return Ok(());
+                    }
+                },
+
+                // Label must not exist
+                (TestKind::LabelDoesNotExist(ref label), ref listing) => {
+                    if !self.symbols().contains_symbol(label) {
+                        self.visit_listing(listing)?;
+                        return Ok(());
+                    }
+                }
             }
         }
 

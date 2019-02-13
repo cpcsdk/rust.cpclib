@@ -931,6 +931,32 @@ INC_H equ opcode(inc h)
         "
             .into(),
         ));
+
+
+        let code = CompleteStr(
+            "\t	ifndef ENABLE_CATART_DISPLAY
+		call crtc_display_catart_if_needed
+	endif
+    ",
+        );
+        let tokens = get_val(parse_z80_code(code));
+
+
+        let code = CompleteStr(
+            "\t	ifdef ENABLE_CATART_DISPLAY
+		call crtc_display_catart_if_needed
+	endif
+    ",
+        );
+        let tokens = get_val(parse_z80_code(code));
+
+        let code = CompleteStr(
+            "\t	ifnot ENABLE_CATART_DISPLAY
+		call crtc_display_catart_if_needed
+	endif
+    ",
+        );
+        let tokens = get_val(parse_z80_code(code));
     }
 
     #[test]
@@ -1124,6 +1150,10 @@ INC_H equ opcode(inc h)
 
         let code = "\tRORG 1\n\tdb 5\n\tREND";
         let tokens = get_val(parse_rorg(code.into()));
+
+ let code = "\tRORG 1\n\tdb 5\n\tREND";
+        let tokens = get_val(parse_rorg(code.into()));
+
     }
 
     #[test]

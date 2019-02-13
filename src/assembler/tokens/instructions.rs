@@ -159,6 +159,22 @@ pub enum SaveType {
     Dsk,
 }
 
+
+/// Encode the kind of test done in if/elif/else cases
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TestKind {
+    // Test succeed if it is an expression that returns True
+    True(Expr),
+    // Test succeed if it is an expression that returns False
+    False(Expr),
+    // Test succeed if it is an existing label
+    LabelExists(String),
+    // Test succeed if it is a missing label
+    LabelDoesNotExist(String)
+}
+
+
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     Label(String),
@@ -183,7 +199,7 @@ pub enum Token {
     Defw(Vec<Expr>),
     Equ(String, Expr),
     /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
-    If(Vec<(Expr, Listing)>, Option<Listing>),
+    If(Vec<(TestKind, Listing)>, Option<Listing>),
     /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
     Include(String, Option<Listing>),
     Incbin(
