@@ -73,21 +73,6 @@ pub struct DiscInformation {
 }
 
 impl DiscInformation {
-    pub fn creator_name(&self) -> &str {
-        &self.creator_name
-    }
-
-    pub fn number_of_tracks(&self) -> u8 {
-        self.number_of_tracks
-    }
-
-    pub fn number_of_sides(&self) -> u8 {
-        self.number_of_sides
-    }
-
-    pub fn tracks_size_table(&self) -> &[u8] {
-        &self.track_size_table
-    }
 
     fn creator_name_as_bytes(&self) -> [u8; 14] {
         let mut data = [0 as u8; 14];
@@ -332,6 +317,7 @@ impl TrackInformation {
         buffer.push(self.filler_byte);
 
         assert_eq!(buffer.len() - start_size, 0x18);
+        
         // Inject sectors information list
         self.sector_information_list.sectors.iter().for_each(|s| {
             s.sector_information_bloc.to_buffer(buffer);
@@ -348,7 +334,7 @@ impl TrackInformation {
 
         // Ensure the size is correct
         let added_bytes = (buffer.len() - start_size) as u16;
-        assert!(added_bytes <= self.track_size);
+        assert!(added_bytes <= self.track_size, format!("{} != {}", added_bytes, self.track_size));
         let missing_bytes = self.track_size - added_bytes;
         if missing_bytes != 0 {
             buffer.resize(buffer.len() + missing_bytes as usize, 0);

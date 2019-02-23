@@ -933,6 +933,27 @@ INC_H equ opcode(inc h)
         ));
 
 
+
+        let code = CompleteStr(
+            "\t	ifdef ENABLE_CATART_DISPLAY
+		call blabla
+	endif
+    ",
+        );
+        let tokens = get_val(parse_z80_code(code));
+
+        println!("{:?}", parse_label("crtc_display_catart_if_needed".into()));
+        println!("{:?}", parse_z80_code(" call crtc_display_catart_if_needed".into()));
+
+        let code = CompleteStr(
+            "\t	ifdef ENABLE_CATART_DISPLAY
+		call crtc_display_catart_if_needed
+	endif
+    ",
+        );
+        let tokens = get_val(parse_z80_code(code));
+
+
         let code = CompleteStr(
             "\t	ifndef ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
@@ -942,13 +963,6 @@ INC_H equ opcode(inc h)
         let tokens = get_val(parse_z80_code(code));
 
 
-        let code = CompleteStr(
-            "\t	ifdef ENABLE_CATART_DISPLAY
-		call crtc_display_catart_if_needed
-	endif
-    ",
-        );
-        let tokens = get_val(parse_z80_code(code));
 
         let code = CompleteStr(
             "\t	ifnot ENABLE_CATART_DISPLAY
