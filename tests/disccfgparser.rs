@@ -230,6 +230,10 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         println!("{:?}", &cfg);
         println!("{:?}", &cfg2);
         assert_eq!(cfg, cfg2);
+
+        let mut buffer = Vec::new();
+        dsk.to_buffer(&mut buffer);
+
     }
 
     #[test]
@@ -286,6 +290,45 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
     }
 
     #[test]
+    fn arkos_disc() {
+        let cfg = cpclib::disc::cfg::DiscConfig::from(include_str!("dsk/CreateDoubleSided_3_5i.cfg"));
+
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Side::SideA, 0)
+            .is_some());
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Side::SideA, 79)
+            .is_some());
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Side::SideA, 80)
+            .is_none());
+
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Side::SideB, 0)
+            .is_some());
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Side::SideB, 79)
+            .is_some());
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Side::SideB, 80)
+            .is_none());
+
+
+        for idx in cfg.track_idx_iterator() {
+            let _track = cfg
+                .track_information_for_track(*idx.0, idx.1)
+                .expect(&format!("Unable to get information for {:?}", idx));
+            println!("{:?}", idx);
+        }
+
+
+        let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
+
+        let mut buffer = Vec::new();
+        dsk.to_buffer(&mut buffer);
+    }
+
+    #[test]
     fn test_build() {
         let cfg = cpclib::disc::cfg::DiscConfig::from(SINGLE_SIDED);
         println!("{:?}", cfg);
@@ -310,10 +353,10 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
             let number_of_sectors = sectors_id.len() as u8;
             let track = dsk.get_track_information(3, track_nb).unwrap();
             println!("{:?}", track);
-            assert_eq!(track.number_of_sectors(), number_of_sectors);
+            assert_eq!(*track.number_of_sectors(), number_of_sectors);
             assert_eq!(track.sector_size_human_readable(), sector_size);
 
-            // Check taht the track contains the right number of sectors
+            // Check that the track contains the right number of sectors
             for sector_id in sectors_id.iter() {
                 assert!(track.sector(*sector_id).is_some())
             }
@@ -339,13 +382,13 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         let disc_info = dbg!(cpclib::disc::edsk::DiscInformation::from_buffer(
             &buffer[..256]
         ));
-        assert_eq!(disc_info.number_of_tracks(), 42);
-        assert_eq!(disc_info.tracks_size_table().len(), 42);
+        assert_eq!(*disc_info.number_of_tracks(), 42);
+        assert_eq!(disc_info.track_size_table().len(), 42);
 
         let track0 = dbg!(cpclib::disc::edsk::TrackInformation::from_buffer(
             &buffer[256..]
         ));
-        assert_eq!(track0.number_of_sectors(), 9);
+        assert_eq!(*track0.number_of_sectors(), 9);
 
         assert!(disc_info.track_length_at_idx(0) % 256 == 0);
 

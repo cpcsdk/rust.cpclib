@@ -517,7 +517,7 @@ named!(
 const IF_CODE: u8 = 0;
 const IFNOT_CODE: u8 = 1;
 const IFDEF_CODE: u8 = 2;
-const IFNDEF_CODE: u8 = 3;
+const IFNDEF_CODE: u8 = 4;
 
 /// Parse if expression.
 /// TODO finish the implementation in order to have ELSEIF and ELSE branches
@@ -526,10 +526,10 @@ named!(
 
         // Gest the kind of test to do
         test_kind: alt!(
-            value!(IF_CODE, tag_no_case!("IF")) |
             value!(IFNOT_CODE, tag_no_case!("IFNOT")) |
             value!(IFDEF_CODE, tag_no_case!("IFDEF")) |
-            value!(IFNDEF_CODE, tag_no_case!("IFNDEF"))
+            value!(IFNDEF_CODE, tag_no_case!("IFNDEF")) |
+            value!(IF_CODE, tag_no_case!("IF")) 
          ) >>
 
         // Get the corresponding test
@@ -550,7 +550,7 @@ named!(
                 ) |
                 cond_reduce!(
                     test_kind == IFNDEF_CODE,
-                    map!(parse_label, |l|{TestKind::LabelDoesNotExist(l)})
+                   map!(parse_label, |l|{TestKind::LabelDoesNotExist(l)})
                 )
             ), 
             space0
@@ -583,7 +583,7 @@ named!(
         (
             Token::If(
                 vec![(cond, code)],
-                None
+                r#else
             )
         )
     )    

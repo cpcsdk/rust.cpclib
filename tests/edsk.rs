@@ -5,7 +5,7 @@ mod tests {
         let track = dsk
             .get_track_information(cpclib::disc::edsk::Side::SideA, 0)
             .unwrap();
-        assert_eq!(track.number_of_sectors(), 9);
+        assert_eq!(*track.number_of_sectors(), 9);
 
         for (sector_idx, sum) in &[
             (0xc1, 21413),
