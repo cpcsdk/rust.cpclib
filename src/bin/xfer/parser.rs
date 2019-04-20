@@ -1,7 +1,7 @@
 use nom;
 use nom::types::CompleteStr;
-use nom::{alpha1, eof, preceded, space0, space1};
-use nom::{alphanumeric, multispace, space};
+use nom::{alpha1, space1};
+
 use std::str;
 
 #[derive(Debug)]

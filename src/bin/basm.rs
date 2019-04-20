@@ -1,12 +1,12 @@
 extern crate bitsets;
 
-use std::fmt;
+
 use std::fs::File;
 use std::io;
-use std::io::BufReader;
+
 use std::io::{Read, Write};
 use std::path::Path;
-use std::str::FromStr;
+
 
 use cpclib::assembler::assembler::Env;
 use cpclib::assembler::parser::*;
@@ -28,7 +28,7 @@ extern crate time;
 #[macro_use]
 extern crate failure;
 
-use failure::Error;
+
 
 #[derive(Debug, Fail)]
 enum BasmError {

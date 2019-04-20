@@ -32,7 +32,7 @@ pub struct BasicLine {
 }
 
 impl fmt::Display for BasicLine {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ", self.line_number)?;
         for token in self.tokens().iter() {
             write!(f, "{}", token)?;
@@ -120,7 +120,7 @@ pub struct BasicProgram {
 }
 
 impl fmt::Display for BasicProgram {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for line in self.lines.iter() {
             write!(f, "{}\n", line)?;
         }

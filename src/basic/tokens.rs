@@ -242,7 +242,7 @@ pub enum BasicTokenNoPrefix {
 }
 
 impl fmt::Display for BasicTokenNoPrefix {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let tag = match self {
             Self::Call => "CALL",
             Self::Print => "PRINT",
@@ -332,7 +332,7 @@ pub enum BasicTokenPrefixed {
 }
 
 impl fmt::Display for BasicTokenPrefixed {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let tag = match self {
             Self::Abs => "ABS",
             _ => unimplemented!("{}", self),
@@ -414,7 +414,7 @@ pub enum BasicToken {
 }
 
 impl fmt::Display for BasicToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BasicToken::SimpleToken(ref tok) => {
                 write!(f, "{}", tok.to_string())?;

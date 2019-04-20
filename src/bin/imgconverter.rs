@@ -11,8 +11,8 @@ use std::time::Duration;
 
 use cpclib::assembler::assembler::visit_tokens;
 use cpclib::assembler::parser::parse_z80_str;
-use cpclib::ga::{Palette, Pen};
-use cpclib::image::*;
+use cpclib::ga::{Palette};
+
 use cpclib::imageconverter::*;
 use cpclib::sna::*;
 
@@ -199,11 +199,11 @@ fn convert(matches: &ArgMatches) -> Result<(), String> {
 
     // Make the conversion before feeding sna or dsk
     let (palette, code) = match &conversion {
-        Output::CPCMemoryStandard(memory, pal) => {
+        Output::CPCMemoryStandard(_memory, pal) => {
             (pal, assemble(standard_display_code(output_mode)))
         }
 
-        Output::CPCMemoryOverscan(memory1, memory2, pal) => {
+        Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
             let code = assemble(fullscreen_display_code(output_mode, 96 / 2, &pal));
             (pal, code)
         }
