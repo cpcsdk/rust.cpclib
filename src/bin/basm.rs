@@ -34,10 +34,19 @@ use failure::Error;
 enum BasmError {
     #[fail(display = "IO error: {}", io)]
     Io { io: io::Error },
+
     #[fail(display = "Assembling error: {}", error)]
     AssemblerError { error: AssemblerError },
+
     #[fail(display = "Invalid Amsdos filename: {}", filename)]
     InvalidAmsdosFilename { filename: String },
+
+    #[fail(display = "{} is not a valid directory.", path)]
+    NotAValidDirectory{path: String},
+
+    #[fail(display = "{} is not a valid file.", file)]
+    NotAValidFile{file: String},
+
 }
 
 // XXX I do not understand why I have to do that !!!
@@ -68,6 +77,14 @@ fn parse(matches: &ArgMatches) -> Result<Listing, BasmError> {
     let mut context = ParserContext::default();
     context.set_current_filename(&filename);
     context.add_search_path_from_file(&filename);
+    if let Some(directories) = matches.values_of("INCLUDE_DIRECTORIES") {
+        for directory in directories {
+            if !Path::new(directory).is_dir() {
+                return Err(BasmError::NotAValidDirectory{path: directory.to_owned()});
+            }
+            context.add_search_path(directory);
+        }
+    }
 
     parse_str_with_context(&code, &context).map_err(|e| e.into())
 }
@@ -80,6 +97,13 @@ fn assemble(matches: &ArgMatches, listing: &Listing) -> Result<Env, BasmError> {
     options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
 
     // TODO add symbols if any
+    if let Some(files) = matches.values_of("LOAD_SYMBOLS") {
+        for file in files {
+            if !Path::new(file).is_file() {
+                return Err(BasmError::NotAValidFile{file: file.to_owned()})
+            }
+        }
+    }
 
     crate::assembler::visit_tokens_all_passes_with_options(&listing.listing(), &options)
         .map_err(|e| e.into())
@@ -179,14 +203,32 @@ fn main() {
 					)
 					.arg(
 						Arg::with_name("CASE_INSENSITIVE")
-							.help("Configure the assembler to be case insensitive")
+							.help("Configure the assembler to be case insensitive.")
 							.long("case-insensitive")
 							.short("i") 
 					)
+                    .arg(
+                        Arg::with_name("INCLUDE_DIRECTORIES")
+                            .help("Provide additional directories used to search files.")
+                            .long("include")
+                            .short("I")
+                            .takes_value(true)
+                            .multiple(true)
+                            .number_of_values(1)
+                    )
+                    .arg(
+                        Arg::with_name("LOAD_SYMBOLS")
+                            .help("Load symbols from the given file")
+                            .short("-l")
+                            .takes_value(true)
+                            .multiple(true)
+                            .number_of_values(1)
+                    )
 					.group(
 						ArgGroup::with_name("HEADER")
 							.args(&["BINARY_HEADER", "BASIC_HEADER"])
 					)
 					.get_matches();
+                    
     process(&matches).expect("Error while assembling file.");
 }

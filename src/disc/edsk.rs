@@ -201,13 +201,6 @@ impl TrackInformation {
     #[deprecated(
         note = "Note sure it should be used as each sector store this information and different sizes are possible"
     )]
-    pub fn sector_size(&self) -> u8 {
-        self.sector_size
-    }
-
-    #[deprecated(
-        note = "Note sure it should be used as each sector store this information and different sizes are possible"
-    )]
     pub fn sector_size_human_readable(&self) -> u16 {
         convert_fdc_sector_size_to_real_sector_size(self.sector_size)
     }

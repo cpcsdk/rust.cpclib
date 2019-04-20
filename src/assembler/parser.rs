@@ -15,6 +15,7 @@ use std::iter;
 pub mod error_code {
     pub const ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION: u32 = 128;
     pub const INVALID_ARGUMENT: u32 = 129;
+    pub const UNABLE_TO_PARSE_INNER_CONTENT: u32 = 130;
 }
 
 /// Context information that can guide the parser
@@ -62,7 +63,8 @@ impl ParserContext {
         } else {
             // loop over all possibilities
             for search in self.search_path.iter() {
-                let current_path = search.join(fname.clone());
+                let current_path = dbg!(search.join(fname.clone()));
+
                 if current_path.is_file() {
                     return Some(current_path);
                 }
@@ -163,6 +165,7 @@ named!(
             many1!(eol) => {|_|{Vec::new()}} |
             parse_empty_line |
             parse_repeat => {|repeat| vec![repeat]} |
+            parse_macro => {|m| vec![m]} |
             parse_basic => {|basic| vec![basic]}|
             parse_rorg => {|rorg| vec![rorg]}|
             preceded!(space1, parse_conditional) => {|cond| vec![cond]}|
@@ -182,7 +185,10 @@ named!(
         exp: expr >>
         space0 >>
         eol >>
-        inner: opt!(parse_z80_code) >> 
+        inner: opt!(add_return_error!(
+            ErrorKind::Custom(error_code::UNABLE_TO_PARSE_INNER_CONTENT),
+            parse_z80_code
+        )) >> 
         multispace >>
         alt!(
             tag_no_case!("DEPHASE") |
@@ -196,6 +202,28 @@ named!(
                 else {
                     Vec::new().into()
                 }
+            )
+        )
+    )
+);
+
+named!(
+    pub parse_macro<CompleteStr<'_>, Token>, do_parse!(
+        opt!(multispace) >>
+        tag_no_case!("MACRO") >>
+        space1 >>
+        name: parse_label >> // TODO use a specific function for that
+        // TODO treat args
+        multispace >>
+        content: many_till!(
+            take!(1),
+            tag_no_case!("ENDM")
+        ) >>
+        (
+            Token::Macro(
+                name,
+                Vec::new(),
+                content.0.iter().map(|s|->String{s.to_string()}).collect::<String>()
             )
         )
     )
@@ -558,7 +586,10 @@ named!(
         
         alt!(eol | tag!(":")) >>
 
-        code: parse_z80_code >>
+        code: return_error!(
+            ErrorKind::Custom(error_code::UNABLE_TO_PARSE_INNER_CONTENT),
+            parse_z80_code
+        ) >>
 
 
         r#else: opt!(
