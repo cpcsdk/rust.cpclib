@@ -80,7 +80,7 @@ impl Default for AssemblingOptions {
     fn default() -> AssemblingOptions {
         AssemblingOptions {
             case_sensitive: true,
-            symbols: Default::default(),
+            symbols: Default::default()
         }
     }
 }
@@ -122,6 +122,8 @@ impl AssemblingOptions {
     pub fn case_sensitive(&self) -> bool {
         self.case_sensitive
     }
+
+
 }
 
 /// Assemble a piece of code and returns the associated list of bytes

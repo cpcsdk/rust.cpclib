@@ -971,6 +971,16 @@ INC_H equ opcode(inc h)
     ",
         );
         let tokens = get_val(parse_z80_code(code));
+
+        let code = CompleteStr(
+            "\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\n",
+        );
+        let tokens = get_val(parse_z80_code(code));
+
+        let code = CompleteStr(
+            "STACK_SIZE equ 20 ; XXX Very small stack; hope 10 calls is enough\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\nSTACK_END",
+        );
+        let tokens = get_val(parse_z80_code(code));
     }
 
     #[test]
@@ -1280,5 +1290,37 @@ FDC_GetST3
     "
             .into(),
         ));
+    }
+
+
+    #[test]
+    fn r#macro() {
+        get_val(parse_macro(
+            "macro MYMACRO
+            endm".into()
+        ));
+
+        get_val(parse_macro(
+        "    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
+        ld bc, 0x7fc1
+        out (c), c
+        ld (go_back_main_memory_from_extra_memory+1), bc
+    endm"
+        .into()));
+
+
+        get_val(parse_z80_code(
+            "macro MYMACRO
+            endm".into()
+        ));
+
+        get_val(parse_z80_code(
+        "    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
+        ld bc, 0x7fc1
+        out (c), c
+        ld (go_back_main_memory_from_extra_memory+1), bc
+    endm"
+        .into()));
+
     }
 }

@@ -216,6 +216,9 @@ impl From<String> for Ink {
             "BRIGHTYELLOW" => Ink { value: 24 },
             "PASTELYELLOW" => Ink { value: 25 },
             "BRIGHTWHITE" => Ink { value: 26 },
+
+            "GRAY" | "GREY" => "WHITE".into(),
+
             _ => panic!("{} color does not exist", item),
         }
     }
