@@ -522,7 +522,7 @@ impl Palette {
 
     /// Add the inks if not present in empty slots of the palette as soon as it is possible. Returns the number of inks added a,d the number of inks impossible to add because of the lack of space.
     pub fn add_novel_inks_except_in_border(&mut self, inks: &[Ink]) -> (usize, usize) {
-        let mut counter_added = 0;
+        let counter_added = 0;
         let mut counter_impossible = 0;
 
         for ink in inks {

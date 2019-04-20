@@ -11,8 +11,8 @@ use std::fmt;
 
 use delegate::delegate;
 use either::*;
-use failure::Error;
-use itertools::Itertools;
+
+
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -261,7 +261,7 @@ impl SymbolsTable {
             .keys()
             .map(move |symbol2| (strsim::levenshtein(symbol2, symbol.as_ref()), symbol2))
             .min()
-            .map(|(distance, symbol2)| symbol2.to_owned())
+            .map(|(_distance, symbol2)| symbol2.to_owned())
     }
 }
 
@@ -756,7 +756,7 @@ impl Env {
     }
 
     /// Continue to assemble at the right place, but change the value of $ to the specified one
-    pub fn visit_rorg(&mut self, exp: &Expr, listing: &Listing) -> Result<(), AssemblerError> {
+    pub fn visit_rorg(&mut self, _exp: &Expr, listing: &Listing) -> Result<(), AssemblerError> {
         let backup = self.codeadr;
         self.visit_listing(listing)?;
         self.codeadr = backup;
@@ -1444,7 +1444,7 @@ impl Env {
             }
 
             DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                let mut val = self.resolve_expr_may_fail_in_first_pass(exp)? as i32;
+                let val = self.resolve_expr_may_fail_in_first_pass(exp)? as i32;
                 bytes.push(indexed_register16_to_code(reg));
                 add_byte(&mut bytes, 0xcb);
                 bytes.push((val & 0xff) as _);
@@ -1489,7 +1489,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             }
 
             &DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                let mut val = env.resolve_expr_may_fail_in_first_pass(exp)?;
+                let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
 
                 add_index_register_code(&mut bytes, reg);
                 add_byte(&mut bytes, 0b01000110 | (dst << 3));
@@ -1502,7 +1502,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
             &DataAccess::Memory(ref expr) => {
                 // dst is A
-                let mut val = env.resolve_expr_may_fail_in_first_pass(expr)?;
+                let val = env.resolve_expr_may_fail_in_first_pass(expr)?;
                 add_byte(&mut bytes, 0x3a);
                 add_word(&mut bytes, val as _);
             }
@@ -2049,7 +2049,7 @@ fn flag_test_to_code(flag: &FlagTest) -> u8 {
 #[cfg(test)]
 mod test {
     use crate::assembler::assembler::*;
-    use crate::assembler::tokens::*;
+    
 
     #[test]
     pub fn test_pop() {

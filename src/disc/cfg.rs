@@ -2,7 +2,7 @@
 use nom;
 use nom::types::CompleteStr;
 use nom::{eol, hex_u32, space0, space1};
-use std::str::FromStr;
+
 
 use itertools;
 use itertools::Itertools;
@@ -465,13 +465,13 @@ mod tests {
     fn parse_list_value() {
         let res = list_of_values("0x10 ".into());
         assert!(res.is_ok());
-        let (next, res) = res.unwrap();
+        let (_next, res) = res.unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0], 0x10);
 
         let res = list_of_values("10,11 ".into());
         assert!(res.is_ok());
-        let (next, res) = res.unwrap();
+        let (_next, res) = res.unwrap();
         assert_eq!(res.len(), 2);
         assert_eq!(res[0], 10);
         assert_eq!(res[1], 11);

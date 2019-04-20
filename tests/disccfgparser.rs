@@ -220,7 +220,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 
     #[test]
     fn dsk_to_cfg() {
-        use cpclib::disc::cfg::*;
+        
 
         let cfg = cpclib::disc::cfg::DiscConfig::from(SINGLE_SIDED);
 

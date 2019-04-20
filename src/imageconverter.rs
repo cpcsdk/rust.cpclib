@@ -354,16 +354,16 @@ impl Debug for Output {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
             &Output::LinearEncodedSprite {
-                ref data,
-                ref palette,
-                ref byte_width,
-                ref height,
+                data: _,
+                palette: _,
+                byte_width: _,
+                height: _,
             } => writeln!(fmt, "LinearEncodedSprite"),
             &Output::LinearEncodedChuncky {
-                ref data,
-                ref palette,
-                ref byte_width,
-                ref height,
+                data: _,
+                palette: _,
+                byte_width: _,
+                height: _,
             } => writeln!(fmt, "LinearEncodedChuncky"),
             &Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
             &Output::CPCMemoryOverscan(_, _, _) => writeln!(fmt, "CPCMemoryStandard (32kb)"),

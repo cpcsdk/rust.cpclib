@@ -5,8 +5,8 @@ extern crate matches;
 mod tests {
     use cpclib::assembler::parser::*;
     use cpclib::assembler::tokens::*;
-    use nom::types::{CompleteByteSlice, CompleteStr};
-    use nom::{line_ending, space, ErrorKind, IResult};
+    use nom::types::{CompleteStr};
+    use nom::{IResult};
 
     fn check_mnemonic(code: &str, mnemonic: Mnemonic) -> bool {
         match parse_org(CompleteStr(code)) {
@@ -872,7 +872,7 @@ INC_H equ opcode(inc h)
     ENDIF",
         );
         println!("{:?}", parse_conditional(code));
-        let tokens = get_val(parse_conditional(code));
+        let _tokens = get_val(parse_conditional(code));
 
         let code = CompleteStr(
             "IF expression
@@ -880,14 +880,14 @@ INC_H equ opcode(inc h)
     ENDIF",
         );
         println!("{:?}", parse_conditional(code));
-        let tokens = get_val(parse_conditional(code));
+        let _tokens = get_val(parse_conditional(code));
 
         let code = CompleteStr(
             "IF expression : ld a, b : ld a, b : ld a, b
     ENDIF",
         );
         println!("{:?}", parse_conditional(code));
-        let tokens = get_val(parse_conditional(code));
+        let _tokens = get_val(parse_conditional(code));
 
         // TODO modify the parser to handle this case
         /*
@@ -905,7 +905,7 @@ INC_H equ opcode(inc h)
     ENDIF",
         );
 
-        let tokens = get_val(parse_conditional(code));
+        let _tokens = get_val(parse_conditional(code));
 
         let code = CompleteStr(
             "\tIF expression
@@ -915,7 +915,7 @@ INC_H equ opcode(inc h)
         ld a, b
     ENDIF",
         );
-        let tokens = get_val(parse_z80_code(code));
+        let _tokens = get_val(parse_z80_code(code));
 
         let code = CompleteStr(
             "\t	if ENABLE_CATART_DISPLAY
@@ -923,7 +923,7 @@ INC_H equ opcode(inc h)
 	endif
     ",
         );
-        let tokens = get_val(parse_z80_code(code));
+        let _tokens = get_val(parse_z80_code(code));
 
         get_val(parse_z80_code(
             "
@@ -940,7 +940,7 @@ INC_H equ opcode(inc h)
 	endif
     ",
         );
-        let tokens = get_val(parse_z80_code(code));
+        let _tokens = get_val(parse_z80_code(code));
 
         println!("{:?}", parse_label("crtc_display_catart_if_needed".into()));
         println!("{:?}", parse_z80_code(" call crtc_display_catart_if_needed".into()));
@@ -951,7 +951,7 @@ INC_H equ opcode(inc h)
 	endif
     ",
         );
-        let tokens = get_val(parse_z80_code(code));
+        let _tokens = get_val(parse_z80_code(code));
 
 
         let code = CompleteStr(
@@ -960,7 +960,7 @@ INC_H equ opcode(inc h)
 	endif
     ",
         );
-        let tokens = get_val(parse_z80_code(code));
+        let _tokens = get_val(parse_z80_code(code));
 
 
 
@@ -970,17 +970,17 @@ INC_H equ opcode(inc h)
 	endif
     ",
         );
-        let tokens = get_val(parse_z80_code(code));
+        let _tokens = get_val(parse_z80_code(code));
 
         let code = CompleteStr(
             "\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\n",
         );
-        let tokens = get_val(parse_z80_code(code));
+        let _tokens = get_val(parse_z80_code(code));
 
         let code = CompleteStr(
             "STACK_SIZE equ 20 ; XXX Very small stack; hope 10 calls is enough\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\nSTACK_END",
         );
-        let tokens = get_val(parse_z80_code(code));
+        let _tokens = get_val(parse_z80_code(code));
     }
 
     #[test]
@@ -1170,35 +1170,35 @@ INC_H equ opcode(inc h)
     #[test]
     fn rorg() {
         let code = "\tRORG 1\n\tREND";
-        let tokens = get_val(parse_rorg(code.into()));
+        let _tokens = get_val(parse_rorg(code.into()));
 
         let code = "\tRORG 1\n\tdb 5\n\tREND";
-        let tokens = get_val(parse_rorg(code.into()));
+        let _tokens = get_val(parse_rorg(code.into()));
 
  let code = "\tRORG 1\n\tdb 5\n\tREND";
-        let tokens = get_val(parse_rorg(code.into()));
+        let _tokens = get_val(parse_rorg(code.into()));
 
     }
 
     #[test]
     fn ld() {
         let code = "LD HL, 0";
-        let tokens = get_val(parse_ld(code.into()));
+        let _tokens = get_val(parse_ld(code.into()));
 
         let code = "LD HL, label";
-        let tokens = get_val(parse_ld(code.into()));
+        let _tokens = get_val(parse_ld(code.into()));
 
         let code = "LD HL, label_with_underscore";
-        let tokens = get_val(parse_ld(code.into()));
+        let _tokens = get_val(parse_ld(code.into()));
 
         let code = "\tld hl, label_with_underscore";
-        let tokens = get_val(parse_z80_code(code.into()));
+        let _tokens = get_val(parse_z80_code(code.into()));
 
         let code = "\n\tld hl, label_with_underscore";
-        let tokens = get_val(parse_z80_code(code.into()));
+        let _tokens = get_val(parse_z80_code(code.into()));
 
         let code = "ld i,a";
-        let tokens = get_val(parse_ld(code.into()));
+        let _tokens = get_val(parse_ld(code.into()));
     }
 
     #[test]

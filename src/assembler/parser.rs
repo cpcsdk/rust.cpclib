@@ -5,7 +5,7 @@ use nom::{
 };
 use nom::{InputIter, InputLength};
 
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 
 use crate::assembler::tokens::*;
 use crate::assembler::AssemblerError;
@@ -1297,7 +1297,7 @@ named!(
             >> space0
             >> reg: parse_indexregister16
             >> space0
-            >> op: alt_complete!(value!(Oper::Add, tag!("+")) | value!(Oper::Sub, tag!("-")))
+            >> _op: alt_complete!(value!(Oper::Add, tag!("+")) | value!(Oper::Sub, tag!("-")))
             >> space0
             >> expr: expr
             >> space0

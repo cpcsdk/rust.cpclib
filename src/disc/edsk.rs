@@ -684,7 +684,7 @@ impl TrackInformationList {
 
     fn to_buffer(&self, buffer: &mut Vec<u8>) {
         for track in self.list.iter() {
-            let added_bytes = track.to_buffer(buffer);
+            let _added_bytes = track.to_buffer(buffer);
         }
     }
 
@@ -770,7 +770,7 @@ impl ExtendedDsk {
         let mut pos = (side, track, sector);
         let mut consummed = 0;
         while consummed < buffer.len() {
-            let mut current_sector = self
+            let current_sector = self
                 .sector_mut(pos.0.clone(), pos.1.clone(), pos.2.clone())
                 .ok_or("Sector not found".to_owned())?;
 
@@ -941,7 +941,7 @@ impl ExtendedDsk {
     }
 
     /// Return the smallest sector id over all tracks
-    pub fn min_sector<S: Into<Side>>(&self, size: S) -> u8 {
+    pub fn min_sector<S: Into<Side>>(&self, _size: S) -> u8 {
         self.tracks().iter().map(|t| t.min_sector()).min().unwrap()
     }
 }
