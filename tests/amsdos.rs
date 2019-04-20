@@ -95,7 +95,7 @@ mod tests {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 66, 67, 10,
         ];
-        let header = &result[0..128];
+        let _header = &result[0..128];
 
         let filename = AmsdosFileName::new_incorrect_case(0, "test", "bin").unwrap();
         let file =

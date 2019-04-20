@@ -2,7 +2,7 @@ pub mod parser;
 pub mod tokens;
 
 use parser::parse_basic_program;
-use std::collections::BTreeMap;
+
 use std::fmt;
 use tokens::BasicToken;
 
@@ -130,7 +130,7 @@ impl fmt::Display for BasicProgram {
 
 impl BasicProgram {
     /// Create the program from a list of lines
-    pub fn new(mut lines: Vec<BasicLine>) -> BasicProgram {
+    pub fn new(lines: Vec<BasicLine>) -> BasicProgram {
         BasicProgram { lines }
     }
 
@@ -190,7 +190,7 @@ impl BasicProgram {
                     None
                 }
             }
-            Err(e) => None,
+            Err(_e) => None,
             _ => unreachable!(),
         }
     }
@@ -337,7 +337,7 @@ mod test {
     #[test]
     fn indices() {
         let code = "10 CALL &1234\n20 CALL &1234";
-        let mut prog = BasicProgram::parse(code).unwrap();
+        let prog = BasicProgram::parse(code).unwrap();
 
         assert_eq!(
             Ok(BasicProgramLineIdx::Index(0)),

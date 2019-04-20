@@ -1,8 +1,8 @@
 use crate::disc::edsk::ExtendedDsk;
 
-use arrayref;
+
 use bitfield::Bit;
-use slice_of_array::prelude::*;
+
 
 use std::fs::File;
 use std::io::Read;
@@ -567,7 +567,7 @@ impl AmsdosEntries {
     /// Bloc used in erased files are returned (so they may be broken)
     pub fn available_blocs(&self) -> Vec<BlocIdx> {
         // first 2 blocs are not available if we trust idsk. So  Ido the same
-        let mut set = (2..=255)
+        let set = (2..=255)
             .map(|b| BlocIdx::from(b))
             .filter(|b| b.is_valid()) // TODO I'm pretty sure there is womething wrong there with the erased value
             .collect::<std::collections::BTreeSet<BlocIdx>>();
@@ -643,7 +643,7 @@ impl AmsdosManager {
 
     /// Format the disc. Currently it only modifies the catalog
     pub fn format(&mut self) {
-        let mut catalog = self.catalog();
+        let _catalog = self.catalog();
         unimplemented!();
     }
 
@@ -815,7 +815,7 @@ impl AmsdosManager {
         } else if data.len() > size {
             unreachable!()
         } else {
-            let missing = size - data.len();
+            let _missing = size - data.len();
             let mut data = data.to_vec();
             data.resize(size, 0);
             data
@@ -837,9 +837,9 @@ impl AmsdosManager {
             0
         }; // XXX why ?
 
-        let mut sector = self.disc.sector_mut(self.side, track, sector_id).unwrap();
+        let sector = self.disc.sector_mut(self.side, track, sector_id).unwrap();
         let idx_in_sector: usize = ((entry.idx & 15) << 5) as usize;
-        let mut bytes =
+        let bytes =
             &mut (sector.values_mut()[idx_in_sector..(idx_in_sector + AmsdosEntry::len())]);
 
         bytes.copy_from_slice(entry.as_bytes().as_ref());
@@ -908,14 +908,14 @@ impl AmsdosManager {
         let access_info = self.bloc_access_information(bloc_idx);
 
         // Copy in first sector
-        let mut sector = self
+        let sector = self
             .disc
             .sector_mut(self.side, access_info.track1, access_info.sector1_id)
             .unwrap();
         sector.set_values(&content[0..DATA_SECTOR_SIZE]).unwrap();
 
         // Copy in second sector
-        let mut sector = self
+        let sector = self
             .disc
             .sector_mut(self.side, access_info.track2, access_info.sector2_id)
             .unwrap();

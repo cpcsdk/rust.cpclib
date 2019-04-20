@@ -4,14 +4,14 @@ mod tests {
 
     #[test]
     fn test_empty() {
-        let mut p = Palette::empty();
+        let p = Palette::empty();
         assert_eq!(p.pens().len(), 0);
         assert!(!p.contains_border());
     }
 
     #[test]
     fn test_default() {
-        let mut p = Palette::default();
+        let p = Palette::default();
         assert_eq!(p.pens().len(), 16);
         assert_eq!(p.pens_with_border().len(), 17);
         assert!(p.contains_border());
@@ -21,7 +21,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let mut p = Palette::new();
+        let p = Palette::new();
         assert_eq!(p.pens().len(), 16);
         assert_eq!(p.pens_with_border().len(), 17);
         assert!(p.contains_border());

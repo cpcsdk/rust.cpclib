@@ -365,11 +365,11 @@ impl BasicValue {
         BasicValue::Integer((word % 256) as u8, (word / 256) as u8)
     }
 
-    pub fn new_string(value: &str) -> BasicValue {
+    pub fn new_string(_value: &str) -> BasicValue {
         unimplemented!()
     }
 
-    pub fn new_float(value: i32) -> BasicValue {
+    pub fn new_float(_value: i32) -> BasicValue {
         unimplemented!()
     }
 
@@ -455,7 +455,7 @@ impl BasicToken {
                 tok.value(),
             ],
 
-            BasicToken::Rsx(ref name) => {
+            BasicToken::Rsx(ref _name) => {
                 let encoded_name = self.rsx_encoded_name().unwrap();
                 let mut data = vec![BasicTokenNoPrefix::Pipe.value(), encoded_name.len() as u8];
                 data.extend_from_slice(&encoded_name);

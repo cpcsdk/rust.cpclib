@@ -12,7 +12,7 @@ use crate::assembler::tokens::Listing;
 use crate::assembler::AssemblerError;
 
 use either::*;
-use failure::ResultExt;
+
 use std::fs::File;
 use std::io::Read;
 
@@ -428,14 +428,14 @@ impl Token {
         &self,
         sym: &SymbolsTableCaseDependent,
     ) -> Option<Result<Vec<&Token>, AssemblerError>> {
-        if let Token::Repeat(ref expr, ref tokens, ref counter_label) = self {
+        if let Token::Repeat(ref expr, ref tokens, ref _counter_label) = self {
             let count: Result<i32, AssemblerError> = expr.resolve(sym);
             if count.is_err() {
                 return Some(Err(count.err().unwrap()));
             } else {
                 let count = count.unwrap();
                 let mut res = Vec::with_capacity(count as usize * tokens.len());
-                for i in 0..count {
+                for _i in 0..count {
                     // TODO add a specific token to control the loop counter (and change the return type)
                     for t in tokens.iter() {
                         res.push(t);
@@ -460,7 +460,7 @@ impl Token {
                         });
                     }
                     Some(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|e| AssemblerError::IOError {
+                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
                             msg: format!("Unable to open {:?}", fname),
                         })?;
                         let mut content = String::new();
@@ -483,7 +483,7 @@ impl Token {
                         });
                     }
                     Some(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|e| AssemblerError::IOError {
+                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
                             msg: format!("Unable to open {:?}", fname),
                         })?;
                         let mut content = Vec::new();
@@ -519,7 +519,7 @@ impl Token {
         &self,
         table: &mut SymbolsTableCaseDependent,
     ) -> Result<Bytes, AssemblerError> {
-        let mut env = &mut crate::assembler::assembler::Env::with_table_case_dependent(table);
+        let env = &mut crate::assembler::assembler::Env::with_table_case_dependent(table);
         match self {
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => assemble_opcode(
                 mnemonic, arg1, arg2, env, // Modification to the environment are lost

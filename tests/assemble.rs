@@ -4,7 +4,7 @@ extern crate matches;
 #[cfg(test)]
 mod tests {
     use cpclib::assembler::assembler::*;
-    use cpclib::assembler::parser::*;
+    
     use cpclib::assembler::tokens::Listing;
     use cpclib::assembler::tokens::*;
 
