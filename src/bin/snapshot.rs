@@ -1,17 +1,17 @@
 extern crate bitsets;
 
-use std::fmt;
-use std::fs::File;
-use std::io;
+
+
+
 use std::io::prelude::*;
-use std::io::BufReader;
+
 use std::path::Path;
 use std::str::FromStr;
 
 use cpclib::sna::*;
 
 extern crate clap;
-use clap::{App, Arg, SubCommand};
+use clap::{App, Arg};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));

@@ -40,7 +40,7 @@ pub struct AmsdosFileName {
 }
 
 impl std::fmt::Debug for AmsdosFileName {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}.{}", self.user(), self.name(), self.extension())
     }
 }
@@ -273,7 +273,7 @@ impl From<u8> for AmsdosFileType {
 }
 
 impl std::fmt::Debug for AmsdosFileType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let repr = match self {
             AmsdosFileType::Basic => "Basic",
             AmsdosFileType::Protected => "Protected",
@@ -372,7 +372,7 @@ pub struct AmsdosEntry {
 }
 
 impl std::fmt::Display for AmsdosEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let fname = self.amsdos_filename().filename_with_user();
         let size = self.used_space();
 
@@ -485,7 +485,7 @@ pub struct AmsdosEntries {
 }
 
 impl std::fmt::Debug for AmsdosEntries {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for entry in self.used_entries() {
             write!(f, "{:?}", entry)?;
         }
@@ -966,7 +966,7 @@ pub struct AmsdosHeader {
 }
 
 impl std::fmt::Debug for AmsdosHeader {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "File: {:?}", self.amsdos_filename())?;
         writeln!(f, "Type: {:?}", self.file_type())?;
         writeln!(f, "Size 0x{:x}", self.file_length())?;

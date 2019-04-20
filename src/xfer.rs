@@ -3,14 +3,14 @@ extern crate path_absolutize;
 use curl::easy::{Easy, Form};
 use curl::Error;
 use path_absolutize::*;
-use std::borrow::Borrow;
-use std::borrow::BorrowMut;
-use std::env;
+
+
+
 use std::fs;
-use std::fs::File;
+
 use std::io::prelude::*;
 use std::path::Path;
-use std::sync::Arc;
+
 
 extern crate custom_error;
 use custom_error::custom_error;

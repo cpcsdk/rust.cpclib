@@ -177,7 +177,7 @@ fn main() -> std::io::Result<()> {
             }
 
             for idx in 0..4 {
-                let mut sector = dsk.sector_mut(0, 0, idx + 0xc1).expect("Wrong format");
+                let sector = dsk.sector_mut(0, 0, idx + 0xc1).expect("Wrong format");
                 let idx = idx as usize;
                 sector.set_values(&bytes[idx * 512..(idx + 1) * 512]);
             }
@@ -230,7 +230,7 @@ fn main() -> std::io::Result<()> {
         let mut track = u8::from_str(sub.value_of("TRACK").unwrap()).expect("Wrong track format");
         let mut sector = u8::from_str(sub.value_of("SECTOR").unwrap()).expect("Wrong track format");
         let mut side = u8::from_str(sub.value_of("SIDE").unwrap()).expect("Wrong track format");
-        let export = sub.value_of("Z80_EXPORT").unwrap();
+        let _export = sub.value_of("Z80_EXPORT").unwrap();
 
         let mut dsk =
             ExtendedDsk::open(dsk_fname).expect(&format!("Unable to open the file {}", dsk_fname));
@@ -246,7 +246,7 @@ fn main() -> std::io::Result<()> {
                 .add_file_sequentially(side.clone(), track.clone(), sector.clone(), &content)
                 .expect(&format!("Unable to add {}", file));
 
-            let mut base_label = Path::new(file)
+            let base_label = Path::new(file)
                 .file_name()
                 .unwrap()
                 .to_str()

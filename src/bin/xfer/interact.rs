@@ -1,12 +1,12 @@
 use cpclib::xfer::CpcXfer;
 extern crate rustyline;
 
-use rustyline::completion::{extract_word, Completer, FilenameCompleter, Pair};
+
 use rustyline::error::ReadlineError;
-use rustyline::highlight::Highlighter;
-use rustyline::hint::Hinter;
+
+
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, Helper, KeyPress};
-use std::borrow::Cow::{self, Borrowed, Owned};
+
 
 use crate::parser::{parse_command, XferCommand};
 

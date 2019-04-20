@@ -60,7 +60,7 @@ enum AssemblingPass {
     Finished,
 }
 impl fmt::Display for AssemblingPass {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let content = match self {
             AssemblingPass::Uninitialized => "Uninitialized",
             AssemblingPass::FirstPass => "1",
@@ -398,7 +398,7 @@ pub struct Env {
     symbols: SymbolsTableCaseDependent,
 }
 impl fmt::Debug for Env {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "Env{{ pass: {:?}, symbols {:?} }}",
