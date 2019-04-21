@@ -88,12 +88,40 @@ fn main() -> std::io::Result<()> {
         let user = matches.value_of("USER").map_or(0, string_to_nb) as u8;
         let (filename, extension) = {
             let complete_filename = matches.value_of("INPUT").unwrap();
+        
             let parts = complete_filename.split('.').collect::<Vec<_>>();
-            match parts.len() {
-                1 => (parts[0], ""),
-                2 => (parts[0], parts[1]),
-                _ => unreachable!(),
-            }
+            let (filename, extension) = match parts.len() {
+                1 => (
+                    parts[0].to_owned(),
+                    "".to_owned()
+                ),
+                2 => (
+                    parts[0].to_owned(),
+                    parts[1].to_owned()
+                ),
+                n => (
+                    eprintln!("[Warning] Filename contains several `.`. They have been all removed.")
+                    parts[..parts.len()-1].join("_").to_owned(),
+                    parts[parts.len()-1].to_owned()
+                )
+            };
+            
+            let filename = if filename.len() > 8 {
+                eprintln!("[Warning] Filename is too large and has been cropped. If it is not the expected behavior provide a file with the right filename");
+                filename[..8].to_owned()
+                
+            } else {
+                filename
+            };
+
+            let extension = if extension.len() > 3 {
+                eprintln!("[Warning] Extension is too large and has been cropped. If it is not the expected behavior provide a file with the right extension");
+                extension[..3].to_owned()
+            } else {
+                extension
+            };
+
+            (filename, extension)
         };
 
         AmsdosFileName::new_correct_case(user, filename, extension)

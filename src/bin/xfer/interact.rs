@@ -76,8 +76,8 @@ pub fn start(xfer: CpcXfer) {
         let readline = rl.readline(&prompt);
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_ref());
                 treat_line(&xfer, &line);
+                rl.add_history_entry(line);
             }
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
