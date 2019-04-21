@@ -168,16 +168,19 @@ impl AmsdosFileName {
             || char == ' ' as u8 // by definition ' ' is already used to fill space
     }
 
-    // Build a AmsdosFileName ensurinf the case is correct
-    pub fn new_correct_case(
+    // Build a AmsdosFileName ensuring the case is correct
+    pub fn new_correct_case<S1, S2>(
         user: u8,
-        filename: &str,
-        extension: &str,
-    ) -> Result<AmsdosFileName, String> {
+        filename: S1,
+        extension: S2,
+    ) -> Result<AmsdosFileName, String> 
+    where 
+        S1: AsRef<str>, 
+        S2: AsRef<str> {
         Self::new_incorrect_case(
             user,
-            &filename.to_ascii_uppercase(),
-            &extension.to_ascii_uppercase(),
+            &filename.as_ref().to_ascii_uppercase(),
+            &extension.as_ref().to_ascii_uppercase(),
         )
     }
 

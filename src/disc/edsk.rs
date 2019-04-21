@@ -284,41 +284,78 @@ impl TrackInformation {
         track_info
     }
 
+    /// http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format#TRACK_INFORMATION_BLOCK_2
+    /// 
+    /// offset 	description 	bytes
+    /// 00 - 0b 	"Track-Info\r\n" 	12
+    /// 0c - 0f 	unused 	4
+    /// 10 	track number 	1
+    /// 11 	side number 	1
+    /// 12 - 13 	unused 	2
+    /// 14 	sector size 	1
+    /// 15 	number of sectors 	1
+    /// 16 	GAP#3 length 	1
+    /// 17 	filler byte 	1
+    /// 18 - xx 	Sector Information List 	xx
+    /// 
+    /// Extensions
+    /// offset 	description 	bytes
+    /// 12 	Data rate. (See note 1 and note 3) 	1
+    /// 13 	Recording mode. (See note 2 and note 3) 	1 
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
         let start_size = buffer.len();
 
-        // low byte MUST be null
+        // low byte MUST be null XXX I'm not pretty sure of that
         assert_eq!(start_size % 256, 0);
 
+        // 00 - 0b 	"Track-Info\r\n" 	12
         buffer.extend_from_slice(&"Track-Info\r\n".as_bytes()[..12]);
         assert_eq!(buffer.len() - start_size, 12);
 
+        // 0c - 0f 	unused 	4
         buffer.push(0);
         buffer.push(0);
         buffer.push(0);
         buffer.push(0);
 
+        // 10 	track number 	1
         buffer.push(self.track_number);
+
+        // 11 	side number 	1
         buffer.push(self.side_number);
 
+        // 12 	Data rate. (See note 1 and note 3) 	1
         buffer.push(self.data_rate.clone().into());
+
+        // 13 	Recording mode. (See note 2 and note 3) 	1 
         buffer.push(self.recording_mode.clone().into());
 
+        // 14 	sector size 	1
         buffer.push(self.sector_size);
+
+        // 15 	number of sectors 	1
         buffer.push(self.number_of_sectors);
+ 
+        // 16 	GAP#3 length 	1
         buffer.push(self.gap3_length);
+
+        // 17 	filler byte 	1
         buffer.push(self.filler_byte);
 
         assert_eq!(buffer.len() - start_size, 0x18);
         
+        // 18 - xx 	Sector Information List 	x
         // Inject sectors information list
         self.sector_information_list.sectors.iter().for_each(|s| {
             s.sector_information_bloc.to_buffer(buffer);
         });
+        // TODO store offsets ?
 
+        // Ensure next position has a low byte value of 0
         let added_bytes = buffer.len() - start_size;
         let missing_bytes = 256 - added_bytes;
         buffer.resize(buffer.len() + missing_bytes, 0);
+        assert_eq!(buffer.len()%256, 0);
 
         // Inject sectors information data
         self.sector_information_list.sectors.iter().for_each(|s| {
@@ -327,7 +364,10 @@ impl TrackInformation {
 
         // Ensure the size is correct
         let added_bytes = (buffer.len() - start_size) as u16;
-        assert!(added_bytes <= self.track_size, format!("{} != {}", added_bytes, self.track_size));
+        assert!(
+            added_bytes <= self.track_size, 
+            format!("{} != {}", added_bytes, self.track_size)
+        );
         let missing_bytes = self.track_size - added_bytes;
         if missing_bytes != 0 {
             buffer.resize(buffer.len() + missing_bytes as usize, 0);
@@ -462,6 +502,13 @@ impl SectorInformation {
         info
     }
 
+    /// 00 	track (equivalent to C parameter in NEC765 commands) 	1
+    /// 01 	side (equivalent to H parameter in NEC765 commands) 	1
+    /// 02 	sector ID (equivalent to R parameter in NEC765 commands) 	1
+    /// 03 	sector size (equivalent to N parameter in NEC765 commands) 	1
+    /// 04 	FDC status register 1 (equivalent to NEC765 ST1 status register) 	1
+    /// 05 	FDC status register 2 (equivalent to NEC765 ST2 status register) 	1
+    /// 06 - 07 	actual data length in bytes 	2 
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
         buffer.push(self.track);
         buffer.push(self.side);
@@ -469,6 +516,8 @@ impl SectorInformation {
         buffer.push(self.sector_size);
         buffer.push(self.fdc_status_register_1);
         buffer.push(self.fdc_status_register_2);
+
+        // Specific for extended image
         buffer.push((self.data_length % 256) as u8);
         buffer.push((self.data_length / 256) as u8);
     }
@@ -682,7 +731,9 @@ impl TrackInformationList {
         TrackInformationList { list }
     }
 
+    /// Write the track list in the given buffer
     fn to_buffer(&self, buffer: &mut Vec<u8>) {
+
         for track in self.list.iter() {
             let _added_bytes = track.to_buffer(buffer);
         }
@@ -825,7 +876,7 @@ impl ExtendedDsk {
         file_buffer.write_all(&memory_buffer)
     }
 
-    /// Write the dsk in the buffer
+    /// Write the dsk in the provided buffer
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
         self.disc_information_bloc.to_buffer(buffer);
         self.track_list.to_buffer(buffer);
