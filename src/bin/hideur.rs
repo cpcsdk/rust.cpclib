@@ -99,11 +99,13 @@ fn main() -> std::io::Result<()> {
                     parts[0].to_owned(),
                     parts[1].to_owned()
                 ),
-                n => (
-                    eprintln!("[Warning] Filename contains several `.`. They have been all removed.")
-                    parts[..parts.len()-1].join("_").to_owned(),
-                    parts[parts.len()-1].to_owned()
-                )
+                n => {
+                    eprintln!("[Warning] Filename contains several `.`. They have been all removed.");
+                    (
+                        parts[..parts.len()-1].join("_").to_owned(),
+                        parts[parts.len()-1].to_owned()
+                    )
+                }
             };
             
             let filename = if filename.len() > 8 {
