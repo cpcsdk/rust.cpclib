@@ -68,22 +68,7 @@ fn main() -> std::io::Result<()> {
         buf
     };
 
-    // Get the type of file
-    let ftype = {
-        match matches
-            .value_of("TYPE")
-            .unwrap()
-            .to_ascii_lowercase()
-            .as_ref()
-        {
-            "0" | "basic" => AmsdosFileType::Basic,
-            "1" | "protected" => AmsdosFileType::Protected,
-            "2" | "binary" => AmsdosFileType::Binary,
-            _ => unreachable!(),
-        }
-    };
-
-    // obtain its filename
+    // Get filename and extension
     let filename = {
         let user = matches.value_of("USER").map_or(0, string_to_nb) as u8;
         let (filename, extension) = {
@@ -130,30 +115,56 @@ fn main() -> std::io::Result<()> {
             .expect("Invalid file definition")
     };
 
-    // Build the header according to the given options
-    let header = match ftype {
-        AmsdosFileType::Binary => {
-            let exec = string_to_nb(
-                &matches
-                    .value_of("EXEC")
-                    .expect("The execution address is expected for a binary target"),
-            ) as u16;
-            let load = string_to_nb(
-                &matches
-                    .value_of("LOAD")
-                    .expect("The load address is expected for a binary target"),
-            ) as u16;
+    if matches.is_present("INFO") {
+        // In this branch we display information about the header
+        let amsfile = AmsdosFile::from_buffer(&content);
+        let header = amsfile.header();
+        println!("{:?}", header);
+    }
+    else {
+        // In this branch, we build the file with its header
 
-            AmsdosManager::compute_binary_header(&filename, load, exec, &content)
-        }
-        AmsdosFileType::Basic => AmsdosManager::compute_basic_header(&filename, &content),
-        _ => unimplemented!(),
-    };
+        // Get the type of file
+        let ftype = {
+            match matches
+                .value_of("TYPE")
+                .unwrap()
+                .to_ascii_lowercase()
+                .as_ref()
+            {
+                "0" | "basic" => AmsdosFileType::Basic,
+                "1" | "protected" => AmsdosFileType::Protected,
+                "2" | "binary" => AmsdosFileType::Binary,
+                _ => unreachable!(),
+            }
+        };
 
-    // Write the final file
-    let mut f = File::create(matches.value_of("OUTPUT").unwrap())?;
-    f.write_all(header.as_bytes())?;
-    f.write_all(&content)?;
 
+
+        // Build the header according to the given options
+        let header = match ftype {
+            AmsdosFileType::Binary => {
+                let exec = string_to_nb(
+                    &matches
+                        .value_of("EXEC")
+                        .expect("The execution address is expected for a binary target"),
+                ) as u16;
+                let load = string_to_nb(
+                    &matches
+                        .value_of("LOAD")
+                        .expect("The load address is expected for a binary target"),
+                ) as u16;
+
+                AmsdosManager::compute_binary_header(&filename, load, exec, &content)
+            }
+            AmsdosFileType::Basic => AmsdosManager::compute_basic_header(&filename, &content),
+            _ => unimplemented!(),
+        };
+
+        // Write the final file
+        let mut f = File::create(matches.value_of("OUTPUT").unwrap())?;
+        f.write_all(header.as_bytes())?;
+        f.write_all(&content)?;
+    }
     Ok(())
 }
