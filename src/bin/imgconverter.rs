@@ -227,12 +227,11 @@ fn convert(matches: &ArgMatches) -> Result<(), String> {
 
                 // Save the binary data of the sprite
                 let sprite_fname = sub_sprite.value_of("SPRITE_FNAME").unwrap();
-                let file = File::create(sprite_fname).expect("Unable to create the sprite file");
+                let mut file = File::create(sprite_fname).expect("Unable to create the sprite file");
                 file.write_all(&data);
 
                 // Save the binary data of the palette if any
                 sub_sprite.value_of("CONFIGURATION")
-                    .
                     .and_then(|conf_fname: &str|{
                         let mut file = File::create(conf_fname).expect("Unable to create the configuration file");
                         let fname = std::path::Path::new(conf_fname).file_stem().unwrap().to_str().unwrap().replace(".", "_");
