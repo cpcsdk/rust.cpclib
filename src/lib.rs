@@ -18,6 +18,8 @@
 //!
 //! Why releasing it publicly whereas no-one else will use it ? ;) Just because it is simpler to manage public crates with cargo. There is nothing secret here, and I welcome any contribution.
 
+#![recursion_limit="512"]
+
 #[macro_use]
 extern crate bitfield;
 #[macro_use]

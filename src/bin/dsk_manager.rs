@@ -8,7 +8,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use cpclib::disc::amsdos::*;
-use cpclib::disc::edsk::ExtendedDsk;
+use cpclib::disc::edsk::{ExtendedDsk, Side};
 
 // Still everything to do
 fn main() -> std::io::Result<()> {

@@ -12,6 +12,8 @@ use std::iter::Iterator;
 
 use crate::disc::edsk::Side;
 
+use delegate::delegate;
+
 #[derive(Debug)]
 pub enum AmsdosError {
     NoEntriesAvailable,
@@ -107,10 +109,10 @@ impl AmsdosFileName {
         buffer[9..].copy_from_slice(self.extension_header_format().as_ref());
 
         if system {
-            buffer[9] += 0b10000000;
+            buffer[10] += 0b10000000;
         }
         if read_only {
-            buffer[10] += 0b10000000;
+            buffer[9] += 0b10000000;
         }
 
         buffer
@@ -118,6 +120,10 @@ impl AmsdosFileName {
 
     pub fn user(&self) -> u8 {
         self.user
+    }
+
+    pub fn set_user(&mut self, user: u8) {
+        self.user = user;
     }
 
     pub fn name(&self) -> String {
@@ -140,6 +146,43 @@ impl AmsdosFileName {
 
     pub fn filename_with_user(&self) -> String {
         format!("{}:{}.{}", self.user(), self.name(), self.extension())
+    }
+
+    pub fn set_filename<S:AsRef<str>>(&mut self, filename: S) {
+        let filename = filename.as_ref();
+        match filename.find(".") {
+            Some(idx) => {
+                self.set_name(&filename[0..idx]);
+                self.set_extension(&filename[idx+1..filename.len()])
+            },
+
+            None => {
+                self.set_name(filename);
+                self.set_extension("");
+            }
+        }
+    }
+
+    pub fn set_name<S:AsRef<str>>(&mut self, name: S) {
+        let name = name.as_ref().as_bytes();
+        for idx in 0..8 {
+            self.name[idx] = if idx < name.len() {
+                *name.get(idx).unwrap()
+            } else {
+                ' ' as u8
+            };
+        }
+    }
+
+    pub fn set_extension<S:AsRef<str>>(&mut self, extension: S) {
+        let extension = extension.as_ref().as_bytes();
+        for idx in 0..3 {
+            self.extension[idx] = if idx < extension.len() {
+                    *extension.get(idx).unwrap()
+            } else {
+                ' ' as u8
+            };
+        }
     }
 
     // A filename can only contains the chars a-z A-Z 0-9 ! " # $ & ' +  @ ^ ' } {
@@ -233,6 +276,7 @@ impl AmsdosFileName {
             extension,
         })
     }
+
 }
 
 // TODO use tryfrom asap
@@ -471,6 +515,38 @@ impl AmsdosEntry {
         self.system
     }
 
+    pub fn set_system(&mut self) {
+        self.system = true;
+    }
+
+    pub fn set_read_only(&mut self) {
+        self.read_only = true;
+    }
+
+    pub fn unset_system(&mut self) {
+        self.system = false;
+    }
+
+    pub fn unset_read_only(&mut self) {
+        self.read_only = false;
+    }
+
+    delegate! {
+        target self.file_name {
+            pub fn user(&self) -> u8;
+            pub fn set_user(&mut self, user: u8);
+
+            pub fn name(&self) -> String;
+            pub fn extension(&self) -> String;
+            pub fn filename(&self) -> String;
+            pub fn filename_with_user(&self) -> String;
+
+            pub fn set_filename<S:AsRef<str>>(&mut self, filename: S);
+            pub fn set_name<S:AsRef<str>>(&mut self, name: S);
+            pub fn set_extension<S:AsRef<str>>(&mut self, extension: S);
+        }
+    }
+    
     pub fn format(&self) -> String {
         format!(
             "{}:{}.{}",
@@ -497,6 +573,10 @@ impl std::fmt::Debug for AmsdosEntries {
 }
 
 impl AmsdosEntries {
+    pub fn get_entry_mut(&mut self, idx: usize) -> &mut AmsdosEntry {
+        &mut self.entries[idx]
+    }
+
     /// Generate a binary version that can be used to export the catalog
     pub fn as_bytes(&self) -> [u8; 64 * 32] {
         let mut content = [0; 64 * 32];
