@@ -51,6 +51,8 @@ custom_error = {version="1.3.0", optional=true}
 rustyline = {version="2.1.0", optional=true}
 
 notify = {version="4.0.6", optional=true}
+log = {version="0.4.6", optional=true}
+simplelog = {version="0.5.3", optional=true}
 
 [dependencies.nom]
 version = "4.1.1"
@@ -67,6 +69,7 @@ xfer = ["clap", "rustyline"]
 snapshot = ["clap", "built", "time", "semver"]
 imgconverter = ["clap", 'notify', "exitcode"]
 dskmanager = ["clap"]
+catalog = ["clap", "log", "simplelog"]
 hideur = ["clap"]
 basic = ["clap"]
 asm = ["clap", "built", "semver", "time"]
@@ -106,3 +109,8 @@ required-features = ["basic"]
 name = "basm"
 path = "src/bin/basm.rs"
 required-features = ["asm"]
+
+[[bin]]
+name = "catalog"
+path = "src/bin/catalog.rs"
+required-features = ["catalog"]

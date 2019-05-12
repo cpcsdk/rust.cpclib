@@ -116,6 +116,19 @@ mod tests {
         assert_eq!(fname1.extension(), "BIN");
         assert_eq!(fname2.name(), "TEST");
         assert_eq!(fname2.user(), 0);
+
+        let mut fname3 = fname2.clone();
+        fname3.set_extension("BAS");
+        assert_eq!(fname3.extension(), "BAS");
+
+        fname3.set_name("TOTOTO");
+        assert_eq!(fname3.name(), "TOTOTO");
+
+        assert_eq!(fname3.filename(), "TOTOTO.BAS");
+
+        fname3.set_filename("HELLOWORLD");
+        assert_eq!(fname3.name(), "HELLOWOR");
+        assert_eq!(fname3.extension(), "");
     }
 
     #[test]

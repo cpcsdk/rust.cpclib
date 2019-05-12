@@ -16,6 +16,9 @@ use cpclib::ga::{Palette};
 use cpclib::imageconverter::*;
 use cpclib::sna::*;
 
+use std::fs::File;
+use std::io::{Read, Write};
+
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
 
@@ -157,25 +160,35 @@ fn assemble(z80: String) -> Vec<u8> {
 }
 
 fn get_output_format(matches: &ArgMatches) -> OutputFormat {
-    if matches.is_present("OVERSCAN") {
-        OutputFormat::CPCMemory {
-            outputDimension: CPCScreenDimension::overscan(),
-            displayAddress: DisplayCRTCAddress::new_overscan_from_page(2),
-        }
-    } else if matches.is_present("FULLSCREEN") {
-        OutputFormat::CPCMemory {
-            outputDimension: CPCScreenDimension::overscan(),
-            displayAddress: DisplayCRTCAddress::new_overscan_from_page(2),
-        }
-    } else {
-        // assume it is a standard screen
-        OutputFormat::CPCMemory {
-            outputDimension: CPCScreenDimension::standard(),
-            displayAddress: DisplayCRTCAddress::new_standard_from_page(3),
+
+    if let Some(sprite_matches)=  matches.subcommand_matches("sprite")
+    {
+        // Sprite case. Only Linear encoding is currently managed
+        OutputFormat::LinearEncodedSprite
+    }
+    else {
+        // Standard case
+        if matches.is_present("OVERSCAN") {
+            OutputFormat::CPCMemory {
+                outputDimension: CPCScreenDimension::overscan(),
+                displayAddress: DisplayCRTCAddress::new_overscan_from_page(2),
+            }
+        } else if matches.is_present("FULLSCREEN") {
+            OutputFormat::CPCMemory {
+                outputDimension: CPCScreenDimension::overscan(),
+                displayAddress: DisplayCRTCAddress::new_overscan_from_page(2),
+            }
+        } else {
+            // assume it is a standard screen
+            OutputFormat::CPCMemory {
+                outputDimension: CPCScreenDimension::standard(),
+                displayAddress: DisplayCRTCAddress::new_standard_from_page(3),
+            }
         }
     }
 }
 
+// TODO - Add the ability to import a target palette
 fn convert(matches: &ArgMatches) -> Result<(), String> {
     let input_file = matches.value_of("SOURCE").unwrap();
     let output_mode = matches.value_of("MODE").unwrap().parse::<u8>().unwrap();
@@ -197,77 +210,113 @@ fn convert(matches: &ArgMatches) -> Result<(), String> {
     println!("Expected {:?}", &output_format);
     println!("Conversion  {:?}", &conversion);
 
-    // Make the conversion before feeding sna or dsk
-    let (palette, code) = match &conversion {
-        Output::CPCMemoryStandard(_memory, pal) => {
-            (pal, assemble(standard_display_code(output_mode)))
-        }
-
-        Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
-            let code = assemble(fullscreen_display_code(output_mode, 96 / 2, &pal));
-            (pal, code)
-        }
-
-        _ => unreachable!(),
-    };
-
     let sub_sna = matches.subcommand_matches("sna");
     let sub_m4 = matches.subcommand_matches("m4");
     let sub_dsk = matches.subcommand_matches("dsk");
+    let sub_sprite = matches.subcommand_matches("sprite");
 
-    if sub_dsk.is_some() {
-        // TODO create the linker
-
-    }
-    if sub_sna.is_some() || sub_m4.is_some() {
-        // Create a snapshot with a standard screen
-        let mut sna = Snapshot::default();
-
+    if sub_sprite.is_some() {
+        let sub_sprite = sub_sprite.unwrap();
         match &conversion {
-            Output::CPCMemoryStandard(memory, _) => {
-                sna.add_data(&memory.to_vec(), 0xc000)
-                    .expect("Unable to add the image in the snapshot");
+            Output::LinearEncodedSprite {
+                data,
+                palette,
+                byte_width,
+                height
+            } => {
+
+                // Save the binary data of the sprite
+                let sprite_fname = sub_sprite.value_of("SPRITE_FNAME").unwrap();
+                let file = File::create(sprite_fname).expect("Unable to create the sprite file");
+                file.write_all(&data);
+
+                // Save the binary data of the palette if any
+                sub_sprite.value_of("CONFIGURATION")
+                    .
+                    .and_then(|conf_fname: &str|{
+                        let mut file = File::create(conf_fname).expect("Unable to create the configuration file");
+                        let fname = std::path::Path::new(conf_fname).file_stem().unwrap().to_str().unwrap().replace(".", "_");
+                        writeln!(&mut file, "{}_WIDTH equ {}", fname, byte_width);
+                        writeln!(&mut file, "{}_HEIGHT equ {}", fname, height);
+                        Some(())
+                    });
+                    
             }
-            Output::CPCMemoryOverscan(memory1, memory2, _) => {
-                sna.add_data(&memory1.to_vec(), 0x8000)
-                    .expect("Unable to add the image in the snapshot");
-                sna.add_data(&memory2.to_vec(), 0xc000)
-                    .expect("Unable to add the image in the snapshot");
+            _ => unreachable!()
+        }
+    }
+    else {
+        // Make the conversion before feeding sna or dsk
+        let (palette, code) = match &conversion {
+            Output::CPCMemoryStandard(_memory, pal) => {
+                (pal, assemble(standard_display_code(output_mode)))
             }
+
+            Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
+                let code = assemble(fullscreen_display_code(output_mode, 96 / 2, &pal));
+                (pal, code)
+            }
+
             _ => unreachable!(),
         };
 
-        sna.add_data(&code, 0x4000).unwrap();
-        sna.set_value(SnapshotFlag::Z80_PC, 0x4000).unwrap();
-        sna.set_value(SnapshotFlag::GA_PAL(Some(16)), 0x54).unwrap();
-        for i in 0..16 {
-            sna.set_value(
-                SnapshotFlag::GA_PAL(Some(i)),
-                palette.get((i as i32).into()).gate_array() as u16,
-            )
-            .unwrap();
+
+
+
+        if sub_dsk.is_some() {
+            // TODO create the linker
+
         }
+        if sub_sna.is_some() || sub_m4.is_some() {
+            // Create a snapshot with a standard screen
+            let mut sna = Snapshot::default();
 
-        if let Some(sub_sna) = sub_sna {
-            let sna_fname = sub_sna.value_of("SNA").unwrap();
-            sna.save_sna(sna_fname)
-                .expect("Unable to save the snapshot");
-        } else if let Some(sub_m4) = sub_m4 {
-            #[cfg(feature = "xferlib")]
-            {
-                let mut f = Builder::new()
-                    .suffix(".sna")
-                    .tempfile()
-                    .expect("Unable to create the temporary file");
+            match &conversion {
+                Output::CPCMemoryStandard(memory, _) => {
+                    sna.add_data(&memory.to_vec(), 0xc000)
+                        .expect("Unable to add the image in the snapshot");
+                }
+                Output::CPCMemoryOverscan(memory1, memory2, _) => {
+                    sna.add_data(&memory1.to_vec(), 0x8000)
+                        .expect("Unable to add the image in the snapshot");
+                    sna.add_data(&memory2.to_vec(), 0xc000)
+                        .expect("Unable to add the image in the snapshot");
+                }
+                _ => unreachable!(),
+            };
 
-                sna.write(f.as_file_mut(), cpclib::sna::SnapshotVersion::V2)
-                    .expect("Unable to write the sna in the temporary file");
+            sna.add_data(&code, 0x4000).unwrap();
+            sna.set_value(SnapshotFlag::Z80_PC, 0x4000).unwrap();
+            sna.set_value(SnapshotFlag::GA_PAL(Some(16)), 0x54).unwrap();
+            for i in 0..16 {
+                sna.set_value(
+                    SnapshotFlag::GA_PAL(Some(i)),
+                    palette.get((i as i32).into()).gate_array() as u16,
+                )
+                .unwrap();
+            }
 
-                let xfer = CpcXfer::new(sub_m4.value_of("CPCM4").unwrap());
+            if let Some(sub_sna) = sub_sna {
+                let sna_fname = sub_sna.value_of("SNA").unwrap();
+                sna.save_sna(sna_fname)
+                    .expect("Unable to save the snapshot");
+            } else if let Some(sub_m4) = sub_m4 {
+                #[cfg(feature = "xferlib")]
+                {
+                    let mut f = Builder::new()
+                        .suffix(".sna")
+                        .tempfile()
+                        .expect("Unable to create the temporary file");
 
-                let tmp_file_name = f.path().to_str().unwrap();
-                xfer.upload_and_run(tmp_file_name, None)
-                    .expect("An error occured while transfering the snapshot");
+                    sna.write(f.as_file_mut(), cpclib::sna::SnapshotVersion::V2)
+                        .expect("Unable to write the sna in the temporary file");
+
+                    let xfer = CpcXfer::new(sub_m4.value_of("CPCM4").unwrap());
+
+                    let tmp_file_name = f.path().to_str().unwrap();
+                    xfer.upload_and_run(tmp_file_name, None)
+                        .expect("An error occured while transfering the snapshot");
+                }
             }
         }
     }
@@ -312,6 +361,40 @@ fn main() {
                                     false => Err(format!("{} has not a dsk extention.", dsk))
                                 }
                             })
+                        )
+                    )
+
+                    .subcommand(
+                        SubCommand::with_name("sprite")
+                        .about("Generate a sprite file to be included inside an application")
+                        .arg(
+                            Arg::with_name("EXPORT_PALETTE")
+                            .long("palette")
+                            .short("p")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Name of the binary file that contains the palette")
+                        )
+                        .arg(
+                            Arg::with_name("CONFIGURATION")
+                            .long("configuration")
+                            .short("c")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Name of the assembly file that contains the size of the sprite")
+                        )
+                        .arg(
+                            Arg::with_name("FORMAT")
+                            .long("format")
+                            .short("f")
+                            .required(true)
+                            .default_value("linear")
+                        )
+                        .arg(
+                            Arg::with_name("SPRITE_FNAME")
+                            .takes_value(true)
+                            .help("Filename to generate")
+                            .required(true)
                         )
                     )
 
@@ -387,11 +470,11 @@ fn main() {
     }
     .get_matches();
 
-    println!("ff");
-
     if matches.subcommand_matches("m4").is_none()
         && matches.subcommand_matches("dsk").is_none()
         && matches.subcommand_matches("sna").is_none()
+        && matches.subcommand_matches("sprite").is_none()
+
     {
         eprintln!("[ERROR] you have not specified any action to do.");
         std::process::exit(exitcode::USAGE);

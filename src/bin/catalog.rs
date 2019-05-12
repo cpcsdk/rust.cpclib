@@ -83,6 +83,25 @@ fn main() -> std::io::Result<()> {
 							.long("nosystem")
 							.requires("ENTRY")
 					)
+					.arg(
+						Arg::with_name("USER")
+							.help("Set the user value")
+							.long("user")
+							.requires("ENTRY")
+							.validator(|v|{
+								v.parse::<u8>()
+								.map_err(|e|{e.to_string()})
+								.and_then(
+									|nb|
+									if nb >= 0 && nb <= 255 { // TODO set the real limit
+										Ok(())
+									}
+									else {
+										Err("The user must be a number between 0 and 255".to_owned())
+									}
+								)
+							})
+					)
 					.get_matches();
 
 
@@ -127,6 +146,8 @@ fn main() -> std::io::Result<()> {
 				if is_read_only {
 					print!(" [read only]");
 				}
+
+				print!(" {}Kb {:?}", entry.used_space(), entry.used_blocs());
 				println!("");
 			} else if is_present && contains_control_chars && listall {
 				println!("{}. => CONTROL CHARS <=", idx);
@@ -143,6 +164,7 @@ fn main() -> std::io::Result<()> {
 		info!("Manipulate entry {}", idx);
 
 		let mut entry = catalog_content.get_entry_mut(idx as _);
+		
 		if matches.is_present("SETREADONLY") {
 			entry.set_read_only();
 		}
@@ -154,6 +176,11 @@ fn main() -> std::io::Result<()> {
 		}
 		if matches.is_present("UNSETSYSTEM") {
 			entry.unset_system();
+		}
+
+		if let Some(user) = matches.value_of("USER") {
+			let user = user.parse::<u8>().unwrap();
+			entry.set_user(user);
 		}
 
 		// Write the result 
