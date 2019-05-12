@@ -4,6 +4,7 @@ extern crate clap;
 extern crate cpclib;
 extern crate log;
 extern crate simplelog;
+extern crate num;
 
 use clap::{App, Arg, ArgGroup, SubCommand};
 use std::fs::File;
@@ -13,6 +14,28 @@ use cpclib::disc::edsk::{ExtendedDsk, Side};
 use cpclib::disc::amsdos::*;
 use log::{info, trace, warn, error};
 use simplelog::*;
+
+use num::Num;
+
+
+pub fn to_number<T>(repr: &str) -> T 
+where T: Num, <T as num::Num>::FromStrRadixErr : std::fmt::Debug {
+	dbg!(repr);
+	let repr = repr.trim();
+	let repr = &repr;
+	if repr.starts_with("0x") {
+		T::from_str_radix(dbg!(&repr[2..]), 16)
+	}
+	else if repr.starts_with("\\$") || repr.starts_with("&") {
+		T::from_str_radix(dbg!(&repr[1..]), 16)
+	}
+	else if repr.starts_with("0") {
+		T::from_str_radix(dbg!(repr), 8)
+	}
+	else {
+		T::from_str_radix(dbg!(repr), 10)
+	}.expect("Unable to parse number")
+}
 
 fn main() -> std::io::Result<()> {
     TermLogger::init(LevelFilter::Debug, Config::default()).expect("Unable to build logger");
@@ -125,6 +148,12 @@ fn main() -> std::io::Result<()> {
 						.long("numpage")
 						.takes_value(true)
 					)
+					.arg(
+						Arg::with_name("SIZE")
+						.help("Force the size of the entry")
+						.long("size")
+						.takes_value(true)
+					)
 					.get_matches();
 
 
@@ -201,8 +230,9 @@ fn main() -> std::io::Result<()> {
 			entry.unset_system();
 		}
 
+
 		if let Some(user) = matches.value_of("USER") {
-			let user = user.parse::<u8>().unwrap();
+			let user = to_number::<u8>(user);
 			entry.set_user(user);
 		}
 
@@ -212,13 +242,19 @@ fn main() -> std::io::Result<()> {
 
 		if let Some(blocs) = matches.values_of("BLOCS") {
 			let blocs = blocs.map(|bloc|{
-									BlocIdx::from(bloc.parse::<u8>().unwrap())
+									BlocIdx::from(to_number::<u8>(bloc))
 								}).collect::<Vec<BlocIdx>>();
 			entry.set_blocs(&blocs);
 		} 
 
 		if let Some(numpage) = matches.value_of("NUMPAGE") {
-			entry.set_num_page(numpage.parse::<u8>().unwrap());
+			entry.set_num_page(to_number::<u8>(numpage));
+		}
+
+		// XXX It is important ot keep it AFTER the blocs as it override their value
+		if let Some(size) = matches.value_of("SIZE") {
+			let size = to_number::<u8>(size);
+			entry.set_page_size(size);
 		}
 
 		// Write the result 

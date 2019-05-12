@@ -551,6 +551,14 @@ impl AmsdosEntry {
         self.num_page = num;
     }
 
+    pub fn page_size(&self) -> u8 {
+        self.page_size
+    }
+
+    pub fn set_page_size(&mut self, size: u8) {
+        self.page_size = size;
+    }
+
     delegate! {
         target self.file_name {
             pub fn user(&self) -> u8;
