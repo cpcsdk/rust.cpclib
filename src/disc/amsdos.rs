@@ -479,6 +479,22 @@ impl AmsdosEntry {
         (self.page_size as usize + 7) >> 3
     }
 
+    /// Set the number of blocs
+    pub fn set_blocs(&mut self, blocs: &[BlocIdx]) {
+        let mut nb_blocs = 0;
+        for idx in 0..16 {
+            self.blocs[idx] = if blocs.len() > idx {
+                    nb_blocs += 1;
+                    blocs[idx]
+                }
+                else {
+                    BlocIdx::Empty
+                }
+        }
+
+        self.page_size = (nb_blocs << 3) - 7;
+    }
+
     pub fn as_bytes(&self) -> [u8; 32] {
         let mut bytes = [0; 32];
         bytes[0..12].copy_from_slice(
@@ -529,6 +545,10 @@ impl AmsdosEntry {
 
     pub fn unset_read_only(&mut self) {
         self.read_only = false;
+    }
+
+    pub fn set_num_page(&mut self, num: u8) {
+        self.num_page = num;
     }
 
     delegate! {

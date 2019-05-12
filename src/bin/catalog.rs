@@ -87,6 +87,7 @@ fn main() -> std::io::Result<()> {
 						Arg::with_name("USER")
 							.help("Set the user value")
 							.long("user")
+							.takes_value(true)
 							.requires("ENTRY")
 							.validator(|v|{
 								v.parse::<u8>()
@@ -101,6 +102,28 @@ fn main() -> std::io::Result<()> {
 									}
 								)
 							})
+					)
+					.arg(
+						Arg::with_name("FILENAME")
+							.help("Set the filename of the entry")
+							.takes_value(true)
+							.long("filename")
+							.requires("ENTRY")
+					)
+					.arg(
+						Arg::with_name("BLOCS")
+							.help("Set the blocs to load (and update the number of blocs accordingly to that)")
+							.long("blocs")
+							.takes_value(true)
+							.requires("ENTRY")
+							.multiple(false)
+							.max_values(16)
+					)
+					.arg(
+						Arg::with_name("NUMPAGE")
+						.help("Set the page number")
+						.long("numpage")
+						.takes_value(true)
 					)
 					.get_matches();
 
@@ -181,6 +204,21 @@ fn main() -> std::io::Result<()> {
 		if let Some(user) = matches.value_of("USER") {
 			let user = user.parse::<u8>().unwrap();
 			entry.set_user(user);
+		}
+
+		if let Some(filename) = matches.value_of("FILENAME") {
+			entry.set_filename(filename);
+		}
+
+		if let Some(blocs) = matches.values_of("BLOCS") {
+			let blocs = blocs.map(|bloc|{
+									BlocIdx::from(bloc.parse::<u8>().unwrap())
+								}).collect::<Vec<BlocIdx>>();
+			entry.set_blocs(&blocs);
+		} 
+
+		if let Some(numpage) = matches.value_of("NUMPAGE") {
+			entry.set_num_page(numpage.parse::<u8>().unwrap());
 		}
 
 		// Write the result 
