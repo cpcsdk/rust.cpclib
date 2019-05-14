@@ -10,7 +10,7 @@ mod tests {
     #[test]
     fn new_data() {
         let empty_expected = ExtendedDsk::open("./tests/dsk/empty.dsk").unwrap();
-        let empty_obtained = ExtendedDsk::from(DiscConfig::single_side_data_format());
+        let empty_obtained = ExtendedDsk::from(DiscConfig::single_head_data_format());
         assert_eq!(empty_expected.to_cfg(), empty_obtained.to_cfg());
     }
 
@@ -27,7 +27,7 @@ mod tests {
 
         assert_eq!(file.content(), file2.content());
 
-        let empty_obtained = ExtendedDsk::from(DiscConfig::single_side_data_format());
+        let empty_obtained = ExtendedDsk::from(DiscConfig::single_head_data_format());
         let mut manager2 = AmsdosManager::new_from_disc(empty_obtained, 0);
         manager2.add_file(&file2, false, false).unwrap();
 
@@ -51,7 +51,7 @@ mod tests {
         use cpclib::disc::amsdos::AmsdosManager;
         use cpclib::disc::cfg::DiscConfig;
 
-        let dsk = DiscConfig::single_side_data_format().into();
+        let dsk = DiscConfig::single_head_data_format().into();
         let manager = AmsdosManager::new_from_disc(dsk, 0);
         let catalog = manager.catalog();
 
@@ -176,7 +176,7 @@ mod tests {
         use cpclib::disc::amsdos::AmsdosManager;
         use cpclib::disc::cfg::DiscConfig;
 
-        let dsk = DiscConfig::single_side_data_format().into();
+        let dsk = DiscConfig::single_head_data_format().into();
         let mut manager = AmsdosManager::new_from_disc(dsk, 0);
         let catalog = manager.catalog();
 

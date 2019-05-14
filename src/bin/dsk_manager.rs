@@ -8,7 +8,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use cpclib::disc::amsdos::*;
-use cpclib::disc::edsk::{ExtendedDsk, Side};
+use cpclib::disc::edsk::{ExtendedDsk, Head};
 
 // Still everything to do
 fn main() -> std::io::Result<()> {
@@ -131,7 +131,7 @@ fn main() -> std::io::Result<()> {
                            )
                            .arg(
                                Arg::with_name("SIDE")
-                                .help("The side of interest")
+                                .help("The head of interest")
                                 .short("p")
                                 .takes_value(true)
                                 .required(true)
@@ -160,7 +160,7 @@ fn main() -> std::io::Result<()> {
     if let Some(sub) = matches.subcommand_matches("catalog") {
         let mut dsk =
             ExtendedDsk::open(dsk_fname).expect(&format!("Unable to open the file {}", dsk_fname));
-        eprintln!("WIP - We assume side 0 is chosen");
+        eprintln!("WIP - We assume head 0 is chosen");
 
         // Import the catalog from one file in one existing disc
         if let Some(fname) = sub.value_of("IMPORT") {
@@ -229,7 +229,7 @@ fn main() -> std::io::Result<()> {
         /// Add files in a sectorial way
         let mut track = u8::from_str(sub.value_of("TRACK").unwrap()).expect("Wrong track format");
         let mut sector = u8::from_str(sub.value_of("SECTOR").unwrap()).expect("Wrong track format");
-        let mut side = u8::from_str(sub.value_of("SIDE").unwrap()).expect("Wrong track format");
+        let mut head = u8::from_str(sub.value_of("SIDE").unwrap()).expect("Wrong track format");
         let _export = sub.value_of("Z80_EXPORT").unwrap();
 
         let mut dsk =
@@ -243,7 +243,7 @@ fn main() -> std::io::Result<()> {
             f.read_to_end(&mut content)?;
 
             let next_position = dsk
-                .add_file_sequentially(side.clone(), track.clone(), sector.clone(), &content)
+                .add_file_sequentially(head.clone(), track.clone(), sector.clone(), &content)
                 .expect(&format!("Unable to add {}", file));
 
             let base_label = Path::new(file)
@@ -253,8 +253,8 @@ fn main() -> std::io::Result<()> {
                 .unwrap()
                 .replace(".", "_");
             listing.add(builder::equ(
-                format!("{}_side", &base_label),
-                side.clone() as u8,
+                format!("{}_head", &base_label),
+                head.clone() as u8,
             ));
             listing.add(builder::equ(
                 format!("{}_track", &base_label),
@@ -265,7 +265,7 @@ fn main() -> std::io::Result<()> {
                 sector.clone() as u8,
             ));
 
-            side = next_position.0;
+            head = next_position.0;
             track = next_position.1;
             sector = next_position.2;
         }
@@ -310,8 +310,8 @@ fn main() -> std::io::Result<()> {
             cpclib::disc::cfg::DiscConfig::new(desc_fname)?
         } else if let Some(desc) = sub.value_of("FORMAT_NAME") {
             match desc {
-                "data42" => DiscConfig::single_side_data42_format(),
-                "data" => DiscConfig::single_side_data_format(),
+                "data42" => DiscConfig::single_head_data42_format(),
+                "data" => DiscConfig::single_head_data_format(),
                 _ => unreachable!(),
             }
         } else {

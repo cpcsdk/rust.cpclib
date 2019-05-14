@@ -6,7 +6,7 @@ extern crate pretty_assertions;
 mod tests {
 
     const DOUBLE_SIDED: &str = "NbTrack = 80
-NbSide = 2
+NbHead = 2
 
 [Track-A:0]
 SectorSize = 512
@@ -143,7 +143,7 @@ sectorIDHead = 1,1,1,1,1,1,1,1,1,1
 
     const SINGLE_SIDED: &str = "
 NbTrack = 42
-NbSide = 1
+NbHead = 1
 
 [Track:0]
 SectorSize = 512
@@ -215,7 +215,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
     #[test]
     fn test_data() {
         // should not panic
-        let _data_cfg = cpclib::disc::cfg::DiscConfig::single_side_data_format();
+        let _data_cfg = cpclib::disc::cfg::DiscConfig::single_head_data_format();
     }
 
     #[test]
@@ -237,7 +237,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
     }
 
     #[test]
-    fn parse_double_sided_cfg() {
+    fn parse_double_headd_cfg() {
         let parsed = cpclib::disc::cfg::parse_config(DOUBLE_SIDED.into());
         assert!(parsed.is_ok());
         match parsed {
@@ -246,10 +246,10 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
                 assert_eq!(res.to_string().to_uppercase(), DOUBLE_SIDED.to_uppercase());
 
                 assert!(res
-                    .track_information_for_track(cpclib::disc::edsk::Side::SideA, 0)
+                    .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 0)
                     .is_some());
                 assert!(res
-                    .track_information_for_track(cpclib::disc::edsk::Side::SideA, 200)
+                    .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 200)
                     .is_none());
 
                 for idx in res.track_idx_iterator() {
@@ -277,7 +277,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
     }
 
     #[test]
-    fn parse_single_sided_cfg() {
+    fn parse_single_headd_cfg() {
         let parsed = cpclib::disc::cfg::parse_config(SINGLE_SIDED.into());
         println!("{:?}", &parsed);
         assert!(parsed.is_ok());
@@ -294,23 +294,23 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         let cfg = cpclib::disc::cfg::DiscConfig::from(include_str!("dsk/CreateDoubleSided_3_5i.cfg"));
 
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Side::SideA, 0)
+            .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 0)
             .is_some());
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Side::SideA, 79)
+            .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 79)
             .is_some());
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Side::SideA, 80)
+            .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 80)
             .is_none());
 
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Side::SideB, 0)
+            .track_information_for_track(cpclib::disc::edsk::Head::HeadB, 0)
             .is_some());
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Side::SideB, 79)
+            .track_information_for_track(cpclib::disc::edsk::Head::HeadB, 79)
             .is_some());
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Side::SideB, 80)
+            .track_information_for_track(cpclib::disc::edsk::Head::HeadB, 80)
             .is_none());
 
 
