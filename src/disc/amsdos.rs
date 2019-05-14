@@ -10,7 +10,7 @@ use std::path::Path;
 
 use std::iter::Iterator;
 
-use crate::disc::edsk::Side;
+use crate::disc::edsk::Head;
 
 use delegate::delegate;
 
@@ -733,7 +733,7 @@ struct BlocAccessInformation {
 ///
 pub struct AmsdosManager {
     disc: ExtendedDsk,
-    side: crate::disc::edsk::Side,
+    head: crate::disc::edsk::Head,
 }
 
 impl AmsdosManager {
@@ -745,10 +745,10 @@ impl AmsdosManager {
         &mut self.disc
     }
 
-    pub fn new_from_disc<S: Into<Side>>(disc: ExtendedDsk, side: S) -> AmsdosManager {
+    pub fn new_from_disc<S: Into<Head>>(disc: ExtendedDsk, head: S) -> AmsdosManager {
         AmsdosManager {
             disc,
-            side: side.into(),
+            head: head.into(),
         }
     }
 
@@ -764,7 +764,7 @@ impl AmsdosManager {
         let mut entries = Vec::new();
         let bytes = self
             .disc
-            .sectors_bytes(self.side, 0, DATA_FIRST_SECTOR_NUMBER, 4)
+            .sectors_bytes(self.head, 0, DATA_FIRST_SECTOR_NUMBER, 4)
             .unwrap();
 
         for idx in 0..DIRECTORY_SIZE
@@ -938,7 +938,7 @@ impl AmsdosManager {
     /// Still stolen to iDSK
     pub fn update_entry(&mut self, entry: &AmsdosEntry) {
         // compute the track/sector
-        let min_sect = self.disc.min_sector(self.side);
+        let min_sect = self.disc.min_sector(self.head);
         let sector_id = (entry.idx >> 4) + min_sect;
         let track = if min_sect == 0x41 {
             2
@@ -948,7 +948,7 @@ impl AmsdosManager {
             0
         }; // XXX why ?
 
-        let sector = self.disc.sector_mut(self.side, track, sector_id).unwrap();
+        let sector = self.disc.sector_mut(self.head, track, sector_id).unwrap();
         let idx_in_sector: usize = ((entry.idx & 15) << 5) as usize;
         let bytes =
             &mut (sector.values_mut()[idx_in_sector..(idx_in_sector + AmsdosEntry::len())]);
@@ -965,7 +965,7 @@ impl AmsdosManager {
         let sector_pos = bloc_idx.sector();
         let min_sector = self
             .disc
-            .get_track_information(self.side, 0)
+            .get_track_information(self.head, 0)
             .unwrap()
             .min_sector();
         let track = {
@@ -978,12 +978,12 @@ impl AmsdosManager {
             track
         };
 
-        if track > self.disc.nb_tracks_per_side() - 1 {
+        if track > self.disc.nb_tracks_per_head() - 1 {
             unimplemented!(
                 "Need to format track. [{:?}] => {} > {}",
                 bloc_idx,
                 track,
-                self.disc.nb_tracks_per_side() - 1
+                self.disc.nb_tracks_per_head() - 1
             );
         }
 
@@ -1021,14 +1021,14 @@ impl AmsdosManager {
         // Copy in first sector
         let sector = self
             .disc
-            .sector_mut(self.side, access_info.track1, access_info.sector1_id)
+            .sector_mut(self.head, access_info.track1, access_info.sector1_id)
             .unwrap();
         sector.set_values(&content[0..DATA_SECTOR_SIZE]).unwrap();
 
         // Copy in second sector
         let sector = self
             .disc
-            .sector_mut(self.side, access_info.track2, access_info.sector2_id)
+            .sector_mut(self.head, access_info.track2, access_info.sector2_id)
             .unwrap();
         sector
             .set_values(&content[DATA_SECTOR_SIZE..2 * DATA_SECTOR_SIZE])
@@ -1042,13 +1042,13 @@ impl AmsdosManager {
 
         let sector1_data = self
             .disc
-            .sector(self.side, access_info.track1, access_info.sector1_id)
+            .sector(self.head, access_info.track1, access_info.sector1_id)
             .unwrap()
             .values();
 
         let sector2_data = self
             .disc
-            .sector(self.side, access_info.track2, access_info.sector2_id)
+            .sector(self.head, access_info.track2, access_info.sector2_id)
             .unwrap()
             .values();
 

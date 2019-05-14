@@ -24,51 +24,85 @@ pub fn convert_fdc_sector_size_to_real_sector_size(size: u8) -> u16 {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone, Ord, PartialOrd, Eq)]
-pub enum Side {
-    SideA,
-    SideB,
+pub enum Head {
+    HeadA,
+    HeadB,
     Unspecified,
 }
 
-impl From<u8> for Side {
-    fn from(val: u8) -> Side {
+impl From<u8> for Head {
+    fn from(val: u8) -> Head {
         match val {
-            0 => Side::SideA,
-            1 => Side::SideB,
-            _ => Side::Unspecified,
+            0 => Head::HeadA,
+            1 => Head::HeadB,
+            _ => Head::Unspecified,
         }
     }
 }
 
-impl Into<u8> for Side {
+impl Into<u8> for Head {
     fn into(self) -> u8 {
         match self {
-            Side::SideA => 0,
-            Side::SideB => 1,
-            Side::Unspecified => 0,
+            Head::HeadA => 0,
+            Head::HeadB => 1,
+            Head::Unspecified => 0,
         }
     }
 }
 
-impl Into<u8> for &Side {
+impl Into<u8> for &Head {
     fn into(self) -> u8 {
         match *self {
-            Side::SideA => 0,
-            Side::SideB => 1,
-            Side::Unspecified => 0,
+            Head::HeadA => 0,
+            Head::HeadB => 1,
+            Head::Unspecified => 0,
         }
     }
 }
 
+
+// Disc image files consist of a 0x100-byte disc info block and for each track a 0x100-byte track info block, followed by the data for every sector in that track. The new extended disk format is intended for some copy protected disks. Parts which are new in the extended format are marked with "*E*" (from our "Extended DISK Format Proposal, Rev.5").
+//
+//
+// The Disc Information block
+// Byte (Hex): 	Meaning:
+// 00 - 21 	"MV - CPCEMU Disk-File\r\nDisk-Info\r\n"
+// ("MV - CPC" is characteristic)
+//
+// *E* -- "EXTENDED CPC DSK File\r\n\Disk-Info\r\n"
+// ("EXTENDED" is characteristic)
+// 22 - 2F 	unused (0)
+//
+// *E* -- DSK creator (name of the utility)
+// (no ending \0 needed!)
+// 30 	number of tracks (40, 42, maybe 80)
+// 31 	number of heads (1 or 2)
+// 32 - 33 	size of one track (including 0x100-byte track info)
+// With 9 sectors * 0x200 bytes + 0x100 byte track info = 0x1300.
+//
+// *E* -- unused (0)
+// 34 - FF 	unused (0)
+//
+// *E* -- high bytes of track sizes for all tracks
+// (computed in the same way as 32-33 for the normal format).
+//
+//     For single sided formats the table contains track sizes of just one side, otherwise for two alternating sides.
+//     A size of value 0 indicates an unformatted track.
+//     Actual track data length = table value * 256.
+//     Keep in mind that the image contains additional 256 bytes for each track info.
 #[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct DiscInformation {
+    /// Specific to edsk
     #[get = "pub"]
     pub(crate) creator_name: String,
+    /// Number of tracks
     #[get = "pub"]
     pub(crate) number_of_tracks: u8,
+    /// Number of heads
     #[get = "pub"]
-    pub(crate) number_of_sides: u8,
+    pub(crate) number_of_heads: u8,
     #[get = "pub"]
+    /// high bytes of track sizes for all tracks
     pub(crate) track_size_table: Vec<u8>, // XXX for standard DSK only one value is provided It should be duplicated there
 }
 
@@ -92,15 +126,15 @@ impl DiscInformation {
 
         let creator_name = String::from_utf8_lossy(&buffer[0x22..=0x2f]);
         let number_of_tracks = buffer[0x30];
-        let number_of_sides = buffer[0x31];
-        let track_size_table = &buffer[0x34..(0x34 + number_of_tracks * number_of_sides) as usize];
+        let number_of_heads = buffer[0x31];
+        let track_size_table = &buffer[0x34..(0x34 + number_of_tracks * number_of_heads) as usize];
 
-        assert!(number_of_sides == 1 || number_of_sides == 2);
+        assert!(number_of_heads == 1 || number_of_heads == 2);
 
         DiscInformation {
             creator_name: creator_name.to_string(),
             number_of_tracks,
-            number_of_sides,
+            number_of_heads,
             track_size_table: track_size_table.to_vec(),
         }
     }
@@ -113,7 +147,7 @@ impl DiscInformation {
         assert_eq!(buffer.len(), 34 + 14);
 
         buffer.push(self.number_of_tracks);
-        buffer.push(self.number_of_sides);
+        buffer.push(self.number_of_heads);
         assert_eq!(buffer.len(), 34 + 14 + 1 + 1);
 
         // XXX missing size of a track
@@ -131,31 +165,31 @@ impl DiscInformation {
         buffer.resize(256, 0);
     }
 
-    pub fn is_double_sided(&self) -> bool {
-        self.number_of_sides == 2
+    pub fn is_double_head(&self) -> bool {
+        self.number_of_heads == 2
     }
 
-    pub fn is_single_sided(&self) -> bool {
-        !self.is_double_sided()
+    pub fn is_single_head(&self) -> bool {
+        !self.is_double_head()
     }
 
     /// Returns the length of the track including the track information block
-    pub fn track_length(&self, track: u8, side: u8) -> u16 {
-        assert!(side < self.number_of_sides);
+    pub fn track_length(&self, track: u8, Head: u8) -> u16 {
+        assert!(Head < self.number_of_heads);
 
         let track = track as usize;
-        let side = side as usize;
-        let idx = if self.is_single_sided() {
+        let Head = Head as usize;
+        let idx = if self.is_single_head() {
             track
         } else {
-            track * 2 + side
+            track * 2 + Head
         };
 
         self.track_length_at_idx(idx)
     }
 
-    pub fn is_formatted(&self, track: u8, side: u8) -> bool {
-        self.track_length(track, side) > 0
+    pub fn is_formatted(&self, track: u8, Head: u8) -> bool {
+        self.track_length(track, Head) > 0
     }
 
     pub fn track_length_at_idx(&self, idx: usize) -> u16 {
@@ -173,18 +207,55 @@ impl DiscInformation {
     }
 }
 
+
+/// Byte (Hex) 	Meaning:
+/// 00 - 0C 	Track-Info\r\n
+/// 0D - 0F 	unused (0)
+/// 10 	track number (0 to number of tracks-1)
+/// 11 	head number (0 or 1)
+/// 12 - 13 	unused (0)
+/// Format track parameters:
+/// 14 	BPS (bytes per sector) (2 for 0x200 bytes)
+/// 15 	SPT (sectors per track) (9, at the most 18)
+/// 16 	GAP#3 format (gap for formatting; 0x4E)
+/// 17 	Filling byte (filling byte for formatting; 0xE5)
+/// Sector info (for every sector at a time):
+/// 18+i 	track number (sector ID information)
+/// 19+i 	head number (sector ID information)
+/// 1A+i 	sector number (sector ID information)
+/// 1B+i 	BPS (sector ID information)
+/// 1C+i 	state 1 error code (0)
+/// 1D+i 	state 2 error code (0)
+/// 1E+i,1F+i 	unused (0)
+///
+/// *E* -- sector data length in bytes (little endian notation).
+/// This allows different sector sizes in a track.
+/// It is computed as (0x0080 << real_BPS).
+///
+/// Annotations:
+///
+///     The sector data must follow the track information block in the order of the sector IDs. No track or sector may be omitted.
+///     With double sided formats, the tracks are alternating, e.g. track 0 head 0, track 0 head 1, track 1 ...
+///     Use CPCTRANS to copy CPC discs into this format.
+
 #[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct TrackInformation {
+    /// track number (0 to number of tracks-1)
     #[get = "pub"]
     pub(crate) track_number: u8,
+    // head number (0 or 1)
     #[get = "pub"]
-    pub(crate) side_number: u8,
+    pub(crate) head_number: u8,
     #[get = "pub"]
+    /// BPS (bytes per sector) (2 for 0x200 bytes)
     pub(crate) sector_size: u8, // XXX check if really needed to be stored
+    /// SPT (sectors per track) (9, at the most 18)
     #[get = "pub"]
     pub(crate) number_of_sectors: u8,
+    /// GAP#3 format (gap for formatting; 0x4E)
     #[get = "pub"]
     pub(crate) gap3_length: u8,
+    /// Filling byte (filling byte for formatting; 0xE5)
     #[get = "pub"]
     pub(crate) filler_byte: u8,
     #[get = "pub"]
@@ -239,8 +310,8 @@ impl TrackInformation {
             .sum::<usize>()
     }
 
-    pub fn corresponds_to(&self, track: u8, side: u8) -> bool {
-        self.track_number == track && self.side_number == side
+    pub fn corresponds_to(&self, track: u8, Head: u8) -> bool {
+        self.track_number == track && self.head_number == Head
     }
 
     pub fn from_buffer(buffer: &[u8]) -> TrackInformation {
@@ -252,7 +323,7 @@ impl TrackInformation {
 
         let track_size = buffer.len() as u16;
         let track_number = buffer[0x10];
-        let side_number = buffer[0x11];
+        let head_number = buffer[0x11];
         let sector_size = buffer[0x14];
         let number_of_sectors = buffer[0x15];
         let gap3_length = buffer[0x16];
@@ -261,15 +332,15 @@ impl TrackInformation {
         let recording_mode = buffer[0x13].into();
 
         println!(
-            "Track {} side {} sector_size {} nb_sectors {} gap length {:x}, filler_byte {:x}",
-            track_number, side_number, sector_size, number_of_sectors, gap3_length, filler_byte
+            "Track {} Head {} sector_size {} nb_sectors {} gap length {:x}, filler_byte {:x}",
+            track_number, head_number, sector_size, number_of_sectors, gap3_length, filler_byte
         );
         let sector_information_list =
             SectorInformationList::from_buffer(&buffer[0x18..], number_of_sectors);
 
         let track_info = TrackInformation {
             track_number,
-            side_number,
+            head_number,
             sector_size,
             number_of_sectors,
             gap3_length,
@@ -290,7 +361,7 @@ impl TrackInformation {
     /// 00 - 0b 	"Track-Info\r\n" 	12
     /// 0c - 0f 	unused 	4
     /// 10 	track number 	1
-    /// 11 	side number 	1
+    /// 11 	Head number 	1
     /// 12 - 13 	unused 	2
     /// 14 	sector size 	1
     /// 15 	number of sectors 	1
@@ -321,8 +392,8 @@ impl TrackInformation {
         // 10 	track number 	1
         buffer.push(self.track_number);
 
-        // 11 	side number 	1
-        buffer.push(self.side_number);
+        // 11 	Head number 	1
+        buffer.push(self.head_number);
 
         // 12 	Data rate. (See note 1 and note 3) 	1
         buffer.push(self.data_rate.clone().into());
@@ -468,9 +539,9 @@ pub struct SectorInformation {
     /// track (equivalent to C parameter in NEC765 commands)
     #[get = "pub"]
     pub(crate) track: u8,
-    /// side (equivalent to H parameter in NEC765 commands)
+    /// Head (equivalent to H parameter in NEC765 commands)
     #[get = "pub"]
-    pub(crate) side: u8,
+    pub(crate) head: u8,
     /// sector ID (equivalent to R parameter in NEC765 commands)
     #[get = "pub"]
     pub(crate) sector_id: u8,
@@ -492,7 +563,7 @@ impl SectorInformation {
     pub fn from_buffer(buffer: &[u8]) -> SectorInformation {
         let info = SectorInformation {
             track: buffer[0x00],
-            side: buffer[0x01],
+            head: buffer[0x01],
             sector_id: buffer[0x02],
             sector_size: buffer[0x03],
             fdc_status_register_1: buffer[0x04],
@@ -503,7 +574,7 @@ impl SectorInformation {
     }
 
     /// 00 	track (equivalent to C parameter in NEC765 commands) 	1
-    /// 01 	side (equivalent to H parameter in NEC765 commands) 	1
+    /// 01 	Head (equivalent to H parameter in NEC765 commands) 	1
     /// 02 	sector ID (equivalent to R parameter in NEC765 commands) 	1
     /// 03 	sector size (equivalent to N parameter in NEC765 commands) 	1
     /// 04 	FDC status register 1 (equivalent to NEC765 ST1 status register) 	1
@@ -511,7 +582,7 @@ impl SectorInformation {
     /// 06 - 07 	actual data length in bytes 	2 
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
         buffer.push(self.track);
-        buffer.push(self.side);
+        buffer.push(self.head);
         buffer.push(self.sector_id);
         buffer.push(self.sector_size);
         buffer.push(self.fdc_status_register_1);
@@ -614,7 +685,7 @@ impl SectorInformationList {
             sector.sector_information_bloc.track = track_number;
             sector.sector_information_bloc.sector_size = sector_size;
             sector.sector_information_bloc.sector_id = ids[idx];
-            sector.sector_information_bloc.side = heads[idx];
+            sector.sector_information_bloc.head = heads[idx];
 
             let data_size = convert_fdc_sector_size_to_real_sector_size(
                 sector.sector_information_bloc.sector_size as _,
@@ -717,9 +788,9 @@ impl TrackInformationList {
         let mut list = Vec::new();
 
         for track_number in 0..disc_info.number_of_tracks {
-            for side_nb in 0..disc_info.number_of_sides {
+            for Head_nb in 0..disc_info.number_of_heads {
                 // Size of the track data + header
-                let current_track_size = disc_info.track_length(track_number, side_nb) as usize;
+                let current_track_size = disc_info.track_length(track_number, Head_nb) as usize;
                 // TODO treat the case of unformatted tracks
                 let track_buffer = &buffer
                     [consummed_bytes as usize..(consummed_bytes + current_track_size) as usize];
@@ -746,12 +817,12 @@ impl TrackInformationList {
         self.list.last_mut().unwrap()
     }
 
-    /// Returns the tracks for the given side
-    pub fn tracks_for_side(&self, side: Side) -> impl Iterator<Item = &TrackInformation> {
-        let side: u8 = side.into();
+    /// Returns the tracks for the given Head
+    pub fn tracks_for_head(&self, Head: Head) -> impl Iterator<Item = &TrackInformation> {
+        let Head: u8 = Head.into();
         self.list
             .iter()
-            .filter(move |info| info.side_number == side)
+            .filter(move |info| info.head_number == Head)
     }
 
     /// Returns the track following this one
@@ -813,12 +884,12 @@ impl ExtendedDsk {
     /// Add the file in consecutive sectors
     pub fn add_file_sequentially(
         &mut self,
-        side: u8,
+        Head: u8,
         track: u8,
         sector: u8,
         buffer: &[u8],
     ) -> Result<(u8, u8, u8), String> {
-        let mut pos = (side, track, sector);
+        let mut pos = (Head, track, sector);
         let mut consummed = 0;
         while consummed < buffer.len() {
             let current_sector = self
@@ -840,26 +911,26 @@ impl ExtendedDsk {
     }
 
     /// Compute the next sector position if possible
-    /// XXX check if side should be the logic or physical one
+    /// XXX check if Head should be the logic or physical one
     /// XXX the two behaviors are mixed there ...
-    fn next_position(&self, side: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
+    fn next_position(&self, Head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
         // Retrieve the current track and exit if does not exist
         let current_track = self.get_track_information(
-            side.clone(),
+            Head.clone(),
             /// Physical
             track,
         )?;
 
         // Return the next sector if exist
         if let Some(next_sector) = current_track.next_sector_id(sector.clone()) {
-            return Some((side.clone(), track.clone(), next_sector));
+            return Some((Head.clone(), track.clone(), next_sector));
         }
 
         // Search the next track
         let next_track = self.track_list.next_track(&current_track)?;
 
         Some((
-            *next_track.side_number(), // XXX  logical
+            *next_track.head_number(), // XXX  logical
             *next_track.track_number(),
             next_track.min_sector(),
         ))
@@ -882,14 +953,14 @@ impl ExtendedDsk {
         self.track_list.to_buffer(buffer);
     }
 
-    pub fn is_double_sided(&self) -> bool {
-        self.disc_information_bloc.is_double_sided()
+    pub fn is_double_head(&self) -> bool {
+        self.disc_information_bloc.is_double_head()
     }
 
-    // We assume we have the same number of tracks per side.
+    // We assume we have the same number of tracks per Head.
     // Need to be modified the day ot will not be the case.
-    pub fn nb_tracks_per_side(&self) -> u8 {
-        let val = if self.disc_information_bloc.is_single_sided() {
+    pub fn nb_tracks_per_head(&self) -> u8 {
+        let val = if self.disc_information_bloc.is_single_head() {
             self.track_list.list.len()
         } else {
             self.track_list.list.len() / 2
@@ -897,74 +968,79 @@ impl ExtendedDsk {
         val as u8
     }
 
-    pub fn nb_sides(&self) -> u8 {
-        self.disc_information_bloc.number_of_sides
+    #[deprecated]
+    pub fn nb_tracks_per_side(&self) -> u8 {
+        self.nb_tracks_per_head()
     }
 
-    pub fn get_track_information<S: Into<Side>>(
+    pub fn nb_heads(&self) -> u8 {
+        self.disc_information_bloc.number_of_heads
+    }
+
+    pub fn get_track_information<S: Into<Head>>(
         &self,
-        side: S,
+        Head: S,
         track: u8,
     ) -> Option<&TrackInformation> {
-        let idx = self.get_track_idx(side.into(), track);
+        let idx = self.get_track_idx(Head.into(), track);
         self.track_list.list.get(idx)
     }
 
     pub fn get_track_information_mut(
         &mut self,
-        side: Side,
+        Head: Head,
         track: u8,
     ) -> Option<&mut TrackInformation> {
-        let idx = self.get_track_idx(side.into(), track);
+        let idx = self.get_track_idx(Head.into(), track);
         self.track_list.list.get_mut(idx)
     }
 
     /// Search and returns the appropriate sector
-    pub fn sector<S: Into<Side>>(&self, side: S, track: u8, sector_id: u8) -> Option<&Sector> {
-        self.get_track_information(side.into(), track)
+    pub fn sector<S: Into<Head>>(&self, Head: S, track: u8, sector_id: u8) -> Option<&Sector> {
+        self.get_track_information(Head.into(), track)
             .and_then(|track| track.sector(sector_id))
     }
 
     /// Search and returns the appropriate mutable sector
-    pub fn sector_mut<S: Into<Side>>(
+    pub fn sector_mut<S: Into<Head>>(
         &mut self,
-        side: S,
+        Head: S,
         track: u8,
         sector_id: u8,
     ) -> Option<&mut Sector> {
-        self.get_track_information_mut(side.into(), track)
+        self.get_track_information_mut(Head.into(), track)
             .and_then(|track| track.sector_mut(sector_id))
     }
 
-    fn get_track_idx(&self, side: Side, track: u8) -> usize {
-        if self.disc_information_bloc.is_double_sided() {
-            let side = match side {
-                Side::SideA => 0,
-                Side::SideB => 1,
-                Side::Unspecified => panic!("You must specify a side for a double sided disc."),
+    fn get_track_idx(&self, Head: Head, track: u8) -> usize {
+        if self.disc_information_bloc.is_double_head() {
+            let Head = match Head {
+                Head::HeadA => 0,
+                Head::HeadB => 1,
+                Head::Unspecified => panic!("You must specify a Head for a double Headd disc."),
             };
-            track as usize * 2 + side
+            track as usize * 2 + Head
         } else {
-            if let Side::SideB = side {
-                panic!("You cannot select side B in a single sided disc");
+            if let Head::HeadB = Head {
+                panic!("You cannot select Head B in a single Headd disc");
             }
             track as usize
         }
     }
 
     /// Return the concatenated values of several consecutive sectors
-    pub fn sectors_bytes<S: Into<Side>>(
+    pub fn sectors_bytes<S: Into<Head>>(
         &self,
-        side: S,
+        Head: S,
         track: u8,
         sector_id: u8,
         nb_sectors: u8,
     ) -> Option<Vec<u8>> {
         let mut res = Vec::new();
-        let side = side.into();
+        let Head = Head.into();
 
         for count in 0..nb_sectors {
-            match self.sector(side.clone(), track, sector_id + count) {
+            match self.sector(Head.clone(), track, sector_id + count) {
                 None => return None,
                 Some(s) => res.extend(s.values.iter()),
             }
@@ -974,9 +1050,9 @@ impl ExtendedDsk {
     }
 
     /// Compute the datasum for the given track
-    pub fn data_sum(&self, side: Side) -> usize {
+    pub fn data_sum(&self, Head: Head) -> usize {
         self.track_list
-            .tracks_for_side(side)
+            .tracks_for_head(Head)
             .map(|t| t.data_sum())
             .sum()
     }
@@ -992,7 +1068,7 @@ impl ExtendedDsk {
     }
 
     /// Return the smallest sector id over all tracks
-    pub fn min_sector<S: Into<Side>>(&self, _size: S) -> u8 {
+    pub fn min_sector<S: Into<Head>>(&self, _size: S) -> u8 {
         self.tracks().iter().map(|t| t.min_sector()).min().unwrap()
     }
 }

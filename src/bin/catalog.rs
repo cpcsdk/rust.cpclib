@@ -10,7 +10,7 @@ use clap::{App, Arg, ArgGroup, SubCommand};
 use std::fs::File;
 use std::io::{Read, Write};
 
-use cpclib::disc::edsk::{ExtendedDsk, Side};
+use cpclib::disc::edsk::{ExtendedDsk, Head};
 use cpclib::disc::amsdos::*;
 use log::{info, trace, warn, error};
 use simplelog::*;
@@ -166,7 +166,7 @@ fn main() -> std::io::Result<()> {
 			// Read a dsk file
 			error!("Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results.");
 			let dsk = ExtendedDsk::open(catalog_fname).expect("unable to read the dsk file");
-			let manager = AmsdosManager::new_from_disc(dsk, Side::SideA);
+			let manager = AmsdosManager::new_from_disc(dsk, Head::HeadA);
 			manager.catalog()
 		}
 		else {
