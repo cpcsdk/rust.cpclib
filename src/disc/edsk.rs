@@ -1049,6 +1049,24 @@ impl ExtendedDsk {
         Some(res)
     }
 
+    /// Return all the bytes of the given track
+    pub fn tracks_bytes<H: Into<Head>>(
+        &self,
+        head: H,
+        track: u8) -> Option<Vec<u8>> {
+
+        match self.get_track_information(head, track) {
+            Some(track) => {
+                let mut bytes = Vec::new();
+                for sector in track.sector_information_list.sectors() {
+                    bytes.extend(sector.values.iter());
+                }
+                Some(bytes) 
+            },
+            _ => None
+        }
+    }
+
     /// Compute the datasum for the given track
     pub fn data_sum(&self, Head: Head) -> usize {
         self.track_list
