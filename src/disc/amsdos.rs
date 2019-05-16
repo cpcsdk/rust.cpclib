@@ -606,7 +606,6 @@ pub struct AmsdosCatalogEntry {
     file_name: AmsdosFileName,
     read_only: bool,
     system: bool,
-    page_size: u8,
     /// The indices, in the real catalog, of the entries that represent this one
     entries_idx: Vec<u8>,
     blocs: Vec<BlocIdx>
