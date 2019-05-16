@@ -600,7 +600,136 @@ impl std::fmt::Debug for AmsdosEntries {
     }
 }
 
+/// Encode a file in the catalog. This file can be represented by several entries
+#[derive(Clone, Debug)]
+pub struct AmsdosCatalogEntry {
+    file_name: AmsdosFileName,
+    read_only: bool,
+    system: bool,
+    page_size: u8,
+    /// The indices, in the real catalog, of the entries that represent this one
+    entries_idx: Vec<u8>,
+    blocs: Vec<BlocIdx>
+}
+
+impl AmsdosCatalogEntry {
+    pub fn file_name(&self) -> &AmsdosFileName {
+        &self.file_name
+    }
+}
+
+impl From<AmsdosEntry> for AmsdosCatalogEntry {
+    fn from(e: AmsdosEntry) -> AmsdosCatalogEntry{
+        AmsdosCatalogEntry {
+            file_name: e.file_name,
+            read_only: e.read_only,
+            system: e.system,
+            entries_idx: vec![e.idx],
+            blocs: e.blocs.iter()
+                        .filter(|b|{b.is_valid()})
+                        .map(|v|{v.clone()})
+                        .collect()
+        }
+    }
+}
+
+impl AmsdosCatalogEntry {
+    fn merge_entries(e1: &AmsdosCatalogEntry, e2: &AmsdosCatalogEntry) -> AmsdosCatalogEntry {
+        assert_eq!(
+            e1.file_name,
+            e2.file_name
+        );
+
+        AmsdosCatalogEntry {
+            file_name: e1.file_name.clone(),
+            read_only: e1.read_only,
+            system: e1.system,
+            entries_idx: {
+                let mut idx = e1.entries_idx.clone();
+                idx.extend_from_slice(&e2.entries_idx);
+                idx
+            },
+            blocs : {
+                let mut blocs = e1.blocs.clone();
+                blocs.extend_from_slice(&e2.blocs);
+                blocs
+            }
+        }
+    }
+
+    pub fn read_only(&self) -> bool {
+        self.read_only
+    }
+
+    pub fn system(&self) -> bool {
+        self.system
+    }
+
+    pub fn blocs(&self) -> &[BlocIdx] {
+        &self.blocs
+    }
+
+    /// Size in kilobytes
+    pub fn size(&self) -> usize {
+        self.blocs.len() * 512 *2 /1024
+    }
+}
+
+/// The AmsdosCatalog represents the catalog of a disc. It contains only valid entries and merge common ones
+#[derive(Debug)]
+pub struct AmsdosCatalog {
+    entries: Vec<AmsdosCatalogEntry>
+}
+
+impl From<AmsdosEntries> for AmsdosCatalog {
+    fn from(entries: AmsdosEntries) -> AmsdosCatalog {
+        let mut novel: Vec<AmsdosCatalogEntry> = Vec::new();
+
+        for current_entry in entries.without_erased_entries()
+                                    .map(|e|{AmsdosCatalogEntry::from(e.clone())}) {
+
+            let mut added = false;
+            for idx in 0..novel.len() {
+                if &novel[idx].file_name == &current_entry.file_name {
+                    novel[idx] = AmsdosCatalogEntry::merge_entries(
+                        &novel[idx], 
+                        &current_entry);
+                    added = true;
+                    break;
+                }
+            }
+
+            if !added {
+                novel.push(current_entry.clone())
+            }
+        }
+
+        AmsdosCatalog {
+            entries: novel
+        }
+    }
+}
+
+impl std::ops::Index<usize> for AmsdosCatalog {
+    type Output = AmsdosCatalogEntry;
+
+    fn index(&self, idx: usize) -> &Self::Output {
+        &self.entries[idx]
+    }
+
+}
+impl AmsdosCatalog {
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+}
+
 impl AmsdosEntries {
+
+    pub fn to_amsdos_catalog(self) ->  AmsdosCatalog {
+        AmsdosCatalog::from(self)
+    }
+
     pub fn get_entry_mut(&mut self, idx: usize) -> &mut AmsdosEntry {
         &mut self.entries[idx]
     }
