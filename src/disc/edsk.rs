@@ -269,6 +269,13 @@ pub struct TrackInformation {
 }
 
 impl TrackInformation {
+    /// TODO find a nicer (with Either ?) way to manipulate unformatted tracks
+    pub fn unformatted() -> TrackInformation {
+        Default::default()
+    }
+}
+
+impl TrackInformation {
     #[deprecated(
         note = "Note sure it should be used as each sector store this information and different sizes are possible"
     )]
@@ -791,10 +798,15 @@ impl TrackInformationList {
             for Head_nb in 0..disc_info.number_of_heads {
                 // Size of the track data + header
                 let current_track_size = disc_info.track_length(track_number, Head_nb) as usize;
-                // TODO treat the case of unformatted tracks
                 let track_buffer = &buffer
                     [consummed_bytes as usize..(consummed_bytes + current_track_size) as usize];
-                list.push(TrackInformation::from_buffer(track_buffer));
+                if current_track_size > 0 {
+                    list.push(TrackInformation::from_buffer(track_buffer));
+                }
+                else {
+                    eprintln!("Track {} is unformatted", track_number);
+                    list.push(TrackInformation::unformatted());
+                }
                 consummed_bytes += current_track_size;
             }
         }

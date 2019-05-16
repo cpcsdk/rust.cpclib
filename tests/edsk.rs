@@ -626,4 +626,74 @@ mod tests {
         32
     );
 }
+
+
+#[test]
+pub fn test_turlogh() {
+            use itertools::Itertools;
+
+        let dsk = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/Turlogh Le Rodeur (F) (Face A) (1987) [Original] (GAPS).dsk").unwrap();
+
+        let tracks_content = [
+            494279,
+550396,
+529390,
+552966,
+598805,
+591019,
+601475,
+556186,
+594971,
+592668,
+602404,
+376845,
+359686,
+347200,
+395356,
+429818,
+429007,
+597495,
+513222,
+599514,
+468723,
+462045,
+533030,
+466295,
+569636,
+631156,
+522249,
+476454,
+456379,
+520724,
+501739,
+370663,
+548114,
+563875,
+413639,
+432743,
+507678,
+587941,
+686284,
+1055232,
+        ];
+
+
+        for (idx, value) in tracks_content.iter().enumerate() {
+            let track = dsk.tracks_bytes(
+                            cpclib::disc::edsk::Head::HeadA, 
+                            idx as u8)
+                        .unwrap();
+            let obtained = track.iter()
+                        .map(|&v|v as usize)
+                        .sum::<usize>();
+            let nb = track.iter().count();
+
+            dbg!( (idx, *value, obtained, nb));
+
+            assert_eq!(
+                obtained,
+                *value
+            );
+        }
+}
 }
