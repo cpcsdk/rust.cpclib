@@ -265,6 +265,7 @@ pub struct TrackInformation {
     #[get = "pub"]
     pub(crate) sector_information_list: SectorInformationList,
     /// The size taken by the track + header in the dsk. This is a duplicated information obtained in the DiscInformation bloc
+    #[get = "pub"]
     pub(crate) track_size: u16,
 }
 
@@ -272,6 +273,11 @@ impl TrackInformation {
     /// TODO find a nicer (with Either ?) way to manipulate unformatted tracks
     pub fn unformatted() -> TrackInformation {
         Default::default()
+    }
+
+    /// Returns the real size of the track (i.e. after removing the header)
+    pub fn real_track_size(&self) -> u16 {
+        self.track_size() - 256
     }
 }
 
@@ -343,7 +349,10 @@ impl TrackInformation {
             track_number, head_number, sector_size, number_of_sectors, gap3_length, filler_byte
         );
         let sector_information_list =
-            SectorInformationList::from_buffer(&buffer[0x18..], number_of_sectors);
+            SectorInformationList::from_buffer(
+                &buffer[0x18..], 
+                number_of_sectors
+            );
 
         let track_info = TrackInformation {
             track_number,
@@ -359,6 +368,12 @@ impl TrackInformation {
         };
 
         assert!(track_info.track_size != 0);
+
+        assert_eq!(
+            track_info.real_track_size(),
+            track_info.compute_track_size() as u16,
+            "Wrong track_info {:?}", track_info
+        );
         track_info
     }
 
@@ -452,12 +467,28 @@ impl TrackInformation {
         }
     }
 
+    /// TODO remove this method or set it private
     pub fn total_size(&self) -> usize {
         self.sector_information_list
             .sectors
             .iter()
-            .map(|info| info.sector_information_bloc.data_length as usize)
+            .map(|info| dbg!(info.sector_information_bloc.data_length) as usize)
             .sum()
+    }
+
+    /// Track size has it should be written in the DSK
+    pub fn compute_track_size(&self) -> usize {
+        let size = self.total_size();
+        if size % 256 == 0{
+            size
+        } else {
+            let mut s = dbg!(size);
+            // TODO implement an efficient version
+            while s % 256 != 0 {
+                s = s +1;
+            }
+            s
+          }
     }
 
     delegate! {
@@ -638,13 +669,16 @@ impl SectorInformationList {
             consummed_bytes += 8;
             list_info.push(sector);
         }
+        dbg!(&list_info);                    
 
         // Get the data
         consummed_bytes = 256 - 0x18; // Skip the unused bytes
         for sector in list_info.iter() {
             let current_sector_size = sector.data_length as usize;
             let current_buffer = &buffer[consummed_bytes..consummed_bytes + current_sector_size];
-            list_data.push(current_buffer.to_vec());
+            let sector_bytes = current_buffer.to_vec();
+            assert_eq!(sector_bytes.len(), current_sector_size);
+            list_data.push(sector_bytes);
             consummed_bytes += current_sector_size;
         }
 
@@ -652,9 +686,12 @@ impl SectorInformationList {
         let info_drain = list_info.drain(..);
         let data_drain = list_data.drain(..);
         let sectors = zip(info_drain, data_drain)
-            .map(|(info, data)| Sector {
-                sector_information_bloc: info,
-                values: data,
+            .map(|(info, data)| {
+                assert_eq!(info.data_length as usize, data.len());
+                Sector {
+                    sector_information_bloc: info,
+                    values: data,
+                }
             })
             .collect::<Vec<Sector>>();
 

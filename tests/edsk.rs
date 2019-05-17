@@ -679,16 +679,25 @@ pub fn test_turlogh() {
 
 
         for (idx, value) in tracks_content.iter().enumerate() {
-            let track = dsk.tracks_bytes(
+            let track = dsk.get_track_information(cpclib::disc::edsk::Head::HeadA, 
+                            idx as u8).unwrap();
+            let track_bytes = dsk.tracks_bytes(
                             cpclib::disc::edsk::Head::HeadA, 
                             idx as u8)
                         .unwrap();
-            let obtained = track.iter()
+            let obtained = track_bytes.iter()
                         .map(|&v|v as usize)
                         .sum::<usize>();
-            let nb = track.iter().count();
+            let nb = track_bytes.iter().count();
+            let gap = track.gap3_length();
+            let track_size = track.compute_track_size();
 
-            dbg!( (idx, *value, obtained, nb));
+            dbg!( (idx, 
+                *value, 
+                obtained, 
+                nb,
+                track_size,
+                gap));
 
             assert_eq!(
                 obtained,
