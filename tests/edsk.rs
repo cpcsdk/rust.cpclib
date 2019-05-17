@@ -1104,5 +1104,90 @@ pub fn test_turlogh() {
                 *value
             );
         }
+
+        use cpclib::disc::amsdos::*;
+        let amsdos = AmsdosManager::new_from_disc(dsk, cpclib::disc::edsk::Head::HeadA);
+        let entries = dbg!(
+            amsdos.catalog()
+            .to_amsdos_catalog()
+            .sorted_physically_and_alphabetically()
+        );
+        
+        assert_eq!(entries.len(), 45);
+        let expected_values = [
+            (0,"ARMES ","BIN","3 Ko"),
+(0,"ASSEM ","BIN","3 Ko"),
+(0,"BANC ","BIN","1 Ko"),
+(0,"BASIC1 ","BAS","18 Ko"),
+(0,"BASIC2 ","BAS","18 Ko"),
+(0,"BOOT2 ","BAS","1 Ko"),
+(0,"DEMO ","BAS","1 Ko"),
+(0,"ENCORE ","BIN","3 Ko"),
+(0,"GENERIC ","BAS","5 Ko"),
+(0,"ICOCOMB1","BIN","2 Ko"),
+(0,"ICOCOMB2","BIN","1 Ko"),
+(0,"INTRO ","BAS","5 Ko"),
+(0,"LOAD ","BIN","1 Ko"),
+(0,"VERSION ","BIN","1 Ko"),
+(0,"1","CPT","4 Ko"),
+(0,"18","CPT","3 Ko"),
+(0,"19","CPT","4 Ko"),
+(0,"2","CPT","3 Ko"),
+(0,"20","CPT","3 Ko"),
+(0,"3","CPT","4 Ko"),
+(0,"325","CPT","3 Ko"),
+(0,"33","CPT","4 Ko"),
+(0,"4","CPT","2 Ko"),
+(0,"6","CPT","3 Ko"),
+(0,"DES ","CPT","1 Ko"),
+(0,"GARDE ","CPT","11 Ko"),
+(0,"ICOMENU ","BIN","4 Ko"),
+(0,"MUSIC ","BIN","3 Ko"),
+(0,"PROTO ","CPT","7 Ko"),
+(0,"TURLOG ","BIN","3 Ko"),
+(0,"101","CPT","3 Ko"),
+(0,"120","CPT","3 Ko"),
+(0,"125","CPT","4 Ko"),
+(0,"14","CPT","3 Ko"),
+(0,"17","CPT","4 Ko"),
+(0,"22","CPT","3 Ko"),
+(0,"225","CPT","4 Ko"),
+(0,"25","CPT","4 Ko"),
+(0,"35","CPT","3 Ko"),
+(0,"5","CPT","3 Ko"),
+(0,"500","CPT","4 Ko"),
+(0,"BOOT ","BAS","1 Ko"),
+(0,"BOOT1 ","BAS","1 Ko"),
+(0,"GENER ","CPT","7 Ko"),
+(0,"JEU ","BAS","1 Ko"),
+
+        ];
+
+
+        for (idx, expected_entry) in expected_values.iter().enumerate() {
+            let entry = &entries[idx];
+            assert_eq!(
+                expected_entry.0,
+                entry.file_name().user()
+            );
+
+            assert_eq!(
+                expected_entry.1.trim(),
+                entry.file_name().name()
+            );
+
+            assert_eq!(
+                expected_entry.2.trim(),
+                entry.file_name().extension()
+            );
+
+            assert_eq!(
+                expected_entry.3,
+                format!("{} Ko", entry.size())
+            );
+
+            assert!(entry.system());
+            assert!(!entry.read_only());
+        }
 }
 }

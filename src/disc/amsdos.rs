@@ -603,6 +603,8 @@ impl std::fmt::Debug for AmsdosEntries {
 /// Encode a file in the catalog. This file can be represented by several entries
 #[derive(Clone, Debug)]
 pub struct AmsdosCatalogEntry {
+    track: u8,
+    sector: u8,
     file_name: AmsdosFileName,
     read_only: bool,
     system: bool,
@@ -617,9 +619,12 @@ impl AmsdosCatalogEntry {
     }
 }
 
-impl From<AmsdosEntry> for AmsdosCatalogEntry {
-    fn from(e: AmsdosEntry) -> AmsdosCatalogEntry{
+impl From<(u8, u8, AmsdosEntry)> for AmsdosCatalogEntry {
+    fn from(e: (u8, u8, AmsdosEntry)) -> AmsdosCatalogEntry{
+        let (track, sector, e) = e;
         AmsdosCatalogEntry {
+            track,
+            sector,
             file_name: e.file_name,
             read_only: e.read_only,
             system: e.system,
@@ -640,6 +645,8 @@ impl AmsdosCatalogEntry {
         );
 
         AmsdosCatalogEntry {
+            track: e1.track.min(e2.track),
+            sector: e1.sector.min(e2.sector),
             file_name: e1.file_name.clone(),
             read_only: e1.read_only,
             system: e1.system,
@@ -675,7 +682,7 @@ impl AmsdosCatalogEntry {
 }
 
 /// The AmsdosCatalog represents the catalog of a disc. It contains only valid entries and merge common ones
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AmsdosCatalog {
     entries: Vec<AmsdosCatalogEntry>
 }
@@ -685,7 +692,16 @@ impl From<AmsdosEntries> for AmsdosCatalog {
         let mut novel: Vec<AmsdosCatalogEntry> = Vec::new();
 
         for current_entry in entries.without_erased_entries()
-                                    .map(|e|{AmsdosCatalogEntry::from(e.clone())}) {
+                                    .map(|e|{
+                                        AmsdosCatalogEntry::from(
+                                            (
+                                                entries.track(e).unwrap(), 
+                                                entries.sector(e).unwrap(), 
+                                                e.clone()
+                                            )
+                                        )
+                                        }
+                                    ) {
 
             let mut added = false;
             for idx in 0..novel.len() {
@@ -707,6 +723,8 @@ impl From<AmsdosEntries> for AmsdosCatalog {
             entries: novel
         }
     }
+
+
 }
 
 impl std::ops::Index<usize> for AmsdosCatalog {
@@ -718,15 +736,76 @@ impl std::ops::Index<usize> for AmsdosCatalog {
 
 }
 impl AmsdosCatalog {
+    
+    /// Returns the number of entries in the catalog
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    /// Create an alphabetically sorted version of the catalog
+    pub fn sorted_alphabetically(&self) -> AmsdosCatalog {
+        let mut copy: AmsdosCatalog = self.clone();
+        copy.entries.sort_by_key(|entry|{
+            entry.file_name().to_entry_format(false, false)
+        });
+        copy
+    }
+
+
+    /// Create a physically sorted version of the catalog
+    pub fn sorted_physically(&self) -> AmsdosCatalog {
+        let mut copy: AmsdosCatalog = self.clone();
+        copy.entries.sort_by_key(|entry|{
+            (entry.track, entry.sector)
+        });
+        copy
+    }
+
+    /// Create a physically and alphabetically sorted version of the catalog
+    pub fn sorted_physically_and_alphabetically(&self) -> AmsdosCatalog {
+        let mut copy: AmsdosCatalog = self.clone();
+        copy.entries.sort_by_key(|entry|{
+            (entry.track, entry.sector, entry.file_name().to_entry_format(false, false))
+        });
+        copy
     }
 }
 
 impl AmsdosEntries {
 
+    /// Generate a catalog that is more user friendly
     pub fn to_amsdos_catalog(self) ->  AmsdosCatalog {
         AmsdosCatalog::from(self)
+    }
+
+    /// Return the index of the entry
+    pub fn entry_index(&self, entry: &AmsdosEntry) -> Option<usize> {
+        for idx in 0..self.entries.len() {
+            if &self.entries[idx] as * const AmsdosEntry == entry as * const AmsdosEntry {
+                return Some(idx);
+            }
+        }
+        None
+    }
+
+    /// Return the track that contains the entry
+    pub fn track(&self, entry: &AmsdosEntry) -> Option<u8> {
+        match self.entry_index(entry) {
+            Some(idx) => {
+                Some((4*idx/64) as u8)
+            }
+            None => None
+        }
+    }
+
+    pub fn sector(&self, entry: &AmsdosEntry) -> Option<u8> {
+        match self.entry_index(entry) {
+            Some(idx) => {
+                let idx = idx%16;
+                Some([0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9][idx/16])
+            }
+            _ => None
+        }
     }
 
     pub fn get_entry_mut(&mut self, idx: usize) -> &mut AmsdosEntry {
