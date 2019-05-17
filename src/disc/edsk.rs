@@ -598,6 +598,12 @@ pub struct SectorInformation {
 }
 
 impl SectorInformation {
+
+    /// Return the real size of the sector
+    pub fn len(&self) -> usize {
+        self.sector_size as usize * 256
+    }
+
     pub fn from_buffer(buffer: &[u8]) -> SectorInformation {
         let info = SectorInformation {
             track: buffer[0x00],
@@ -763,14 +769,18 @@ bitflags! {
 pub struct Sector {
     #[get]
     pub(crate) sector_information_bloc: SectorInformation,
-    #[get]
+    /// Some DSK seem to have a vector with not the right size. In tFor this reason, it is better to not give access to it directly
     pub(crate) values: Vec<u8>,
 }
 
 impl Sector {
     /// Number of bytes stored in the sector
-    pub fn len(&self) -> u16 {
+    pub fn real_size(&self) -> u16 {
         self.values.len() as u16
+    }
+
+    pub fn len(&self) -> u16 {
+        self.sector_information_bloc.len() as u16
     }
 
     pub fn is_empty(&self) -> bool {
@@ -778,15 +788,16 @@ impl Sector {
     }
 
     pub fn data_sum(&self) -> usize {
-        self.values.iter().map(|&v| v as usize).sum::<usize>()
+        self.values().iter().map(|&v| v as usize).sum::<usize>()
     }
 
     pub fn values(&self) -> &[u8] {
-        &self.values
+        &self.values[..self.len() as usize]
     }
 
     pub fn values_mut(&mut self) -> &mut [u8] {
-        &mut self.values
+        let idx = dbg!(self.len() as usize);
+        &mut self.values[..idx]
     }
 
     /// Set all the values stored in the sector
@@ -1066,7 +1077,7 @@ impl ExtendedDsk {
             let Head = match Head {
                 Head::HeadA => 0,
                 Head::HeadB => 1,
-                Head::Unspecified => panic!("You must specify a Head for a double Headd disc."),
+                Head::Unspecified => panic!("You must specify a Head for a double Headed disc."),
             };
             track as usize * 2 + Head
         } else {
@@ -1099,7 +1110,7 @@ impl ExtendedDsk {
     }
 
     /// Return all the bytes of the given track
-    pub fn tracks_bytes<H: Into<Head>>(
+    pub fn track_bytes<H: Into<Head>>(
         &self,
         head: H,
         track: u8) -> Option<Vec<u8>> {
@@ -1108,7 +1119,7 @@ impl ExtendedDsk {
             Some(track) => {
                 let mut bytes = Vec::new();
                 for sector in track.sector_information_list.sectors() {
-                    bytes.extend(sector.values.iter());
+                    bytes.extend(sector.values().iter());
                 }
                 Some(bytes) 
             },
