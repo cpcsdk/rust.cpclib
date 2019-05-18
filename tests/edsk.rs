@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn open_double_head_edsk() {
-        let dsk = cpclib::disc::edsk::ExtendedDsk::open("./tests/dsk/bf2heads.dsk").unwrap();
+        let dsk = cpclib::disc::edsk::ExtendedDsk::open("./tests/dsk/bf2sides.dsk").unwrap();
         test_double_head_bf_edsk(&dsk);
 
         let tmp_file = "/tmp/tmp.dsk";
