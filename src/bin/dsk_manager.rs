@@ -10,8 +10,15 @@ use std::str::FromStr;
 use cpclib::disc::amsdos::*;
 use cpclib::disc::edsk::{ExtendedDsk, Head};
 
+use custom_error::custom_error;
+
+custom_error!{pub DskManagerError
+    IOError{source: std::io::Error} = "IO error: {source}.",
+    DiscConfigError{source: cpclib::disc::cfg::DiscConfigError} = "Disc configuration: {source}"
+}
+
 // Still everything to do
-fn main() -> std::io::Result<()> {
+fn main() -> Result<(), DskManagerError> {
     let matches = App::new("dsk_manager")
                        .about("Manipulate DSK files")
                        .author("Krusty/Benediction")
