@@ -422,7 +422,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);
 
-        let dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
+        let _dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
 
         let amsdos = cpclib::disc::amsdos::AmsdosManager::new_from_disc(dsk.clone(), 0);
         let catalog = amsdos.catalog();

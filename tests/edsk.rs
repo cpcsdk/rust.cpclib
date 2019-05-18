@@ -568,8 +568,8 @@ mod tests {
 
         let track = *chunk.next().unwrap() as u8;
         let sector = *chunk.next().unwrap() as u8;
-        let size = *chunk.next().unwrap() as usize;
-        let real_size = *chunk.next().unwrap() as usize;
+        let _size = *chunk.next().unwrap() as usize;
+        let _real_size = *chunk.next().unwrap() as usize;
         let value = *chunk.next().unwrap() as usize;
 
         assert_eq!(
