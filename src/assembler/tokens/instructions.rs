@@ -243,7 +243,7 @@ pub enum Token {
     Undef(String),
     While(Expr, Listing),
 
-    MacroCall(String, Vec<String>), // String are used in order to not be limited to expression and allow opcode/registers use
+    MacroCall(String, Vec<Expr>), // String are used in order to not be limited to expression and allow opcode/registers use
 }
 
 impl fmt::Display for Token {
@@ -344,8 +344,11 @@ impl fmt::Display for Token {
             },
 
             Token::MacroCall(ref name, ref args)
-                => {
-                    write!(f, "{} {}", name, args.clone().join(", "))?;
+                => {use itertools::Itertools;
+                    write!(f, "{} {}", name, args.clone()
+                                                .iter()
+                                                .map(|a|{a.to_string()})
+                                                .join(", "))?;
                     Ok(())
             },
             _ => unimplemented!()
