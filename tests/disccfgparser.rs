@@ -424,27 +424,13 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 
         let dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
 
-        let disc_info = dbg!(cpclib::disc::edsk::DiscInformation::from_buffer(
-            &buffer[..256]
-        ));
-        assert_eq!(*disc_info.number_of_tracks(), 42);
-        assert_eq!(disc_info.track_size_table().len(), 42);
-
-        let track0 = dbg!(cpclib::disc::edsk::TrackInformation::from_buffer(
-            &buffer[256..]
-        ));
-        assert_eq!(*track0.number_of_sectors(), 9);
-
-        assert!(disc_info.track_length_at_idx(0) % 256 == 0);
-
-        //let track1 = dbg!(cpclib::disc::edsk::TrackInformation::from_buffer(&buffer[(256 + disc_info.track_length_at_idx(0)) as usize ..]));
-
         let amsdos = cpclib::disc::amsdos::AmsdosManager::new_from_disc(dsk.clone(), 0);
         let catalog = amsdos.catalog();
         let nb_entries = catalog.used_entries().count();
         assert_eq!(0, nb_entries);
-
+/*
         let dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
         assert_eq!(dsk, dsk2)
+        */
     }
 }
