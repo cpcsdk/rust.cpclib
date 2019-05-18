@@ -226,11 +226,9 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         let cfg = cpclib::disc::cfg::DiscConfig::from_str(SINGLE_SIDED).unwrap();
 
         let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
-        let cfg2 = (&dsk).into();
+        let cfg2: cpclib::disc::cfg::DiscConfig = (&dsk).into();
 
-        println!("{:?}", &cfg);
-        println!("{:?}", &cfg2);
-        assert_eq!(cfg, cfg2);
+        assert_eq!(cfg.explode(), cfg2.explode());
 
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);
@@ -338,6 +336,41 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         assert_eq!(track_info.gap3(), 0x4e);
         assert_eq!(track_info.nb_sectors(), 9);
 
+        let track_info = dbg!(cfg.track_information_for_track(3, 18).unwrap());
+        assert_eq!(track_info.sector_size_human_readable(), 512);
+        assert_eq!(track_info.gap3(), 0x30);
+        assert_eq!(track_info.nb_sectors(),10);
+        assert_eq!(track_info.sector_id_at(0), 0xb4);
+        assert_eq!(track_info.sector_id_at(9), 0xb3);
+
+        let cfgb = cfg.explode();
+        let track_info = dbg!(cfgb.track_information_for_track(3, 18).unwrap());
+        assert_eq!(track_info.sector_size_human_readable(), 512);
+        assert_eq!(track_info.gap3(), 0x30);
+        assert_eq!(track_info.nb_sectors(),10);
+        assert_eq!(track_info.sector_id_at(0), 0xb4);
+        assert_eq!(track_info.sector_id_at(9), 0xb3);
+/*
+// This comment code compare the result with the one of Ramlaid.
+// It fails, but I'm not sure the error comes from us
+        let dsk2 = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/SingleSided_3i.dsk").unwrap();
+
+        dbg!(&dsk2);
+        let cfg2 = dsk2.to_cfg();
+
+        let track_info = dbg!(cfg2.track_information_for_track(3, 18).unwrap());
+        assert_eq!(track_info.sector_size_human_readable(), 512);
+        assert_eq!(track_info.gap3(), 0x30);
+        assert_eq!(track_info.nb_sectors(),10);
+        assert_eq!(track_info.sector_id_at(0), 0xb4);
+        assert_eq!(track_info.sector_id_at(9), 0xb3);
+
+        assert_eq!(
+            cfg.explode(),
+            cfg2.explode()
+        );
+
+*/
         let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);
@@ -377,8 +410,19 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
             );
         }
 
+        for track in &[8, 18, 28, 38] {
+            check_track(
+                *track,
+                512, // sector size
+                &[0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xb1, 0xb2, 0xb3],
+            );
+        }
+
+        dsk.save("/tmp/test.dsk").unwrap();
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);
+
+        let dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
 
         let disc_info = dbg!(cpclib::disc::edsk::DiscInformation::from_buffer(
             &buffer[..256]

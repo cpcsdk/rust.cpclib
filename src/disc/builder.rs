@@ -27,6 +27,7 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
     for (head, track_idx) in cfg.track_idx_iterator() {
         let mut track = edsk.track_list.add_empty_track();
         track.track_number = track_idx;
+
         track.head_number = match *head {
             Head::Unspecified => Head::HeadA,
             Head::HeadA => Head::HeadA,
@@ -51,6 +52,8 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
 
         track_info.track_number = track_idx;
         track_info.head_number = track_model.head.into();
+        track_info.data_rate = 1.into();
+        track_info.recording_mode = 2.into();
         track_info.sector_size = track_model.sector_size_dsk_format();
         track_info.number_of_sectors = track_model.sector_id.len() as _;
         track_info.gap3_length = track_model.gap3 as _; // TODO ensure a 8buts value is in the cfg
