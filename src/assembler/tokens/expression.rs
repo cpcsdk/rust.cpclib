@@ -13,6 +13,8 @@ use crate::assembler::AssemblerError;
 pub enum Expr {
     /// 32 bits integer value (should be able to include any integer value manipulated by the assember.
     Value(i32),
+    /// String (for db directive)
+    String(String),
     /// Label
     Label(String),
     /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
@@ -133,6 +135,8 @@ impl Expr {
         match *self {
             Value(val) => Ok(val),
 
+            String(ref string) => panic!("String values cannot be converted to i32 {}", string),
+
             Label(ref label) => match sym.value(label) {
                 Some(val) => Ok(val),
                 None => Err(AssemblerError::UnknownSymbol {
@@ -246,6 +250,7 @@ impl Display for Expr {
         use self::Expr::*;
         match self {
             &Value(val) => write!(format, "0x{:x}", val),
+            &String(ref string) => write!(format, "\"{}\"", string),
             &Label(ref label) => write!(format, "{}", label),
             &Duration(ref token) => write!(format, "DURATION({})", token),
             &OpCode(ref token) => write!(format, "OPCODE({})", token),
@@ -287,6 +292,7 @@ impl Debug for Expr {
         use self::Expr::*;
         match *self {
             Value(val) => write!(format, "{}", val),
+            String(ref string) => write!(format, "\"{}\"", string),
             Label(ref label) => write!(format, "{}", label),
             Duration(ref token) => write!(format, "DURATION({:?})", token),
             OpCode(ref token) => write!(format, "OPCODE({:?})", token),
