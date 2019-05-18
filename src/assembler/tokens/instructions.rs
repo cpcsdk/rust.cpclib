@@ -173,7 +173,12 @@ pub enum TestKind {
     LabelDoesNotExist(String)
 }
 
-
+/// List of transformations that can be applied to an imported binary file
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BinaryTransformation {
+    None,
+    Exomizer
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
@@ -202,13 +207,14 @@ pub enum Token {
     If(Vec<(TestKind, Listing)>, Option<Listing>),
     /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
     Include(String, Option<Listing>),
-    Incbin(
+    Incbin( // TODO name arguments to ease manipulation
         String,
         Option<Expr>,
         Option<Expr>,
         Option<Expr>,
         Option<Expr>,
         Option<Vec<u8>>,
+        BinaryTransformation
     ),
     Let(String, Expr),
     List,
@@ -477,7 +483,7 @@ impl Token {
                 }
             }
 
-            Token::Incbin(ref fname, _, _, _, _, ref mut data) if data.is_none() => {
+            Token::Incbin(ref fname, _, _, _, _, ref mut data, ref transformation) if data.is_none() => {
                 //TODO manage the optional arguments
                 match ctx.get_path_for(fname) {
                     None => {
@@ -492,7 +498,15 @@ impl Token {
                         let mut content = Vec::new();
                         f.read_to_end(&mut content)
                             .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
-                        data.replace(content);
+
+                        match transformation {
+                            BinaryTransformation::None => {
+                                data.replace(content);
+                            },
+                            BinaryTransformation::Exomizer => {
+                                unimplemented!("Need to implement exomizer crunching")
+                            }
+                        }
                     }
                 }
             },

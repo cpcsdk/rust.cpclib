@@ -612,12 +612,12 @@ mod tests {
 
     #[test]
     fn test_repeat() {
-        let z80 = "  repeat 5
+        let z80 = "   repeat 5
                 db 0
                 db 1
             endrepeat
             ";
-        let res = parse_repeat(CompleteStr(z80));
+        let res = dbg!(parse_repeat(z80.into()));
         assert!(res.is_ok());
     }
 
