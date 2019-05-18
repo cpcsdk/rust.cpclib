@@ -161,8 +161,20 @@ impl DiscInformation {
             34 + 14 + 1 + 1 + 2 + self.track_size_table.len()
         );
 
+        assert!(buffer.len()<= 256);
         // ensure we use 256 bytes
-        buffer.resize(256, 0);
+        buffer.resize(256, 0x00);
+        assert_eq!(buffer.len(), 256);
+
+        // DEBUG mode XXX To remove
+        let from_buffer = Self::from_buffer(&buffer);
+        assert_eq!(
+            self,
+            &from_buffer
+        );
+
+
+
     }
 
     pub fn is_double_head(&self) -> bool {
@@ -331,7 +343,7 @@ impl TrackInformation {
         if String::from_utf8_lossy(&buffer[..0xc]).to_ascii_uppercase()
             != "Track-info\r\n".to_ascii_uppercase()
         {
-            panic!("Track buffer does not seem coherent\n{:?}", buffer);
+            panic!("Track buffer does not seem coherent\n{:?}...", &buffer[..0xc]);
         }
 
         let track_size = buffer.len() as u16;
@@ -398,7 +410,7 @@ impl TrackInformation {
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
         let start_size = buffer.len();
 
-        // low byte MUST be null XXX I'm not pretty sure of that
+        // low byte MUST be null
         assert_eq!(start_size % 256, 0);
 
         // 00 - 0b 	"Track-Info\r\n" 	12
@@ -442,7 +454,8 @@ impl TrackInformation {
         self.sector_information_list.sectors.iter().for_each(|s| {
             s.sector_information_bloc.to_buffer(buffer);
         });
-        // TODO store offsets ?
+
+
 
         // Ensure next position has a low byte value of 0
         let added_bytes = buffer.len() - start_size;
@@ -455,6 +468,9 @@ impl TrackInformation {
             buffer.extend_from_slice(&s.values);
         });
 
+
+    /*
+        // TODO find why this coded was previously present as it raise issues
         // Ensure the size is correct
         let added_bytes = (buffer.len() - start_size) as u16;
         assert!(
@@ -465,6 +481,10 @@ impl TrackInformation {
         if missing_bytes != 0 {
             buffer.resize(buffer.len() + missing_bytes as usize, 0);
         }
+    */
+        // Add padding
+        assert!(buffer.len()%256 == 0);
+
     }
 
     /// TODO remove this method or set it private
@@ -625,6 +645,7 @@ impl SectorInformation {
     /// 05 	FDC status register 2 (equivalent to NEC765 ST2 status register) 	1
     /// 06 - 07 	actual data length in bytes 	2 
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
+        
         buffer.push(self.track);
         buffer.push(self.head);
         buffer.push(self.sector_id);

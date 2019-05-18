@@ -82,6 +82,7 @@ impl FromStr for DiscConfig {
     }
 }
 
+
 impl DiscConfig {
     pub fn single_head_data_format() -> DiscConfig {
         Self::from_str(DATA_FORMAT_CFG).unwrap()
@@ -138,6 +139,37 @@ impl DiscConfig {
         head_iterator.cartesian_product(track_iterator)
     }
 }
+
+impl DiscConfig {
+    /// return a disc configuration where each groups contains only one track
+    /// TODO find a better name
+    pub fn explode(&self) -> DiscConfig {
+        let mut groups = Vec::new();
+        for track_group in self.track_groups.iter() {
+            for track in track_group.tracks.iter() {
+                groups.push(TrackGroup{
+                    tracks: vec![*track],
+                    head: track_group.head,
+                    sector_size: track_group.sector_size,
+                    gap3: track_group.gap3,
+                    sector_id: track_group.sector_id.clone(),
+                    sector_id_head: track_group.sector_id_head.clone()
+                });
+            }
+        }
+
+        groups.sort_by_key(|group|{
+            group.tracks[0]
+        });
+
+        DiscConfig {
+            nb_tracks: self.nb_tracks,
+            nb_heads: self.nb_heads,
+            track_groups: groups
+        }
+    }
+}
+
 
 #[derive(Debug, PartialEq)]
 pub struct TrackGroup {
@@ -204,6 +236,10 @@ impl TrackGroup {
 
     pub fn number_of_sectors(&self) -> usize {
         self.sector_id.len()
+    }
+
+    pub fn sector_id_at(&self, idx: usize) -> u8 {
+        self.sector_id[idx]
     }
 }
 
@@ -426,6 +462,7 @@ named!(
     )
 );
 
+// TODO allow to write the information in a different order
 named!(pub parse_config<CompleteStr<'_>, DiscConfig>,
   do_parse!(
 		many0!(empty_line) >>
