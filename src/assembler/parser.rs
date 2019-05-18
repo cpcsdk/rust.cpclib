@@ -464,14 +464,27 @@ named!(
 named!(
     parse_incbin<CompleteStr<'_>, Token>,
     do_parse!(
-        tag_no_case!("INCBIN")
+        transformation: alt!(
+            tag_no_case!("INCBIN") => {|_| {BinaryTransformation::None}} |
+            tag_no_case!("INCEXO") => {|_| {BinaryTransformation::Exomizer}}
+        )
             >> space1
             >> fname:
                 alt!(
                     preceded!(tag!("\""), take_until_and_consume1!("\""))
                         | preceded!(tag!("'"), take_until_and_consume1!("'"))
                 )
-            >> (Token::Incbin(fname.to_string(), None, None, None, None, None))
+            >> (
+                Token::Incbin(
+                    fname.to_string(), 
+                    None, 
+                    None, 
+                    None, 
+                    None, 
+                    None, 
+                    transformation
+                )
+            )
     )
 );
 
