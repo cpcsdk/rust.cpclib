@@ -817,7 +817,7 @@ named!(
     pub expr_list <CompleteStr<'_>, Vec<Expr>>,
         separated_nonempty_list!(
             do_parse!(tag!(",") >> many0!(space) >> ()),
-            expr
+            alt!(expr | string_expr)
             )
     );
 
@@ -1436,6 +1436,15 @@ named!(
 
 // Usefull later for db
 named!(pub string_between_quotes<CompleteStr<'_>, CompleteStr<'_>>, delimited!(char!('\"'), is_not!("\""), char!('\"')));
+
+
+named!(
+    pub string_expr<CompleteStr<'_>, Expr>,
+    map!(
+        string_between_quotes,
+        |string| Expr::String(string.to_string())
+    )
+);
 
 pub fn parse_label(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, String> {
     // Get the label
