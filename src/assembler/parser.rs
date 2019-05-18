@@ -530,6 +530,7 @@ named!(
             | parse_stable_ticker
             | parse_undef
             | parse_noarg_directive
+            | parse_macro_call
     )
 );
 
@@ -802,6 +803,22 @@ named!(
         }
     })
   )
+);
+
+
+named!(
+    pub parse_macro_call <CompleteStr<'_>, Token>, do_parse!(
+        name: parse_label >>
+        args: opt!(
+            alt!(
+                expr_list |
+                tag_no_case!("(void)") => {|_| Vec::new()}
+            )
+        ) >>
+        (
+            Token::MacroCall(name, args.unwrap_or(Vec::new()))
+        )
+    )
 );
 
 named!(
