@@ -4,6 +4,7 @@ extern crate pretty_assertions;
 
 #[cfg(test)]
 mod tests {
+use std::str::FromStr;
 
     const DOUBLE_SIDED: &str = "NbTrack = 80
 NbHead = 2
@@ -222,7 +223,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
     fn dsk_to_cfg() {
         
 
-        let cfg = cpclib::disc::cfg::DiscConfig::from(SINGLE_SIDED);
+        let cfg = cpclib::disc::cfg::DiscConfig::from_str(SINGLE_SIDED).unwrap();
 
         let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
         let cfg2 = (&dsk).into();
@@ -291,7 +292,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 
     #[test]
     fn arkos_disc() {
-        let cfg = cpclib::disc::cfg::DiscConfig::from(include_str!("dsk/CreateDoubleSided_3_5i.cfg"));
+        let cfg = cpclib::disc::cfg::DiscConfig::from_str(include_str!("dsk/CreateDoubleSided_3_5i.cfg")).unwrap();
 
         assert!(cfg
             .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 0)
@@ -330,7 +331,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 
     #[test]
     fn test_build() {
-        let cfg = cpclib::disc::cfg::DiscConfig::from(SINGLE_SIDED);
+        let cfg = cpclib::disc::cfg::DiscConfig::from_str(SINGLE_SIDED).unwrap();
         println!("{:?}", cfg);
         let track_info = cfg.track_information_for_track(3, 0).unwrap();
         assert_eq!(track_info.sector_size_human_readable(), 512);
