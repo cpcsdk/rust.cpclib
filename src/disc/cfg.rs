@@ -2,7 +2,7 @@
 use nom;
 use nom::types::CompleteStr;
 use nom::{eol, hex_u32, space0, space1};
-
+use custom_error::custom_error;
 
 use itertools;
 use itertools::Itertools;
@@ -14,6 +14,8 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+
+use std::str::FromStr;
 
 const DATA_FORMAT_CFG: &str = "
 NbTrack = 40
@@ -37,6 +39,12 @@ SectorID = 0xc1,0xc6,0xc2,0xc7,0xc3,0xc8,0xc4,0xc9,0xc5
 sectorIDHead = 0,0,0,0,0,0,0,0,0
 ";
 
+
+custom_error!{pub DiscConfigError
+    IOError{source: std::io::Error} = "IO error: {source}.",
+    ParseError{msg: String}            = "Parse error: {msg}"
+}
+
 /// Disk format configuration.
 #[derive(Debug, PartialEq)]
 pub struct DiscConfig {
@@ -48,31 +56,48 @@ pub struct DiscConfig {
     pub(crate) track_groups: Vec<TrackGroup>,
 }
 
-impl From<&str> for DiscConfig {
+impl FromStr for DiscConfig { 
+    type Err = DiscConfigError;
+
     /// Generates the configuration from a &str. Panic in case of failure.
     /// The format corresponds to cpctools format from Ramlaid/Mortel.
-    fn from(config: &str) -> DiscConfig {
-        let (_, res) = parse_config(config.into()).unwrap();
-        res
+    fn from_str(config: &str) -> Result<DiscConfig, Self::Err> {
+
+        match parse_config(config.into()) {
+            Ok((next, res)) => {
+                if next.trim().len() != 0 {
+                    Err(DiscConfigError::ParseError{
+                            msg:format!("Bug in the parser, there is still content to parse: {}", next)
+                        }
+                    )
+                }
+                else {
+                    Ok(res)
+                }
+            },
+            Err(error) => {
+                Err(DiscConfigError::ParseError{ msg: error.to_string()})
+            }
+        }
     }
 }
 
 impl DiscConfig {
     pub fn single_head_data_format() -> DiscConfig {
-        DATA_FORMAT_CFG.into()
+        Self::from_str(DATA_FORMAT_CFG).unwrap()
     }
 
     pub fn single_head_data42_format() -> DiscConfig {
-        DATA_FORMAT42_CFG.into()
+        Self::from_str(DATA_FORMAT42_CFG).unwrap()
     }
 
     /// Create a configuration from the provided file
-    pub fn new<P: AsRef<Path>>(p: P) -> std::io::Result<DiscConfig> {
+    pub fn new<P: AsRef<Path>>(p: P) -> Result<DiscConfig, DiscConfigError> {
         let mut content = String::new();
         let mut f = File::open(p.as_ref())?;
         f.read_to_string(&mut content)?;
 
-        Ok(content.as_str().into())
+        Self::from_str(content.as_str())
     }
 }
 
@@ -406,7 +431,10 @@ named!(pub parse_config<CompleteStr<'_>, DiscConfig>,
 		many0!(empty_line) >>
 	  nb_tracks: call!(value_of_key, "NbTrack") >>
 		many0!(empty_line) >>
-	  nb_heads: call!(value_of_key, "NbHead") >>
+	  nb_heads: alt!(
+          call!(value_of_key, "NbHead") |
+          call!(value_of_key, "NbSide")
+       ) >>
 		track_groups: fold_many1!(
 			 preceded!(
 			  many0!(empty_line),
