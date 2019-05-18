@@ -246,9 +246,9 @@ impl DiscInformation {
 ///
 /// Annotations:
 ///
-///     The sector data must follow the track information block in the order of the sector IDs. No track or sector may be omitted.
-///     With double sided formats, the tracks are alternating, e.g. track 0 head 0, track 0 head 1, track 1 ...
-///     Use CPCTRANS to copy CPC discs into this format.
+///   - The sector data must follow the track information block in the order of the sector IDs. No track or sector may be omitted.
+///   - With double sided formats, the tracks are alternating, e.g. track 0 head 0, track 0 head 1, track 1 ...
+///   - Use CPCTRANS to copy CPC discs into this format.
 
 #[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct TrackInformation {
