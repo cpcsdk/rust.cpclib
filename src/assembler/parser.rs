@@ -91,6 +91,7 @@ pub fn parse_str_with_context(code: &str, ctx: &ParserContext) -> Result<Listing
                         "Bug in the parser. The remaining source has not been assembled:\n{}",
                         remaining
                     ),
+                    context: ctx.clone()
                 })
             } else {
                 for token in parsed.listing_mut().iter_mut() {
@@ -568,10 +569,10 @@ named!(
 
         // Gest the kind of test to do
         test_kind: alt!(
+            value!(IF_CODE, tag_no_case!("IF")) |
             value!(IFNOT_CODE, tag_no_case!("IFNOT")) |
             value!(IFDEF_CODE, tag_no_case!("IFDEF")) |
-            value!(IFNDEF_CODE, tag_no_case!("IFNDEF")) |
-            value!(IF_CODE, tag_no_case!("IF")) 
+            value!(IFNDEF_CODE, tag_no_case!("IFNDEF"))
          ) >>
 
         // Get the corresponding test
