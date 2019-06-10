@@ -9,13 +9,14 @@ pub mod assembler;
 
 /// Utility functions to manually create tokens.
 pub mod builder;
+use crate::assembler::parser::ParserContext;
 
 #[derive(Debug, Fail)]
 pub enum AssemblerError {
     #[fail(display = "Assembling bug: {}", msg)]
     BugInAssembler { msg: String },
-    #[fail(display = "Parser bug: {}", error)]
-    BugInParser { error: String },
+    #[fail(display = "Parser bug: {}. Context: {:?}", error, context)]
+    BugInParser { error: String, context: ParserContext},
 
     // TODO add more information
     #[fail(display = "Syntax error: {}", error)]

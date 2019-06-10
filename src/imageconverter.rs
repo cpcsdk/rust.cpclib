@@ -321,6 +321,330 @@ pub enum OutputFormat {
 
     /// CPC memory encoded to be used with hardware splitting. The vector only contains the Variant CPCMemory
     CPCSplittingMemory(Vec<OutputFormat>),
+
+    /// For quite complexe coding more related to very fast display
+    TileEncoded {
+        /// The width of a tile
+        tile_width: TileWidthCapture,
+        /// The height of a tile
+        tile_height: TileHeightCapture,
+        /// The way tile are horizontally captured
+        horizontal_movement: TileHorizontalCapture,
+        /// The way tile are vertically captured
+        vertical_movement: TileVerticalCapture,
+        /// The width of the grid (i.e., the number of tiles present in a row)
+        grid_width: GridWidthCapture,
+        /// The height of the gris (i.e., the number of tiles present in a column)
+        grid_height: GridHeightCapture,
+    }
+}
+
+/// Defines the width of the capture
+#[derive(Debug,Clone)]
+pub enum TileWidthCapture {
+    /// All the width is captured
+    FullWidth,
+    /// Only the given number of bytes is captured
+    NbBytes(usize)
+}
+
+/// Defines the width of the capture
+#[derive(Debug,Clone)]
+pub enum TileHeightCapture {
+    /// All the height is captured
+    FullHeight,
+    /// Only the given number of lines is captured
+    NbLines(usize)
+}
+
+/// Defines the width of the capture
+#[derive(Debug,Clone)]
+pub enum GridWidthCapture {
+    /// All the width is captured
+    FullWidth,
+    /// Only the given number of tiles are capture in a row
+    TilesInRow(usize)
+}
+
+/// Defines the width of the capture
+#[derive(Debug,Clone)]
+pub enum GridHeightCapture {
+    /// All the height is captured
+    FullHeight,
+    /// Only the given number of tiles is captured in a column
+    TilesInColumn(usize)
+}
+
+/// Defines the horizontal movement when capturing bytes
+#[derive(Debug,Clone)]
+pub enum TileHorizontalCapture {
+    /// Bytes are always captured from left to right
+    AlwaysFromLeftToRight,
+    /// Bytes are always captured from right to left
+    AlwaysFromRightToLeft,
+    /// Bytes are read in a right-left left-right way
+    StartFromRightAndFlipAtTheEndOfLine,
+    /// Bytes are read in a left-right right-left way
+    StartFromLeftAndFlipAtTheEndOfLine
+}
+
+
+
+
+pub trait HorizontalWordCounter {
+    fn get_column_index(&self) -> usize {
+        unimplemented!()
+    }
+    /// goto the next position to compute (that is configuration dependant)
+    fn next(&mut self) {
+        unimplemented!();
+    }
+
+    // Acknowledge that line is ended
+    fn line_ended(&mut self) {
+        unimplemented!();
+    }
+}
+
+pub struct StartFromLeftAndFlipAtTheEndOfLine {
+    current_column: usize,
+    left_to_right: bool
+}
+
+impl Default for StartFromLeftAndFlipAtTheEndOfLine {
+    fn default() -> Self {
+        StartFromLeftAndFlipAtTheEndOfLine {
+            current_column: 0,
+            left_to_right: true
+        }
+    }
+}
+impl HorizontalWordCounter for StartFromLeftAndFlipAtTheEndOfLine {
+
+    fn get_column_index(&self) -> usize {
+        self.current_column
+    }
+
+    fn next(&mut self) {
+        if self.left_to_right {
+            self.current_column += 1;
+        }
+        else {
+            self.current_column -= 1
+        }
+    }
+
+    fn line_ended(&mut self) {
+        self.left_to_right = ! self.left_to_right;
+    }
+}
+
+impl TileHorizontalCapture {
+    pub fn counter(&self) -> Box<dyn HorizontalWordCounter> {
+        match self {
+            Self::AlwaysFromLeftToRight => unimplemented!(),
+            Self::AlwaysFromRightToLeft => unimplemented!(),
+            Self::StartFromRightAndFlipAtTheEndOfLine => unimplemented!(),
+            Self::StartFromLeftAndFlipAtTheEndOfLine => Box::new(StartFromLeftAndFlipAtTheEndOfLine::default())
+        }
+    }
+}
+
+/// Utility structure that helps in playing with gray code movement in lines.
+/// We assume that chars are 8 lines tall. Some modification are possible for chars of 4 lines
+/// 
+/// Addresses ordered by lines on screen
+/// 
+/// 0 0x00??  000
+/// 1 0x08??  001
+/// 2 0x10??  010
+/// 3 0x18??  011
+/// 4 0x20??  100
+/// 5 0x28??  101
+/// 6 0x30??  110
+/// 7 0x38??  111
+/// 
+/// Adresses ordered by graycode
+/// 
+/// 0 000 => 0
+/// 1 001 => 1
+/// 2 011 => 3
+/// 3 010 => 2
+/// 4 110 => 6
+/// 5 111 => 7
+/// 6 101 => 5
+/// 7 100 => 4
+/// 
+#[derive(Debug)]
+pub struct GrayCodeLineCounter {
+    char_line: usize,
+    pos_in_char: u8 // in gray code space
+}
+
+/// Standard line counter
+pub struct StandardLineCounter {
+    pos_in_screen: usize,
+    top_to_bottom: bool
+}
+
+pub trait LineCounter {
+    /// Return the real number of the line
+    fn get_line_index_in_screen(&self) -> usize;
+
+    /// goto the next position to compute (that is configuration dependant)
+    fn next(&mut self) {
+        unimplemented!();
+    }
+
+}
+
+impl StandardLineCounter {
+    pub fn top_to_bottom() -> Self {
+        Self {
+            pos_in_screen: 0,
+            top_to_bottom: true
+        }
+    }
+
+    pub fn bottom_to_top(start: usize) -> Self {
+        Self {
+            pos_in_screen: start,
+            top_to_bottom: false
+        }
+    }
+}
+
+impl LineCounter for StandardLineCounter {
+    fn get_line_index_in_screen(&self) -> usize {
+        self.pos_in_screen
+    }
+    fn next(&mut self) {
+        if self.top_to_bottom {
+            self.pos_in_screen += 1;
+        }
+        else {
+            self.pos_in_screen -= 1;
+        }
+    }
+}
+
+
+
+impl GrayCodeLineCounter {
+    const GRAYCODE_INDEX_TO_SCREEN_INDEX: [u8;8] = [0,1,3,2,6,7,5,4];
+    const SCREEN_INDEX_TO_GRAYCODE_INDEX: [u8;8] = [0,1,3,2,7,6,4,5];
+
+    pub fn new() -> Self {
+        GrayCodeLineCounter {
+            char_line: 0,
+            pos_in_char: 0
+        }
+    }
+
+    pub fn get_char_line(&self) -> usize {
+        self.char_line
+    }
+
+    pub fn get_line_index_in_char(&self) -> u8 {
+        Self::GRAYCODE_INDEX_TO_SCREEN_INDEX[self.get_graycode_index_in_char() as usize]
+    }
+
+    pub fn get_graycode_index_in_char(&self) -> u8 {
+        self.pos_in_char
+    }
+
+
+    /// Modify the state to represent the previous line
+    pub fn goto_previous_line(&mut self) {
+        if self.pos_in_char == 0 {
+            self.pos_in_char = 7;
+            self.char_line -= 1;
+        }
+        else {
+            self.pos_in_char -= 1;
+        }
+    }
+
+    /// Modify the state to represent the next line
+    pub fn goto_next_line(&mut self) {
+        self.pos_in_char += 1;
+        if self.pos_in_char == 8 {
+            self.pos_in_char = 0;
+            self.char_line += 1;
+        }
+    }
+
+}
+
+
+
+
+
+impl LineCounter for GrayCodeLineCounter {
+    fn get_line_index_in_screen(&self) -> usize {
+        self.char_line * 8 + self.get_line_index_in_char() as usize
+    }
+    fn next(&mut self) {
+        self.goto_next_line()
+    }
+}
+
+
+/// Defines the vertical movement when capturing lines
+#[derive(Debug,Clone)]
+pub enum TileVerticalCapture {
+    /// Lines are always captured from the top to the bottom
+    AlwaysFromTopToBottom,
+    /// Lines are always captured from the bottom to the top
+    AlwaysFromBottomToTop,
+    /// Lines are captured in a top-bottom bottom-top way
+    StartFromTopAndFlipAtEndOfScreen,
+    /// Lines are captured in bottom-top top-bottom way
+    StartFromBottomAndFlipAtEndOfScreen,
+    /// Lines are captured following a gray-code way that starts from the top
+    GrayCodeFromTop,
+    /// Lines are captured following a gray-code way that starts from the bottom
+    GrayCodeFromBottom
+}
+
+impl TileVerticalCapture {
+    /// Generates the counter when it is possible.
+    /// Panics if contextual information is needed
+    pub fn counter(&self) -> Box<dyn LineCounter> {
+        match self {
+            Self::AlwaysFromTopToBottom => Box::new(StandardLineCounter::top_to_bottom()),
+            Self::AlwaysFromBottomToTop => panic!("A parameter is needed there"),
+            Self::GrayCodeFromTop =>Box::new( GrayCodeLineCounter::new()),
+            _ => unimplemented!()
+        }
+    }
+
+    pub fn counter_with_context(&self, screen_height: usize) -> Box<dyn LineCounter> {
+        unimplemented!("TODO once someone will code it")
+    }
+}
+
+
+
+
+impl OutputFormat {
+    pub fn create_linear_encoded_sprite() -> Self {
+        Self::LinearEncodedSprite
+    }
+
+    pub fn create_overscan_cpc_memory() -> Self {
+        Self::CPCMemory{
+            outputDimension: CPCScreenDimension::overscan(),
+            displayAddress: DisplayAddress::new_overscan_from_page(2) // we do not care of the page
+        }
+    }
+
+    pub fn create_standard_cpc_memory() -> Self {
+        Self::CPCMemory{
+            outputDimension: CPCScreenDimension::standard(),
+            displayAddress: DisplayAddress::new_standard_from_page(2)
+        }
+    }
 }
 
 /// Embeds the conversion output
@@ -348,6 +672,16 @@ pub enum Output {
 
     /// Result using several chunks of memory
     CPCSplittingMemory(Vec<Output>),
+
+    /// Result containing several tiles
+    TilesList {
+        tile_height: u32,
+        tile_width: u32,
+        horizontal_movement: TileHorizontalCapture,
+        vertical_movement: TileVerticalCapture,
+        palette: Palette,
+        list: Vec<Vec<u8>>
+    }
 }
 
 impl Debug for Output {
@@ -367,12 +701,49 @@ impl Debug for Output {
             } => writeln!(fmt, "LinearEncodedChuncky"),
             &Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
             &Output::CPCMemoryOverscan(_, _, _) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
-            &Output::CPCSplittingMemory(ref vec) => writeln!(fmt, "CPCSplitterdMemory {:?}", &vec),
+            &Output::CPCSplittingMemory(ref vec) => writeln!(fmt, "CPCSplitteringMemory {:?}", &vec),
+            &Output::TilesList {
+        ref tile_height,
+        ref tile_width,
+       ref  horizontal_movement,
+        ref vertical_movement,
+        ref palette,
+        ref list
+    } => writeln!(fmt, "{} tiles of {}x{}", list.len(), tile_width, tile_height)
         }
     }
 }
 
-impl Output {}
+impl Output {
+
+    /// Returns the bank that contains the first half of the screen
+    pub fn overscan_screen1(&self) -> Option<&[u8; 0x4000]> {
+        match self {
+            Self::CPCMemoryOverscan(ref s1, _, _) => Some(s1),
+            _ => None
+        }
+    }
+
+    /// Returns the bank that contains the second half of the screen
+    pub fn overscan_screen2(&self) -> Option<&[u8; 0x4000]> {
+        match self {
+            Self::CPCMemoryOverscan(_, ref s1, _) => Some(s1),
+            _ => None
+        }
+    }
+
+    /// Returns the list of tiles
+    pub fn tiles_list(&self) -> Option<&[Vec<u8>]> {
+        match self {
+            Self::TilesList{
+                ref list, 
+                ..
+            } => Some(list),
+            _ => None
+        }
+    }
+
+}
 
 /// ImageConverter is able to make the conversion of images to several output format
 pub struct ImageConverter<'a> {
@@ -439,10 +810,11 @@ impl<'a> ImageConverter<'a> {
         }
     }
 
+    /// Makes the conversion of the provided sprite to the expected format
     pub fn import(sprite: &Sprite, output: &'a OutputFormat) -> Result<Output, String> {
         let mut converter = ImageConverter {
             palette: None,
-            mode: Mode::Mode0, // TODO make the mode optional,
+            mode: Mode::Mode0, // TODO make the mode an optional argument,
             output: output,
             transformations: TransformationsList::new(),
         };
@@ -462,8 +834,10 @@ impl<'a> ImageConverter<'a> {
     }
 
     fn load_color_matrix(&self, input_file: &Path) -> ColorMatrix {
-        let img =
-            im::open(input_file).expect(&format!("Unable to convert {:?} properly.", input_file));
+        let img = im::open(input_file)
+                        .expect(&format!(
+                            "Unable to convert {:?} properly.", 
+                            input_file));
         let mat = ColorMatrix::convert(&img.to_rgb(), ConversionRule::AnyModeUseAllPixels);
         self.transformations.apply(mat)
     }
@@ -473,12 +847,28 @@ impl<'a> ImageConverter<'a> {
         let output = self.output.clone();
 
         match output {
-            OutputFormat::LinearEncodedSprite => self.linearize_sprite(sprite),
+            OutputFormat::LinearEncodedSprite => {
+                self.linearize_sprite(sprite)
+            },
             OutputFormat::CPCMemory {
                 ref outputDimension,
                 ref displayAddress,
-            } => self.build_memory_blocks(sprite, outputDimension.clone(), displayAddress.clone()),
-            OutputFormat::CPCSplittingMemory(ref _vec) => unimplemented!(),
+            } => {
+                self.build_memory_blocks(sprite, outputDimension.clone(), displayAddress.clone())
+            },
+            OutputFormat::CPCSplittingMemory(ref _vec) => {
+                unimplemented!()
+            },
+            OutputFormat::TileEncoded {
+                tile_width,
+                tile_height,
+                horizontal_movement,
+                vertical_movement,
+                grid_width,
+                grid_height,
+            } => {
+                self.extract_tiles(tile_width, tile_height, horizontal_movement, vertical_movement, grid_width, grid_height, sprite)
+            }
 
             _ => unreachable!(),
         }
@@ -493,6 +883,71 @@ impl<'a> ImageConverter<'a> {
             byte_width: sprite.byte_width() as _,
             height: sprite.height() as _,
         })
+    }
+
+    fn extract_tiles(&mut self, tile_width: TileWidthCapture, tile_height: TileHeightCapture, horizontal_movement: TileHorizontalCapture, vertical_movement:TileVerticalCapture, grid_width: GridWidthCapture, grid_height: GridHeightCapture, sprite: &Sprite) -> Result<Output, String> {
+
+        // Compute the real value of the arguments
+        let tile_width = match tile_width {
+            TileWidthCapture::FullWidth => sprite.byte_width(),
+            TileWidthCapture::NbBytes(nb) => nb as _
+        };
+        let tile_height = match tile_height {
+            TileHeightCapture::FullHeight => sprite.height(),
+            TileHeightCapture::NbLines(nb) => nb as _
+        };
+        let nb_columns = match grid_width {
+            GridWidthCapture::TilesInRow(nb) => nb,
+            FullWidth => sprite.byte_width() as usize / tile_width as usize
+        };
+        let nb_rows = match grid_height {
+            GridHeightCapture::TilesInColumn(nb) => nb,
+            FullHeight => sprite.height() as usize / tile_height as usize
+        };
+
+        // Really makes the extraction
+        let mut tiles_list:Vec<Vec<u8>> = Vec::new();
+        for row in 0..nb_rows {
+            for column in 0..nb_columns {
+                // TODO add an additional parametr to read x before y
+                // Manage the sprite in this cell
+                let mut y_counter = vertical_movement.counter();
+                let mut x_counter = horizontal_movement.counter();
+                let mut current_tile: Vec<u8> = Vec::new();
+                for y in 0..tile_height {
+                    for x in 0..tile_width {
+                        // Get the line of interest
+                        let real_line = y_counter.get_line_index_in_screen() + row * tile_height as usize;
+
+                        // Get the 2 columns of interest (we want to  display word per word)
+                        let real_col1 = x_counter.get_column_index() + column * tile_width as usize;
+                        if x != tile_width-1 {x_counter.next();}
+
+                        // Get the byte from the sprite ...
+                        let byte: u8 = sprite.get_byte(real_col1, real_line);
+
+                        // ... and store it at the right place
+                        current_tile.push(byte);
+
+                    }
+                    x_counter.line_ended();
+                    y_counter.next();
+                }
+                tiles_list.push(current_tile);
+            }
+        }
+
+        // build the object to return
+        Ok(
+            Output::TilesList {
+                tile_height,
+                tile_width,
+                horizontal_movement,
+                vertical_movement,
+                palette: sprite.palette().unwrap(),
+                list: tiles_list
+            }
+        )
     }
 
     /// Manage the creation of the memory blocks
