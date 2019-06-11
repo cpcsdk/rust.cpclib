@@ -142,6 +142,15 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
     )
 }
 
+
+pub fn ld_de_expr(val: Expr) -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Ld,
+        Register16::De.into(),
+        val.into()
+    )
+}
+
 pub fn ld_d_mem_hl() -> Token {
     ld_register8_mem_hl(Register8::D)
 }
@@ -189,6 +198,48 @@ pub fn ld_mem_hl_register8(reg: Register8) -> Token {
         reg.into(),
     )
 }
+
+pub fn ldi() -> Token {
+    token_for_opcode_no_arg(Mnemonic::Ldi)
+}
+
+pub fn ldd() -> Token {
+    token_for_opcode_no_arg(Mnemonic::Ldd)
+}
+
+pub fn ldir() -> Token {
+    token_for_opcode_no_arg(Mnemonic::Ldir)
+}
+
+pub fn lddr() -> Token {
+    token_for_opcode_no_arg(Mnemonic::Lddr)
+}
+
+
+pub fn res_d(bit: u8) -> Token {
+    res_reg_pos(Register8::D, bit)
+}
+
+pub fn set_d(bit: u8) -> Token {
+    set_reg_pos(Register8::D, bit)
+}
+
+pub fn res_reg_pos(reg: Register8, bit: u8) -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Res,
+        bit.into(),
+        reg.into()
+    )
+}
+
+pub fn set_reg_pos(reg: Register8, bit: u8) -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Set,
+        bit.into(),
+        reg.into()
+    )
+}
+
 
 /// Build a token that represents a mnemonic without any argument
 pub fn token_for_opcode_no_arg(mne: Mnemonic) -> Token {

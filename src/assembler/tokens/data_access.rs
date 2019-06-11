@@ -27,6 +27,12 @@ pub enum DataAccess {
     SpecialRegisterR,
 }
 
+impl From<u8> for DataAccess {
+    fn from(val: u8) -> DataAccess {
+        DataAccess::Expression(val.into())
+    }
+}
+
 impl From<Expr> for DataAccess {
     fn from(exp: Expr) -> DataAccess {
         DataAccess::Expression(exp)

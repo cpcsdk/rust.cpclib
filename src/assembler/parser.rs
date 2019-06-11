@@ -12,6 +12,8 @@ use crate::assembler::AssemblerError;
 use either::*;
 use std::iter;
 
+use std::str::FromStr;
+
 pub mod error_code {
     pub const ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION: u32 = 128;
     pub const INVALID_ARGUMENT: u32 = 129;
@@ -1813,4 +1815,13 @@ pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr<'_>>) -> Strin
     }
 
     error_string
+}
+
+
+impl FromStr for Listing {
+    type Err = AssemblerError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_str(s)
+    }
 }
