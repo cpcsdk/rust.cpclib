@@ -248,24 +248,6 @@ impl fmt::Display for Listing {
     }
 }
 
-/// To create a listing from a string correspond to assemble the string to produce the Tokens
-impl FromStr for Listing {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let res = parser::parse_z80_str(s);
-        match res {
-            Err(e) => Err(String::from_str(e.into_error_kind().description())
-                .ok()
-                .unwrap()),
-            Ok((_, opcodes)) => {
-                let mut listing = Listing::new();
-                listing.extend_from_slice(&opcodes);
-                Ok(listing)
-            }
-        }
-    }
-}
 
 /// Main usage of listing is related to Tokens.. Here are the methods strongly liked to Token
 impl Listing {

@@ -285,7 +285,7 @@ impl fmt::Display for Token {
                 => write!(f, "{}", string),
 
             Token::Comment(ref string)
-                => write!(f, " ; {}", string),
+                => write!(f, " ; {}", string.replace("\n","\n;")),
 
             Token::OpCode(ref mne, None, None)
                 => write!(f, "{}", mne),
