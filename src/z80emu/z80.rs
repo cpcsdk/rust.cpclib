@@ -1,5 +1,7 @@
 use crate::assembler::tokens::*;
 use num::integer::Integer;
+use num::One;
+use num::traits::{WrappingAdd, WrappingSub};
 use std::fmt;
 use std::fmt::Debug;
 ///! Manage z80 CPU
@@ -8,7 +10,7 @@ use std::mem::swap;
 
 /// Common trait for Register 8 and 6 bits
 pub trait HasValue {
-    type ValueType: Integer;
+    type ValueType: Integer + One + WrappingAdd + WrappingSub;
 
     /// Retreive the stored value
     fn value(&self) -> Self::ValueType;
@@ -20,13 +22,21 @@ pub trait HasValue {
     /// Change the stored value
     fn set(&mut self, value: Self::ValueType);
 
-    /// Add value to register
-    // TODO return flags
-    fn add(&mut self, value: Self::ValueType);
+    fn add(&mut self, value: Self::ValueType) {
+        self.set(self.value().wrapping_add(&value));
+    }
 
-    // TODO find a way to implement it here
-    // TODO return flags
-    fn inc(&mut self);
+    fn sub(&mut self, value: Self::ValueType) {
+        self.set(self.value().wrapping_sub(&value));
+    }
+
+    fn inc(&mut self) {
+        self.add(Self::ValueType::one());
+    }
+
+    fn dec(&mut self) {
+        self.sub(Self::ValueType::one());
+    }
 }
 
 /// Represents an 8 bit register
@@ -54,13 +64,17 @@ impl HasValue for Register8 {
     fn set(&mut self, value: Self::ValueType) {
         self.val = value;
     }
+}
 
-    fn add(&mut self, value: Self::ValueType) {
-        self.val = ((self.val as u16 + value as u16) & 256) as u8;
+impl Register8 {
+    pub fn res_bit(&mut self, bit: u8) {
+        let new = self.value() & (!(1<<bit));
+        self.set(new);
     }
 
-    fn inc(&mut self) {
-        self.add(1);
+    pub fn set_bit(&mut self, bit: u8) {
+        let new =self.value() | (1<<bit);
+        self.set(new);
     }
 }
 
@@ -89,14 +103,6 @@ impl HasValue for Register16 {
         self.high_mut().set((value / 256) as _);
     }
 
-    fn add(&mut self, value: Self::ValueType) {
-        let val = ((self.value() as u32 + value as u32) & 0xffff) as u16;
-        self.set(val);
-    }
-
-    fn inc(&mut self) {
-        self.add(1);
-    }
 }
 
 impl Register16 {
@@ -320,6 +326,9 @@ impl Z80 {
         swap(&mut self.reg_bc_prime, &mut self.reg_bc);
     }
 
+    pub fn ex_de_hl(&mut self) {
+        swap(&mut self.reg_hl, &mut self.reg_de);
+    }
     // To reduce copy paste/implementation errors, all manipulation are translated as token usage
     pub fn copy_to_from(
         &mut self,
@@ -332,6 +341,8 @@ impl Z80 {
             Some(DataAccess::Register8(from)),
         ));
     }
+
+
 }
 
 #[cfg(test)]
@@ -399,6 +410,16 @@ mod tests {
 
         z80.ex_af_af_prime();
         assert_eq!(z80.a().value(), 0x45);
+
+        z80.a_mut().set(0);assert_eq!(0, z80.a().value());
+        z80.a_mut().add(1);assert_eq!(1, z80.a().value());
+
+
+        z80.a_mut().set(0);assert_eq!(0, z80.a().value());
+        z80.a_mut().inc(); assert_eq!(1, z80.a().value());
+        z80.a_mut().dec(); assert_eq!(0, z80.a().value());
+        z80.a_mut().dec(); assert_eq!(0xff, z80.a().value());
+        z80.a_mut().inc(); assert_eq!(0, z80.a().value());
     }
 
     #[test]
