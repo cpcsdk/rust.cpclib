@@ -253,12 +253,12 @@ impl fmt::Display for Listing {
 /// Main usage of listing is related to Tokens.. Here are the methods strongly liked to Token
 impl Listing {
     /// Save the listing on disc
-    pub fn save(&self, path: &::std::path::Path) -> ::std::io::Result<()> {
+    pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> ::std::io::Result<()> {
         use std::fs::File;
         use std::io::prelude::*;
 
         // Open a file in write-only mode, returns `io::Result<File>`
-        let mut file = File::create(path)?;
+        let mut file = File::create(path.as_ref())?;
         file.write_all(self.to_string().as_bytes())?;
 
         Ok(())
