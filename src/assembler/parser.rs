@@ -500,6 +500,7 @@ named!(
     parse_token<CompleteStr<'_>, Token>,
     alt_complete!(
         parse_ex_af
+        | parse_ex_hl_de
             | parse_logical_operator
             | parse_add_or_adc
             | parse_cp
@@ -530,6 +531,22 @@ named!(
             >> (Token::OpCode(Mnemonic::ExAf, None, None))
     )
 );
+
+
+named!(
+    parse_ex_hl_de<CompleteStr<'_>, Token>,
+    do_parse!(
+        tag_no_case!("EX")
+            >> space1
+            >> tag_no_case!("HL")
+            >> space0
+            >> char!(',')
+            >> space0
+            >> tag_no_case!("DE")
+            >> (Token::OpCode(Mnemonic::ExHlDe, None, None))        
+    )
+);
+
 named!(
     parse_directive<CompleteStr<'_>, Token>,
     alt_complete!(

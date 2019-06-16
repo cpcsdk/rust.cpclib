@@ -1,6 +1,8 @@
 
 ///! Utility code to build more easily tokens to manipulate in code generators
 use crate::assembler::tokens::*;
+use paste;
+use casey::{camel, lower, shouty, snake, upper};
 
 pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {
     Token::Equ(label.as_ref().to_owned(), expr.into())
@@ -142,7 +144,30 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
     )
 }
 
+macro_rules! ld_r16_expr {
+    ($($reg:ident, $name:ident)*) => {$(
+        paste::item! {
+            /// Generate the opcode LD $reg, expr
+            pub fn [<ld_ $name _expr>] (val: Expr) -> Token {
+                token_for_opcode_two_args(
+                    Mnemonic::Ld,
+                    Register16::$reg.into(),
+                    val.into()
+                )
+            }
+        }
+    )*}
+}
 
+// TODO remove these extra uneeded arguments
+ld_r16_expr!{
+    Af,af 
+    Bc,bc 
+    De,de 
+    Hl,hl
+}
+
+/*
 pub fn ld_de_expr(val: Expr) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
@@ -150,6 +175,9 @@ pub fn ld_de_expr(val: Expr) -> Token {
         val.into()
     )
 }
+*/
+
+
 
 pub fn ld_d_mem_hl() -> Token {
     ld_register8_mem_hl(Register8::D)
