@@ -390,6 +390,11 @@ impl<'a> TryFrom<&'a str> for Token {
 }
 
 impl Token {
+    
+    pub fn is_opcode(&self) -> bool {
+        self.mnemonic().is_some()
+    }
+
     pub fn label(&self) -> Option<&String> {
         match self {
             &Token::Label(ref value) | &Token::Equ(ref value, _) => Some(value),
