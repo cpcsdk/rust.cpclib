@@ -146,7 +146,7 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
 
 macro_rules! ld_r16_expr {
     ($($reg:ident, $name:ident)*) => {$(
-        paste::item! {
+        paste::item_with_macros! {
             /// Generate the opcode LD $reg, expr
             pub fn [<ld_ $name _expr>] (val: Expr) -> Token {
                 token_for_opcode_two_args(

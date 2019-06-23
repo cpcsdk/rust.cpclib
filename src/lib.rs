@@ -4,6 +4,7 @@
 #![feature(type_ascription)]
 #![feature(custom_attribute)]
 #![feature(proc_macro_hygiene)]
+#![feature(vec_drain_as_slice)] 
 
 // Notes for later when clippy will work:
 // https://rust-lang.github.io/rust-clippy/master/index.html#identity_op must be deactivated
