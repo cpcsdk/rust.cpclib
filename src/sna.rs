@@ -8,6 +8,9 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::str::FromStr;
 
+use std::ops::Deref;
+use std::ops::Add;
+
 ///! Reimplementation of createsnapshot by Ramlaid/Arkos
 ///! in rust by Krusty/Benediction
 
@@ -558,12 +561,14 @@ pub enum SnapshotError {
     InvalidIndex,
 }
 
-pub struct SnapshotChunk {
+pub struct SnapshotChunkData {
     code: [u8; 4],
     data: Vec<u8>,
 }
 
-impl SnapshotChunk {
+
+
+impl SnapshotChunkData {
     pub fn code(&self) -> &[u8; 4] {
         &(self.code)
     }
@@ -589,6 +594,174 @@ impl SnapshotChunk {
     }
 }
 
+
+pub struct MemoryChunk{
+    data: SnapshotChunkData
+}
+
+impl MemoryChunk {
+    pub fn from(code: [u8;4], data: Vec<u8>) -> Self {
+        MemoryChunk {
+            data: SnapshotChunkData{
+                code,
+                data
+            }
+        }
+    }
+
+    pub fn uncrunched_memory(&self) -> Vec<u8> {
+        let mut content = Vec::new();
+
+        let mut idx = std::rc::Rc::new(std::cell::RefCell::new(0));
+        let mut read_byte = || {
+            let byte = self.data.data[*idx.borrow()];
+            idx.borrow_mut().deref().add(1);
+            byte
+        };
+        while *idx.borrow() != self.data.data.len() {
+            match read_byte() {
+                0xe5 => {
+                    let amount = read_byte();
+                    if amount != 0 {
+                        let val = read_byte();
+                        content.push(val);
+                    }
+                },
+                val => {
+                    content.push(val);
+                }
+            }
+        }
+
+        assert!(content.len() == 64*1024);
+        content
+    }
+
+    /// Returns the address in the memory array
+    pub fn abstract_address(&self) -> usize {
+        let nb = (self.data.code[3] - '0' as u8) as usize;
+        nb*0x10000
+    }
+}
+
+pub struct UnknownChunk {
+    data: SnapshotChunkData
+}
+
+
+
+impl UnknownChunk {
+    pub fn from(code: [u8;4], data: Vec<u8>) -> Self {
+        UnknownChunk {
+            data: SnapshotChunkData{
+                code,
+                data
+            }
+        }
+    }
+}
+
+/*
+pub struct BreakpointChunk {
+    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
+        unimplemented!()
+    }
+}
+
+pub struct InsertedDiscChunk {
+    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
+        unimplemented!()
+    }
+}
+
+pub struct CPCPlusChunk {
+    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
+        unimplemented!()
+    }
+}
+*/
+
+pub enum SnapshotChunk {
+    MemoryChunk(MemoryChunk),
+    UnknownChunk(UnknownChunk)
+}
+
+impl SnapshotChunk {
+    pub fn is_memory_chunk(&self) -> bool {
+        self.memory_chunk().is_some()
+    }
+
+    pub fn memory_chunk(&self) -> Option<&MemoryChunk> {
+        match self {
+            SnapshotChunk::MemoryChunk(ref mem) => Some(mem),
+            _ => None
+        }
+    }
+
+    /// Provides the code of the chunk
+    pub fn code(&self) -> &[u8; 4] {
+        match self {
+            SnapshotChunk::MemoryChunk(ref chunk) => {
+                chunk.data.code()
+            },
+             
+            SnapshotChunk::UnknownChunk(ref chunk) => {
+                chunk.data.code()
+            }
+        }
+    }
+
+    pub fn size(&self) -> u32 {
+        match self {
+            SnapshotChunk::MemoryChunk(ref chunk) => {
+                chunk.data.size()
+            },
+             
+            SnapshotChunk::UnknownChunk(ref chunk) => {
+                chunk.data.size()
+            }
+        }
+    }
+
+    pub fn size_as_array(&self) -> [u8; 4]  {
+        match self {
+            SnapshotChunk::MemoryChunk(ref chunk) => {
+                chunk.data.size_as_array()
+            },
+             
+            SnapshotChunk::UnknownChunk(ref chunk) => {
+                chunk.data.size_as_array()
+            }
+        }
+    }
+
+    pub fn data(&self) -> &[u8] {
+        match self {
+            SnapshotChunk::MemoryChunk(ref chunk) => {
+                chunk.data.data()
+            },
+             
+            SnapshotChunk::UnknownChunk(ref chunk) => {
+                chunk.data.data()
+            }
+        }
+    }
+}
+
+impl From<MemoryChunk> for SnapshotChunk {
+    fn from(chunk: MemoryChunk) -> SnapshotChunk {
+        SnapshotChunk::MemoryChunk(chunk)
+    }
+}
+
+impl From<UnknownChunk> for SnapshotChunk {
+    fn from(chunk: UnknownChunk) -> SnapshotChunk {
+        SnapshotChunk::UnknownChunk(chunk)
+    }
+}
+
+
+
 const PAGE_SIZE: usize = 0x4000;
 const HEADER_SIZE: usize = 256;
 
@@ -597,7 +770,7 @@ pub struct Snapshot {
     header: [u8; HEADER_SIZE],
     memory: [u8; PAGE_SIZE * 8],
     memory_already_written: bitsets::DenseBitSet,
-    chuncks: Vec<SnapshotChunk>,
+    chunks: Vec<SnapshotChunk>,
 
     // nothing to do with the snapshot. Should be moved elsewhere
     pub debug: bool,
@@ -628,7 +801,7 @@ impl Default for Snapshot {
                 0x00, 0x00, 0x00, 0x00,
             ],
             memory: [0; PAGE_SIZE * 8],
-            chuncks: Vec::new(),
+            chunks: Vec::new(),
             memory_already_written: bitsets::DenseBitSet::with_capacity_and_state(PAGE_SIZE * 8, 0),
             debug: false,
         }
@@ -642,19 +815,118 @@ impl Snapshot {
         }
     }
 
-    pub fn load(filename: &Path) -> Snapshot {
+    pub fn load<P:AsRef<Path>>(filename: P) -> Snapshot {
         let mut sna = Snapshot::default();
+        let filename = filename.as_ref();
 
-        let mut f = File::open(filename).expect("file not found");
+        // Read the full content of the file
+        let mut file_content = {
+            let mut f = File::open(filename)
+                        .expect("file not found");
+            let mut content = Vec::new();
+            f.read_to_end(&mut content);
+            content
+        };
 
-        f.read_exact(&mut sna.header)
-            .expect("Unable to read snapshot header");
-        f.read_exact(&mut sna.memory)
-            .expect("Unable to read snapshot memory");
-        eprintln!("[Warning] Current sna reader does not take care of chuncks");
+        eprintln!("Complete {:?}", std::str::from_utf8(&file_content));
+
+
+        // Copy the header
+        sna.header.copy_from_slice(file_content.drain(0..0x100).as_slice());
+        let memory_dump_size = sna.memory_size_header();
+        let version = sna.version_header();
+
+        eprintln!("Remaining {:?}", std::str::from_utf8(&file_content));
+
+        if version == 2 || memory_dump_size == 128 {
+            // Snapshot V2 is easy to read
+            assert!(memory_dump_size == 128, "Need to implement SNA loading with memory != 128");
+            let memory_len = sna.memory.len();
+            sna.memory.copy_from_slice(file_content.drain(0..memory_len).as_slice());
+        }
+        else {
+            // Snapshot V3 crunch data
+            assert!(memory_dump_size == 0, "Need to implement SNA loading with memory != 0");
+            eprintln!("{:?}", &sna.header[0xe0]);
+
+            loop {
+                if let Some(chunk) = Self::read_chunk(
+                    &mut file_content, 
+                    &mut sna) {
+                    sna.chunks.push(chunk);
+                }
+                else {
+                    break
+                }
+            }
+
+        }
+
+        eprintln!("{} chunks", sna.nb_chunks());
 
         // TODO manage chuncks
         sna
+    }
+
+    /// Count the number of kilobytes that are within chunks
+    fn compute_memory_size_in_chunks(&self) -> u16 {
+        let nb_pages = self.chunks
+                .iter()
+                .filter(|c|{c.is_memory_chunk()})
+                .count() as u16;
+        nb_pages * 64
+    }
+
+    pub fn memory_size_header(&self) -> u16 {
+        self.header[0x6b] as u16 + 256 * self.header[0x6c] as u16
+    }
+
+    pub fn version_header(&self) -> u8 {
+        self.header[0x10]
+    }
+
+    /// Read a chunk if available
+    fn read_chunk(file_content: &mut Vec<u8>, sna: &mut Snapshot) -> Option<SnapshotChunk> {
+
+        if file_content.len() < 4 {
+            return None;
+
+        }
+        let mut code = file_content.drain(0..4).as_slice().to_vec();
+        let mut data_length = file_content.drain(0..4).as_slice().to_vec();
+
+        eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
+
+        let data_length = {
+            let mut count = 0;
+            for i in 0..4 {
+                count = 256*count + data_length[3-i] as usize;
+            }
+            count
+        };
+
+        let mut content = file_content.drain(0..data_length as usize).as_slice().to_vec();
+
+        // Generate the 4 size array
+        let code = {
+            let mut new_code = [0; 4];
+            new_code.copy_from_slice(&code);
+            new_code
+        };
+        let chunk = match code {
+            [0x4d,0x45,0x4d,_] => MemoryChunk::from(code, content).into(),/*
+            ['B', 'R', 'K', 'S'] => BreakpointChunk::from(content),
+            ['D', 'S', 'C', _] => InsertedDiscChunk::from(code, content)
+            ['C', 'P', 'C', '+'] => CPCPlusChunk::from(content)
+            */
+            _ => UnknownChunk::from(code, content).into()
+        };
+
+        Some(chunk)      
+    }
+
+    pub fn nb_chunks(&self) -> usize {
+        self.chunks.len()
     }
 
     /// Save the snapshot V3 on disc
@@ -679,12 +951,19 @@ impl Snapshot {
                     for idx in 0x6d..=0xff {
                         header[idx] = 0;
                     }
+                    let memory_size = self.compute_memory_size_in_chunks();
+                    unimplemented!();
                 }
                 SnapshotVersion::V2 => {
                     header[0x10] = 2;
                     for idx in 0x75..=0xff {
                         header[idx] = 0;
                     }
+                    let memory_size = self.compute_memory_size_in_chunks();
+                    assert!(
+                        memory_size == 128 || memory_size == 64 || memory_size == 0, 
+                        format!("Need to implement other cases: {}", memory_size)
+                    );
                 }
                 SnapshotVersion::V3 => {
                     header[0x10] = 3;
@@ -695,16 +974,29 @@ impl Snapshot {
         buffer.write_all(&header)?;
 
         // Write memory
-        if version.is_v3() && !self.chuncks.is_empty() {
-            panic!("Need to implement the compressed memory block format");
-        } else {
+        if !version.is_v3() && !self.chunks.is_empty() {
+            // We downgrade from a V3 snapshot to a previous version
+            let mut memory = self.memory.clone();
+            for chunk in self.chunks.iter() {
+                if let Some(memory_chunk) = chunk.memory_chunk() {
+                    let address = memory_chunk.abstract_address();
+                    let content = memory_chunk.uncrunched_memory();
+                    memory[address .. address+0x1000].copy_from_slice(&content);
+                }
+                else {
+                    eprintln!("[Warning] Unable to save chunk {:?} in this snapshot version.", chunk.code());
+                }
+            }
+            buffer.write_all(&self.memory)?;
+        }
+        else {
             buffer.write_all(&self.memory)?;
         }
 
-        // Save the chuncks in the V3 version
+        // Save the chunks in the V3 version after memory if any
         match version {
             SnapshotVersion::V3 => {
-                for chunck in self.chuncks.iter() {
+                for chunck in self.chunks.iter() {
                     buffer.write_all(chunck.code())?;
                     buffer.write_all(&chunck.size_as_array())?;
                     buffer.write_all(chunck.data())?;
@@ -713,7 +1005,6 @@ impl Snapshot {
             _ => (),
         }
 
-        //TODO add the chuncks
         Ok(())
     }
 

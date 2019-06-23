@@ -84,7 +84,17 @@ fn main() -> Result<(), cpc::xfer::XferError> {
         xfer.reset_cpc();
     } else if let Some(y_opt) = matches.subcommand_matches("-y") {
         let fname = y_opt.value_of("fname").unwrap();
-        xfer.upload_and_run(fname, None);
+        let mut done = false;
+        // Snapshot needs to be converted in V2 format and handled differently
+        if let Some(extension) = std::path::Path::new(fname).extension() {
+            let extension = extension.to_str().unwrap().to_ascii_lowercase();
+            if extension == "sna" {
+                xfer.upload_and_run_sna(&crate::cpc::sna::Snapshot::load(fname)).expect("Unable to launch SNA");
+                done = true;
+            }
+
+        }
+        if ! done {xfer.upload_and_run(fname, None).expect("Unable to launch file")};
     } else if let Some(x_opt) = matches.subcommand_matches("-x") {
         let fname = x_opt.value_of("fname").unwrap();
         xfer.run(fname); /*.expect("Unable to launch file on CPC.");*/
