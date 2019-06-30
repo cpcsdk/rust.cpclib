@@ -69,14 +69,14 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
     edsk
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl From<DiscConfig> for ExtendedDsk {
     fn from(config: DiscConfig) -> ExtendedDsk {
         build_disc_from_cfg(&config)
     }
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl From<&DiscConfig> for ExtendedDsk {
     fn from(config: &DiscConfig) -> ExtendedDsk {
         build_disc_from_cfg(config)

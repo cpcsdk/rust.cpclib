@@ -1002,7 +1002,6 @@ pub fn assemble_defs(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Byte
     Ok(bytes)
 }
 
-
 /// Assemble DB or DW directive
 pub fn assemble_db_or_dw(token: &Token, env: &Env) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();

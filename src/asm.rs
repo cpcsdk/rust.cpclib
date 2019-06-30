@@ -6,7 +6,6 @@ use std::io::prelude::*;
 
 /// Probably a completely dead module. TODO verify that.
 
-
 #[allow(missing_docs)]
 pub fn bytes_to_db_str(bytes: &[u8]) -> String {
     let bytes_str: Vec<String> = bytes.iter().map(|b| format!("0x{:x}", b)).collect();
@@ -278,7 +277,7 @@ impl StringCodePageContainer {
 
         for page1 in possibilities.iter() {
             for page2 in possibilities.iter() {
-                if page1  != page2  && page1.overlaps(page2) {
+                if page1 != page2 && page1.overlaps(page2) {
                     panic!("Error, {:?} overlaps {:?}", page1, page2);
                 }
             }

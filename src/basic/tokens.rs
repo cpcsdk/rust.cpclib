@@ -261,8 +261,6 @@ impl fmt::Display for BasicTokenNoPrefix {
     }
 }
 
-
-
 impl BasicTokenNoPrefix {
     /// Returns the 8bit code that represents the token
     pub fn value(&self) -> u8 {
@@ -516,7 +514,6 @@ impl BasicToken {
 mod test {
     use crate::basic::tokens::*;
     use std::convert::TryInto;
-
 
     #[test]
     fn test_conversion() {

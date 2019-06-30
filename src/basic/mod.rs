@@ -1,4 +1,3 @@
-
 /// Paring related functions for basic.
 pub mod parser;
 /// Basic token encoding.
@@ -6,10 +5,9 @@ pub mod tokens;
 
 use parser::parse_basic_program;
 
+use failure::Fail;
 use std::fmt;
 use tokens::BasicToken;
-use failure::Fail;
-
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Basic line representation
