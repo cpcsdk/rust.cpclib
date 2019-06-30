@@ -1,8 +1,10 @@
-use num_enum::CustomTryInto;
 use num_enum::IntoPrimitive;
 use std::fmt;
 
-#[derive(IntoPrimitive, CustomTryInto, Copy, Clone, PartialEq, Debug)]
+use num_enum::TryFromPrimitive;
+use std::convert::TryInto;
+
+#[derive(IntoPrimitive, Copy, Clone, PartialEq, Debug)]
 #[repr(u8)]
 pub enum BasicTokenNoPrefix {
     EndOfTokenisedLine = 0,
@@ -258,12 +260,13 @@ impl fmt::Display for BasicTokenNoPrefix {
         write!(f, "{}", tag)
     }
 }
-
+/*
 impl From<u8> for BasicTokenNoPrefix {
     fn from(val: u8) -> BasicTokenNoPrefix {
-        val.try_into_BasicTokenNoPrefix().unwrap()
+        val.try_into().unwrap()
     }
 }
+*/
 
 impl BasicTokenNoPrefix {
     pub fn value(&self) -> u8 {
@@ -271,7 +274,7 @@ impl BasicTokenNoPrefix {
     }
 }
 
-#[derive(IntoPrimitive, CustomTryInto, Copy, Clone, PartialEq, Debug)]
+#[derive(IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Debug)]
 #[repr(u8)]
 pub enum BasicTokenPrefixed {
     Abs = 0,
@@ -341,11 +344,13 @@ impl fmt::Display for BasicTokenPrefixed {
     }
 }
 
+/*
 impl From<u8> for BasicTokenPrefixed {
     fn from(val: u8) -> BasicTokenPrefixed {
-        val.try_into_BasicTokenPrefixed().unwrap()
+        val.try_into().unwrap()
     }
 }
+*/
 
 impl BasicTokenPrefixed {
     pub fn value(&self) -> u8 {
