@@ -1,7 +1,7 @@
 use nom;
 use nom::types::CompleteStr;
 use nom::{alpha1, space1};
-use nom::{named, do_parse, alt, tag_no_case};
+use nom::{alt, do_parse, named, tag_no_case};
 
 use std::str;
 

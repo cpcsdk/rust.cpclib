@@ -1,6 +1,3 @@
-
-
-
 use path_absolutize;
 
 use curl::easy::{Easy, Form};
@@ -13,9 +10,7 @@ use std::fs;
 
 use std::path::Path;
 
-
 use custom_error::custom_error;
-
 
 custom_error! {#[allow(missing_docs)] pub XferError
     ConnectionError{source: Error} = "There is a connection error with the Cpc Wifi.",
@@ -52,7 +47,6 @@ impl From<&str> for M4File {
         }
     }
 }
-
 
 /// List of files in the M4
 #[derive(Debug)]
@@ -93,7 +87,6 @@ impl M4FilesList {
         &self.files
     }
 }
-
 
 /// Bridget the the CPC Wifi card
 #[derive(Debug)]
@@ -228,19 +221,16 @@ impl CpcXfer {
 
     /// Directly sends the SNA to the M4. SNA is first saved as a V2 version as M4 is unable to read other ones
     pub fn upload_and_run_sna(&self, sna: &crate::sna::Snapshot) -> Result<(), XferError> {
+        let file = tempfile::NamedTempFile::new().expect("Unable to build a temporary file");
+        let path = file.into_temp_path();
+        let path = path.to_str().unwrap();
+        sna.save(/*path*/ "/tmp/m4.sna", crate::sna::SnapshotVersion::V2)
+            .expect("Unable to save the snapshot");
+        self.upload_and_run(path, None)?;
 
-            let file = tempfile::NamedTempFile::new()
-                        .expect("Unable to build a temporary file");
-            let path = file.into_temp_path();
-            let path = path.to_str().unwrap();
-            sna.save(/*path*/"/tmp/m4.sna", crate::sna::SnapshotVersion::V2)
-                .expect("Unable to save the snapshot");
-            self.upload_and_run(path, None)?;
-
-            // sleep a bit to be sure the file is not deleted
-            std::thread::sleep(std::time::Duration::from_secs(5));
-            Ok(())
-        
+        // sleep a bit to be sure the file is not deleted
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        Ok(())
     }
 
     pub fn upload_and_run<P: AsRef<Path>>(

@@ -535,7 +535,7 @@ impl FromStr for SnapshotFlag {
     }
 }
 
-/// Encode the type of the flag values 
+/// Encode the type of the flag values
 #[derive(Debug, Clone)]
 pub enum FlagValue {
     /// The flag is a byte
@@ -795,7 +795,7 @@ impl std::fmt::Debug for SnapshotMemory {
         let code = match self {
             Self::Empty(_) => "Empty",
             Self::SixtyFourKb(_) => "64kb",
-            Self::OneHundredTwentyHeightKb(_) => "128kb"
+            Self::OneHundredTwentyHeightKb(_) => "128kb",
         };
         write!(f, "SnapshotMemory ({})", code)
     }
@@ -908,17 +908,15 @@ pub struct Snapshot {
     pub debug: bool,
 }
 
-
 impl std::fmt::Debug for Snapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Snapshot ({{")?;
-        write!(f,"\theader: TODO")?;
+        write!(f, "\theader: TODO")?;
         write!(f, "memory: {:?}", &self.memory)?;
         write!(f, "chunks: {:?}", &self.chunks)?;
-        write!(f,"}})")
+        write!(f, "}})")
     }
 }
-
 
 impl Default for Snapshot {
     fn default() -> Snapshot {
@@ -1090,10 +1088,7 @@ impl Snapshot {
             count
         };
 
-        let content = file_content
-            .drain(0..data_length)
-            .as_slice()
-            .to_vec();
+        let content = file_content.drain(0..data_length).as_slice().to_vec();
 
         // Generate the 4 size array
         let code = {

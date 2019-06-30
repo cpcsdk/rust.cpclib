@@ -7,9 +7,9 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::string::ToString;
 
+use bitflags::bitflags;
 use delegate::delegate;
 use getset::Getters;
-use bitflags::bitflags;
 
 /// Computes the sector size as expected by the FDC from a human readable sector size
 pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {
@@ -38,7 +38,7 @@ pub enum Head {
     Unspecified,
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl From<u8> for Head {
     fn from(val: u8) -> Head {
         match val {
@@ -49,7 +49,7 @@ impl From<u8> for Head {
     }
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl Into<u8> for Head {
     fn into(self) -> u8 {
         match self {
@@ -60,7 +60,7 @@ impl Into<u8> for Head {
     }
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl Into<u8> for &Head {
     fn into(self) -> u8 {
         match *self {
@@ -116,7 +116,7 @@ pub struct DiscInformation {
     pub(crate) track_size_table: Vec<u8>, // XXX for standard DSK only one value is provided It should be duplicated there
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl DiscInformation {
     fn creator_name_as_bytes(&self) -> [u8; 14] {
         let mut data = [0; 14];
@@ -260,7 +260,7 @@ impl DiscInformation {
 ///   - With double sided formats, the tracks are alternating, e.g. track 0 head 0, track 0 head 1, track 1 ...
 ///   - Use CPCTRANS to copy CPC discs into this format.
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 #[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct TrackInformation {
     /// track number (0 to number of tracks-1)
@@ -295,7 +295,7 @@ pub struct TrackInformation {
     pub(crate) track_size: u16,
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl TrackInformation {
     /// TODO find a nicer (with Either ?) way to manipulate unformatted tracks
     pub fn unformatted() -> TrackInformation {
@@ -308,7 +308,7 @@ impl TrackInformation {
     }
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl TrackInformation {
     #[deprecated(
         note = "Note sure it should be used as each sector store this information and different sizes are possible"
@@ -533,7 +533,7 @@ impl TrackInformation {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 pub enum DataRate {
     Unknown = 0,
     SingleOrDoubleDensity = 1,
@@ -541,14 +541,14 @@ pub enum DataRate {
     ExtendedDensity = 3,
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl Default for DataRate {
     fn default() -> Self {
         DataRate::Unknown
     }
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl From<u8> for DataRate {
     fn from(b: u8) -> DataRate {
         match b {
@@ -561,34 +561,34 @@ impl From<u8> for DataRate {
     }
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl Into<u8> for DataRate {
     fn into(self) -> u8 {
         match self {
             DataRate::Unknown => 0,
             DataRate::SingleOrDoubleDensity => 1,
             DataRate::HighDensity => 2,
-            DataRate::ExtendedDensity => 3
+            DataRate::ExtendedDensity => 3,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 pub enum RecordingMode {
     Unknown = 0,
     FM = 1,
     MFM = 2,
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl Default for RecordingMode {
     fn default() -> Self {
         RecordingMode::Unknown
     }
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl From<u8> for RecordingMode {
     fn from(b: u8) -> RecordingMode {
         match b {
@@ -600,19 +600,19 @@ impl From<u8> for RecordingMode {
     }
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl Into<u8> for RecordingMode {
     fn into(self) -> u8 {
         match self {
             RecordingMode::Unknown => 0,
             RecordingMode::FM => 1,
-            RecordingMode::MFM => 2
+            RecordingMode::MFM => 2,
         }
     }
 }
 
 #[derive(Getters, Debug, Default, PartialEq, Clone, Copy)]
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 pub struct SectorInformation {
     /// track (equivalent to C parameter in NEC765 commands)
     #[get = "pub"]
@@ -637,7 +637,7 @@ pub struct SectorInformation {
     pub(crate) data_length: u16, // in bytes, little endian notation
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl SectorInformation {
     /// Return the real size of the sector
     pub fn len(&self) -> usize {
@@ -679,13 +679,13 @@ impl SectorInformation {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 pub struct SectorInformationList {
     //sectors: Vec<Sector>
     pub(crate) sectors: Vec<Sector>,
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl SectorInformationList {
     pub fn sectors(&self) -> &[Sector] {
         &self.sectors
@@ -808,7 +808,7 @@ bitflags! {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 #[allow(unused)]
 pub struct Sector {
     #[get]
@@ -817,7 +817,7 @@ pub struct Sector {
     pub(crate) values: Vec<u8>,
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl Sector {
     /// Number of bytes stored in the sector
     pub fn real_size(&self) -> u16 {
@@ -875,12 +875,12 @@ impl Sector {
 }
 
 #[derive(Default, PartialEq, Debug, Clone)]
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 pub struct TrackInformationList {
     pub(crate) list: Vec<TrackInformation>,
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl TrackInformationList {
     fn from_buffer_and_disc_information(
         buffer: &[u8],
@@ -893,8 +893,7 @@ impl TrackInformationList {
             for head_nb in 0..disc_info.number_of_heads {
                 // Size of the track data + header
                 let current_track_size = disc_info.track_length(track_number, head_nb) as usize;
-                let track_buffer = &buffer
-                    [consummed_bytes..(consummed_bytes + current_track_size)];
+                let track_buffer = &buffer[consummed_bytes..(consummed_bytes + current_track_size)];
                 if current_track_size > 0 {
                     list.push(TrackInformation::from_buffer(track_buffer));
                 } else {
@@ -936,7 +935,7 @@ impl TrackInformationList {
             let current_track = &self.list[idx];
             let next_track = &self.list[idx + 1];
 
-            if current_track == track  {
+            if current_track == track {
                 return Some(next_track);
             }
         }
@@ -946,13 +945,13 @@ impl TrackInformationList {
 }
 
 #[derive(Default, PartialEq, Debug, Clone)]
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 pub struct ExtendedDsk {
     pub(crate) disc_information_bloc: DiscInformation,
     pub(crate) track_list: TrackInformationList,
 }
 
-#[allow(missing_docs)] 
+#[allow(missing_docs)]
 impl ExtendedDsk {
     /// open an extended dsk from an existing file
     pub fn open<P>(path: P) -> io::Result<ExtendedDsk>

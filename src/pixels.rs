@@ -6,7 +6,7 @@ pub mod mode1 {
     /// [Pixel0(), Pixel1(), Pixel2(), Pixel3()]
     #[repr(u8)]
     #[derive(Copy, Clone, Debug)]
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     pub enum PixelPosition {
         Pixel0 = 0,
         Pixel1 = 1,
@@ -17,7 +17,7 @@ pub mod mode1 {
     /// Signification of the bits in the byte
     #[repr(u8)]
     #[derive(Copy, Clone, Debug)]
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     pub enum BitMapping {
         Pixel3Bit1 = 0,
         Pixel2Bit1 = 1,
@@ -172,7 +172,7 @@ pub mod mode0 {
     /// [Pixel0(), Pixel1()]
     #[repr(u8)]
     #[derive(Copy, Clone, Debug)]
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     pub enum PixelPosition {
         Pixel0 = 0,
         Pixel1 = 1,
@@ -181,7 +181,7 @@ pub mod mode0 {
     /// Signification of the bites in the byte
     #[repr(u8)]
     #[derive(Copy, Clone, Debug)]
-#[allow(missing_docs)]
+    #[allow(missing_docs)]
     pub enum BitMapping {
         Pixel1Bit3 = 0,
         Pixel0Bit3 = 1,

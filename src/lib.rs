@@ -7,14 +7,17 @@
 #![feature(vec_drain_as_slice)]
 // Notes for later when clippy will work:
 // https://rust-lang.github.io/rust-clippy/master/index.html#identity_op must be deactivated
-
-#![deny(missing_docs,
-        missing_debug_implementations, missing_copy_implementations,
-        trivial_casts, trivial_numeric_casts,
-        unused_import_braces, unused_qualifications,
-        nonstandard_style,
-        rust_2018_idioms,
-        unused
+#![deny(
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_qualifications,
+    nonstandard_style,
+    rust_2018_idioms,
+    unused
 )]
 
 //! cpclib aims at providing tools that help cross-development for the Amstrad CPC.
@@ -31,13 +34,8 @@
 
 #![recursion_limit = "512"]
 
-
-
 #[macro_use]
 extern crate dbg;
-
-
-
 
 /// Screen emulation. Unknown state ;)
 pub mod screen;

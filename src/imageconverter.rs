@@ -110,7 +110,11 @@ impl CPCScreenDimension {
     }
 
     /// Specify a tailored dimension
-    pub fn new(horizontal_displayed: u8, vertical_displayed: u8, maximum_raster_address: u8) -> Self {
+    pub fn new(
+        horizontal_displayed: u8,
+        vertical_displayed: u8,
+        maximum_raster_address: u8,
+    ) -> Self {
         CPCScreenDimension {
             horizontal_displayed,
             vertical_displayed,
@@ -859,7 +863,9 @@ impl<'a> ImageConverter<'a> {
             OutputFormat::CPCMemory {
                 ref output_dimension,
                 ref display_address,
-            } => self.build_memory_blocks(sprite, output_dimension.clone(), display_address.clone()),
+            } => {
+                self.build_memory_blocks(sprite, output_dimension.clone(), display_address.clone())
+            }
             OutputFormat::CPCSplittingMemory(ref _vec) => unimplemented!(),
             OutputFormat::TileEncoded {
                 tile_width,
@@ -1007,12 +1013,7 @@ impl<'a> ImageConverter<'a> {
         }
 
         // Simulate the memory
-        let mut pages = [
-            [0; 0x4000],
-            [0; 0x4000],
-            [0; 0x4000],
-            [0; 0x4000],
-        ];
+        let mut pages = [[0; 0x4000], [0; 0x4000], [0; 0x4000], [0; 0x4000]];
 
         let mut used_pages = HashSet::new();
         let is_overscan = dim.use_two_banks();

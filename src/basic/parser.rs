@@ -1,16 +1,13 @@
 ///! Locomotive basic parser routines.
-
 use nom::named_attr;
 use nom::types::CompleteStr;
 use nom::InputIter;
 use nom::InputLength;
-use nom::{line_ending, ErrorKind, IResult};
 use nom::*;
-
+use nom::{line_ending, ErrorKind, IResult};
 
 use crate::basic::tokens::*;
 use crate::basic::{BasicLine, BasicProgram};
-
 
 named_attr!(#[doc=" Parse complete basic program"],
 	pub parse_basic_program<CompleteStr<'_>, BasicProgram>, do_parse!(

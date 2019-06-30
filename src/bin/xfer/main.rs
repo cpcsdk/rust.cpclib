@@ -91,10 +91,14 @@ fn main() -> Result<(), cpc::xfer::XferError> {
                 let sna = crate::cpc::sna::Snapshot::load(fname);
                 if sna.version_header() == 3 {
                     eprintln!("Need to downgrade SNA version");
-                    let sna_fname = std::path::Path::new(fname).file_name().unwrap().to_str().unwrap();
+                    let sna_fname = std::path::Path::new(fname)
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap();
                     sna.save(sna_fname, crate::cpc::sna::SnapshotVersion::V2);
                     xfer.upload_and_run(sna_fname, None)
-                    .expect("Unable to launch SNA");
+                        .expect("Unable to launch SNA");
                     done = true;
                 }
             }
