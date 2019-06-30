@@ -2,7 +2,7 @@ use custom_error::custom_error;
 /// Parser of the disc configuraiton used by the Arkos Loader
 use nom;
 use nom::types::CompleteStr;
-use nom::{eol, hex_u32, space0, space1};
+use nom::{eol, space0};
 use nom::*;
 
 use itertools;

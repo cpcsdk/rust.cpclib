@@ -568,8 +568,7 @@ impl Into<u8> for DataRate {
             DataRate::Unknown => 0,
             DataRate::SingleOrDoubleDensity => 1,
             DataRate::HighDensity => 2,
-            DataRate::ExtendedDensity => 3,
-            _ => unreachable!(),
+            DataRate::ExtendedDensity => 3
         }
     }
 }
@@ -607,8 +606,7 @@ impl Into<u8> for RecordingMode {
         match self {
             RecordingMode::Unknown => 0,
             RecordingMode::FM => 1,
-            RecordingMode::MFM => 2,
-            _ => unreachable!(),
+            RecordingMode::MFM => 2
         }
     }
 }
@@ -811,6 +809,7 @@ bitflags! {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 #[allow(missing_docs)] 
+#[allow(unused)]
 pub struct Sector {
     #[get]
     pub(crate) sector_information_bloc: SectorInformation,
@@ -1025,7 +1024,7 @@ impl ExtendedDsk {
         // Retrieve the current track and exit if does not exist
         let current_track = self.get_track_information(
             head.clone(),
-            /// Physical
+            // Physical
             track,
         )?;
 

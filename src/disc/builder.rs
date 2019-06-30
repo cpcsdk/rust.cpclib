@@ -23,7 +23,7 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
         })
         .collect::<Vec<_>>();
 
-    /// Create the empty tracks -- to be filled in the next loop
+    // Create the empty tracks -- to be filled in the next loop
     for (head, track_idx) in cfg.track_idx_iterator() {
         let mut track = edsk.track_list.add_empty_track();
         track.track_number = track_idx;
@@ -38,7 +38,7 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
             edsk.disc_information_bloc.track_size_table[track_idx as usize] as u16 * 256 + 512; // XXX Need to see why I had to add these 512 bytes ...
     }
 
-    /// Update the tracks stuff
+    // Update the tracks stuff
     for (&head, track_idx) in cfg.track_idx_iterator() {
         let track_info = edsk
             .get_track_information_mut(head, track_idx)

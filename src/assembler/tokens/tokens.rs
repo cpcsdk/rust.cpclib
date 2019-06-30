@@ -2,7 +2,6 @@ use crate::assembler::assembler::SymbolsTableCaseDependent;
 use crate::assembler::tokens::listing::*;
 use crate::assembler::tokens::*;
 use crate::assembler::AssemblerError;
-use std::str::FromStr;
 
 impl ListingElement for Token {
     /// Returns an estimation of the duration.
@@ -42,7 +41,7 @@ impl ListingElement for Token {
                         _ => unreachable!(),
                     },
 
-                    /// XXX Not stable timing
+                    // XXX Not stable timing
                     &Mnemonic::Djnz => 3, // or 4
 
                     &Mnemonic::ExAf => 1,

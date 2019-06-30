@@ -10,7 +10,6 @@ use std::str::FromStr;
 
 use num_enum::TryFromPrimitive;
 use std::ops::AddAssign;
-use std::ops::Deref;
 use std::ops::DerefMut;
 
 ///! Reimplementation of createsnapshot by Ramlaid/Arkos
@@ -634,7 +633,7 @@ impl MemoryChunk {
         let mut content = Vec::new();
 
         let idx = std::rc::Rc::new(std::cell::RefCell::new(0));
-        let mut read_byte = || {
+        let read_byte = || {
             let byte = self.data.data[*idx.borrow()];
             idx.borrow_mut().deref_mut().add_assign(1);
             byte
@@ -645,7 +644,7 @@ impl MemoryChunk {
                     let amount = read_byte();
                     if amount != 0 {
                         let val = read_byte();
-                        for idx in 0..amount {
+                        for _idx in 0..amount {
                             content.push(val);
                         }
                     }
@@ -854,13 +853,13 @@ impl SnapshotMemory {
     /// Produce a novel memory that is bigger
     fn increased_size(self) -> SnapshotMemory {
         match self {
-            Self::Empty(ref mem) => Self::default_64(),
+            Self::Empty(ref _mem) => Self::default_64(),
             Self::SixtyFourKb(ref mem) => {
                 let mut new = Self::default_128();
                 new.memory_mut()[0..64 * 1024].copy_from_slice(mem);
                 new
             }
-            Self::OneHundredTwentyHeightKb(ref mem) => unreachable!(),
+            Self::OneHundredTwentyHeightKb(ref _mem) => unreachable!(),
         }
     }
 
@@ -915,7 +914,7 @@ impl std::fmt::Debug for Snapshot {
         write!(f, "Snapshot ({{")?;
         write!(f,"\theader: TODO")?;
         write!(f, "memory: {:?}", &self.memory)?;
-        write!(f, "chunks: {:?}", &self.chunks);
+        write!(f, "chunks: {:?}", &self.chunks)?;
         write!(f,"}})")
     }
 }
@@ -954,6 +953,7 @@ impl Default for Snapshot {
 }
 
 #[allow(missing_docs)]
+#[allow(unused)]
 impl Snapshot {
     pub fn log<S: std::fmt::Display>(&self, msg: S) {
         if self.debug {
@@ -1073,12 +1073,12 @@ impl Snapshot {
     }
 
     /// Read a chunk if available
-    fn read_chunk(file_content: &mut Vec<u8>, sna: &mut Snapshot) -> Option<SnapshotChunk> {
+    fn read_chunk(file_content: &mut Vec<u8>, _sna: &mut Snapshot) -> Option<SnapshotChunk> {
         if file_content.len() < 4 {
             return None;
         }
-        let mut code = file_content.drain(0..4).as_slice().to_vec();
-        let mut data_length = file_content.drain(0..4).as_slice().to_vec();
+        let code = file_content.drain(0..4).as_slice().to_vec();
+        let data_length = file_content.drain(0..4).as_slice().to_vec();
 
         eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
 
@@ -1090,7 +1090,7 @@ impl Snapshot {
             count
         };
 
-        let mut content = file_content
+        let content = file_content
             .drain(0..data_length)
             .as_slice()
             .to_vec();

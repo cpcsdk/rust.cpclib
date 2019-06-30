@@ -11,7 +11,6 @@ use crate::disc::amsdos::AmsdosFileType;
 
 use std::fs;
 
-use std::io::prelude::*;
 use std::path::Path;
 
 
@@ -305,7 +304,7 @@ impl CpcXfer {
             self.absolute_path(directory)?
         };
 
-        self.ls_request(&directory);
+        self.ls_request(&directory)?;
 
         // Ensure theire is a / at the end
         if directory.chars().rev().next().unwrap() != '/' {

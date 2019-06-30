@@ -12,6 +12,7 @@ pub mod builder;
 use crate::assembler::parser::ParserContext;
 
 use failure::Fail;
+use crate::basic::BasicError;
 
 #[derive(Debug, Fail)]
 #[allow(missing_docs)]
@@ -27,6 +28,9 @@ pub enum AssemblerError {
     // TODO add more information
     #[fail(display = "Syntax error: {}", error)]
     SyntaxError { error: String },
+
+    #[fail(display = "Basic error: {}", error)]
+    BasicError{error: String},
 
     // TODO add more information
     #[fail(display = "Assembling error: {}", msg)]
@@ -70,6 +74,14 @@ impl From<&String> for AssemblerError {
     fn from(msg: &String) -> AssemblerError {
         AssemblerError::GenericError {
             msg: msg.to_string(),
+        }
+    }
+}
+
+impl From<BasicError> for AssemblerError {
+    fn from(msg: BasicError) -> AssemblerError {
+        AssemblerError::BasicError{
+            error: msg.to_string()
         }
     }
 }

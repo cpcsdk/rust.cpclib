@@ -62,6 +62,7 @@ pub enum ConversionRule {
 }
 
 /// Browse the image and returns the list of colors
+#[allow(unused)]
 fn get_unique_colors(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> HashSet<im::Rgb<u8>> {
     let mut set = HashSet::new();
     for pixel in img.pixels() {
@@ -71,6 +72,7 @@ fn get_unique_colors(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> HashSet<im:
 }
 
 /// Browse the image and returns the palette to use
+#[allow(unused)]
 fn extract_palette(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> Palette {
     let colors = get_unique_colors(img);
     let mut p = Palette::empty();
@@ -193,7 +195,7 @@ impl ColorMatrix {
             vec![vec![Ink::from(0); (self.width() / 2) as usize]; self.height() as usize];
         for x in 0..((self.width() / 2) as usize) {
             for y in 0..(self.height() as usize) {
-                let color = self.get_ink((x * 2), y);
+                let color = self.get_ink(x * 2, y);
                 new_data[y][x] = color.clone();
             }
         }
