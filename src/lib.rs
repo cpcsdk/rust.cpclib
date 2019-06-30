@@ -20,6 +20,8 @@
     unused
 )]
 
+#![deny(clippy::all)]
+
 //! cpclib aims at providing tools that help cross-development for the Amstrad CPC.
 //! It is mainly focused on the creation of demos for the Amstrad CPC but could be used for games or tools.
 //! Warning: none of the proposed features is fully fonctional or complete ! But hey should be correct.
