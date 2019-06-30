@@ -68,21 +68,21 @@ impl TransformationsList {
 #[derive(Clone, Copy)]
 pub struct CPCScreenDimension {
     /// Number of bytes in width
-    horizontalDisplayed: u8,
+    horizontal_displayed: u8,
     /// Number of chars in height
-    verticalDisplayed: u8,
+    vertical_displayed: u8,
     /// Number of pixel line per char line
-    maximumRasterAddress: u8,
+    maximum_raster_address: u8,
 }
 
 impl Debug for CPCScreenDimension {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(
             fmt,
-            "CPCScreenDimension {{ horizontalDisplayed: {}, verticalDisplayed: {}, maximumRasterAddress: {}, use_two_banks: {} }}",
-            self.horizontalDisplayed,
-            self.verticalDisplayed,
-            self.maximumRasterAddress,
+            "CPCScreenDimension {{ horizontal_displayed: {}, vertical_displayed: {}, maximum_raster_address: {}, use_two_banks: {} }}",
+            self.horizontal_displayed,
+            self.vertical_displayed,
+            self.maximum_raster_address,
             self.use_two_banks()
         )
     }
@@ -93,63 +93,63 @@ impl CPCScreenDimension {
     /// Return screen dimension for a standard screen
     pub fn standard() -> Self {
         CPCScreenDimension {
-            horizontalDisplayed: 80 / 2,
-            verticalDisplayed: 25,
+            horizontal_displayed: 80 / 2,
+            vertical_displayed: 25,
             /// Unsure of this value
-            maximumRasterAddress: 7,
+            maximum_raster_address: 7,
         }
     }
 
     /// Return the screen dimension for a standard overscan screen
     pub fn overscan() -> Self {
         CPCScreenDimension {
-            horizontalDisplayed: 96 / 2,
-            verticalDisplayed: 36,
-            maximumRasterAddress: 7,
+            horizontal_displayed: 96 / 2,
+            vertical_displayed: 36,
+            maximum_raster_address: 7,
         }
     }
 
     /// Specify a tailored dimension
-    pub fn new(horizontalDisplayed: u8, verticalDisplayed: u8, maximumRasterAddress: u8) -> Self {
+    pub fn new(horizontal_displayed: u8, vertical_displayed: u8, maximum_raster_address: u8) -> Self {
         CPCScreenDimension {
-            horizontalDisplayed,
-            verticalDisplayed,
-            maximumRasterAddress,
+            horizontal_displayed,
+            vertical_displayed,
+            maximum_raster_address,
         }
     }
 
     /// Number of lines to display a char
-    pub fn nbLinesPerChar(&self) -> u8 {
-        1 + self.maximumRasterAddress
+    pub fn nb_lines_per_char(&self) -> u8 {
+        1 + self.maximum_raster_address
     }
 
     /// Number of chars used to vertically encode the screen
-    pub fn nbCharLines(&self) -> u8 {
-        self.verticalDisplayed
+    pub fn nb_char_lines(&self) -> u8 {
+        self.vertical_displayed
     }
 
-    pub fn nbWordColumns(&self) -> u8 {
-        self.horizontalDisplayed
+    pub fn nb_word_columns(&self) -> u8 {
+        self.horizontal_displayed
     }
 
     /// Number of chars used to horizontally encode the screen
-    pub fn nbByteColumns(&self) -> u8 {
-        self.nbWordColumns() * 2
+    pub fn nb_byte_columns(&self) -> u8 {
+        self.nb_word_columns() * 2
     }
 
     /// Height of the screen in pixels
     pub fn height(&self) -> u16 {
-        self.nbCharLines() as u16 * self.nbLinesPerChar() as u16
+        self.nb_char_lines() as u16 * self.nb_lines_per_char() as u16
     }
 
     /// Width of the screen in pixels
     pub fn width(&self, mode: &Mode) -> u16 {
-        self.nbByteColumns() as u16 * mode.nbPixelsPerByte() as u16
+        self.nb_byte_columns() as u16 * mode.nb_pixels_per_byte() as u16
     }
 
     /// Return true if the image needs two banks
     pub fn use_two_banks(&self) -> bool {
-        self.nbByteColumns() as u16 * self.height() > 0x4000
+        self.nb_byte_columns() as u16 * self.height() > 0x4000
     }
 }
 
@@ -246,11 +246,11 @@ impl DisplayAddress {
         self.0.set_bit_range(Self::PAGE_START, Self::PAGE_END, page);
     }
 
-    pub fn R12(&self) -> u8 {
+    pub fn r12(&self) -> u8 {
         self.0.bit_range(15, 8)
     }
 
-    pub fn R13(&self) -> u8 {
+    pub fn r13(&self) -> u8 {
         self.0.bit_range(7, 0)
     }
 
@@ -322,8 +322,8 @@ pub enum OutputFormat {
 
     /// CPC memory encoded. The binary can be directly included in a snapshot
     CPCMemory {
-        outputDimension: CPCScreenDimension,
-        displayAddress: DisplayAddress,
+        output_dimension: CPCScreenDimension,
+        display_address: DisplayAddress,
     },
 
     /// CPC memory encoded to be used with hardware splitting. The vector only contains the Variant CPCMemory
@@ -638,15 +638,15 @@ impl OutputFormat {
 
     pub fn create_overscan_cpc_memory() -> Self {
         Self::CPCMemory {
-            outputDimension: CPCScreenDimension::overscan(),
-            displayAddress: DisplayAddress::new_overscan_from_page(2), // we do not care of the page
+            output_dimension: CPCScreenDimension::overscan(),
+            display_address: DisplayAddress::new_overscan_from_page(2), // we do not care of the page
         }
     }
 
     pub fn create_standard_cpc_memory() -> Self {
         Self::CPCMemory {
-            outputDimension: CPCScreenDimension::standard(),
-            displayAddress: DisplayAddress::new_standard_from_page(2),
+            output_dimension: CPCScreenDimension::standard(),
+            display_address: DisplayAddress::new_standard_from_page(2),
         }
     }
 }
@@ -858,9 +858,9 @@ impl<'a> ImageConverter<'a> {
         match output {
             OutputFormat::LinearEncodedSprite => self.linearize_sprite(sprite),
             OutputFormat::CPCMemory {
-                ref outputDimension,
-                ref displayAddress,
-            } => self.build_memory_blocks(sprite, outputDimension.clone(), displayAddress.clone()),
+                ref output_dimension,
+                ref display_address,
+            } => self.build_memory_blocks(sprite, output_dimension.clone(), display_address.clone()),
             OutputFormat::CPCSplittingMemory(ref _vec) => unimplemented!(),
             OutputFormat::TileEncoded {
                 tile_width,
@@ -915,11 +915,11 @@ impl<'a> ImageConverter<'a> {
         };
         let nb_columns = match grid_width {
             GridWidthCapture::TilesInRow(nb) => nb,
-            FullWidth => sprite.byte_width() as usize / tile_width as usize,
+            GridWidthCapture::FullWidth => sprite.byte_width() as usize / tile_width as usize,
         };
         let nb_rows = match grid_height {
             GridHeightCapture::TilesInColumn(nb) => nb,
-            FullHeight => sprite.height() as usize / tile_height as usize,
+            GridHeightCapture::FullHeight => sprite.height() as usize / tile_height as usize,
         };
 
         // Really makes the extraction
@@ -973,7 +973,7 @@ impl<'a> ImageConverter<'a> {
         &mut self,
         sprite: &Sprite,
         dim: CPCScreenDimension,
-        displayAddress: DisplayAddress,
+        display_address: DisplayAddress,
     ) -> Result<Output, String> {
         let screen_width = dim.width(&sprite.mode().unwrap()) as u32;
         let screen_height = dim.height() as u32;
@@ -1017,26 +1017,26 @@ impl<'a> ImageConverter<'a> {
 
         let mut used_pages = HashSet::new();
         let is_overscan = dim.use_two_banks();
-        if !is_overscan && displayAddress.is_overscan() {
+        if !is_overscan && display_address.is_overscan() {
             return Err(format!(
                 "Image requires an overscan configuration for R12/R13={:?}",
-                displayAddress
+                display_address
             ));
         }
 
-        let mut current_address = displayAddress.clone();
+        let mut current_address = display_address.clone();
         used_pages.insert(current_address.page());
 
         // loop over the chars vertically
-        for char_y in 0..dim.nbCharLines() {
+        for char_y in 0..dim.nb_char_lines() {
             let char_y = char_y as usize;
 
             // loop over the chars horiontally (2 bytes)
-            for char_x in 0..dim.nbWordColumns() {
+            for char_x in 0..dim.nb_word_columns() {
                 let char_x = char_x as usize;
 
                 // Loop over the lines of the current char (8 lines for a standard screen)
-                for line_in_char in 0..dim.nbLinesPerChar() {
+                for line_in_char in 0..dim.nb_lines_per_char() {
                     let line_in_char = line_in_char as usize;
 
                     // Loop over the bytes of the current char
@@ -1044,7 +1044,7 @@ impl<'a> ImageConverter<'a> {
                         let byte_nb = byte_nb as usize;
 
                         let x_coord = 2 * char_x + byte_nb;
-                        let y_coord = dim.nbLinesPerChar() as usize * char_y + line_in_char;
+                        let y_coord = dim.nb_lines_per_char() as usize * char_y + line_in_char;
 
                         let value = sprite.get_byte_safe(x_coord, y_coord);
                         //let value = Some(sprite.get_byte(x_coord as _, y_coord as _));

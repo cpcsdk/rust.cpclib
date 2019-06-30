@@ -43,7 +43,7 @@ impl Mode {
     }
 
     /// Return the number of pixels encode by one byte in the given mode
-    pub fn nbPixelsPerByte(&self) -> usize {
+    pub fn nb_pixels_per_byte(&self) -> usize {
         match self {
             &Mode::Mode0 | &Mode::Mode3 => 2,
             &Mode::Mode1 => 4,
@@ -545,7 +545,7 @@ impl Sprite {
     pub fn pixel_width(&self) -> u32 {
         match self.mode {
             None => panic!("Unable to get the pixel width when mode is not specified"),
-            Some(mode) => mode.nbPixelsPerByte() as u32 * self.byte_width(),
+            Some(mode) => mode.nb_pixels_per_byte() as u32 * self.byte_width(),
         }
     }
 
