@@ -7,7 +7,10 @@ use nom::{eol, line_ending, space, space0, space1, Err, ErrorKind, IResult};
 use crate::basic::tokens::*;
 use crate::basic::{BasicLine, BasicProgram};
 
-named!(
+
+#[allow(missing_docs)]
+	/// Parse complete basic program
+named_attr!(#[doc=" TODO"],
 	pub parse_basic_program<CompleteStr<'_>, BasicProgram>, do_parse!(
 		lines: fold_many0!(
 			parse_basic_inner_line,
@@ -30,8 +33,8 @@ named!(
 	)
 );
 
-/// Parse a line
-named!(
+	/// Parse a line
+named_attr!(#[doc=" TODO"],
 	pub parse_basic_line<CompleteStr<'_>, BasicLine>, do_parse!(
 		line_number: dec_u16_inner >>
 		char!(' ') >> 
@@ -52,8 +55,8 @@ named!(
 	)
 );
 
-/// Parse a line BUT expect an end of line char
-named!(
+	/// Parse a line BUT expect an end of line char
+named_attr!(#[doc=" TODO"],
 	pub parse_basic_inner_line<CompleteStr<'_>, BasicLine>, do_parse!(
 		line: parse_basic_line >>
 		line_ending >>
@@ -63,8 +66,8 @@ named!(
 	)
 );
 
-/// Parse any token
-named!(
+	/// Parse any token
+named_attr!(#[doc=" TODO"],
 	pub parse_token<CompleteStr<'_>, BasicToken>, alt!(
 		parse_rem |
 		parse_simple_instruction |
@@ -74,7 +77,8 @@ named!(
 	)
 );
 
-named!(
+	/// Parse a comment
+named_attr!(#[doc=" TODO"],
 	pub parse_rem<CompleteStr<'_>, BasicToken>, do_parse!(
 		sym: alt!(
 			tag_no_case!("REM") => 
@@ -89,9 +93,9 @@ named!(
 	)
 );
 
-/// Parse the instructions that do not need a prefix byte
-/// TODO Add all the other variants
-named!(
+	/// Parse the instructions that do not need a prefix byte
+	/// TODO Add all the other variants
+named_attr!(#[doc=" TODO"],
 	pub parse_simple_instruction<CompleteStr<'_>, BasicToken>, do_parse!(
 		token: alt!(
 			tag_no_case!("CALL") => {|_| BasicTokenNoPrefix::Call} |
@@ -104,8 +108,8 @@ named!(
 	)
 );
 
-/// TODO add the missing chars
-named!(
+	/// TODO add the missing chars
+named_attr!(#[doc=" TODO"],
 	pub parse_char<CompleteStr<'_>, BasicToken>, do_parse!(
 		token: alt!(
 			char!(':') => {|_| BasicTokenNoPrefix::StatementSeparator} |
@@ -173,7 +177,7 @@ named!(
 
 /// Parse the instructions that do not need a prefix byte
 /// TODO Add all the other instructions
-named!(
+named_attr!(#[doc=" TODO"],
 	pub parse_prefixed_instruction<CompleteStr<'_>, BasicToken>, do_parse!(
 		token: alt!(
 			tag_no_case!("ABS") => {|_| BasicTokenPrefixed::Abs}
@@ -184,14 +188,16 @@ named!(
 	)
 );
 
-named!(
+	/// Parse a basic value
+named_attr!(#[doc=" TODO"],
 	pub parse_basic_value<CompleteStr<'_>, BasicToken>, alt!(
 		parse_hexadecimal_value_16bits |
 		parse_decimal_value_16bits
 	)
 );
+	/// Parse an hexadecimal value
 
-named!(
+named_attr!(#[doc=" TODO"],
     pub parse_hexadecimal_value_16bits<CompleteStr<'_>, BasicToken>, do_parse!(
         tag_no_case!( "&") >>
         val: hex_u16_inner >>
@@ -204,7 +210,7 @@ named!(
         )
     );
 
-named!(
+named_attr!(#[doc=" TODO"],
     pub parse_decimal_value_16bits<CompleteStr<'_>, BasicToken>, do_parse!(
         val: dec_u16_inner >>
         (
@@ -228,8 +234,8 @@ pub fn hex_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
             } else {
                 let mut res = 0u32;
                 for e in parsed.iter_elements() {
-                    let digit = e as char;
-                    let value = digit.to_digit(16).unwrap_or(0) as u32;
+                    let digit = e;
+                    let value = digit.to_digit(16).unwrap_or(0);
                     res = value + (res * 16);
                 }
                 if res > u16::max_value() as u32 {
@@ -254,8 +260,8 @@ pub fn dec_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
             } else {
                 let mut res = 0u32;
                 for e in parsed.iter_elements() {
-                    let digit = e as char;
-                    let value = digit.to_digit(10).unwrap_or(0) as u32;
+                    let digit = e;
+                    let value = digit.to_digit(10).unwrap_or(0);
                     res = value + (res * 10);
                 }
                 if res > u16::max_value() as u32 {

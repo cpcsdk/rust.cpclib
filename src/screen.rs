@@ -1,11 +1,18 @@
 use image as im;
 
+#[allow(missing_docs)]
 pub const MAX_WIDTH_MODE0: u32 = 96 * 2;
+#[allow(missing_docs)]
 pub const MAX_WIDTH_MODE1: u32 = 96 * 4;
+#[allow(missing_docs)]
 pub const MAX_WIDTH_MODE2: u32 = 96 * 8;
+#[allow(missing_docs)]
 pub const MAX_WIDTH_MODE3: u32 = 96 * 2;
+#[allow(missing_docs)]
 pub const MAX_HEIGHT: u32 = 39 * 8;
 
+#[allow(missing_docs)]
+#[derive(Debug)]
 pub struct SimpleMonitor {
     pub width: u32,
     pub height: u32,
@@ -15,6 +22,7 @@ pub struct SimpleMonitor {
     pub buffer: im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
 }
 
+#[allow(missing_docs)]
 impl SimpleMonitor {
     pub fn new(width: u32, height: u32, mode: u8) -> SimpleMonitor {
         SimpleMonitor {

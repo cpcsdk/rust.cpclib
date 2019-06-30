@@ -1,6 +1,7 @@
 use std::fmt;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy)]
+#[allow(missing_docs)]
 pub enum Register16 {
     Af,
     Hl,
@@ -21,6 +22,7 @@ impl fmt::Display for Register16 {
     }
 }
 
+#[allow(missing_docs)]
 impl Register16 {
     /// Return the high 8bit register if exists
     pub fn high(&self) -> Option<Register8> {
@@ -49,7 +51,8 @@ impl Register16 {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[allow(missing_docs)]
 pub enum IndexRegister16 {
     Ix,
     Iy,
@@ -66,7 +69,8 @@ impl fmt::Display for IndexRegister16 {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Hash, Copy)]
+#[allow(missing_docs)]
 pub enum Register8 {
     A,
     B,
@@ -77,6 +81,7 @@ pub enum Register8 {
     L,
 }
 
+#[allow(missing_docs)]
 impl Register8 {
     pub fn is_high(&self) -> bool {
         match self {
@@ -131,7 +136,8 @@ impl fmt::Display for Register8 {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[allow(missing_docs)]
 pub enum IndexRegister8 {
     Ixh,
     Ixl,
@@ -164,7 +170,8 @@ pub enum Value{
 */
 
 // TODO add missing flags
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[allow(missing_docs)]
 pub enum FlagTest {
     NZ,
     Z,

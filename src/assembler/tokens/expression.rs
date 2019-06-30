@@ -8,6 +8,7 @@ use crate::assembler::AssemblerError;
 
 /// Expression nodes.
 #[derive(PartialEq, Eq, Clone)]
+#[allow(missing_docs)]
 pub enum Expr {
     /// 32 bits integer value (should be able to include any integer value manipulated by the assember.
     Value(i32),
@@ -79,6 +80,7 @@ impl<S:AsRef<str>> From<S> for Expr {
 }
 */
 
+#[allow(missing_docs)]
 impl Expr {
     pub fn neg(&self) -> Expr {
         Expr::Neg(Box::new(self.clone()))
@@ -195,7 +197,8 @@ impl Expr {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[allow(missing_docs)]
 pub enum Oper {
     Add,
     Sub,
@@ -214,8 +217,12 @@ pub enum Oper {
     StrictlyLower,
 }
 
+#[derive(Copy, Clone, Debug)]
+/// Function that can be applied in expressions
 pub enum Function {
+    /// Computes the high byte of a 16bits number
     Hi,
+    /// Computes the low byte of a 16bits number
     Lo,
 }
 

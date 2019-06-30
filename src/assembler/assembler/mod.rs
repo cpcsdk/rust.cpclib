@@ -14,6 +14,7 @@ use either::*;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
+#[allow(missing_docs)]
 pub type Bytes = SmallVec<[u8; MAX_SIZE]>;
 
 /// Add the encoding of an indexed structure
@@ -69,6 +70,7 @@ impl fmt::Display for AssemblingPass {
     }
 }
 
+#[allow(missing_docs)]
 impl AssemblingPass {
     fn is_uninitialized(&self) -> bool {
         match self {
@@ -115,6 +117,7 @@ struct StableTickerCounters {
     counters: Vec<(String, usize)>,
 }
 
+#[allow(missing_docs)]
 impl StableTickerCounters {
     /// Check if a counter with the same name already exists
     pub fn has_counter<S: AsRef<str>>(&self, name: S) -> bool {
@@ -154,6 +157,7 @@ impl StableTickerCounters {
 }
 
 #[derive(Default, Debug)]
+#[allow(missing_docs)]
 struct OrgZone {
     ibank: usize,
     protect: bool,
@@ -161,12 +165,14 @@ struct OrgZone {
     _memend: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
+#[allow(missing_docs)]
 pub enum Symbol {
     Integer(i32),
 }
 
 #[derive(Debug, Clone)]
+#[allow(missing_docs)]
 pub struct SymbolsTable {
     map: HashMap<String, Symbol>,
     dummy: bool,
@@ -181,6 +187,7 @@ impl Default for SymbolsTable {
     }
 }
 
+#[allow(missing_docs)]
 impl SymbolsTable {
     pub fn laxist() -> SymbolsTable {
         let mut map = HashMap::new();
@@ -216,11 +223,11 @@ impl SymbolsTable {
     /// Set the given symbol to the given value
     pub fn set_symbol_to_value<S: AsRef<str>>(&mut self, label: S, value: i32) {
         self.map
-            .insert(label.as_ref().into(), Symbol::Integer(value as _));
+            .insert(label.as_ref().into(), Symbol::Integer(value));
     }
 
     pub fn update_symbol_to_value<S: AsRef<str>>(&mut self, label: S, value: i32) {
-        *(self.map.get_mut(label.as_ref()).unwrap()) = Symbol::Integer(value as _);
+        *(self.map.get_mut(label.as_ref()).unwrap()) = Symbol::Integer(value);
     }
 
     /// TODO return the symbol instead of the int
@@ -265,6 +272,7 @@ impl SymbolsTable {
 
 /// Wrapper around the symbols table in order to easily manage the fact that the assembler is case dependent or independant
 #[derive(Debug, Clone)]
+#[allow(missing_docs)]
 pub struct SymbolsTableCaseDependent {
     table: SymbolsTable,
     case_sensitive: bool,
@@ -286,6 +294,7 @@ impl AsRef<SymbolsTable> for SymbolsTableCaseDependent {
     }
 }
 
+#[allow(missing_docs)]
 impl SymbolsTableCaseDependent {
     fn new(table: SymbolsTable, case_sensitive: bool) -> SymbolsTableCaseDependent {
         SymbolsTableCaseDependent {
@@ -364,6 +373,7 @@ impl SymbolsTableCaseDependent {
 }
 
 /// Environment of the assembly
+#[allow(missing_docs)]
 pub struct Env {
     /// Current pass
     pass: AssemblingPass,
@@ -427,6 +437,7 @@ impl Default for Env {
     }
 }
 
+#[allow(missing_docs)]
 impl Env {
     /// Create an environment that embeds a copy of the given table and is configured to be in the latest pass.
     /// Mainly used for tests.
@@ -491,7 +502,7 @@ impl Env {
     pub fn produced_bytes(&self) -> Vec<u8> {
         // assume we start at 0 if never provided
         let startadr = self.startadr.or(Some(0)).unwrap();
-        self.memory(startadr as _, self.outputadr - startadr)
+        self.memory(startadr, self.outputadr - startadr)
     }
 
     /// Returns the address of the 1st written byte
@@ -654,6 +665,7 @@ impl Env {
     }
 }
 
+#[allow(missing_docs)]
 impl Env {
     /// Visit all the tokens of the listing
     pub fn visit_listing(&mut self, listing: &Listing) -> Result<(), AssemblerError> {
@@ -883,6 +895,7 @@ fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     env.output_bytes(&bytes)
 }
 
+#[allow(missing_docs)]
 impl Env {
     pub fn visit_basic(
         &mut self,
@@ -970,6 +983,7 @@ pub fn visit_stableticker(
     }
 }
 
+/// Assemble DEFS directive
 pub fn assemble_defs(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Bytes, AssemblerError> {
     let count = env.resolve_expr_must_never_fail(expr)?;
     let mut bytes = Bytes::with_capacity(count as usize);
@@ -987,6 +1001,8 @@ pub fn assemble_defs(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Byte
     Ok(bytes)
 }
 
+
+/// Assemble DB or DW directive
 pub fn assemble_db_or_dw(token: &Token, env: &Env) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
@@ -1139,12 +1155,12 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
 
     // TODO Check overlapping region
     // TODO manage rorg like instruction
-    env.outputadr = adr as usize;
-    env.codeadr = adr as usize;
+    env.outputadr = adr;
+    env.codeadr = adr;
 
     // Specify start address at first use
     if env.startadr.is_none() {
-        env.startadr = Some(env.outputadr as usize);
+        env.startadr = Some(env.outputadr);
     }
 
     Ok(())
@@ -1342,6 +1358,7 @@ fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> 
     }
 }
 
+#[allow(missing_docs)]
 impl Env {
     pub fn assemble_cp(&mut self, arg: &DataAccess) -> Result<Bytes, AssemblerError> {
         let mut bytes = Bytes::new();
@@ -1444,7 +1461,7 @@ impl Env {
             }
 
             DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                let val = self.resolve_expr_may_fail_in_first_pass(exp)? as i32;
+                let val = self.resolve_expr_may_fail_in_first_pass(exp)?;
                 bytes.push(indexed_register16_to_code(reg));
                 add_byte(&mut bytes, 0xcb);
                 bytes.push((val & 0xff) as _);
@@ -1848,7 +1865,7 @@ fn assemble_add_or_adc(
                 }
 
                 &DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                    let val = exp.resolve(sym)? as i32;
+                    let val = exp.resolve(sym)?;
 
                     // TODO check if the code is ok
                     bytes.push(indexed_register16_to_code(reg));
@@ -2340,7 +2357,7 @@ mod test {
         assert_eq!(m.len(), 1);
         assert_eq!(m[0], 2);
 
-        add_word(&mut m, 0x1234 as u16);
+        add_word(&mut m, 0x1234);
         assert_eq!(m.len(), 3);
         assert_eq!(m[1], 0x34);
         assert_eq!(m[2], 0x12);

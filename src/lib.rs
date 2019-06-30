@@ -8,6 +8,11 @@
 // Notes for later when clippy will work:
 // https://rust-lang.github.io/rust-clippy/master/index.html#identity_op must be deactivated
 
+#![deny(missing_docs,
+        missing_debug_implementations, missing_copy_implementations,
+        trivial_casts, trivial_numeric_casts,
+        unused_import_braces, unused_qualifications)]
+
 //! cpclib aims at providing tools that help cross-development for the Amstrad CPC.
 //! It is mainly focused on the creation of demos for the Amstrad CPC but could be used for games or tools.
 //! Warning: none of the proposed features is fully fonctional or complete ! But hey should be correct.
@@ -22,7 +27,6 @@
 
 #![recursion_limit = "512"]
 
-#[macro_use]
 extern crate bitfield;
 #[macro_use]
 extern crate bitflags;
@@ -63,12 +67,13 @@ pub mod imageconverter;
 /// Gate Array specific objects. Finished.
 pub mod ga;
 
+/// ???
 pub mod asm;
 
 /// Z80 tokens manipulations. Useable
 pub mod assembler;
 
-// Basic program manipulation. WIP
+/// Basic program manipulation. WIP
 pub mod basic;
 
 /// Z80 emulation. WIP
@@ -80,6 +85,7 @@ pub mod sna;
 /// Disk (edsk) manipulation. WIP
 pub mod disc;
 
+/// CPC Wifi extension related stuff. Useable
 #[cfg(any(feature = "xferlib", feature = "xfer"))]
 pub mod xfer;
 
@@ -87,6 +93,7 @@ pub mod xfer;
 pub use crate::disc::edsk::ExtendedDsk;
 pub use crate::ga::{Ink, Palette, Pen};
 
+/// `util` namespace contain various utility functions that could be used by any module and are not specific to the project.
 pub mod util {
     /**
      * Convert a string to its unsigned 32 bits representation (to access to extra memory)

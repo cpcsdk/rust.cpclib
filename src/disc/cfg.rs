@@ -39,7 +39,11 @@ SectorID = 0xc1,0xc6,0xc2,0xc7,0xc3,0xc8,0xc4,0xc9,0xc5
 sectorIDHead = 0,0,0,0,0,0,0,0,0
 ";
 
-custom_error! {pub DiscConfigError
+
+custom_error! {
+#[allow(missing_docs)] 
+/// Errors specifics to the configuration manipulation    
+pub DiscConfigError
     IOError{source: std::io::Error} = "IO error: {source}.",
     ParseError{msg: String}            = "Parse error: {msg}"
 }
@@ -81,6 +85,7 @@ impl FromStr for DiscConfig {
     }
 }
 
+#[allow(missing_docs)] 
 impl DiscConfig {
     pub fn single_head_data_format() -> DiscConfig {
         Self::from_str(DATA_FORMAT_CFG).unwrap()
@@ -100,6 +105,7 @@ impl DiscConfig {
     }
 }
 
+#[allow(missing_docs)] 
 impl fmt::Display for DiscConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "NbTrack = {}", self.nb_tracks)?;
@@ -113,6 +119,7 @@ impl fmt::Display for DiscConfig {
     }
 }
 
+#[allow(missing_docs)] 
 impl DiscConfig {
     /// HeadA or HeadB for a two headd dsk. Unspecified for a single headd disc
     pub fn track_information_for_track<S: Into<Head>>(
@@ -138,6 +145,7 @@ impl DiscConfig {
     }
 }
 
+#[allow(missing_docs)] 
 impl DiscConfig {
     /// return a disc configuration where each groups contains only one track
     /// TODO find a better name
@@ -167,6 +175,7 @@ impl DiscConfig {
 }
 
 #[derive(Debug, PartialEq)]
+/// Desribes tracks for a given group of tracks
 pub struct TrackGroup {
     /// Identifier of the tracks molded from this configuration
     pub(crate) tracks: Vec<u8>,
@@ -181,6 +190,7 @@ pub struct TrackGroup {
     pub(crate) sector_id_head: Vec<u8>,
 }
 
+#[allow(missing_docs)] 
 impl fmt::Display for TrackGroup {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let head_info = match self.head {
@@ -210,6 +220,7 @@ impl fmt::Display for TrackGroup {
     }
 }
 
+#[allow(missing_docs)] 
 impl TrackGroup {
     /// Return the sector size in the format expected by a DSK
     pub fn sector_size_dsk_format(&self) -> u8 {
@@ -238,6 +249,7 @@ impl TrackGroup {
     }
 }
 
+#[allow(missing_docs)] 
 impl TrackInformationList {
     pub fn to_cfg(&self, double_headd: bool) -> Vec<TrackGroup> {
         let mut single = self
@@ -291,6 +303,7 @@ impl TrackInformationList {
 }
 
 /// Extend TrackInformation with the ability to extract its configuration
+#[allow(missing_docs)] 
 impl TrackInformation {
     pub fn to_cfg(&self, double_headd: bool) -> TrackGroup {
         let tracks = vec![self.track_number];
@@ -333,6 +346,7 @@ impl TrackInformation {
     }
 }
 
+#[allow(missing_docs)] 
 impl ExtendedDsk {
     /// Generate a configuration from the dsk
     pub fn to_cfg(&self) -> DiscConfig {
@@ -344,6 +358,7 @@ impl ExtendedDsk {
     }
 }
 
+#[allow(missing_docs)] 
 impl From<&ExtendedDsk> for DiscConfig {
     fn from(dsk: &ExtendedDsk) -> DiscConfig {
         dsk.to_cfg()
@@ -457,8 +472,7 @@ named!(
     )
 );
 
-// TODO allow to write the information in a different order
-named!(pub parse_config<CompleteStr<'_>, DiscConfig>,
+named_attr!(#[doc="// TODO allow to write the information in a different order"],pub parse_config<CompleteStr<'_>, DiscConfig>,
   do_parse!(
 		many0!(empty_line) >>
 	  nb_tracks: call!(value_of_key, "NbTrack") >>

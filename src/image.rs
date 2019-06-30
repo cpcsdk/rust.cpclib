@@ -8,9 +8,13 @@ use std::collections::HashSet;
 /// Screen mode
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Mode {
+    /// Mode 0 - 16 colors
     Mode0,
+    /// Mode 1 - 4 colors
     Mode1,
+    /// Mode 2 - 2 colors
     Mode2,
+    /// Mode 3 - 4 colors / same resolution than Mode 0
     Mode3,
 }
 
@@ -26,6 +30,7 @@ impl From<u8> for Mode {
     }
 }
 
+#[allow(missing_docs)]
 impl Mode {
     /// Return the maximum number of colors for the current mode (without using rasters)
     pub fn max_colors(&self) -> usize {
@@ -48,9 +53,11 @@ impl Mode {
 }
 
 /// Conversion rules
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum ConversionRule {
+    /// All pixels are used
     AnyModeUseAllPixels,
+    /// One pixel out of two is skiped (used for mode0 pictures where the graphician has doubled each pixel)
     Mode0SkipOddPixels,
 }
 
@@ -137,11 +144,13 @@ fn inks_to_pens(inks: &Vec<Vec<Ink>>, p: &Palette) -> Vec<Vec<Pen>> {
 /// A ColorMatrix represents an image through a list of Inks.
 /// It has no real meaning in CPC world but can be used for image transformaton
 /// There is no mode information
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ColorMatrix {
+    /// List of inks
     data: Vec<Vec<Ink>>,
 }
 
+#[allow(missing_docs)]
 impl ColorMatrix {
     /// Create a new empty color matrix for the given dimensions
     pub fn new(width: usize, height: usize) -> ColorMatrix {
@@ -168,7 +177,7 @@ impl ColorMatrix {
             vec![vec![Ink::from(0); (2 * self.width()) as usize]; self.height() as usize];
         for x in 0..(self.width() as usize) {
             for y in 0..(self.height() as usize) {
-                let color = self.get_ink(x as _, y as _);
+                let color = self.get_ink(x, y);
                 new_data[y][x * 2 + 0] = color.clone();
                 new_data[y][x * 2 + 1] = color.clone();
             }
@@ -184,7 +193,7 @@ impl ColorMatrix {
             vec![vec![Ink::from(0); (self.width() / 2) as usize]; self.height() as usize];
         for x in 0..((self.width() / 2) as usize) {
             for y in 0..(self.height() as usize) {
-                let color = self.get_ink((x * 2) as _, y as _);
+                let color = self.get_ink((x * 2), y);
                 new_data[y][x] = color.clone();
             }
         }
@@ -280,7 +289,7 @@ impl ColorMatrix {
     /// TODO Use a trait for that
     pub fn width(&self) -> u32 {
         match self.height() {
-            0 => 0 as u32,
+            0 => 0,
             _ => self.data[0].len() as u32,
         }
     }
@@ -441,12 +450,17 @@ impl ColorMatrix {
 /// palette.
 /// TODO Check why mode nad palette are optionnals. Force them if it is not mandatory to have htem
 /// optionnal
+#[derive(Debug)]
 pub struct Sprite {
+    /// Optional screen mode of the sprite
     pub(crate) mode: Option<Mode>,
+    /// Optinal palete of the sprite
     pub(crate) palette: Option<Palette>,
+    /// Content of the sprite
     pub(crate) data: Vec<Vec<u8>>,
 }
 
+#[allow(missing_docs)]
 impl Sprite {
     /// TODO Use TryFrom once in standard rust
     /// The conversion can only work if a palette and a mode is provided
@@ -521,7 +535,7 @@ impl Sprite {
     /// TODO Use a trait for that
     pub fn byte_width(&self) -> u32 {
         match self.height() {
-            0 => 0 as u32,
+            0 => 0,
             _ => self.data[0].len() as u32,
         }
     }
@@ -591,18 +605,22 @@ impl Sprite {
 
 /// Simple multimode sprite where each line can have its own resolution mode
 /// The palette is assumed to be the same on all the lines
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+#[allow(missing_docs)]
 pub struct MultiModeSprite {
     mode: Vec<Mode>,
     palette: Palette,
     data: Vec<Vec<u8>>,
 }
 
+#[derive(Copy, Clone, Debug)]
+#[allow(missing_docs)]
 pub enum MultiModeConversion {
     FirstHalfSecondHalf,
     OddEven,
 }
 
+#[allow(missing_docs)]
 impl MultiModeSprite {
     /// Build an empty multimode sprite BUT provide the palette
     pub fn new(p: Palette) -> MultiModeSprite {
@@ -688,7 +706,7 @@ impl MultiModeSprite {
                     sprite_height / 2 + 1
                 } else {
                     sprite_height / 2 + 0
-                } as usize;
+                };
 
                 let mut modes = Vec::with_capacity(sprite_height);
                 let mut lines = Vec::with_capacity(encoded_height);

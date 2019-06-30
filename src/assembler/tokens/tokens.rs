@@ -326,7 +326,7 @@ impl Listing {
             }
 
             if current_address.is_some() {
-                current_address = Some(current_address.unwrap() as usize + current_size);
+                current_address = Some(current_address.unwrap() + current_size);
             }
             count += current_size;
         }

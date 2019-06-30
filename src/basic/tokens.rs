@@ -6,6 +6,7 @@ use std::convert::TryInto;
 
 #[derive(IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Debug)]
 #[repr(u8)]
+#[allow(missing_docs)]
 pub enum BasicTokenNoPrefix {
     EndOfTokenisedLine = 0,
 
@@ -264,6 +265,7 @@ impl fmt::Display for BasicTokenNoPrefix {
 
 
 impl BasicTokenNoPrefix {
+    /// Returns the 8bit code that represents the token
     pub fn value(&self) -> u8 {
         (*self).into()
     }
@@ -271,6 +273,7 @@ impl BasicTokenNoPrefix {
 
 #[derive(IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Debug)]
 #[repr(u8)]
+#[allow(missing_docs)]
 pub enum BasicTokenPrefixed {
     Abs = 0,
     Asc,
@@ -348,18 +351,24 @@ impl From<u8> for BasicTokenPrefixed {
 */
 
 impl BasicTokenPrefixed {
+    /// Returns the 8bits code that represents the prefixed token
     pub fn value(&self) -> u8 {
         (*self).into()
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Encode a Basic value
 pub enum BasicValue {
+    /// 16bits integer value
     Integer(u8, u8),
+    /// 5bytes float value
     Float(u8, u8, u8, u8, u8),
+    /// String
     String(String),
 }
 
+#[allow(missing_docs)]
 impl BasicValue {
     pub fn new_integer(word: u16) -> BasicValue {
         BasicValue::Integer((word % 256) as u8, (word / 256) as u8)
@@ -410,6 +419,7 @@ pub enum BasicToken {
     Variable(String, BasicValue),
     /// Encode a constant. The first field can only take ValueIntegerDecimal8bits, ValueIntegerDecimal16bits, ValueIntegerBinary16bits, ValueIntegerHexadecimal16bits
     Constant(BasicTokenNoPrefix, BasicValue),
+    /// Encode a comment
     Comment(BasicTokenNoPrefix, Vec<u8>),
 }
 
@@ -445,6 +455,7 @@ impl fmt::Display for BasicToken {
     }
 }
 
+#[allow(missing_docs)]
 impl BasicToken {
     pub fn as_bytes(&self) -> Vec<u8> {
         match self {

@@ -13,6 +13,7 @@ use crate::disc::edsk::Head;
 use delegate::delegate;
 
 #[derive(Debug)]
+#[allow(missing_docs)] 
 pub enum AmsdosError {
     NoEntriesAvailable,
     NoBlocAvailable,
@@ -21,7 +22,7 @@ pub enum AmsdosError {
     IO(std::io::Error),
 }
 
-impl std::convert::From<std::io::Error> for AmsdosError {
+impl From<std::io::Error> for AmsdosError {
     fn from(err: std::io::Error) -> AmsdosError {
         AmsdosError::IO(err)
     }
@@ -32,7 +33,7 @@ impl std::convert::From<std::io::Error> for AmsdosError {
 /// - the filename (up to 8 chars)
 /// - the extension (up to 3 chars)
 /// It does not contain property information
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct AmsdosFileName {
     user: u8,
     name: [u8; 8],
@@ -53,6 +54,7 @@ impl PartialEq for AmsdosFileName {
     }
 }
 
+#[allow(missing_docs)] 
 impl AmsdosFileName {
     pub fn filename_header_format(&self) -> &[u8; 8] {
         /*
@@ -300,9 +302,14 @@ impl<S: AsRef<str>> From<S> for AmsdosFileName {
     }
 }
 
+#[derive(Clone, Copy)]
+/// Encodes the amsdos file type
 pub enum AmsdosFileType {
+    /// Basic file type
     Basic = 0,
+    /// Protected binary file type
     Protected = 1,
+    /// Binary file type
     Binary = 2,
 }
 
@@ -330,8 +337,11 @@ impl std::fmt::Debug for AmsdosFileType {
 /// Encode the index of a bloc
 #[derive(Debug, Copy, Clone, Ord, Eq)]
 pub enum BlocIdx {
+    /// The block is not used
     Empty,
+    /// The block is deleted
     Deleted, // TODO find a real name
+    /// Index of a real bloc
     Index(std::num::NonZeroU8),
 }
 
@@ -377,6 +387,7 @@ impl PartialEq for BlocIdx {
     }
 }
 
+#[allow(missing_docs)] 
 impl BlocIdx {
     pub fn is_valid(&self) -> bool {
         match self {
@@ -401,7 +412,8 @@ impl BlocIdx {
 }
 
 // http://www.cpc-power.com/cpcarchives/index.php?page=articles&num=92
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+/// Represents an entry in the Amsdos Catalog
 pub struct AmsdosEntry {
     /// Location of the entry in the catalog
     idx: u8,
@@ -425,10 +437,11 @@ impl std::fmt::Display for AmsdosEntry {
     }
 }
 
+#[allow(missing_docs)] 
 impl AmsdosEntry {
     /// Provide the size, in Kb, eaten by the file on disc
     pub fn used_space(&self) -> usize {
-        (self.nb_blocs() as usize * DATA_SECTOR_SIZE as usize * 2) / 1024
+        (self.nb_blocs() * DATA_SECTOR_SIZE * 2) / 1024
     }
 
     /// Check if the given filename corresponds to the entry
@@ -469,7 +482,7 @@ impl AmsdosEntry {
 
     /// Returns the list of used blocs by tis entry
     pub fn used_blocs(&self) -> &[BlocIdx] {
-        &self.blocs[..(self.nb_blocs() as usize)]
+        &self.blocs[..(self.nb_blocs())]
     }
 
     /// Compute the real number of blocs to read
@@ -585,6 +598,7 @@ impl AmsdosEntry {
 /// Encode the catalog of an existing disc
 #[derive(PartialEq)]
 pub struct AmsdosEntries {
+    /// List of entried in the catalog
     entries: Vec<AmsdosEntry>,
 }
 
@@ -599,6 +613,7 @@ impl std::fmt::Debug for AmsdosEntries {
 
 /// Encode a file in the catalog. This file can be represented by several entries
 #[derive(Clone, Debug)]
+#[allow(missing_docs)] 
 pub struct AmsdosCatalogEntry {
     track: u8,
     sector: u8,
@@ -611,6 +626,7 @@ pub struct AmsdosCatalogEntry {
 }
 
 impl AmsdosCatalogEntry {
+    /// Return the file name component of the entry
     pub fn file_name(&self) -> &AmsdosFileName {
         &self.file_name
     }
@@ -636,6 +652,7 @@ impl From<(u8, u8, AmsdosEntry)> for AmsdosCatalogEntry {
     }
 }
 
+#[allow(missing_docs)] 
 impl AmsdosCatalogEntry {
     fn merge_entries(e1: &AmsdosCatalogEntry, e2: &AmsdosCatalogEntry) -> AmsdosCatalogEntry {
         assert_eq!(e1.file_name, e2.file_name);
@@ -679,10 +696,12 @@ impl AmsdosCatalogEntry {
 
 /// The AmsdosCatalog represents the catalog of a disc. It contains only valid entries and merge common ones
 #[derive(Debug, Clone)]
+#[allow(missing_docs)] 
 pub struct AmsdosCatalog {
     entries: Vec<AmsdosCatalogEntry>,
 }
 
+#[allow(missing_docs)] 
 impl From<AmsdosEntries> for AmsdosCatalog {
     fn from(entries: AmsdosEntries) -> AmsdosCatalog {
         let mut novel: Vec<AmsdosCatalogEntry> = Vec::new();
@@ -719,6 +738,7 @@ impl std::ops::Index<usize> for AmsdosCatalog {
         &self.entries[idx]
     }
 }
+#[allow(missing_docs)] 
 impl AmsdosCatalog {
     /// Returns the number of entries in the catalog
     pub fn len(&self) -> usize {
@@ -755,6 +775,7 @@ impl AmsdosCatalog {
     }
 }
 
+#[allow(missing_docs)] 
 impl AmsdosEntries {
     /// Generate a catalog that is more user friendly
     pub fn to_amsdos_catalog(self) -> AmsdosCatalog {
@@ -764,7 +785,7 @@ impl AmsdosEntries {
     /// Return the index of the entry
     pub fn entry_index(&self, entry: &AmsdosEntry) -> Option<usize> {
         for idx in 0..self.entries.len() {
-            if &self.entries[idx] as *const AmsdosEntry == entry as *const AmsdosEntry {
+            if &self.entries[idx] == entry {
                 return Some(idx);
             }
         }
@@ -909,6 +930,7 @@ const DATA_RECORDS_PER_TRACK: u8 = 4;
 const DATA_SECTOR_SIZE: usize = 512;
 
 /// Minimal information needed to access to twe two sectors of a given bloc
+#[allow(missing_docs)] 
 struct BlocAccessInformation {
     track1: u8,
     sector1_id: u8,
@@ -919,11 +941,14 @@ struct BlocAccessInformation {
 /// http://cpctech.cpc-live.com/docs/manual/s968se09.pdf
 /// Current implementatin only focus on DATA format
 ///
+#[allow(missing_docs)] 
+#[derive(Debug)]
 pub struct AmsdosManager {
     disc: ExtendedDsk,
-    head: crate::disc::edsk::Head,
+    head: Head,
 }
 
+#[allow(missing_docs)] 
 impl AmsdosManager {
     pub fn dsk(&self) -> &ExtendedDsk {
         &self.disc
@@ -1258,7 +1283,8 @@ impl AmsdosManager {
 }
 
 /// http://www.cpcwiki.eu/index.php/AMSDOS_Header
-#[derive(Clone)]
+#[derive(Clone, Copy)]
+#[allow(missing_docs)] 
 pub struct AmsdosHeader {
     content: [u8; 128],
 }
@@ -1281,6 +1307,7 @@ impl PartialEq for AmsdosHeader {
     }
 }
 
+#[allow(missing_docs)] 
 impl AmsdosHeader {
     /// XXX currently untested
     pub fn build_header(
@@ -1291,7 +1318,7 @@ impl AmsdosHeader {
         data: &[u8],
     ) -> AmsdosHeader {
         let mut content = AmsdosHeader {
-            content: [0 as u8; 128],
+            content: [0; 128],
         };
 
         content.set_amsdos_filename(filename);
@@ -1441,11 +1468,13 @@ impl AmsdosHeader {
 
 /// Encode an amsdos file.
 #[derive(Clone, PartialEq, Debug)]
+#[allow(missing_docs)] 
 pub struct AmsdosFile {
     header: AmsdosHeader,
     content: Vec<u8>,
 }
 
+#[allow(missing_docs)] 
 impl AmsdosFile {
     /// Create a binary file and add build the header accordingly to the arguments
     pub fn binary_file_from_buffer(

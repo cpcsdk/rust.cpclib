@@ -4,12 +4,17 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 
+/// Probably a completely dead module. TODO verify that.
+
+
+#[allow(missing_docs)]
 pub fn bytes_to_db_str(bytes: &[u8]) -> String {
     let bytes_str: Vec<String> = bytes.iter().map(|b| format!("0x{:x}", b)).collect();
     format!("\tdb {}\n", bytes_str.join(","))
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(missing_docs)]
 pub enum Bank {
     Bank0,
     Bank1,
@@ -22,6 +27,7 @@ pub enum Bank {
     Bank7,
 }
 
+#[allow(missing_docs)]
 impl Bank {
     pub fn is_main_memory(&self) -> bool {
         use self::Bank::*;
@@ -62,6 +68,7 @@ impl Bank {
 }
 
 #[derive(Clone, PartialEq)]
+#[allow(missing_docs)]
 pub struct PageDefinition {
     bank: Bank,
     start: u16,
@@ -89,6 +96,7 @@ impl Debug for PageDefinition {
     }
 }
 
+#[allow(missing_docs)]
 impl PageDefinition {
     pub fn new(bank: Bank, start: u16, end: Option<u16>) -> PageDefinition {
         assert!(start >= bank.start_address());
@@ -188,12 +196,15 @@ impl PageDefinition {
     }
 }
 
+#[allow(missing_docs)]
+#[derive(Debug)]
 pub struct StringCodePage {
     code: Vec<String>,
     current_address: u16,
     definition: PageDefinition,
 }
 
+#[allow(missing_docs)]
 impl StringCodePage {
     pub fn new(definition: PageDefinition) -> StringCodePage {
         StringCodePage {
@@ -252,11 +263,14 @@ impl StringCodePage {
     }
 }
 
+#[allow(missing_docs)]
+#[derive(Debug)]
 pub struct StringCodePageContainer {
     pages: Vec<StringCodePage>,
     possibilities: Vec<PageDefinition>,
 }
 
+#[allow(missing_docs)]
 impl StringCodePageContainer {
     pub fn new(mut possibilities: Vec<PageDefinition>) -> StringCodePageContainer {
         // As we pop possibilities, it is necessary to revert it
@@ -264,7 +278,7 @@ impl StringCodePageContainer {
 
         for page1 in possibilities.iter() {
             for page2 in possibilities.iter() {
-                if page1 as *const _ != page2 as *const _ && page1.overlaps(page2) {
+                if page1  != page2  && page1.overlaps(page2) {
                     panic!("Error, {:?} overlaps {:?}", page1, page2);
                 }
             }

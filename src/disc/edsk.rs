@@ -9,6 +9,8 @@ use std::string::ToString;
 
 use delegate::delegate;
 
+
+/// Computes the sector size as expected by the FDC from a human readable sector size
 pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {
     let mut n = 0;
     while size > 0x80 {
@@ -19,17 +21,23 @@ pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {
     n as _
 }
 
+/// Computes the sector size as expected by a human from the FDC
 pub fn convert_fdc_sector_size_to_real_sector_size(size: u8) -> u16 {
     0x80 << size
 }
 
 #[derive(Debug, PartialEq, Copy, Clone, Ord, PartialOrd, Eq)]
+/// Symbolises the head of a disc.
 pub enum Head {
+    /// Side A of the disc for double sided discs
     HeadA,
+    /// Side B of the disc for double sided discs
     HeadB,
+    /// Side not specified for single sided discs. Should be deprecated in favor of HeadA
     Unspecified,
 }
 
+#[allow(missing_docs)] 
 impl From<u8> for Head {
     fn from(val: u8) -> Head {
         match val {
@@ -40,6 +48,7 @@ impl From<u8> for Head {
     }
 }
 
+#[allow(missing_docs)] 
 impl Into<u8> for Head {
     fn into(self) -> u8 {
         match self {
@@ -50,6 +59,7 @@ impl Into<u8> for Head {
     }
 }
 
+#[allow(missing_docs)] 
 impl Into<u8> for &Head {
     fn into(self) -> u8 {
         match *self {
@@ -60,35 +70,35 @@ impl Into<u8> for &Head {
     }
 }
 
-// Disc image files consist of a 0x100-byte disc info block and for each track a 0x100-byte track info block, followed by the data for every sector in that track. The new extended disk format is intended for some copy protected disks. Parts which are new in the extended format are marked with "*E*" (from our "Extended DISK Format Proposal, Rev.5").
-//
-//
-// The Disc Information block
-// Byte (Hex): 	Meaning:
-// 00 - 21 	"MV - CPCEMU Disk-File\r\nDisk-Info\r\n"
-// ("MV - CPC" is characteristic)
-//
-// *E* -- "EXTENDED CPC DSK File\r\n\Disk-Info\r\n"
-// ("EXTENDED" is characteristic)
-// 22 - 2F 	unused (0)
-//
-// *E* -- DSK creator (name of the utility)
-// (no ending \0 needed!)
-// 30 	number of tracks (40, 42, maybe 80)
-// 31 	number of heads (1 or 2)
-// 32 - 33 	size of one track (including 0x100-byte track info)
-// With 9 sectors * 0x200 bytes + 0x100 byte track info = 0x1300.
-//
-// *E* -- unused (0)
-// 34 - FF 	unused (0)
-//
-// *E* -- high bytes of track sizes for all tracks
-// (computed in the same way as 32-33 for the normal format).
-//
-//     For single sided formats the table contains track sizes of just one side, otherwise for two alternating sides.
-//     A size of value 0 indicates an unformatted track.
-//     Actual track data length = table value * 256.
-//     Keep in mind that the image contains additional 256 bytes for each track info.
+/// Disc image files consist of a 0x100-byte disc info block and for each track a 0x100-byte track info block, followed by the data for every sector in that track. The new extended disk format is intended for some copy protected disks. Parts which are new in the extended format are marked with "*E*" (from our "Extended DISK Format Proposal, Rev.5").
+///
+///
+/// The Disc Information block
+/// Byte (Hex): 	Meaning:
+/// 00 - 21 	"MV - CPCEMU Disk-File\r\nDisk-Info\r\n"
+/// ("MV - CPC" is characteristic)
+///
+/// *E* -- "EXTENDED CPC DSK File\r\n\Disk-Info\r\n"
+/// ("EXTENDED" is characteristic)
+/// 22 - 2F 	unused (0)
+///
+/// *E* -- DSK creator (name of the utility)
+/// (no ending \0 needed!)
+/// 30 	number of tracks (40, 42, maybe 80)
+/// 31 	number of heads (1 or 2)
+/// 32 - 33 	size of one track (including 0x100-byte track info)
+/// With 9 sectors * 0x200 bytes + 0x100 byte track info = 0x1300.
+///
+/// *E* -- unused (0)
+/// 34 - FF 	unused (0)
+///
+/// *E* -- high bytes of track sizes for all tracks
+/// (computed in the same way as 32-33 for the normal format).
+///
+///     For single sided formats the table contains track sizes of just one side, otherwise for two alternating sides.
+///     A size of value 0 indicates an unformatted track.
+///     Actual track data length = table value * 256.
+///     Keep in mind that the image contains additional 256 bytes for each track info.
 #[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct DiscInformation {
     /// Specific to edsk
@@ -105,16 +115,18 @@ pub struct DiscInformation {
     pub(crate) track_size_table: Vec<u8>, // XXX for standard DSK only one value is provided It should be duplicated there
 }
 
+#[allow(missing_docs)] 
 impl DiscInformation {
     fn creator_name_as_bytes(&self) -> [u8; 14] {
-        let mut data = [0 as u8; 14];
+        let mut data = [0; 14];
         for (idx, byte) in self.creator_name.as_bytes()[0..14].iter().enumerate() {
             data[idx] = *byte;
         }
         data
     }
 
-    // TODO manage the case of standard dsk
+    /// Build an eDSK from a buffer of bytes
+    ///  TODO manage the case of standard dsk
     pub fn from_buffer(buffer: &[u8]) -> DiscInformation {
         assert_eq!(buffer.len(), 256);
         assert_eq!(
@@ -169,10 +181,12 @@ impl DiscInformation {
         assert_eq!(self, &from_buffer);
     }
 
+    /// Check if the dsk is double sided
     pub fn is_double_head(&self) -> bool {
         self.number_of_heads == 2
     }
 
+    /// Check if the dsk is single sided
     pub fn is_single_head(&self) -> bool {
         !self.is_double_head()
     }
@@ -192,20 +206,24 @@ impl DiscInformation {
         self.track_length_at_idx(idx)
     }
 
+    /// Check if the wanted track is formatted
     pub fn is_formatted(&self, track: u8, Head: u8) -> bool {
         self.track_length(track, Head) > 0
     }
 
+    /// Get the lenght of the required track
     pub fn track_length_at_idx(&self, idx: usize) -> u16 {
         256 * u16::from(self.track_size_table[idx])
     }
 
+    /// Sum all the tracks lenght
     pub fn total_tracks_lengths(&self) -> usize {
         (0..self.number_of_distinct_tracks())
             .map(|idx: usize| self.track_length_at_idx(idx) as usize)
             .sum::<usize>()
     }
 
+    /// Provide the number of different tracks
     pub fn number_of_distinct_tracks(&self) -> usize {
         self.track_size_table.len()
     }
@@ -241,12 +259,13 @@ impl DiscInformation {
 ///   - With double sided formats, the tracks are alternating, e.g. track 0 head 0, track 0 head 1, track 1 ...
 ///   - Use CPCTRANS to copy CPC discs into this format.
 
+#[allow(missing_docs)] 
 #[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct TrackInformation {
     /// track number (0 to number of tracks-1)
     #[get = "pub"]
     pub(crate) track_number: u8,
-    // head number (0 or 1)
+    /// head number (0 or 1)
     #[get = "pub"]
     pub(crate) head_number: u8,
     #[get = "pub"]
@@ -261,10 +280,13 @@ pub struct TrackInformation {
     /// Filling byte (filling byte for formatting; 0xE5)
     #[get = "pub"]
     pub(crate) filler_byte: u8,
+    /// Returns the data rate
     #[get = "pub"]
     pub(crate) data_rate: DataRate,
+    /// Returns the recordingmode
     #[get = "pub"]
     pub(crate) recording_mode: RecordingMode,
+    /// List of sectors
     #[get = "pub"]
     pub(crate) sector_information_list: SectorInformationList,
     /// The size taken by the track + header in the dsk. This is a duplicated information obtained in the DiscInformation bloc
@@ -272,6 +294,7 @@ pub struct TrackInformation {
     pub(crate) track_size: u16,
 }
 
+#[allow(missing_docs)] 
 impl TrackInformation {
     /// TODO find a nicer (with Either ?) way to manipulate unformatted tracks
     pub fn unformatted() -> TrackInformation {
@@ -284,6 +307,7 @@ impl TrackInformation {
     }
 }
 
+#[allow(missing_docs)] 
 impl TrackInformation {
     #[deprecated(
         note = "Note sure it should be used as each sector store this information and different sizes are possible"
@@ -507,7 +531,8 @@ impl TrackInformation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[allow(missing_docs)] 
 pub enum DataRate {
     Unknown = 0,
     SingleOrDoubleDensity = 1,
@@ -515,12 +540,14 @@ pub enum DataRate {
     ExtendedDensity = 3,
 }
 
+#[allow(missing_docs)] 
 impl Default for DataRate {
     fn default() -> Self {
         DataRate::Unknown
     }
 }
 
+#[allow(missing_docs)] 
 impl From<u8> for DataRate {
     fn from(b: u8) -> DataRate {
         match b {
@@ -533,6 +560,7 @@ impl From<u8> for DataRate {
     }
 }
 
+#[allow(missing_docs)] 
 impl Into<u8> for DataRate {
     fn into(self) -> u8 {
         match self {
@@ -545,19 +573,22 @@ impl Into<u8> for DataRate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(missing_docs)] 
 pub enum RecordingMode {
     Unknown = 0,
     FM = 1,
     MFM = 2,
 }
 
+#[allow(missing_docs)] 
 impl Default for RecordingMode {
     fn default() -> Self {
         RecordingMode::Unknown
     }
 }
 
+#[allow(missing_docs)] 
 impl From<u8> for RecordingMode {
     fn from(b: u8) -> RecordingMode {
         match b {
@@ -569,6 +600,7 @@ impl From<u8> for RecordingMode {
     }
 }
 
+#[allow(missing_docs)] 
 impl Into<u8> for RecordingMode {
     fn into(self) -> u8 {
         match self {
@@ -580,7 +612,8 @@ impl Into<u8> for RecordingMode {
     }
 }
 
-#[derive(Getters, Debug, Default, PartialEq, Clone)]
+#[derive(Getters, Debug, Default, PartialEq, Clone, Copy)]
+#[allow(missing_docs)] 
 pub struct SectorInformation {
     /// track (equivalent to C parameter in NEC765 commands)
     #[get = "pub"]
@@ -605,6 +638,7 @@ pub struct SectorInformation {
     pub(crate) data_length: u16, // in bytes, little endian notation
 }
 
+#[allow(missing_docs)] 
 impl SectorInformation {
     /// Return the real size of the sector
     pub fn len(&self) -> usize {
@@ -646,11 +680,13 @@ impl SectorInformation {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
+#[allow(missing_docs)] 
 pub struct SectorInformationList {
     //sectors: Vec<Sector>
     pub(crate) sectors: Vec<Sector>,
 }
 
+#[allow(missing_docs)] 
 impl SectorInformationList {
     pub fn sectors(&self) -> &[Sector] {
         &self.sectors
@@ -745,7 +781,7 @@ impl SectorInformationList {
             sector.sector_information_bloc.head = heads[idx];
 
             let data_size = convert_fdc_sector_size_to_real_sector_size(
-                sector.sector_information_bloc.sector_size as _,
+                sector.sector_information_bloc.sector_size,
             ) as usize;
             sector.values.resize(data_size, filler_byte);
             sector.sector_information_bloc.data_length = sector.values.len() as u16;
@@ -773,6 +809,7 @@ bitflags! {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
+#[allow(missing_docs)] 
 pub struct Sector {
     #[get]
     pub(crate) sector_information_bloc: SectorInformation,
@@ -780,6 +817,7 @@ pub struct Sector {
     pub(crate) values: Vec<u8>,
 }
 
+#[allow(missing_docs)] 
 impl Sector {
     /// Number of bytes stored in the sector
     pub fn real_size(&self) -> u16 {
@@ -837,10 +875,12 @@ impl Sector {
 }
 
 #[derive(Default, PartialEq, Debug, Clone)]
+#[allow(missing_docs)] 
 pub struct TrackInformationList {
     pub(crate) list: Vec<TrackInformation>,
 }
 
+#[allow(missing_docs)] 
 impl TrackInformationList {
     fn from_buffer_and_disc_information(
         buffer: &[u8],
@@ -854,7 +894,7 @@ impl TrackInformationList {
                 // Size of the track data + header
                 let current_track_size = disc_info.track_length(track_number, Head_nb) as usize;
                 let track_buffer = &buffer
-                    [consummed_bytes as usize..(consummed_bytes + current_track_size) as usize];
+                    [consummed_bytes..(consummed_bytes + current_track_size)];
                 if current_track_size > 0 {
                     list.push(TrackInformation::from_buffer(track_buffer));
                 } else {
@@ -896,7 +936,7 @@ impl TrackInformationList {
             let current_track = &self.list[idx];
             let next_track = &self.list[idx + 1];
 
-            if current_track as *const _ == track as *const _ {
+            if current_track == track  {
                 return Some(next_track);
             }
         }
@@ -906,11 +946,13 @@ impl TrackInformationList {
 }
 
 #[derive(Default, PartialEq, Debug, Clone)]
+#[allow(missing_docs)] 
 pub struct ExtendedDsk {
     pub(crate) disc_information_bloc: DiscInformation,
     pub(crate) track_list: TrackInformationList,
 }
 
+#[allow(missing_docs)] 
 impl ExtendedDsk {
     /// open an extended dsk from an existing file
     pub fn open<P>(path: P) -> io::Result<ExtendedDsk>

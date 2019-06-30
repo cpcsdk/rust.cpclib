@@ -12,6 +12,7 @@ pub mod builder;
 use crate::assembler::parser::ParserContext;
 
 #[derive(Debug, Fail)]
+#[allow(missing_docs)]
 pub enum AssemblerError {
     #[fail(display = "Assembling bug: {}", msg)]
     BugInAssembler { msg: String },
@@ -72,7 +73,7 @@ impl From<&String> for AssemblerError {
 }
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AssemblingOptions {
     /// Set to true to consider that the assembler pay attention to the case of the labels
     case_sensitive: bool,
@@ -89,6 +90,7 @@ impl Default for AssemblingOptions {
     }
 }
 
+#[allow(missing_docs)]
 impl AssemblingOptions {
     pub fn new_case_sensitive() -> Self {
         Self::default()
@@ -133,6 +135,7 @@ pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
     assemble_and_table(code).map(|(b, _)| b)
 }
 
+#[allow(missing_docs)]
 #[deprecated(note = "use assemble_with_options instead.")]
 pub fn assemble_and_table(
     code: &str,
@@ -144,6 +147,7 @@ pub fn assemble_and_table(
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
 }
 
+#[allow(missing_docs)]
 #[deprecated(note = "use assemble_with_options instead.")]
 pub fn assemble_with_table(
     code: &str,
@@ -156,6 +160,7 @@ pub fn assemble_with_table(
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
 }
 
+#[allow(missing_docs)]
 pub fn assemble_with_options(
     code: &str,
     options: &AssemblingOptions,

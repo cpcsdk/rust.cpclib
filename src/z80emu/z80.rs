@@ -9,7 +9,9 @@ use std::fmt::Debug;
 use std::mem::swap;
 
 /// Common trait for Register 8 and 6 bits
+#[allow(missing_docs)]
 pub trait HasValue {
+    /// The type that encodes the value of interest
     type ValueType: Integer + One + WrappingAdd + WrappingSub;
 
     /// Retreive the stored value
@@ -87,7 +89,7 @@ pub struct Register16 {
 
 impl Debug for Register16 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe { write!(f, "({:?}, {:?})", &self.high, &self.low) }
+        write!(f, "({:?}, {:?})", &self.high, &self.low)
     }
 }
 
@@ -124,7 +126,7 @@ impl Register16 {
 
 /// Highly simplify z80 model.
 /// TODO Add memory
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Copy, Clone)]
 pub struct Z80 {
     reg_pc: Register16,
     reg_sp: Register16,
@@ -148,6 +150,7 @@ pub struct Z80 {
     reg_hl_prime: Register16,
 }
 
+#[allow(missing_docs)]
 impl Z80 {
     // Immutable accessors
     pub fn pc(&self) -> &Register16 {

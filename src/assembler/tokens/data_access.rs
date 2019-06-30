@@ -4,6 +4,7 @@ use std::fmt;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// Encode the way mnemonics access to data
+#[allow(missing_docs)]
 pub enum DataAccess {
     /// We are using an indexed register associated to its index
     IndexRegister16WithIndex(IndexRegister16, Expr),
@@ -95,6 +96,7 @@ impl fmt::Display for DataAccess {
     }
 }
 
+#[allow(missing_docs)]
 impl DataAccess {
     pub fn expr(&self) -> Option<&Expr> {
         match self {
