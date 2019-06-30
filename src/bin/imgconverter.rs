@@ -159,6 +159,7 @@ fn assemble(z80: String) -> Vec<u8> {
     mem
 }
 
+#[allow(clippy::if_same_then_else)] // false positive
 fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
         // Sprite case. Only Linear encoding is currently managed

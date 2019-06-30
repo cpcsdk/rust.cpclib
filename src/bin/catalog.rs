@@ -73,7 +73,7 @@ fn main() -> std::io::Result<()> {
 							.map_err(|e|{e.to_string()})
 							.and_then(
 								|nb|
-								if nb >= 0 && nb <= 63 {
+								if nb <= 63 {
 									Ok(())
 								}
 								else {
@@ -113,16 +113,11 @@ fn main() -> std::io::Result<()> {
 							.takes_value(true)
 							.requires("ENTRY")
 							.validator(|v|{
-								v.parse::<u8>()
+								v.parse::<u8>() // between 0 and 255
 								.map_err(|e|{e.to_string()})
 								.and_then(
 									|nb|
-									if nb >= 0 && nb <= 255 { // TODO set the real limit
-										Ok(())
-									}
-									else {
-										Err("The user must be a number between 0 and 255".to_owned())
-									}
+									Ok(())
 								)
 							})
 					)
