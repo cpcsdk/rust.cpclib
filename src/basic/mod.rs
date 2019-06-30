@@ -337,7 +337,7 @@ mod test {
     fn hide1() {
         let code = "10 CALL &1234";
         let mut prog = BasicProgram::parse(code).unwrap();
-        prog.hide_line(BasicProgramLineIdx::Number(10));
+        prog.hide_line(BasicProgramLineIdx::Number(10)).unwrap();
         let bytes = prog.as_bytes();
         let expected = vec![10, 0, 0, 0, 131, 32, 28, 0x34, 0x12, 0, 0, 0, 0];
 
@@ -383,7 +383,7 @@ mod test {
         let code = "10 CALL &1234\n20 CALL &1234";
         let mut prog = BasicProgram::parse(code).unwrap();
         assert!(prog.has_line(BasicProgramLineIdx::Number(20)));
-        prog.hide_line(BasicProgramLineIdx::Number(20));
+        prog.hide_line(BasicProgramLineIdx::Number(20)).unwrap();
         let bytes = prog.as_bytes();
         let expected = vec![
             20, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 00, 0, 20, 0, 131, 32, 28, 0x34, 0x12, 0, 0,

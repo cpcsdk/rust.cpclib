@@ -1315,14 +1315,14 @@ mod tests {
 
     #[test]
     fn test_increase() {
-        let mut memory = SnapshotMemory::default();
+        let memory = SnapshotMemory::default();
         assert!(memory.is_empty());
 
-        let mut memory = memory.increased_size();
+        let memory = memory.increased_size();
         assert!(memory.is_64k());
         assert_eq!(memory.memory().len(), 64 * 1024);
 
-        let mut memory = memory.increased_size();
+        let memory = memory.increased_size();
         assert!(memory.is_128k());
         assert_eq!(memory.memory().len(), 128 * 1024);
     }

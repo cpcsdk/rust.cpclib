@@ -2162,7 +2162,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_ld_R16_R16() {
+    pub fn test_ld_r16_r16() {
         let res = assemble_ld(
             &DataAccess::Register16(Register16::De),
             &DataAccess::Register16(Register16::Hl),
@@ -2220,7 +2220,7 @@ mod test {
         for operator in operators.iter() {
             for operand in operands.iter() {
                 let token = Token::OpCode(operator.clone(), Some(operand.clone()), None);
-                visit_tokens(&[token]);
+                visit_tokens(&[token]).unwrap();
             }
         }
     }
