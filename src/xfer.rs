@@ -1,4 +1,7 @@
-extern crate path_absolutize;
+
+
+
+use path_absolutize;
 
 use curl::easy::{Easy, Form};
 use curl::Error;
@@ -11,7 +14,7 @@ use std::fs;
 use std::io::prelude::*;
 use std::path::Path;
 
-extern crate custom_error;
+
 use custom_error::custom_error;
 
 

@@ -1,7 +1,6 @@
-extern crate clap;
 #[macro_use]
-extern crate nom;
-
+use nom;
+use clap;
 use std::path::Path;
 
 mod interact;
