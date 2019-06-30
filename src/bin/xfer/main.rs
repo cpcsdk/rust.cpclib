@@ -1,5 +1,5 @@
 #[macro_use]
-use nom;
+
 use clap;
 use std::path::Path;
 
