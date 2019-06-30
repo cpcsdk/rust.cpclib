@@ -11,6 +11,7 @@ use std::str::FromStr;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ops::AddAssign;
+use num_enum::TryFromPrimitive;
 
 ///! Reimplementation of createsnapshot by Ramlaid/Arkos
 ///! in rust by Krusty/Benediction
@@ -38,7 +39,8 @@ use std::ops::AddAssign;
 
 */
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
+ #[repr(u8)]
 pub enum SnapshotVersion {
     V1=1,
     V2,

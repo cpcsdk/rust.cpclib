@@ -1,6 +1,7 @@
 extern crate bitsets;
 
-
+use num_enum::TryFromPrimitive;
+use std::convert::TryInto;
 
 
 use std::io::prelude::*;
@@ -95,6 +96,15 @@ fn main() {
                                .help("Put <$2> byte at <$1> address in snapshot memory")
 
                             )
+                          .arg(Arg::with_name("version")
+                                .takes_value(true)
+                                .short("v")
+                                .long("version")
+                                .number_of_values(1)
+                                .possible_values(&["1", "2", "3"])
+                                .help("Version of the saved snapshot.")
+                                .default_value("3")
+                           )
                           .arg(Arg::with_name("flags")
                                 .help("List the flags and exit")
                                .long("flags"))
@@ -113,6 +123,7 @@ fn main() {
         return;
     }
 
+    // Load a snapshot or generate an empty one
     let mut sna = if matches.is_present("inSnapshot") {
         let fname = matches.value_of("inSnapshot").unwrap();
         let path = Path::new(&fname);
@@ -204,5 +215,8 @@ fn main() {
     }
 
     let fname = matches.value_of("OUTPUT").unwrap();
-    sna.save_sna(&fname).expect("Unable to save the snapshot");
+    let version = matches.value_of("version").unwrap()
+                        .parse::<u8>().unwrap()
+                        .try_into().unwrap();
+    sna.save(&fname, version).expect("Unable to save the snapshot");
 }
