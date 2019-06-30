@@ -78,7 +78,7 @@ fn main() -> std::io::Result<()> {
             let (filename, extension) = match parts.len() {
                 1 => (parts[0].to_owned(), "".to_owned()),
                 2 => (parts[0].to_owned(), parts[1].to_owned()),
-                n => {
+                _n => {
                     eprintln!(
                         "[Warning] Filename contains several `.`. They have been all removed."
                     );

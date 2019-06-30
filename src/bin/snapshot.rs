@@ -1,6 +1,6 @@
 extern crate bitsets;
 
-use num_enum::TryFromPrimitive;
+
 use std::convert::TryInto;
 
 use std::io::prelude::*;

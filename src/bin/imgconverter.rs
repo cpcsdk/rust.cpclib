@@ -17,7 +17,7 @@ use cpclib::imageconverter::*;
 use cpclib::sna::*;
 
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Write};
 
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
@@ -161,7 +161,7 @@ fn assemble(z80: String) -> Vec<u8> {
 
 #[allow(clippy::if_same_then_else)] // false positive
 fn get_output_format(matches: &ArgMatches) -> OutputFormat {
-    if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
+    if let Some(_sprite_matches) = matches.subcommand_matches("sprite") {
         // Sprite case. Only Linear encoding is currently managed
         OutputFormat::LinearEncodedSprite
     } else {
@@ -218,7 +218,7 @@ fn convert(matches: &ArgMatches) -> Result<(), String> {
         match &conversion {
             Output::LinearEncodedSprite {
                 data,
-                palette,
+                palette: _,
                 byte_width,
                 height,
             } => {

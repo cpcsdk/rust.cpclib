@@ -6,13 +6,13 @@ extern crate log;
 extern crate num;
 extern crate simplelog;
 
-use clap::{App, Arg, ArgGroup, SubCommand};
+use clap::{App, Arg};
 use std::fs::File;
 use std::io::{Read, Write};
 
 use cpclib::disc::amsdos::*;
 use cpclib::disc::edsk::{ExtendedDsk, Head};
-use log::{error, info, trace, warn};
+use log::{error, info};
 use simplelog::*;
 
 use num::Num;
@@ -116,7 +116,7 @@ fn main() -> std::io::Result<()> {
 								v.parse::<u8>() // between 0 and 255
 								.map_err(|e|{e.to_string()})
 								.and_then(
-									|nb|
+									|_nb|
 									Ok(())
 								)
 							})
@@ -208,7 +208,7 @@ fn main() -> std::io::Result<()> {
         let idx = idx.parse::<u8>().unwrap();
         info!("Manipulate entry {}", idx);
 
-        let mut entry = catalog_content.get_entry_mut(idx as _);
+        let entry = catalog_content.get_entry_mut(idx as _);
 
         if matches.is_present("SETREADONLY") {
             entry.set_read_only();
