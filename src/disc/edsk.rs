@@ -192,23 +192,23 @@ impl DiscInformation {
     }
 
     /// Returns the length of the track including the track information block
-    pub fn track_length(&self, track: u8, Head: u8) -> u16 {
-        assert!(Head < self.number_of_heads);
+    pub fn track_length(&self, track: u8, head: u8) -> u16 {
+        assert!(head < self.number_of_heads);
 
         let track = track as usize;
-        let Head = Head as usize;
+        let head = head as usize;
         let idx = if self.is_single_head() {
             track
         } else {
-            track * 2 + Head
+            track * 2 + head
         };
 
         self.track_length_at_idx(idx)
     }
 
     /// Check if the wanted track is formatted
-    pub fn is_formatted(&self, track: u8, Head: u8) -> bool {
-        self.track_length(track, Head) > 0
+    pub fn is_formatted(&self, track: u8, head: u8) -> bool {
+        self.track_length(track, head) > 0
     }
 
     /// Get the lenght of the required track
@@ -350,8 +350,8 @@ impl TrackInformation {
             .sum::<usize>()
     }
 
-    pub fn corresponds_to(&self, track: u8, Head: u8) -> bool {
-        self.track_number == track && self.head_number == Head
+    pub fn corresponds_to(&self, track: u8, head: u8) -> bool {
+        self.track_number == track && self.head_number == head
     }
 
     pub fn from_buffer(buffer: &[u8]) -> TrackInformation {
@@ -793,18 +793,18 @@ impl SectorInformationList {
 
 bitflags! {
     struct FdcStatusRegister1: u8 {
-        const EndOfCylinder = 1<<7;
-        const DataError = 1<<5;
-        const NoData = 1<<2;
-        const MissingAddressMark = 1<<0;
+        const END_OF_CYLINDER = 1<<7;
+        const DATA_ERROR = 1<<5;
+        const NO_DATA = 1<<2;
+        const MISSING_ADDRESS_MARK = 1<<0;
     }
 }
 
 bitflags! {
     struct FdcStatusRegister2: u8 {
-        const ControlMark = 1<<5;
-        const DataErrorInDataField = 1<<5;
-        const MissingAddressMarkInDataField = 1<<0;
+        const CONTROL_MARK = 1<<5;
+        const DATA_ERROR_IN_DATA_FIELD = 1<<5;
+        const MISSING_ADDRESS_MARK_IN_DATA_FIELD = 1<<0;
     }
 }
 
@@ -890,9 +890,9 @@ impl TrackInformationList {
         let mut list = Vec::new();
 
         for track_number in 0..disc_info.number_of_tracks {
-            for Head_nb in 0..disc_info.number_of_heads {
+            for head_nb in 0..disc_info.number_of_heads {
                 // Size of the track data + header
-                let current_track_size = disc_info.track_length(track_number, Head_nb) as usize;
+                let current_track_size = disc_info.track_length(track_number, head_nb) as usize;
                 let track_buffer = &buffer
                     [consummed_bytes..(consummed_bytes + current_track_size)];
                 if current_track_size > 0 {
@@ -922,12 +922,12 @@ impl TrackInformationList {
         self.list.last_mut().unwrap()
     }
 
-    /// Returns the tracks for the given Head
-    pub fn tracks_for_head(&self, Head: Head) -> impl Iterator<Item = &TrackInformation> {
-        let Head: u8 = Head.into();
+    /// Returns the tracks for the given head
+    pub fn tracks_for_head(&self, head: Head) -> impl Iterator<Item = &TrackInformation> {
+        let head: u8 = head.into();
         self.list
             .iter()
-            .filter(move |info| info.head_number == Head)
+            .filter(move |info| info.head_number == head)
     }
 
     /// Returns the track following this one
@@ -991,12 +991,12 @@ impl ExtendedDsk {
     /// Add the file in consecutive sectors
     pub fn add_file_sequentially(
         &mut self,
-        Head: u8,
+        head: u8,
         track: u8,
         sector: u8,
         buffer: &[u8],
     ) -> Result<(u8, u8, u8), String> {
-        let mut pos = (Head, track, sector);
+        let mut pos = (head, track, sector);
         let mut consummed = 0;
         while consummed < buffer.len() {
             let current_sector = self
@@ -1020,17 +1020,17 @@ impl ExtendedDsk {
     /// Compute the next sector position if possible
     /// XXX check if Head should be the logic or physical one
     /// XXX the two behaviors are mixed there ...
-    fn next_position(&self, Head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
+    fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
         // Retrieve the current track and exit if does not exist
         let current_track = self.get_track_information(
-            Head.clone(),
+            head.clone(),
             /// Physical
             track,
         )?;
 
         // Return the next sector if exist
         if let Some(next_sector) = current_track.next_sector_id(sector.clone()) {
-            return Some((Head.clone(), track.clone(), next_sector));
+            return Some((head.clone(), track.clone(), next_sector));
         }
 
         // Search the next track
@@ -1086,49 +1086,49 @@ impl ExtendedDsk {
 
     pub fn get_track_information<S: Into<Head>>(
         &self,
-        Head: S,
+        head: S,
         track: u8,
     ) -> Option<&TrackInformation> {
-        let idx = self.get_track_idx(Head.into(), track);
+        let idx = self.get_track_idx(head.into(), track);
         self.track_list.list.get(idx)
     }
 
     pub fn get_track_information_mut(
         &mut self,
-        Head: Head,
+        head: Head,
         track: u8,
     ) -> Option<&mut TrackInformation> {
-        let idx = self.get_track_idx(Head.into(), track);
+        let idx = self.get_track_idx(head.into(), track);
         self.track_list.list.get_mut(idx)
     }
 
     /// Search and returns the appropriate sector
-    pub fn sector<S: Into<Head>>(&self, Head: S, track: u8, sector_id: u8) -> Option<&Sector> {
-        self.get_track_information(Head.into(), track)
+    pub fn sector<S: Into<Head>>(&self, head: S, track: u8, sector_id: u8) -> Option<&Sector> {
+        self.get_track_information(head.into(), track)
             .and_then(|track| track.sector(sector_id))
     }
 
     /// Search and returns the appropriate mutable sector
     pub fn sector_mut<S: Into<Head>>(
         &mut self,
-        Head: S,
+        head: S,
         track: u8,
         sector_id: u8,
     ) -> Option<&mut Sector> {
-        self.get_track_information_mut(Head.into(), track)
+        self.get_track_information_mut(head.into(), track)
             .and_then(|track| track.sector_mut(sector_id))
     }
 
-    fn get_track_idx(&self, Head: Head, track: u8) -> usize {
+    fn get_track_idx(&self, head: Head, track: u8) -> usize {
         if self.disc_information_bloc.is_double_head() {
-            let Head = match Head {
+            let head = match head {
                 Head::HeadA => 0,
                 Head::HeadB => 1,
                 Head::Unspecified => panic!("You must specify a Head for a double Headed disc."),
             };
-            track as usize * 2 + Head
+            track as usize * 2 + head
         } else {
-            if let Head::HeadB = Head {
+            if let Head::HeadB = head {
                 panic!("You cannot select Head B in a single Headd disc");
             }
             track as usize
@@ -1138,16 +1138,16 @@ impl ExtendedDsk {
     /// Return the concatenated values of several consecutive sectors
     pub fn sectors_bytes<S: Into<Head>>(
         &self,
-        Head: S,
+        head: S,
         track: u8,
         sector_id: u8,
         nb_sectors: u8,
     ) -> Option<Vec<u8>> {
         let mut res = Vec::new();
-        let Head = Head.into();
+        let head = head.into();
 
         for count in 0..nb_sectors {
-            match self.sector(Head.clone(), track, sector_id + count) {
+            match self.sector(head.clone(), track, sector_id + count) {
                 None => return None,
                 Some(s) => res.extend(s.values.iter()),
             }
@@ -1171,9 +1171,9 @@ impl ExtendedDsk {
     }
 
     /// Compute the datasum for the given track
-    pub fn data_sum(&self, Head: Head) -> usize {
+    pub fn data_sum(&self, head: Head) -> usize {
         self.track_list
-            .tracks_for_head(Head)
+            .tracks_for_head(head)
             .map(|t| t.data_sum())
             .sum()
     }

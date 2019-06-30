@@ -11,7 +11,9 @@
 #![deny(missing_docs,
         missing_debug_implementations, missing_copy_implementations,
         trivial_casts, trivial_numeric_casts,
-        unused_import_braces, unused_qualifications)]
+        unused_import_braces, unused_qualifications,
+        nonstandard_style
+)]
 
 //! cpclib aims at providing tools that help cross-development for the Amstrad CPC.
 //! It is mainly focused on the creation of demos for the Amstrad CPC but could be used for games or tools.

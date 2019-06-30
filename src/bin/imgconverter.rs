@@ -167,19 +167,19 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         // Standard case
         if matches.is_present("OVERSCAN") {
             OutputFormat::CPCMemory {
-                outputDimension: CPCScreenDimension::overscan(),
-                displayAddress: DisplayCRTCAddress::new_overscan_from_page(2),
+                output_dimension: CPCScreenDimension::overscan(),
+                display_address: DisplayCRTCAddress::new_overscan_from_page(2),
             }
         } else if matches.is_present("FULLSCREEN") {
             OutputFormat::CPCMemory {
-                outputDimension: CPCScreenDimension::overscan(),
-                displayAddress: DisplayCRTCAddress::new_overscan_from_page(2),
+                output_dimension: CPCScreenDimension::overscan(),
+                display_address: DisplayCRTCAddress::new_overscan_from_page(2),
             }
         } else {
             // assume it is a standard screen
             OutputFormat::CPCMemory {
-                outputDimension: CPCScreenDimension::standard(),
-                displayAddress: DisplayCRTCAddress::new_standard_from_page(3),
+                output_dimension: CPCScreenDimension::standard(),
+                display_address: DisplayCRTCAddress::new_standard_from_page(3),
             }
         }
     }
