@@ -56,7 +56,7 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
         track_info.recording_mode = 2.into();
         track_info.sector_size = track_model.sector_size_dsk_format();
         track_info.number_of_sectors = track_model.sector_id.len() as _;
-        track_info.gap3_length = track_model.gap3 as _; // TODO ensure a 8buts value is in the cfg
+        track_info.gap3_length = track_model.gap3; // TODO ensure a 8buts value is in the cfg
         track_info.filler_byte = 0xe5;
         track_info.sector_information_list.fill_with(
             &track_model.sector_id,
@@ -69,22 +69,26 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
     edsk
 }
 
+#[allow(missing_docs)] 
 impl From<DiscConfig> for ExtendedDsk {
     fn from(config: DiscConfig) -> ExtendedDsk {
         build_disc_from_cfg(&config)
     }
 }
 
+#[allow(missing_docs)] 
 impl From<&DiscConfig> for ExtendedDsk {
     fn from(config: &DiscConfig) -> ExtendedDsk {
         build_disc_from_cfg(config)
     }
 }
 
+/// Generate a standard singled sided amsdos disc
 pub fn single_head_data_dsk() -> ExtendedDsk {
     DiscConfig::single_head_data_format().into()
 }
 
+/// Generate a double sided amsdos disc
 pub fn single_head_data42_dsk() -> ExtendedDsk {
     DiscConfig::single_head_data42_format().into()
 }

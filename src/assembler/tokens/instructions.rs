@@ -16,7 +16,8 @@ use either::*;
 use std::fs::File;
 use std::io::Read;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[allow(missing_docs)]
 pub enum Mnemonic {
     Adc,
     Add,
@@ -115,6 +116,7 @@ impl fmt::Display for Mnemonic {
     }
 }
 
+#[allow(missing_docs)]
 impl Mnemonic {
     pub fn is_sla(&self) -> bool {
         match self {
@@ -140,13 +142,15 @@ impl Mnemonic {
 
 /// Stable ticker serves to count nops with the assembler !
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
 pub enum StableTickerAction {
     /// Start of the ticker with its name that will contains its duration
     Start(String),
     Stop,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[allow(missing_docs)]
 pub enum CrunchType {
     LZ48,
     LZ49,
@@ -155,7 +159,8 @@ pub enum CrunchType {
     LZEXO,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[allow(missing_docs)]
 pub enum SaveType {
     Amsdos,
     Dsk,
@@ -163,6 +168,7 @@ pub enum SaveType {
 
 /// Encode the kind of test done in if/elif/else cases
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
 pub enum TestKind {
     // Test succeed if it is an expression that returns True
     True(Expr),
@@ -175,13 +181,15 @@ pub enum TestKind {
 }
 
 /// List of transformations that can be applied to an imported binary file
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[allow(missing_docs)]
 pub enum BinaryTransformation {
     None,
     Exomizer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
 pub enum Token {
     Label(String),
     Comment(String),
@@ -389,6 +397,7 @@ impl<'a> TryFrom<&'a str> for Token {
     }
 }
 
+#[allow(missing_docs)]
 impl Token {
     pub fn is_opcode(&self) -> bool {
         self.mnemonic().is_some()

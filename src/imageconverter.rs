@@ -11,14 +11,15 @@ use std::path::Path;
 use crate::ga::*;
 use crate::image::*;
 
-#[derive(Clone)]
 /// List of all the possible transformations applicable to a ColorMAtrix
+#[derive(Copy, Clone, Debug)]
 pub enum Transformation {
     /// When using mode 0, do not read all the pixels lines
     SkipOddPixels,
 }
 
 impl Transformation {
+    /// Apply the transformation to the given image
     pub fn apply(&self, matrix: ColorMatrix) -> ColorMatrix {
         match self {
             Transformation::SkipOddPixels => {
@@ -31,11 +32,13 @@ impl Transformation {
 }
 
 /// Container of transformations
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TransformationsList {
+    /// list of transformations
     transformations: Vec<Transformation>,
 }
 
+#[allow(missing_docs)]
 impl TransformationsList {
     /// Create an empty list of transformations
     pub fn new() -> Self {
@@ -62,7 +65,7 @@ impl TransformationsList {
 }
 
 /// Encode the screen dimension in CRTC measures
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct CPCScreenDimension {
     /// Number of bytes in width
     horizontalDisplayed: u8,
@@ -73,7 +76,7 @@ pub struct CPCScreenDimension {
 }
 
 impl Debug for CPCScreenDimension {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(
             fmt,
             "CPCScreenDimension {{ horizontalDisplayed: {}, verticalDisplayed: {}, maximumRasterAddress: {}, use_two_banks: {} }}",
@@ -85,6 +88,7 @@ impl Debug for CPCScreenDimension {
     }
 }
 
+#[allow(missing_docs)]
 impl CPCScreenDimension {
     /// Return screen dimension for a standard screen
     pub fn standard() -> Self {
@@ -151,11 +155,13 @@ impl CPCScreenDimension {
 
 /// Manage the display address contained in R12-R13
 /// TODO move that later in a CRTC emulator code
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct DisplayAddress(u16);
 
+#[allow(missing_docs)]
 pub type DisplayCRTCAddress = DisplayAddress;
 
+#[allow(missing_docs)]
 impl DisplayAddress {
     const OFFSET_START: usize = 9;
     const OFFSET_END: usize = 0;
@@ -306,6 +312,7 @@ impl DisplayAddress {
 /// Specify the output format to be used
 /// TODO - add additional output format (for example zigzag sprites that can be usefull or sprite display routines)
 #[derive(Clone, Debug)]
+#[allow(missing_docs)]
 pub enum OutputFormat {
     /// Mode specific bytes are stored consecutively in a linear way (line 0, line 1, ... line n)
     LinearEncodedSprite,
@@ -340,7 +347,7 @@ pub enum OutputFormat {
 }
 
 /// Defines the width of the capture
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum TileWidthCapture {
     /// All the width is captured
     FullWidth,
@@ -349,7 +356,7 @@ pub enum TileWidthCapture {
 }
 
 /// Defines the width of the capture
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum TileHeightCapture {
     /// All the height is captured
     FullHeight,
@@ -358,7 +365,7 @@ pub enum TileHeightCapture {
 }
 
 /// Defines the width of the capture
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum GridWidthCapture {
     /// All the width is captured
     FullWidth,
@@ -367,7 +374,7 @@ pub enum GridWidthCapture {
 }
 
 /// Defines the width of the capture
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum GridHeightCapture {
     /// All the height is captured
     FullHeight,
@@ -376,7 +383,7 @@ pub enum GridHeightCapture {
 }
 
 /// Defines the horizontal movement when capturing bytes
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum TileHorizontalCapture {
     /// Bytes are always captured from left to right
     AlwaysFromLeftToRight,
@@ -388,6 +395,7 @@ pub enum TileHorizontalCapture {
     StartFromLeftAndFlipAtTheEndOfLine,
 }
 
+#[allow(missing_docs)]
 pub trait HorizontalWordCounter {
     fn get_column_index(&self) -> usize {
         unimplemented!()
@@ -403,11 +411,14 @@ pub trait HorizontalWordCounter {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+#[allow(missing_docs)]
 pub struct StartFromLeftAndFlipAtTheEndOfLine {
     current_column: usize,
     left_to_right: bool,
 }
 
+#[allow(missing_docs)]
 impl Default for StartFromLeftAndFlipAtTheEndOfLine {
     fn default() -> Self {
         StartFromLeftAndFlipAtTheEndOfLine {
@@ -416,6 +427,7 @@ impl Default for StartFromLeftAndFlipAtTheEndOfLine {
         }
     }
 }
+#[allow(missing_docs)]
 impl HorizontalWordCounter for StartFromLeftAndFlipAtTheEndOfLine {
     fn get_column_index(&self) -> usize {
         self.current_column
@@ -434,6 +446,7 @@ impl HorizontalWordCounter for StartFromLeftAndFlipAtTheEndOfLine {
     }
 }
 
+#[allow(missing_docs)]
 impl TileHorizontalCapture {
     pub fn counter(&self) -> Box<dyn HorizontalWordCounter> {
         match self {
@@ -472,18 +485,22 @@ impl TileHorizontalCapture {
 /// 6 101 => 5
 /// 7 100 => 4
 ///
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
+#[allow(missing_docs)]
 pub struct GrayCodeLineCounter {
     char_line: usize,
     pos_in_char: u8, // in gray code space
 }
 
 /// Standard line counter
+#[derive(Copy, Clone, Debug)]
+#[allow(missing_docs)]
 pub struct StandardLineCounter {
     pos_in_screen: usize,
     top_to_bottom: bool,
 }
 
+/// LineCounter manage the choice of the line when iterateing a sprite vertically
 pub trait LineCounter {
     /// Return the real number of the line
     fn get_line_index_in_screen(&self) -> usize;
@@ -494,6 +511,7 @@ pub trait LineCounter {
     }
 }
 
+#[allow(missing_docs)]
 impl StandardLineCounter {
     pub fn top_to_bottom() -> Self {
         Self {
@@ -510,6 +528,7 @@ impl StandardLineCounter {
     }
 }
 
+#[allow(missing_docs)]
 impl LineCounter for StandardLineCounter {
     fn get_line_index_in_screen(&self) -> usize {
         self.pos_in_screen
@@ -523,6 +542,7 @@ impl LineCounter for StandardLineCounter {
     }
 }
 
+#[allow(missing_docs)]
 impl GrayCodeLineCounter {
     const GRAYCODE_INDEX_TO_SCREEN_INDEX: [u8; 8] = [0, 1, 3, 2, 6, 7, 5, 4];
     const SCREEN_INDEX_TO_GRAYCODE_INDEX: [u8; 8] = [0, 1, 3, 2, 7, 6, 4, 5];
@@ -576,7 +596,7 @@ impl LineCounter for GrayCodeLineCounter {
 }
 
 /// Defines the vertical movement when capturing lines
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum TileVerticalCapture {
     /// Lines are always captured from the top to the bottom
     AlwaysFromTopToBottom,
@@ -592,6 +612,7 @@ pub enum TileVerticalCapture {
     GrayCodeFromBottom,
 }
 
+#[allow(missing_docs)]
 impl TileVerticalCapture {
     /// Generates the counter when it is possible.
     /// Panics if contextual information is needed
@@ -609,6 +630,7 @@ impl TileVerticalCapture {
     }
 }
 
+#[allow(missing_docs)]
 impl OutputFormat {
     pub fn create_linear_encoded_sprite() -> Self {
         Self::LinearEncodedSprite
@@ -631,6 +653,7 @@ impl OutputFormat {
 
 /// Embeds the conversion output
 /// There must be one implementation per OuputFormat
+#[allow(missing_docs)]
 pub enum Output {
     LinearEncodedSprite {
         data: Vec<u8>,
@@ -667,7 +690,7 @@ pub enum Output {
 }
 
 impl Debug for Output {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             &Output::LinearEncodedSprite {
                 data: _,
@@ -704,6 +727,7 @@ impl Debug for Output {
     }
 }
 
+#[allow(missing_docs)]
 impl Output {
     /// Returns the bank that contains the first half of the screen
     pub fn overscan_screen1(&self) -> Option<&[u8; 0x4000]> {
@@ -731,6 +755,7 @@ impl Output {
 }
 
 /// ImageConverter is able to make the conversion of images to several output format
+#[derive(Debug)]
 pub struct ImageConverter<'a> {
     // TODO add a crop area to not keep the complete image
     // cropArea: Option<???>
@@ -747,6 +772,7 @@ pub struct ImageConverter<'a> {
     transformations: TransformationsList,
 }
 
+#[allow(missing_docs)]
 impl<'a> ImageConverter<'a> {
     /// Create the object that will be used to make the conversion
     pub fn convert<P>(
@@ -983,10 +1009,10 @@ impl<'a> ImageConverter<'a> {
 
         // Simulate the memory
         let mut pages = [
-            [0 as u8; 0x4000],
-            [0 as u8; 0x4000],
-            [0 as u8; 0x4000],
-            [0 as u8; 0x4000],
+            [0; 0x4000],
+            [0; 0x4000],
+            [0; 0x4000],
+            [0; 0x4000],
         ];
 
         let mut used_pages = HashSet::new();
@@ -1020,7 +1046,7 @@ impl<'a> ImageConverter<'a> {
                         let x_coord = 2 * char_x + byte_nb;
                         let y_coord = dim.nbLinesPerChar() as usize * char_y + line_in_char;
 
-                        let value = sprite.get_byte_safe(x_coord as _, y_coord as _);
+                        let value = sprite.get_byte_safe(x_coord, y_coord);
                         //let value = Some(sprite.get_byte(x_coord as _, y_coord as _));
 
                         match value {

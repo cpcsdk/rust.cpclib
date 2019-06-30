@@ -42,12 +42,16 @@ use std::ops::DerefMut;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
 #[repr(u8)]
 pub enum SnapshotVersion {
+    /// Version 1 of Snapshsots
     V1 = 1,
+    /// Version 2 of Snapshsots
     V2,
+    /// Version 3 of Snapshsots (use of chunks)
     V3,
 }
 
 impl SnapshotVersion {
+    /// Check if snapshot ius V3 version
     pub fn is_v3(&self) -> bool {
         if let SnapshotVersion::V3 = self {
             true
@@ -60,6 +64,7 @@ impl SnapshotVersion {
 /// Encode a flag of the snaphot
 #[derive(PartialEq, Debug, Copy, Clone)]
 #[allow(non_camel_case_types)]
+#[allow(missing_docs)]
 pub enum SnapshotFlag {
     Z80_AF,
     Z80_F,
@@ -130,6 +135,7 @@ pub enum SnapshotFlag {
     INT_REQ,
 }
 
+#[allow(missing_docs)]
 impl SnapshotFlag {
     pub fn enumerate() -> [SnapshotFlag; 67] {
         use self::SnapshotFlag::*;
@@ -530,10 +536,14 @@ impl FromStr for SnapshotFlag {
     }
 }
 
+/// Encode the type of the flag values 
 #[derive(Debug, Clone)]
 pub enum FlagValue {
+    /// The flag is a byte
     Byte(u8),
+    /// The flag is a word
     Word(u16),
+    /// The flag is a list of bytes or words
     Array(Vec<FlagValue>), // Restr$icted to Byte or Word
 }
 
@@ -555,7 +565,8 @@ impl fmt::Display for FlagValue {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
+#[allow(missing_docs)]
 pub enum SnapshotError {
     FileError,
     NotEnougSpaceAvailable,
@@ -564,12 +575,16 @@ pub enum SnapshotError {
     InvalidIndex,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+/// Raw chunk data.
 pub struct SnapshotChunkData {
+    /// Identifier of the chunk
     code: [u8; 4],
+    /// Content of the chunk
     data: Vec<u8>,
 }
 
+#[allow(missing_docs)]
 impl SnapshotChunkData {
     pub fn code(&self) -> &[u8; 4] {
         &(self.code)
@@ -596,11 +611,14 @@ impl SnapshotChunkData {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+/// Memory chunk that superseeds the snapshot memory if any.
 pub struct MemoryChunk {
+    /// Raw content of the memory chunk (i.e. compressed version)
     data: SnapshotChunkData,
 }
 
+#[allow(missing_docs)]
 impl MemoryChunk {
     /// Create a memory chunk.
     /// `code` identify with memory block is concerned
@@ -649,12 +667,15 @@ impl MemoryChunk {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+/// Unknwon kind of chunk
 pub struct UnknownChunk {
+    /// Raw data of the chunk
     data: SnapshotChunkData,
 }
 
 impl UnknownChunk {
+    /// Generate the chunk from raw data
     pub fn from(code: [u8; 4], data: Vec<u8>) -> Self {
         UnknownChunk {
             data: SnapshotChunkData { code, data },
@@ -682,12 +703,16 @@ pub struct CPCPlusChunk {
 }
 */
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+/// Represents any kind of chunks in order to manipulate them easily based on their semantic
 pub enum SnapshotChunk {
+    /// The chunk is a memory chunk
     MemoryChunk(MemoryChunk),
+    /// The type of the chunk is unknown
     UnknownChunk(UnknownChunk),
 }
 
+#[allow(missing_docs)]
 impl SnapshotChunk {
     pub fn is_memory_chunk(&self) -> bool {
         self.memory_chunk().is_some()
@@ -750,10 +775,13 @@ const PAGE_SIZE: usize = 0x4000;
 const HEADER_SIZE: usize = 256;
 
 /// 3 different states are possible. No memory, 64kb or 128kb
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum SnapshotMemory {
+    /// No memory is stored within the snapshot
     Empty([u8; 0]),
+    /// A 64kb page is stored within the snapshot
     SixtyFourKb([u8; PAGE_SIZE * 4]),
+    /// A 128kb page is stored within the snapshot
     OneHundredTwentyHeightKb([u8; PAGE_SIZE * 8]),
 }
 
@@ -763,6 +791,18 @@ impl Default for SnapshotMemory {
     }
 }
 
+impl std::fmt::Debug for SnapshotMemory {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let code = match self {
+            Self::Empty(_) => "Empty",
+            Self::SixtyFourKb(_) => "64kb",
+            Self::OneHundredTwentyHeightKb(_) => "128kb"
+        };
+        write!(f, "SnapshotMemory ({})", code)
+    }
+}
+
+#[allow(missing_docs)]
 impl SnapshotMemory {
     pub fn is_empty(&self) -> bool {
         match self {
@@ -858,6 +898,7 @@ impl SnapshotMemory {
 
 /// Snapshot V3 representation. Can be saved in snapshot V1 or v2.
 #[derive(Clone)]
+#[allow(missing_docs)]
 pub struct Snapshot {
     header: [u8; HEADER_SIZE],
     memory: SnapshotMemory,
@@ -867,6 +908,18 @@ pub struct Snapshot {
     // nothing to do with the snapshot. Should be moved elsewhere
     pub debug: bool,
 }
+
+
+impl std::fmt::Debug for Snapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Snapshot ({{")?;
+        write!(f,"\theader: TODO")?;
+        write!(f, "memory: {:?}", &self.memory)?;
+        write!(f, "chunks: {:?}", &self.chunks);
+        write!(f,"}})")
+    }
+}
+
 
 impl Default for Snapshot {
     fn default() -> Snapshot {
@@ -900,6 +953,7 @@ impl Default for Snapshot {
     }
 }
 
+#[allow(missing_docs)]
 impl Snapshot {
     pub fn log<S: std::fmt::Display>(&self, msg: S) {
         if self.debug {
@@ -1037,7 +1091,7 @@ impl Snapshot {
         };
 
         let mut content = file_content
-            .drain(0..data_length as usize)
+            .drain(0..data_length)
             .as_slice()
             .to_vec();
 
@@ -1113,7 +1167,7 @@ impl Snapshot {
                 let memory_chunk = dbg!(memory_chunk);
                 let address = memory_chunk.abstract_address();
                 let content = memory_chunk.uncrunched_memory();
-                max_memory = address as usize + 64 * 1024;
+                max_memory = address + 64 * 1024;
 
                 if memory.len() < max_memory {
                     memory = memory.increased_size();

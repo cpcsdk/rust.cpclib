@@ -104,17 +104,20 @@ pub const INKS_RGB_VALUES: [im::Rgba<u8>; 27] = [
     INK15, INK16, INK17, INK18, INK19, INK20, INK21, INK22, INK23, INK24, INK25, INK26,
 ];
 
-// Ga value for each ink
+/// Ga value for each ink
 pub const INKS_GA_VALUE: [u8; 27] = [
     0x54, 0x44, 0x55, 0x5c, 0x58, 0x5d, 0x4c, 0x45, 0x4d, 0x56, 0x46, 0x57, 0x5e, 0x40, 0x5f, 0x4e,
     0x47, 0x4f, 0x52, 0x42, 0x53, 0x5a, 0x59, 0x5b, 0x4a, 0x43, 0x4b,
 ];
 
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
+/// Amstrad INK
 pub struct Ink {
+    /// Ink value
     value: u8,
 }
 
+#[allow(missing_docs)]
 impl Ink {
     /// Get the RGB color value of the ink
     pub fn color(&self) -> im::Rgba<u8> {
@@ -267,6 +270,7 @@ impl<'a> From<&'a str> for Ink {
     }
 }
 
+/// Available inks
 pub const INKS: [Ink; NB_INKS as usize] = [
     Ink { value: 0 },
     Ink { value: 1 },
@@ -300,6 +304,7 @@ pub const INKS: [Ink; NB_INKS as usize] = [
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Serialize, Deserialize)]
 /// Represents a Pen. There a 16 pens + the border in the Amstrad CPC
 pub struct Pen {
+    /// pen value
     value: u8,
 }
 
@@ -325,6 +330,7 @@ where
     }
 }
 
+#[allow(missing_docs)]
 impl Pen {
     /// Get the number of the pen
     pub fn number(&self) -> u8 {
@@ -352,6 +358,7 @@ impl Add<i8> for Pen {
     }
 }
 
+/// Available pens
 pub const PENS: [Pen; NB_PENS as usize] = [
     Pen { value: 0 },
     Pen { value: 1 },
@@ -374,6 +381,7 @@ pub const PENS: [Pen; NB_PENS as usize] = [
 
 /// The palette maps one Ink for each Pen
 pub struct Palette {
+    /// Values for the palette. Some itms may be absent
     values: HashMap<Pen, Ink>,
 }
 
@@ -471,6 +479,7 @@ impl<'de> Deserialize<'de> for Palette {
     }
 }
 
+#[allow(missing_docs)]
 impl Palette {
     /// Create a new palette.
     /// All pens are black.
@@ -513,7 +522,7 @@ impl Palette {
     }
 
     pub fn to_gate_array(&self) -> [u8; NB_PENS as usize] {
-        let mut res = [0 as u8; NB_PENS as usize];
+        let mut res = [0; NB_PENS as usize];
         for pen in 0..NB_PENS {
             res[pen as usize] = self.get(&pen.into()).gate_array();
         }
@@ -658,6 +667,7 @@ impl Into<Vec<u8>> for Palette {
     }
 }
 
+#[allow(missing_docs)]
 impl Palette {
     pub fn to_vec(self) -> Vec<u8> {
         self.into()

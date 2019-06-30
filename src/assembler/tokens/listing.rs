@@ -49,6 +49,7 @@ impl<T: Clone + ListingElement> DerefMut for BaseListing<T> {
     }
 }
 
+#[allow(missing_docs)]
 impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
     /// Create an empty listing without duration
     pub fn new() -> Self {
@@ -93,7 +94,7 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
                 for token in self.listing.iter() {
                     duration = duration + token.estimated_duration()?;
                 }
-                Ok(duration as usize)
+                Ok(duration)
             }
         }
     }

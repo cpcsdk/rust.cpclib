@@ -5,6 +5,8 @@ pub mod mode1 {
     /// Pixel ordering in a byte
     /// [Pixel0(), Pixel1(), Pixel2(), Pixel3()]
     #[repr(u8)]
+    #[derive(Copy, Clone, Debug)]
+#[allow(missing_docs)]
     pub enum PixelPosition {
         Pixel0 = 0,
         Pixel1 = 1,
@@ -14,6 +16,8 @@ pub mod mode1 {
 
     /// Signification of the bits in the byte
     #[repr(u8)]
+    #[derive(Copy, Clone, Debug)]
+#[allow(missing_docs)]
     pub enum BitMapping {
         Pixel3Bit1 = 0,
         Pixel2Bit1 = 1,
@@ -160,12 +164,15 @@ pub mod mode1 {
 
 }
 
+/// Mode 0 pixels specific operations
 pub mod mode0 {
     use crate::ga::Pen;
 
     /// Pixel ordering in a byte
     /// [Pixel0(), Pixel1()]
     #[repr(u8)]
+    #[derive(Copy, Clone, Debug)]
+#[allow(missing_docs)]
     pub enum PixelPosition {
         Pixel0 = 0,
         Pixel1 = 1,
@@ -173,6 +180,8 @@ pub mod mode0 {
 
     /// Signification of the bites in the byte
     #[repr(u8)]
+    #[derive(Copy, Clone, Debug)]
+#[allow(missing_docs)]
     pub enum BitMapping {
         Pixel1Bit3 = 0,
         Pixel0Bit3 = 1,
@@ -206,6 +215,7 @@ pub mod mode0 {
         (pen0.into(), pen1.into())
     }
 
+    /// Convert a couple of pen and pixel position to the corresponding byte value
     pub fn pen_to_pixel_byte(pen: &Pen, pixel: PixelPosition) -> u8 {
         assert!(pen.number() < 16, format!("{} >=16", pen.number()));
 
@@ -268,7 +278,7 @@ pub mod mode0 {
         res
     }
 
-    // Convert a vector of bytes as a vector of pens
+    /// Convert a vector of bytes as a vector of pens
     pub fn bytes_to_pens(bytes: &[u8]) -> Vec<Pen> {
         let mut res = Vec::with_capacity(bytes.len() * 2);
 

@@ -1,4 +1,7 @@
+
+/// Paring related functions for basic.
 pub mod parser;
+/// Basic token encoding.
 pub mod tokens;
 
 use parser::parse_basic_program;
@@ -6,7 +9,8 @@ use parser::parse_basic_program;
 use std::fmt;
 use tokens::BasicToken;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+/// Basic line representation
 pub enum BasicProgramLineIdx {
     /// The basic line is indexed by its position in the listing
     Index(usize),
@@ -14,7 +18,8 @@ pub enum BasicProgramLineIdx {
     Number(u16),
 }
 
-#[derive(Debug, Fail, PartialEq)]
+#[derive(Debug, Fail, PartialEq, Copy, Clone)]
+#[allow(missing_docs)]
 pub enum BasicError {
     #[fail(display = "Line does not exist: {:?}", idx)]
     UnknownLine { idx: BasicProgramLineIdx },
@@ -26,7 +31,7 @@ pub struct BasicLine {
     /// Basic number of the line
     line_number: u16,
     /// Tokens of the basic line
-    tokens: Vec<tokens::BasicToken>,
+    tokens: Vec<BasicToken>,
     /// Length of the line when we do not have to use the real lenght (ie, we play to hide lines)
     forced_length: Option<u16>,
 }
@@ -41,13 +46,14 @@ impl fmt::Display for BasicLine {
     }
 }
 
+#[allow(missing_docs)]
 impl BasicLine {
     pub fn line_number(&self) -> u16 {
         self.line_number
     }
 
     /// Create a line with its content
-    pub fn new(line_number: u16, tokens: &[tokens::BasicToken]) -> BasicLine {
+    pub fn new(line_number: u16, tokens: &[BasicToken]) -> BasicLine {
         BasicLine {
             line_number,
             tokens: tokens.to_vec(),
@@ -67,7 +73,7 @@ impl BasicLine {
     pub fn forced_length(&self) -> u16 {
         match self.forced_length {
             Some(val) => val,
-            None => (self.real_length() + 2 + 2 + 1) as _,
+            None => (self.real_length() + 2 + 2 + 1),
         }
     }
 
@@ -116,6 +122,7 @@ impl BasicLine {
 /// Encode a complete basic program
 #[derive(Debug, Clone)]
 pub struct BasicProgram {
+    /// The ensemble of lines of the basic program
     lines: Vec<BasicLine>,
 }
 
@@ -128,6 +135,7 @@ impl fmt::Display for BasicProgram {
     }
 }
 
+#[allow(missing_docs)]
 impl BasicProgram {
     /// Create the program from a list of lines
     pub fn new(lines: Vec<BasicLine>) -> BasicProgram {
