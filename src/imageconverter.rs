@@ -1114,8 +1114,8 @@ mod tests {
         let mut address = DisplayAddress::new_from(0x3000);
 
         assert_eq!(address.address(), 0xC000);
-        assert_eq!(address.R12(), 0x30);
-        assert_eq!(address.R13(), 0x00);
+        assert_eq!(address.r12(), 0x30);
+        assert_eq!(address.r13(), 0x00);
         assert!(!address.is_overscan());
 
         address.set_page(1);

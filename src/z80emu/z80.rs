@@ -357,37 +357,37 @@ mod tests {
 
     #[test]
     fn test_register8() {
-        let mut B = Register8::default();
+        let mut b = Register8::default();
 
-        assert_eq!(B.value(), 0);
+        assert_eq!(b.value(), 0);
 
-        B.set(22);
-        assert_eq!(B.value(), 22);
+        b.set(22);
+        assert_eq!(b.value(), 22);
     }
 
     #[test]
     fn test_register16() {
-        let mut BC = Register16::default();
+        let mut bc = Register16::default();
 
-        assert_eq!(BC.value(), 0);
+        assert_eq!(bc.value(), 0);
 
-        BC.set(22);
-        assert_eq!(BC.low().value(), 22);
-        assert_eq!(BC.high().value(), 0);
-        assert_eq!(BC.value(), 22);
+        bc.set(22);
+        assert_eq!(bc.low().value(), 22);
+        assert_eq!(bc.high().value(), 0);
+        assert_eq!(bc.value(), 22);
 
-        BC.set(50 * 256);
-        assert_eq!(BC.low().value(), 0);
-        assert_eq!(BC.high().value(), 50);
-        assert_eq!(BC.value(), 50 * 256);
+        bc.set(50 * 256);
+        assert_eq!(bc.low().value(), 0);
+        assert_eq!(bc.high().value(), 50);
+        assert_eq!(bc.value(), 50 * 256);
 
-        BC.set(0xffff);
-        BC.add(1);
-        assert_eq!(BC.value(), 0);
+        bc.set(0xffff);
+        bc.add(1);
+        assert_eq!(bc.value(), 0);
 
-        BC.set(0x4000);
-        BC.add(1);
-        assert_eq!(BC.value(), 0x4001);
+        bc.set(0x4000);
+        bc.add(1);
+        assert_eq!(bc.value(), 0x4001);
     }
 
     #[test]
