@@ -28,7 +28,7 @@ fn main() -> Result<(), cpc::xfer::XferError> {
         )
         .subcommand(
             clap::SubCommand::with_name("-y")
-            .about("Upload a file on the M4 in the /tmp folder and launch it.")
+            .about("Upload a file on the M4 in the /tmp folder and launch it. V3 snapshots are automatically downgraded to V2 version")
             .arg(
                 clap::Arg::with_name("fname")
                 .help("Filename to send and execute. Can be an executable (Amsdos header expected) or a snapshot V2")
@@ -89,9 +89,15 @@ fn main() -> Result<(), cpc::xfer::XferError> {
         if let Some(extension) = std::path::Path::new(fname).extension() {
             let extension = extension.to_str().unwrap().to_ascii_lowercase();
             if extension == "sna" {
-                xfer.upload_and_run_sna(&crate::cpc::sna::Snapshot::load(fname))
+                let sna = crate::cpc::sna::Snapshot::load(fname);
+                if sna.version_header() == 3 {
+                    eprintln!("Need to downgrade SNA version");
+                    let sna_fname = std::path::Path::new(fname).file_name().unwrap().to_str().unwrap();
+                    sna.save(sna_fname, crate::cpc::sna::SnapshotVersion::V2);
+                    xfer.upload_and_run(sna_fname, None)
                     .expect("Unable to launch SNA");
-                done = true;
+                    done = true;
+                }
             }
         }
         if !done {
