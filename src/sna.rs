@@ -9,7 +9,8 @@ use std::path::Path;
 use std::str::FromStr;
 
 use std::ops::Deref;
-use std::ops::Add;
+use std::ops::DerefMut;
+use std::ops::AddAssign;
 
 ///! Reimplementation of createsnapshot by Ramlaid/Arkos
 ///! in rust by Krusty/Benediction
@@ -39,7 +40,7 @@ use std::ops::Add;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum SnapshotVersion {
-    V1,
+    V1=1,
     V2,
     V3,
 }
@@ -527,7 +528,7 @@ impl FromStr for SnapshotFlag {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FlagValue {
     Byte(u8),
     Word(u16),
@@ -561,6 +562,8 @@ pub enum SnapshotError {
     InvalidIndex,
 }
 
+
+#[derive(Clone)]
 pub struct SnapshotChunkData {
     code: [u8; 4],
     data: Vec<u8>,
@@ -595,11 +598,15 @@ impl SnapshotChunkData {
 }
 
 
+#[derive(Clone)]
 pub struct MemoryChunk{
     data: SnapshotChunkData
 }
 
 impl MemoryChunk {
+    /// Create a memory chunk.
+    /// `code` identify with memory block is concerned
+    /// `data` contains the crunched version of the code
     pub fn from(code: [u8;4], data: Vec<u8>) -> Self {
         MemoryChunk {
             data: SnapshotChunkData{
@@ -609,13 +616,14 @@ impl MemoryChunk {
         }
     }
 
+    /// Uncrunch the 64kbio of RLE crunched data
     pub fn uncrunched_memory(&self) -> Vec<u8> {
         let mut content = Vec::new();
 
-        let mut idx = std::rc::Rc::new(std::cell::RefCell::new(0));
+        let idx = std::rc::Rc::new(std::cell::RefCell::new(0));
         let mut read_byte = || {
             let byte = self.data.data[*idx.borrow()];
-            idx.borrow_mut().deref().add(1);
+            idx.borrow_mut().deref_mut().add_assign(1);
             byte
         };
         while *idx.borrow() != self.data.data.len() {
@@ -624,7 +632,9 @@ impl MemoryChunk {
                     let amount = read_byte();
                     if amount != 0 {
                         let val = read_byte();
-                        content.push(val);
+                        for idx in 0..amount {
+                            content.push(val);
+                        }
                     }
                 },
                 val => {
@@ -633,7 +643,7 @@ impl MemoryChunk {
             }
         }
 
-        assert!(content.len() == 64*1024);
+        assert_eq!(content.len(), 64*1024);
         content
     }
 
@@ -644,6 +654,7 @@ impl MemoryChunk {
     }
 }
 
+#[derive(Clone)]
 pub struct UnknownChunk {
     data: SnapshotChunkData
 }
@@ -681,6 +692,7 @@ pub struct CPCPlusChunk {
 }
 */
 
+#[derive(Clone)]
 pub enum SnapshotChunk {
     MemoryChunk(MemoryChunk),
     UnknownChunk(UnknownChunk)
@@ -765,10 +777,121 @@ impl From<UnknownChunk> for SnapshotChunk {
 const PAGE_SIZE: usize = 0x4000;
 const HEADER_SIZE: usize = 256;
 
+/// 3 different states are possible. No memory, 64kb or 128kb
+#[derive(Clone)]
+pub enum SnapshotMemory {
+    Empty([u8; 0]),
+    SixtyFourKb([u8; PAGE_SIZE * 4]),
+    OneHundredTwentyHeightKb([u8; PAGE_SIZE * 8])
+}
+
+impl Default for SnapshotMemory {
+    fn default() -> Self {
+        Self::Empty(Default::default())
+    }
+}
+
+impl SnapshotMemory {
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Empty(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_64k(&self) -> bool {
+        match self {
+            Self::SixtyFourKb(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_128k(&self) -> bool {
+        match self {
+            Self::OneHundredTwentyHeightKb(_) => true,
+            _ => false
+        }
+    }
+
+    /// Read only access to the memory
+    fn memory(&self) -> &[u8] {
+        match self {
+            Self::Empty(ref mem) => mem,
+            Self::SixtyFourKb(ref mem) => mem,
+            Self::OneHundredTwentyHeightKb(ref mem) => mem,
+        }
+    }
+
+    /// Reda write access to the memory
+    fn memory_mut(&mut self) -> &mut [u8] {
+        match self {
+            Self::Empty(ref mut mem) => mem,
+            Self::SixtyFourKb(ref mut mem) => mem,
+            Self::OneHundredTwentyHeightKb(ref mut mem) => mem,
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Self::Empty(_x) => 0,
+            Self::SixtyFourKb(_) => 64*1024,
+            Self::OneHundredTwentyHeightKb(_) => 128*1024,
+        }
+    }
+
+    /// Produce a novel memory that is bigger
+    fn increased_size(self) -> SnapshotMemory {
+        match self {
+            Self::Empty(ref mem) => {
+                Self::default_64()
+            },
+            Self::SixtyFourKb(ref  mem) => {
+                let mut new = Self::default_128();
+                new.memory_mut()[0..64*1024].copy_from_slice(mem);
+                new
+            },
+            Self::OneHundredTwentyHeightKb(ref mem) => unreachable!(),
+        }
+    }
+
+    fn new(source:&[u8]) -> SnapshotMemory {
+        match source.len() {
+            0 => {Default::default()},
+            0x10000 => {Self::new_64(source)},
+            0x20000 => {Self::new_128(source)},
+            _ => unreachable!()
+        }
+    }
+
+    fn new_64(source: &[u8]) -> SnapshotMemory {
+        assert_eq!(source.len(), 64*1024);
+        let mut mem = [0; PAGE_SIZE*4];
+        mem.copy_from_slice(source);
+        Self::SixtyFourKb(mem)
+    }
+
+    fn new_128(source: &[u8]) -> SnapshotMemory {
+        assert_eq!(source.len(), 128*1024);
+        let mut mem = [0; PAGE_SIZE*8];
+        mem.copy_from_slice(source);
+        Self::OneHundredTwentyHeightKb(mem)
+    }
+
+    fn default_64() -> SnapshotMemory {
+        Self::SixtyFourKb([0;PAGE_SIZE*4])
+    }
+
+    fn default_128() -> SnapshotMemory {
+        Self::OneHundredTwentyHeightKb([0;PAGE_SIZE*8])
+    }
+}
+
 /// Snapshot V3 representation. Can be saved in snapshot V1 or v2.
+#[derive(Clone)]
 pub struct Snapshot {
     header: [u8; HEADER_SIZE],
-    memory: [u8; PAGE_SIZE * 8],
+    memory: SnapshotMemory,
     memory_already_written: bitsets::DenseBitSet,
     chunks: Vec<SnapshotChunk>,
 
@@ -800,7 +923,7 @@ impl Default for Snapshot {
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00,
             ],
-            memory: [0; PAGE_SIZE * 8],
+            memory: SnapshotMemory::default_128(),
             chunks: Vec::new(),
             memory_already_written: bitsets::DenseBitSet::with_capacity_and_state(PAGE_SIZE * 8, 0),
             debug: false,
@@ -827,28 +950,21 @@ impl Snapshot {
             f.read_to_end(&mut content);
             content
         };
-
-        eprintln!("Complete {:?}", std::str::from_utf8(&file_content));
-
-
         // Copy the header
         sna.header.copy_from_slice(file_content.drain(0..0x100).as_slice());
-        let memory_dump_size = sna.memory_size_header();
+        let memory_dump_size = sna.memory_size_header() as usize;
         let version = sna.version_header();
+   
+        dbg!(memory_dump_size*1024);
+        dbg!(file_content.len());
 
-        eprintln!("Remaining {:?}", std::str::from_utf8(&file_content));
+        assert!(memory_dump_size*1024 <= file_content.len());
+        sna.memory = SnapshotMemory::new(
+            file_content.drain(0..memory_dump_size*1024).as_slice()
+        );
+  
 
-        if version == 2 || memory_dump_size == 128 {
-            // Snapshot V2 is easy to read
-            assert!(memory_dump_size == 128, "Need to implement SNA loading with memory != 128");
-            let memory_len = sna.memory.len();
-            sna.memory.copy_from_slice(file_content.drain(0..memory_len).as_slice());
-        }
-        else {
-            // Snapshot V3 crunch data
-            assert!(memory_dump_size == 0, "Need to implement SNA loading with memory != 0");
-            eprintln!("{:?}", &sna.header[0xe0]);
-
+        if version == 3 {
             loop {
                 if let Some(chunk) = Self::read_chunk(
                     &mut file_content, 
@@ -859,7 +975,6 @@ impl Snapshot {
                     break
                 }
             }
-
         }
 
         eprintln!("{} chunks", sna.nb_chunks());
@@ -881,8 +996,68 @@ impl Snapshot {
         self.header[0x6b] as u16 + 256 * self.header[0x6c] as u16
     }
 
+    fn set_memory_size_header(&mut self, size: u16) {
+        self.header[0x6b] = (size % 256) as _;
+        self.header[0x6c] = (size / 256) as _;
+    }
+
     pub fn version_header(&self) -> u8 {
         self.header[0x10]
+    }
+
+    /// Create a new snapshot that contains only information understandable
+    /// by the required version
+    /// TODO return an error in case of failure instead of panicing
+    pub fn fix_version(&self, version: SnapshotVersion) -> Snapshot {
+        // Clone the snapshot in order to patch it
+        let mut cloned = self.clone();
+
+        // Delete un-needed data
+        match version {
+            SnapshotVersion::V1 => {
+                for idx in 0x6d..=0xff {
+                    cloned.header[idx] = 0;
+                }
+            },
+            SnapshotVersion::V2 => {
+                for idx in 0x75..=0xff {
+                    cloned.header[idx] = 0;
+                }
+            }
+            ,
+            SnapshotVersion::V3 => {}
+        };
+
+        // Write the version number
+        cloned.header[0x10] = version as u8;
+
+        // We have to modify the memory coding and remove the chunks
+        if cloned.chunks.len() > 0 && version != SnapshotVersion::V3 {
+            let memory = self.memory_dump();
+            let memory_size = memory.len() / 1024;
+            if memory_size > 128 {
+                panic!("V1 or V2 snapshots cannot code more than 128kb of memory");
+            }
+            if memory_size !=0 && memory_size != 64 && memory_size != 128 {
+                panic!("Memory of {}kb", memory_size);
+            }
+
+            // specify the right memory size ...
+            cloned.set_memory_size_header(memory_size as _);
+
+            // ... and replace it by the expected content
+            cloned.memory = SnapshotMemory::new(&memory);
+
+            // remove all the chunks
+            cloned.chunks.clear();
+            assert_eq!(cloned.chunks.len(), 0);
+        }
+
+        // TODO add a case to remove main memory in V3 snapshots in order
+        // to crunch it and reduce sna size
+        
+
+        cloned
     }
 
     /// Read a chunk if available
@@ -940,72 +1115,59 @@ impl Snapshot {
         self.write(&mut buffer, version)
     }
 
-    /// We are currently only able to build a V2 version.
     pub fn write(&self, buffer: &mut File, version: SnapshotVersion) -> Result<(), std::io::Error> {
-        // get a proper header
-        let header: [u8; HEADER_SIZE] = {
-            let mut header = self.header.clone();
-            match version {
-                SnapshotVersion::V1 => {
-                    header[0x10] = 1;
-                    for idx in 0x6d..=0xff {
-                        header[idx] = 0;
-                    }
-                    let memory_size = self.compute_memory_size_in_chunks();
-                    unimplemented!();
-                }
-                SnapshotVersion::V2 => {
-                    header[0x10] = 2;
-                    for idx in 0x75..=0xff {
-                        header[idx] = 0;
-                    }
-                    let memory_size = self.compute_memory_size_in_chunks();
-                    assert!(
-                        memory_size == 128 || memory_size == 64 || memory_size == 0, 
-                        format!("Need to implement other cases: {}", memory_size)
-                    );
-                }
-                SnapshotVersion::V3 => {
-                    header[0x10] = 3;
-                }
-            };
-            header
-        };
-        buffer.write_all(&header)?;
 
-        // Write memory
-        if !version.is_v3() && !self.chunks.is_empty() {
-            // We downgrade from a V3 snapshot to a previous version
-            let mut memory = self.memory.clone();
-            for chunk in self.chunks.iter() {
-                if let Some(memory_chunk) = chunk.memory_chunk() {
-                    let address = memory_chunk.abstract_address();
-                    let content = memory_chunk.uncrunched_memory();
-                    memory[address .. address+0x1000].copy_from_slice(&content);
-                }
-                else {
-                    eprintln!("[Warning] Unable to save chunk {:?} in this snapshot version.", chunk.code());
-                }
-            }
-            buffer.write_all(&self.memory)?;
-        }
-        else {
-            buffer.write_all(&self.memory)?;
+        // Convert the snapshot to ensure header is correct
+        let sna = self.fix_version(version);
+
+        // Write header
+        buffer.write_all(&sna.header)?;
+
+        // Write main memory if any
+        if sna.memory_size_header() > 0 {
+            assert_eq!(sna.memory.memory().len() , sna.memory_size_header() as usize *1024);
+            buffer.write_all(&sna.memory.memory())?;
         }
 
-        // Save the chunks in the V3 version after memory if any
-        match version {
-            SnapshotVersion::V3 => {
-                for chunck in self.chunks.iter() {
-                    buffer.write_all(chunck.code())?;
-                    buffer.write_all(&chunck.size_as_array())?;
-                    buffer.write_all(chunck.data())?;
-                }
-            }
-            _ => (),
+        // Write chunks if any
+        for chunck in self.chunks.iter() {
+            buffer.write_all(chunck.code())?;
+            buffer.write_all(&chunck.size_as_array())?;
+            buffer.write_all(chunck.data())?;
         }
 
         Ok(())
+    }
+
+    /// Returns all the memory of the snapshot in a linear way by mixing both the hardcoded memory of the snapshot and the memory of chunks
+    pub fn memory_dump(&self) -> Vec<u8> {
+        // by default, the memory i already coded
+        let mut memory = self.memory.clone();
+
+        let mut max_memory = self.memory_size_header() as usize *1024 ;
+
+        // but it can be patched by chunks
+        for chunk in self.chunks.iter() {
+            if let Some(memory_chunk) = chunk.memory_chunk() {
+                let memory_chunk = dbg!(memory_chunk);
+                let address = memory_chunk.abstract_address();
+                let content = memory_chunk.uncrunched_memory();
+                max_memory = address as usize + 64*1024;
+
+                if memory.len() < max_memory {
+                    memory = memory.increased_size();
+                }
+                memory.memory_mut()[address .. max_memory].copy_from_slice(&content); // TODO treat the case where extra memory is used as `memroy` may need to be extended
+
+                
+            }
+        }
+        memory.memory()[..max_memory].to_vec()
+    }
+
+    /// Returns the memory that is hardcoded in the snapshot
+    pub fn memory_block(&self) -> &SnapshotMemory {
+        &self.memory
     }
 
     /// Add the content of a file at the required position
@@ -1044,7 +1206,7 @@ impl Snapshot {
                 if self.memory_already_written.test(current_pos) {
                     eprintln!("[WARNING] Replace memory in 0x{:x}", current_pos);
                 }
-                self.memory[current_pos] = *byte;
+                self.memory.memory_mut()[current_pos] = *byte;
                 self.memory_already_written.set(current_pos);
             }
 
@@ -1052,12 +1214,13 @@ impl Snapshot {
         }
     }
 
-    /// Change a memory value
+    /// Change a memory value. Panic if memory size is not appropriate
+    /// TODO should enlarge memory if needed or write un Chunks
     pub fn set_memory(&mut self, address: u32, value: u8) {
         assert!(address < 0x20000);
         let address = address as usize;
 
-        self.memory[address] = value;
+        self.memory.memory_mut()[address] = value;
     }
 
     /// Change the value of a flag
@@ -1116,4 +1279,47 @@ impl Snapshot {
             println!("{:?} => {}", &flag, &self.get_value(flag));
         }
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+	use super::SnapshotMemory;
+
+	#[test]
+    fn test_memory() {
+        assert!(SnapshotMemory::default().is_empty());
+        assert!(SnapshotMemory::default_64().is_64k());
+        assert!(SnapshotMemory::default_128().is_128k());
+
+        assert_eq!(SnapshotMemory::default().len(), 0);
+        assert_eq!(SnapshotMemory::default_64().len(), 64*1024);
+        assert_eq!(SnapshotMemory::default_128().len(), 128*1024);
+
+        assert_eq!(SnapshotMemory::default().memory().len(), 0);
+        assert_eq!(SnapshotMemory::default_64().memory().len(), 64*1024);
+        assert_eq!(SnapshotMemory::default_128().memory().len(), 128*1024);
+    }
+
+    #[test]
+    fn test_increase() {
+        let mut memory = SnapshotMemory::default();
+        assert!(memory.is_empty());
+
+        let mut memory = memory.increased_size();
+        assert!(memory.is_64k());
+        assert_eq!(memory.memory().len(), 64*1024);
+
+        let mut memory = memory.increased_size();
+        assert!(memory.is_128k());
+        assert_eq!(memory.memory().len(), 128*1024);
+        
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_increase2() {
+        SnapshotMemory::default_128().increased_size();
+    }
+
 }
