@@ -792,7 +792,7 @@ impl Default for SnapshotMemory {
 }
 
 impl std::fmt::Debug for SnapshotMemory {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let code = match self {
             Self::Empty(_) => "Empty",
             Self::SixtyFourKb(_) => "64kb",
@@ -911,7 +911,7 @@ pub struct Snapshot {
 
 
 impl std::fmt::Debug for Snapshot {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Snapshot ({{")?;
         write!(f,"\theader: TODO")?;
         write!(f, "memory: {:?}", &self.memory)?;

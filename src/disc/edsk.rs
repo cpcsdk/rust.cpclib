@@ -8,7 +8,8 @@ use std::path::Path;
 use std::string::ToString;
 
 use delegate::delegate;
-
+use getset::Getters;
+use bitflags::bitflags;
 
 /// Computes the sector size as expected by the FDC from a human readable sector size
 pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {

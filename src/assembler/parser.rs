@@ -4,6 +4,7 @@ use nom::{
     alphanumeric, alphanumeric1, eol, line_ending, space, space0, space1, Err, ErrorKind, IResult,
 };
 use nom::{InputIter, InputLength};
+use nom::*;
 
 use std::path::PathBuf;
 
@@ -67,7 +68,7 @@ impl ParserContext {
         } else {
             // loop over all possibilities
             for search in self.search_path.iter() {
-                let current_path = dbg!(search.join(fname.clone()));
+                let current_path = search.join(fname.clone());
 
                 if current_path.is_file() {
                     return Some(current_path);

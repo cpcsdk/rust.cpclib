@@ -12,6 +12,8 @@ use crate::disc::edsk::Head;
 
 use delegate::delegate;
 
+use arrayref::array_ref;
+
 #[derive(Debug)]
 #[allow(missing_docs)] 
 pub enum AmsdosError {

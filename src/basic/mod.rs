@@ -8,6 +8,8 @@ use parser::parse_basic_program;
 
 use std::fmt;
 use tokens::BasicToken;
+use failure::Fail;
+
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Basic line representation

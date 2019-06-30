@@ -11,6 +11,8 @@ pub mod assembler;
 pub mod builder;
 use crate::assembler::parser::ParserContext;
 
+use failure::Fail;
+
 #[derive(Debug, Fail)]
 #[allow(missing_docs)]
 pub enum AssemblerError {

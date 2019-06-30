@@ -3,6 +3,7 @@ use custom_error::custom_error;
 use nom;
 use nom::types::CompleteStr;
 use nom::{eol, hex_u32, space0, space1};
+use nom::*;
 
 use itertools;
 use itertools::Itertools;

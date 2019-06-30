@@ -12,7 +12,8 @@
         missing_debug_implementations, missing_copy_implementations,
         trivial_casts, trivial_numeric_casts,
         unused_import_braces, unused_qualifications,
-        nonstandard_style
+        nonstandard_style,
+        rust_2018_idioms
 )]
 
 //! cpclib aims at providing tools that help cross-development for the Amstrad CPC.
@@ -29,30 +30,13 @@
 
 #![recursion_limit = "512"]
 
-extern crate bitfield;
-#[macro_use]
-extern crate bitflags;
-#[macro_use]
-extern crate nom;
 
-#[cfg(feature = "xferlib")]
-extern crate curl;
-#[cfg(feature = "xferlib")]
-extern crate reqwest;
-
-#[macro_use]
-extern crate arrayref;
-
-#[macro_use]
-extern crate serde_derive;
 
 #[macro_use]
 extern crate dbg;
-#[macro_use]
-extern crate failure;
 
-#[macro_use]
-extern crate getset;
+
+
 
 /// Screen emulation. Unknown state ;)
 pub mod screen;
