@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use cpclib::assembler::assembler::visit_tokens;
 use cpclib::assembler::parser::parse_z80_str;
-use cpclib::ga::{Palette};
+use cpclib::ga::Palette;
 
 use cpclib::imageconverter::*;
 use cpclib::sna::*;
@@ -160,13 +160,10 @@ fn assemble(z80: String) -> Vec<u8> {
 }
 
 fn get_output_format(matches: &ArgMatches) -> OutputFormat {
-
-    if let Some(sprite_matches)=  matches.subcommand_matches("sprite")
-    {
+    if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
         // Sprite case. Only Linear encoding is currently managed
         OutputFormat::LinearEncodedSprite
-    }
-    else {
+    } else {
         // Standard case
         if matches.is_present("OVERSCAN") {
             OutputFormat::CPCMemory {
@@ -222,29 +219,34 @@ fn convert(matches: &ArgMatches) -> Result<(), String> {
                 data,
                 palette,
                 byte_width,
-                height
+                height,
             } => {
-
                 // Save the binary data of the sprite
                 let sprite_fname = sub_sprite.value_of("SPRITE_FNAME").unwrap();
-                let mut file = File::create(sprite_fname).expect("Unable to create the sprite file");
+                let mut file =
+                    File::create(sprite_fname).expect("Unable to create the sprite file");
                 file.write_all(&data);
 
                 // Save the binary data of the palette if any
-                sub_sprite.value_of("CONFIGURATION")
-                    .and_then(|conf_fname: &str|{
-                        let mut file = File::create(conf_fname).expect("Unable to create the configuration file");
-                        let fname = std::path::Path::new(conf_fname).file_stem().unwrap().to_str().unwrap().replace(".", "_");
+                sub_sprite
+                    .value_of("CONFIGURATION")
+                    .and_then(|conf_fname: &str| {
+                        let mut file = File::create(conf_fname)
+                            .expect("Unable to create the configuration file");
+                        let fname = std::path::Path::new(conf_fname)
+                            .file_stem()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .replace(".", "_");
                         writeln!(&mut file, "{}_WIDTH equ {}", fname, byte_width);
                         writeln!(&mut file, "{}_HEIGHT equ {}", fname, height);
                         Some(())
                     });
-                    
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
-    }
-    else {
+    } else {
         // Make the conversion before feeding sna or dsk
         let (palette, code) = match &conversion {
             Output::CPCMemoryStandard(_memory, pal) => {
@@ -258,9 +260,6 @@ fn convert(matches: &ArgMatches) -> Result<(), String> {
 
             _ => unreachable!(),
         };
-
-
-
 
         if sub_dsk.is_some() {
             // TODO create the linker
@@ -342,7 +341,7 @@ fn main() {
                                             true => Ok(()),
                                             false => Err(format!("{} has not a snapshot extension.", sna))
                                         }
-                                    })  
+                                    })
                             )
                     )
 
@@ -473,7 +472,6 @@ fn main() {
         && matches.subcommand_matches("dsk").is_none()
         && matches.subcommand_matches("sna").is_none()
         && matches.subcommand_matches("sprite").is_none()
-
     {
         eprintln!("[ERROR] you have not specified any action to do.");
         std::process::exit(exitcode::USAGE);

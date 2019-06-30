@@ -73,30 +73,25 @@ fn main() -> std::io::Result<()> {
         let user = matches.value_of("USER").map_or(0, string_to_nb) as u8;
         let (filename, extension) = {
             let complete_filename = matches.value_of("INPUT").unwrap();
-        
+
             let parts = complete_filename.split('.').collect::<Vec<_>>();
             let (filename, extension) = match parts.len() {
-                1 => (
-                    parts[0].to_owned(),
-                    "".to_owned()
-                ),
-                2 => (
-                    parts[0].to_owned(),
-                    parts[1].to_owned()
-                ),
+                1 => (parts[0].to_owned(), "".to_owned()),
+                2 => (parts[0].to_owned(), parts[1].to_owned()),
                 n => {
-                    eprintln!("[Warning] Filename contains several `.`. They have been all removed.");
+                    eprintln!(
+                        "[Warning] Filename contains several `.`. They have been all removed."
+                    );
                     (
-                        parts[..parts.len()-1].join("_").to_owned(),
-                        parts[parts.len()-1].to_owned()
+                        parts[..parts.len() - 1].join("_").to_owned(),
+                        parts[parts.len() - 1].to_owned(),
                     )
                 }
             };
-            
+
             let filename = if filename.len() > 8 {
                 eprintln!("[Warning] Filename is too large and has been cropped. If it is not the expected behavior provide a file with the right filename");
                 filename[..8].to_owned()
-                
             } else {
                 filename
             };
@@ -120,8 +115,7 @@ fn main() -> std::io::Result<()> {
         let amsfile = AmsdosFile::from_buffer(&content);
         let header = amsfile.header();
         println!("{:?}", header);
-    }
-    else {
+    } else {
         // In this branch, we build the file with its header
 
         // Get the type of file
@@ -138,8 +132,6 @@ fn main() -> std::io::Result<()> {
                 _ => unreachable!(),
             }
         };
-
-
 
         // Build the header according to the given options
         let header = match ftype {

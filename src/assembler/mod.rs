@@ -16,7 +16,10 @@ pub enum AssemblerError {
     #[fail(display = "Assembling bug: {}", msg)]
     BugInAssembler { msg: String },
     #[fail(display = "Parser bug: {}. Context: {:?}", error, context)]
-    BugInParser { error: String, context: ParserContext},
+    BugInParser {
+        error: String,
+        context: ParserContext,
+    },
 
     // TODO add more information
     #[fail(display = "Syntax error: {}", error)]
@@ -81,7 +84,7 @@ impl Default for AssemblingOptions {
     fn default() -> AssemblingOptions {
         AssemblingOptions {
             case_sensitive: true,
-            symbols: Default::default()
+            symbols: Default::default(),
         }
     }
 }
@@ -123,8 +126,6 @@ impl AssemblingOptions {
     pub fn case_sensitive(&self) -> bool {
         self.case_sensitive
     }
-
-
 }
 
 /// Assemble a piece of code and returns the associated list of bytes

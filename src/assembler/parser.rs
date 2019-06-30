@@ -5,7 +5,7 @@ use nom::{
 };
 use nom::{InputIter, InputLength};
 
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
 use crate::assembler::tokens::*;
 use crate::assembler::AssemblerError;
@@ -93,7 +93,7 @@ pub fn parse_str_with_context(code: &str, ctx: &ParserContext) -> Result<Listing
                         "Bug in the parser. The remaining source has not been assembled:\n{}",
                         remaining
                     ),
-                    context: ctx.clone()
+                    context: ctx.clone(),
                 })
             } else {
                 for token in parsed.listing_mut().iter_mut() {
@@ -467,27 +467,26 @@ named!(
 named!(
     parse_incbin<CompleteStr<'_>, Token>,
     do_parse!(
-        transformation: alt!(
-            tag_no_case!("INCBIN") => {|_| {BinaryTransformation::None}} |
-            tag_no_case!("INCEXO") => {|_| {BinaryTransformation::Exomizer}}
-        )
+        transformation:
+            alt!(
+                tag_no_case!("INCBIN") => {|_| {BinaryTransformation::None}} |
+                tag_no_case!("INCEXO") => {|_| {BinaryTransformation::Exomizer}}
+            )
             >> space1
             >> fname:
                 alt!(
                     preceded!(tag!("\""), take_until_and_consume1!("\""))
                         | preceded!(tag!("'"), take_until_and_consume1!("'"))
                 )
-            >> (
-                Token::Incbin(
-                    fname.to_string(), 
-                    None, 
-                    None, 
-                    None, 
-                    None, 
-                    None, 
-                    transformation
-                )
-            )
+            >> (Token::Incbin(
+                fname.to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                transformation
+            ))
     )
 );
 
@@ -500,7 +499,7 @@ named!(
     parse_token<CompleteStr<'_>, Token>,
     alt_complete!(
         parse_ex_af
-        | parse_ex_hl_de
+            | parse_ex_hl_de
             | parse_logical_operator
             | parse_add_or_adc
             | parse_cp
@@ -532,7 +531,6 @@ named!(
     )
 );
 
-
 named!(
     parse_ex_hl_de<CompleteStr<'_>, Token>,
     do_parse!(
@@ -543,7 +541,7 @@ named!(
             >> char!(',')
             >> space0
             >> tag_no_case!("DE")
-            >> (Token::OpCode(Mnemonic::ExHlDe, None, None))        
+            >> (Token::OpCode(Mnemonic::ExHlDe, None, None))
     )
 );
 
@@ -574,7 +572,6 @@ named!(
         value!(Token::NoList, tag_no_case!("nolist"))
     )
 );
-
 
 const IF_CODE: u8 = 0;
 const IFNOT_CODE: u8 = 1;
@@ -837,7 +834,6 @@ named!(
     })
   )
 );
-
 
 named!(
     pub parse_macro_call <CompleteStr<'_>, Token>, do_parse!(
@@ -1487,7 +1483,6 @@ named!(
 // Usefull later for db
 named!(pub string_between_quotes<CompleteStr<'_>, CompleteStr<'_>>, delimited!(char!('\"'), is_not!("\""), char!('\"')));
 
-
 named!(
     pub string_expr<CompleteStr<'_>, Expr>,
     map!(
@@ -1833,7 +1828,6 @@ pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr<'_>>) -> Strin
 
     error_string
 }
-
 
 impl FromStr for Listing {
     type Err = AssemblerError;

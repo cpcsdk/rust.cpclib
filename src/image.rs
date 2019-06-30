@@ -216,27 +216,26 @@ impl ColorMatrix {
 
     /// Build a vector of Inks that contains all the inks of the given column
     pub fn get_column(&self, x: usize) -> Vec<Ink> {
-        self.data.iter()
-            .map(|line|{&line[x]})
-            .map(|ref_ink|{ref_ink.clone()})
+        self.data
+            .iter()
+            .map(|line| &line[x])
+            .map(|ref_ink| ref_ink.clone())
             .collect::<Vec<Ink>>()
     }
 
     /// Return a copy of the inks for the given window definition
-    pub fn window(&self, start_x: usize, start_y: usize, width: usize, height:usize) -> Self {
-
-        let selected_lines = &self.data[start_y..start_y+height];
-        let window = selected_lines.iter()
-                            .map(|line|{&line[start_x..start_x+width]})
-                            .map(|line|{
-                                let mut new_line = Vec::with_capacity(line.len());
-                                new_line.extend_from_slice(line);
-                                new_line
-                            })
-                            .collect();
-        Self{
-            data: window
-        }
+    pub fn window(&self, start_x: usize, start_y: usize, width: usize, height: usize) -> Self {
+        let selected_lines = &self.data[start_y..start_y + height];
+        let window = selected_lines
+            .iter()
+            .map(|line| &line[start_x..start_x + width])
+            .map(|line| {
+                let mut new_line = Vec::with_capacity(line.len());
+                new_line.extend_from_slice(line);
+                new_line
+            })
+            .collect();
+        Self { data: window }
     }
 
     /// Return the number of different inks in the image
@@ -259,24 +258,22 @@ impl ColorMatrix {
 
     /// Modify the image in order to keep the right amount of inks
     pub fn reduce_colors_for_mode(&mut self, mode: Mode) {
-
         // Get the reduced palette
         let inks = flatten(self.data.iter())
-                        .unique()
-                        .map(|&i|{i})
-                        .collect::<Vec<Ink>>();
+            .unique()
+            .map(|&i| i)
+            .collect::<Vec<Ink>>();
         let max_count = mode.max_colors().min(inks.len());
         let inks = &inks[..max_count];
 
         // Replace all wrong inks by first possible ink
         for y in 0..(self.height() as usize) {
             for x in 0..(self.width() as usize) {
-                if ! inks.contains(&self.data[y][x]) {
+                if !inks.contains(&self.data[y][x]) {
                     self.data[y][x] = inks[0];
                 }
             }
         }
-
     }
 
     /// Get the width (in bytes) of the image

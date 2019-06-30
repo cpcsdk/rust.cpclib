@@ -1,8 +1,7 @@
-
 ///! Utility code to build more easily tokens to manipulate in code generators
 use crate::assembler::tokens::*;
-use paste;
 use casey::{camel, lower, shouty, snake, upper};
+use paste;
 
 pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {
     Token::Equ(label.as_ref().to_owned(), expr.into())
@@ -160,10 +159,10 @@ macro_rules! ld_r16_expr {
 }
 
 // TODO remove these extra uneeded arguments
-ld_r16_expr!{
-    Af,af 
-    Bc,bc 
-    De,de 
+ld_r16_expr! {
+    Af,af
+    Bc,bc
+    De,de
     Hl,hl
 }
 
@@ -176,8 +175,6 @@ pub fn ld_de_expr(val: Expr) -> Token {
     )
 }
 */
-
-
 
 pub fn ld_d_mem_hl() -> Token {
     ld_register8_mem_hl(Register8::D)
@@ -243,7 +240,6 @@ pub fn lddr() -> Token {
     token_for_opcode_no_arg(Mnemonic::Lddr)
 }
 
-
 pub fn res_d(bit: u8) -> Token {
     res_reg_pos(Register8::D, bit)
 }
@@ -253,21 +249,12 @@ pub fn set_d(bit: u8) -> Token {
 }
 
 pub fn res_reg_pos(reg: Register8, bit: u8) -> Token {
-    token_for_opcode_two_args(
-        Mnemonic::Res,
-        bit.into(),
-        reg.into()
-    )
+    token_for_opcode_two_args(Mnemonic::Res, bit.into(), reg.into())
 }
 
 pub fn set_reg_pos(reg: Register8, bit: u8) -> Token {
-    token_for_opcode_two_args(
-        Mnemonic::Set,
-        bit.into(),
-        reg.into()
-    )
+    token_for_opcode_two_args(Mnemonic::Set, bit.into(), reg.into())
 }
-
 
 /// Build a token that represents a mnemonic without any argument
 pub fn token_for_opcode_no_arg(mne: Mnemonic) -> Token {

@@ -1,7 +1,7 @@
 use crate::assembler::tokens::*;
 use num::integer::Integer;
-use num::One;
 use num::traits::{WrappingAdd, WrappingSub};
+use num::One;
 use std::fmt;
 use std::fmt::Debug;
 ///! Manage z80 CPU
@@ -68,12 +68,12 @@ impl HasValue for Register8 {
 
 impl Register8 {
     pub fn res_bit(&mut self, bit: u8) {
-        let new = self.value() & (!(1<<bit));
+        let new = self.value() & (!(1 << bit));
         self.set(new);
     }
 
     pub fn set_bit(&mut self, bit: u8) {
-        let new =self.value() | (1<<bit);
+        let new = self.value() | (1 << bit);
         self.set(new);
     }
 }
@@ -102,7 +102,6 @@ impl HasValue for Register16 {
         self.low_mut().set((value % 256) as _);
         self.high_mut().set((value / 256) as _);
     }
-
 }
 
 impl Register16 {
@@ -341,8 +340,6 @@ impl Z80 {
             Some(DataAccess::Register8(from)),
         ));
     }
-
-
 }
 
 #[cfg(test)]
@@ -411,15 +408,21 @@ mod tests {
         z80.ex_af_af_prime();
         assert_eq!(z80.a().value(), 0x45);
 
-        z80.a_mut().set(0);assert_eq!(0, z80.a().value());
-        z80.a_mut().add(1);assert_eq!(1, z80.a().value());
+        z80.a_mut().set(0);
+        assert_eq!(0, z80.a().value());
+        z80.a_mut().add(1);
+        assert_eq!(1, z80.a().value());
 
-
-        z80.a_mut().set(0);assert_eq!(0, z80.a().value());
-        z80.a_mut().inc(); assert_eq!(1, z80.a().value());
-        z80.a_mut().dec(); assert_eq!(0, z80.a().value());
-        z80.a_mut().dec(); assert_eq!(0xff, z80.a().value());
-        z80.a_mut().inc(); assert_eq!(0, z80.a().value());
+        z80.a_mut().set(0);
+        assert_eq!(0, z80.a().value());
+        z80.a_mut().inc();
+        assert_eq!(1, z80.a().value());
+        z80.a_mut().dec();
+        assert_eq!(0, z80.a().value());
+        z80.a_mut().dec();
+        assert_eq!(0xff, z80.a().value());
+        z80.a_mut().inc();
+        assert_eq!(0, z80.a().value());
     }
 
     #[test]

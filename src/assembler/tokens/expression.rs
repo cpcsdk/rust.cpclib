@@ -6,8 +6,6 @@ use crate::assembler::tokens::listing::ListingElement;
 use crate::assembler::tokens::Token;
 use crate::assembler::AssemblerError;
 
-
-
 /// Expression nodes.
 #[derive(PartialEq, Eq, Clone)]
 pub enum Expr {

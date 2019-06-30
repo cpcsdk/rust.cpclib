@@ -3,7 +3,6 @@ extern crate bitsets;
 use num_enum::TryFromPrimitive;
 use std::convert::TryInto;
 
-
 use std::io::prelude::*;
 
 use std::path::Path;
@@ -215,8 +214,13 @@ fn main() {
     }
 
     let fname = matches.value_of("OUTPUT").unwrap();
-    let version = matches.value_of("version").unwrap()
-                        .parse::<u8>().unwrap()
-                        .try_into().unwrap();
-    sna.save(&fname, version).expect("Unable to save the snapshot");
+    let version = matches
+        .value_of("version")
+        .unwrap()
+        .parse::<u8>()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    sna.save(&fname, version)
+        .expect("Unable to save the snapshot");
 }

@@ -4,8 +4,7 @@
 #![feature(type_ascription)]
 #![feature(custom_attribute)]
 #![feature(proc_macro_hygiene)]
-#![feature(vec_drain_as_slice)] 
-
+#![feature(vec_drain_as_slice)]
 // Notes for later when clippy will work:
 // https://rust-lang.github.io/rust-clippy/master/index.html#identity_op must be deactivated
 
@@ -21,7 +20,7 @@
 //!
 //! Why releasing it publicly whereas no-one else will use it ? ;) Just because it is simpler to manage public crates with cargo. There is nothing secret here, and I welcome any contribution.
 
-#![recursion_limit="512"]
+#![recursion_limit = "512"]
 
 #[macro_use]
 extern crate bitfield;
@@ -40,7 +39,6 @@ extern crate arrayref;
 
 #[macro_use]
 extern crate serde_derive;
-
 
 #[macro_use]
 extern crate dbg;

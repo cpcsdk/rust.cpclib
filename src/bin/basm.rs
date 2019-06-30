@@ -1,12 +1,10 @@
 extern crate bitsets;
 
-
 use std::fs::File;
 use std::io;
 
 use std::io::{Read, Write};
 use std::path::Path;
-
 
 use cpclib::assembler::assembler::Env;
 use cpclib::assembler::parser::*;
@@ -28,8 +26,6 @@ extern crate time;
 #[macro_use]
 extern crate failure;
 
-
-
 #[derive(Debug, Fail)]
 enum BasmError {
     #[fail(display = "IO error: {}", io)]
@@ -42,11 +38,10 @@ enum BasmError {
     InvalidAmsdosFilename { filename: String },
 
     #[fail(display = "{} is not a valid directory.", path)]
-    NotAValidDirectory{path: String},
+    NotAValidDirectory { path: String },
 
     #[fail(display = "{} is not a valid file.", file)]
-    NotAValidFile{file: String},
-
+    NotAValidFile { file: String },
 }
 
 // XXX I do not understand why I have to do that !!!
@@ -80,7 +75,9 @@ fn parse(matches: &ArgMatches) -> Result<Listing, BasmError> {
     if let Some(directories) = matches.values_of("INCLUDE_DIRECTORIES") {
         for directory in directories {
             if !Path::new(directory).is_dir() {
-                return Err(BasmError::NotAValidDirectory{path: directory.to_owned()});
+                return Err(BasmError::NotAValidDirectory {
+                    path: directory.to_owned(),
+                });
             }
             context.add_search_path(directory);
         }
@@ -100,7 +97,9 @@ fn assemble(matches: &ArgMatches, listing: &Listing) -> Result<Env, BasmError> {
     if let Some(files) = matches.values_of("LOAD_SYMBOLS") {
         for file in files {
             if !Path::new(file).is_file() {
-                return Err(BasmError::NotAValidFile{file: file.to_owned()})
+                return Err(BasmError::NotAValidFile {
+                    file: file.to_owned(),
+                });
             }
         }
     }
@@ -229,6 +228,6 @@ fn main() {
 							.args(&["BINARY_HEADER", "BASIC_HEADER"])
 					)
 					.get_matches();
-                    
+
     process(&matches).expect("Error while assembling file.");
 }

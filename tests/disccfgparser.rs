@@ -4,7 +4,7 @@ extern crate pretty_assertions;
 
 #[cfg(test)]
 mod tests {
-use std::str::FromStr;
+    use std::str::FromStr;
 
     const DOUBLE_SIDED: &str = "NbTrack = 80
 NbHead = 2
@@ -221,8 +221,6 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 
     #[test]
     fn dsk_to_cfg() {
-        
-
         let cfg = cpclib::disc::cfg::DiscConfig::from_str(SINGLE_SIDED).unwrap();
 
         let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
@@ -232,7 +230,6 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);
-
     }
 
     #[test]
@@ -290,7 +287,9 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 
     #[test]
     fn arkos_disc() {
-        let cfg = cpclib::disc::cfg::DiscConfig::from_str(include_str!("dsk/CreateDoubleSided_3_5i.cfg")).unwrap();
+        let cfg =
+            cpclib::disc::cfg::DiscConfig::from_str(include_str!("dsk/CreateDoubleSided_3_5i.cfg"))
+                .unwrap();
 
         assert!(cfg
             .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 0)
@@ -312,14 +311,12 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
             .track_information_for_track(cpclib::disc::edsk::Head::HeadB, 80)
             .is_none());
 
-
         for idx in cfg.track_idx_iterator() {
             let _track = cfg
                 .track_information_for_track(*idx.0, idx.1)
                 .expect(&format!("Unable to get information for {:?}", idx));
             println!("{:?}", idx);
         }
-
 
         let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
 
@@ -339,7 +336,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         let track_info = dbg!(cfg.track_information_for_track(3, 18).unwrap());
         assert_eq!(track_info.sector_size_human_readable(), 512);
         assert_eq!(track_info.gap3(), 0x30);
-        assert_eq!(track_info.nb_sectors(),10);
+        assert_eq!(track_info.nb_sectors(), 10);
         assert_eq!(track_info.sector_id_at(0), 0xb4);
         assert_eq!(track_info.sector_id_at(9), 0xb3);
 
@@ -347,30 +344,30 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         let track_info = dbg!(cfgb.track_information_for_track(3, 18).unwrap());
         assert_eq!(track_info.sector_size_human_readable(), 512);
         assert_eq!(track_info.gap3(), 0x30);
-        assert_eq!(track_info.nb_sectors(),10);
+        assert_eq!(track_info.nb_sectors(), 10);
         assert_eq!(track_info.sector_id_at(0), 0xb4);
         assert_eq!(track_info.sector_id_at(9), 0xb3);
-/*
-// This comment code compare the result with the one of Ramlaid.
-// It fails, but I'm not sure the error comes from us
-        let dsk2 = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/SingleSided_3i.dsk").unwrap();
+        /*
+        // This comment code compare the result with the one of Ramlaid.
+        // It fails, but I'm not sure the error comes from us
+                let dsk2 = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/SingleSided_3i.dsk").unwrap();
 
-        dbg!(&dsk2);
-        let cfg2 = dsk2.to_cfg();
+                dbg!(&dsk2);
+                let cfg2 = dsk2.to_cfg();
 
-        let track_info = dbg!(cfg2.track_information_for_track(3, 18).unwrap());
-        assert_eq!(track_info.sector_size_human_readable(), 512);
-        assert_eq!(track_info.gap3(), 0x30);
-        assert_eq!(track_info.nb_sectors(),10);
-        assert_eq!(track_info.sector_id_at(0), 0xb4);
-        assert_eq!(track_info.sector_id_at(9), 0xb3);
+                let track_info = dbg!(cfg2.track_information_for_track(3, 18).unwrap());
+                assert_eq!(track_info.sector_size_human_readable(), 512);
+                assert_eq!(track_info.gap3(), 0x30);
+                assert_eq!(track_info.nb_sectors(),10);
+                assert_eq!(track_info.sector_id_at(0), 0xb4);
+                assert_eq!(track_info.sector_id_at(9), 0xb3);
 
-        assert_eq!(
-            cfg.explode(),
-            cfg2.explode()
-        );
+                assert_eq!(
+                    cfg.explode(),
+                    cfg2.explode()
+                );
 
-*/
+        */
         let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);
@@ -428,7 +425,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         let catalog = amsdos.catalog();
         let nb_entries = catalog.used_entries().count();
         assert_eq!(0, nb_entries);
-/*
+        /*
         let dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
         assert_eq!(dsk, dsk2)
         */

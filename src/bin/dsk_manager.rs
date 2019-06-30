@@ -12,7 +12,7 @@ use cpclib::disc::edsk::{ExtendedDsk, Head};
 
 use custom_error::custom_error;
 
-custom_error!{pub DskManagerError
+custom_error! {pub DskManagerError
     IOError{source: std::io::Error} = "IO error: {source}.",
     DiscConfigError{source: cpclib::disc::cfg::DiscConfigError} = "Disc configuration: {source}"
 }

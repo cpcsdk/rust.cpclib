@@ -4,13 +4,10 @@ use curl::easy::{Easy, Form};
 use curl::Error;
 use path_absolutize::*;
 
-
-
 use std::fs;
 
 use std::io::prelude::*;
 use std::path::Path;
-
 
 extern crate custom_error;
 use custom_error::custom_error;
@@ -228,8 +225,7 @@ impl CpcXfer {
 
     /// Directly sends the SNA to the M4. SNA is first saved as a V2 version as M4 is unable to read other ones
     pub fn upload_and_run_sna(&self, sna: &crate::sna::Snapshot) -> Result<(), XferError> {
-        let file = tempfile::NamedTempFile::new()
-                                .expect("Unable to build a temporary file");
+        let file = tempfile::NamedTempFile::new().expect("Unable to build a temporary file");
         let path = file.into_temp_path();
         let path = path.to_str().unwrap();
         sna.save(path, crate::sna::SnapshotVersion::V2)
@@ -254,7 +250,6 @@ impl CpcXfer {
         path: &Path,
         header: Option<(AmsdosFileType, u16, u16)>,
     ) -> Result<(), XferError> {
-
         // We are sure it is not a snapshot there
         self.upload_impl(path, "/tmp", header)?;
         self.run(&format!(
