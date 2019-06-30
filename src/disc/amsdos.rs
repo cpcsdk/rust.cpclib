@@ -912,23 +912,41 @@ impl AmsdosEntries {
     }
 }
 
+#[allow(unused)]
 const DIRECTORY_SIZE: usize = 64;
+#[allow(unused)]
 const DATA_SECTORS: [u8; 9] = [0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9];
+#[allow(unused)]
 const DATA_NB_RECORDS_PER_TRACK: u8 = 36;
+#[allow(unused)]
 const DATA_BLOCK_SHIFT: u8 = 3;
+#[allow(unused)]
 const DATA_BLOCK_MASK: u8 = 7;
+#[allow(unused)]
 const DATA_EXTENT_MASK: u8 = 0;
+#[allow(unused)]
 const DATA_NB_BLOCKS: u8 = 180;
+#[allow(unused)]
 const DATA_TWO_DIRECTORY_BLOCKS: u8 = 0x00c0;
+#[allow(unused)]
 const DATA_SIZE_OF_CHECKSUM_VECTOR: u8 = 16;
+#[allow(unused)]
 const DATA_RESERVED_TRACK: u8 = 0;
+#[allow(unused)]
 const DATA_FIRST_SECTOR_NUMBER: u8 = DATA_SECTORS[0];
+#[allow(unused)]
 const DATA_SECTORS_PER_TRACK: u8 = 9;
+#[allow(unused)]
 const DATA_GAP_LENGTH_READ_WRITE: u8 = 42;
+#[allow(unused)]
 const DATA_GAP_LENGTH_FORMAT: u8 = 82;
+#[allow(unused)]
 const DATA_FILLER_BYTE: u8 = 0xe9;
+#[allow(unused)]
 const DATA_LOG2_SECTOR_SIZE_MINUS_SEVEN: u8 = 2;
+#[allow(unused)]
 const DATA_RECORDS_PER_TRACK: u8 = 4;
+#[allow(unused)]
 const DATA_SECTOR_SIZE: usize = 512;
 
 /// Minimal information needed to access to twe two sectors of a given bloc

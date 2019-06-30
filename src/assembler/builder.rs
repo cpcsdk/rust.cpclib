@@ -1,6 +1,5 @@
 ///! Utility code to build more easily tokens to manipulate in code generators
 use crate::assembler::tokens::*;
-use casey::{camel, lower, shouty, snake, upper};
 use paste;
 
 #[allow(missing_docs)] pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {

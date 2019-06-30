@@ -4,7 +4,7 @@ use nom::named_attr;
 use nom::types::CompleteStr;
 use nom::InputIter;
 use nom::InputLength;
-use nom::{eol, line_ending, space, space0, space1, Err, ErrorKind, IResult};
+use nom::{line_ending, ErrorKind, IResult};
 use nom::*;
 
 
@@ -12,8 +12,7 @@ use crate::basic::tokens::*;
 use crate::basic::{BasicLine, BasicProgram};
 
 
-	/// Parse complete basic program
-named_attr!(#[doc=" TODO"],
+named_attr!(#[doc=" Parse complete basic program"],
 	pub parse_basic_program<CompleteStr<'_>, BasicProgram>, do_parse!(
 		lines: fold_many0!(
 			parse_basic_inner_line,
@@ -36,8 +35,7 @@ named_attr!(#[doc=" TODO"],
 	)
 );
 
-	/// Parse a line
-named_attr!(#[doc=" TODO"],
+named_attr!(#[doc=" Parse a line"],
 	pub parse_basic_line<CompleteStr<'_>, BasicLine>, do_parse!(
 		line_number: dec_u16_inner >>
 		char!(' ') >> 
@@ -58,8 +56,7 @@ named_attr!(#[doc=" TODO"],
 	)
 );
 
-	/// Parse a line BUT expect an end of line char
-named_attr!(#[doc=" TODO"],
+named_attr!(#[doc=" Parse a line BUT expect an end of line char"],
 	pub parse_basic_inner_line<CompleteStr<'_>, BasicLine>, do_parse!(
 		line: parse_basic_line >>
 		line_ending >>
@@ -69,8 +66,7 @@ named_attr!(#[doc=" TODO"],
 	)
 );
 
-	/// Parse any token
-named_attr!(#[doc=" TODO"],
+named_attr!(#[doc=" Parse any token"],
 	pub parse_token<CompleteStr<'_>, BasicToken>, alt!(
 		parse_rem |
 		parse_simple_instruction |
@@ -80,8 +76,7 @@ named_attr!(#[doc=" TODO"],
 	)
 );
 
-	/// Parse a comment
-named_attr!(#[doc=" TODO"],
+named_attr!(#[doc=" Parse a comment"],
 	pub parse_rem<CompleteStr<'_>, BasicToken>, do_parse!(
 		sym: alt!(
 			tag_no_case!("REM") => 
@@ -96,9 +91,8 @@ named_attr!(#[doc=" TODO"],
 	)
 );
 
-	/// Parse the instructions that do not need a prefix byte
-	/// TODO Add all the other variants
-named_attr!(#[doc=" TODO"],
+named_attr!(#[doc=" Parse the instructions that do not need a prefix byte
+	/// TODO Add all the other variants"],
 	pub parse_simple_instruction<CompleteStr<'_>, BasicToken>, do_parse!(
 		token: alt!(
 			tag_no_case!("CALL") => {|_| BasicTokenNoPrefix::Call} |
@@ -111,8 +105,7 @@ named_attr!(#[doc=" TODO"],
 	)
 );
 
-	/// TODO add the missing chars
-named_attr!(#[doc=" TODO"],
+named_attr!(#[doc=" TODO add the missing chars"],
 	pub parse_char<CompleteStr<'_>, BasicToken>, do_parse!(
 		token: alt!(
 			char!(':') => {|_| BasicTokenNoPrefix::StatementSeparator} |
@@ -178,9 +171,8 @@ named_attr!(#[doc=" TODO"],
 	)
 );
 
-/// Parse the instructions that do not need a prefix byte
-/// TODO Add all the other instructions
-named_attr!(#[doc=" TODO"],
+named_attr!(#[doc=" Parse the instructions that do not need a prefix byte
+/// TODO Add all the other instructions"],
 	pub parse_prefixed_instruction<CompleteStr<'_>, BasicToken>, do_parse!(
 		token: alt!(
 			tag_no_case!("ABS") => {|_| BasicTokenPrefixed::Abs}
@@ -191,16 +183,14 @@ named_attr!(#[doc=" TODO"],
 	)
 );
 
-	/// Parse a basic value
-named_attr!(#[doc=" TODO"],
+named_attr!(#[doc=" Parse a basic value"],
 	pub parse_basic_value<CompleteStr<'_>, BasicToken>, alt!(
 		parse_hexadecimal_value_16bits |
 		parse_decimal_value_16bits
 	)
 );
-	/// Parse an hexadecimal value
 
-named_attr!(#[doc=" TODO"],
+named_attr!(#[doc=" Parse an hexadecimal value"],
     pub parse_hexadecimal_value_16bits<CompleteStr<'_>, BasicToken>, do_parse!(
         tag_no_case!( "&") >>
         val: hex_u16_inner >>

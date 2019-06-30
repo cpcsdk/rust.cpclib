@@ -2,7 +2,6 @@ use num_enum::IntoPrimitive;
 use std::fmt;
 
 use num_enum::TryFromPrimitive;
-use std::convert::TryInto;
 
 #[derive(IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Debug)]
 #[repr(u8)]

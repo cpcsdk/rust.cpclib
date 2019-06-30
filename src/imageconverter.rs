@@ -545,6 +545,7 @@ impl LineCounter for StandardLineCounter {
 #[allow(missing_docs)]
 impl GrayCodeLineCounter {
     const GRAYCODE_INDEX_TO_SCREEN_INDEX: [u8; 8] = [0, 1, 3, 2, 6, 7, 5, 4];
+    #[allow(unused)]
     const SCREEN_INDEX_TO_GRAYCODE_INDEX: [u8; 8] = [0, 1, 3, 2, 7, 6, 4, 5];
 
     pub fn new() -> Self {
@@ -625,7 +626,7 @@ impl TileVerticalCapture {
         }
     }
 
-    pub fn counter_with_context(&self, screen_height: usize) -> Box<dyn LineCounter> {
+    pub fn counter_with_context(&self, _screen_height: usize) -> Box<dyn LineCounter> {
         unimplemented!("TODO once someone will code it")
     }
 }
@@ -712,10 +713,8 @@ impl Debug for Output {
             &Output::TilesList {
                 ref tile_height,
                 ref tile_width,
-                ref horizontal_movement,
-                ref vertical_movement,
-                ref palette,
                 ref list,
+                ..
             } => writeln!(
                 fmt,
                 "{} tiles of {}x{}",
@@ -931,7 +930,7 @@ impl<'a> ImageConverter<'a> {
                 let mut y_counter = vertical_movement.counter();
                 let mut x_counter = horizontal_movement.counter();
                 let mut current_tile: Vec<u8> = Vec::new();
-                for y in 0..tile_height {
+                for _y in 0..tile_height {
                     for x in 0..tile_width {
                         // Get the line of interest
                         let real_line =

@@ -71,6 +71,7 @@ impl fmt::Display for AssemblingPass {
 }
 
 #[allow(missing_docs)]
+#[allow(unused)]
 impl AssemblingPass {
     fn is_uninitialized(&self) -> bool {
         match self {
@@ -947,7 +948,7 @@ impl Env {
         // build the basic tokens
         let mut basic = BasicProgram::parse(basic_src)?;
         if hidden_lines.is_some() {
-            basic.hide_lines(hidden_lines.unwrap());
+            basic.hide_lines(hidden_lines.unwrap())?;
         }
         Ok(basic.as_bytes())
     }
@@ -1142,7 +1143,6 @@ pub fn assemble_opcode(
         Mnemonic::Sla | Mnemonic::Sra | Mnemonic::Srl => {
             env.assemble_shift(mnemonic, arg1.as_ref().unwrap())
         }
-        _ => Err(format!("Unable to assemble opcode {:?}", mnemonic).into()),
     }
 }
 

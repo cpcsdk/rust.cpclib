@@ -272,8 +272,7 @@ named_attr!(#[doc="TODO"],
     )
 );
 
-/// Parse a Basic bloc.
-named_attr!(#[doc="TODO"],
+named_attr!(#[doc="Parse a Basic bloc"],
     pub parse_basic<CompleteStr<'_>, Token>, do_parse!(
         opt!(multispace) >>
         tag_no_case!("LOCOMOTIVE") >>
@@ -406,11 +405,10 @@ named_attr!(#[doc="TODO"],
         )
     );
 
-/**
- * No opcodes are expected there.
- * Initially it was supposed to manage lines with only labels, however it has been extended
- * to labels fallowed by specific commands.
- */
+
+// No opcodes are expected there.
+// Initially it was supposed to manage lines with only labels, however it has been extended
+// to labels fallowed by specific commands.
 named_attr!(#[doc="TODO"],
        pub parse_z80_line_label_only <CompleteStr<'_>, Vec<Token>>, do_parse!(
         opt!(line_ending) >>
@@ -468,8 +466,8 @@ named_attr!(#[doc="TODO"],
     )
 );
 
-/// TODO add the missing optional parameters
-named_attr!(#[doc="TODO"],
+
+named_attr!(#[doc="TODO add the missing optional parameters"],
     parse_incbin<CompleteStr<'_>, Token>,
     do_parse!(
         transformation:
@@ -583,9 +581,8 @@ const IFNOT_CODE: u8 = 1;
 const IFDEF_CODE: u8 = 2;
 const IFNDEF_CODE: u8 = 4;
 
-/// Parse if expression.
-/// TODO finish the implementation in order to have ELSEIF and ELSE branches
-named_attr!(#[doc="TODO"],
+
+named_attr!(#[doc="Parse if expression.TODO finish the implementation in order to have ELSEIF and ELSE branches"],
     pub parse_conditional<CompleteStr<'_>, Token>, do_parse!(
 
         // Gest the kind of test to do
@@ -936,8 +933,8 @@ named_attr!(#[doc="TODO"],
     )
 );
 
-/// TODO treat all the cases
-named_attr!(#[doc="TODO"],
+
+named_attr!(#[doc="TODO treat all the cases"],
     pub parse_logical_operator<CompleteStr<'_>, Token>, do_parse!(
         operator: alt_complete!(
             value!(Mnemonic::And, tag_no_case!("AND")) |
@@ -1174,9 +1171,9 @@ named_attr!(#[doc="TODO"],// TODO manage other out formats
     )
 );
 
-/// TODO remove multispace
-/// TODO reduce the flag space for jr
-named_attr!(#[doc="TODO"],
+
+named_attr!(#[doc="TODO remove multispace
+ TODO reduce the flag space for jr"],
     parse_call_jp_or_jr<CompleteStr<'_>, Token>,
     do_parse!(
         call_jp_or_jr:
@@ -1340,8 +1337,8 @@ named_attr!(#[doc="TODO"],
     )
 );
 
-/// Parse the use of an indexed register as (IX + 5)
-named_attr!(#[doc="TODO"],
+
+named_attr!(#[doc="Parse the use of an indexed register as (IX + 5)"],
     parse_indexregister_with_index<CompleteStr<'_>, DataAccess>,
     do_parse!(
         tag!("(")
@@ -1360,8 +1357,8 @@ named_attr!(#[doc="TODO"],
     )
 );
 
-/// Parse an address access `(expression)`
-named_attr!(#[doc="TODO"],
+
+named_attr!(#[doc="Parse an address access `(expression)`"],
     pub parse_address <CompleteStr<'_>, DataAccess>,
     do_parse!(
         tag!("(") >>
@@ -1374,8 +1371,8 @@ named_attr!(#[doc="TODO"],
 
 );
 
-/// Parse (R16)
-named_attr!(#[doc="TODO"],
+
+named_attr!(#[doc="Parse (R16)"],
     pub parse_reg_address <CompleteStr<'_>, DataAccess>,
     do_parse!(
         tag!("(") >>
@@ -1390,8 +1387,8 @@ named_attr!(#[doc="TODO"],
 
 );
 
-/// Parse (HL)
-named_attr!(#[doc="TODO"],
+
+named_attr!(#[doc="Parse (HL)"],
     pub parse_hl_address<CompleteStr<'_>, DataAccess>,
     do_parse!(
         tag!("(") >>
@@ -1405,8 +1402,7 @@ named_attr!(#[doc="TODO"],
     )
 );
 
-/// Parse and expression and returns it inside a DataAccession::Expression
-named_attr!(#[doc="TODO"],
+named_attr!(#[doc="Parse and expression and returns it inside a DataAccession::Expression"],
     pub parse_expr <CompleteStr<'_>, DataAccess>,
     do_parse!(
         expr: expr >>
@@ -1476,8 +1472,8 @@ named_attr!(#[doc="TODO"],
         )
     );
 
-/// Parse a comment that start by `;` and ends at the end of the line.
-named_attr!(#[doc="TODO"],
+
+named_attr!(#[doc="Parse a comment that start by `;` and ends at the end of the line."],
     comment<CompleteStr<'_>, Token>,
     map!(
         preceded!(tag!(";"), take_till!(|ch| ch == '\n')),
@@ -1791,9 +1787,8 @@ named_attr!(#[doc="TODO"],pub comp<CompleteStr<'_>, Expr>, do_parse!(
 
 /// Generate a string from a parsing error. Probably deprecated
 pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr<'_>>) -> String {
-    use nom::InputLength;
 
-    let mut error_string;
+    let error_string;
 
     if let ::nom::Err::Failure(::nom::simple_errors::Context::Code(
         remaining,
