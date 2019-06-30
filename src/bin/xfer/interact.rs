@@ -1,12 +1,9 @@
 use cpclib::xfer::CpcXfer;
 extern crate rustyline;
 
-
 use rustyline::error::ReadlineError;
 
-
 use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, Helper, KeyPress};
-
 
 use crate::parser::{parse_command, XferCommand};
 

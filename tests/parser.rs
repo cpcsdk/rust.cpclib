@@ -5,8 +5,8 @@ extern crate matches;
 mod tests {
     use cpclib::assembler::parser::*;
     use cpclib::assembler::tokens::*;
-    use nom::types::{CompleteStr};
-    use nom::{IResult};
+    use nom::types::CompleteStr;
+    use nom::IResult;
 
     fn check_mnemonic(code: &str, mnemonic: Mnemonic) -> bool {
         match parse_org(CompleteStr(code)) {
@@ -599,15 +599,19 @@ mod tests {
 
     #[test]
     fn test_call_macro() {
-        let z80 = "MACRONAME"; assert!(dbg!(parse_macro_call(z80.into())).is_ok());
-        let z80 = "MACRONAME 1, 2, 3, TRUC"; assert!(parse_macro_call(z80.into()).is_ok());
-        let z80 = "MACRONAME (void)"; assert!(parse_macro_call(z80.into()).is_ok());
+        let z80 = "MACRONAME";
+        assert!(dbg!(parse_macro_call(z80.into())).is_ok());
+        let z80 = "MACRONAME 1, 2, 3, TRUC";
+        assert!(parse_macro_call(z80.into()).is_ok());
+        let z80 = "MACRONAME (void)";
+        assert!(parse_macro_call(z80.into()).is_ok());
 
-
-        let z80 = "LABEL MACRONAME"; assert!(dbg!(parse_z80_line(z80.into())).is_ok());
-        let z80 = "LABEL MACRONAME 1, 2, \"trois\""; assert!(dbg!(parse_z80_line(z80.into())).is_ok());
-        let z80 = "MACRONAME 1 2 3 "; assert!(dbg!(parse_z80_line(z80.into())).is_err());
-
+        let z80 = "LABEL MACRONAME";
+        assert!(dbg!(parse_z80_line(z80.into())).is_ok());
+        let z80 = "LABEL MACRONAME 1, 2, \"trois\"";
+        assert!(dbg!(parse_z80_line(z80.into())).is_ok());
+        let z80 = "MACRONAME 1 2 3 ";
+        assert!(dbg!(parse_z80_line(z80.into())).is_err());
     }
 
     #[test]
@@ -945,8 +949,6 @@ INC_H equ opcode(inc h)
             .into(),
         ));
 
-
-
         let code = CompleteStr(
             "\t	ifdef ENABLE_CATART_DISPLAY
 		call blabla
@@ -956,7 +958,10 @@ INC_H equ opcode(inc h)
         let _tokens = get_val(parse_z80_code(code));
 
         println!("{:?}", parse_label("crtc_display_catart_if_needed".into()));
-        println!("{:?}", parse_z80_code(" call crtc_display_catart_if_needed".into()));
+        println!(
+            "{:?}",
+            parse_z80_code(" call crtc_display_catart_if_needed".into())
+        );
 
         let code = CompleteStr(
             "\t	ifdef ENABLE_CATART_DISPLAY
@@ -966,7 +971,6 @@ INC_H equ opcode(inc h)
         );
         let _tokens = get_val(parse_z80_code(code));
 
-
         let code = CompleteStr(
             "\t	ifndef ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
@@ -974,8 +978,6 @@ INC_H equ opcode(inc h)
     ",
         );
         let _tokens = get_val(parse_z80_code(code));
-
-
 
         let code = CompleteStr(
             "\t	ifnot ENABLE_CATART_DISPLAY
@@ -1188,9 +1190,8 @@ INC_H equ opcode(inc h)
         let code = "\tRORG 1\n\tdb 5\n\tREND";
         let _tokens = get_val(parse_rorg(code.into()));
 
- let code = "\tRORG 1\n\tdb 5\n\tREND";
+        let code = "\tRORG 1\n\tdb 5\n\tREND";
         let _tokens = get_val(parse_rorg(code.into()));
-
     }
 
     #[test]
@@ -1305,35 +1306,36 @@ FDC_GetST3
         ));
     }
 
-
     #[test]
     fn r#macro() {
         get_val(parse_macro(
             "macro MYMACRO
-            endm".into()
+            endm"
+                .into(),
         ));
 
         get_val(parse_macro(
-        "    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
+            "    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
         ld bc, 0x7fc1
         out (c), c
         ld (go_back_main_memory_from_extra_memory+1), bc
     endm"
-        .into()));
-
-
-        get_val(parse_z80_code(
-            "macro MYMACRO
-            endm".into()
+                .into(),
         ));
 
         get_val(parse_z80_code(
-        "    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
+            "macro MYMACRO
+            endm"
+                .into(),
+        ));
+
+        get_val(parse_z80_code(
+            "    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
         ld bc, 0x7fc1
         out (c), c
         ld (go_back_main_memory_from_extra_memory+1), bc
     endm"
-        .into()));
-
+                .into(),
+        ));
     }
 }

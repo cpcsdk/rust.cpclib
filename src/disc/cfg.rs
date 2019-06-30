@@ -1,8 +1,8 @@
+use custom_error::custom_error;
 /// Parser of the disc configuraiton used by the Arkos Loader
 use nom;
 use nom::types::CompleteStr;
 use nom::{eol, hex_u32, space0, space1};
-use custom_error::custom_error;
 
 use itertools;
 use itertools::Itertools;
@@ -39,8 +39,7 @@ SectorID = 0xc1,0xc6,0xc2,0xc7,0xc3,0xc8,0xc4,0xc9,0xc5
 sectorIDHead = 0,0,0,0,0,0,0,0,0
 ";
 
-
-custom_error!{pub DiscConfigError
+custom_error! {pub DiscConfigError
     IOError{source: std::io::Error} = "IO error: {source}.",
     ParseError{msg: String}            = "Parse error: {msg}"
 }
@@ -56,32 +55,31 @@ pub struct DiscConfig {
     pub(crate) track_groups: Vec<TrackGroup>,
 }
 
-impl FromStr for DiscConfig { 
+impl FromStr for DiscConfig {
     type Err = DiscConfigError;
 
     /// Generates the configuration from a &str. Panic in case of failure.
     /// The format corresponds to cpctools format from Ramlaid/Mortel.
     fn from_str(config: &str) -> Result<DiscConfig, Self::Err> {
-
         match parse_config(config.into()) {
             Ok((next, res)) => {
                 if next.trim().len() != 0 {
-                    Err(DiscConfigError::ParseError{
-                            msg:format!("Bug in the parser, there is still content to parse: {}", next)
-                        }
-                    )
-                }
-                else {
+                    Err(DiscConfigError::ParseError {
+                        msg: format!(
+                            "Bug in the parser, there is still content to parse: {}",
+                            next
+                        ),
+                    })
+                } else {
                     Ok(res)
                 }
-            },
-            Err(error) => {
-                Err(DiscConfigError::ParseError{ msg: error.to_string()})
             }
+            Err(error) => Err(DiscConfigError::ParseError {
+                msg: error.to_string(),
+            }),
         }
     }
 }
-
 
 impl DiscConfig {
     pub fn single_head_data_format() -> DiscConfig {
@@ -147,29 +145,26 @@ impl DiscConfig {
         let mut groups = Vec::new();
         for track_group in self.track_groups.iter() {
             for track in track_group.tracks.iter() {
-                groups.push(TrackGroup{
+                groups.push(TrackGroup {
                     tracks: vec![*track],
                     head: track_group.head,
                     sector_size: track_group.sector_size,
                     gap3: track_group.gap3,
                     sector_id: track_group.sector_id.clone(),
-                    sector_id_head: track_group.sector_id_head.clone()
+                    sector_id_head: track_group.sector_id_head.clone(),
                 });
             }
         }
 
-        groups.sort_by_key(|group|{
-            group.tracks[0]
-        });
+        groups.sort_by_key(|group| group.tracks[0]);
 
         DiscConfig {
             nb_tracks: self.nb_tracks,
             nb_heads: self.nb_heads,
-            track_groups: groups
+            track_groups: groups,
         }
     }
 }
-
 
 #[derive(Debug, PartialEq)]
 pub struct TrackGroup {

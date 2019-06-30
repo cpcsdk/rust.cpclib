@@ -4,7 +4,7 @@ use std::fmt;
 use num_enum::TryFromPrimitive;
 use std::convert::TryInto;
 
-#[derive(IntoPrimitive, Copy, Clone, PartialEq, Debug)]
+#[derive(IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Debug)]
 #[repr(u8)]
 pub enum BasicTokenNoPrefix {
     EndOfTokenisedLine = 0,
@@ -260,13 +260,8 @@ impl fmt::Display for BasicTokenNoPrefix {
         write!(f, "{}", tag)
     }
 }
-/*
-impl From<u8> for BasicTokenNoPrefix {
-    fn from(val: u8) -> BasicTokenNoPrefix {
-        val.try_into().unwrap()
-    }
-}
-*/
+
+
 
 impl BasicTokenNoPrefix {
     pub fn value(&self) -> u8 {
@@ -510,6 +505,8 @@ impl BasicToken {
 #[cfg(test)]
 mod test {
     use crate::basic::tokens::*;
+    use std::convert::TryInto;
+
 
     #[test]
     fn test_conversion() {
@@ -526,6 +523,7 @@ mod test {
 
         assert_eq!(BasicTokenNoPrefix::Division.value(), 0xf7);
 
-        assert_eq!(BasicTokenNoPrefix::from(0xf7), BasicTokenNoPrefix::Division);
+        let token: BasicTokenNoPrefix = 0xf7.try_into().unwrap();
+        assert_eq!(token, BasicTokenNoPrefix::Division);
     }
 }

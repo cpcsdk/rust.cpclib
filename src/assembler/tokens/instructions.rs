@@ -161,7 +161,6 @@ pub enum SaveType {
     Dsk,
 }
 
-
 /// Encode the kind of test done in if/elif/else cases
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TestKind {
@@ -172,14 +171,14 @@ pub enum TestKind {
     // Test succeed if it is an existing label
     LabelExists(String),
     // Test succeed if it is a missing label
-    LabelDoesNotExist(String)
+    LabelDoesNotExist(String),
 }
 
 /// List of transformations that can be applied to an imported binary file
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinaryTransformation {
     None,
-    Exomizer
+    Exomizer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -209,14 +208,15 @@ pub enum Token {
     If(Vec<(TestKind, Listing)>, Option<Listing>),
     /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
     Include(String, Option<Listing>),
-    Incbin( // TODO name arguments to ease manipulation
+    Incbin(
+        // TODO name arguments to ease manipulation
         String,
         Option<Expr>,
         Option<Expr>,
         Option<Expr>,
         Option<Expr>,
         Option<Vec<u8>>,
-        BinaryTransformation
+        BinaryTransformation,
     ),
     Let(String, Expr),
     List,
@@ -390,7 +390,6 @@ impl<'a> TryFrom<&'a str> for Token {
 }
 
 impl Token {
-    
     pub fn is_opcode(&self) -> bool {
         self.mnemonic().is_some()
     }
@@ -490,7 +489,9 @@ impl Token {
                 }
             }
 
-            Token::Incbin(ref fname, _, _, _, _, ref mut data, ref transformation) if data.is_none() => {
+            Token::Incbin(ref fname, _, _, _, _, ref mut data, ref transformation)
+                if data.is_none() =>
+            {
                 //TODO manage the optional arguments
                 match ctx.get_path_for(fname) {
                     None => {
@@ -509,14 +510,14 @@ impl Token {
                         match transformation {
                             BinaryTransformation::None => {
                                 data.replace(content);
-                            },
+                            }
                             BinaryTransformation::Exomizer => {
                                 unimplemented!("Need to implement exomizer crunching")
                             }
                         }
                     }
                 }
-            },
+            }
 
             // Rorg may embed some instructions that read files
             Token::Rorg(_, ref mut listing) => {

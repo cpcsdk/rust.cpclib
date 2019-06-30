@@ -1,6 +1,6 @@
+use crate::assembler::tokens::data_access;
 use crate::assembler::tokens::*;
 use crate::z80emu::z80::*;
-use crate::assembler::tokens::data_access;
 
 impl Z80 {
     /// Execute the given token.
@@ -10,7 +10,7 @@ impl Z80 {
         match opcode {
             &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 self.execute_opcode(mnemonic, arg1.as_ref(), arg2.as_ref());
-            },
+            }
             _ => panic!("{:?} is not yet handled", opcode),
         }
 
@@ -34,7 +34,7 @@ impl Z80 {
                 ) => {
                     let val = self.get_register_8(arg2.unwrap()).value();
                     self.get_register_8_mut(arg1.unwrap()).add(val);
-                },
+                }
 
                 (
                     Some(&DataAccess::Register16(crate::assembler::tokens::Register16::Hl)),
@@ -48,25 +48,21 @@ impl Z80 {
 
             Mnemonic::Res => {
                 let bit = self.get_value(arg1.unwrap()).unwrap() as _;
-                self.get_register_8_mut(arg2.unwrap())
-                    .res_bit(bit)
-            },
+                self.get_register_8_mut(arg2.unwrap()).res_bit(bit)
+            }
 
             Mnemonic::Set => {
                 let bit = self.get_value(arg1.unwrap()).unwrap() as _;
-                self.get_register_8_mut(arg2.unwrap())
-                    .set_bit(bit)
-            },
+                self.get_register_8_mut(arg2.unwrap()).set_bit(bit)
+            }
 
-            Mnemonic::Ret => {
-                self.ret()
-            },
+            Mnemonic::Ret => self.ret(),
 
             Mnemonic::Pop => {
                 let word = self.read_memory_word(self.sp().value());
                 self.bc_mut().set(word);
                 self.sp_mut().add(2);
-            },
+            }
 
             Mnemonic::Ldi => {
                 let byte = self.read_memory_byte(self.hl().value());
@@ -74,57 +70,47 @@ impl Z80 {
                 self.bc_mut().inc();
                 self.de_mut().inc();
                 self.hl_mut().inc();
-            },
+            }
 
-            Mnemonic::ExHlDe => {
-                self.ex_de_hl()
-            },
+            Mnemonic::ExHlDe => self.ex_de_hl(),
 
             Mnemonic::Inc => match arg1 {
                 Some(&DataAccess::Register8(ref reg)) => {
                     self.get_register_8_mut(arg1.unwrap()).inc()
-                },
+                }
                 Some(&DataAccess::Register16(ref reg)) => {
                     self.get_register_16_mut(arg1.unwrap()).inc()
-                },
-                _ => unreachable!()
+                }
+                _ => unreachable!(),
             },
 
             Mnemonic::Dec => match arg1 {
                 Some(&DataAccess::Register8(ref reg)) => {
                     self.get_register_8_mut(arg1.unwrap()).dec()
-                },
+                }
                 Some(&DataAccess::Register16(ref reg)) => {
                     self.get_register_16_mut(arg1.unwrap()).dec()
-                },
-                _ => unreachable!()
+                }
+                _ => unreachable!(),
             },
 
             Mnemonic::Ld => match (arg1, arg2) {
                 // Load in reg8
-                (
-                    Some(&DataAccess::Register8(_)), 
-                    Some(_)
-                ) => {
-                    let val = self.get_value(arg2.unwrap())
-                                .expect(&format!("Unable to get value of {:?}", &arg2));
+                (Some(&DataAccess::Register8(_)), Some(_)) => {
+                    let val = self
+                        .get_value(arg2.unwrap())
+                        .expect(&format!("Unable to get value of {:?}", &arg2));
                     self.get_register_8_mut(arg1.unwrap()).set(val as u8);
-                },
+                }
 
                 // Load in reg16
-                (
-                    Some(&DataAccess::Register16(ref reg16)), 
-                    Some(_)
-                ) => {
+                (Some(&DataAccess::Register16(ref reg16)), Some(_)) => {
                     let val = self.get_value(arg2.unwrap()).unwrap();
                     self.get_register_16_mut(arg1.unwrap()).set(val);
-                },
+                }
 
                 // Write in memory
-                (
-                    Some(&DataAccess::MemoryRegister16(ref reg)),
-                    Some(_)
-                ) => {
+                (Some(&DataAccess::MemoryRegister16(ref reg)), Some(_)) => {
                     let address = self.get_value(arg1.unwrap()).unwrap();
                     let value = self.get_value(arg2.unwrap()).unwrap();
                     self.write_memory_byte(address, value as _);
@@ -156,23 +142,20 @@ impl Z80 {
     /// TODO better emulation to never return None
     fn get_value(&self, access: &DataAccess) -> Option<u16> {
         match access {
-            &DataAccess::Memory(ref exp) => {
-                self.eval_expr(exp)
-                    .map(|address|{
-                        self.read_memory_byte(address) as u16
-                    })
-            }, 
+            &DataAccess::Memory(ref exp) => self
+                .eval_expr(exp)
+                .map(|address| self.read_memory_byte(address) as u16),
             &DataAccess::IndexRegister16WithIndex(_, _) => None,
             &DataAccess::IndexRegister16(_) => Some(self.get_register_16(access).value() as _),
             &DataAccess::IndexRegister8(_) => Some(self.get_register_8(access).value() as _),
             &DataAccess::Register16(_) => Some(self.get_register_16(access).value() as _),
             &DataAccess::Register8(_) => Some(self.get_register_8(access).value() as _),
-            &DataAccess::MemoryRegister16(ref reg) => {
-                Some(
-                    self.read_memory_byte(self.get_register_16(&DataAccess::Register16(reg.clone()))
-                        .value()) as u16
-                )
-            },
+            &DataAccess::MemoryRegister16(ref reg) => Some(
+                self.read_memory_byte(
+                    self.get_register_16(&DataAccess::Register16(reg.clone()))
+                        .value(),
+                ) as u16,
+            ),
             &DataAccess::Expression(ref expr) => self.eval_expr(expr),
             &DataAccess::FlagTest(_) => panic!(),
             _ => unimplemented!(),

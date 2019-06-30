@@ -152,8 +152,7 @@ impl ListingElement for Token {
 
                     &Mnemonic::Ldi | &Mnemonic::Ldd => 5,
 
-                    &Mnemonic::Nop | &Mnemonic::Exx | &Mnemonic::Di |
-                    &Mnemonic::ExHlDe => 1,
+                    &Mnemonic::Nop | &Mnemonic::Exx | &Mnemonic::Di | &Mnemonic::ExHlDe => 1,
                     &Mnemonic::Nops2 => 2,
 
                     &Mnemonic::Out => {
@@ -248,7 +247,6 @@ impl fmt::Display for Listing {
         Ok(())
     }
 }
-
 
 /// Main usage of listing is related to Tokens.. Here are the methods strongly liked to Token
 impl Listing {

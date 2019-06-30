@@ -12,8 +12,6 @@ use std::fmt;
 use delegate::delegate;
 use either::*;
 
-
-
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
 pub type Bytes = SmallVec<[u8; MAX_SIZE]>;
@@ -699,7 +697,7 @@ impl Env {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
-                },
+                }
 
                 // Expression must be false
                 (TestKind::False(ref exp), ref listing) => {
@@ -708,7 +706,7 @@ impl Env {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
-                },
+                }
 
                 // Label must exist
                 (TestKind::LabelExists(ref label), ref listing) => {
@@ -716,7 +714,7 @@ impl Env {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
-                },
+                }
 
                 // Label must not exist
                 (TestKind::LabelDoesNotExist(ref label), ref listing) => {
@@ -1910,7 +1908,9 @@ fn assemble_add_or_adc(
 
                 &DataAccess::IndexRegister16(ref reg2) => {
                     if reg1 != reg2 {
-                        return Err(String::from("Unable to add differetn indexed registers").into());
+                        return Err(
+                            String::from("Unable to add differetn indexed registers").into()
+                        );
                     }
 
                     bytes.push(indexed_register16_to_code(reg1));
@@ -2051,7 +2051,6 @@ fn flag_test_to_code(flag: &FlagTest) -> u8 {
 #[cfg(test)]
 mod test {
     use crate::assembler::assembler::*;
-    
 
     #[test]
     pub fn test_pop() {

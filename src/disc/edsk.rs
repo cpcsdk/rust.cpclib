@@ -60,7 +60,6 @@ impl Into<u8> for &Head {
     }
 }
 
-
 // Disc image files consist of a 0x100-byte disc info block and for each track a 0x100-byte track info block, followed by the data for every sector in that track. The new extended disk format is intended for some copy protected disks. Parts which are new in the extended format are marked with "*E*" (from our "Extended DISK Format Proposal, Rev.5").
 //
 //
@@ -107,7 +106,6 @@ pub struct DiscInformation {
 }
 
 impl DiscInformation {
-
     fn creator_name_as_bytes(&self) -> [u8; 14] {
         let mut data = [0 as u8; 14];
         for (idx, byte) in self.creator_name.as_bytes()[0..14].iter().enumerate() {
@@ -161,20 +159,14 @@ impl DiscInformation {
             34 + 14 + 1 + 1 + 2 + self.track_size_table.len()
         );
 
-        assert!(buffer.len()<= 256);
+        assert!(buffer.len() <= 256);
         // ensure we use 256 bytes
         buffer.resize(256, 0x00);
         assert_eq!(buffer.len(), 256);
 
         // DEBUG mode XXX To remove
         let from_buffer = Self::from_buffer(&buffer);
-        assert_eq!(
-            self,
-            &from_buffer
-        );
-
-
-
+        assert_eq!(self, &from_buffer);
     }
 
     pub fn is_double_head(&self) -> bool {
@@ -218,7 +210,6 @@ impl DiscInformation {
         self.track_size_table.len()
     }
 }
-
 
 /// Byte (Hex) 	Meaning:
 /// 00 - 0C 	Track-Info\r\n
@@ -343,7 +334,10 @@ impl TrackInformation {
         if String::from_utf8_lossy(&buffer[..0xc]).to_ascii_uppercase()
             != "Track-info\r\n".to_ascii_uppercase()
         {
-            panic!("Track buffer does not seem coherent\n{:?}...", &buffer[..0xc]);
+            panic!(
+                "Track buffer does not seem coherent\n{:?}...",
+                &buffer[..0xc]
+            );
         }
 
         let track_size = buffer.len() as u16;
@@ -361,10 +355,7 @@ impl TrackInformation {
             track_number, head_number, sector_size, number_of_sectors, gap3_length, filler_byte
         );
         let sector_information_list =
-            SectorInformationList::from_buffer(
-                &buffer[0x18..], 
-                number_of_sectors
-            );
+            SectorInformationList::from_buffer(&buffer[0x18..], number_of_sectors);
 
         let track_info = TrackInformation {
             track_number,
@@ -384,13 +375,14 @@ impl TrackInformation {
         assert_eq!(
             track_info.real_track_size(),
             track_info.compute_track_size() as u16,
-            "Wrong track_info {:?}", track_info
+            "Wrong track_info {:?}",
+            track_info
         );
         track_info
     }
 
     /// http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format#TRACK_INFORMATION_BLOCK_2
-    /// 
+    ///
     /// offset 	description 	bytes
     /// 00 - 0b 	"Track-Info\r\n" 	12
     /// 0c - 0f 	unused 	4
@@ -402,11 +394,11 @@ impl TrackInformation {
     /// 16 	GAP#3 length 	1
     /// 17 	filler byte 	1
     /// 18 - xx 	Sector Information List 	xx
-    /// 
+    ///
     /// Extensions
     /// offset 	description 	bytes
     /// 12 	Data rate. (See note 1 and note 3) 	1
-    /// 13 	Recording mode. (See note 2 and note 3) 	1 
+    /// 13 	Recording mode. (See note 2 and note 3) 	1
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
         let start_size = buffer.len();
 
@@ -432,7 +424,7 @@ impl TrackInformation {
         // 12 	Data rate. (See note 1 and note 3) 	1
         buffer.push(self.data_rate.clone().into());
 
-        // 13 	Recording mode. (See note 2 and note 3) 	1 
+        // 13 	Recording mode. (See note 2 and note 3) 	1
         buffer.push(self.recording_mode.clone().into());
 
         // 14 	sector size 	1
@@ -440,7 +432,7 @@ impl TrackInformation {
 
         // 15 	number of sectors 	1
         buffer.push(self.number_of_sectors);
- 
+
         // 16 	GAP#3 length 	1
         buffer.push(self.gap3_length);
 
@@ -448,43 +440,39 @@ impl TrackInformation {
         buffer.push(self.filler_byte);
 
         assert_eq!(buffer.len() - start_size, 0x18);
-        
+
         // 18 - xx 	Sector Information List 	x
         // Inject sectors information list
         self.sector_information_list.sectors.iter().for_each(|s| {
             s.sector_information_bloc.to_buffer(buffer);
         });
 
-
-
         // Ensure next position has a low byte value of 0
         let added_bytes = buffer.len() - start_size;
         let missing_bytes = 256 - added_bytes;
         buffer.resize(buffer.len() + missing_bytes, 0);
-        assert_eq!(buffer.len()%256, 0);
+        assert_eq!(buffer.len() % 256, 0);
 
         // Inject sectors information data
         self.sector_information_list.sectors.iter().for_each(|s| {
             buffer.extend_from_slice(&s.values);
         });
 
-
-    /*
-        // TODO find why this coded was previously present as it raise issues
-        // Ensure the size is correct
-        let added_bytes = (buffer.len() - start_size) as u16;
-        assert!(
-            added_bytes <= self.track_size, 
-            format!("{} != {}", added_bytes, self.track_size)
-        );
-        let missing_bytes = self.track_size - added_bytes;
-        if missing_bytes != 0 {
-            buffer.resize(buffer.len() + missing_bytes as usize, 0);
-        }
-    */
+        /*
+            // TODO find why this coded was previously present as it raise issues
+            // Ensure the size is correct
+            let added_bytes = (buffer.len() - start_size) as u16;
+            assert!(
+                added_bytes <= self.track_size,
+                format!("{} != {}", added_bytes, self.track_size)
+            );
+            let missing_bytes = self.track_size - added_bytes;
+            if missing_bytes != 0 {
+                buffer.resize(buffer.len() + missing_bytes as usize, 0);
+            }
+        */
         // Add padding
-        assert!(buffer.len()%256 == 0);
-
+        assert!(buffer.len() % 256 == 0);
     }
 
     /// TODO remove this method or set it private
@@ -499,16 +487,16 @@ impl TrackInformation {
     /// Track size has it should be written in the DSK
     pub fn compute_track_size(&self) -> usize {
         let size = self.total_size();
-        if size % 256 == 0{
+        if size % 256 == 0 {
             size
         } else {
             let mut s = dbg!(size);
             // TODO implement an efficient version
             while s % 256 != 0 {
-                s = s +1;
+                s = s + 1;
             }
             s
-          }
+        }
     }
 
     delegate! {
@@ -618,7 +606,6 @@ pub struct SectorInformation {
 }
 
 impl SectorInformation {
-
     /// Return the real size of the sector
     pub fn len(&self) -> usize {
         self.sector_size as usize * 256
@@ -643,9 +630,8 @@ impl SectorInformation {
     /// 03 	sector size (equivalent to N parameter in NEC765 commands) 	1
     /// 04 	FDC status register 1 (equivalent to NEC765 ST1 status register) 	1
     /// 05 	FDC status register 2 (equivalent to NEC765 ST2 status register) 	1
-    /// 06 - 07 	actual data length in bytes 	2 
+    /// 06 - 07 	actual data length in bytes 	2
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
-        
         buffer.push(self.track);
         buffer.push(self.head);
         buffer.push(self.sector_id);
@@ -696,7 +682,7 @@ impl SectorInformationList {
             consummed_bytes += 8;
             list_info.push(sector);
         }
-        dbg!(&list_info);                    
+        dbg!(&list_info);
 
         // Get the data
         consummed_bytes = 256 - 0x18; // Skip the unused bytes
@@ -871,8 +857,7 @@ impl TrackInformationList {
                     [consummed_bytes as usize..(consummed_bytes + current_track_size) as usize];
                 if current_track_size > 0 {
                     list.push(TrackInformation::from_buffer(track_buffer));
-                }
-                else {
+                } else {
                     eprintln!("Track {} is unformatted", track_number);
                     list.push(TrackInformation::unformatted());
                 }
@@ -885,7 +870,6 @@ impl TrackInformationList {
 
     /// Write the track list in the given buffer
     fn to_buffer(&self, buffer: &mut Vec<u8>) {
-
         for track in self.list.iter() {
             let _added_bytes = track.to_buffer(buffer);
         }
@@ -1131,20 +1115,16 @@ impl ExtendedDsk {
     }
 
     /// Return all the bytes of the given track
-    pub fn track_bytes<H: Into<Head>>(
-        &self,
-        head: H,
-        track: u8) -> Option<Vec<u8>> {
-
+    pub fn track_bytes<H: Into<Head>>(&self, head: H, track: u8) -> Option<Vec<u8>> {
         match self.get_track_information(head, track) {
             Some(track) => {
                 let mut bytes = Vec::new();
                 for sector in track.sector_information_list.sectors() {
                     bytes.extend(sector.values().iter());
                 }
-                Some(bytes) 
-            },
-            _ => None
+                Some(bytes)
+            }
+            _ => None,
         }
     }
 

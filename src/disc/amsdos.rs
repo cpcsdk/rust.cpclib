@@ -1,8 +1,6 @@
 use crate::disc::edsk::ExtendedDsk;
 
-
 use bitfield::Bit;
-
 
 use std::fs::File;
 use std::io::Read;
@@ -148,13 +146,13 @@ impl AmsdosFileName {
         format!("{}:{}.{}", self.user(), self.name(), self.extension())
     }
 
-    pub fn set_filename<S:AsRef<str>>(&mut self, filename: S) {
+    pub fn set_filename<S: AsRef<str>>(&mut self, filename: S) {
         let filename = filename.as_ref();
         match filename.find(".") {
             Some(idx) => {
                 self.set_name(&filename[0..idx]);
-                self.set_extension(&filename[idx+1..filename.len()])
-            },
+                self.set_extension(&filename[idx + 1..filename.len()])
+            }
 
             None => {
                 self.set_name(filename);
@@ -163,7 +161,7 @@ impl AmsdosFileName {
         }
     }
 
-    pub fn set_name<S:AsRef<str>>(&mut self, name: S) {
+    pub fn set_name<S: AsRef<str>>(&mut self, name: S) {
         let name = name.as_ref().as_bytes();
         for idx in 0..8 {
             self.name[idx] = if idx < name.len() {
@@ -174,11 +172,11 @@ impl AmsdosFileName {
         }
     }
 
-    pub fn set_extension<S:AsRef<str>>(&mut self, extension: S) {
+    pub fn set_extension<S: AsRef<str>>(&mut self, extension: S) {
         let extension = extension.as_ref().as_bytes();
         for idx in 0..3 {
             self.extension[idx] = if idx < extension.len() {
-                    *extension.get(idx).unwrap()
+                *extension.get(idx).unwrap()
             } else {
                 ' ' as u8
             };
@@ -216,10 +214,11 @@ impl AmsdosFileName {
         user: u8,
         filename: S1,
         extension: S2,
-    ) -> Result<AmsdosFileName, String> 
-    where 
-        S1: AsRef<str>, 
-        S2: AsRef<str> {
+    ) -> Result<AmsdosFileName, String>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
         Self::new_incorrect_case(
             user,
             &filename.as_ref().to_ascii_uppercase(),
@@ -276,7 +275,6 @@ impl AmsdosFileName {
             extension,
         })
     }
-
 }
 
 // TODO use tryfrom asap
@@ -484,12 +482,11 @@ impl AmsdosEntry {
         let mut nb_blocs = 0;
         for idx in 0..16 {
             self.blocs[idx] = if blocs.len() > idx {
-                    nb_blocs += 1;
-                    blocs[idx]
-                }
-                else {
-                    BlocIdx::Empty
-                }
+                nb_blocs += 1;
+                blocs[idx]
+            } else {
+                BlocIdx::Empty
+            }
         }
 
         self.page_size = (nb_blocs << 3) - 7;
@@ -574,7 +571,7 @@ impl AmsdosEntry {
             pub fn set_extension<S:AsRef<str>>(&mut self, extension: S);
         }
     }
-    
+
     pub fn format(&self) -> String {
         format!(
             "{}:{}.{}",
@@ -610,7 +607,7 @@ pub struct AmsdosCatalogEntry {
     system: bool,
     /// The indices, in the real catalog, of the entries that represent this one
     entries_idx: Vec<u8>,
-    blocs: Vec<BlocIdx>
+    blocs: Vec<BlocIdx>,
 }
 
 impl AmsdosCatalogEntry {
@@ -620,7 +617,7 @@ impl AmsdosCatalogEntry {
 }
 
 impl From<(u8, u8, AmsdosEntry)> for AmsdosCatalogEntry {
-    fn from(e: (u8, u8, AmsdosEntry)) -> AmsdosCatalogEntry{
+    fn from(e: (u8, u8, AmsdosEntry)) -> AmsdosCatalogEntry {
         let (track, sector, e) = e;
         AmsdosCatalogEntry {
             track,
@@ -629,20 +626,19 @@ impl From<(u8, u8, AmsdosEntry)> for AmsdosCatalogEntry {
             read_only: e.read_only,
             system: e.system,
             entries_idx: vec![e.idx],
-            blocs: e.blocs.iter()
-                        .filter(|b|{b.is_valid()})
-                        .map(|v|{v.clone()})
-                        .collect()
+            blocs: e
+                .blocs
+                .iter()
+                .filter(|b| b.is_valid())
+                .map(|v| v.clone())
+                .collect(),
         }
     }
 }
 
 impl AmsdosCatalogEntry {
     fn merge_entries(e1: &AmsdosCatalogEntry, e2: &AmsdosCatalogEntry) -> AmsdosCatalogEntry {
-        assert_eq!(
-            e1.file_name,
-            e2.file_name
-        );
+        assert_eq!(e1.file_name, e2.file_name);
 
         AmsdosCatalogEntry {
             track: e1.track.min(e2.track),
@@ -655,11 +651,11 @@ impl AmsdosCatalogEntry {
                 idx.extend_from_slice(&e2.entries_idx);
                 idx
             },
-            blocs : {
+            blocs: {
                 let mut blocs = e1.blocs.clone();
                 blocs.extend_from_slice(&e2.blocs);
                 blocs
-            }
+            },
         }
     }
 
@@ -677,38 +673,31 @@ impl AmsdosCatalogEntry {
 
     /// Size in kilobytes
     pub fn size(&self) -> usize {
-        self.blocs.len() * 512 *2 /1024
+        self.blocs.len() * 512 * 2 / 1024
     }
 }
 
 /// The AmsdosCatalog represents the catalog of a disc. It contains only valid entries and merge common ones
 #[derive(Debug, Clone)]
 pub struct AmsdosCatalog {
-    entries: Vec<AmsdosCatalogEntry>
+    entries: Vec<AmsdosCatalogEntry>,
 }
 
 impl From<AmsdosEntries> for AmsdosCatalog {
     fn from(entries: AmsdosEntries) -> AmsdosCatalog {
         let mut novel: Vec<AmsdosCatalogEntry> = Vec::new();
 
-        for current_entry in entries.without_erased_entries()
-                                    .map(|e|{
-                                        AmsdosCatalogEntry::from(
-                                            (
-                                                entries.track(e).unwrap(), 
-                                                entries.sector(e).unwrap(), 
-                                                e.clone()
-                                            )
-                                        )
-                                        }
-                                    ) {
-
+        for current_entry in entries.without_erased_entries().map(|e| {
+            AmsdosCatalogEntry::from((
+                entries.track(e).unwrap(),
+                entries.sector(e).unwrap(),
+                e.clone(),
+            ))
+        }) {
             let mut added = false;
             for idx in 0..novel.len() {
                 if &novel[idx].file_name == &current_entry.file_name {
-                    novel[idx] = AmsdosCatalogEntry::merge_entries(
-                        &novel[idx], 
-                        &current_entry);
+                    novel[idx] = AmsdosCatalogEntry::merge_entries(&novel[idx], &current_entry);
                     added = true;
                     break;
                 }
@@ -719,12 +708,8 @@ impl From<AmsdosEntries> for AmsdosCatalog {
             }
         }
 
-        AmsdosCatalog {
-            entries: novel
-        }
+        AmsdosCatalog { entries: novel }
     }
-
-
 }
 
 impl std::ops::Index<usize> for AmsdosCatalog {
@@ -733,10 +718,8 @@ impl std::ops::Index<usize> for AmsdosCatalog {
     fn index(&self, idx: usize) -> &Self::Output {
         &self.entries[idx]
     }
-
 }
 impl AmsdosCatalog {
-    
     /// Returns the number of entries in the catalog
     pub fn len(&self) -> usize {
         self.entries.len()
@@ -745,43 +728,43 @@ impl AmsdosCatalog {
     /// Create an alphabetically sorted version of the catalog
     pub fn sorted_alphabetically(&self) -> AmsdosCatalog {
         let mut copy: AmsdosCatalog = self.clone();
-        copy.entries.sort_by_key(|entry|{
-            entry.file_name().to_entry_format(false, false)
-        });
+        copy.entries
+            .sort_by_key(|entry| entry.file_name().to_entry_format(false, false));
         copy
     }
-
 
     /// Create a physically sorted version of the catalog
     pub fn sorted_physically(&self) -> AmsdosCatalog {
         let mut copy: AmsdosCatalog = self.clone();
-        copy.entries.sort_by_key(|entry|{
-            (entry.track, entry.sector)
-        });
+        copy.entries
+            .sort_by_key(|entry| (entry.track, entry.sector));
         copy
     }
 
     /// Create a physically and alphabetically sorted version of the catalog
     pub fn sorted_physically_and_alphabetically(&self) -> AmsdosCatalog {
         let mut copy: AmsdosCatalog = self.clone();
-        copy.entries.sort_by_key(|entry|{
-            (entry.track, entry.sector, entry.file_name().to_entry_format(false, false))
+        copy.entries.sort_by_key(|entry| {
+            (
+                entry.track,
+                entry.sector,
+                entry.file_name().to_entry_format(false, false),
+            )
         });
         copy
     }
 }
 
 impl AmsdosEntries {
-
     /// Generate a catalog that is more user friendly
-    pub fn to_amsdos_catalog(self) ->  AmsdosCatalog {
+    pub fn to_amsdos_catalog(self) -> AmsdosCatalog {
         AmsdosCatalog::from(self)
     }
 
     /// Return the index of the entry
     pub fn entry_index(&self, entry: &AmsdosEntry) -> Option<usize> {
         for idx in 0..self.entries.len() {
-            if &self.entries[idx] as * const AmsdosEntry == entry as * const AmsdosEntry {
+            if &self.entries[idx] as *const AmsdosEntry == entry as *const AmsdosEntry {
                 return Some(idx);
             }
         }
@@ -791,20 +774,18 @@ impl AmsdosEntries {
     /// Return the track that contains the entry
     pub fn track(&self, entry: &AmsdosEntry) -> Option<u8> {
         match self.entry_index(entry) {
-            Some(idx) => {
-                Some((4*idx/64) as u8)
-            }
-            None => None
+            Some(idx) => Some((4 * idx / 64) as u8),
+            None => None,
         }
     }
 
     pub fn sector(&self, entry: &AmsdosEntry) -> Option<u8> {
         match self.entry_index(entry) {
             Some(idx) => {
-                let idx = idx%16;
-                Some([0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9][idx/16])
+                let idx = idx % 16;
+                Some([0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9][idx / 16])
             }
-            _ => None
+            _ => None,
         }
     }
 
@@ -1157,8 +1138,7 @@ impl AmsdosManager {
 
         let sector = self.disc.sector_mut(self.head, track, sector_id).unwrap();
         let idx_in_sector: usize = ((entry.idx & 15) << 5) as usize;
-        let bytes =
-            &mut (sector.values_mut()[idx_in_sector..(idx_in_sector + AmsdosEntry::len())]);
+        let bytes = &mut (sector.values_mut()[idx_in_sector..(idx_in_sector + AmsdosEntry::len())]);
 
         bytes.copy_from_slice(entry.as_bytes().as_ref());
     }
