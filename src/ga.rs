@@ -470,9 +470,7 @@ impl Serialize for Palette {
 }
 
 impl<'de> Deserialize<'de> for Palette {
-    fn deserialize<D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> std::result::Result<Self, D::Error> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let inks: Vec<Ink> = Vec::<Ink>::deserialize(deserializer)?;
         let palette: Self = inks.into();
         Ok(palette)
@@ -497,7 +495,7 @@ impl Palette {
     /// An empty palette does not contains all the inks and must make crash most of the code that has been previously written !
     pub fn empty() -> Self {
         Self {
-            values: HashMap::<Pen, Ink>::default()
+            values: HashMap::<Pen, Ink>::default(),
         }
     }
 
@@ -588,8 +586,7 @@ impl Palette {
             .filter_map(|(&p, _)| {
                 if p.number() == 16 {
                     None
-                }
-                else {
+                } else {
                     Some(p.clone())
                 }
             })
@@ -621,14 +618,7 @@ impl Palette {
         self.values
             .iter()
             .filter(|(&p, _)| p.number() != 16)
-            .find_map(|(p, i)| {
-               if i == expected {
-                   Some(p.clone())
-               }
-               else {
-                   None
-               }
-            })
+            .find_map(|(p, i)| if i == expected { Some(p.clone()) } else { None })
     }
 
     /// Returns true if the palette contains the inks in one of its pens (except border)

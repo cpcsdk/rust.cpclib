@@ -98,7 +98,6 @@ impl AmsdosFileName {
             name,
             extension,
         }
-
     }
 
     /// Build a filename compatible with the catalog entry format
@@ -152,13 +151,12 @@ impl AmsdosFileName {
     pub fn set_filename<S: AsRef<str>>(&mut self, filename: S) {
         let filename = filename.as_ref();
         if let Some(idx) = filename.find(".") {
-                self.set_name(&filename[0..idx]);
-                self.set_extension(&filename[idx + 1..filename.len()])
-        } else{
-                self.set_name(filename);
-                self.set_extension("");
-            }
-        
+            self.set_name(&filename[0..idx]);
+            self.set_extension(&filename[idx + 1..filename.len()])
+        } else {
+            self.set_name(filename);
+            self.set_extension("");
+        }
     }
 
     pub fn set_name<S: AsRef<str>>(&mut self, name: S) {
@@ -210,11 +208,7 @@ impl AmsdosFileName {
     }
 
     // Build a AmsdosFileName ensuring the case is correct
-    pub fn new_correct_case<S1, S2>(
-        user: u8,
-        filename: S1,
-        extension: S2,
-    ) -> Result<Self, String>
+    pub fn new_correct_case<S1, S2>(user: u8, filename: S1, extension: S2) -> Result<Self, String>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -227,11 +221,7 @@ impl AmsdosFileName {
     }
 
     // Build a AmsdosFileName without checking case
-    pub fn new_incorrect_case(
-        user: u8,
-        filename: &str,
-        extension: &str,
-    ) -> Result<Self, String> {
+    pub fn new_incorrect_case(user: u8, filename: &str, extension: &str) -> Result<Self, String> {
         let filename = filename.trim();
         let extension = extension.trim();
 
@@ -645,14 +635,7 @@ impl From<(u8, u8, AmsdosEntry)> for AmsdosCatalogEntry {
             blocs: e
                 .blocs
                 .iter()
-                .filter_map(|b| {
-                    if b.is_valid() {
-                        Some(*b)
-                    }
-                    else {
-                        None
-                    }
-                })
+                .filter_map(|b| if b.is_valid() { Some(*b) } else { None })
                 .collect(),
         }
     }
@@ -1393,9 +1376,8 @@ impl AmsdosHeader {
             .filter_map(|&c| {
                 if c == ' ' as u8 {
                     None
-                }
-                else {
-                    Some(c as char) 
+                } else {
+                    Some(c as char)
                 }
             })
             .collect::<String>()
@@ -1411,12 +1393,11 @@ impl AmsdosHeader {
     pub fn extension(&self) -> String {
         self.content[9..(9 + 3)]
             .iter()
-            .filter_map(|&c|{
+            .filter_map(|&c| {
                 if c == ' ' as u8 {
                     None
-                }
-                else {
-                     Some(c as char)
+                } else {
+                    Some(c as char)
                 }
             })
             .collect::<String>()

@@ -160,7 +160,7 @@ impl PageDefinition {
             let memory_overlaps = (self.start >= other.start && self.start <= other.end.unwrap())
                 || (self.end.unwrap() >= other.start && self.end.unwrap() <= other.end.unwrap());
 
-            if memory_overlaps  {
+            if memory_overlaps {
                 // We have overlap BUT we do not care if the banks are different
                 if self.bank() == other.bank() {
                     // Same bank meens overlap
@@ -173,8 +173,7 @@ impl PageDefinition {
 
                     start < 0x4000 || start > 0x7fff || end < 0x4000 || end > 0x7fff
                 }
-            }
-            else {
+            } else {
                 false
             }
         }

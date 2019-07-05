@@ -28,7 +28,7 @@ pub struct BaseListing<T: Clone + ListingElement> {
 
 impl<T: Clone + ListingElement> From<Vec<T>> for BaseListing<T> {
     fn from(listing: Vec<T>) -> Self {
-        Self{
+        Self {
             listing,
             duration: None,
         }
@@ -89,14 +89,13 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
     pub fn estimated_duration(&self) -> Result<usize, String> {
         if let Some(duration) = self.duration {
             Ok(duration)
-        }
-        else {
-                let mut duration = 0;
-                for token in &self.listing {
-                    duration = duration + token.estimated_duration()?;
-                }
-                Ok(duration)
+        } else {
+            let mut duration = 0;
+            for token in &self.listing {
+                duration = duration + token.estimated_duration()?;
             }
+            Ok(duration)
+        }
     }
 
     pub fn set_duration(&mut self, duration: usize) {

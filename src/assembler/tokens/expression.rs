@@ -92,8 +92,6 @@ impl Expr {
         self.resolve(&sym)
     }
 
-
-
     pub fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError> {
         use self::Expr::*;
 

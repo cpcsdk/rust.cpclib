@@ -1214,8 +1214,9 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, Assemble
         }
 
         &DataAccess::Register8(ref reg) => {
-            bytes
-                .push(if is_inc { 0b0000_0100 } else { 0b0000_0101 } | (register8_to_code(reg) << 3));
+            bytes.push(
+                if is_inc { 0b0000_0100 } else { 0b0000_0101 } | (register8_to_code(reg) << 3),
+            );
         }
         _ => {
             return Err(format!("Inc/dec not implemented for {:?}", arg1).into());
@@ -1254,12 +1255,11 @@ fn assemble_ret(arg1: &Option<DataAccess>) -> Result<Bytes, AssemblerError> {
 
     if arg1.is_some() {
         if let Some(&DataAccess::FlagTest(ref test)) = arg1.as_ref() {
-                let flag = flag_test_to_code(test);
-                bytes.push(0b1100_0000 | (flag << 3));
-            }
-        else{
-                return Err(format!("Wrong argument for ret {:?}", arg1).into());
-            }
+            let flag = flag_test_to_code(test);
+            bytes.push(0b1100_0000 | (flag << 3));
+        } else {
+            return Err(format!("Wrong argument for ret {:?}", arg1).into());
+        }
     } else {
         bytes.push(0xc9);
     };
@@ -1302,37 +1302,36 @@ fn assemble_call_jr_or_jp(
 
     // Treat address
     if let &DataAccess::Expression(ref e) = arg2 {
-            let address = env.resolve_expr_may_fail_in_first_pass(e)?;
-            if is_jr {
-                let relative = env.absolute_to_relative_may_fail_in_first_pass(address, 2)?;
-                if flag_code.is_some() {
-                    // jr - flag
-                    add_byte(&mut bytes, 0b0010_0000 | (flag_code.unwrap() << 3));
-                } else {
-                    // jr - no flag
-                    add_byte(&mut bytes, 0b0001_1000);
-                }
-                add_byte(&mut bytes, relative);
-            } else if is_call {
-                match flag_code {
-                    Some(flag) => add_byte(&mut bytes, 0b1100_0100 | (flag << 3)),
-                    None => add_byte(&mut bytes, 0xCD),
-                }
-                add_word(&mut bytes, address as u16);
+        let address = env.resolve_expr_may_fail_in_first_pass(e)?;
+        if is_jr {
+            let relative = env.absolute_to_relative_may_fail_in_first_pass(address, 2)?;
+            if flag_code.is_some() {
+                // jr - flag
+                add_byte(&mut bytes, 0b0010_0000 | (flag_code.unwrap() << 3));
             } else {
-                if flag_code.is_some() {
-                    // jp - flag
-                    add_byte(&mut bytes, 0b1100_0010 | (flag_code.unwrap() << 3))
-                } else {
-                    // jp - no flag
-                    add_byte(&mut bytes, 0xc3);
-                }
-                add_word(&mut bytes, address as u16);
+                // jr - no flag
+                add_byte(&mut bytes, 0b0001_1000);
             }
+            add_byte(&mut bytes, relative);
+        } else if is_call {
+            match flag_code {
+                Some(flag) => add_byte(&mut bytes, 0b1100_0100 | (flag << 3)),
+                None => add_byte(&mut bytes, 0xCD),
+            }
+            add_word(&mut bytes, address as u16);
+        } else {
+            if flag_code.is_some() {
+                // jp - flag
+                add_byte(&mut bytes, 0b1100_0010 | (flag_code.unwrap() << 3))
+            } else {
+                // jp - no flag
+                add_byte(&mut bytes, 0xc3);
+            }
+            add_word(&mut bytes, address as u16);
         }
-    else {
-            return Err(format!("Parameter {:?} not treated", arg2).into());
-        }
+    } else {
+        return Err(format!("Parameter {:?} not treated", arg2).into());
+    }
 
     Ok(bytes)
 }
@@ -1411,7 +1410,10 @@ impl Env {
 
             DataAccess::Register8(ref reg) => {
                 add_byte(&mut bytes, 0xcb);
-                add_byte(&mut bytes, 0b0100_0000 + (bit << 3) + register8_to_code(reg))
+                add_byte(
+                    &mut bytes,
+                    0b0100_0000 + (bit << 3) + register8_to_code(reg),
+                )
             }
 
             _ => unimplemented!("aseemble_bit {:?} {:?}", arg1, arg2),
@@ -1970,15 +1972,14 @@ fn assemble_res_or_set(
     };
 
     // Apply it to the right thing
-    if let  &DataAccess::Register8(ref reg) = arg2{
-            bytes.push(0xcb);
-            bytes.push(
-                if is_res { 0b1000_0000 } else { 0b1100_0000 } | (bit << 3) | register8_to_code(reg),
-            );
-        }
-     else{
-            return Err(format!("Res not implemented for {:?}", arg2).into());
-        }
+    if let &DataAccess::Register8(ref reg) = arg2 {
+        bytes.push(0xcb);
+        bytes.push(
+            if is_res { 0b1000_0000 } else { 0b1100_0000 } | (bit << 3) | register8_to_code(reg),
+        );
+    } else {
+        return Err(format!("Res not implemented for {:?}", arg2).into());
+    }
 
     Ok(bytes)
 }

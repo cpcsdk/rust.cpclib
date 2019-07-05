@@ -145,8 +145,12 @@ impl Z80 {
                 .eval_expr(exp)
                 .map(|address| self.read_memory_byte(address) as u16),
             &DataAccess::IndexRegister16WithIndex(_, _) => None,
-            &DataAccess::IndexRegister16(_) | &DataAccess::Register16(_) => Some(self.get_register_16(access).value()),
-            &DataAccess::IndexRegister8(_) | &DataAccess::Register8(_) => Some(self.get_register_8(access).value().into()),
+            &DataAccess::IndexRegister16(_) | &DataAccess::Register16(_) => {
+                Some(self.get_register_16(access).value())
+            }
+            &DataAccess::IndexRegister8(_) | &DataAccess::Register8(_) => {
+                Some(self.get_register_8(access).value().into())
+            }
             &DataAccess::MemoryRegister16(ref reg) => Some(
                 self.read_memory_byte(
                     self.get_register_16(&DataAccess::Register16(reg.clone()))

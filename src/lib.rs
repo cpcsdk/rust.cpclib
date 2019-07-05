@@ -19,10 +19,9 @@
     rust_2018_idioms,
     unused
 )]
-
 #![deny(clippy::pedantic)]
 #![allow(
-    clippy::module_name_repetitions, 
+    clippy::module_name_repetitions,
     clippy::doc_markdown,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,

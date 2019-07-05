@@ -17,7 +17,7 @@ use cpclib::imageconverter::*;
 use cpclib::sna::*;
 
 use std::fs::File;
-use std::io::{Write};
+use std::io::Write;
 
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
