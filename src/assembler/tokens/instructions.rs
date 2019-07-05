@@ -336,13 +336,13 @@ impl fmt::Display for Token {
 
             Token::Repeat(ref exp, ref code, ref label) => {
                 if label.is_some() {
-                    write!(f, "REPEAT {}, {}\n", exp, label.as_ref().unwrap())?;
+                    writeln!(f, "REPEAT {}, {}", exp, label.as_ref().unwrap())?;
                 }
                 else {
-                    write!(f, "REPEAT {}\n", exp)?;
+                    writeln!(f, "REPEAT {}", exp)?;
                 }
                 for token in code.iter() {
-                    write!(f, "\t{}\n", token)?;
+                    writeln!(f, "\t{}", token)?;
                 }
                 write!(f, "\tENDREPEAT")
             },
@@ -451,7 +451,7 @@ impl Token {
     pub fn unroll(
         &self,
         sym: &SymbolsTableCaseDependent,
-    ) -> Option<Result<Vec<&Token>, AssemblerError>> {
+    ) -> Option<Result<Vec<&Self>, AssemblerError>> {
         if let Token::Repeat(ref expr, ref tokens, ref _counter_label) = self {
             let count: Result<i32, AssemblerError> = expr.resolve(sym);
             if count.is_err() {
@@ -549,6 +549,7 @@ impl Token {
     }
 
     /// Assemble the symbol taking into account some context, but never modify this context
+    #[allow(clippy::match_same_arms)]
     pub fn to_bytes_with_context(
         &self,
         table: &mut SymbolsTableCaseDependent,

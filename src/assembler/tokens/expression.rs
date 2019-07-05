@@ -50,17 +50,17 @@ pub enum Expr {
 }
 
 impl From<&str> for Expr {
-    fn from(src: &str) -> Expr {
+    fn from(src: &str) -> Self {
         Expr::Label(src.to_string())
     }
 }
 impl From<i32> for Expr {
-    fn from(src: i32) -> Expr {
+    fn from(src: i32) -> Self {
         Expr::Value(src)
     }
 }
 impl From<u8> for Expr {
-    fn from(src: u8) -> Expr {
+    fn from(src: u8) -> Self {
         Expr::Value(src as _)
     }
 }
@@ -82,7 +82,7 @@ impl<S:AsRef<str>> From<S> for Expr {
 
 #[allow(missing_docs)]
 impl Expr {
-    pub fn neg(&self) -> Expr {
+    pub fn neg(&self) -> Self {
         Expr::Neg(Box::new(self.clone()))
     }
 
@@ -92,10 +92,12 @@ impl Expr {
         self.resolve(&sym)
     }
 
+
+
     pub fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError> {
         use self::Expr::*;
 
-        let oper = |left: &Expr, right: &Expr, oper: Oper| -> Result<i32, AssemblerError> {
+        let oper = |left: &Self, right: &Self, oper: Oper| -> Result<i32, AssemblerError> {
             let res_left = left.resolve(sym);
             let res_right = right.resolve(sym);
 

@@ -20,7 +20,7 @@ pub enum Transformation {
 
 impl Transformation {
     /// Apply the transformation to the given image
-    pub fn apply(&self, matrix: ColorMatrix) -> ColorMatrix {
+    pub fn apply(&self, matrix: &ColorMatrix) -> ColorMatrix {
         match self {
             Transformation::SkipOddPixels => {
                 let mut res = matrix.clone();
@@ -42,7 +42,7 @@ pub struct TransformationsList {
 impl TransformationsList {
     /// Create an empty list of transformations
     pub fn new() -> Self {
-        TransformationsList {
+        Self {
             transformations: Vec::new(),
         }
     }
@@ -51,16 +51,16 @@ impl TransformationsList {
     pub fn skip_odd_pixels(self) -> Self {
         let mut transformations = self.transformations.clone();
         transformations.push(Transformation::SkipOddPixels);
-        TransformationsList { transformations }
+        Self { transformations }
     }
 
     /// Apply ALL the transformation (in order of addition)
-    pub fn apply(&self, matrix: ColorMatrix) -> ColorMatrix {
-        let mut matrix = matrix;
-        for transformation in self.transformations.iter() {
-            matrix = transformation.apply(matrix);
+    pub fn apply(&self, matrix: &ColorMatrix) -> ColorMatrix {
+        let mut result = Some(matrix.clone());
+        for transformation in &self.transformations {
+            result = Some(transformation.apply(&result.unwrap()))
         }
-        matrix
+        result.unwrap()
     }
 }
 
@@ -92,7 +92,7 @@ impl Debug for CPCScreenDimension {
 impl CPCScreenDimension {
     /// Return screen dimension for a standard screen
     pub fn standard() -> Self {
-        CPCScreenDimension {
+        Self {
             horizontal_displayed: 80 / 2,
             vertical_displayed: 25,
             /// Unsure of this value
@@ -102,7 +102,7 @@ impl CPCScreenDimension {
 
     /// Return the screen dimension for a standard overscan screen
     pub fn overscan() -> Self {
-        CPCScreenDimension {
+        Self {
             horizontal_displayed: 96 / 2,
             vertical_displayed: 36,
             maximum_raster_address: 7,
@@ -115,7 +115,7 @@ impl CPCScreenDimension {
         vertical_displayed: u8,
         maximum_raster_address: u8,
     ) -> Self {
-        CPCScreenDimension {
+        Self {
             horizontal_displayed,
             vertical_displayed,
             maximum_raster_address,
@@ -177,12 +177,12 @@ impl DisplayAddress {
     const PAGE_END: usize = 12;
 
     /// Create the display address
-    pub fn new_from(val: u16) -> DisplayAddress {
-        assert!(val < 0b1100000000000000);
-        DisplayAddress(val)
+    pub fn new_from(val: u16) -> Self {
+        assert!(val < 0b1100_0000_0000_0000);
+        Self(val)
     }
 
-    pub fn new(page: u16, is_overscan: bool, offset: u16) -> DisplayAddress {
+    pub fn new(page: u16, is_overscan: bool, offset: u16) -> Self {
         let mut address = Self::new_from(0);
         address.set_page(page);
         address.set_overscan(is_overscan);
@@ -190,19 +190,19 @@ impl DisplayAddress {
         address
     }
 
-    pub fn new_standard_from_page(page: u16) -> DisplayAddress {
+    pub fn new_standard_from_page(page: u16) -> Self {
         Self::new(page, false, 0)
     }
 
-    pub fn new_overscan_from_page(page: u16) -> DisplayAddress {
+    pub fn new_overscan_from_page(page: u16) -> Self {
         Self::new(page, true, 0)
     }
 
-    pub fn new_standard_from_address(_address: u16) -> DisplayAddress {
+    pub fn new_standard_from_address(_address: u16) -> Self {
         unimplemented!()
     }
 
-    pub fn new_overscan_from_address(_address: u16) -> DisplayAddress {
+    pub fn new_overscan_from_address(_address: u16) -> Self {
         unimplemented!()
     }
     /// Return the offset part of the address
@@ -425,7 +425,7 @@ pub struct StartFromLeftAndFlipAtTheEndOfLine {
 #[allow(missing_docs)]
 impl Default for StartFromLeftAndFlipAtTheEndOfLine {
     fn default() -> Self {
-        StartFromLeftAndFlipAtTheEndOfLine {
+        Self {
             current_column: 0,
             left_to_right: true,
         }
@@ -553,7 +553,7 @@ impl GrayCodeLineCounter {
     const SCREEN_INDEX_TO_GRAYCODE_INDEX: [u8; 8] = [0, 1, 3, 2, 7, 6, 4, 5];
 
     pub fn new() -> Self {
-        GrayCodeLineCounter {
+        Self {
             char_line: 0,
             pos_in_char: 0,
         }
@@ -698,16 +698,10 @@ impl Debug for Output {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             &Output::LinearEncodedSprite {
-                data: _,
-                palette: _,
-                byte_width: _,
-                height: _,
+                ..
             } => writeln!(fmt, "LinearEncodedSprite"),
             &Output::LinearEncodedChuncky {
-                data: _,
-                palette: _,
-                byte_width: _,
-                height: _,
+               ..
             } => writeln!(fmt, "LinearEncodedChuncky"),
             &Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
             &Output::CPCMemoryOverscan(_, _, _) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
@@ -805,8 +799,7 @@ impl<'a> ImageConverter<'a> {
             output,
         };
 
-        match output {
-            OutputFormat::LinearEncodedChuncky => {
+        if  let OutputFormat::LinearEncodedChuncky = output {
                 let mut matrix = converter.load_color_matrix(input_file);
                 matrix.double_horizontally();
                 let sprite = matrix.as_sprite(mode, None);
@@ -817,19 +810,19 @@ impl<'a> ImageConverter<'a> {
                     height: sprite.height() as _,
                 })
             }
-            _ => {
+            else {
                 let sprite = converter.load_sprite(input_file);
                 converter.apply_sprite_conversion(&sprite)
             }
-        }
+        
     }
 
     /// Makes the conversion of the provided sprite to the expected format
     pub fn import(sprite: &Sprite, output: &'a OutputFormat) -> Result<Output, String> {
         let mut converter = ImageConverter {
             palette: None,
-            mode: Mode::Mode0, // TODO make the mode an optional argument,
-            output: output,
+            mode: Mode::Zero, // TODO make the mode an optional argument,
+            output,
             transformations: TransformationsList::new(),
         };
 
@@ -851,7 +844,7 @@ impl<'a> ImageConverter<'a> {
         let img =
             im::open(input_file).expect(&format!("Unable to convert {:?} properly.", input_file));
         let mat = ColorMatrix::convert(&img.to_rgb(), ConversionRule::AnyModeUseAllPixels);
-        self.transformations.apply(mat)
+        self.transformations.apply(&mat)
     }
 
     /// Manage the conversion on the given sprite

@@ -12,6 +12,8 @@ use delegate::delegate;
 use getset::Getters;
 
 /// Computes the sector size as expected by the FDC from a human readable sector size
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_sign_loss)]
 pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {
     let mut n = 0;
     while size > 0x80 {
@@ -31,20 +33,20 @@ pub fn convert_fdc_sector_size_to_real_sector_size(size: u8) -> u16 {
 /// Symbolises the head of a disc.
 pub enum Head {
     /// Side A of the disc for double sided discs
-    HeadA,
+    A,
     /// Side B of the disc for double sided discs
-    HeadB,
-    /// Side not specified for single sided discs. Should be deprecated in favor of HeadA
+    B,
+    /// Side not specified for single sided discs. Should be deprecated in favor of A
     Unspecified,
 }
 
 #[allow(missing_docs)]
 impl From<u8> for Head {
-    fn from(val: u8) -> Head {
+    fn from(val: u8) -> Self {
         match val {
-            0 => Head::HeadA,
-            1 => Head::HeadB,
-            _ => Head::Unspecified,
+            0 => Self::A,
+            1 => Self::B,
+            _ => Self::Unspecified,
         }
     }
 }
@@ -53,9 +55,8 @@ impl From<u8> for Head {
 impl Into<u8> for Head {
     fn into(self) -> u8 {
         match self {
-            Head::HeadA => 0,
-            Head::HeadB => 1,
-            Head::Unspecified => 0,
+            Self::A | Self::Unspecified => 0,
+            Self::B => 1,
         }
     }
 }
@@ -63,10 +64,9 @@ impl Into<u8> for Head {
 #[allow(missing_docs)]
 impl Into<u8> for &Head {
     fn into(self) -> u8 {
-        match *self {
-            Head::HeadA => 0,
-            Head::HeadB => 1,
-            Head::Unspecified => 0,
+        match self {
+            &Head::A | &Head::Unspecified => 0,
+            &Head::B => 1,
         }
     }
 }
@@ -128,7 +128,7 @@ impl DiscInformation {
 
     /// Build an eDSK from a buffer of bytes
     ///  TODO manage the case of standard dsk
-    pub fn from_buffer(buffer: &[u8]) -> DiscInformation {
+    pub fn from_buffer(buffer: &[u8]) -> Self {
         assert_eq!(buffer.len(), 256);
         assert_eq!(
             String::from_utf8_lossy(&buffer[..34]).to_ascii_uppercase(),
@@ -142,7 +142,7 @@ impl DiscInformation {
 
         assert!(number_of_heads == 1 || number_of_heads == 2);
 
-        DiscInformation {
+        Self {
             creator_name: creator_name.to_string(),
             number_of_tracks,
             number_of_heads,
@@ -298,8 +298,8 @@ pub struct TrackInformation {
 #[allow(missing_docs)]
 impl TrackInformation {
     /// TODO find a nicer (with Either ?) way to manipulate unformatted tracks
-    pub fn unformatted() -> TrackInformation {
-        Default::default()
+    pub fn unformatted() -> Self {
+        Self::default()
     }
 
     /// Returns the real size of the track (i.e. after removing the header)
@@ -347,7 +347,7 @@ impl TrackInformation {
         self.sector_information_list
             .sectors
             .iter()
-            .map(|s| s.data_sum())
+            .map(Sector::data_sum)
             .sum::<usize>()
     }
 
@@ -355,7 +355,8 @@ impl TrackInformation {
         self.track_number == track && self.head_number == head
     }
 
-    pub fn from_buffer(buffer: &[u8]) -> TrackInformation {
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn from_buffer(buffer: &[u8]) -> Self {
         if String::from_utf8_lossy(&buffer[..0xc]).to_ascii_uppercase()
             != "Track-info\r\n".to_ascii_uppercase()
         {
@@ -382,7 +383,7 @@ impl TrackInformation {
         let sector_information_list =
             SectorInformationList::from_buffer(&buffer[0x18..], number_of_sectors);
 
-        let track_info = TrackInformation {
+        let track_info = Self {
             track_number,
             head_number,
             sector_size,
@@ -544,18 +545,18 @@ pub enum DataRate {
 #[allow(missing_docs)]
 impl Default for DataRate {
     fn default() -> Self {
-        DataRate::Unknown
+        Self::Unknown
     }
 }
 
 #[allow(missing_docs)]
 impl From<u8> for DataRate {
-    fn from(b: u8) -> DataRate {
+    fn from(b: u8) -> Self {
         match b {
-            0 => DataRate::Unknown,
-            1 => DataRate::SingleOrDoubleDensity,
-            2 => DataRate::HighDensity,
-            3 => DataRate::ExtendedDensity,
+            0 => Self::Unknown,
+            1 => Self::SingleOrDoubleDensity,
+            2 => Self::HighDensity,
+            3 => Self::ExtendedDensity,
             _ => unreachable!(),
         }
     }
@@ -565,10 +566,10 @@ impl From<u8> for DataRate {
 impl Into<u8> for DataRate {
     fn into(self) -> u8 {
         match self {
-            DataRate::Unknown => 0,
-            DataRate::SingleOrDoubleDensity => 1,
-            DataRate::HighDensity => 2,
-            DataRate::ExtendedDensity => 3,
+            Self::Unknown => 0,
+            Self::SingleOrDoubleDensity => 1,
+            Self::HighDensity => 2,
+            Self::ExtendedDensity => 3,
         }
     }
 }
@@ -584,17 +585,17 @@ pub enum RecordingMode {
 #[allow(missing_docs)]
 impl Default for RecordingMode {
     fn default() -> Self {
-        RecordingMode::Unknown
+        Self::Unknown
     }
 }
 
 #[allow(missing_docs)]
 impl From<u8> for RecordingMode {
-    fn from(b: u8) -> RecordingMode {
+    fn from(b: u8) -> Self {
         match b {
-            0 => RecordingMode::Unknown,
-            1 => RecordingMode::FM,
-            2 => RecordingMode::MFM,
+            0 => Self::Unknown,
+            1 => Self::FM,
+            2 => Self::MFM,
             _ => unreachable!(),
         }
     }
@@ -604,9 +605,9 @@ impl From<u8> for RecordingMode {
 impl Into<u8> for RecordingMode {
     fn into(self) -> u8 {
         match self {
-            RecordingMode::Unknown => 0,
-            RecordingMode::FM => 1,
-            RecordingMode::MFM => 2,
+            Self::Unknown => 0,
+            Self::FM => 1,
+            Self::MFM => 2,
         }
     }
 }
@@ -644,8 +645,8 @@ impl SectorInformation {
         self.sector_size as usize * 256
     }
 
-    pub fn from_buffer(buffer: &[u8]) -> SectorInformation {
-        let info = SectorInformation {
+    pub fn from_buffer(buffer: &[u8]) -> Self {
+        Self {
             track: buffer[0x00],
             head: buffer[0x01],
             sector_id: buffer[0x02],
@@ -653,8 +654,7 @@ impl SectorInformation {
             fdc_status_register_1: buffer[0x04],
             fdc_status_register_2: buffer[0x05],
             data_length: u16::from(buffer[0x06]) + (u16::from(buffer[0x07]) * 256),
-        };
-        info
+        }
     }
 
     /// 00 	track (equivalent to C parameter in NEC765 commands) 	1
@@ -664,6 +664,7 @@ impl SectorInformation {
     /// 04 	FDC status register 1 (equivalent to NEC765 ST1 status register) 	1
     /// 05 	FDC status register 2 (equivalent to NEC765 ST2 status register) 	1
     /// 06 - 07 	actual data length in bytes 	2
+    #[allow(clippy::cast_possible_truncation)]
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
         buffer.push(self.track);
         buffer.push(self.head);
@@ -705,7 +706,7 @@ impl SectorInformationList {
         self.sectors.push(sector);
     }
 
-    pub fn from_buffer(buffer: &[u8], number_of_sectors: u8) -> SectorInformationList {
+    pub fn from_buffer(buffer: &[u8], number_of_sectors: u8) -> Self {
         let mut list_info = Vec::new();
         let mut list_data = Vec::new();
         let mut consummed_bytes = 0;
@@ -721,7 +722,7 @@ impl SectorInformationList {
 
         // Get the data
         consummed_bytes = 256 - 0x18; // Skip the unused bytes
-        for sector in list_info.iter() {
+        for sector in &list_info {
             let current_sector_size = sector.data_length as usize;
             let current_buffer = &buffer[consummed_bytes..consummed_bytes + current_sector_size];
             let sector_bytes = current_buffer.to_vec();
@@ -743,7 +744,7 @@ impl SectorInformationList {
             })
             .collect::<Vec<Sector>>();
 
-        SectorInformationList { sectors }
+        Self { sectors }
     }
 
     pub fn sector(&self, sector_id: u8) -> Option<&Sector> {
@@ -760,6 +761,7 @@ impl SectorInformationList {
     }
 
     /// Fill the information list with sectors corresponding to the provided arguments
+    #[allow(clippy::cast_possible_truncation)] 
     pub fn fill_with(
         &mut self,
         ids: &[u8],
@@ -820,6 +822,7 @@ pub struct Sector {
 #[allow(missing_docs)]
 impl Sector {
     /// Number of bytes stored in the sector
+    #[allow(clippy::cast_possible_truncation)]
     pub fn real_size(&self) -> u16 {
         self.values.len() as u16
     }
@@ -847,7 +850,7 @@ impl Sector {
 
     /// Set all the values stored in the sector
     pub fn set_values(&mut self, data: &[u8]) -> Result<(), String> {
-        if (data.len() as u16) < self.len() {
+        if data.len()  < self.len() as usize {
             return Err(format!(
                 "You cannot insert {} bytes in a sector of size {}.",
                 data.len(),
@@ -855,7 +858,7 @@ impl Sector {
             ));
         }
 
-        if (data.len() as u16) > self.len() {
+        if data.len() > self.len() as usize {
             return Err(format!(
                 "Smaller data of {} bytes to put in a sector of size {}.",
                 data.len(),
@@ -885,7 +888,7 @@ impl TrackInformationList {
     fn from_buffer_and_disc_information(
         buffer: &[u8],
         disc_info: &DiscInformation,
-    ) -> TrackInformationList {
+    ) -> Self {
         let mut consummed_bytes: usize = 0;
         let mut list = Vec::new();
 
@@ -904,12 +907,12 @@ impl TrackInformationList {
             }
         }
 
-        TrackInformationList { list }
+        Self { list }
     }
 
     /// Write the track list in the given buffer
     fn to_buffer(&self, buffer: &mut Vec<u8>) {
-        for track in self.list.iter() {
+        for track in &self.list {
             let _added_bytes = track.to_buffer(buffer);
         }
     }
@@ -954,7 +957,7 @@ pub struct ExtendedDsk {
 #[allow(missing_docs)]
 impl ExtendedDsk {
     /// open an extended dsk from an existing file
-    pub fn open<P>(path: P) -> io::Result<ExtendedDsk>
+    pub fn open<P>(path: P) -> io::Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -969,7 +972,7 @@ impl ExtendedDsk {
         Ok(Self::from_buffer(&buffer))
     }
 
-    pub fn from_buffer(buffer: &[u8]) -> ExtendedDsk {
+    pub fn from_buffer(buffer: &[u8]) -> Self {
         let disc_info = DiscInformation::from_buffer(&buffer[..256]);
 
         println!(
@@ -981,7 +984,7 @@ impl ExtendedDsk {
         let track_list =
             TrackInformationList::from_buffer_and_disc_information(&buffer[256..], &disc_info);
 
-        ExtendedDsk {
+        Self {
             disc_information_bloc: disc_info,
             track_list,
         }
@@ -1065,13 +1068,14 @@ impl ExtendedDsk {
 
     // We assume we have the same number of tracks per Head.
     // Need to be modified the day ot will not be the case.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn nb_tracks_per_head(&self) -> u8 {
         let val = if self.disc_information_bloc.is_single_head() {
             self.track_list.list.len()
         } else {
             self.track_list.list.len() / 2
         };
-        val as u8
+        (val & 0xff ) as u8
     }
 
     #[deprecated]
@@ -1121,13 +1125,13 @@ impl ExtendedDsk {
     fn get_track_idx(&self, head: Head, track: u8) -> usize {
         if self.disc_information_bloc.is_double_head() {
             let head = match head {
-                Head::HeadA => 0,
-                Head::HeadB => 1,
+                Head::A => 0,
+                Head::B => 1,
                 Head::Unspecified => panic!("You must specify a Head for a double Headed disc."),
             };
             track as usize * 2 + head
         } else {
-            if let Head::HeadB = head {
+            if let Head::B = head {
                 panic!("You cannot select Head B in a single Headd disc");
             }
             track as usize
@@ -1173,7 +1177,7 @@ impl ExtendedDsk {
     pub fn data_sum(&self, head: Head) -> usize {
         self.track_list
             .tracks_for_head(head)
-            .map(|t| t.data_sum())
+            .map(TrackInformation::data_sum)
             .sum()
     }
 
@@ -1188,7 +1192,7 @@ impl ExtendedDsk {
     }
 
     /// Return the smallest sector id over all tracks
-    pub fn min_sector<S: Into<Head>>(&self, _size: S) -> u8 {
-        self.tracks().iter().map(|t| t.min_sector()).min().unwrap()
+    pub fn min_sector<S: Into<Head>>(&self, _size: &S) -> u8 {
+        self.tracks().iter().map(TrackInformation::min_sector).min().unwrap()
     }
 }

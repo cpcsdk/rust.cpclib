@@ -3,7 +3,7 @@ mod tests {
 
     fn test_single_dsk(dsk: &cpclib::disc::edsk::ExtendedDsk) {
         let track = dsk
-            .get_track_information(cpclib::disc::edsk::Head::HeadA, 0)
+            .get_track_information(cpclib::disc::edsk::Head::A, 0)
             .unwrap();
         assert_eq!(*track.number_of_sectors(), 9);
 
@@ -27,7 +27,7 @@ mod tests {
 
         assert_eq!(track.data_sum(), 484121);
         assert_eq!(
-            dsk.get_track_information(cpclib::disc::edsk::Head::HeadA, 41)
+            dsk.get_track_information(cpclib::disc::edsk::Head::A, 41)
                 .unwrap()
                 .data_sum(),
             329484
@@ -81,9 +81,9 @@ mod tests {
 
     fn test_double_head_bf_edsk(dsk: &cpclib::disc::edsk::ExtendedDsk) {
         assert!(dsk.is_double_head());
-        assert_eq!(dsk.data_sum(cpclib::disc::edsk::Head::HeadA), 66709468);
+        assert_eq!(dsk.data_sum(cpclib::disc::edsk::Head::A), 66709468);
 
-        assert_eq!(dsk.data_sum(cpclib::disc::edsk::Head::HeadB), 54340792);
+        assert_eq!(dsk.data_sum(cpclib::disc::edsk::Head::B), 54340792);
     }
 
     #[test]
@@ -135,7 +135,7 @@ mod tests {
 
         for (idx, value) in tracks_content.iter().enumerate() {
             assert_eq!(
-                dsk.track_bytes(cpclib::disc::edsk::Head::HeadA, idx as u8)
+                dsk.track_bytes(cpclib::disc::edsk::Head::A, idx as u8)
                     .unwrap()
                     .iter()
                     .map(|&v| v as usize)
@@ -279,7 +279,7 @@ mod tests {
             let value = *chunk.next().unwrap() as usize;
 
             assert_eq!(
-                dsk.sectors_bytes(cpclib::disc::edsk::Head::HeadA, track, sector, 1)
+                dsk.sectors_bytes(cpclib::disc::edsk::Head::A, track, sector, 1)
                     .unwrap()
                     .iter()
                     .map(|&v| v as usize)
@@ -297,7 +297,7 @@ mod tests {
         */
 
         use cpclib::disc::amsdos::*;
-        let amsdos = AmsdosManager::new_from_disc(dsk, cpclib::disc::edsk::Head::HeadA);
+        let amsdos = AmsdosManager::new_from_disc(dsk, cpclib::disc::edsk::Head::A);
         let entries = dbg!(amsdos.catalog().to_amsdos_catalog());
 
         assert_eq!(entries.len(), 1);
@@ -427,7 +427,7 @@ mod tests {
             let value = *chunk.next().unwrap() as usize;
 
             let sector = dsk
-                .sector(cpclib::disc::edsk::Head::HeadA, track, sector)
+                .sector(cpclib::disc::edsk::Head::A, track, sector)
                 .unwrap();
 
             assert_eq!(size as u16, sector.len());
@@ -447,10 +447,10 @@ mod tests {
 
         for (idx, value) in tracks_content.iter().enumerate() {
             let track = dsk
-                .get_track_information(cpclib::disc::edsk::Head::HeadA, idx as u8)
+                .get_track_information(cpclib::disc::edsk::Head::A, idx as u8)
                 .unwrap();
             let track_bytes = dsk
-                .track_bytes(cpclib::disc::edsk::Head::HeadA, idx as u8)
+                .track_bytes(cpclib::disc::edsk::Head::A, idx as u8)
                 .unwrap();
             let obtained = track_bytes.iter().map(|&v| v as usize).sum::<usize>();
             let nb = track_bytes.iter().count();
@@ -463,7 +463,7 @@ mod tests {
         }
 
         use cpclib::disc::amsdos::*;
-        let amsdos = AmsdosManager::new_from_disc(dsk, cpclib::disc::edsk::Head::HeadA);
+        let amsdos = AmsdosManager::new_from_disc(dsk, cpclib::disc::edsk::Head::A);
         let entries = dbg!(amsdos
             .catalog()
             .to_amsdos_catalog()

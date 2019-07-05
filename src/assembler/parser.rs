@@ -67,7 +67,7 @@ impl ParserContext {
             }
         } else {
             // loop over all possibilities
-            for search in self.search_path.iter() {
+            for search in &self.search_path {
                 let current_path = search.join(fname.clone());
 
                 if current_path.is_file() {
@@ -110,7 +110,7 @@ pub fn parse_str_with_context(code: &str, ctx: &ParserContext) -> Result<Listing
 
 /// Parse a string and return the corresponding listing
 pub fn parse_str(code: &str) -> Result<Listing, AssemblerError> {
-    parse_str_with_context(code, &Default::default())
+    parse_str_with_context(code, &ParserContext::default())
 }
 
 named_attr! (
@@ -1519,7 +1519,7 @@ pub fn dec_u16(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
             if parsed.input_len() > 5 {
                 Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
             } else {
-                let mut res = 0u32;
+                let mut res = 0_u32;
                 for e in parsed.iter_elements() {
                     let digit = e;
                     let value = digit.to_digit(10).unwrap_or(0);
@@ -1567,7 +1567,7 @@ pub fn hex_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
             if parsed.input_len() > 4 {
                 Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
             } else {
-                let mut res = 0u32;
+                let mut res = 0_u32;
                 for e in parsed.iter_elements() {
                     let digit = e;
                     let value = digit.to_digit(16).unwrap_or(0);
@@ -1776,6 +1776,7 @@ named_attr!(#[doc="TODO"],pub comp<CompleteStr<'_>, Expr>, do_parse!(
 );
 
 /// Generate a string from a parsing error. Probably deprecated
+#[allow(clippy::needless_pass_by_value)]
 pub fn decode_parsing_error(orig: &str, e: ::nom::Err<CompleteStr<'_>>) -> String {
     let error_string;
 

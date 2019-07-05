@@ -20,7 +20,14 @@
     unused
 )]
 
-#![deny(clippy::all)]
+#![deny(clippy::pedantic)]
+#![allow(
+    clippy::module_name_repetitions, 
+    clippy::doc_markdown,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 
 //! cpclib aims at providing tools that help cross-development for the Amstrad CPC.
 //! It is mainly focused on the creation of demos for the Amstrad CPC but could be used for games or tools.

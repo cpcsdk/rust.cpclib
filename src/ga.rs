@@ -149,7 +149,7 @@ impl Into<u8> for &Ink {
 
 impl From<im::Rgba<u8>> for Ink {
     fn from(color: im::Rgba<u8>) -> Self {
-        Ink::from(color.to_rgb())
+        Self::from(color.to_rgb())
     }
 }
 
@@ -174,13 +174,13 @@ impl From<im::Rgb<u8>> for Ink {
                 selected_idx = idx;
             }
         }
-        Ink::from(selected_idx as u8)
+        Self::from(selected_idx as u8)
     }
 }
 
 impl From<u8> for Ink {
     fn from(item: u8) -> Self {
-        Ink { value: item }
+        Self { value: item }
     }
 }
 
@@ -192,33 +192,33 @@ impl From<String> for Ink {
             .replace("_", "")
             .as_str()
         {
-            "BLACK" => Ink { value: 0 },
-            "BLUE" => Ink { value: 1 },
-            "BRIGHTBLUE" => Ink { value: 2 },
-            "RED" => Ink { value: 3 },
-            "MAGENTA" => Ink { value: 4 },
-            "MAUVE" => Ink { value: 5 },
-            "BRIGHTRED" => Ink { value: 6 },
-            "PURPLE" => Ink { value: 7 },
-            "BRIGHTMAGENTA" => Ink { value: 8 },
-            "GREEN" => Ink { value: 9 },
-            "CYAN" => Ink { value: 10 },
-            "SKYBLUE" => Ink { value: 11 },
-            "YELLOW" => Ink { value: 12 },
-            "WHITE" => Ink { value: 13 },
-            "PASTELBLUE" => Ink { value: 14 },
-            "ORANGE" => Ink { value: 15 },
-            "PINK" => Ink { value: 16 },
-            "PASTELMAGENTA" => Ink { value: 17 },
-            "BRIGHTGREEN" => Ink { value: 18 },
-            "SEAGREEN" => Ink { value: 19 },
-            "BRIGHTCYAN" => Ink { value: 20 },
-            "LIME" => Ink { value: 21 },
-            "PASTELGREEN" => Ink { value: 22 },
-            "PASTELCYAN" => Ink { value: 23 },
-            "BRIGHTYELLOW" => Ink { value: 24 },
-            "PASTELYELLOW" => Ink { value: 25 },
-            "BRIGHTWHITE" => Ink { value: 26 },
+            "BLACK" => Self { value: 0 },
+            "BLUE" => Self { value: 1 },
+            "BRIGHTBLUE" => Self { value: 2 },
+            "RED" => Self { value: 3 },
+            "MAGENTA" => Self { value: 4 },
+            "MAUVE" => Self { value: 5 },
+            "BRIGHTRED" => Self { value: 6 },
+            "PURPLE" => Self { value: 7 },
+            "BRIGHTMAGENTA" => Self { value: 8 },
+            "GREEN" => Self { value: 9 },
+            "CYAN" => Self { value: 10 },
+            "SKYBLUE" => Self { value: 11 },
+            "YELLOW" => Self { value: 12 },
+            "WHITE" => Self { value: 13 },
+            "PASTELBLUE" => Self { value: 14 },
+            "ORANGE" => Self { value: 15 },
+            "PINK" => Self { value: 16 },
+            "PASTELMAGENTA" => Self { value: 17 },
+            "BRIGHTGREEN" => Self { value: 18 },
+            "SEAGREEN" => Self { value: 19 },
+            "BRIGHTCYAN" => Self { value: 20 },
+            "LIME" => Self { value: 21 },
+            "PASTELGREEN" => Self { value: 22 },
+            "PASTELCYAN" => Self { value: 23 },
+            "BRIGHTYELLOW" => Self { value: 24 },
+            "PASTELYELLOW" => Self { value: 25 },
+            "BRIGHTWHITE" => Self { value: 26 },
 
             "GRAY" | "GREY" => "WHITE".into(),
 
@@ -266,7 +266,7 @@ impl Debug for Ink {
 
 impl<'a> From<&'a str> for Ink {
     fn from(item: &'a str) -> Self {
-        Ink::from(String::from(item))
+        Self::from(String::from(item))
     }
 }
 
@@ -315,7 +315,7 @@ where
 {
     fn from(item: T) -> Self {
         let item: i32 = item.into();
-        Pen { value: item as u8 }
+        Self { value: item as u8 }
     }
 }
 
@@ -341,18 +341,18 @@ impl Pen {
     /// given mode
     pub fn limit(&mut self, mode: Mode) {
         self.value = match mode {
-            Mode::Mode0 => self.value,
-            Mode::Mode3 | Mode::Mode1 => self.value & 3,
-            Mode::Mode2 => self.value & 1,
+            Mode::Zero => self.value,
+            Mode::Three | Mode::One => self.value & 3,
+            Mode::Two => self.value & 1,
         };
     }
 }
 
 impl Add<i8> for Pen {
-    type Output = Pen;
+    type Output = Self;
 
-    fn add(self, delta: i8) -> Pen {
-        Pen {
+    fn add(self, delta: i8) -> Self {
+        Self {
             value: (self.value as i8 + delta) as u8,
         }
     }
@@ -392,7 +392,7 @@ impl Clone for Palette {
             map.insert(pen.clone(), ink.clone());
         }
 
-        Palette { values: map }
+        Self { values: map }
     }
 }
 
@@ -408,8 +408,8 @@ impl Debug for Palette {
 impl Default for Palette {
     /// Create a new palette.
     /// Pens ink are the same than Amsdos ones.
-    fn default() -> Palette {
-        let mut p = Palette::new();
+    fn default() -> Self {
+        let mut p = Self::new();
         for i in 0..15 {
             p.set(&PENS[i], INKS[i]);
         }
@@ -423,7 +423,7 @@ where
     T: Copy,
 {
     fn from(items: Vec<T>) -> Self {
-        let mut p = Palette::new();
+        let mut p = Self::new();
 
         for (idx, ink) in items.iter().enumerate() {
             p.set(&Pen::from(idx as u8), Ink::from(ink.clone()));
@@ -472,9 +472,9 @@ impl Serialize for Palette {
 impl<'de> Deserialize<'de> for Palette {
     fn deserialize<D: Deserializer<'de>>(
         deserializer: D,
-    ) -> std::result::Result<Palette, D::Error> {
+    ) -> std::result::Result<Self, D::Error> {
         let inks: Vec<Ink> = Vec::<Ink>::deserialize(deserializer)?;
-        let palette: Palette = inks.into();
+        let palette: Self = inks.into();
         Ok(palette)
     }
 }
@@ -483,21 +483,21 @@ impl<'de> Deserialize<'de> for Palette {
 impl Palette {
     /// Create a new palette.
     /// All pens are black.
-    pub fn new() -> Palette {
+    pub fn new() -> Self {
         let mut map: HashMap<Pen, Ink> = HashMap::new();
 
         for pen in 0..NB_PENS {
             map.insert(Pen { value: pen }, Ink { value: 0 });
         }
 
-        Palette { values: map }
+        Self { values: map }
     }
 
     /// Create an empty Palette.
     /// An empty palette does not contains all the inks and must make crash most of the code that has been previously written !
-    pub fn empty() -> Palette {
-        Palette {
-            values: Default::default(),
+    pub fn empty() -> Self {
+        Self {
+            values: HashMap::<Pen, Ink>::default()
         }
     }
 
@@ -563,8 +563,13 @@ impl Palette {
     pub fn inks(&self) -> Vec<Ink> {
         self.values
             .iter()
-            .filter(|(&p, _)| p.number() != 16)
-            .map(|(_, i)| i.clone())
+            .filter_map(|(&p, i)| {
+                if p.number() == 16 {
+                    None
+                } else {
+                    Some(i.clone())
+                }
+            })
             .collect::<Vec<Ink>>()
     }
 
@@ -580,8 +585,14 @@ impl Palette {
     pub fn pens(&self) -> Vec<Pen> {
         self.values
             .iter()
-            .filter(|(&p, _)| p.number() != 16)
-            .map(|(p, _)| p.clone())
+            .filter_map(|(&p, _)| {
+                if p.number() == 16 {
+                    None
+                }
+                else {
+                    Some(p.clone())
+                }
+            })
             .collect::<Vec<Pen>>()
     }
 
@@ -610,8 +621,14 @@ impl Palette {
         self.values
             .iter()
             .filter(|(&p, _)| p.number() != 16)
-            .find(|(_, i)| *i == expected)
-            .map(|(p, _)| p.clone())
+            .find_map(|(p, i)| {
+               if i == expected {
+                   Some(p.clone())
+               }
+               else {
+                   None
+               }
+            })
     }
 
     /// Returns true if the palette contains the inks in one of its pens (except border)
@@ -621,7 +638,7 @@ impl Palette {
 
     /// Replicate the firsts 4 pens in order to manage special texture that contains both mode 0
     /// and mode 3 patterns
-    pub fn to_mode3_mixed_with_mode0(&self) -> Palette {
+    pub fn to_mode3_mixed_with_mode0(&self) -> Self {
         let mut p = self.clone();
 
         let ink0 = self.get(&PENS[0]);

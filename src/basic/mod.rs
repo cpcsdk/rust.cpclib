@@ -53,8 +53,8 @@ impl BasicLine {
     }
 
     /// Create a line with its content
-    pub fn new(line_number: u16, tokens: &[BasicToken]) -> BasicLine {
-        BasicLine {
+    pub fn new(line_number: u16, tokens: &[BasicToken]) -> Self {
+        Self {
             line_number,
             tokens: tokens.to_vec(),
             forced_length: None,
@@ -90,7 +90,7 @@ impl BasicLine {
     fn tokens_as_bytes(&self) -> Vec<u8> {
         self.tokens
             .iter()
-            .flat_map(|t| t.as_bytes())
+            .flat_map(BasicToken::as_bytes)
             .collect::<Vec<u8>>()
     }
 
@@ -128,8 +128,8 @@ pub struct BasicProgram {
 
 impl fmt::Display for BasicProgram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for line in self.lines.iter() {
-            write!(f, "{}\n", line)?;
+        for line in &self.lines {
+            writeln!(f, "{}", line)?;
         }
         Ok(())
     }
@@ -138,21 +138,22 @@ impl fmt::Display for BasicProgram {
 #[allow(missing_docs)]
 impl BasicProgram {
     /// Create the program from a list of lines
-    pub fn new(lines: Vec<BasicLine>) -> BasicProgram {
-        BasicProgram { lines }
+    pub fn new(lines: Vec<BasicLine>) -> Self {
+        Self { lines }
     }
 
     /// Create the program from a code to parse
-    pub fn parse<S: AsRef<str>>(code: S) -> Result<BasicProgram, String> {
+    pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, String> {
         match parse_basic_program(code.as_ref().into()) {
             Ok((res, prog)) => {
-                if res.trim().len() != 0 {
+                if res.trim().len() == 0 {
+                    Ok(prog)
+                }
+                else {
                     Err(format!(
                         "Basic content has not been totally parsed: `{}`",
                         res
                     ))
-                } else {
-                    Ok(prog)
                 }
             }
             Err(e) => Err(format!("Error while parsing the Basic content: {}", e)),
@@ -192,10 +193,11 @@ impl BasicProgram {
     pub fn previous_idx(&self, idx: BasicProgramLineIdx) -> Option<BasicProgramLineIdx> {
         match self.line_idx_as_valid_index(idx) {
             Ok(BasicProgramLineIdx::Index(index)) => {
-                if index != 0 {
-                    Some(BasicProgramLineIdx::Index(index - 1))
-                } else {
+                if index == 0 {
                     None
+                }
+                else {
+                    Some(BasicProgramLineIdx::Index(index - 1))
                 }
             }
             Err(_e) => None,
@@ -234,8 +236,13 @@ impl BasicProgram {
         self.lines
             .iter()
             .enumerate()
-            .filter(move |(_index, line)| line.line_number == number)
-            .map(|(index, _line)| index)
+            .filter_map(move |(index, line)| {
+                    if line.line_number == number {
+                        Some(index)
+                    }else {
+                        None
+                    }
+                })
             .collect::<Vec<_>>()
             .first()
             .map(|&v| v)
@@ -279,13 +286,15 @@ impl BasicProgram {
         let mut bytes = self
             .lines
             .iter()
-            .flat_map(|v| v.as_bytes())
+            .flat_map(BasicLine::as_bytes)
             .collect::<Vec<u8>>();
         bytes.resize(bytes.len() + 3, 0);
         bytes
     }
 }
 
+#[allow(clippy::let_unit_value)]
+#[allow(clippy::shadow_unrelated)]
 #[cfg(test)]
 mod test {
     use crate::basic::*;
@@ -295,11 +304,11 @@ mod test {
         let code = "10 call &0: call &0\n";
         BasicProgram::parse(code).expect("Unable to produce basic tokens");
 
-        let code = "10 call &0: call &0";
-        BasicProgram::parse(code).expect("Unable to produce basic tokens");
+        let code1 = "10 call &0: call &0";
+        BasicProgram::parse(code1).expect("Unable to produce basic tokens");
 
-        let code = "10 ' blabla bla\n20 ' blab bla bal\n30 call &180";
-        BasicProgram::parse(code).expect("Unable to produce basic tokens");
+        let code2 = "10 ' blabla bla\n20 ' blab bla bal\n30 call &180";
+        BasicProgram::parse(code2).expect("Unable to produce basic tokens");
     }
 
     #[test]

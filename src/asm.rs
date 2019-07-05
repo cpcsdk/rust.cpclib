@@ -15,15 +15,15 @@ pub fn bytes_to_db_str(bytes: &[u8]) -> String {
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(missing_docs)]
 pub enum Bank {
-    Bank0,
-    Bank1,
-    Bank2,
-    Bank3,
+    Zero,
+    One,
+    Two,
+    Three,
 
-    Bank4,
-    Bank5,
-    Bank6,
-    Bank7,
+    Four,
+    Five,
+    Six,
+    Seven,
 }
 
 #[allow(missing_docs)]
@@ -31,7 +31,7 @@ impl Bank {
     pub fn is_main_memory(&self) -> bool {
         use self::Bank::*;
         match self {
-            &Bank0 | &Bank1 | &Bank2 | &Bank3 => true,
+            &Zero | &One | &Two | &Three => true,
             _ => false,
         }
     }
@@ -43,24 +43,25 @@ impl Bank {
     pub fn num(&self) -> u8 {
         use self::Bank::*;
         match self {
-            &Bank0 => 0,
-            &Bank1 => 1,
-            &Bank2 => 2,
-            &Bank3 => 3,
-            &Bank4 => 4,
-            &Bank5 => 5,
-            &Bank6 => 6,
-            &Bank7 => 7,
+            &Zero => 0,
+            &One => 1,
+            &Two => 2,
+            &Three => 3,
+            &Four => 4,
+            &Five => 5,
+            &Six => 6,
+            &Seven => 7,
         }
     }
 
+    #[allow(clippy::match_same_arms)]
     pub fn start_address(&self) -> u16 {
         use self::Bank::*;
         match self {
-            &Bank0 => 0x0000,
-            &Bank1 => 0x4000,
-            &Bank2 => 0x8000,
-            &Bank3 => 0xc000,
+            &Zero => 0x0000,
+            &One => 0x4000,
+            &Two => 0x8000,
+            &Three => 0xc000,
             _ => 0x4000,
         }
     }
@@ -97,7 +98,7 @@ impl Debug for PageDefinition {
 
 #[allow(missing_docs)]
 impl PageDefinition {
-    pub fn new(bank: Bank, start: u16, end: Option<u16>) -> PageDefinition {
+    pub fn new(bank: Bank, start: u16, end: Option<u16>) -> Self {
         assert!(start >= bank.start_address());
         assert!((start as u32) < (bank.start_address() as u32 + 0x4000));
 
@@ -106,7 +107,7 @@ impl PageDefinition {
             assert!((end.unwrap() as u32) < (bank.start_address() as u32 + 0x4000));
         }
 
-        PageDefinition {
+        Self {
             bank,
             start,
             end,
@@ -151,7 +152,7 @@ impl PageDefinition {
 
     /// Check if there is overlapping between the two pages.
     /// Test is not done if one of the definition has no end
-    pub fn overlaps(&self, other: &PageDefinition) -> bool {
+    pub fn overlaps(&self, other: &Self) -> bool {
         if self.end.is_none() && other.end.is_none() {
             // We do not test overlap when end is not specified
             false
@@ -159,10 +160,7 @@ impl PageDefinition {
             let memory_overlaps = (self.start >= other.start && self.start <= other.end.unwrap())
                 || (self.end.unwrap() >= other.start && self.end.unwrap() <= other.end.unwrap());
 
-            if !memory_overlaps {
-                // We have no overlap
-                false
-            } else {
+            if memory_overlaps  {
                 // We have overlap BUT we do not care if the banks are different
                 if self.bank() == other.bank() {
                     // Same bank meens overlap
@@ -176,12 +174,15 @@ impl PageDefinition {
                     start < 0x4000 || start > 0x7fff || end < 0x4000 || end > 0x7fff
                 }
             }
+            else {
+                false
+            }
         }
     }
 
     /// Chekc that hte other page is contained by self. Cannot be used only when end address is
     /// given
-    pub fn includes(&self, other: &PageDefinition) -> bool {
+    pub fn includes(&self, other: &Self) -> bool {
         if self.end.is_none() || other.end.is_none() {
             return false;
         }
@@ -205,11 +206,11 @@ pub struct StringCodePage {
 
 #[allow(missing_docs)]
 impl StringCodePage {
-    pub fn new(definition: PageDefinition) -> StringCodePage {
-        StringCodePage {
+    pub fn new(definition: PageDefinition) -> Self {
+        Self {
             code: Vec::new(),
             current_address: definition.start(),
-            definition: definition,
+            definition,
         }
     }
 
@@ -252,7 +253,7 @@ impl StringCodePage {
     pub fn save_code(&self, fname: &str) -> io::Result<()> {
         let mut out = File::create(fname)?;
         writeln!(out, "\torg 0x{:x}", self.definition.start())?;
-        for instruction in self.code.iter() {
+        for instruction in &self.code {
             write!(out, "{}", instruction)?;
         }
         if let Some(end) = self.definition.end() {
@@ -271,19 +272,19 @@ pub struct StringCodePageContainer {
 
 #[allow(missing_docs)]
 impl StringCodePageContainer {
-    pub fn new(mut possibilities: Vec<PageDefinition>) -> StringCodePageContainer {
+    pub fn new(mut possibilities: Vec<PageDefinition>) -> Self {
         // As we pop possibilities, it is necessary to revert it
         possibilities.reverse();
 
-        for page1 in possibilities.iter() {
-            for page2 in possibilities.iter() {
+        for page1 in &possibilities {
+            for page2 in &possibilities {
                 if page1 != page2 && page1.overlaps(page2) {
                     panic!("Error, {:?} overlaps {:?}", page1, page2);
                 }
             }
         }
 
-        StringCodePageContainer {
+        Self {
             pages: Vec::new(),
             possibilities,
         }

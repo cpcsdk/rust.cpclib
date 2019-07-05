@@ -65,13 +65,13 @@ pub enum AssemblerError {
 }
 
 impl From<String> for AssemblerError {
-    fn from(msg: String) -> AssemblerError {
+    fn from(msg: String) -> Self {
         AssemblerError::GenericError { msg }
     }
 }
 
 impl From<&String> for AssemblerError {
-    fn from(msg: &String) -> AssemblerError {
+    fn from(msg: &String) -> Self {
         AssemblerError::GenericError {
             msg: msg.to_string(),
         }
@@ -79,7 +79,7 @@ impl From<&String> for AssemblerError {
 }
 
 impl From<BasicError> for AssemblerError {
-    fn from(msg: BasicError) -> AssemblerError {
+    fn from(msg: BasicError) -> Self {
         AssemblerError::BasicError {
             error: msg.to_string(),
         }
@@ -96,10 +96,10 @@ pub struct AssemblingOptions {
 }
 
 impl Default for AssemblingOptions {
-    fn default() -> AssemblingOptions {
-        AssemblingOptions {
+    fn default() -> Self {
+        Self {
             case_sensitive: true,
-            symbols: Default::default(),
+            symbols: assembler::SymbolsTable::default(),
         }
     }
 }

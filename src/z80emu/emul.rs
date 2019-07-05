@@ -145,10 +145,8 @@ impl Z80 {
                 .eval_expr(exp)
                 .map(|address| self.read_memory_byte(address) as u16),
             &DataAccess::IndexRegister16WithIndex(_, _) => None,
-            &DataAccess::IndexRegister16(_) => Some(self.get_register_16(access).value()),
-            &DataAccess::IndexRegister8(_) => Some(self.get_register_8(access).value().into()),
-            &DataAccess::Register16(_) => Some(self.get_register_16(access).value()),
-            &DataAccess::Register8(_) => Some(self.get_register_8(access).value().into()),
+            &DataAccess::IndexRegister16(_) | &DataAccess::Register16(_) => Some(self.get_register_16(access).value()),
+            &DataAccess::IndexRegister8(_) | &DataAccess::Register8(_) => Some(self.get_register_8(access).value().into()),
             &DataAccess::MemoryRegister16(ref reg) => Some(
                 self.read_memory_byte(
                     self.get_register_16(&DataAccess::Register16(reg.clone()))
@@ -241,9 +239,10 @@ impl Z80 {
         }
     }
 
+    #[allow(clippy::cast_sign_loss)]
     fn eval_expr(&self, expr: &Expr) -> Option<u16> {
         match expr.eval() {
-            Ok(val) => Some(val as u16),
+            Ok(val) => Some(val.abs() as u16),
             Err(_) => None,
         }
     }

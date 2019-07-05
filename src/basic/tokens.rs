@@ -367,21 +367,21 @@ pub enum BasicValue {
 
 #[allow(missing_docs)]
 impl BasicValue {
-    pub fn new_integer(word: u16) -> BasicValue {
+    pub fn new_integer(word: u16) -> Self {
         BasicValue::Integer((word % 256) as u8, (word / 256) as u8)
     }
 
-    pub fn new_string(_value: &str) -> BasicValue {
+    pub fn new_string(_value: &str) -> Self {
         unimplemented!()
     }
 
-    pub fn new_float(_value: i32) -> BasicValue {
+    pub fn new_float(_value: i32) -> Self {
         unimplemented!()
     }
 
     pub fn as_bytes(&self) -> Vec<u8> {
         match self {
-            BasicValue::Integer(ref low, ref high) => vec![*low, *high],
+            Self::Integer(ref low, ref high) => vec![*low, *high],
             _ => unimplemented!(),
         }
     }
@@ -505,7 +505,7 @@ impl BasicToken {
     fn encode_string(name: &str) -> Vec<u8> {
         let mut copy = name.as_bytes().to_vec();
         copy.pop(); // Remove \0
-        copy.last_mut().map(|c| *c += 0b10000000); // Set bit 7 to last char
+        copy.last_mut().map(|c| *c += 0b1000_0000); // Set bit 7 to last char
         copy
     }
 }

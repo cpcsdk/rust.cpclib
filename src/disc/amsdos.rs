@@ -25,7 +25,7 @@ pub enum AmsdosError {
 }
 
 impl From<std::io::Error> for AmsdosError {
-    fn from(err: std::io::Error) -> AmsdosError {
+    fn from(err: std::io::Error) -> Self {
         AmsdosError::IO(err)
     }
 }
@@ -49,7 +49,7 @@ impl std::fmt::Debug for AmsdosFileName {
 }
 
 impl PartialEq for AmsdosFileName {
-    fn eq(&self, other: &AmsdosFileName) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.user == other.user
             && self.name().to_uppercase() == other.name().to_uppercase()
             && self.extension().to_uppercase() == other.extension().to_uppercase()
@@ -81,25 +81,24 @@ impl AmsdosFileName {
         &self.extension
     }
 
-    pub fn from_slice(slice: &[u8]) -> AmsdosFileName {
+    pub fn from_slice(slice: &[u8]) -> Self {
         Self::from_entry_format(array_ref!(slice, 0, 12))
     }
 
     /// Create an amsdos filename from a catalog entry buffer
-    pub fn from_entry_format(buffer: &[u8; 12]) -> AmsdosFileName {
+    pub fn from_entry_format(buffer: &[u8; 12]) -> Self {
         let user: u8 = buffer[0];
         let name: [u8; 8] = array_ref!(buffer, 1, 8).clone();
         // Remove bit 7 of each char
         let mut extension: [u8; 3] = array_ref!(buffer, 9, 3).clone();
-        extension.iter_mut().for_each(|b| *b = *b & 0b01111111);
+        extension.iter_mut().for_each(|b| *b = *b & 0b0111_1111);
 
-        let fname = AmsdosFileName {
+        Self {
             user,
             name,
             extension,
-        };
+        }
 
-        fname
     }
 
     /// Build a filename compatible with the catalog entry format
@@ -111,10 +110,10 @@ impl AmsdosFileName {
         buffer[9..].copy_from_slice(self.extension_header_format().as_ref());
 
         if system {
-            buffer[10] += 0b10000000;
+            buffer[10] += 0b1000_0000;
         }
         if read_only {
-            buffer[9] += 0b10000000;
+            buffer[9] += 0b1000_0000;
         }
 
         buffer
@@ -152,17 +151,14 @@ impl AmsdosFileName {
 
     pub fn set_filename<S: AsRef<str>>(&mut self, filename: S) {
         let filename = filename.as_ref();
-        match filename.find(".") {
-            Some(idx) => {
+        if let Some(idx) = filename.find(".") {
                 self.set_name(&filename[0..idx]);
                 self.set_extension(&filename[idx + 1..filename.len()])
-            }
-
-            None => {
+        } else{
                 self.set_name(filename);
                 self.set_extension("");
             }
-        }
+        
     }
 
     pub fn set_name<S: AsRef<str>>(&mut self, name: S) {
@@ -218,7 +214,7 @@ impl AmsdosFileName {
         user: u8,
         filename: S1,
         extension: S2,
-    ) -> Result<AmsdosFileName, String>
+    ) -> Result<Self, String>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -235,7 +231,7 @@ impl AmsdosFileName {
         user: u8,
         filename: &str,
         extension: &str,
-    ) -> Result<AmsdosFileName, String> {
+    ) -> Result<Self, String> {
         let filename = filename.trim();
         let extension = extension.trim();
 
@@ -273,7 +269,7 @@ impl AmsdosFileName {
         };
 
         //TODO see if upercase is needed
-        Ok(AmsdosFileName {
+        Ok(Self {
             user,
             name,
             extension,
@@ -284,7 +280,7 @@ impl AmsdosFileName {
 // TODO use tryfrom asap
 impl<S: AsRef<str>> From<S> for AmsdosFileName {
     /// Make a filename conversion by considering the following format is used: user:name.extension
-    fn from(content: S) -> AmsdosFileName {
+    fn from(content: S) -> Self {
         let content = content.as_ref();
         let (user, rest) = match content.find(':') {
             None => (0, content),
@@ -300,7 +296,7 @@ impl<S: AsRef<str>> From<S> for AmsdosFileName {
             Some(idx) => (&rest[..idx], &rest[(idx + 1)..]),
         };
 
-        AmsdosFileName::new_correct_case(user, filename, extension).unwrap()
+        Self::new_correct_case(user, filename, extension).unwrap()
     }
 }
 
@@ -316,7 +312,7 @@ pub enum AmsdosFileType {
 }
 
 impl From<u8> for AmsdosFileType {
-    fn from(val: u8) -> AmsdosFileType {
+    fn from(val: u8) -> Self {
         match val {
             0 => AmsdosFileType::Basic,
             1 => AmsdosFileType::Protected,
@@ -348,13 +344,13 @@ pub enum BlocIdx {
 }
 
 impl Default for BlocIdx {
-    fn default() -> BlocIdx {
+    fn default() -> Self {
         BlocIdx::Empty
     }
 }
 
 impl From<u8> for BlocIdx {
-    fn from(val: u8) -> BlocIdx {
+    fn from(val: u8) -> Self {
         match val {
             0 => BlocIdx::Empty,
             0xe5 => BlocIdx::Deleted,
@@ -374,7 +370,7 @@ impl Into<u8> for &BlocIdx {
 }
 
 impl PartialOrd for BlocIdx {
-    fn partial_cmp(&self, other: &BlocIdx) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         let a: u8 = self.into();
         let b: u8 = other.into();
         a.partial_cmp(&b)
@@ -382,7 +378,7 @@ impl PartialOrd for BlocIdx {
 }
 
 impl PartialEq for BlocIdx {
-    fn eq(&self, other: &BlocIdx) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         let a: u8 = self.into();
         let b: u8 = other.into();
         a == b
@@ -403,11 +399,13 @@ impl BlocIdx {
     }
 
     /// only valid for a valid block
+    #[allow(clippy::cast_possible_truncation)]
     pub fn track(&self) -> u8 {
         (((self.value() as u16) << 1) / 9) as u8
     }
 
     /// only valid for a valid block
+    #[allow(clippy::cast_possible_truncation)]
     pub fn sector(&self) -> u8 {
         (((self.value() as u16) << 1) % 9) as u8
     }
@@ -418,16 +416,16 @@ impl BlocIdx {
 /// Represents an entry in the Amsdos Catalog
 pub struct AmsdosEntry {
     /// Location of the entry in the catalog
-    idx: u8,
+    pub(crate) idx: u8,
     /// Name of the file
-    file_name: AmsdosFileName,
-    read_only: bool,
-    system: bool,
-    num_page: u8,
+    pub(crate) file_name: AmsdosFileName,
+    pub(crate) read_only: bool,
+    pub(crate) system: bool,
+    pub(crate) num_page: u8,
     /// Encoded page size
-    page_size: u8,
+    pub(crate) page_size: u8,
     /// list of block indexes
-    blocs: [BlocIdx; 16],
+    pub(crate) blocs: [BlocIdx; 16],
 }
 
 impl std::fmt::Display for AmsdosEntry {
@@ -455,13 +453,13 @@ impl AmsdosEntry {
         &self.file_name
     }
 
-    pub fn from_slice(idx: u8, slice: &[u8]) -> AmsdosEntry {
+    pub fn from_slice(idx: u8, slice: &[u8]) -> Self {
         Self::from_buffer(idx, array_ref!(slice, 0, 32))
     }
 
     /// Create the entry from its 32 bytes
-    pub fn from_buffer(idx: u8, buffer: &[u8; 32]) -> AmsdosEntry {
-        AmsdosEntry {
+    pub fn from_buffer(idx: u8, buffer: &[u8; 32]) -> Self {
+        Self {
             idx,
             file_name: AmsdosFileName::from_entry_format(array_ref!(buffer, 0, 12)),
             read_only: buffer[1 + 8 + 0].bit(7),
@@ -635,9 +633,9 @@ impl AmsdosCatalogEntry {
 }
 
 impl From<(u8, u8, AmsdosEntry)> for AmsdosCatalogEntry {
-    fn from(e: (u8, u8, AmsdosEntry)) -> AmsdosCatalogEntry {
+    fn from(e: (u8, u8, AmsdosEntry)) -> Self {
         let (track, sector, e) = e;
-        AmsdosCatalogEntry {
+        Self {
             track,
             sector,
             file_name: e.file_name,
@@ -647,8 +645,14 @@ impl From<(u8, u8, AmsdosEntry)> for AmsdosCatalogEntry {
             blocs: e
                 .blocs
                 .iter()
-                .filter(|b| b.is_valid())
-                .map(|v| v.clone())
+                .filter_map(|b| {
+                    if b.is_valid() {
+                        Some(*b)
+                    }
+                    else {
+                        None
+                    }
+                })
                 .collect(),
         }
     }
@@ -656,10 +660,10 @@ impl From<(u8, u8, AmsdosEntry)> for AmsdosCatalogEntry {
 
 #[allow(missing_docs)]
 impl AmsdosCatalogEntry {
-    fn merge_entries(e1: &AmsdosCatalogEntry, e2: &AmsdosCatalogEntry) -> AmsdosCatalogEntry {
+    fn merge_entries(e1: &Self, e2: &Self) -> Self {
         assert_eq!(e1.file_name, e2.file_name);
 
-        AmsdosCatalogEntry {
+        Self {
             track: e1.track.min(e2.track),
             sector: e1.sector.min(e2.sector),
             file_name: e1.file_name.clone(),
@@ -705,7 +709,7 @@ pub struct AmsdosCatalog {
 
 #[allow(missing_docs)]
 impl From<AmsdosEntries> for AmsdosCatalog {
-    fn from(entries: AmsdosEntries) -> AmsdosCatalog {
+    fn from(entries: AmsdosEntries) -> Self {
         let mut novel: Vec<AmsdosCatalogEntry> = Vec::new();
 
         for current_entry in entries.without_erased_entries().map(|e| {
@@ -729,7 +733,7 @@ impl From<AmsdosEntries> for AmsdosCatalog {
             }
         }
 
-        AmsdosCatalog { entries: novel }
+        Self { entries: novel }
     }
 }
 
@@ -748,24 +752,24 @@ impl AmsdosCatalog {
     }
 
     /// Create an alphabetically sorted version of the catalog
-    pub fn sorted_alphabetically(&self) -> AmsdosCatalog {
-        let mut copy: AmsdosCatalog = self.clone();
+    pub fn sorted_alphabetically(&self) -> Self {
+        let mut copy: Self = self.clone();
         copy.entries
             .sort_by_key(|entry| entry.file_name().to_entry_format(false, false));
         copy
     }
 
     /// Create a physically sorted version of the catalog
-    pub fn sorted_physically(&self) -> AmsdosCatalog {
-        let mut copy: AmsdosCatalog = self.clone();
+    pub fn sorted_physically(&self) -> Self {
+        let mut copy: Self = self.clone();
         copy.entries
             .sort_by_key(|entry| (entry.track, entry.sector));
         copy
     }
 
     /// Create a physically and alphabetically sorted version of the catalog
-    pub fn sorted_physically_and_alphabetically(&self) -> AmsdosCatalog {
-        let mut copy: AmsdosCatalog = self.clone();
+    pub fn sorted_physically_and_alphabetically(&self) -> Self {
+        let mut copy: Self = self.clone();
         copy.entries.sort_by_key(|entry| {
             (
                 entry.track,
@@ -826,7 +830,7 @@ impl AmsdosEntries {
     }
 
     /// Manually create the catalog from a byte slice. Usefull to manipulate catarts
-    pub fn from_slice(slice: &[u8]) -> AmsdosEntries {
+    pub fn from_slice(slice: &[u8]) -> Self {
         let mut entries = Vec::new();
         for i in 0..64 {
             entries.push(AmsdosEntry::from_slice(
@@ -834,7 +838,7 @@ impl AmsdosEntries {
                 &slice[i * 32..(i + 1) * 32],
             ))
         }
-        AmsdosEntries { entries }
+        Self { entries }
     }
 
     /// Returns all the entries of the catalog
@@ -891,7 +895,7 @@ impl AmsdosEntries {
         // first 2 blocs are not available if we trust idsk. So  Ido the same
         let set = (2..=255)
             .map(|b| BlocIdx::from(b))
-            .filter(|b| b.is_valid()) // TODO I'm pretty sure there is womething wrong there with the erased value
+            .filter(BlocIdx::is_valid) // TODO I'm pretty sure there is womething wrong there with the erased value
             .collect::<std::collections::BTreeSet<BlocIdx>>();
         let used = self
             .used_entries()
@@ -978,8 +982,8 @@ impl AmsdosManager {
         &mut self.disc
     }
 
-    pub fn new_from_disc<S: Into<Head>>(disc: ExtendedDsk, head: S) -> AmsdosManager {
-        AmsdosManager {
+    pub fn new_from_disc<S: Into<Head>>(disc: ExtendedDsk, head: S) -> Self {
+        Self {
             disc,
             head: head.into(),
         }
@@ -1014,7 +1018,7 @@ impl AmsdosManager {
     /// Rewrite the whole catalog
     pub fn set_catalog(&mut self, entries: &AmsdosEntries) {
         assert_eq!(64, entries.entries.len());
-        for entry in entries.entries.iter() {
+        for entry in &entries.entries {
             self.update_entry(entry);
         }
     }
@@ -1058,7 +1062,7 @@ impl AmsdosManager {
             let entries = self
                 .catalog()
                 .for_file(&filename)
-                .map(|e| e.clone())
+                .map(Clone::clone)
                 .collect::<Vec<_>>();
             if entries.len() == 0 {
                 return None;
@@ -1171,7 +1175,7 @@ impl AmsdosManager {
     /// Still stolen to iDSK
     pub fn update_entry(&mut self, entry: &AmsdosEntry) {
         // compute the track/sector
-        let min_sect = self.disc.min_sector(self.head);
+        let min_sect = self.disc.min_sector(&self.head);
         let sector_id = (entry.idx >> 4) + min_sect;
         let track = if min_sect == 0x41 {
             2
@@ -1251,18 +1255,18 @@ impl AmsdosManager {
         let access_info = self.bloc_access_information(bloc_idx);
 
         // Copy in first sector
-        let sector = self
+        let sector1 = self
             .disc
             .sector_mut(self.head, access_info.track1, access_info.sector1_id)
             .unwrap();
-        sector.set_values(&content[0..DATA_SECTOR_SIZE]).unwrap();
+        sector1.set_values(&content[0..DATA_SECTOR_SIZE]).unwrap();
 
         // Copy in second sector
-        let sector = self
+        let sector2 = self
             .disc
             .sector_mut(self.head, access_info.track2, access_info.sector2_id)
             .unwrap();
-        sector
+        sector2
             .set_values(&content[DATA_SECTOR_SIZE..2 * DATA_SECTOR_SIZE])
             .unwrap();
     }
@@ -1322,7 +1326,7 @@ impl std::fmt::Debug for AmsdosHeader {
 }
 
 impl PartialEq for AmsdosHeader {
-    fn eq(&self, other: &AmsdosHeader) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.content[..68] == other.content[..68]
     }
 }
@@ -1336,8 +1340,8 @@ impl AmsdosHeader {
         loading_address: u16,
         execution_address: u16,
         data: &[u8],
-    ) -> AmsdosHeader {
-        let mut content = AmsdosHeader { content: [0; 128] };
+    ) -> Self {
+        let mut content = Self { content: [0; 128] };
 
         content.set_amsdos_filename(filename);
         content.set_file_type(file_type);
@@ -1349,8 +1353,8 @@ impl AmsdosHeader {
         content
     }
 
-    pub fn from_buffer(buffer: &[u8]) -> AmsdosHeader {
-        AmsdosHeader {
+    pub fn from_buffer(buffer: &[u8]) -> Self {
+        Self {
             content: *array_ref!(buffer, 0, 128),
         }
     }
@@ -1386,8 +1390,14 @@ impl AmsdosHeader {
     pub fn filename(&self) -> String {
         self.content[1..9]
             .iter()
-            .filter(|&&c| c != ' ' as u8)
-            .map(|&c| c as char)
+            .filter_map(|&c| {
+                if c == ' ' as u8 {
+                    None
+                }
+                else {
+                    Some(c as char) 
+                }
+            })
             .collect::<String>()
     }
 
@@ -1401,8 +1411,14 @@ impl AmsdosHeader {
     pub fn extension(&self) -> String {
         self.content[9..(9 + 3)]
             .iter()
-            .filter(|&&c| c != ' ' as u8)
-            .map(|&c| c as char)
+            .filter_map(|&c|{
+                if c == ' ' as u8 {
+                    None
+                }
+                else {
+                     Some(c as char)
+                }
+            })
             .collect::<String>()
     }
 
@@ -1500,7 +1516,7 @@ impl AmsdosFile {
         loading_address: u16,
         execution_address: u16,
         data: &[u8],
-    ) -> Result<AmsdosFile, AmsdosError> {
+    ) -> Result<Self, AmsdosError> {
         if data.len() > 0x10000 {
             return Err(AmsdosError::FileLargerThan64Kb);
         }
@@ -1514,13 +1530,13 @@ impl AmsdosFile {
         );
         let content = data.to_vec();
 
-        Ok(AmsdosFile { header, content })
+        Ok(Self { header, content })
     }
 
     pub fn basic_file_from_buffer(
         filename: &AmsdosFileName,
         data: &[u8],
-    ) -> Result<AmsdosFile, AmsdosError> {
+    ) -> Result<Self, AmsdosError> {
         if data.len() > 0x10000
         /*TODO shorten the limit*/
         {
@@ -1531,20 +1547,20 @@ impl AmsdosFile {
             AmsdosHeader::build_header(filename, AmsdosFileType::Basic, 0x0170, 0x0000, data);
         let content = data.to_vec();
 
-        Ok(AmsdosFile { header, content })
+        Ok(Self { header, content })
     }
 
     /// Create a file from its header and content
-    pub fn from_buffer(data: &[u8]) -> AmsdosFile {
+    pub fn from_buffer(data: &[u8]) -> Self {
         let (header_bytes, content_bytes) = data.split_at(128);
-        AmsdosFile {
+        Self {
             header: AmsdosHeader::from_buffer(header_bytes),
             content: content_bytes.to_vec(),
         }
     }
 
     /// Read a file from disc and success if there is no io error and if the header if correct
-    pub fn open_valid<P: AsRef<Path>>(path: P) -> Result<AmsdosFile, AmsdosError> {
+    pub fn open_valid<P: AsRef<Path>>(path: P) -> Result<Self, AmsdosError> {
         let mut f = File::open(path.as_ref())?;
         let mut content = Vec::new();
         f.read_to_end(&mut content)?;
