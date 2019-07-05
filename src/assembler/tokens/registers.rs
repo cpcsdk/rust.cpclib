@@ -38,11 +38,10 @@ impl Register16 {
     /// Return the low 8bit register if exists
     pub fn low(&self) -> Option<Register8> {
         match self {
-            Register16::Af => None,
+            Register16::Af | Register16::Sp => None,
             Register16::Hl => Some(Register8::L),
             Register16::De => Some(Register8::E),
             Register16::Bc => Some(Register8::C),
-            Register16::Sp => None,
         }
     }
 
@@ -94,7 +93,7 @@ impl Register8 {
         !self.is_high()
     }
 
-    pub fn neighbourg(&self) -> Option<Register8> {
+    pub fn neighbourg(&self) -> Option<Self> {
         match self {
             &Register8::A => None,
             &Register8::B => Some(Register8::C),
@@ -110,12 +109,9 @@ impl Register8 {
     pub fn complete(&self) -> Register16 {
         match self {
             &Register8::A => Register16::Af,
-            &Register8::B => Register16::Bc,
-            &Register8::C => Register16::Bc,
-            &Register8::D => Register16::De,
-            &Register8::E => Register16::De,
-            &Register8::H => Register16::Hl,
-            &Register8::L => Register16::Hl,
+            &Register8::B | &Register8::C => Register16::Bc,
+            &Register8::D | &Register8::E => Register16::De,
+            &Register8::H | &Register8::L => Register16::Hl,
         }
     }
 }

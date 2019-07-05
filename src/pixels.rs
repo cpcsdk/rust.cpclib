@@ -3,15 +3,15 @@ pub mod mode1 {
     use crate::ga::Pen;
 
     /// Pixel ordering in a byte
-    /// [Pixel0(), Pixel1(), Pixel2(), Pixel3()]
+    /// [First(), Second(), Third(), Fourth()]
     #[repr(u8)]
     #[derive(Copy, Clone, Debug)]
     #[allow(missing_docs)]
     pub enum PixelPosition {
-        Pixel0 = 0,
-        Pixel1 = 1,
-        Pixel2 = 2,
-        Pixel3 = 3,
+        First = 0,
+        Second = 1,
+        Third = 2,
+        Fourth = 3,
     }
 
     /// Signification of the bits in the byte
@@ -19,14 +19,14 @@ pub mod mode1 {
     #[derive(Copy, Clone, Debug)]
     #[allow(missing_docs)]
     pub enum BitMapping {
-        Pixel3Bit1 = 0,
-        Pixel2Bit1 = 1,
-        Pixel1Bit1 = 2,
-        Pixel0Bit1 = 3,
-        Pixel3Bit0 = 4,
-        Pixel2Bit0 = 5,
-        Pixel1Bit0 = 6,
-        Pixel0Bit0 = 7,
+        FourthBit1 = 0,
+        ThirdBit1 = 1,
+        SecondBit1 = 2,
+        FirstBit1 = 3,
+        FourthBit0 = 4,
+        ThirdBit0 = 5,
+        SecondBit0 = 6,
+        FirstBit0 = 7,
     }
 
     /// Convert the pen value to its byte representation at the proper place
@@ -42,17 +42,17 @@ pub mod mode1 {
         let bits_position: [u8; 2] = {
             let mut pos = match pixel {
                 // pixel pos [0,1,2,3]            bit1 idx                        bit0 idx
-                PixelPosition::Pixel0 => {
-                    [BitMapping::Pixel0Bit1 as u8, BitMapping::Pixel0Bit0 as u8]
+                PixelPosition::First => {
+                    [BitMapping::FirstBit1 as u8, BitMapping::FirstBit0 as u8]
                 }
-                PixelPosition::Pixel1 => {
-                    [BitMapping::Pixel1Bit1 as u8, BitMapping::Pixel1Bit0 as u8]
+                PixelPosition::Second => {
+                    [BitMapping::SecondBit1 as u8, BitMapping::SecondBit0 as u8]
                 }
-                PixelPosition::Pixel2 => {
-                    [BitMapping::Pixel2Bit1 as u8, BitMapping::Pixel2Bit0 as u8]
+                PixelPosition::Third => {
+                    [BitMapping::ThirdBit1 as u8, BitMapping::ThirdBit0 as u8]
                 }
-                PixelPosition::Pixel3 => {
-                    [BitMapping::Pixel3Bit1 as u8, BitMapping::Pixel3Bit0 as u8]
+                PixelPosition::Fourth => {
+                    [BitMapping::FourthBit1 as u8, BitMapping::FourthBit0 as u8]
                 }
             };
             pos.reverse(); // reverse because reading order is opposite to storage order
@@ -71,10 +71,10 @@ pub mod mode1 {
 
     /// Convert the 4 pens in a row (from left to right)
     pub fn pens_to_byte(pen0: Pen, pen1: Pen, pen2: Pen, pen3: Pen) -> u8 {
-        pen_to_pixel_byte(pen0, PixelPosition::Pixel0)
-            + pen_to_pixel_byte(pen1, PixelPosition::Pixel1)
-            + pen_to_pixel_byte(pen2, PixelPosition::Pixel2)
-            + pen_to_pixel_byte(pen3, PixelPosition::Pixel3)
+        pen_to_pixel_byte(pen0, PixelPosition::First)
+            + pen_to_pixel_byte(pen1, PixelPosition::Second)
+            + pen_to_pixel_byte(pen2, PixelPosition::Third)
+            + pen_to_pixel_byte(pen3, PixelPosition::Fourth)
     }
 
     /// Convert a vector of pens into a vector of bytes
@@ -169,13 +169,13 @@ pub mod mode0 {
     use crate::ga::Pen;
 
     /// Pixel ordering in a byte
-    /// [Pixel0(), Pixel1()]
+    /// [First(), Second()]
     #[repr(u8)]
     #[derive(Copy, Clone, Debug)]
     #[allow(missing_docs)]
     pub enum PixelPosition {
-        Pixel0 = 0,
-        Pixel1 = 1,
+        First = 0,
+        Second = 1,
     }
 
     /// Signification of the bites in the byte
@@ -183,14 +183,14 @@ pub mod mode0 {
     #[derive(Copy, Clone, Debug)]
     #[allow(missing_docs)]
     pub enum BitMapping {
-        Pixel1Bit3 = 0,
-        Pixel0Bit3 = 1,
-        Pixel1Bit1 = 2,
-        Pixel0Bit1 = 3,
-        Pixel1Bit2 = 4,
-        Pixel0Bit2 = 5,
-        Pixel1Bit0 = 6,
-        Pixel0Bit0 = 7,
+        SecondBit3 = 0,
+        FirstBit3 = 1,
+        SecondBit1 = 2,
+        FirstBit1 = 3,
+        SecondBit2 = 4,
+        FirstBit2 = 5,
+        SecondBit0 = 6,
+        FirstBit0 = 7,
     }
 
     /// For a given byte, returns the left and right represented pixels
@@ -222,18 +222,18 @@ pub mod mode0 {
         let bits_position: [u8; 4] = {
             let mut pos = match pixel {
                 // pixel pos [0, 1]      bit3  bit2 bit1 bit0
-                PixelPosition::Pixel0 => [
-                    BitMapping::Pixel0Bit3 as u8,
-                    BitMapping::Pixel0Bit2 as u8,
-                    BitMapping::Pixel0Bit1 as u8,
-                    BitMapping::Pixel0Bit0 as u8,
+                PixelPosition::First => [
+                    BitMapping::FirstBit3 as u8,
+                    BitMapping::FirstBit2 as u8,
+                    BitMapping::FirstBit1 as u8,
+                    BitMapping::FirstBit0 as u8,
                 ],
 
-                PixelPosition::Pixel1 => [
-                    BitMapping::Pixel1Bit3 as u8,
-                    BitMapping::Pixel1Bit2 as u8,
-                    BitMapping::Pixel1Bit1 as u8,
-                    BitMapping::Pixel1Bit0 as u8,
+                PixelPosition::Second => [
+                    BitMapping::SecondBit3 as u8,
+                    BitMapping::SecondBit2 as u8,
+                    BitMapping::SecondBit1 as u8,
+                    BitMapping::SecondBit0 as u8,
                 ],
             };
             pos.reverse();
@@ -258,8 +258,8 @@ pub mod mode0 {
 
     /// Convert the 2 pens in the corresponding byte
     pub fn pens_to_byte(pen0: &Pen, pen1: &Pen) -> u8 {
-        pen_to_pixel_byte(pen0, PixelPosition::Pixel0)
-            + pen_to_pixel_byte(pen1, PixelPosition::Pixel1)
+        pen_to_pixel_byte(pen0, PixelPosition::First)
+            + pen_to_pixel_byte(pen1, PixelPosition::Second)
     }
 
     /// Convert a vector of pens into a vector of bytes.
@@ -322,10 +322,12 @@ pub mod mode0 {
 }
 
 #[cfg(test)]
+#[allow(clippy::pedantic)]
 mod tests {
     use crate::ga::Pen;
     use crate::pixels::*;
 
+    #[allow(clippy::similar_names)]
     fn test_couple(a: u8, b: u8) {
         let pa: Pen = a.into();
         let pb: Pen = b.into();

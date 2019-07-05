@@ -29,49 +29,49 @@ pub enum DataAccess {
 }
 
 impl From<u8> for DataAccess {
-    fn from(val: u8) -> DataAccess {
+    fn from(val: u8) -> Self {
         DataAccess::Expression(val.into())
     }
 }
 
 impl From<Expr> for DataAccess {
-    fn from(exp: Expr) -> DataAccess {
+    fn from(exp: Expr) -> Self {
         DataAccess::Expression(exp)
     }
 }
 
 impl From<&str> for DataAccess {
-    fn from(txt: &str) -> DataAccess {
+    fn from(txt: &str) -> Self {
         DataAccess::Expression(txt.into())
     }
 }
 
 impl From<Register8> for DataAccess {
-    fn from(reg: Register8) -> DataAccess {
+    fn from(reg: Register8) -> Self {
         DataAccess::Register8(reg)
     }
 }
 
 impl From<Register16> for DataAccess {
-    fn from(reg: Register16) -> DataAccess {
+    fn from(reg: Register16) -> Self {
         DataAccess::Register16(reg)
     }
 }
 
 impl From<IndexRegister8> for DataAccess {
-    fn from(reg: IndexRegister8) -> DataAccess {
+    fn from(reg: IndexRegister8) -> Self {
         DataAccess::IndexRegister8(reg)
     }
 }
 
 impl From<IndexRegister16> for DataAccess {
-    fn from(reg: IndexRegister16) -> DataAccess {
+    fn from(reg: IndexRegister16) -> Self {
         DataAccess::IndexRegister16(reg)
     }
 }
 
 impl From<FlagTest> for DataAccess {
-    fn from(test: FlagTest) -> DataAccess {
+    fn from(test: FlagTest) -> Self {
         DataAccess::FlagTest(test)
     }
 }

@@ -45,7 +45,7 @@ const DD: u8 = 0xdd;
 const FD: u8 = 0xfd;
 
 ///! Lots of things will probably be inspired from RASM
-type Bank = [u8; 0x10000];
+type Bank = [u8; 0x1_0000];
 
 /// Several passes are needed to properly assemble a source file.
 /// This structure allows to code which pass is going to be analysed.
@@ -101,7 +101,7 @@ impl AssemblingPass {
         }
     }
 
-    fn next_pass(self) -> AssemblingPass {
+    fn next_pass(self) -> Self {
         match self {
             AssemblingPass::Uninitialized => AssemblingPass::FirstPass,
             AssemblingPass::FirstPass => AssemblingPass::SecondPass,
@@ -180,8 +180,8 @@ pub struct SymbolsTable {
 }
 
 impl Default for SymbolsTable {
-    fn default() -> SymbolsTable {
-        SymbolsTable {
+    fn default() -> Self {
+        Self {
             map: HashMap::new(),
             dummy: false,
         }
@@ -190,10 +190,10 @@ impl Default for SymbolsTable {
 
 #[allow(missing_docs)]
 impl SymbolsTable {
-    pub fn laxist() -> SymbolsTable {
+    pub fn laxist() -> Self {
         let mut map = HashMap::new();
         map.insert(String::from("$"), Symbol::Integer(0));
-        SymbolsTable { map, dummy: true }
+        Self { map, dummy: true }
     }
 
     /// Return the current addres if it is known or return an error
@@ -281,9 +281,9 @@ pub struct SymbolsTableCaseDependent {
 
 /// By default, the assembler is case sensitive
 impl Default for SymbolsTableCaseDependent {
-    fn default() -> SymbolsTableCaseDependent {
-        SymbolsTableCaseDependent {
-            table: Default::default(),
+    fn default() -> Self {
+        Self {
+            table: SymbolsTable::default(),
             case_sensitive: true,
         }
     }
@@ -297,16 +297,16 @@ impl AsRef<SymbolsTable> for SymbolsTableCaseDependent {
 
 #[allow(missing_docs)]
 impl SymbolsTableCaseDependent {
-    fn new(table: SymbolsTable, case_sensitive: bool) -> SymbolsTableCaseDependent {
-        SymbolsTableCaseDependent {
+    fn new(table: SymbolsTable, case_sensitive: bool) -> Self {
+        Self {
             table,
             case_sensitive,
         }
     }
 
     /// Build a laxists vesion of the table : do not care of case and absences of symboles
-    pub fn laxist() -> SymbolsTableCaseDependent {
-        SymbolsTableCaseDependent::new(SymbolsTable::laxist(), false)
+    pub fn laxist() -> Self {
+        Self::new(SymbolsTable::laxist(), false)
     }
 
     /// Modify the symbol value depending on the case confurigration (do nothing, or set uppercase)
@@ -418,8 +418,8 @@ impl fmt::Debug for Env {
 }
 
 impl Default for Env {
-    fn default() -> Env {
-        Env {
+    fn default() -> Self {
+        Self {
             pass: AssemblingPass::Uninitialized,
             stable_counters: StableTickerCounters::default(),
 
@@ -428,12 +428,12 @@ impl Default for Env {
             codeadr: 0,
             maxptr: 0xffff,
             activebank: 0,
-            mem: [[0; 0x10000]; 1],
+            mem: [[0; 0x1_0000]; 1],
 
             iorg: 0,
             org_zones: Vec::new(),
 
-            symbols: Default::default(),
+            symbols: SymbolsTableCaseDependent::default(),
         }
     }
 }
@@ -442,15 +442,15 @@ impl Default for Env {
 impl Env {
     /// Create an environment that embeds a copy of the given table and is configured to be in the latest pass.
     /// Mainly used for tests.
-    pub fn with_table(symbols: &SymbolsTable) -> Env {
-        let mut env = Env::default();
+    pub fn with_table(symbols: &SymbolsTable) -> Self {
+        let mut env = Self::default();
         env.symbols.set_table(symbols.clone());
         env.pass = AssemblingPass::SecondPass;
         env
     }
 
-    pub fn with_table_case_dependent(symbols: &SymbolsTableCaseDependent) -> Env {
-        let mut env = Env::default();
+    pub fn with_table_case_dependent(symbols: &SymbolsTableCaseDependent) -> Self {
+        let mut env = Self::default();
         env.symbols = symbols.clone();
         env.pass = AssemblingPass::SecondPass;
         env
@@ -841,7 +841,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             }
             Ok(())
         }
-        Token::Comment(_) => Ok(()), // Nothing to do for a comment
+        Token::Comment(_) | Token::List | Token::NoList => Ok(()), // Nothing to do for a comment
         Token::Include(_, Some(ref listing)) => env.visit_listing(listing),
         Token::Incbin(_, _, _, _, _, ref data, _) => env.visit_incbin(data.as_ref().unwrap()),
         Token::If(ref cases, ref other) => env.visit_if(cases, other.as_ref()),
@@ -852,8 +852,6 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
-        // ignored tokens
-        Token::List | Token::NoList => Ok(()),
         _ => panic!("Not treated {:?}", token),
     }
 }
@@ -958,7 +956,7 @@ impl Env {
 pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     let tokens = rept.unroll(env.symbols()).unwrap()?;
 
-    for token in tokens.iter() {
+    for token in &tokens {
         visit_token(token, env)?;
     }
 
@@ -968,6 +966,7 @@ pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 /// Manage the stable ticker stuff.
 /// - Start: register a counter
 /// - Stop: store counter count
+#[allow(clippy::cast_possible_wrap)]
 pub fn visit_stableticker(
     ticker: &StableTickerAction,
     env: &mut Env,
@@ -1204,7 +1203,7 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, Assemble
 
     match arg1 {
         &DataAccess::Register16(ref reg) => {
-            let base = if is_inc { 0b00000011 } else { 0b00001011 };
+            let base = if is_inc { 0b0000_0011 } else { 0b0000_1011 };
             let byte = base | (register16_to_code_with_sp(reg) << 4);
             bytes.push(byte);
         }
@@ -1216,7 +1215,7 @@ fn assemble_inc_dec(mne: &Mnemonic, arg1: &DataAccess) -> Result<Bytes, Assemble
 
         &DataAccess::Register8(ref reg) => {
             bytes
-                .push(if is_inc { 0b00000100 } else { 0b00000101 } | (register8_to_code(reg) << 3));
+                .push(if is_inc { 0b0000_0100 } else { 0b0000_0101 } | (register8_to_code(reg) << 3));
         }
         _ => {
             return Err(format!("Inc/dec not implemented for {:?}", arg1).into());
@@ -1254,15 +1253,13 @@ fn assemble_ret(arg1: &Option<DataAccess>) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
     if arg1.is_some() {
-        match arg1.as_ref() {
-            Some(&DataAccess::FlagTest(ref test)) => {
+        if let Some(&DataAccess::FlagTest(ref test)) = arg1.as_ref() {
                 let flag = flag_test_to_code(test);
-                bytes.push(0b11000000 | (flag << 3));
+                bytes.push(0b1100_0000 | (flag << 3));
             }
-            _ => {
+        else{
                 return Err(format!("Wrong argument for ret {:?}", arg1).into());
             }
-        };
     } else {
         bytes.push(0xc9);
     };
@@ -1304,29 +1301,28 @@ fn assemble_call_jr_or_jp(
     };
 
     // Treat address
-    match arg2 {
-        &DataAccess::Expression(ref e) => {
+    if let &DataAccess::Expression(ref e) = arg2 {
             let address = env.resolve_expr_may_fail_in_first_pass(e)?;
             if is_jr {
                 let relative = env.absolute_to_relative_may_fail_in_first_pass(address, 2)?;
                 if flag_code.is_some() {
                     // jr - flag
-                    add_byte(&mut bytes, 0b00100000 | (flag_code.unwrap() << 3));
+                    add_byte(&mut bytes, 0b0010_0000 | (flag_code.unwrap() << 3));
                 } else {
                     // jr - no flag
-                    add_byte(&mut bytes, 0b00011000);
+                    add_byte(&mut bytes, 0b0001_1000);
                 }
                 add_byte(&mut bytes, relative);
             } else if is_call {
                 match flag_code {
-                    Some(flag) => add_byte(&mut bytes, 0b11000100 | (flag << 3)),
+                    Some(flag) => add_byte(&mut bytes, 0b1100_0100 | (flag << 3)),
                     None => add_byte(&mut bytes, 0xCD),
                 }
                 add_word(&mut bytes, address as u16);
             } else {
                 if flag_code.is_some() {
                     // jp - flag
-                    add_byte(&mut bytes, 0b11000010 | (flag_code.unwrap() << 3))
+                    add_byte(&mut bytes, 0b1100_0010 | (flag_code.unwrap() << 3))
                 } else {
                     // jp - no flag
                     add_byte(&mut bytes, 0xc3);
@@ -1334,10 +1330,9 @@ fn assemble_call_jr_or_jp(
                 add_word(&mut bytes, address as u16);
             }
         }
-        _ => {
+    else {
             return Err(format!("Parameter {:?} not treated", arg2).into());
         }
-    };
 
     Ok(bytes)
 }
@@ -1364,7 +1359,7 @@ impl Env {
 
         match arg {
             DataAccess::Register8(ref reg) => {
-                add_byte(&mut bytes, 0b10111000 + register8_to_code(reg));
+                add_byte(&mut bytes, 0b1011_1000 + register8_to_code(reg));
             }
 
             DataAccess::Expression(ref exp) => {
@@ -1409,14 +1404,14 @@ impl Env {
         match arg2 {
             DataAccess::MemoryRegister16(Register16::Hl) => {
                 add_byte(&mut bytes, 0xcb);
-                add_byte(&mut bytes, 0b01000110 + bit << 3);
+                add_byte(&mut bytes, 0b0100_0110 + bit << 3);
             }
 
             DataAccess::IndexRegister16WithIndex(_, _) => unimplemented!(),
 
             DataAccess::Register8(ref reg) => {
                 add_byte(&mut bytes, 0xcb);
-                add_byte(&mut bytes, 0b01000000 + (bit << 3) + register8_to_code(reg))
+                add_byte(&mut bytes, 0b0100_0000 + (bit << 3) + register8_to_code(reg))
             }
 
             _ => unimplemented!("aseemble_bit {:?} {:?}", arg1, arg2),
@@ -1436,11 +1431,11 @@ impl Env {
             DataAccess::Register8(ref reg) => {
                 add_byte(&mut bytes, 0xcb);
                 if mne.is_sla() {
-                    add_byte(&mut bytes, 0b00100000 + register8_to_code(reg));
+                    add_byte(&mut bytes, 0b0010_0000 + register8_to_code(reg));
                 } else if mne.is_sra() {
-                    add_byte(&mut bytes, 0b00101000 + register8_to_code(reg));
+                    add_byte(&mut bytes, 0b0010_1000 + register8_to_code(reg));
                 } else if mne.is_srl() {
-                    add_byte(&mut bytes, 0b00111000 + register8_to_code(reg));
+                    add_byte(&mut bytes, 0b0011_1000 + register8_to_code(reg));
                 } else {
                     unreachable!()
                 }
@@ -1493,14 +1488,14 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 //R. Zaks p 297
                 let src = register8_to_code(src);
 
-                let code = 0b01000000 + (dst << 3) + src;
+                let code = 0b0100_0000 + (dst << 3) + src;
                 bytes.push(code);
             }
 
             &DataAccess::Expression(ref exp) => {
                 let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
 
-                bytes.push(0b00000110 | (dst << 3));
+                bytes.push(0b0000_0110 | (dst << 3));
                 bytes.push(val);
             }
 
@@ -1508,12 +1503,12 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
 
                 add_index_register_code(&mut bytes, reg);
-                add_byte(&mut bytes, 0b01000110 | (dst << 3));
+                add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
                 add_index(&mut bytes, val)?;
             }
 
             &DataAccess::MemoryRegister16(Register16::Hl) => {
-                add_byte(&mut bytes, 0b01000110 | (dst << 3));
+                add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
             }
 
             &DataAccess::Memory(ref expr) => {
@@ -1538,7 +1533,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             &DataAccess::Expression(ref exp) => {
                 let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xffff) as u16;
 
-                add_byte(&mut bytes, 0b00000001 | (dst_code << 4));
+                add_byte(&mut bytes, 0b0000_0001 | (dst_code << 4));
                 add_word(&mut bytes, val);
             }
 
@@ -1572,7 +1567,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                     add_byte(&mut bytes, 0xED);
                     add_byte(
                         &mut bytes,
-                        (register16_to_code_with_sp(dst) << 4) + 0b01001011,
+                        (register16_to_code_with_sp(dst) << 4) + 0b0100_1011,
                     );
                     add_word(&mut bytes, val);
                 }
@@ -1611,17 +1606,17 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             &Register16::Hl => {
                 if let &DataAccess::Register8(ref src) = arg2 {
                     let src = register8_to_code(src);
-                    let code = 0b01110000 | src;
+                    let code = 0b0111_0000 | src;
                     bytes.push(code);
                 }
             }
 
             &Register16::De if &DataAccess::Register8(Register8::A) == arg2 => {
-                bytes.push(0b00010010);
+                bytes.push(0b0001_0010);
             }
 
             &Register16::Bc if &DataAccess::Register8(Register8::A) == arg2 => {
-                bytes.push(0b00000010);
+                bytes.push(0b0000_0010);
             }
 
             _ => {}
@@ -1634,21 +1629,21 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
         match arg2 {
             &DataAccess::IndexRegister16(IndexRegister16::Ix) => {
                 bytes.push(0xdd);
-                bytes.push(0b00100010);
+                bytes.push(0b0010_0010);
                 add_word(&mut bytes, address as _);
             }
             &DataAccess::IndexRegister16(IndexRegister16::Iy) => {
                 bytes.push(0xfd);
-                bytes.push(0b00100010);
+                bytes.push(0b0010_0010);
                 add_word(&mut bytes, address as _);
             }
             &DataAccess::Register16(Register16::Hl) => {
-                bytes.push(0b00100010);
+                bytes.push(0b0010_0010);
                 add_word(&mut bytes, address as _);
             }
             &DataAccess::Register16(ref reg) => {
                 bytes.push(0xED);
-                bytes.push(0b01000011 | (register16_to_code_with_sp(reg)));
+                bytes.push(0b0100_0011 | (register16_to_code_with_sp(reg)));
                 add_word(&mut bytes, address as _);
             }
             &DataAccess::Register8(Register8::A) => {
@@ -1691,7 +1686,7 @@ fn assemble_in(
         &DataAccess::Register8(Register8::C) => match arg2 {
             &DataAccess::Register8(ref reg) => {
                 bytes.push(0xED);
-                bytes.push(0b01000000 | (register8_to_code(reg) << 3))
+                bytes.push(0b0100_0000 | (register8_to_code(reg) << 3))
             }
             _ => panic!(),
         },
@@ -1724,7 +1719,7 @@ fn assemble_out(
         &DataAccess::Register8(Register8::C) => match arg2 {
             &DataAccess::Register8(ref reg) => {
                 bytes.push(0xED);
-                bytes.push(0b01000001 | (register8_to_code(reg) << 3))
+                bytes.push(0b0100_0001 | (register8_to_code(reg) << 3))
             }
             _ => {}
         },
@@ -1751,7 +1746,7 @@ fn assemble_pop(arg1: &DataAccess) -> Result<Bytes, AssemblerError> {
 
     match arg1 {
         &DataAccess::Register16(ref reg) => {
-            let byte = 0b11000001 | (register16_to_code_with_af(reg) << 4);
+            let byte = 0b1100_0001 | (register16_to_code_with_af(reg) << 4);
             bytes.push(byte);
         }
         &DataAccess::IndexRegister16(ref reg) => {
@@ -1771,7 +1766,7 @@ fn assemble_push(arg1: &DataAccess) -> Result<Bytes, AssemblerError> {
 
     match arg1 {
         &DataAccess::Register16(ref reg) => {
-            let byte = 0b11000101 | (register16_to_code_with_af(reg) << 4);
+            let byte = 0b1100_0101 | (register16_to_code_with_af(reg) << 4);
             bytes.push(byte);
         }
         &DataAccess::IndexRegister16(ref reg) => {
@@ -1803,9 +1798,9 @@ fn assemble_logical_operator(
     match *arg1 {
         DataAccess::Register8(ref reg) => {
             let base = match mnemonic {
-                Mnemonic::And => 0b10100000,
-                Mnemonic::Or => 0b10110000,
-                Mnemonic::Xor => 0b10101000,
+                Mnemonic::And => 0b1010_0000,
+                Mnemonic::Or => 0b10110_000,
+                Mnemonic::Xor => 0b1010_1000,
                 _ => unreachable!(),
             };
             bytes.push(base + register8_to_code(reg));
@@ -1857,9 +1852,9 @@ fn assemble_add_or_adc(
             match arg2 {
                 &DataAccess::MemoryRegister16(Register16::Hl) => {
                     if is_add {
-                        bytes.push(0b10000110);
+                        bytes.push(0b1000_0110);
                     } else {
-                        bytes.push(0b10001110);
+                        bytes.push(0b1000_1110);
                     }
                 }
 
@@ -1868,22 +1863,22 @@ fn assemble_add_or_adc(
 
                     // TODO check if the code is ok
                     bytes.push(indexed_register16_to_code(reg));
-                    bytes.push(0b10000110);
+                    bytes.push(0b1000_0110);
                     add_index(&mut bytes, val)?;
                 }
 
                 &DataAccess::Expression(ref exp) => {
                     let val = exp.resolve(sym)? as u8;
                     if is_add {
-                        bytes.push(0b11000110);
+                        bytes.push(0b1100_0110);
                     } else {
-                        bytes.push(0b11001110);
+                        bytes.push(0b1100_1110);
                     }
                     bytes.push(val);
                 }
 
                 &DataAccess::Register8(ref reg) => {
-                    let base = if is_add { 0b10000000 } else { 0b10001000 };
+                    let base = if is_add { 0b1000_0000 } else { 0b1000_1000 };
                     bytes.push(base | register8_to_code(reg));
                 }
                 _ => {}
@@ -1893,10 +1888,10 @@ fn assemble_add_or_adc(
         &DataAccess::Register16(Register16::Hl) => match arg2 {
             &DataAccess::Register16(ref reg) => {
                 let base = if is_add {
-                    0b00001001
+                    0b0000_1001
                 } else {
                     bytes.push(0xED);
-                    0b01001010
+                    0b0100_1010
                 };
 
                 bytes.push(base | (register16_to_code_with_sp(reg) << 4));
@@ -1911,7 +1906,7 @@ fn assemble_add_or_adc(
                     // TODO Error if reg2 = HL
                     bytes.push(indexed_register16_to_code(reg1));
                     let base = if is_add {
-                        0b00001001
+                        0b0000_1001
                     } else {
                         panic!();
                     };
@@ -1931,7 +1926,7 @@ fn assemble_add_or_adc(
 
                     bytes.push(indexed_register16_to_code(reg1));
                     let base = if is_add {
-                        0b00001001
+                        0b0000_1001
                     } else {
                         panic!();
                     };
@@ -1975,17 +1970,15 @@ fn assemble_res_or_set(
     };
 
     // Apply it to the right thing
-    match arg2 {
-        &DataAccess::Register8(ref reg) => {
+    if let  &DataAccess::Register8(ref reg) = arg2{
             bytes.push(0xcb);
             bytes.push(
-                if is_res { 0b10000000 } else { 0b11000000 } | (bit << 3) | register8_to_code(reg),
+                if is_res { 0b1000_0000 } else { 0b1100_0000 } | (bit << 3) | register8_to_code(reg),
             );
         }
-        _ => {
+     else{
             return Err(format!("Res not implemented for {:?}", arg2).into());
         }
-    };
 
     Ok(bytes)
 }
@@ -2072,7 +2065,7 @@ mod test {
     pub fn test_pop() {
         let res = assemble_pop(&DataAccess::Register16(Register16::Af)).unwrap();
         assert_eq!(res.len(), 1);
-        assert_eq!(res[0], 0b11110001);
+        assert_eq!(res[0], 0b1111_0001);
     }
 
     #[test]
@@ -2085,7 +2078,7 @@ mod test {
         )
         .unwrap();
         assert_eq!(res.len(), 3);
-        assert_eq!(res[0], 0b11001010);
+        assert_eq!(res[0], 0b1100_1010);
         assert_eq!(res[1], 0x34);
         assert_eq!(res[2], 0x12);
     }
@@ -2216,8 +2209,8 @@ mod test {
             DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, 2.into()),
         ];
 
-        for operator in operators.iter() {
-            for operand in operands.iter() {
+        for operator in &operators {
+            for operand in &operands {
                 let token = Token::OpCode(operator.clone(), Some(operand.clone()), None);
                 visit_tokens(&[token]).unwrap();
             }

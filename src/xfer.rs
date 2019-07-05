@@ -38,9 +38,9 @@ pub struct M4File {
 }
 
 impl From<&str> for M4File {
-    fn from(line: &str) -> M4File {
+    fn from(line: &str) -> Self {
         let mut splitted = line.split(',');
-        M4File {
+        Self {
             fname: splitted.next().unwrap().into(),
             unknown: splitted.next().unwrap().into(),
             size: splitted.next().unwrap().into(),
@@ -58,16 +58,16 @@ pub struct M4FilesList {
 }
 
 impl From<&str> for M4FilesList {
-    fn from(buffer: &str) -> M4FilesList {
+    fn from(buffer: &str) -> Self {
         let mut iter = buffer.lines();
         let mut path = iter.next().unwrap();
         if path == "//" {
             path = "/";
         }
         let files = iter.map(|s| s.into()).collect::<Vec<M4File>>();
-        M4FilesList {
+        Self {
             cwd: path.into(),
-            files: files,
+            files,
         }
     }
 }
@@ -97,8 +97,8 @@ pub struct CpcXfer {
 
 #[allow(missing_docs)]
 impl CpcXfer {
-    pub fn new(hostname: &str) -> CpcXfer {
-        CpcXfer {
+    pub fn new(hostname: &str) -> Self {
+        Self {
             hostname: String::from(hostname),
         }
     }
@@ -166,6 +166,7 @@ impl CpcXfer {
         self.upload_impl(path.as_ref(), m4_path, header)
     }
 
+    #[allow(clippy::similar_names)]
     pub fn upload_impl(
         &self,
         path: &Path,

@@ -242,10 +242,10 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
                 assert_eq!(res.to_string().to_uppercase(), DOUBLE_SIDED.to_uppercase());
 
                 assert!(res
-                    .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 0)
+                    .track_information_for_track(cpclib::disc::edsk::Head::A, 0)
                     .is_some());
                 assert!(res
-                    .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 200)
+                    .track_information_for_track(cpclib::disc::edsk::Head::A, 200)
                     .is_none());
 
                 for idx in res.track_idx_iterator() {
@@ -292,23 +292,23 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
                 .unwrap();
 
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 0)
+            .track_information_for_track(cpclib::disc::edsk::Head::A, 0)
             .is_some());
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 79)
+            .track_information_for_track(cpclib::disc::edsk::Head::A, 79)
             .is_some());
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::HeadA, 80)
+            .track_information_for_track(cpclib::disc::edsk::Head::A, 80)
             .is_none());
 
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::HeadB, 0)
+            .track_information_for_track(cpclib::disc::edsk::Head::B, 0)
             .is_some());
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::HeadB, 79)
+            .track_information_for_track(cpclib::disc::edsk::Head::B, 79)
             .is_some());
         assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::HeadB, 80)
+            .track_information_for_track(cpclib::disc::edsk::Head::B, 80)
             .is_none());
 
         for idx in cfg.track_idx_iterator() {

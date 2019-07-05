@@ -70,9 +70,9 @@ impl<'a> Span<'a> {
     ///
     pub fn new_at(input: Input<'a>, offset: usize, line: u32, column: u32) -> Self {
         Span {
-            offset: offset,
-            line: line,
-            column: column,
+            offset,
+            line,
+            column,
             slice: input,
         }
     }

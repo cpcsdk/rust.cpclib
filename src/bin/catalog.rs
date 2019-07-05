@@ -160,7 +160,7 @@ fn main() -> std::io::Result<()> {
             // Read a dsk file
             error!("Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results.");
             let dsk = ExtendedDsk::open(catalog_fname).expect("unable to read the dsk file");
-            let manager = AmsdosManager::new_from_disc(dsk, Head::HeadA);
+            let manager = AmsdosManager::new_from_disc(dsk, Head::A);
             manager.catalog()
         } else {
             // Read a catalog file

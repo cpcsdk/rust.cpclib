@@ -9,22 +9,22 @@ use std::collections::HashSet;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Mode {
     /// Mode 0 - 16 colors
-    Mode0,
+    Zero,
     /// Mode 1 - 4 colors
-    Mode1,
+    One,
     /// Mode 2 - 2 colors
-    Mode2,
+    Two,
     /// Mode 3 - 4 colors / same resolution than Mode 0
-    Mode3,
+    Three,
 }
 
 impl From<u8> for Mode {
-    fn from(val: u8) -> Mode {
+    fn from(val: u8) -> Self {
         match val {
-            0 => Mode::Mode0,
-            1 => Mode::Mode1,
-            2 => Mode::Mode2,
-            3 => Mode::Mode3,
+            0 => Mode::Zero,
+            1 => Mode::One,
+            2 => Mode::Two,
+            3 => Mode::Three,
             _ => panic!(format!("{} is not a valid mode.", val)),
         }
     }
@@ -35,19 +35,18 @@ impl Mode {
     /// Return the maximum number of colors for the current mode (without using rasters)
     pub fn max_colors(&self) -> usize {
         match self {
-            &Mode::Mode0 => 16,
-            &Mode::Mode1 => 4,
-            &Mode::Mode2 => 2,
-            &Mode::Mode3 => 4,
+            &Mode::Zero => 16,
+            &Mode::One | &Mode::Three  => 4,
+            &Mode::Two => 2
         }
     }
 
     /// Return the number of pixels encode by one byte in the given mode
     pub fn nb_pixels_per_byte(&self) -> usize {
         match self {
-            &Mode::Mode0 | &Mode::Mode3 => 2,
-            &Mode::Mode1 => 4,
-            &Mode::Mode2 => 8,
+            &Mode::Zero | &Mode::Three => 2,
+            &Mode::One => 4,
+            &Mode::Two => 8,
         }
     }
 }
@@ -58,7 +57,7 @@ pub enum ConversionRule {
     /// All pixels are used
     AnyModeUseAllPixels,
     /// One pixel out of two is skiped (used for mode0 pictures where the graphician has doubled each pixel)
-    Mode0SkipOddPixels,
+    ZeroSkipOddPixels,
 }
 
 /// Browse the image and returns the list of colors
@@ -88,13 +87,13 @@ fn extract_palette(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> Palette {
 }
 
 /// Encode the raw array of Pens in an array of CPC bytes encoded for the right screen mode
-fn encode(pens: Vec<Vec<Pen>>, mode: Mode) -> Vec<Vec<u8>> {
+fn encode(pens: &Vec<Vec<Pen>>, mode: Mode) -> Vec<Vec<u8>> {
     let mut rows = Vec::new();
     for input_row in pens.iter() {
         let row = {
             match mode {
-                Mode::Mode0 => pixels::mode0::pens_to_vec(input_row),
-                Mode::Mode1 => pixels::mode1::pens_to_vec(input_row),
+                Mode::Zero => pixels::mode0::pens_to_vec(input_row),
+                Mode::One => pixels::mode1::pens_to_vec(input_row),
                 _ => panic!("Unimplemented yet ..."),
             }
         };
@@ -132,13 +131,7 @@ fn merge_mode0_mode3(line1: &Vec<u8>, line2: &Vec<u8>) -> Vec<u8> {
 fn inks_to_pens(inks: &Vec<Vec<Ink>>, p: &Palette) -> Vec<Vec<Pen>> {
     inks.iter().map( |line| {
         line.iter().map(|ink|{
-            let pen = p.get_pen_for_ink(ink);
-            match pen {
-                Some(pen) => pen,
-                None => {
-                    panic!("Unable to find a correspondance for ink {:?} in given palette {:?}", ink, p);
-                }
-            }
+            p.get_pen_for_ink(ink).expect(&format!("Unable to find a correspondance for ink {:?} in given palette {:?}", ink, p))
         }).collect::<Vec<Pen>>()
     }).collect::<Vec<_>>()
 }
@@ -155,19 +148,19 @@ pub struct ColorMatrix {
 #[allow(missing_docs)]
 impl ColorMatrix {
     /// Create a new empty color matrix for the given dimensions
-    pub fn new(width: usize, height: usize) -> ColorMatrix {
-        ColorMatrix {
+    pub fn new(width: usize, height: usize) -> Self {
+        Self {
             data: vec![vec![Ink::from(0); width]; height],
         }
     }
 
-    pub fn empty() -> ColorMatrix {
-        ColorMatrix { data: Vec::new() }
+    pub fn empty() -> Self {
+        Self { data: Vec::new() }
     }
 
     /// Create a new ColorMatrix that encodes a new image full of black
-    pub fn empty_like(&self) -> ColorMatrix {
-        ColorMatrix {
+    pub fn empty_like(&self) -> Self {
+        Self {
             data: vec![vec![Ink::from(0); self.width() as usize]; self.height() as usize],
         }
     }
@@ -229,8 +222,7 @@ impl ColorMatrix {
     pub fn get_column(&self, x: usize) -> Vec<Ink> {
         self.data
             .iter()
-            .map(|line| &line[x])
-            .map(|ref_ink| ref_ink.clone())
+            .map(|line| line[x])
             .collect::<Vec<Ink>>()
     }
 
@@ -299,21 +291,21 @@ impl ColorMatrix {
     pub fn convert_from_fname(
         fname: &str,
         conversion: ConversionRule,
-    ) -> Result<ColorMatrix, im::ImageError> {
+    ) -> Result<Self, im::ImageError> {
         let img = im::open(fname)?;
-        Ok(ColorMatrix::convert(&img.to_rgb(), conversion))
+        Ok(Self::convert(&img.to_rgb(), conversion))
     }
 
     pub fn convert(
         img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>,
         conversion: ConversionRule,
-    ) -> ColorMatrix {
+    ) -> Self {
         // Get destination image size
         let height = img.height();
         let width = {
             match conversion {
                 ConversionRule::AnyModeUseAllPixels => img.width(),
-                ConversionRule::Mode0SkipOddPixels => img.width() / 2,
+                ConversionRule::ZeroSkipOddPixels => img.width() / 2,
             }
         };
 
@@ -328,7 +320,7 @@ impl ColorMatrix {
                 let src_x = {
                     match conversion {
                         ConversionRule::AnyModeUseAllPixels => x,
-                        ConversionRule::Mode0SkipOddPixels => x * 2,
+                        ConversionRule::ZeroSkipOddPixels => x * 2,
                     }
                 };
 
@@ -343,11 +335,11 @@ impl ColorMatrix {
         }
 
         // And create the sprite structure
-        ColorMatrix { data: lines }
+        Self { data: lines }
     }
 
     /// Compute a difference map to see the problematic positions
-    pub fn diff(&self, other: &ColorMatrix) -> ColorMatrix {
+    pub fn diff(&self, other: &Self) -> Self {
         // Create a map encoding a complete success
         let mut data = vec![vec![Ink::from(26); other.width() as usize]; other.height() as usize];
 
@@ -361,7 +353,7 @@ impl ColorMatrix {
         }
 
         // Return the object
-        ColorMatrix { data }
+        Self { data }
     }
 
     /// Convert the buffer as an image
@@ -390,7 +382,7 @@ impl ColorMatrix {
         Sprite {
             mode: Some(mode),
             palette: Some(palette),
-            data: encode(pens, mode.clone()),
+            data: encode(&pens, mode.clone()),
         }
     }
 
@@ -416,11 +408,11 @@ impl ColorMatrix {
             };
 
             // get the pens for the current line
-            let pens = self.get_line(y).iter().enumerate().map(|(x, ink)|{
+            let pens = self.get_line(y).iter().enumerate().map(|(x, ink)|-> Pen {
                 let pen = line_palette.get_pen_for_ink(ink);
-                match pen {
-                    Some(pen) => pen,
-                    None => {
+                if let Some(pen) = pen { 
+                    pen
+                } else {
                         eprintln!("
                             [ERROR] In line {}, pixel {} color ({:?}) is not in the palette {:?}. Background is used insted", 
                             y,
@@ -429,19 +421,18 @@ impl ColorMatrix {
                             line_palette
                         );
                         Pen::from(0)
-                    }, // If the color is not in the palette, use pen 0
-                }
+                    } // If the color is not in the palette, use pen 0
             }).collect::<Vec<Pen>>();
 
             // Transform the pens in bytes
             data.push(pens);
         }
 
-        let encoded_pixels = encode(data, Mode::Mode1);
+        let encoded_pixels = encode(&data, Mode::One);
 
         // Convert the matrix of pens as a sprite
         Sprite {
-            mode: Some(Mode::Mode1),
+            mode: Some(Mode::One),
             palette: Some(dummy_palette.clone()),
             data: encoded_pixels,
         }
@@ -473,9 +464,9 @@ impl Sprite {
 
         let mut data = Vec::with_capacity(self.data.len());
         let p = self.palette.as_ref().unwrap();
-        for line in self.data.iter() {
+        for line in &self.data {
             let inks = match self.mode {
-                Some(Mode::Mode0) | Some(Mode::Mode3) => line
+                Some(Mode::Zero) | Some(Mode::Three) => line
                     .iter()
                     .flat_map(|b: &u8| {
                         let pens = {
@@ -578,7 +569,7 @@ impl Sprite {
         mode: Mode,
         conversion: ConversionRule,
         palette: Option<Palette>,
-    ) -> Sprite {
+    ) -> Self {
         // Get the list of Inks that represent the image
         let matrix = ColorMatrix::convert(img, conversion);
         matrix.as_sprite(mode, palette)
@@ -589,9 +580,9 @@ impl Sprite {
         mode: Mode,
         conversion: ConversionRule,
         palette: Option<Palette>,
-    ) -> Result<Sprite, im::ImageError> {
+    ) -> Result<Self, im::ImageError> {
         let img = im::open(fname)?;
-        Ok(Sprite::convert(&img.to_rgb(), mode, conversion, palette))
+        Ok(Self::convert(&img.to_rgb(), mode, conversion, palette))
     }
 
     /// Apply a transformation function on each line
@@ -625,8 +616,8 @@ pub enum MultiModeConversion {
 #[allow(missing_docs)]
 impl MultiModeSprite {
     /// Build an empty multimode sprite BUT provide the palette
-    pub fn new(p: Palette) -> MultiModeSprite {
-        MultiModeSprite {
+    pub fn new(p: Palette) -> Self {
+        Self {
             palette: p,
             mode: Vec::new(), // Color modes for the real lines
             data: Vec::new(), // Data for texture lines (twice less than real ones
@@ -651,7 +642,7 @@ impl MultiModeSprite {
     /// The multimode sprite is consummed
     pub fn to_mode0_sprite(self) -> Sprite {
         Sprite {
-            mode: Some(Mode::Mode0),
+            mode: Some(Mode::Zero),
             palette: Some(self.palette),
             data: self.data,
         }
@@ -659,17 +650,18 @@ impl MultiModeSprite {
 
     pub fn to_mode3_sprite(self) -> Sprite {
         Sprite {
-            mode: Some(Mode::Mode3),
+            mode: Some(Mode::Three),
             palette: Some(self.palette),
             data: self.data,
         }
     }
 
     /// Generate a multimode sprite that mixes mode 0 and mode 3 and uses only 4 colors
+    #[allow(clippy::similar_names)]
     pub fn mode0_mode3_mix_from_mode0(
         sprite: &Sprite,
         conversion: MultiModeConversion,
-    ) -> MultiModeSprite {
+    ) -> Self {
         // TODO check that there are only the first 4 inks used
         let p_orig = sprite.palette().unwrap();
 
@@ -691,7 +683,7 @@ impl MultiModeSprite {
             ];
 
             // Fill inks depending on the lut
-            for (src, dsts) in lut.iter() {
+            for (src, dsts) in &lut {
                 dsts.iter().for_each(|dst| {
                     p.set((*dst).into(), p_orig.get((*src).into()).clone());
                 });
@@ -716,9 +708,9 @@ impl MultiModeSprite {
                 // Create the vector of modes
                 for i in 0..sprite_height {
                     let mode = if i < encoded_height {
-                        Mode::Mode0
+                        Mode::Zero
                     } else {
-                        Mode::Mode3
+                        Mode::Three
                     };
                     modes.push(mode);
                 }
@@ -742,7 +734,7 @@ impl MultiModeSprite {
             _ => unimplemented!(),
         };
 
-        MultiModeSprite {
+        Self {
             palette: p,
             mode: modes,
             data: lines,

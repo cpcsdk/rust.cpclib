@@ -27,8 +27,8 @@ pub struct BaseListing<T: Clone + ListingElement> {
 }
 
 impl<T: Clone + ListingElement> From<Vec<T>> for BaseListing<T> {
-    fn from(listing: Vec<T>) -> BaseListing<T> {
-        BaseListing::<T> {
+    fn from(listing: Vec<T>) -> Self {
+        Self{
             listing,
             duration: None,
         }
@@ -53,7 +53,7 @@ impl<T: Clone + ListingElement> DerefMut for BaseListing<T> {
 impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
     /// Create an empty listing without duration
     pub fn new() -> Self {
-        BaseListing::<T> {
+        Self {
             listing: Vec::new(),
             duration: None,
         }
@@ -87,20 +87,21 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
     pub fn estimated_duration(&self) -> Result<usize, String> {
-        match self.duration {
-            Some(duration) => Ok(duration),
-            None => {
+        if let Some(duration) = self.duration {
+            Ok(duration)
+        }
+        else {
                 let mut duration = 0;
-                for token in self.listing.iter() {
+                for token in &self.listing {
                     duration = duration + token.estimated_duration()?;
                 }
                 Ok(duration)
             }
-        }
     }
 
     pub fn set_duration(&mut self, duration: usize) {
-        self.duration = Some(duration);
+        let duration = Some(duration);
+        self.duration = duration;
     }
 
     /// Get the token at the required position

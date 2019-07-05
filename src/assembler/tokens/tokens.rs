@@ -6,6 +6,7 @@ use crate::assembler::AssemblerError;
 impl ListingElement for Token {
     /// Returns an estimation of the duration.
     /// This estimation may be wrong for instruction having several states.
+    #[allow(clippy::match_same_arms)]
     fn estimated_duration(&self) -> Result<usize, String> {
         let duration = match self {
             Token::Breakpoint(_)
@@ -335,6 +336,7 @@ impl Listing {
 }
 
 #[cfg(test)]
+#[allow(clippy::pedantic)]
 mod tests {
     use crate::assembler::builder::*;
     use crate::assembler::tokens::*;

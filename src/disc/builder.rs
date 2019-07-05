@@ -18,8 +18,7 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
                 .unwrap_or_else(|| panic!("Unable to acquire information for track {:?}", idx));
             let sectors_size = info.sector_size as usize * info.number_of_sectors();
             let header_size = 256;
-            let encoded_size = ((sectors_size + header_size) / 256) as u8;
-            encoded_size
+            ((sectors_size + header_size) / 256) as u8
         })
         .collect::<Vec<_>>();
 
@@ -29,9 +28,8 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
         track.track_number = track_idx;
 
         track.head_number = match *head {
-            Head::Unspecified => Head::HeadA,
-            Head::HeadA => Head::HeadA,
-            Head::HeadB => Head::HeadA,
+            Head::A | Head::Unspecified => Head::A,
+            Head::B => Head::B,
         }
         .into();
         track.track_size =
@@ -71,14 +69,14 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
 
 #[allow(missing_docs)]
 impl From<DiscConfig> for ExtendedDsk {
-    fn from(config: DiscConfig) -> ExtendedDsk {
+    fn from(config: DiscConfig) -> Self {
         build_disc_from_cfg(&config)
     }
 }
 
 #[allow(missing_docs)]
 impl From<&DiscConfig> for ExtendedDsk {
-    fn from(config: &DiscConfig) -> ExtendedDsk {
+    fn from(config: &DiscConfig) -> Self {
         build_disc_from_cfg(config)
     }
 }

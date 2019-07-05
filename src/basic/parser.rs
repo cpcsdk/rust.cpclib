@@ -222,7 +222,7 @@ pub fn hex_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
             if parsed.input_len() > 4 {
                 Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
             } else {
-                let mut res = 0u32;
+                let mut res = 0_u32;
                 for e in parsed.iter_elements() {
                     let digit = e;
                     let value = digit.to_digit(16).unwrap_or(0);
@@ -248,7 +248,7 @@ pub fn dec_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
             if parsed.input_len() > 5 {
                 Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
             } else {
-                let mut res = 0u32;
+                let mut res = 0_u32;
                 for e in parsed.iter_elements() {
                     let digit = e;
                     let value = digit.to_digit(10).unwrap_or(0);

@@ -64,18 +64,19 @@ impl FromStr for DiscConfig {
 
     /// Generates the configuration from a &str. Panic in case of failure.
     /// The format corresponds to cpctools format from Ramlaid/Mortel.
-    fn from_str(config: &str) -> Result<DiscConfig, Self::Err> {
+    fn from_str(config: &str) -> Result<Self, Self::Err> {
         match parse_config(config.into()) {
             Ok((next, res)) => {
-                if next.trim().len() != 0 {
+                if next.trim().len() == 0 {
+                    Ok(res)
+                }
+                else {
                     Err(DiscConfigError::ParseError {
                         msg: format!(
                             "Bug in the parser, there is still content to parse: {}",
                             next
                         ),
                     })
-                } else {
-                    Ok(res)
                 }
             }
             Err(error) => Err(DiscConfigError::ParseError {
@@ -87,16 +88,16 @@ impl FromStr for DiscConfig {
 
 #[allow(missing_docs)]
 impl DiscConfig {
-    pub fn single_head_data_format() -> DiscConfig {
+    pub fn single_head_data_format() -> Self {
         Self::from_str(DATA_FORMAT_CFG).unwrap()
     }
 
-    pub fn single_head_data42_format() -> DiscConfig {
+    pub fn single_head_data42_format() -> Self {
         Self::from_str(DATA_FORMAT42_CFG).unwrap()
     }
 
     /// Create a configuration from the provided file
-    pub fn new<P: AsRef<Path>>(p: P) -> Result<DiscConfig, DiscConfigError> {
+    pub fn new<P: AsRef<Path>>(p: P) -> Result<Self, DiscConfigError> {
         let mut content = String::new();
         let mut f = File::open(p.as_ref())?;
         f.read_to_string(&mut content)?;
@@ -111,7 +112,7 @@ impl fmt::Display for DiscConfig {
         writeln!(f, "NbTrack = {}", self.nb_tracks)?;
         writeln!(f, "NbHead = {}", self.nb_heads)?;
 
-        for track_group in self.track_groups.iter() {
+        for track_group in &self.track_groups {
             write!(f, "\n{}", track_group)?;
         }
 
@@ -121,7 +122,7 @@ impl fmt::Display for DiscConfig {
 
 #[allow(missing_docs)]
 impl DiscConfig {
-    /// HeadA or HeadB for a two headd dsk. Unspecified for a single headd disc
+    /// A or B for a two headd dsk. Unspecified for a single headd disc
     pub fn track_information_for_track<S: Into<Head>>(
         &self,
         head: S,
@@ -135,7 +136,7 @@ impl DiscConfig {
 
     pub fn track_idx_iterator(&self) -> impl Iterator<Item = (&Head, u8)> {
         let head_iterator = match self.nb_heads {
-            2 => [Head::HeadA, Head::HeadB].iter(),
+            2 => [Head::A, Head::B].iter(),
             1 => [Head::Unspecified].iter(),
             _ => unreachable!(),
         };
@@ -149,10 +150,10 @@ impl DiscConfig {
 impl DiscConfig {
     /// return a disc configuration where each groups contains only one track
     /// TODO find a better name
-    pub fn explode(&self) -> DiscConfig {
+    pub fn explode(&self) -> Self {
         let mut groups = Vec::new();
-        for track_group in self.track_groups.iter() {
-            for track in track_group.tracks.iter() {
+        for track_group in &self.track_groups {
+            for track in &track_group.tracks {
                 groups.push(TrackGroup {
                     tracks: vec![*track],
                     head: track_group.head,
@@ -166,7 +167,7 @@ impl DiscConfig {
 
         groups.sort_by_key(|group| group.tracks[0]);
 
-        DiscConfig {
+        Self {
             nb_tracks: self.nb_tracks,
             nb_heads: self.nb_heads,
             track_groups: groups,
@@ -194,8 +195,8 @@ pub struct TrackGroup {
 impl fmt::Display for TrackGroup {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let head_info = match self.head {
-            Head::HeadA => "-A",
-            Head::HeadB => "-B",
+            Head::A => "-A",
+            Head::B => "-B",
             Head::Unspecified => "",
         };
         let tracks_info = self.tracks.iter().map(|t| format!("{}", t)).join(",");
@@ -360,7 +361,7 @@ impl ExtendedDsk {
 
 #[allow(missing_docs)]
 impl From<&ExtendedDsk> for DiscConfig {
-    fn from(dsk: &ExtendedDsk) -> DiscConfig {
+    fn from(dsk: &ExtendedDsk) -> Self {
         dsk.to_cfg()
     }
 }
@@ -445,8 +446,8 @@ named!(
 	delimited!(
 		tag_no_case!("[Track-"), 
 		alt!(
-			tag_no_case!("A") => {|_|{Head::HeadA}} |
-			tag_no_case!("B") => {|_|{Head::HeadB}}
+			tag_no_case!("A") => {|_|{Head::A}} |
+			tag_no_case!("B") => {|_|{Head::B}}
 		),
 	 tag_no_case!(":")
  ) |
