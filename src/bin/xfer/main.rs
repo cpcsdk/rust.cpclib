@@ -1,5 +1,4 @@
 #[macro_use]
-
 use clap;
 use std::path::Path;
 

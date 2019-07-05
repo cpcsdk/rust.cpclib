@@ -761,7 +761,7 @@ impl SectorInformationList {
     }
 
     /// Fill the information list with sectors corresponding to the provided arguments
-    #[allow(clippy::cast_possible_truncation)] 
+    #[allow(clippy::cast_possible_truncation)]
     pub fn fill_with(
         &mut self,
         ids: &[u8],
@@ -850,7 +850,7 @@ impl Sector {
 
     /// Set all the values stored in the sector
     pub fn set_values(&mut self, data: &[u8]) -> Result<(), String> {
-        if data.len()  < self.len() as usize {
+        if data.len() < self.len() as usize {
             return Err(format!(
                 "You cannot insert {} bytes in a sector of size {}.",
                 data.len(),
@@ -885,10 +885,7 @@ pub struct TrackInformationList {
 
 #[allow(missing_docs)]
 impl TrackInformationList {
-    fn from_buffer_and_disc_information(
-        buffer: &[u8],
-        disc_info: &DiscInformation,
-    ) -> Self {
+    fn from_buffer_and_disc_information(buffer: &[u8], disc_info: &DiscInformation) -> Self {
         let mut consummed_bytes: usize = 0;
         let mut list = Vec::new();
 
@@ -1075,7 +1072,7 @@ impl ExtendedDsk {
         } else {
             self.track_list.list.len() / 2
         };
-        (val & 0xff ) as u8
+        (val & 0xff) as u8
     }
 
     #[deprecated]
@@ -1193,6 +1190,10 @@ impl ExtendedDsk {
 
     /// Return the smallest sector id over all tracks
     pub fn min_sector<S: Into<Head>>(&self, _size: &S) -> u8 {
-        self.tracks().iter().map(TrackInformation::min_sector).min().unwrap()
+        self.tracks()
+            .iter()
+            .map(TrackInformation::min_sector)
+            .min()
+            .unwrap()
     }
 }

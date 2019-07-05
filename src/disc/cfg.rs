@@ -69,8 +69,7 @@ impl FromStr for DiscConfig {
             Ok((next, res)) => {
                 if next.trim().len() == 0 {
                     Ok(res)
-                }
-                else {
+                } else {
                     Err(DiscConfigError::ParseError {
                         msg: format!(
                             "Bug in the parser, there is still content to parse: {}",

@@ -36,8 +36,8 @@ impl Mode {
     pub fn max_colors(&self) -> usize {
         match self {
             &Mode::Zero => 16,
-            &Mode::One | &Mode::Three  => 4,
-            &Mode::Two => 2
+            &Mode::One | &Mode::Three => 4,
+            &Mode::Two => 2,
         }
     }
 
@@ -129,11 +129,18 @@ fn merge_mode0_mode3(line1: &Vec<u8>, line2: &Vec<u8>) -> Vec<u8> {
 
 // Convert inks to pens
 fn inks_to_pens(inks: &Vec<Vec<Ink>>, p: &Palette) -> Vec<Vec<Pen>> {
-    inks.iter().map( |line| {
-        line.iter().map(|ink|{
-            p.get_pen_for_ink(ink).expect(&format!("Unable to find a correspondance for ink {:?} in given palette {:?}", ink, p))
-        }).collect::<Vec<Pen>>()
-    }).collect::<Vec<_>>()
+    inks.iter()
+        .map(|line| {
+            line.iter()
+                .map(|ink| {
+                    p.get_pen_for_ink(ink).expect(&format!(
+                        "Unable to find a correspondance for ink {:?} in given palette {:?}",
+                        ink, p
+                    ))
+                })
+                .collect::<Vec<Pen>>()
+        })
+        .collect::<Vec<_>>()
 }
 
 /// A ColorMatrix represents an image through a list of Inks.
@@ -220,10 +227,7 @@ impl ColorMatrix {
 
     /// Build a vector of Inks that contains all the inks of the given column
     pub fn get_column(&self, x: usize) -> Vec<Ink> {
-        self.data
-            .iter()
-            .map(|line| line[x])
-            .collect::<Vec<Ink>>()
+        self.data.iter().map(|line| line[x]).collect::<Vec<Ink>>()
     }
 
     /// Return a copy of the inks for the given window definition
@@ -658,10 +662,7 @@ impl MultiModeSprite {
 
     /// Generate a multimode sprite that mixes mode 0 and mode 3 and uses only 4 colors
     #[allow(clippy::similar_names)]
-    pub fn mode0_mode3_mix_from_mode0(
-        sprite: &Sprite,
-        conversion: MultiModeConversion,
-    ) -> Self {
+    pub fn mode0_mode3_mix_from_mode0(sprite: &Sprite, conversion: MultiModeConversion) -> Self {
         // TODO check that there are only the first 4 inks used
         let p_orig = sprite.palette().unwrap();
 

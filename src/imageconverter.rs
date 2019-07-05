@@ -697,12 +697,8 @@ pub enum Output {
 impl Debug for Output {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            &Output::LinearEncodedSprite {
-                ..
-            } => writeln!(fmt, "LinearEncodedSprite"),
-            &Output::LinearEncodedChuncky {
-               ..
-            } => writeln!(fmt, "LinearEncodedChuncky"),
+            &Output::LinearEncodedSprite { .. } => writeln!(fmt, "LinearEncodedSprite"),
+            &Output::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
             &Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
             &Output::CPCMemoryOverscan(_, _, _) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
             &Output::CPCSplittingMemory(ref vec) => {
@@ -799,22 +795,20 @@ impl<'a> ImageConverter<'a> {
             output,
         };
 
-        if  let OutputFormat::LinearEncodedChuncky = output {
-                let mut matrix = converter.load_color_matrix(input_file);
-                matrix.double_horizontally();
-                let sprite = matrix.as_sprite(mode, None);
-                Ok(Output::LinearEncodedChuncky {
-                    data: sprite.to_linear_vec(),
-                    palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set
-                    byte_width: sprite.byte_width() as _,
-                    height: sprite.height() as _,
-                })
-            }
-            else {
-                let sprite = converter.load_sprite(input_file);
-                converter.apply_sprite_conversion(&sprite)
-            }
-        
+        if let OutputFormat::LinearEncodedChuncky = output {
+            let mut matrix = converter.load_color_matrix(input_file);
+            matrix.double_horizontally();
+            let sprite = matrix.as_sprite(mode, None);
+            Ok(Output::LinearEncodedChuncky {
+                data: sprite.to_linear_vec(),
+                palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set
+                byte_width: sprite.byte_width() as _,
+                height: sprite.height() as _,
+            })
+        } else {
+            let sprite = converter.load_sprite(input_file);
+            converter.apply_sprite_conversion(&sprite)
+        }
     }
 
     /// Makes the conversion of the provided sprite to the expected format

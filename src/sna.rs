@@ -250,11 +250,11 @@ impl SnapshotFlag {
     pub fn base(&self) -> usize {
         use self::SnapshotFlag::*;
         match self {
-            &Z80_AF | &Z80_F=> 0x11,
+            &Z80_AF | &Z80_F => 0x11,
             &Z80_A => 0x12,
             &Z80_BC | &Z80_C => 0x13,
             &Z80_B => 0x14,
-            &Z80_DE | &Z80_E=> 0x15,
+            &Z80_DE | &Z80_E => 0x15,
             &Z80_D => 0x16,
             &Z80_HL | &Z80_L => 0x17,
             &Z80_H => 0x18,
@@ -273,7 +273,7 @@ impl SnapshotFlag {
             &Z80_AX => 0x27,
             &Z80_BCX | &Z80_CX => 0x28,
             &Z80_BX => 0x29,
-            &Z80_DEX  | &Z80_EX => 0x2a,
+            &Z80_DEX | &Z80_EX => 0x2a,
             &Z80_DX => 0x2b,
             &Z80_HLX | &Z80_LX => 0x2c,
             &Z80_HX => 0x2d,
@@ -1249,14 +1249,10 @@ impl Snapshot {
             // Here we treate the case where we read only one value
             let offset = flag.offset();
             match flag.elem_size() {
-                1 => {
-                    FlagValue::Byte(self.header[offset])
-                }
-                2 => {
-                    FlagValue::Word(
-                        u16::from(self.header[offset + 1]) * 256 + u16::from(self.header[offset]),
-                    )
-                }
+                1 => FlagValue::Byte(self.header[offset]),
+                2 => FlagValue::Word(
+                    u16::from(self.header[offset + 1]) * 256 + u16::from(self.header[offset]),
+                ),
                 _ => panic!(),
             }
         } else {

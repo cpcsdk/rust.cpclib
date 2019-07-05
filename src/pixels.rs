@@ -42,15 +42,11 @@ pub mod mode1 {
         let bits_position: [u8; 2] = {
             let mut pos = match pixel {
                 // pixel pos [0,1,2,3]            bit1 idx                        bit0 idx
-                PixelPosition::First => {
-                    [BitMapping::FirstBit1 as u8, BitMapping::FirstBit0 as u8]
-                }
+                PixelPosition::First => [BitMapping::FirstBit1 as u8, BitMapping::FirstBit0 as u8],
                 PixelPosition::Second => {
                     [BitMapping::SecondBit1 as u8, BitMapping::SecondBit0 as u8]
                 }
-                PixelPosition::Third => {
-                    [BitMapping::ThirdBit1 as u8, BitMapping::ThirdBit0 as u8]
-                }
+                PixelPosition::Third => [BitMapping::ThirdBit1 as u8, BitMapping::ThirdBit0 as u8],
                 PixelPosition::Fourth => {
                     [BitMapping::FourthBit1 as u8, BitMapping::FourthBit0 as u8]
                 }

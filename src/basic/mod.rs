@@ -148,8 +148,7 @@ impl BasicProgram {
             Ok((res, prog)) => {
                 if res.trim().len() == 0 {
                     Ok(prog)
-                }
-                else {
+                } else {
                     Err(format!(
                         "Basic content has not been totally parsed: `{}`",
                         res
@@ -195,8 +194,7 @@ impl BasicProgram {
             Ok(BasicProgramLineIdx::Index(index)) => {
                 if index == 0 {
                     None
-                }
-                else {
+                } else {
                     Some(BasicProgramLineIdx::Index(index - 1))
                 }
             }
@@ -237,12 +235,12 @@ impl BasicProgram {
             .iter()
             .enumerate()
             .filter_map(move |(index, line)| {
-                    if line.line_number == number {
-                        Some(index)
-                    }else {
-                        None
-                    }
-                })
+                if line.line_number == number {
+                    Some(index)
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>()
             .first()
             .map(|&v| v)

@@ -1,6 +1,5 @@
 extern crate bitsets;
 
-
 use std::convert::TryInto;
 
 use std::io::prelude::*;
