@@ -96,10 +96,10 @@ impl Into<u8> for &Head {
 /// *E* -- high bytes of track sizes for all tracks
 /// (computed in the same way as 32-33 for the normal format).
 ///
-///     For single sided formats the table contains track sizes of just one side, otherwise for two alternating sides.
-///     A size of value 0 indicates an unformatted track.
-///     Actual track data length = table value * 256.
-///     Keep in mind that the image contains additional 256 bytes for each track info.
+/// For single sided formats the table contains track sizes of just one side, otherwise for two alternating sides.
+/// A size of value 0 indicates an unformatted track.
+/// Actual track data length = table value * 256.
+/// Keep in mind that the image contains additional 256 bytes for each track info.
 #[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct DiscInformation {
     /// Specific to edsk
