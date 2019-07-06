@@ -327,9 +327,6 @@ impl SymbolsTableCaseDependent {
         new
     }
 
-    #[deprecated(
-        note = "Symbol table should be manipulated from the options. It sould be better to rewrite code."
-    )]
     fn set_table(&mut self, table: SymbolsTable) {
         self.table = table
     }
@@ -810,11 +807,16 @@ pub fn visit_tokens_all_passes_with_options(
 }
 
 /// Visit the tokens during a single pass. Is deprecated in favor to the mulitpass version
-#[deprecated]
+#[deprecated(note="use visit_tokens_one_pass")]
 pub fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
-    let mut env = Env::default();
+    visit_tokens_one_pass(tokens)
+}
 
-    for token in tokens.iter() {
+/// Assemble the tokens doing one pass only (so symbols are not properly treated)
+pub fn visit_tokens_one_pass(tokens: &[Token]) -> Result<Env, AssemblerError> {
+        let mut env = Env::default();
+
+   for token in tokens.iter() {
         visit_token(token, &mut env)?;
     }
 
@@ -2059,6 +2061,7 @@ fn flag_test_to_code(flag: &FlagTest) -> u8 {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod test {
     use crate::assembler::assembler::*;
 

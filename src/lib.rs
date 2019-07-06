@@ -1,5 +1,4 @@
 // TryFrom is used in the assembler stuff
-#![feature(try_from)]
 #![feature(type_alias_enum_variants)]
 #![feature(type_ascription)]
 #![feature(custom_attribute)]
@@ -17,7 +16,8 @@
     unused_qualifications,
     nonstandard_style,
     rust_2018_idioms,
-    unused
+    unused,
+    warnings
 )]
 #![deny(clippy::pedantic)]
 #![allow(

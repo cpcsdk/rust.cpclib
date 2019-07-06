@@ -144,34 +144,12 @@ impl AssemblingOptions {
     }
 }
 
-/// Assemble a piece of code and returns the associated list of bytes
+/// Assemble a piece of code and returns the associated list of bytes.
 pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
-    assemble_and_table(code).map(|(b, _)| b)
-}
-
-#[allow(missing_docs)]
-#[deprecated(note = "use assemble_with_options instead.")]
-pub fn assemble_and_table(
-    code: &str,
-) -> Result<(Vec<u8>, assembler::SymbolsTable), AssemblerError> {
-    let tokens = parser::parse_str(code.into())?;
     let options = AssemblingOptions::default();
-    let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
-
-    Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
-}
-
-#[allow(missing_docs)]
-#[deprecated(note = "use assemble_with_options instead.")]
-pub fn assemble_with_table(
-    code: &str,
-    table: &assembler::SymbolsTable,
-) -> Result<(Vec<u8>, assembler::SymbolsTable), AssemblerError> {
-    let tokens = parser::parse_str(code.into())?;
-    let options = AssemblingOptions::new_with_table(table);
-    let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
-
-    Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
+    //let options = AssemblingOptions::new_with_table(table);
+    assemble_with_options(code, &options)
+        .map(|(bytes, _symbols)| bytes)
 }
 
 #[allow(missing_docs)]

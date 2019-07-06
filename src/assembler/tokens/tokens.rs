@@ -264,12 +264,12 @@ impl Listing {
 
     /// Add a new label to the listing
     pub fn add_label(&mut self, label: &str) {
-        self.mut_listing().push(Token::Label(String::from(label)));
+        self.listing_mut().push(Token::Label(String::from(label)));
     }
 
     /// Add a new comment to the listing
     pub fn add_comment(&mut self, comment: &str) {
-        self.mut_listing()
+        self.listing_mut()
             .push(Token::Comment(String::from(comment)));
     }
 
@@ -293,7 +293,7 @@ impl Listing {
                 error: e.to_string(),
             })
             .map(|(_res, local_tokens)| {
-                self.mut_listing().extend_from_slice(&local_tokens);
+                self.listing_mut().extend_from_slice(&local_tokens);
             })
     }
 
