@@ -807,16 +807,16 @@ pub fn visit_tokens_all_passes_with_options(
 }
 
 /// Visit the tokens during a single pass. Is deprecated in favor to the mulitpass version
-#[deprecated(note="use visit_tokens_one_pass")]
+#[deprecated(note = "use visit_tokens_one_pass")]
 pub fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
     visit_tokens_one_pass(tokens)
 }
 
 /// Assemble the tokens doing one pass only (so symbols are not properly treated)
 pub fn visit_tokens_one_pass(tokens: &[Token]) -> Result<Env, AssemblerError> {
-        let mut env = Env::default();
+    let mut env = Env::default();
 
-   for token in tokens.iter() {
+    for token in tokens.iter() {
         visit_token(token, &mut env)?;
     }
 

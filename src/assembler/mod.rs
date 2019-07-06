@@ -148,8 +148,7 @@ impl AssemblingOptions {
 pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
     let options = AssemblingOptions::default();
     //let options = AssemblingOptions::new_with_table(table);
-    assemble_with_options(code, &options)
-        .map(|(bytes, _symbols)| bytes)
+    assemble_with_options(code, &options).map(|(bytes, _symbols)| bytes)
 }
 
 #[allow(missing_docs)]
