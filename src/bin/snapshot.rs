@@ -1,24 +1,32 @@
-extern crate bitsets;
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_qualifications,
+    nonstandard_style,
+    rust_2018_idioms,
+    unused,
+    warnings
+)]
+#![deny(clippy::pedantic)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::identity_op)]
 
 use std::convert::TryInto;
-
-use std::io::prelude::*;
 
 use std::path::Path;
 use std::str::FromStr;
 
 use cpclib::sna::*;
 
-extern crate clap;
+use clap;
 use clap::{App, Arg};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
-
-extern crate built;
-extern crate semver;
-extern crate time;
 
 use cpclib::util::string_to_nb;
 
@@ -110,7 +118,7 @@ fn main() {
 
     // Display all tokens
     if matches.is_present("flags") {
-        for flag in SnapshotFlag::enumerate().into_iter() {
+        for flag in SnapshotFlag::enumerate().iter() {
             println!(
                 "{:?} / {:?} bytes.{}",
                 flag,
@@ -148,7 +156,7 @@ fn main() {
             let address = {
                 if place.starts_with("0x") {
                     u32::from_str_radix(&place[2..], 16).unwrap()
-                } else if place.starts_with("0") {
+                } else if place.starts_with('0') {
                     u32::from_str_radix(&place[1..], 8).unwrap()
                 } else {
                     place.parse::<u32>().unwrap()
@@ -187,8 +195,8 @@ fn main() {
         for i in 0..(loads.len() / 2) {
             // Read the parameters from the command line
             let token = loads[i * 2 + 0];
-            let (token, _index) = if token.contains(":") {
-                let elems = token.split(":").collect::<Vec<_>>();
+            let (token, _index) = if token.contains(':') {
+                let elems = token.split(':').collect::<Vec<_>>();
                 (
                     elems[0],
                     Some(elems[1].parse::<usize>().expect("Unable to read indice")),
@@ -203,7 +211,7 @@ fn main() {
 
             // Get the token
             let token = SnapshotFlag::from_str(token).unwrap();
-            sna.set_value(token, value as u16);
+            sna.set_value(token, value as u16).unwrap();
 
             sna.log(format!(
                 "Token {:?} set at value {} (0x{:x})",

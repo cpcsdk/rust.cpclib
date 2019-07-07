@@ -74,7 +74,7 @@ mod tests {
         test_single_dsk(&dsk);
 
         let tmp_file = "/tmp/tmp.dsk";
-        dsk.save(tmp_file);
+        dsk.save(tmp_file).unwrap();
         let dsk = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
         test_single_dsk(&dsk);
     }
@@ -92,7 +92,7 @@ mod tests {
         test_double_head_bf_edsk(&dsk);
 
         let tmp_file = "/tmp/tmp.dsk";
-        dsk.save(tmp_file);
+        dsk.save(tmp_file).unwrap();
         let dsk = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
         test_double_head_bf_edsk(&dsk);
     }
@@ -101,7 +101,7 @@ mod tests {
     fn save_edsk() {
         let tmp_file = "/tmp/tmp.dsk";
         let dsk1 = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/pirate.dsk").unwrap();
-        dsk1.save(tmp_file);
+        dsk1.save(tmp_file).unwrap();
         let _ds2 = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
     }
 
@@ -271,7 +271,7 @@ mod tests {
             117248, 41, 0xC9, 512, 512, 117248, 41, 0xC5, 512, 512, 117248,
         ];
 
-        for mut chunk in &sectors_content.into_iter().chunks(5) {
+        for mut chunk in &sectors_content.iter().chunks(5) {
             let track = *chunk.next().unwrap() as u8;
             let sector = *chunk.next().unwrap() as u8;
             let _size = *chunk.next().unwrap() as usize;
@@ -420,7 +420,7 @@ mod tests {
             512, 117248,
         ];
 
-        for mut chunk in &sectors_content.into_iter().chunks(4) {
+        for mut chunk in &sectors_content.iter().chunks(4) {
             let track = *chunk.next().unwrap() as u8;
             let sector = *chunk.next().unwrap() as u8;
             let size = *chunk.next().unwrap() as usize;

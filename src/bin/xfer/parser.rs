@@ -17,7 +17,7 @@ pub(crate) enum XferCommand {
 
 // TODO find a way to reduce code duplicaiton
 
-named!(ls_path<CompleteStr, XferCommand>,
+named!(ls_path<CompleteStr<'_>, XferCommand>,
 do_parse!(
 	tag_no_case!("ls") >>
 	space1 >>
@@ -28,7 +28,7 @@ do_parse!(
 )
 );
 
-named!(ls_no_path<CompleteStr, XferCommand>,
+named!(ls_no_path<CompleteStr<'_>, XferCommand>,
 do_parse!(
 	tag_no_case!("ls") >>
 	(
@@ -37,11 +37,11 @@ do_parse!(
 )
 );
 
-named!(ls<CompleteStr, XferCommand>,
+named!(ls<CompleteStr<'_>, XferCommand>,
 alt!(ls_path | ls_no_path)
 );
 
-named!(cd_path<CompleteStr, XferCommand>,
+named!(cd_path<CompleteStr<'_>, XferCommand>,
 do_parse!(
 	tag_no_case!("cd") >>
 	space1 >>
@@ -52,7 +52,7 @@ do_parse!(
 )
 );
 
-named!(cd_no_path<CompleteStr, XferCommand>,
+named!(cd_no_path<CompleteStr<'_>, XferCommand>,
 do_parse!(
 	tag_no_case!("cd") >>
 	(
@@ -61,11 +61,11 @@ do_parse!(
 )
 );
 
-named!(cd<CompleteStr, XferCommand>,
+named!(cd<CompleteStr<'_>, XferCommand>,
 alt!(cd_path | cd_no_path)
 );
 
-named!(no_arg<CompleteStr, XferCommand>,
+named!(no_arg<CompleteStr<'_>, XferCommand>,
 alt!(
 	tag_no_case!("pwd") => 	{|_|{XferCommand::Pwd}} |
 	tag_no_case!("reboot") => 	{|_|{XferCommand::Reboot}} |
@@ -73,10 +73,10 @@ alt!(
 )
 );
 
-named!( parse_command_inner<CompleteStr, XferCommand>,
+named!( parse_command_inner<CompleteStr<'_>, XferCommand>,
 	  alt!(cd | ls | no_arg)
 );
 
-pub(crate) fn parse_command(cmd: &str) -> nom::IResult<CompleteStr, XferCommand> {
+pub(crate) fn parse_command(cmd: &str) -> nom::IResult<CompleteStr<'_>, XferCommand> {
     parse_command_inner(cmd.into())
 }

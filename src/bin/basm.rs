@@ -1,4 +1,19 @@
-extern crate bitsets;
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_qualifications,
+    nonstandard_style,
+    rust_2018_idioms,
+    unused,
+    warnings
+)]
+#![deny(clippy::pedantic)]
+#![allow(clippy::cast_possible_truncation)]
+#![feature(custom_attribute)]
+
 
 use std::fs::File;
 use std::io;
@@ -13,19 +28,13 @@ use cpclib::assembler::AssemblerError;
 use cpclib::assembler::*;
 use cpclib::disc::amsdos::{AmsdosFileName, AmsdosManager};
 
-extern crate clap;
+use clap;
 use clap::{App, Arg, ArgGroup, ArgMatches};
+use failure::Fail;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
-
-extern crate built;
-extern crate semver;
-extern crate time;
-#[macro_use]
-extern crate failure;
-
 #[derive(Debug, Fail)]
 enum BasmError {
     #[fail(display = "IO error: {}", io)]
@@ -46,26 +55,26 @@ enum BasmError {
 
 // XXX I do not understand why I have to do that !!!
 impl From<std::io::Error> for BasmError {
-    fn from(error: std::io::Error) -> BasmError {
+    fn from(error: std::io::Error) -> Self {
         BasmError::Io { io: error }
     }
 }
 
 impl From<AssemblerError> for BasmError {
-    fn from(error: AssemblerError) -> BasmError {
-        BasmError::AssemblerError { error: error }
+    fn from(error: AssemblerError) -> Self {
+        BasmError::AssemblerError { error }
     }
 }
 
 /// Parse the given code.
 /// TODO read options to configure the search path
-fn parse(matches: &ArgMatches) -> Result<Listing, BasmError> {
+fn parse(matches: &ArgMatches<'_>) -> Result<Listing, BasmError> {
     let filename = matches.value_of("INPUT").unwrap();
 
     let code = {
         let mut f = File::open(filename)?;
         let mut content = String::new();
-        f.read_to_string(&mut content);
+        f.read_to_string(&mut content)?;
         content
     };
 
@@ -88,7 +97,7 @@ fn parse(matches: &ArgMatches) -> Result<Listing, BasmError> {
 
 /// Assemble the given code
 /// TODO use options to configure the base symbole table
-fn assemble(matches: &ArgMatches, listing: &Listing) -> Result<Env, BasmError> {
+fn assemble(matches: &ArgMatches<'_>, listing: &Listing) -> Result<Env, BasmError> {
     let mut options = AssemblingOptions::default();
 
     options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
@@ -110,7 +119,7 @@ fn assemble(matches: &ArgMatches, listing: &Listing) -> Result<Env, BasmError> {
 
 /// Save the provided result
 /// TODO manage the various save options
-fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
+fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
     let single_binary = true;
     if single_binary {
         let pc_filename = matches.value_of("OUTPUT").unwrap();
@@ -146,7 +155,7 @@ fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
         // Save file on disc
         let mut f = File::create(pc_filename)?;
-        if header.len() > 0 {
+        if !header.is_empty() {
             f.write_all(&header)?;
         }
         f.write_all(&binary)?;
@@ -155,7 +164,7 @@ fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
     Ok(())
 }
 
-fn process(matches: &ArgMatches) -> Result<(), BasmError> {
+fn process(matches: &ArgMatches<'_>) -> Result<(), BasmError> {
     let listing = parse(matches)?;
     let env = assemble(matches, &listing)?;
     save(matches, &env)
