@@ -49,14 +49,20 @@ impl<T: Clone + ListingElement> DerefMut for BaseListing<T> {
     }
 }
 
+impl<T: Clone + ListingElement> Default for BaseListing<T> {
+    fn default() -> Self {
+               Self {
+            listing: Vec::new(),
+            duration: None,
+        }
+    }
+}
+
 #[allow(missing_docs)]
 impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
     /// Create an empty listing without duration
     pub fn new() -> Self {
-        Self {
-            listing: Vec::new(),
-            duration: None,
-        }
+       Self::default() 
     }
 
     /// Write access to listing. Should not exist but I do not know how to access to private firlds
@@ -92,7 +98,7 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
         } else {
             let mut duration = 0;
             for token in &self.listing {
-                duration = duration + token.estimated_duration()?;
+                duration += token.estimated_duration()?;
             }
             Ok(duration)
         }

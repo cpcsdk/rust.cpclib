@@ -25,7 +25,9 @@
     clippy::doc_markdown,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    clippy::cast_possible_wrap
+    clippy::cast_possible_wrap,
+    clippy::module_inception,
+    clippy::identity_op
 )]
 
 //! cpclib aims at providing tools that help cross-development for the Amstrad CPC.

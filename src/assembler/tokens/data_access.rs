@@ -79,19 +79,19 @@ impl From<FlagTest> for DataAccess {
 impl fmt::Display for DataAccess {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            &DataAccess::IndexRegister16WithIndex(ref reg, ref delta) => {
+            DataAccess::IndexRegister16WithIndex(ref reg, ref delta) => {
                 write!(f, "({} {})", reg, delta)
             }
-            &DataAccess::IndexRegister16(ref reg) => write!(f, "{}", reg),
-            &DataAccess::Register16(ref reg) => write!(f, "{}", reg),
-            &DataAccess::IndexRegister8(ref reg) => write!(f, "{}", reg),
-            &DataAccess::Register8(ref reg) => write!(f, "{}", reg),
-            &DataAccess::MemoryRegister16(ref reg) => write!(f, "({})", reg),
-            &DataAccess::Expression(ref exp) => write!(f, "{}", exp),
-            &DataAccess::Memory(ref exp) => write!(f, "({})", exp),
-            &DataAccess::FlagTest(ref test) => write!(f, "{}", test),
-            &DataAccess::SpecialRegisterI => write!(f, "I"),
-            &DataAccess::SpecialRegisterR => write!(f, "R"),
+            DataAccess::IndexRegister16(ref reg) => write!(f, "{}", reg),
+            DataAccess::Register16(ref reg) => write!(f, "{}", reg),
+            DataAccess::IndexRegister8(ref reg) => write!(f, "{}", reg),
+            DataAccess::Register8(ref reg) => write!(f, "{}", reg),
+            DataAccess::MemoryRegister16(ref reg) => write!(f, "({})", reg),
+            DataAccess::Expression(ref exp) => write!(f, "{}", exp),
+            DataAccess::Memory(ref exp) => write!(f, "({})", exp),
+            DataAccess::FlagTest(ref test) => write!(f, "{}", test),
+            DataAccess::SpecialRegisterI => write!(f, "I"),
+            DataAccess::SpecialRegisterR => write!(f, "R"),
         }
     }
 }
@@ -100,7 +100,7 @@ impl fmt::Display for DataAccess {
 impl DataAccess {
     pub fn expr(&self) -> Option<&Expr> {
         match self {
-            &DataAccess::Expression(ref expr) => Some(expr),
+            DataAccess::Expression(ref expr) => Some(expr),
             _ => None,
         }
     }
@@ -128,57 +128,57 @@ impl DataAccess {
 
     pub fn is_register8(&self) -> bool {
         match self {
-            &DataAccess::Register8(_) => true,
+            DataAccess::Register8(_) => true,
             _ => false,
         }
     }
 
     pub fn is_register16(&self) -> bool {
         match self {
-            &DataAccess::Register16(_) => true,
+            DataAccess::Register16(_) => true,
             _ => false,
         }
     }
 
     pub fn is_indexregister16(&self) -> bool {
         match self {
-            &DataAccess::IndexRegister16(_) => true,
+            DataAccess::IndexRegister16(_) => true,
             _ => false,
         }
     }
 
     pub fn is_memory(&self) -> bool {
         match self {
-            &DataAccess::Memory(_) => true,
+            DataAccess::Memory(_) => true,
             _ => false,
         }
     }
 
     pub fn is_address_in_register16(&self) -> bool {
         match self {
-            &DataAccess::MemoryRegister16(_) => true,
+            DataAccess::MemoryRegister16(_) => true,
             _ => false,
         }
     }
 
     pub fn get_register16(&self) -> Option<Register16> {
         match self {
-            &DataAccess::Register16(ref reg) => Some(reg.clone()),
-            &DataAccess::MemoryRegister16(ref reg) => Some(reg.clone()),
+            DataAccess::Register16(ref reg) => Some(*reg),
+            DataAccess::MemoryRegister16(ref reg) => Some(*reg),
             _ => None,
         }
     }
 
     pub fn get_indexregister16(&self) -> Option<IndexRegister16> {
         match self {
-            &DataAccess::IndexRegister16(ref reg) => Some(reg.clone()),
+            DataAccess::IndexRegister16(ref reg) => Some(*reg),
             _ => None,
         }
     }
 
     pub fn get_register8(&self) -> Option<Register8> {
         match self {
-            &DataAccess::Register8(ref reg) => Some(reg.clone()),
+            DataAccess::Register8(ref reg) => Some(*reg),
             _ => None,
         }
     }

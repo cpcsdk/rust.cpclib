@@ -28,40 +28,40 @@ pub enum Bank {
 
 #[allow(missing_docs)]
 impl Bank {
-    pub fn is_main_memory(&self) -> bool {
+    pub fn is_main_memory(self) -> bool {
         use self::Bank::*;
         match self {
-            &Zero | &One | &Two | &Three => true,
+            Zero | One | Two | Three => true,
             _ => false,
         }
     }
 
-    pub fn is_extra_bank(&self) -> bool {
+    pub fn is_extra_bank(self) -> bool {
         !self.is_main_memory()
     }
 
-    pub fn num(&self) -> u8 {
+    pub fn num(self) -> u8 {
         use self::Bank::*;
         match self {
-            &Zero => 0,
-            &One => 1,
-            &Two => 2,
-            &Three => 3,
-            &Four => 4,
-            &Five => 5,
-            &Six => 6,
-            &Seven => 7,
+            Zero => 0,
+            One => 1,
+            Two => 2,
+            Three => 3,
+            Four => 4,
+            Five => 5,
+            Six => 6,
+            Seven => 7,
         }
     }
 
     #[allow(clippy::match_same_arms)]
-    pub fn start_address(&self) -> u16 {
+    pub fn start_address(self) -> u16 {
         use self::Bank::*;
         match self {
-            &Zero => 0x0000,
-            &One => 0x4000,
-            &Two => 0x8000,
-            &Three => 0xc000,
+            Zero => 0x0000,
+            One => 0x4000,
+            Two => 0x8000,
+            Three => 0xc000,
             _ => 0x4000,
         }
     }
@@ -100,11 +100,11 @@ impl Debug for PageDefinition {
 impl PageDefinition {
     pub fn new(bank: Bank, start: u16, end: Option<u16>) -> Self {
         assert!(start >= bank.start_address());
-        assert!((start as u32) < (bank.start_address() as u32 + 0x4000));
+        assert!((u32::from(start)) < (u32::from(bank.start_address()) + 0x4000));
 
         if end.is_some() {
             assert!(end.unwrap() > start);
-            assert!((end.unwrap() as u32) < (bank.start_address() as u32 + 0x4000));
+            assert!((u32::from(end.unwrap())) < (u32::from(bank.start_address()) + 0x4000));
         }
 
         Self {
@@ -125,7 +125,7 @@ impl PageDefinition {
 
     pub fn set_start(&mut self, start: u16) {
         assert!(start >= self.bank.start_address());
-        assert!((start as u32) < (self.bank.start_address() as u32 + 0x4000));
+        assert!((u32::from(start)) < (u32::from(self.bank.start_address()) + 0x4000));
 
         if self.end.is_some() {
             assert!(self.end.unwrap() > start);
@@ -147,7 +147,7 @@ impl PageDefinition {
     }
 
     pub fn contains_address(&self, address: u32) -> bool {
-        self.start as u32 <= address && address <= self.end().unwrap() as u32
+        u32::from(self.start) <= address && address <= u32::from(self.end().unwrap()) 
     }
 
     /// Check if there is overlapping between the two pages.
@@ -292,7 +292,7 @@ impl StringCodePageContainer {
     /// Add the current source code tp the current page if it can contain it.
     /// Otherwise, select another page.
     pub fn add_code(&mut self, asm: String, size: Option<u16>) {
-        if self.pages.len() == 0 || !self.pages.last().unwrap().can_contain(size) {
+        if self.pages.is_empty() || !self.pages.last().unwrap().can_contain(size) {
             self.add_page();
         }
 
@@ -302,7 +302,7 @@ impl StringCodePageContainer {
 
     /// Return the current page. Attention, this page maybe full
     pub fn get_current_page_definition(&self) -> Option<&PageDefinition> {
-        if self.pages.len() == 0 {
+        if self.pages.is_empty() {
             None
         } else {
             Some(self.pages.last().unwrap().get_page_definition())
@@ -311,7 +311,7 @@ impl StringCodePageContainer {
 
     pub fn add_page(&mut self) {
         println!("Create a new page");
-        assert!(self.possibilities.len() > 0, "There is no room to add code");
+        assert!(!self.possibilities.is_empty(), "There is no room to add code");
         self.pages
             .push(StringCodePage::new(self.possibilities.pop().unwrap()));
     }

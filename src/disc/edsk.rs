@@ -1,5 +1,6 @@
 // http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
 
+
 use itertools::zip;
 use std::fs::File;
 use std::io;
@@ -17,7 +18,7 @@ use getset::Getters;
 pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {
     let mut n = 0;
     while size > 0x80 {
-        size = size >> 1;
+        size >>= 1;
         n += 1
     }
 
@@ -65,8 +66,8 @@ impl Into<u8> for Head {
 impl Into<u8> for &Head {
     fn into(self) -> u8 {
         match self {
-            &Head::A | &Head::Unspecified => 0,
-            &Head::B => 1,
+            Head::A | &Head::Unspecified => 0,
+            Head::B => 1,
         }
     }
 }
@@ -448,10 +449,10 @@ impl TrackInformation {
         buffer.push(self.head_number);
 
         // 12 	Data rate. (See note 1 and note 3) 	1
-        buffer.push(self.data_rate.clone().into());
+        buffer.push(self.data_rate.into());
 
         // 13 	Recording mode. (See note 2 and note 3) 	1
-        buffer.push(self.recording_mode.clone().into());
+        buffer.push(self.recording_mode.into());
 
         // 14 	sector size 	1
         buffer.push(self.sector_size);
@@ -519,7 +520,7 @@ impl TrackInformation {
             let mut s = dbg!(size);
             // TODO implement an efficient version
             while s % 256 != 0 {
-                s = s + 1;
+                s += 1;
             }
             s
         }
@@ -639,10 +640,16 @@ pub struct SectorInformation {
 }
 
 #[allow(missing_docs)]
+#[allow(clippy::trivially_copy_pass_by_ref)]
 impl SectorInformation {
     /// Return the real size of the sector
     pub fn len(&self) -> usize {
         self.sector_size as usize * 256
+    }
+
+    /// Check if the sector is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn from_buffer(buffer: &[u8]) -> Self {
@@ -910,7 +917,7 @@ impl TrackInformationList {
     /// Write the track list in the given buffer
     fn to_buffer(&self, buffer: &mut Vec<u8>) {
         for track in &self.list {
-            let _added_bytes = track.to_buffer(buffer);
+            track.to_buffer(buffer);
         }
     }
 
@@ -999,8 +1006,8 @@ impl ExtendedDsk {
         let mut consummed = 0;
         while consummed < buffer.len() {
             let current_sector = self
-                .sector_mut(pos.0.clone(), pos.1.clone(), pos.2.clone())
-                .ok_or("Sector not found".to_owned())?;
+                .sector_mut(pos.0, pos.1, pos.2)
+                .ok_or_else(||"Sector not found".to_owned())?;
 
             let sector_size = current_sector.len() as usize;
             let current_data = &buffer[consummed..consummed + sector_size];
@@ -1008,8 +1015,8 @@ impl ExtendedDsk {
             consummed += sector_size;
 
             let next_pos = self
-                .next_position(pos.0.clone(), pos.1.clone(), pos.2.clone())
-                .ok_or("No more position available".to_owned())?;
+                .next_position(pos.0, pos.1, pos.2)
+                .ok_or_else(||"No more position available".to_owned())?;
             pos = next_pos;
         }
 
@@ -1022,14 +1029,14 @@ impl ExtendedDsk {
     fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
         // Retrieve the current track and exit if does not exist
         let current_track = self.get_track_information(
-            head.clone(),
+            head,
             // Physical
             track,
         )?;
 
         // Return the next sector if exist
-        if let Some(next_sector) = current_track.next_sector_id(sector.clone()) {
-            return Some((head.clone(), track.clone(), next_sector));
+        if let Some(next_sector) = current_track.next_sector_id(sector) {
+            return Some((head, track, next_sector));
         }
 
         // Search the next track
@@ -1093,9 +1100,9 @@ impl ExtendedDsk {
         self.track_list.list.get(idx)
     }
 
-    pub fn get_track_information_mut(
+    pub fn get_track_information_mut<S: Into<Head>>(
         &mut self,
-        head: Head,
+        head: S,
         track: u8,
     ) -> Option<&mut TrackInformation> {
         let idx = self.get_track_idx(head.into(), track);
@@ -1147,7 +1154,7 @@ impl ExtendedDsk {
         let head = head.into();
 
         for count in 0..nb_sectors {
-            match self.sector(head.clone(), track, sector_id + count) {
+            match self.sector(head, track, sector_id + count) {
                 None => return None,
                 Some(s) => res.extend(s.values.iter()),
             }

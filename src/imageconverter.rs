@@ -20,9 +20,9 @@ pub enum Transformation {
 
 impl Transformation {
     /// Apply the transformation to the given image
-    pub fn apply(&self, matrix: &ColorMatrix) -> ColorMatrix {
+    pub fn apply(self, matrix: &ColorMatrix) -> ColorMatrix {
         match self {
-            Transformation::SkipOddPixels => {
+            Self::SkipOddPixels => {
                 let mut res = matrix.clone();
                 res.remove_odd_columns();
                 res
@@ -38,13 +38,19 @@ pub struct TransformationsList {
     transformations: Vec<Transformation>,
 }
 
+impl Default for TransformationsList {
+    fn default() -> Self {
+        Self {
+            transformations: Vec::new(),
+        }
+    }
+}
+
 #[allow(missing_docs)]
 impl TransformationsList {
     /// Create an empty list of transformations
     pub fn new() -> Self {
-        Self {
-            transformations: Vec::new(),
-        }
+        Self::default()
     }
 
     /// Add a transformation that remove one pixel column out of two
@@ -123,37 +129,37 @@ impl CPCScreenDimension {
     }
 
     /// Number of lines to display a char
-    pub fn nb_lines_per_char(&self) -> u8 {
+    pub fn nb_lines_per_char(self) -> u8 {
         1 + self.maximum_raster_address
     }
 
     /// Number of chars used to vertically encode the screen
-    pub fn nb_char_lines(&self) -> u8 {
+    pub fn nb_char_lines(self) -> u8 {
         self.vertical_displayed
     }
 
-    pub fn nb_word_columns(&self) -> u8 {
+    pub fn nb_word_columns(self) -> u8 {
         self.horizontal_displayed
     }
 
     /// Number of chars used to horizontally encode the screen
-    pub fn nb_byte_columns(&self) -> u8 {
+    pub fn nb_byte_columns(self) -> u8 {
         self.nb_word_columns() * 2
     }
 
     /// Height of the screen in pixels
-    pub fn height(&self) -> u16 {
-        self.nb_char_lines() as u16 * self.nb_lines_per_char() as u16
+    pub fn height(self) -> u16 {
+        u16::from(self.nb_char_lines()) * u16::from(self.nb_lines_per_char())
     }
 
     /// Width of the screen in pixels
-    pub fn width(&self, mode: &Mode) -> u16 {
-        self.nb_byte_columns() as u16 * mode.nb_pixels_per_byte() as u16
+    pub fn width(self, mode: Mode) -> u16 {
+        u16::from(self.nb_byte_columns()) * mode.nb_pixels_per_byte() as u16
     }
 
     /// Return true if the image needs two banks
-    pub fn use_two_banks(&self) -> bool {
-        self.nb_byte_columns() as u16 * self.height() > 0x4000
+    pub fn use_two_banks(self) -> bool {
+        u16::from(self.nb_byte_columns()) * self.height() > 0x4000
     }
 }
 
@@ -206,7 +212,7 @@ impl DisplayAddress {
         unimplemented!()
     }
     /// Return the offset part of the address
-    pub fn offset(&self) -> u16 {
+    pub fn offset(self) -> u16 {
         self.0.bit_range(Self::OFFSET_START, Self::OFFSET_END)
     }
 
@@ -220,7 +226,7 @@ impl DisplayAddress {
     /// 0 1 16k
     /// 1 0 16k
     /// 1 1 16k
-    pub fn buffer(&self) -> u16 {
+    pub fn buffer(self) -> u16 {
         self.0.bit_range(Self::BUFFER_START, Self::BUFFER_END)
     }
 
@@ -242,7 +248,7 @@ impl DisplayAddress {
     /// 0 1 0x4000
     /// 1 0 0x8000
     /// 1 1 0xc000
-    pub fn page(&self) -> u16 {
+    pub fn page(self) -> u16 {
         self.0.bit_range(Self::PAGE_START, Self::PAGE_END)
     }
 
@@ -250,16 +256,16 @@ impl DisplayAddress {
         self.0.set_bit_range(Self::PAGE_START, Self::PAGE_END, page);
     }
 
-    pub fn r12(&self) -> u8 {
+    pub fn r12(self) -> u8 {
         self.0.bit_range(15, 8)
     }
 
-    pub fn r13(&self) -> u8 {
+    pub fn r13(self) -> u8 {
         self.0.bit_range(7, 0)
     }
 
     /// Return the page value
-    pub fn page_start(&self) -> u16 {
+    pub fn page_start(self) -> u16 {
         match self.page() {
             0 => 0x0000,
             1 => 0x4000,
@@ -270,7 +276,7 @@ impl DisplayAddress {
     }
 
     /// Check of the configuration correspond to an overscan
-    pub fn is_overscan(&self) -> bool {
+    pub fn is_overscan(self) -> bool {
         match self.buffer() {
             0 | 1 | 2 => false,
             3 => true,
@@ -279,7 +285,7 @@ impl DisplayAddress {
     }
 
     /// Returns the CPC address of the first word.
-    pub fn address(&self) -> u16 {
+    pub fn address(self) -> u16 {
         self.page_start() + self.offset() * 2
     }
 
@@ -452,7 +458,7 @@ impl HorizontalWordCounter for StartFromLeftAndFlipAtTheEndOfLine {
 
 #[allow(missing_docs)]
 impl TileHorizontalCapture {
-    pub fn counter(&self) -> Box<dyn HorizontalWordCounter> {
+    pub fn counter(self) -> Box<dyn HorizontalWordCounter> {
         match self {
             Self::AlwaysFromLeftToRight => unimplemented!(),
             Self::AlwaysFromRightToLeft => unimplemented!(),
@@ -546,6 +552,14 @@ impl LineCounter for StandardLineCounter {
     }
 }
 
+impl Default for GrayCodeLineCounter {
+    fn default() -> Self {
+        Self {
+            char_line: 0,
+            pos_in_char: 0,
+        }
+    }
+}
 #[allow(missing_docs)]
 impl GrayCodeLineCounter {
     const GRAYCODE_INDEX_TO_SCREEN_INDEX: [u8; 8] = [0, 1, 3, 2, 6, 7, 5, 4];
@@ -553,10 +567,7 @@ impl GrayCodeLineCounter {
     const SCREEN_INDEX_TO_GRAYCODE_INDEX: [u8; 8] = [0, 1, 3, 2, 7, 6, 4, 5];
 
     pub fn new() -> Self {
-        Self {
-            char_line: 0,
-            pos_in_char: 0,
-        }
+        Self::default()
     }
 
     pub fn get_char_line(&self) -> usize {
@@ -621,7 +632,7 @@ pub enum TileVerticalCapture {
 impl TileVerticalCapture {
     /// Generates the counter when it is possible.
     /// Panics if contextual information is needed
-    pub fn counter(&self) -> Box<dyn LineCounter> {
+    pub fn counter(self) -> Box<dyn LineCounter> {
         match self {
             Self::AlwaysFromTopToBottom => Box::new(StandardLineCounter::top_to_bottom()),
             Self::AlwaysFromBottomToTop => panic!("A parameter is needed there"),
@@ -630,7 +641,7 @@ impl TileVerticalCapture {
         }
     }
 
-    pub fn counter_with_context(&self, _screen_height: usize) -> Box<dyn LineCounter> {
+    pub fn counter_with_context(self, _screen_height: usize) -> Box<dyn LineCounter> {
         unimplemented!("TODO once someone will code it")
     }
 }
@@ -659,6 +670,7 @@ impl OutputFormat {
 /// Embeds the conversion output
 /// There must be one implementation per OuputFormat
 #[allow(missing_docs)]
+#[allow(clippy::large_enum_variant)]
 pub enum Output {
     LinearEncodedSprite {
         data: Vec<u8>,
@@ -697,14 +709,14 @@ pub enum Output {
 impl Debug for Output {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            &Output::LinearEncodedSprite { .. } => writeln!(fmt, "LinearEncodedSprite"),
-            &Output::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
-            &Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
-            &Output::CPCMemoryOverscan(_, _, _) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
-            &Output::CPCSplittingMemory(ref vec) => {
+            Output::LinearEncodedSprite { .. } => writeln!(fmt, "LinearEncodedSprite"),
+            Output::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
+            Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
+            Output::CPCMemoryOverscan(_, _, _) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
+            Output::CPCSplittingMemory(ref vec) => {
                 writeln!(fmt, "CPCSplitteringMemory {:?}", &vec)
             }
-            &Output::TilesList {
+            Output::TilesList {
                 ref tile_height,
                 ref tile_width,
                 ref list,
@@ -836,7 +848,7 @@ impl<'a> ImageConverter<'a> {
 
     fn load_color_matrix(&self, input_file: &Path) -> ColorMatrix {
         let img =
-            im::open(input_file).expect(&format!("Unable to convert {:?} properly.", input_file));
+            im::open(input_file).unwrap_or_else(|_| panic!("Unable to convert {:?} properly.", input_file));
         let mat = ColorMatrix::convert(&img.to_rgb(), ConversionRule::AnyModeUseAllPixels);
         self.transformations.apply(&mat)
     }
@@ -886,6 +898,7 @@ impl<'a> ImageConverter<'a> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn extract_tiles(
         &mut self,
         tile_width: TileWidthCapture,
@@ -967,8 +980,8 @@ impl<'a> ImageConverter<'a> {
         dim: CPCScreenDimension,
         display_address: DisplayAddress,
     ) -> Result<Output, String> {
-        let screen_width = dim.width(&sprite.mode().unwrap()) as u32;
-        let screen_height = dim.height() as u32;
+        let screen_width = u32::from(dim.width(sprite.mode().unwrap()));
+        let screen_height = u32::from(dim.height());
 
         // Check if the destination is compatible
         if screen_width < sprite.pixel_width() {
@@ -1011,7 +1024,7 @@ impl<'a> ImageConverter<'a> {
             ));
         }
 
-        let mut current_address = display_address.clone();
+        let mut current_address = display_address;
         used_pages.insert(current_address.page());
 
         // loop over the chars vertically
@@ -1028,8 +1041,6 @@ impl<'a> ImageConverter<'a> {
 
                     // Loop over the bytes of the current char
                     for byte_nb in 0..2 {
-                        let byte_nb = byte_nb as usize;
-
                         let x_coord = 2 * char_x + byte_nb;
                         let y_coord = dim.nb_lines_per_char() as usize * char_y + line_in_char;
 

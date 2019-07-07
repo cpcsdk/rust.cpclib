@@ -1,4 +1,5 @@
 /// Manage all the stuff related to mode 1 pixels
+#[allow(clippy::identity_op)]
 pub mod mode1 {
     use crate::ga::Pen;
 
@@ -74,7 +75,7 @@ pub mod mode1 {
     }
 
     /// Convert a vector of pens into a vector of bytes
-    pub fn pens_to_vec(pens: &Vec<Pen>) -> Vec<u8> {
+    pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
         assert!(pens.len() % 4 == 0);
 
         let mut res = Vec::new();
@@ -161,6 +162,7 @@ pub mod mode1 {
 }
 
 /// Mode 0 pixels specific operations
+#[allow(clippy::identity_op)]
 pub mod mode0 {
     use crate::ga::Pen;
 
@@ -212,7 +214,7 @@ pub mod mode0 {
     }
 
     /// Convert a couple of pen and pixel position to the corresponding byte value
-    pub fn pen_to_pixel_byte(pen: &Pen, pixel: PixelPosition) -> u8 {
+    pub fn pen_to_pixel_byte(pen: Pen, pixel: PixelPosition) -> u8 {
         assert!(pen.number() < 16, format!("{} >=16", pen.number()));
 
         let bits_position: [u8; 4] = {
@@ -253,7 +255,7 @@ pub mod mode0 {
     }
 
     /// Convert the 2 pens in the corresponding byte
-    pub fn pens_to_byte(pen0: &Pen, pen1: &Pen) -> u8 {
+    pub fn pens_to_byte(pen0: Pen, pen1: Pen) -> u8 {
         pen_to_pixel_byte(pen0, PixelPosition::First)
             + pen_to_pixel_byte(pen1, PixelPosition::Second)
     }
@@ -263,12 +265,12 @@ pub mod mode0 {
     pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
         let mut res = Vec::with_capacity(pens.len());
         for idx in 0..(pens.len() / 2) {
-            res.push(pens_to_byte(&pens[idx * 2 + 0], &pens[idx * 2 + 1]));
+            res.push(pens_to_byte(pens[idx * 2 + 0], pens[idx * 2 + 1]));
         }
 
         // last pen is 0 if needed
         if pens.len() % 2 == 1 {
-            res.push(pens_to_byte(&pens[pens.len() - 1], &0.into()));
+            res.push(pens_to_byte(pens[pens.len() - 1], 0.into()));
         }
 
         res
@@ -288,7 +290,7 @@ pub mod mode0 {
     }
 
     /// Returns a pen that corresponds to first argument in mode 0 and second in mode3
-    pub fn mix_mode0_mode3(p0: &Pen, p3: &Pen) -> Pen {
+    pub fn mix_mode0_mode3(p0: Pen, p3: Pen) -> Pen {
         (match (p0.number(), p3.number()) {
             (0, 0) => 0,
 
@@ -331,7 +333,7 @@ mod tests {
         assert_eq!(a, pa.number());
         assert_eq!(b, pb.number());
 
-        let b = mode0::pens_to_byte(&pa, &pb);
+        let b = mode0::pens_to_byte(pa, pb);
         let (pa2, pb2) = mode0::byte_to_pens(b);
 
         assert_eq!(pa2.number(), pa2.number());
@@ -354,22 +356,22 @@ mod tests {
         assert!(res.0.number() != res.1.number());
     }
 
-    fn test_mode3(a: &Pen, b: &Pen, c: &Pen) {
+    fn test_mode3(a: Pen, b: Pen, c: Pen) {
         let d = mode0::mix_mode0_mode3(a, b);
         assert_eq!(d.number(), c.number());
     }
 
     #[test]
     fn mode3() {
-        test_mode3(&0.into(), &0.into(), &0.into());
+        test_mode3(0.into(), 0.into(), 0.into());
 
-        test_mode3(&0.into(), &1.into(), &5.into());
-        test_mode3(&0.into(), &2.into(), &6.into());
-        test_mode3(&0.into(), &3.into(), &7.into());
+        test_mode3(0.into(), 1.into(), 5.into());
+        test_mode3(0.into(), 2.into(), 6.into());
+        test_mode3(0.into(), 3.into(), 7.into());
 
-        test_mode3(&3.into(), &0.into(), &4.into());
-        test_mode3(&3.into(), &1.into(), &9.into());
-        test_mode3(&3.into(), &2.into(), &14.into());
-        test_mode3(&3.into(), &3.into(), &3.into());
+        test_mode3(3.into(), 0.into(), 4.into());
+        test_mode3(3.into(), 1.into(), 9.into());
+        test_mode3(3.into(), 2.into(), 14.into());
+        test_mode3(3.into(), 3.into(), 3.into());
     }
 }

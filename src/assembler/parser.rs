@@ -1,3 +1,6 @@
+
+#![allow(clippy::cast_lossless)]
+
 use nom::multispace;
 use nom::types::CompleteStr;
 use nom::*;
@@ -149,7 +152,7 @@ pub fn parse_z80_str(code: &str) -> Result<(CompleteStr<'_>, Listing), Err<Compl
     let mut rest = None;
     let src = "<str>";
 
-    for (line_number, line) in code.split("\n").enumerate() {
+    for (line_number, line) in code.split('\n').enumerate() {
         let res = parse_z80_line(CompleteStr(line));
         match res {
             Ok((res, local_tokens)) => {
@@ -205,7 +208,7 @@ named_attr!(#[doc="TODO"],
         (
             Token::Rorg(exp,
                 if inner.is_some() {
-                    inner.unwrap().into()
+                    inner.unwrap()
                 }
                 else {
                     Vec::new().into()
@@ -261,7 +264,7 @@ named_attr!(#[doc="TODO"],
             Token::Repeat(
                 count, 
                 if inner.is_some() {
-                    inner.unwrap().into()
+                    inner.unwrap()
                 }
                 else {
                     Vec::new().into()
@@ -844,7 +847,7 @@ named_attr!(#[doc="TODO"],
             )
         ) >>
         (
-            Token::MacroCall(name, args.unwrap_or(Vec::new()))
+            Token::MacroCall(name, args.unwrap_or_default())
         )
     )
 );
