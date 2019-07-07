@@ -151,7 +151,7 @@ impl BasicProgram {
     pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, String> {
         match parse_basic_program(code.as_ref().into()) {
             Ok((res, prog)) => {
-                if res.trim().is_empty(){
+                if res.trim().is_empty() {
                     Ok(prog)
                 } else {
                     Err(format!(

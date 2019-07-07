@@ -13,7 +13,6 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
-
 use clap;
 use notify;
 
@@ -30,8 +29,8 @@ use cpclib::assembler::parser::parse_z80_str;
 use cpclib::ga::Palette;
 
 use cpclib::imageconverter::*;
-use cpclib::sna::*;
 use cpclib::sna;
+use cpclib::sna::*;
 
 use std::fs::File;
 use std::io::Write;
@@ -61,7 +60,6 @@ image
 
 // Produce the code that display a standard screen
 fn standard_display_code(mode: u8) -> String {
-
     format!(
         "
         org 0x4000
@@ -157,8 +155,6 @@ vsync_loop
     ",
         code_mode, crtc_width, r12, palette_code
     )
-
-    
 }
 
 fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) -> String {
@@ -527,15 +523,15 @@ fn main() {
             // for example to handle I/O.
             loop {
                 match rx.recv() {
-                    Ok(event) =>  {
+                    Ok(event) => {
                         if let DebouncedEvent::Write(_) = event {
                             println!("Image modified. Launch new conversion");
 
                             if let Err(e) = convert(&matches) {
-                                    eprintln!("[ERROR] Unable to convert the image {}", e);
+                                eprintln!("[ERROR] Unable to convert the image {}", e);
                             }
                         }
-                    },
+                    }
                     Err(e) => println!("watch error: {:?}", e),
                 }
             }

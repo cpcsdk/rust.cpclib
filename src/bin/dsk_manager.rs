@@ -12,7 +12,6 @@
 )]
 #![deny(clippy::pedantic)]
 
-
 use clap;
 use cpclib;
 
@@ -181,8 +180,8 @@ fn main() -> Result<(), DskManagerError> {
 
     // Manipulate the catalog of a disc
     if let Some(sub) = matches.subcommand_matches("catalog") {
-        let mut dsk =
-            ExtendedDsk::open(dsk_fname).unwrap_or_else(|_| panic!("Unable to open the file {}", dsk_fname));
+        let mut dsk = ExtendedDsk::open(dsk_fname)
+            .unwrap_or_else(|_| panic!("Unable to open the file {}", dsk_fname));
         eprintln!("WIP - We assume head 0 is chosen");
 
         // Import the catalog from one file in one existing disc
@@ -202,7 +201,9 @@ fn main() -> Result<(), DskManagerError> {
             for idx in 0..4 {
                 let sector = dsk.sector_mut(0, 0, idx + 0xc1).expect("Wrong format");
                 let idx = idx as usize;
-                sector.set_values(&bytes[idx * 512..(idx + 1) * 512]).unwrap();
+                sector
+                    .set_values(&bytes[idx * 512..(idx + 1) * 512])
+                    .unwrap();
             }
 
             dsk.save(dsk_fname)?;
@@ -255,8 +256,8 @@ fn main() -> Result<(), DskManagerError> {
         let mut head = u8::from_str(sub.value_of("SIDE").unwrap()).expect("Wrong track format");
         let _export = sub.value_of("Z80_EXPORT").unwrap();
 
-        let mut dsk =
-            ExtendedDsk::open(dsk_fname).unwrap_or_else(|_| panic!("Unable to open the file {}", dsk_fname));
+        let mut dsk = ExtendedDsk::open(dsk_fname)
+            .unwrap_or_else(|_| panic!("Unable to open the file {}", dsk_fname));
 
         let mut listing = Listing::new();
         for file in sub.values_of("FILES").unwrap() {
@@ -275,18 +276,9 @@ fn main() -> Result<(), DskManagerError> {
                 .to_str()
                 .unwrap()
                 .replace(".", "_");
-            listing.add(builder::equ(
-                format!("{}_head", &base_label),
-                head,
-            ));
-            listing.add(builder::equ(
-                format!("{}_track", &base_label),
-                track,
-            ));
-            listing.add(builder::equ(
-                format!("{}_sector", &base_label),
-                sector,
-            ));
+            listing.add(builder::equ(format!("{}_head", &base_label), head));
+            listing.add(builder::equ(format!("{}_track", &base_label), track));
+            listing.add(builder::equ(format!("{}_sector", &base_label), sector));
 
             head = next_position.0;
             track = next_position.1;
@@ -296,8 +288,8 @@ fn main() -> Result<(), DskManagerError> {
         // Add files in an Amsdos compatible disc
 
         // Get the input dsk
-        let dsk =
-            ExtendedDsk::open(dsk_fname).unwrap_or_else(|_| panic!("Unable to open the file {}", dsk_fname));
+        let dsk = ExtendedDsk::open(dsk_fname)
+            .unwrap_or_else(|_| panic!("Unable to open the file {}", dsk_fname));
         let mut manager = AmsdosManager::new_from_disc(dsk, 0);
 
         // Get the common parameters
@@ -319,7 +311,9 @@ fn main() -> Result<(), DskManagerError> {
                 }
             };
 
-            manager.add_file(&ams_file, is_system, is_read_only).unwrap();
+            manager
+                .add_file(&ams_file, is_system, is_read_only)
+                .unwrap();
         }
 
         // Save the dsk on disc

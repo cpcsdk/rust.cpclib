@@ -135,10 +135,12 @@ fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
         .map(|line| {
             line.iter()
                 .map(|ink| {
-                    p.get_pen_for_ink(*ink).unwrap_or_else(|| panic!(
-                        "Unable to find a correspondance for ink {:?} in given palette {:?}",
-                        ink, p
-                    ))
+                    p.get_pen_for_ink(*ink).unwrap_or_else(|| {
+                        panic!(
+                            "Unable to find a correspondance for ink {:?} in given palette {:?}",
+                            ink, p
+                        )
+                    })
                 })
                 .collect::<Vec<Pen>>()
         })
@@ -379,7 +381,7 @@ impl ColorMatrix {
     /// Convert the matrix as a sprite, given the right mode and an optionnal palette
     pub fn as_sprite(&self, mode: Mode, palette: Option<Palette>) -> Sprite {
         // Extract the palette is not provided as an argument
-        let palette = palette.unwrap_or_else(||self.extract_palette());
+        let palette = palette.unwrap_or_else(|| self.extract_palette());
 
         // Really make the conversion
         let pens = inks_to_pens(&self.data, &palette);

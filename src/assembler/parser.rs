@@ -1,4 +1,3 @@
-
 #![allow(clippy::cast_lossless)]
 
 use nom::multispace;

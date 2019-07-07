@@ -17,64 +17,46 @@ pub(crate) enum XferCommand {
 
 // TODO find a way to reduce code duplicaiton
 
-named!(ls_path<CompleteStr<'_>, XferCommand>,
-do_parse!(
-	tag_no_case!("ls") >>
-	space1 >>
-	path: alpha1>>
-	(
-		XferCommand::Ls(Some(path.to_string()))
-	)
-)
+named!(
+    ls_path<CompleteStr<'_>, XferCommand>,
+    do_parse!(
+        tag_no_case!("ls") >> space1 >> path: alpha1 >> (XferCommand::Ls(Some(path.to_string())))
+    )
 );
 
-named!(ls_no_path<CompleteStr<'_>, XferCommand>,
-do_parse!(
-	tag_no_case!("ls") >>
-	(
-		XferCommand::Ls(None)
-	)
-)
+named!(
+    ls_no_path<CompleteStr<'_>, XferCommand>,
+    do_parse!(tag_no_case!("ls") >> (XferCommand::Ls(None)))
 );
 
-named!(ls<CompleteStr<'_>, XferCommand>,
-alt!(ls_path | ls_no_path)
+named!(ls<CompleteStr<'_>, XferCommand>, alt!(ls_path | ls_no_path));
+
+named!(
+    cd_path<CompleteStr<'_>, XferCommand>,
+    do_parse!(
+        tag_no_case!("cd") >> space1 >> path: alpha1 >> (XferCommand::Cd(Some(path.to_string())))
+    )
 );
 
-named!(cd_path<CompleteStr<'_>, XferCommand>,
-do_parse!(
-	tag_no_case!("cd") >>
-	space1 >>
-	path: alpha1>>
-	(
-		XferCommand::Cd(Some(path.to_string()))
-	)
-)
+named!(
+    cd_no_path<CompleteStr<'_>, XferCommand>,
+    do_parse!(tag_no_case!("cd") >> (XferCommand::Cd(None)))
 );
 
-named!(cd_no_path<CompleteStr<'_>, XferCommand>,
-do_parse!(
-	tag_no_case!("cd") >>
-	(
-		XferCommand::Cd(None)
-	)
-)
+named!(cd<CompleteStr<'_>, XferCommand>, alt!(cd_path | cd_no_path));
+
+named!(
+    no_arg<CompleteStr<'_>, XferCommand>,
+    alt!(
+        tag_no_case!("pwd") => 	{|_|{XferCommand::Pwd}} |
+        tag_no_case!("reboot") => 	{|_|{XferCommand::Reboot}} |
+        tag_no_case!("reset") => 	{|_|{XferCommand::Reset}}
+    )
 );
 
-named!(cd<CompleteStr<'_>, XferCommand>,
-alt!(cd_path | cd_no_path)
-);
-
-named!(no_arg<CompleteStr<'_>, XferCommand>,
-alt!(
-	tag_no_case!("pwd") => 	{|_|{XferCommand::Pwd}} |
-	tag_no_case!("reboot") => 	{|_|{XferCommand::Reboot}} |
-	tag_no_case!("reset") => 	{|_|{XferCommand::Reset}}
-)
-);
-
-named!( parse_command_inner<CompleteStr<'_>, XferCommand>,
-	  alt!(cd | ls | no_arg)
+named!(
+    parse_command_inner<CompleteStr<'_>, XferCommand>,
+    alt!(cd | ls | no_arg)
 );
 
 pub(crate) fn parse_command(cmd: &str) -> nom::IResult<CompleteStr<'_>, XferCommand> {

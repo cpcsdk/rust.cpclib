@@ -713,9 +713,7 @@ impl Debug for Output {
             Output::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
             Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
             Output::CPCMemoryOverscan(_, _, _) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
-            Output::CPCSplittingMemory(ref vec) => {
-                writeln!(fmt, "CPCSplitteringMemory {:?}", &vec)
-            }
+            Output::CPCSplittingMemory(ref vec) => writeln!(fmt, "CPCSplitteringMemory {:?}", &vec),
             Output::TilesList {
                 ref tile_height,
                 ref tile_width,
@@ -847,8 +845,8 @@ impl<'a> ImageConverter<'a> {
     }
 
     fn load_color_matrix(&self, input_file: &Path) -> ColorMatrix {
-        let img =
-            im::open(input_file).unwrap_or_else(|_| panic!("Unable to convert {:?} properly.", input_file));
+        let img = im::open(input_file)
+            .unwrap_or_else(|_| panic!("Unable to convert {:?} properly.", input_file));
         let mat = ColorMatrix::convert(&img.to_rgb(), ConversionRule::AnyModeUseAllPixels);
         self.transformations.apply(&mat)
     }

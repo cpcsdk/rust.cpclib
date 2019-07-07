@@ -156,7 +156,7 @@ impl Expr {
                 match bytes.len() {
                     0 => Err(format!("{} is assembled with 0 bytes", token).into()),
                     1 => Ok(i32::from(bytes[0])),
-                    2 => Ok(i32::from(bytes[0])* 256 + i32::from(bytes[1])),
+                    2 => Ok(i32::from(bytes[0]) * 256 + i32::from(bytes[1])),
                     val => Err(format!("{} is assembled with {} bytes", token, val).into()),
                 }
             }

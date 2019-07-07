@@ -223,9 +223,10 @@ impl SnapshotFlag {
 
     pub fn indice(&self) -> Option<usize> {
         match self {
-            Self::GA_PAL(ref idx) | Self::CRTC_REG(ref idx) | Self::PSG_REG(ref idx) | &Self::GA_MULTIMODE(ref idx) => {
-                *idx
-            }
+            Self::GA_PAL(ref idx)
+            | Self::CRTC_REG(ref idx)
+            | Self::PSG_REG(ref idx)
+            | &Self::GA_MULTIMODE(ref idx) => *idx,
             _ => Some(0), // For standard stuff indice is considered to be 0
         }
     }
@@ -233,9 +234,9 @@ impl SnapshotFlag {
     pub fn set_indice(&mut self, indice: usize) -> Result<(), SnapshotError> {
         match self {
             Self::GA_PAL(ref mut idx)
-            |  Self::CRTC_REG(ref mut idx)
-            |  Self::PSG_REG(ref mut idx)
-            |  Self::GA_MULTIMODE(ref mut idx) => {
+            | Self::CRTC_REG(ref mut idx)
+            | Self::PSG_REG(ref mut idx)
+            | Self::GA_MULTIMODE(ref mut idx) => {
                 *idx = Some(indice);
                 Ok(())
             }
@@ -972,7 +973,7 @@ impl Snapshot {
 
         if version == 3 {
             while let Some(chunk) = Self::read_chunk(&mut file_content, &mut sna) {
-                    sna.chunks.push(chunk);
+                sna.chunks.push(chunk);
             }
         }
 

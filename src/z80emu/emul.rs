@@ -98,7 +98,7 @@ impl Z80 {
                 (Some(&DataAccess::Register8(_)), Some(_)) => {
                     let val = self
                         .get_value(arg2.unwrap())
-                        .unwrap_or_else(||panic!("Unable to get value of {:?}", &arg2));
+                        .unwrap_or_else(|| panic!("Unable to get value of {:?}", &arg2));
                     self.get_register_8_mut(arg1.unwrap()).set(val as u8);
                 }
 
@@ -151,12 +151,9 @@ impl Z80 {
             DataAccess::IndexRegister8(_) | &DataAccess::Register8(_) => {
                 Some(self.get_register_8(access).value().into())
             }
-            DataAccess::MemoryRegister16(ref reg) => Some(
-                u16::from(self.read_memory_byte(
-                    self.get_register_16(&DataAccess::Register16(*reg))
-                        .value(),
-                ))
-            ),
+            DataAccess::MemoryRegister16(ref reg) => Some(u16::from(
+                self.read_memory_byte(self.get_register_16(&DataAccess::Register16(*reg)).value()),
+            )),
             DataAccess::Expression(ref expr) => self.eval_expr(expr),
             DataAccess::FlagTest(_) => panic!(),
             _ => unimplemented!(),

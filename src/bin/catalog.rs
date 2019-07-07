@@ -12,7 +12,6 @@
 )]
 #![deny(clippy::pedantic)]
 
-
 /// Catalog tool manipulator.
 ///
 use clap;

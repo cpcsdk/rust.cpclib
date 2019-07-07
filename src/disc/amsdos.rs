@@ -191,20 +191,20 @@ impl AmsdosFileName {
 
     pub fn is_valid_char(char: u8) -> bool {
         /*	(char >= 'a' as u8 && char <= 'z' as u8) ||*/
-        (char >= b'A'  && char <= b'Z')
-            || (char >= b'0'  && char <= b'9' )
-            || char == b'!' 
-            || char == b'"' 
-            || char == b'#' 
-            || char == b'$' 
-            || char == b'&' 
-            || char == b'+' 
-            || char == b'@' 
-            || char == b'^' 
-            || char == b'\'' 
-            || char == b'{' 
-            || char == b'}' 
-            || char == b' '  // by definition ' ' is already used to fill space
+        (char >= b'A' && char <= b'Z')
+            || (char >= b'0' && char <= b'9')
+            || char == b'!'
+            || char == b'"'
+            || char == b'#'
+            || char == b'$'
+            || char == b'&'
+            || char == b'+'
+            || char == b'@'
+            || char == b'^'
+            || char == b'\''
+            || char == b'{'
+            || char == b'}'
+            || char == b' ' // by definition ' ' is already used to fill space
     }
 
     // Build a AmsdosFileName ensuring the case is correct
@@ -694,11 +694,7 @@ impl From<&AmsdosEntries> for AmsdosCatalog {
         let mut novel: Vec<AmsdosCatalogEntry> = Vec::new();
 
         for current_entry in entries.without_erased_entries().map(|e| {
-            AmsdosCatalogEntry::from((
-                entries.track(e).unwrap(),
-                entries.sector(e).unwrap(),
-                *e,
-            ))
+            AmsdosCatalogEntry::from((entries.track(e).unwrap(), entries.sector(e).unwrap(), *e))
         }) {
             let mut added = false;
             for entry in &mut novel {
@@ -870,8 +866,7 @@ impl AmsdosEntries {
         let res = self.free_entries().take(1).collect::<Vec<_>>();
         if res.is_empty() {
             None
-        }
-        else{
+        } else {
             Some(res[0])
         }
     }
@@ -897,8 +892,7 @@ impl AmsdosEntries {
         let res = self.available_blocs();
         if res.is_empty() {
             None
-        }
-        else {
+        } else {
             Some(res[0])
         }
     }
@@ -1378,13 +1372,7 @@ impl AmsdosHeader {
     pub fn filename(&self) -> String {
         self.content[1..9]
             .iter()
-            .filter_map(|&c| {
-                if c == b' ' {
-                    None
-                } else {
-                    Some(c as char)
-                }
-            })
+            .filter_map(|&c| if c == b' ' { None } else { Some(c as char) })
             .collect::<String>()
     }
 
@@ -1398,13 +1386,7 @@ impl AmsdosHeader {
     pub fn extension(&self) -> String {
         self.content[9..(9 + 3)]
             .iter()
-            .filter_map(|&c| {
-                if c == b' ' {
-                    None
-                } else {
-                    Some(c as char)
-                }
-            })
+            .filter_map(|&c| if c == b' ' { None } else { Some(c as char) })
             .collect::<String>()
     }
 
@@ -1475,7 +1457,10 @@ impl AmsdosHeader {
     }
 
     pub fn compute_checksum(&self) -> u16 {
-        self.content[0..=66].iter().map(|&b| u16::from(b)).sum::<u16>()
+        self.content[0..=66]
+            .iter()
+            .map(|&b| u16::from(b))
+            .sum::<u16>()
     }
 
     /// Checks if the stored checksum correspond to the expected checksum
