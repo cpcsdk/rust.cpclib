@@ -147,7 +147,7 @@ impl PageDefinition {
     }
 
     pub fn contains_address(&self, address: u32) -> bool {
-        u32::from(self.start) <= address && address <= u32::from(self.end().unwrap()) 
+        u32::from(self.start) <= address && address <= u32::from(self.end().unwrap())
     }
 
     /// Check if there is overlapping between the two pages.
@@ -311,7 +311,10 @@ impl StringCodePageContainer {
 
     pub fn add_page(&mut self) {
         println!("Create a new page");
-        assert!(!self.possibilities.is_empty(), "There is no room to add code");
+        assert!(
+            !self.possibilities.is_empty(),
+            "There is no room to add code"
+        );
         self.pages
             .push(StringCodePage::new(self.possibilities.pop().unwrap()));
     }

@@ -551,45 +551,27 @@ impl Palette {
 
     /// Returns the list of inks contained in the palette with the border
     pub fn inks_with_border(&self) -> Vec<Ink> {
-        self.values
-            .iter()
-            .map(|(_, i)| *i)
-            .collect::<Vec<Ink>>()
+        self.values.iter().map(|(_, i)| *i).collect::<Vec<Ink>>()
     }
 
     /// Returns the list of inks contained in the palette without taking into account the border
     pub fn inks(&self) -> Vec<Ink> {
         self.values
             .iter()
-            .filter_map(|(&p, i)| {
-                if p.number() == 16 {
-                    None
-                } else {
-                    Some(*i)
-                }
-            })
+            .filter_map(|(&p, i)| if p.number() == 16 { None } else { Some(*i) })
             .collect::<Vec<Ink>>()
     }
 
     /// Returns all the set pens (without the border)
     pub fn pens_with_border(&self) -> Vec<Pen> {
-        self.values
-            .iter()
-            .map(|(p, _)| *p)
-            .collect::<Vec<Pen>>()
+        self.values.iter().map(|(p, _)| *p).collect::<Vec<Pen>>()
     }
 
     /// Returns all the set pens (without the border)
     pub fn pens(&self) -> Vec<Pen> {
         self.values
             .iter()
-            .filter_map(|(&p, _)| {
-                if p.number() == 16 {
-                    None
-                } else {
-                    Some(p)
-                }
-            })
+            .filter_map(|(&p, _)| if p.number() == 16 { None } else { Some(p) })
             .collect::<Vec<Pen>>()
     }
 

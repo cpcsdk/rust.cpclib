@@ -109,7 +109,8 @@ fn main() -> Result<(), cpc::xfer::XferError> {
                         .unwrap()
                         .to_str()
                         .unwrap();
-                    sna.save(sna_fname, crate::cpc::sna::SnapshotVersion::V2).unwrap();
+                    sna.save(sna_fname, crate::cpc::sna::SnapshotVersion::V2)
+                        .unwrap();
                     xfer.upload_and_run(sna_fname, None)
                         .expect("Unable to launch SNA");
                     done = true;
@@ -132,8 +133,7 @@ fn main() -> Result<(), cpc::xfer::XferError> {
         let cwd = xfer.current_working_directory()?;
         println!("{}", cwd);
     } else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
-        xfer
-            .cd(cd_opt.value_of("directory").unwrap())
+        xfer.cd(cd_opt.value_of("directory").unwrap())
             .expect("Unable to move in the requested folder.");
     } else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
         interact::start(&xfer);

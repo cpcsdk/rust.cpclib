@@ -238,17 +238,14 @@ impl SymbolsTable {
         let key = key.trim();
         let res = self.map.get(key);
         if let Some(&Symbol::Integer(val)) = res {
-              Some(val)
-           
-        } 
-        else if self.dummy {
-                //eprintln!("{} not found in symbol table. I have replaced it by 1", key);
-                Some(1)
-            } else {
-                //               eprintln!("Symbol table content {:?}", &self.map);
-                None
-            }
-        
+            Some(val)
+        } else if self.dummy {
+            //eprintln!("{} not found in symbol table. I have replaced it by 1", key);
+            Some(1)
+        } else {
+            //               eprintln!("Symbol table content {:?}", &self.map);
+            None
+        }
     }
 
     /// Remove the given symbol name from the table. (used by undef)
@@ -1686,7 +1683,7 @@ fn assemble_in(
     let mut bytes = Bytes::new();
 
     match arg1 {
-       DataAccess::Register8(Register8::C) => match arg2 {
+        DataAccess::Register8(Register8::C) => match arg2 {
             DataAccess::Register8(ref reg) => {
                 bytes.push(0xED);
                 bytes.push(0b0100_0000 | (register8_to_code(*reg) << 3))
@@ -1719,12 +1716,12 @@ fn assemble_out(
     let mut bytes = Bytes::new();
 
     match arg1 {
-        DataAccess::Register8(Register8::C) =>  {
+        DataAccess::Register8(Register8::C) => {
             if let DataAccess::Register8(ref reg) = arg2 {
                 bytes.push(0xED);
                 bytes.push(0b0100_0001 | (register8_to_code(*reg) << 3))
             }
-        },
+        }
 
         DataAccess::Memory(ref exp) => {
             if let DataAccess::Register8(Register8::A) = arg2 {
@@ -1850,7 +1847,7 @@ fn assemble_add_or_adc(
     };
 
     match arg1 {
-       DataAccess::Register8(Register8::A) => {
+        DataAccess::Register8(Register8::A) => {
             match arg2 {
                 DataAccess::MemoryRegister16(Register16::Hl) => {
                     if is_add {
@@ -1888,7 +1885,7 @@ fn assemble_add_or_adc(
         }
 
         DataAccess::Register16(Register16::Hl) => {
-           if let DataAccess::Register16(ref reg) = arg2 {
+            if let DataAccess::Register16(ref reg) = arg2 {
                 let base = if is_add {
                     0b0000_1001
                 } else {
@@ -1898,7 +1895,7 @@ fn assemble_add_or_adc(
 
                 bytes.push(base | (register16_to_code_with_sp(*reg) << 4));
             }
-        },
+        }
 
         DataAccess::IndexRegister16(ref reg1) => {
             match arg2 {
@@ -1911,9 +1908,8 @@ fn assemble_add_or_adc(
                         panic!();
                     };
                     bytes.push(
-                        base | (register16_to_code_with_indexed(&DataAccess::Register16(
-                            *reg2,
-                        )) << 4),
+                        base | (register16_to_code_with_indexed(&DataAccess::Register16(*reg2))
+                            << 4),
                     )
                 }
 
@@ -1965,7 +1961,7 @@ fn assemble_res_or_set(
 
     // Get the bit of interest
     let bit = match arg1 {
-       DataAccess::Expression(ref e) => e.resolve(sym)? as u8,
+        DataAccess::Expression(ref e) => e.resolve(sym)? as u8,
         _ => return Err("unable to get the number of bits".to_string().into()),
     };
 
@@ -2118,8 +2114,7 @@ mod test {
 
     #[test]
     pub fn test_inc_dec() {
-        let res =
-            assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::De)).unwrap();
+        let res = assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::De)).unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0], 0x13);
 

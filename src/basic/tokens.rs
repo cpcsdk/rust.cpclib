@@ -505,7 +505,7 @@ impl BasicToken {
     fn encode_string(name: &str) -> Vec<u8> {
         let mut copy = name.as_bytes().to_vec();
         copy.pop(); // Remove \0
-        if let Some(c) = copy.last_mut(){
+        if let Some(c) = copy.last_mut() {
             *c += 0b1000_0000; // Set bit 7 to last char
         }
         copy

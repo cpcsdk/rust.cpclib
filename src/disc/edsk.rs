@@ -1,6 +1,5 @@
 // http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
 
-
 use itertools::zip;
 use std::fs::File;
 use std::io;
@@ -1007,7 +1006,7 @@ impl ExtendedDsk {
         while consummed < buffer.len() {
             let current_sector = self
                 .sector_mut(pos.0, pos.1, pos.2)
-                .ok_or_else(||"Sector not found".to_owned())?;
+                .ok_or_else(|| "Sector not found".to_owned())?;
 
             let sector_size = current_sector.len() as usize;
             let current_data = &buffer[consummed..consummed + sector_size];
@@ -1016,7 +1015,7 @@ impl ExtendedDsk {
 
             let next_pos = self
                 .next_position(pos.0, pos.1, pos.2)
-                .ok_or_else(||"No more position available".to_owned())?;
+                .ok_or_else(|| "No more position available".to_owned())?;
             pos = next_pos;
         }
 
@@ -1029,8 +1028,7 @@ impl ExtendedDsk {
     fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
         // Retrieve the current track and exit if does not exist
         let current_track = self.get_track_information(
-            head,
-            // Physical
+            head, // Physical
             track,
         )?;
 

@@ -13,7 +13,6 @@
 #![deny(clippy::pedantic)]
 
 ///! Locomotive BASIC manipulation tool.
-
 use clap;
 use cpclib;
 
