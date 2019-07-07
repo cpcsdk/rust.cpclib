@@ -1,4 +1,18 @@
-#[macro_use]
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_qualifications,
+    nonstandard_style,
+    rust_2018_idioms,
+    unused,
+    warnings
+)]
+#![deny(clippy::pedantic)]
+#![allow(unused)]
+
 use clap;
 use std::path::Path;
 
@@ -77,9 +91,9 @@ fn main() -> Result<(), cpc::xfer::XferError> {
     let xfer = cpc::xfer::CpcXfer::new(hostname);
 
     if matches.is_present("-r") {
-        xfer.reset_m4();
+        xfer.reset_m4()?;
     } else if matches.is_present("-s") {
-        xfer.reset_cpc();
+        xfer.reset_cpc()?;
     } else if let Some(y_opt) = matches.subcommand_matches("-y") {
         let fname = y_opt.value_of("fname").unwrap();
         let mut done = false;
@@ -95,7 +109,7 @@ fn main() -> Result<(), cpc::xfer::XferError> {
                         .unwrap()
                         .to_str()
                         .unwrap();
-                    sna.save(sna_fname, crate::cpc::sna::SnapshotVersion::V2);
+                    sna.save(sna_fname, crate::cpc::sna::SnapshotVersion::V2).unwrap();
                     xfer.upload_and_run(sna_fname, None)
                         .expect("Unable to launch SNA");
                     done = true;
@@ -108,7 +122,7 @@ fn main() -> Result<(), cpc::xfer::XferError> {
         };
     } else if let Some(x_opt) = matches.subcommand_matches("-x") {
         let fname = x_opt.value_of("fname").unwrap();
-        xfer.run(fname); /*.expect("Unable to launch file on CPC.");*/
+        xfer.run(fname)?; /*.expect("Unable to launch file on CPC.");*/
     } else if let Some(_ls_opt) = matches.subcommand_matches("--ls") {
         let content = xfer.current_folder_content()?;
         for file in content.files() {
@@ -118,11 +132,11 @@ fn main() -> Result<(), cpc::xfer::XferError> {
         let cwd = xfer.current_working_directory()?;
         println!("{}", cwd);
     } else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
-        let _cwd = xfer
+        xfer
             .cd(cd_opt.value_of("directory").unwrap())
             .expect("Unable to move in the requested folder.");
     } else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
-        interact::start(xfer);
+        interact::start(&xfer);
     }
 
     Ok(())

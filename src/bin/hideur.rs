@@ -1,3 +1,18 @@
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_qualifications,
+    nonstandard_style,
+    rust_2018_idioms,
+    unused,
+    warnings
+)]
+#![deny(clippy::pedantic)]
+#![allow(clippy::cast_possible_truncation)]
+
 /// (unfinished) conversion of hideur maker
 use std::fs::File;
 use std::io::Read;

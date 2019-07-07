@@ -1,5 +1,21 @@
-extern crate clap;
-extern crate cpclib;
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_qualifications,
+    nonstandard_style,
+    rust_2018_idioms,
+    unused,
+    warnings
+)]
+#![deny(clippy::pedantic)]
+
+///! Locomotive BASIC manipulation tool.
+
+use clap;
+use cpclib;
 
 use cpclib::basic::BasicProgram;
 use cpclib::disc::amsdos::AmsdosManager;
@@ -58,7 +74,7 @@ fn main() -> std::io::Result<()> {
         // Add header if needed
         if matches.is_present("HEADER") {
             let header = AmsdosManager::compute_basic_header(&output.into(), &basic_bytes);
-            f.write_all(header.as_bytes().as_ref());
+            f.write_all(header.as_bytes().as_ref())?;
         }
 
         // Add the tokens

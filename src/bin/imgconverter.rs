@@ -1,5 +1,21 @@
-extern crate clap;
-extern crate notify;
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_qualifications,
+    nonstandard_style,
+    rust_2018_idioms,
+    unused,
+    warnings
+)]
+#![deny(clippy::pedantic)]
+#![allow(unused)]
+
+
+use clap;
+use notify;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 use std::path::Path;
@@ -9,12 +25,13 @@ use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-use cpclib::assembler::assembler::visit_tokens;
+use cpclib::assembler::assembler::visit_tokens_all_passes;
 use cpclib::assembler::parser::parse_z80_str;
 use cpclib::ga::Palette;
 
 use cpclib::imageconverter::*;
 use cpclib::sna::*;
+use cpclib::sna;
 
 use std::fs::File;
 use std::io::Write;
@@ -44,12 +61,7 @@ image
 
 // Produce the code that display a standard screen
 fn standard_display_code(mode: u8) -> String {
-    let code = match mode {
-        0 => 0x8c,
-        1 => 0x8d,
-        2 => 0x8e,
-        _ => unreachable!(),
-    };
+
     format!(
         "
         org 0x4000
@@ -58,30 +70,35 @@ fn standard_display_code(mode: u8) -> String {
         out (c), c
         jp $
     ",
-        code
+        match mode {
+            0 => 0x8c,
+            1 => 0x8d,
+            2 => 0x8e,
+            _ => unreachable!(),
+        }
     )
 }
 
 fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> String {
-    let code = match mode {
+    let code_mode = match mode {
         0 => 0x8c,
         1 => 0x8d,
         2 => 0x8e,
         _ => unreachable!(),
     };
 
-    let r12 = 0x20 + 0b00001100;
+    let r12 = 0x20 + 0b0000_1100;
 
     let mut palette_code = String::new();
     palette_code += "\tld bc, 0x7f00\n";
     for i in 0..16 {
         palette_code += &format!(
             "\tld a, {}\n\t out (c), c\n\tout (c), a\n\t inc c\n",
-            palette.get((i as i32).into()).gate_array()
+            palette.get(i.into()).gate_array()
         );
     }
 
-    let code = format!(
+    format!(
         "
         org 0x4000
 
@@ -138,29 +155,28 @@ vsync_loop
 
         jp frame_loop
     ",
-        code, crtc_width, r12, palette_code
-    );
+        code_mode, crtc_width, r12, palette_code
+    )
 
-    code
+    
 }
 
 fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) -> String {
     fullscreen_display_code(mode, crtc_width, pal)
 }
 
-fn assemble(z80: String) -> Vec<u8> {
+fn assemble(z80: &str) -> Vec<u8> {
     let tokens = parse_z80_str(&z80).expect("Unable to tokenize the code").1;
-    let env = visit_tokens(&tokens).unwrap();
+    let env = visit_tokens_all_passes(&tokens).unwrap();
     let start_code = 0x4000;
     let end_code = env.output_address();
     let code_size = end_code - start_code;
-    let mem = env.memory(start_code, code_size);
 
-    mem
+    env.memory(start_code, code_size)
 }
 
 #[allow(clippy::if_same_then_else)] // false positive
-fn get_output_format(matches: &ArgMatches) -> OutputFormat {
+fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
     if let Some(_sprite_matches) = matches.subcommand_matches("sprite") {
         // Sprite case. Only Linear encoding is currently managed
         OutputFormat::LinearEncodedSprite
@@ -187,7 +203,9 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
 }
 
 // TODO - Add the ability to import a target palette
-fn convert(matches: &ArgMatches) -> Result<(), String> {
+#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::cast_possible_truncation)]
+fn convert(matches: &ArgMatches<'_>) -> Result<(), String> {
     let input_file = matches.value_of("SOURCE").unwrap();
     let output_mode = matches.value_of("MODE").unwrap().parse::<u8>().unwrap();
     let mut transformations = TransformationsList::new();
@@ -218,15 +236,15 @@ fn convert(matches: &ArgMatches) -> Result<(), String> {
         match &conversion {
             Output::LinearEncodedSprite {
                 data,
-                palette: _,
                 byte_width,
                 height,
+                ..
             } => {
                 // Save the binary data of the sprite
                 let sprite_fname = sub_sprite.value_of("SPRITE_FNAME").unwrap();
                 let mut file =
                     File::create(sprite_fname).expect("Unable to create the sprite file");
-                file.write_all(&data);
+                file.write_all(&data).unwrap();
 
                 // Save the binary data of the palette if any
                 sub_sprite
@@ -240,8 +258,8 @@ fn convert(matches: &ArgMatches) -> Result<(), String> {
                             .to_str()
                             .unwrap()
                             .replace(".", "_");
-                        writeln!(&mut file, "{}_WIDTH equ {}", fname, byte_width);
-                        writeln!(&mut file, "{}_HEIGHT equ {}", fname, height);
+                        writeln!(&mut file, "{}_WIDTH equ {}", fname, byte_width).unwrap();
+                        writeln!(&mut file, "{}_HEIGHT equ {}", fname, height).unwrap();
                         Some(())
                     });
             }
@@ -251,11 +269,11 @@ fn convert(matches: &ArgMatches) -> Result<(), String> {
         // Make the conversion before feeding sna or dsk
         let (palette, code) = match &conversion {
             Output::CPCMemoryStandard(_memory, pal) => {
-                (pal, assemble(standard_display_code(output_mode)))
+                (pal, assemble(&standard_display_code(output_mode)))
             }
 
             Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
-                let code = assemble(fullscreen_display_code(output_mode, 96 / 2, &pal));
+                let code = assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal));
                 (pal, code)
             }
 
@@ -290,14 +308,14 @@ fn convert(matches: &ArgMatches) -> Result<(), String> {
             for i in 0..16 {
                 sna.set_value(
                     SnapshotFlag::GA_PAL(Some(i)),
-                    palette.get((i as i32).into()).gate_array() as u16,
+                    u16::from(palette.get((i as i32).into()).gate_array()),
                 )
                 .unwrap();
             }
 
             if let Some(sub_sna) = sub_sna {
                 let sna_fname = sub_sna.value_of("SNA").unwrap();
-                sna.save_sna(sna_fname)
+                sna.save(sna_fname, sna::SnapshotVersion::V2)
                     .expect("Unable to save the snapshot");
             } else if let Some(sub_m4) = sub_m4 {
                 #[cfg(feature = "xferlib")]
@@ -338,9 +356,11 @@ fn main() {
                                     .help("snapshot filename to generate")
                                     .required(true)
                                     .validator(|sna| {
-                                        match sna.to_lowercase().ends_with("sna") {
-                                            true => Ok(()),
-                                            false => Err(format!("{} has not a snapshot extension.", sna))
+                                        if sna.to_lowercase().ends_with("sna") {
+                                            Ok(())
+                                        }
+                                        else {
+                                            Err(format!("{} has not a snapshot extension.", sna))
                                         }
                                     })
                             )
@@ -355,9 +375,11 @@ fn main() {
                             .help("dsk filename to generate")
                             .required(true)
                             .validator(|dsk|{
-                                match dsk.to_lowercase().ends_with("dsk") {
-                                    true => Ok(()),
-                                    false => Err(format!("{} has not a dsk extention.", dsk))
+                                if dsk.to_lowercase().ends_with("dsk") {
+                                    Ok(())
+                                }
+                                else {
+                                    Err(format!("{} has not a dsk extention.", dsk))
                                 }
                             })
                         )
@@ -438,9 +460,11 @@ fn main() {
                             .required(true)
                             .empty_values(false)
                             .validator(|source| {
-                              match  Path::new(&source).exists() {
-                                  true => Ok(()),
-                                  false => Err(format!("{} does not exists!", source))
+                              if Path::new(&source).exists() {
+                                  Ok(())
+                              }
+                              else {
+                                  Err(format!("{} does not exists!", source))
                               }
                             })
                    );
@@ -503,18 +527,14 @@ fn main() {
             // for example to handle I/O.
             loop {
                 match rx.recv() {
-                    Ok(event) => match event {
-                        DebouncedEvent::Write(_) => {
+                    Ok(event) =>  {
+                        if let DebouncedEvent::Write(_) = event {
                             println!("Image modified. Launch new conversion");
 
-                            match convert(&matches) {
-                                Err(e) => {
+                            if let Err(e) = convert(&matches) {
                                     eprintln!("[ERROR] Unable to convert the image {}", e);
-                                }
-                                Ok(_) => {}
-                            };
+                            }
                         }
-                        _ => {}
                     },
                     Err(e) => println!("watch error: {:?}", e),
                 }

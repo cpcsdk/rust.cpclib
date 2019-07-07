@@ -1,9 +1,9 @@
 use cpclib::xfer::CpcXfer;
-extern crate rustyline;
+use rustyline;
 
 use rustyline::error::ReadlineError;
 
-use rustyline::{Cmd, CompletionType, Config, EditMode, Editor, Helper, KeyPress};
+use rustyline::Editor;
 
 use crate::parser::{parse_command, XferCommand};
 
@@ -47,11 +47,11 @@ pub fn treat_line(xfer: &CpcXfer, line: &str) {
             }
 
             XferCommand::Reboot => {
-                xfer.reset_m4();
+                xfer.reset_m4().unwrap();
             }
 
             XferCommand::Reset => {
-                xfer.reset_cpc();
+                xfer.reset_cpc().unwrap();
             }
 
             _ => unimplemented!(),
@@ -59,7 +59,7 @@ pub fn treat_line(xfer: &CpcXfer, line: &str) {
     }
 }
 
-pub fn start(xfer: CpcXfer) {
+pub fn start(xfer: &CpcXfer) {
     let history = "history.m4";
 
     let mut rl = Editor::<()>::new();

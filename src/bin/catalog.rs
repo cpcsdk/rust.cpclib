@@ -1,10 +1,25 @@
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_qualifications,
+    nonstandard_style,
+    rust_2018_idioms,
+    unused,
+    warnings
+)]
+#![deny(clippy::pedantic)]
+
+
 /// Catalog tool manipulator.
 ///
-extern crate clap;
-extern crate cpclib;
-extern crate log;
-extern crate num;
-extern crate simplelog;
+use clap;
+use cpclib;
+use log;
+use num;
+use simplelog;
 
 use clap::{App, Arg};
 use std::fs::File;
@@ -27,9 +42,9 @@ where
     let repr = &repr;
     if repr.starts_with("0x") {
         T::from_str_radix(dbg!(&repr[2..]), 16)
-    } else if repr.starts_with("\\$") || repr.starts_with("&") {
+    } else if repr.starts_with("\\$") || repr.starts_with('&') {
         T::from_str_radix(dbg!(&repr[1..]), 16)
-    } else if repr.starts_with("0") {
+    } else if repr.starts_with('0') {
         T::from_str_radix(dbg!(repr), 8)
     } else {
         T::from_str_radix(dbg!(repr), 10)
@@ -183,7 +198,7 @@ fn main() -> std::io::Result<()> {
                 .as_str()
                 .chars()
                 .map(|c| c.is_ascii_graphic())
-                .all(|t| t == true);
+                .all(|t| t);
 
             if is_present && !contains_control_chars {
                 print!("{}. {}", idx, fname);
@@ -195,7 +210,7 @@ fn main() -> std::io::Result<()> {
                 }
 
                 print!(" {}Kb {:?}", entry.used_space(), entry.used_blocs());
-                println!("");
+                println!();
             } else if is_present && contains_control_chars && listall {
                 println!("{}. => CONTROL CHARS <=", idx);
             } else if !is_present {
