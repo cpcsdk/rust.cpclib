@@ -120,17 +120,17 @@ pub struct Ink {
 #[allow(missing_docs)]
 impl Ink {
     /// Get the RGB color value of the ink
-    pub fn color(&self) -> im::Rgba<u8> {
+    pub fn color(self) -> im::Rgba<u8> {
         INKS_RGB_VALUES[self.value as usize]
     }
 
     /// Get the ink number (firmware wise)
-    pub fn number(&self) -> u8 {
+    pub fn number(self) -> u8 {
         self.value
     }
 
     /// Get the value required by the gate array the select the ink
-    pub fn gate_array(&self) -> u8 {
+    pub fn gate_array(self) -> u8 {
         INKS_GA_VALUE[self.value as usize]
     }
 }
@@ -161,16 +161,16 @@ impl From<im::Rgb<u8>> for Ink {
         let distances = INKS_RGB_VALUES
             .iter()
             .map(|color_ink| {
-                (color_ink[0] as i32 - color[0] as i32).pow(2)
-                    + (color_ink[1] as i32 - color[1] as i32).pow(2)
-                    + (color_ink[2] as i32 - color[2] as i32).pow(2)
+                (i32::from(color_ink[0]) - i32::from(color[0])).pow(2)
+                    + (i32::from(color_ink[1]) - i32::from(color[1])).pow(2)
+                    + (i32::from(color_ink[2]) - i32::from(color[2])).pow(2)
             })
             .collect::<Vec<_>>();
         let mut selected_idx = 0;
         let mut smallest = distances[0];
-        for idx in 1..distances.len() {
-            if smallest > distances[idx] {
-                smallest = distances[idx];
+        for (idx, &distance) in distances.iter().enumerate().skip(1) {
+            if smallest > distance {
+                smallest = distance;
                 selected_idx = idx;
             }
         }
@@ -333,7 +333,7 @@ where
 #[allow(missing_docs)]
 impl Pen {
     /// Get the number of the pen
-    pub fn number(&self) -> u8 {
+    pub fn number(self) -> u8 {
         self.value
     }
 
@@ -381,7 +381,7 @@ pub const PENS: [Pen; NB_PENS as usize] = [
 
 /// The palette maps one Ink for each Pen
 pub struct Palette {
-    /// Values for the palette. Some itms may be absent
+    /// Values for the palette. Some items may be absent
     values: HashMap<Pen, Ink>,
 }
 
@@ -389,7 +389,7 @@ impl Clone for Palette {
     fn clone(&self) -> Self {
         let mut map: HashMap<Pen, Ink> = HashMap::new();
         for (pen, ink) in &self.values {
-            map.insert(pen.clone(), ink.clone());
+            map.insert(pen.clone(), *ink);
         }
 
         Self { values: map }
@@ -411,7 +411,7 @@ impl Default for Palette {
     fn default() -> Self {
         let mut p = Self::new();
         for i in 0..15 {
-            p.set(&PENS[i], INKS[i]);
+            p.set(PENS[i], INKS[i]);
         }
         p
     }
@@ -426,7 +426,7 @@ where
         let mut p = Self::new();
 
         for (idx, ink) in items.iter().enumerate() {
-            p.set(&Pen::from(idx as u8), Ink::from(ink.clone()));
+            p.set(Pen::from(idx as u8), Ink::from(*ink));
         }
 
         p
@@ -500,19 +500,19 @@ impl Palette {
     }
 
     /// Verifies if the palette contains the required pen
-    pub fn contains_pen(&self, pen: &Pen) -> bool {
-        self.values.contains_key(pen)
+    pub fn contains_pen(&self, pen: Pen) -> bool {
+        self.values.contains_key(&pen)
     }
 
     pub fn contains_border(&self) -> bool {
-        self.contains_pen(&Pen::from(16))
+        self.contains_pen(Pen::from(16))
     }
 
     /// Provides the next unused pen if there is one
     pub fn next_unused_pen(&self) -> Option<Pen> {
         for i in 0..16 {
             let pen = i.into();
-            if !self.contains_pen(&pen) {
+            if !self.contains_pen(pen) {
                 return Some(pen);
             }
         }
@@ -534,14 +534,14 @@ impl Palette {
 
         for ink in inks {
             // skip if already present
-            if self.contains_ink(ink) {
+            if self.contains_ink(*ink) {
                 continue;
             }
 
             match self.next_unused_pen() {
                 None => counter_impossible += 1,
                 Some(pen) => {
-                    self.set(&pen, ink.clone());
+                    self.set(pen, *ink);
                 }
             }
         }
@@ -553,7 +553,7 @@ impl Palette {
     pub fn inks_with_border(&self) -> Vec<Ink> {
         self.values
             .iter()
-            .map(|(_, i)| i.clone())
+            .map(|(_, i)| *i)
             .collect::<Vec<Ink>>()
     }
 
@@ -565,7 +565,7 @@ impl Palette {
                 if p.number() == 16 {
                     None
                 } else {
-                    Some(i.clone())
+                    Some(*i)
                 }
             })
             .collect::<Vec<Ink>>()
@@ -575,7 +575,7 @@ impl Palette {
     pub fn pens_with_border(&self) -> Vec<Pen> {
         self.values
             .iter()
-            .map(|(p, _)| p.clone())
+            .map(|(p, _)| *p)
             .collect::<Vec<Pen>>()
     }
 
@@ -587,7 +587,7 @@ impl Palette {
                 if p.number() == 16 {
                     None
                 } else {
-                    Some(p.clone())
+                    Some(p)
                 }
             })
             .collect::<Vec<Pen>>()
@@ -604,8 +604,8 @@ impl Palette {
     }
 
     /// Change the ink of the specified pen
-    pub fn set(&mut self, pen: &Pen, ink: Ink) {
-        self.values.insert(pen.clone(), ink);
+    pub fn set(&mut self, pen: Pen, ink: Ink) {
+        self.values.insert(pen, ink);
     }
 
     pub fn set_border(&mut self, ink: Ink) {
@@ -614,15 +614,15 @@ impl Palette {
 
     /// Get the pen that corresponds to the required ink.
     /// Ink 16 (border) is never tested
-    pub fn get_pen_for_ink(&self, expected: &Ink) -> Option<Pen> {
+    pub fn get_pen_for_ink(&self, expected: Ink) -> Option<Pen> {
         self.values
             .iter()
             .filter(|(&p, _)| p.number() != 16)
-            .find_map(|(p, i)| if i == expected { Some(p.clone()) } else { None })
+            .find_map(|(p, &i)| if i == expected { Some(*p) } else { None })
     }
 
     /// Returns true if the palette contains the inks in one of its pens (except border)
-    pub fn contains_ink(&self, expected: &Ink) -> bool {
+    pub fn contains_ink(&self, expected: Ink) -> bool {
         self.get_pen_for_ink(expected).is_some()
     }
 
@@ -636,18 +636,18 @@ impl Palette {
         let ink2 = self.get(&PENS[2]);
         let ink3 = self.get(&PENS[3]);
 
-        p.set(&PENS[4], ink3.clone());
-        p.set(&PENS[5], ink0.clone());
-        p.set(&PENS[6], ink0.clone());
-        p.set(&PENS[7], ink0.clone());
-        p.set(&PENS[8], ink1.clone());
-        p.set(&PENS[9], ink3.clone());
-        p.set(&PENS[10], ink1.clone());
-        p.set(&PENS[11], ink1.clone());
-        p.set(&PENS[12], ink2.clone());
-        p.set(&PENS[13], ink2.clone());
-        p.set(&PENS[14], ink3.clone());
-        p.set(&PENS[15], ink2.clone());
+        p.set(PENS[4], ink3.clone());
+        p.set(PENS[5], ink0.clone());
+        p.set(PENS[6], ink0.clone());
+        p.set(PENS[7], ink0.clone());
+        p.set(PENS[8], ink1.clone());
+        p.set(PENS[9], ink3.clone());
+        p.set(PENS[10], ink1.clone());
+        p.set(PENS[11], ink1.clone());
+        p.set(PENS[12], ink2.clone());
+        p.set(PENS[13], ink2.clone());
+        p.set(PENS[14], ink3.clone());
+        p.set(PENS[15], ink2.clone());
 
         p
     }
@@ -658,7 +658,7 @@ impl Into<Vec<u8>> for &Palette {
         let mut vec = Vec::with_capacity(16);
         for pen in 0..17 {
             let pen = Pen::from(pen);
-            if self.contains_pen(&pen) {
+            if self.contains_pen(pen) {
                 vec.push(self.get(&pen).into());
             } else {
                 vec.push(0x54); // No pens => ink black
@@ -676,7 +676,7 @@ impl Into<Vec<u8>> for Palette {
 
 #[allow(missing_docs)]
 impl Palette {
-    pub fn to_vec(self) -> Vec<u8> {
+    pub fn to_vec(&self) -> Vec<u8> {
         self.into()
     }
 }

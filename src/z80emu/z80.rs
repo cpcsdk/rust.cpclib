@@ -97,7 +97,7 @@ impl HasValue for Register16 {
     type ValueType = u16;
 
     fn value(&self) -> Self::ValueType {
-        256 * self.high().value() as u16 + self.low().value() as u16
+        256 * u16::from(self.high().value()) + u16::from(self.low().value())
     }
 
     fn set(&mut self, value: Self::ValueType) {

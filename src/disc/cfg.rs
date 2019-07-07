@@ -67,7 +67,7 @@ impl FromStr for DiscConfig {
     fn from_str(config: &str) -> Result<Self, Self::Err> {
         match parse_config(config.into()) {
             Ok((next, res)) => {
-                if next.trim().len() == 0 {
+                if next.trim().is_empty() {
                     Ok(res)
                 } else {
                     Err(DiscConfigError::ParseError {

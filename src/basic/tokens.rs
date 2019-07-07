@@ -263,8 +263,8 @@ impl fmt::Display for BasicTokenNoPrefix {
 
 impl BasicTokenNoPrefix {
     /// Returns the 8bit code that represents the token
-    pub fn value(&self) -> u8 {
-        (*self).into()
+    pub fn value(self) -> u8 {
+        self.into()
     }
 }
 
@@ -349,8 +349,8 @@ impl From<u8> for BasicTokenPrefixed {
 
 impl BasicTokenPrefixed {
     /// Returns the 8bits code that represents the prefixed token
-    pub fn value(&self) -> u8 {
-        (*self).into()
+    pub fn value(self) -> u8 {
+        self.into()
     }
 }
 
@@ -389,7 +389,7 @@ impl BasicValue {
     /// Return the integer value when it is an integer
     pub fn as_integer(&self) -> Option<u16> {
         match self {
-            Self::Integer(ref low, ref high) => Some((*low) as u16 + 256 * (*high) as u16),
+            Self::Integer(ref low, ref high) => Some(u16::from(*low) + 256 * u16::from(*high)),
             _ => None,
         }
     }
@@ -505,7 +505,9 @@ impl BasicToken {
     fn encode_string(name: &str) -> Vec<u8> {
         let mut copy = name.as_bytes().to_vec();
         copy.pop(); // Remove \0
-        copy.last_mut().map(|c| *c += 0b1000_0000); // Set bit 7 to last char
+        if let Some(c) = copy.last_mut(){
+            *c += 0b1000_0000; // Set bit 7 to last char
+        }
         copy
     }
 }

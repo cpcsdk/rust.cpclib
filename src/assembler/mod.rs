@@ -156,7 +156,7 @@ pub fn assemble_with_options(
     code: &str,
     options: &AssemblingOptions,
 ) -> Result<(Vec<u8>, assembler::SymbolsTable), AssemblerError> {
-    let tokens = parser::parse_str(code.into())?;
+    let tokens = parser::parse_str(code)?;
     let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
 
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))

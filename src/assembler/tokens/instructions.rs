@@ -118,21 +118,21 @@ impl fmt::Display for Mnemonic {
 
 #[allow(missing_docs)]
 impl Mnemonic {
-    pub fn is_sla(&self) -> bool {
+    pub fn is_sla(self) -> bool {
         match self {
             Mnemonic::Sla => true,
             _ => false,
         }
     }
 
-    pub fn is_sra(&self) -> bool {
+    pub fn is_sra(self) -> bool {
         match self {
             Mnemonic::Sra => true,
             _ => false,
         }
     }
 
-    pub fn is_srl(&self) -> bool {
+    pub fn is_srl(self) -> bool {
         match self {
             Mnemonic::Srl => true,
             _ => false,
@@ -405,28 +405,28 @@ impl Token {
 
     pub fn label(&self) -> Option<&String> {
         match self {
-            &Token::Label(ref value) | &Token::Equ(ref value, _) => Some(value),
+            Token::Label(ref value) | Token::Equ(ref value, _) => Some(value),
             _ => None,
         }
     }
 
     pub fn mnemonic(&self) -> Option<&Mnemonic> {
         match self {
-            &Token::OpCode(ref mnemonic, _, _) => Some(mnemonic),
+            Token::OpCode(ref mnemonic, _, _) => Some(mnemonic),
             _ => None,
         }
     }
 
     pub fn mnemonic_arg1(&self) -> Option<&DataAccess> {
         match self {
-            &Token::OpCode(_, ref arg1, _) => arg1.as_ref(),
+            Token::OpCode(_, ref arg1, _) => arg1.as_ref(),
             _ => None,
         }
     }
 
     pub fn mnemonic_arg2(&self) -> Option<&DataAccess> {
         match self {
-            &Token::OpCode(_, _, ref arg2) => arg2.as_ref(),
+            Token::OpCode(_, _, ref arg2) => arg2.as_ref(),
             _ => None,
         }
     }
@@ -441,7 +441,7 @@ impl Token {
 
     pub fn expr(&self) -> Option<&Expr> {
         match self {
-            &Token::Org(ref expr, _) | &Token::Equ(_, ref expr) => Some(expr),
+            Token::Org(ref expr, _) | Token::Equ(_, ref expr) => Some(expr),
             _ => None,
         }
     }
@@ -455,7 +455,7 @@ impl Token {
         if let Token::Repeat(ref expr, ref tokens, ref _counter_label) = self {
             let count: Result<i32, AssemblerError> = expr.resolve(sym);
             if count.is_err() {
-                return Some(Err(count.err().unwrap()));
+                Some(Err(count.err().unwrap()))
             } else {
                 let count = count.unwrap();
                 let mut res = Vec::with_capacity(count as usize * tokens.len());
@@ -465,7 +465,7 @@ impl Token {
                         res.push(t);
                     }
                 }
-                return Some(Ok(res));
+                Some(Ok(res))
             }
         } else {
             None
@@ -556,21 +556,21 @@ impl Token {
     ) -> Result<Bytes, AssemblerError> {
         let env = &mut crate::assembler::assembler::Env::with_table_case_dependent(table);
         match self {
-            &Token::OpCode(ref mnemonic, ref arg1, ref arg2) => assemble_opcode(
-                mnemonic, arg1, arg2, env, // Modification to the environment are lost
+            Token::OpCode(ref mnemonic, ref arg1, ref arg2) => assemble_opcode(
+                *mnemonic, arg1, arg2, env, // Modification to the environment are lost
             ),
 
-            &Token::Equ(_, _) => Ok(Bytes::new()),
+            Token::Equ(_, _) => Ok(Bytes::new()),
 
-            &Token::Defw(_) | &Token::Defb(_) => assemble_db_or_dw(self, env),
+            Token::Defw(_) | Token::Defb(_) => assemble_db_or_dw(self, env),
 
-            &Token::Label(_) | &Token::Comment(_) | &Token::Org(_, _) | &Token::Assert(_, _) => {
+            Token::Label(_) | Token::Comment(_) | Token::Org(_, _) | Token::Assert(_, _) => {
                 Ok(Bytes::new())
             }
 
-            &Token::Defs(ref expr, ref fill) => assemble_defs(expr, fill.as_ref(), env),
+            Token::Defs(ref expr, ref fill) => assemble_defs(expr, fill.as_ref(), env),
 
-            &Token::Align(ref expr, ref fill) => assemble_align(expr, fill.as_ref(), env),
+            Token::Align(ref expr, ref fill) => assemble_align(expr, fill.as_ref(), env),
 
             // Protect and breakpoint directives do not produce any bytes
             Token::Protect(_, _) | Token::Breakpoint(_) | Token::Print(_) => Ok(Bytes::new()),

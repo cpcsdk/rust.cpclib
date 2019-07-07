@@ -87,6 +87,11 @@ impl BasicLine {
         self.tokens().len()
     }
 
+    /// Verify if there are tokens
+    pub fn is_empty(&self) -> bool {
+        self.tokens().is_empty()
+    }
+
     fn tokens_as_bytes(&self) -> Vec<u8> {
         self.tokens
             .iter()
@@ -146,7 +151,7 @@ impl BasicProgram {
     pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, String> {
         match parse_basic_program(code.as_ref().into()) {
             Ok((res, prog)) => {
-                if res.trim().len() == 0 {
+                if res.trim().is_empty(){
                     Ok(prog)
                 } else {
                     Err(format!(
@@ -243,21 +248,21 @@ impl BasicProgram {
             })
             .collect::<Vec<_>>()
             .first()
-            .map(|&v| v)
+            .cloned()
     }
 
     /// https://cpcrulez.fr/applications_protect-protection_logiciel_n42_ACPC.htm
     pub fn hide_line(&mut self, idx: BasicProgramLineIdx) -> Result<(), BasicError> {
-        if !self.has_line(idx.clone()) {
+        if !self.has_line(idx) {
             Err(BasicError::UnknownLine { idx })
-        } else if self.is_first_line(idx.clone()) {
+        } else if self.is_first_line(idx) {
             // Locomotive basic stat to list lines from 1
             self.lines[0].line_number = 0;
             Ok(())
         } else {
-            match self.previous_idx(idx.clone()) {
+            match self.previous_idx(idx) {
                 Some(previous_idx) => {
-                    let current_length = self.get_line(idx.clone()).unwrap().real_length();
+                    let current_length = self.get_line(idx).unwrap().real_length();
                     self.get_line_mut(previous_idx)
                         .unwrap()
                         .add_length(current_length + 1 + 2 + 2);
@@ -269,7 +274,7 @@ impl BasicProgram {
         }
     }
 
-    pub fn hide_lines(&mut self, lines: &Vec<u16>) -> Result<(), BasicError> {
+    pub fn hide_lines(&mut self, lines: &[u16]) -> Result<(), BasicError> {
         match lines.len() {
 			0 => Ok(()),
 			1 => self.hide_line(BasicProgramLineIdx::Number(lines[0])),

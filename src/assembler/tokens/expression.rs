@@ -61,7 +61,7 @@ impl From<i32> for Expr {
 }
 impl From<u8> for Expr {
     fn from(src: u8) -> Self {
-        Expr::Value(src as _)
+        Expr::Value(i32::from(src))
     }
 }
 
@@ -155,8 +155,8 @@ impl Expr {
                 let bytes = token.to_bytes()?;
                 match bytes.len() {
                     0 => Err(format!("{} is assembled with 0 bytes", token).into()),
-                    1 => Ok(bytes[0] as _),
-                    2 => Ok(bytes[0] as i32 * 256 + bytes[1] as i32),
+                    1 => Ok(i32::from(bytes[0])),
+                    2 => Ok(i32::from(bytes[0])* 256 + i32::from(bytes[1])),
                     val => Err(format!("{} is assembled with {} bytes", token, val).into()),
                 }
             }

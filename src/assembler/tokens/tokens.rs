@@ -23,22 +23,22 @@ impl ListingElement for Token {
             Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 match mnemonic {
                     &Mnemonic::Add => match arg1 {
-                        &Some(DataAccess::Register8(_)) => match arg2 {
-                            &Some(DataAccess::Register8(_)) => 1,
-                            &Some(DataAccess::IndexRegister16WithIndex(_, _)) => 5,
+                        Some(DataAccess::Register8(_)) => match arg2 {
+                            Some(DataAccess::Register8(_)) => 1,
+                            Some(DataAccess::IndexRegister16WithIndex(_, _)) => 5,
                             _ => 2,
                         },
-                        &Some(DataAccess::Register16(_)) => 4,
-                        &Some(DataAccess::IndexRegister16(_)) => 5,
+                        Some(DataAccess::Register16(_)) => 4,
+                        Some(DataAccess::IndexRegister16(_)) => 5,
                         _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
                     },
 
                     &Mnemonic::And | &Mnemonic::Or | &Mnemonic::Xor => match arg1 {
-                        &Some(DataAccess::Register8(_)) => 1,
-                        &Some(DataAccess::IndexRegister8(_)) => 2,
-                        &Some(DataAccess::Expression(_)) => 2,
-                        &Some(DataAccess::MemoryRegister16(_)) => 2,
-                        &Some(DataAccess::IndexRegister16WithIndex(_, _)) => 5,
+                        Some(DataAccess::Register8(_)) => 1,
+                        Some(DataAccess::IndexRegister8(_)) => 2,
+                        Some(DataAccess::Expression(_)) => 2,
+                        Some(DataAccess::MemoryRegister16(_)) => 2,
+                        Some(DataAccess::IndexRegister16WithIndex(_, _)) => 5,
                         _ => unreachable!(),
                     },
 
@@ -48,21 +48,21 @@ impl ListingElement for Token {
                     &Mnemonic::ExAf => 1,
 
                     &Mnemonic::Inc | &Mnemonic::Dec => match arg1 {
-                        &Some(DataAccess::Register8(_)) => 1,
-                        &Some(DataAccess::Register16(_)) => 2,
+                        Some(DataAccess::Register8(_)) => 1,
+                        Some(DataAccess::Register16(_)) => 2,
                         _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
                     },
 
                     &Mnemonic::Jp => match arg1 {
                         &None => match arg2 {
-                            &Some(DataAccess::Expression(_)) => 3,
-                            &Some(DataAccess::MemoryRegister16(Register16::Hl)) => 1,
-                            &Some(DataAccess::IndexRegister16(_)) => 2,
+                            Some(DataAccess::Expression(_)) => 3,
+                            Some(DataAccess::MemoryRegister16(Register16::Hl)) => 1,
+                            Some(DataAccess::IndexRegister16(_)) => 2,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
                         },
 
-                        &Some(DataAccess::FlagTest(_)) => match arg2 {
-                            &Some(DataAccess::Expression(_)) => 3,
+                        Some(DataAccess::FlagTest(_)) => match arg2 {
+                            Some(DataAccess::Expression(_)) => 3,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
                         },
 
@@ -73,15 +73,15 @@ impl ListingElement for Token {
                     &Mnemonic::Jr => {
                         match arg1 {
                             &None => match arg2 {
-                                &Some(DataAccess::Expression(_)) => 3,
+                                Some(DataAccess::Expression(_)) => 3,
                                 _ => {
                                     panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                                 }
                             },
 
-                            &Some(DataAccess::FlagTest(_)) => {
+                            Some(DataAccess::FlagTest(_)) => {
                                 match arg2 {
-                                    &Some(DataAccess::Expression(_)) => 2, // or 3
+                                    Some(DataAccess::Expression(_)) => 2, // or 3
                                     _ => panic!(
                                         "Impossible case {:?}, {:?}, {:?}",
                                         mnemonic, arg1, arg2
@@ -96,10 +96,10 @@ impl ListingElement for Token {
                     &Mnemonic::Ld => {
                         match arg1 {
                             // Dest in memory pointed by register
-                            &Some(DataAccess::MemoryRegister16(_)) => {
+                            Some(DataAccess::MemoryRegister16(_)) => {
                                 match arg2 {
-                                    &Some(DataAccess::Register8(_)) => 2,
-                                    &Some(DataAccess::Expression(_)) => 3, // XXX Valid only for HL
+                                    Some(DataAccess::Register8(_)) => 2,
+                                    Some(DataAccess::Expression(_)) => 3, // XXX Valid only for HL
                                     _ => panic!(
                                         "Impossible case {:?}, {:?}, {:?}",
                                         mnemonic, arg1, arg2
@@ -108,39 +108,39 @@ impl ListingElement for Token {
                             }
 
                             // Dest in 8bits reg
-                            &Some(DataAccess::Register8(ref _dst)) => match arg2 {
-                                &Some(DataAccess::Register8(_)) => 1,
-                                &Some(DataAccess::MemoryRegister16(Register16::Hl)) => 2,
-                                &Some(DataAccess::Expression(_)) => 2,
-                                &Some(DataAccess::Memory(_)) => 4,
-                                &Some(DataAccess::IndexRegister16WithIndex(_, _)) => 5,
+                            Some(DataAccess::Register8(ref _dst)) => match arg2 {
+                                Some(DataAccess::Register8(_)) => 1,
+                                Some(DataAccess::MemoryRegister16(Register16::Hl)) => 2,
+                                Some(DataAccess::Expression(_)) => 2,
+                                Some(DataAccess::Memory(_)) => 4,
+                                Some(DataAccess::IndexRegister16WithIndex(_, _)) => 5,
                                 _ => {
                                     panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                                 }
                             },
 
                             // Dest in 16bits reg
-                            &Some(DataAccess::Register16(ref dst)) => match arg2 {
-                                &Some(DataAccess::Expression(_)) => 3,
-                                &Some(DataAccess::Memory(_)) if dst == &Register16::Hl => 5,
-                                &Some(DataAccess::Memory(_)) => 6,
+                            Some(DataAccess::Register16(ref dst)) => match arg2 {
+                                Some(DataAccess::Expression(_)) => 3,
+                                Some(DataAccess::Memory(_)) if dst == &Register16::Hl => 5,
+                                Some(DataAccess::Memory(_)) => 6,
                                 _ => {
                                     panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                                 }
                             },
 
-                            &Some(DataAccess::IndexRegister16(_)) => match arg2 {
-                                &Some(DataAccess::Expression(_)) => 4,
+                            Some(DataAccess::IndexRegister16(_)) => match arg2 {
+                                Some(DataAccess::Expression(_)) => 4,
                                 _ => {
                                     panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                                 }
                             },
 
-                            &Some(DataAccess::Memory(_)) => match arg2 {
-                                &Some(DataAccess::Register8(Register8::A)) => 4,
-                                &Some(DataAccess::Register16(Register16::Hl)) => 5,
-                                &Some(DataAccess::Register16(_)) => 6,
-                                &Some(DataAccess::IndexRegister16(_)) => 6,
+                            Some(DataAccess::Memory(_)) => match arg2 {
+                                Some(DataAccess::Register8(Register8::A)) => 4,
+                                Some(DataAccess::Register16(Register16::Hl)) => 5,
+                                Some(DataAccess::Register16(_)) => 6,
+                                Some(DataAccess::IndexRegister16(_)) => 6,
                                 _ => {
                                     panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                                 }
@@ -157,8 +157,8 @@ impl ListingElement for Token {
 
                     &Mnemonic::Out => {
                         match arg1 {
-                            &Some(DataAccess::Register8(Register8::C)) => 4, // XXX Not sure for out (c), 0
-                            &Some(DataAccess::Expression(_)) => 3,
+                            Some(DataAccess::Register8(Register8::C)) => 4, // XXX Not sure for out (c), 0
+                            Some(DataAccess::Expression(_)) => 3,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
                         }
                     }
@@ -166,22 +166,22 @@ impl ListingElement for Token {
                     Mnemonic::Outi | Mnemonic::Outd => 5,
 
                     &Mnemonic::Pop => match arg1 {
-                        &Some(DataAccess::Register16(_)) => 3,
-                        &Some(DataAccess::IndexRegister16(_)) => 4,
+                        Some(DataAccess::Register16(_)) => 3,
+                        Some(DataAccess::IndexRegister16(_)) => 4,
                         _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
                     },
 
                     &Mnemonic::Push => match arg1 {
-                        &Some(DataAccess::Register16(_)) => 4,
-                        &Some(DataAccess::IndexRegister16(_)) => 5,
+                        Some(DataAccess::Register16(_)) => 4,
+                        Some(DataAccess::IndexRegister16(_)) => 5,
                         _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
                     },
 
                     &Mnemonic::Res | &Mnemonic::Set => {
                         match arg2 {
-                            &Some(DataAccess::Register8(_)) => 2,
-                            &Some(DataAccess::MemoryRegister16(_)) => 3, // XXX only HL
-                            &Some(DataAccess::IndexRegister16WithIndex(_, _)) => 7,
+                            Some(DataAccess::Register8(_)) => 2,
+                            Some(DataAccess::MemoryRegister16(_)) => 3, // XXX only HL
+                            Some(DataAccess::IndexRegister16WithIndex(_, _)) => 7,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
                         }
                     }
@@ -235,7 +235,7 @@ impl fmt::Display for Listing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for token in self.listing().iter() {
             match token {
-                &Token::Label(_) | &Token::Equ(_, _) | &Token::Comment(_) => (),
+                Token::Label(_) | Token::Equ(_, _) | Token::Comment(_) => (),
                 _ => {
                     write!(f, "\t")?;
                 }
@@ -277,7 +277,7 @@ impl Listing {
     pub fn add_bytes(&mut self, bytes: &[u8]) {
         let exp = bytes
             .iter()
-            .map(|pu8| Expr::Value(*pu8 as _))
+            .map(|pu8| Expr::Value(i32::from(*pu8)))
             .collect::<Vec<_>>();
         let tok = Token::Defb(exp);
         self.push(tok);
@@ -310,10 +310,10 @@ impl Listing {
             }
 
             let mut current_size = 0;
-            if let &Token::Org(ref expr, _) = token {
+            if let Token::Org(ref expr, _) = token {
                 current_address = Some(expr.resolve(&sym)? as usize);
                 println!("Set address to {:?}", current_address);
-            } else if let &Token::Align(ref _expr, _) = token {
+            } else if let Token::Align(ref _expr, _) = token {
                 if current_address.is_none() {
                     return Err("Unable to guess align size if current address is unknown"
                         .to_owned()
@@ -337,6 +337,7 @@ impl Listing {
 
 #[cfg(test)]
 #[allow(clippy::pedantic)]
+#[allow(warnings)]
 mod tests {
     use crate::assembler::builder::*;
     use crate::assembler::tokens::*;

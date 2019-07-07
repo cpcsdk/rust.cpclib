@@ -88,10 +88,10 @@ impl AmsdosFileName {
     /// Create an amsdos filename from a catalog entry buffer
     pub fn from_entry_format(buffer: &[u8; 12]) -> Self {
         let user: u8 = buffer[0];
-        let name: [u8; 8] = array_ref!(buffer, 1, 8).clone();
+        let name: [u8; 8] = *array_ref!(buffer, 1, 8);
         // Remove bit 7 of each char
-        let mut extension: [u8; 3] = array_ref!(buffer, 9, 3).clone();
-        extension.iter_mut().for_each(|b| *b = *b & 0b0111_1111);
+        let mut extension: [u8; 3] = *array_ref!(buffer, 9, 3);
+        extension.iter_mut().for_each(|b| *b &= 0b0111_1111);
 
         Self {
             user,
@@ -150,7 +150,7 @@ impl AmsdosFileName {
 
     pub fn set_filename<S: AsRef<str>>(&mut self, filename: S) {
         let filename = filename.as_ref();
-        if let Some(idx) = filename.find(".") {
+        if let Some(idx) = filename.find('.') {
             self.set_name(&filename[0..idx]);
             self.set_extension(&filename[idx + 1..filename.len()])
         } else {
@@ -165,7 +165,7 @@ impl AmsdosFileName {
             self.name[idx] = if idx < name.len() {
                 *name.get(idx).unwrap()
             } else {
-                ' ' as u8
+                b' '
             };
         }
     }
@@ -176,7 +176,7 @@ impl AmsdosFileName {
             self.extension[idx] = if idx < extension.len() {
                 *extension.get(idx).unwrap()
             } else {
-                ' ' as u8
+                b' '
             };
         }
     }
@@ -191,20 +191,20 @@ impl AmsdosFileName {
 
     pub fn is_valid_char(char: u8) -> bool {
         /*	(char >= 'a' as u8 && char <= 'z' as u8) ||*/
-        (char >= 'A' as u8 && char <= 'Z' as u8)
-            || (char >= '0' as u8 && char <= '9' as u8)
-            || char == '!' as u8
-            || char == '"' as u8
-            || char == '#' as u8
-            || char == '$' as u8
-            || char == '&' as u8
-            || char == '+' as u8
-            || char == '@' as u8
-            || char == '^' as u8
-            || char == '\'' as u8
-            || char == '{' as u8
-            || char == '}' as u8
-            || char == ' ' as u8 // by definition ' ' is already used to fill space
+        (char >= b'A'  && char <= b'Z')
+            || (char >= b'0'  && char <= b'9' )
+            || char == b'!' 
+            || char == b'"' 
+            || char == b'#' 
+            || char == b'$' 
+            || char == b'&' 
+            || char == b'+' 
+            || char == b'@' 
+            || char == b'^' 
+            || char == b'\'' 
+            || char == b'{' 
+            || char == b'}' 
+            || char == b' '  // by definition ' ' is already used to fill space
     }
 
     // Build a AmsdosFileName ensuring the case is correct
@@ -243,7 +243,7 @@ impl AmsdosFileName {
         }
 
         let name = {
-            let mut encoded_filename = [' ' as u8; 8];
+            let mut encoded_filename = [b' '; 8];
             for (idx, c) in filename.as_bytes().iter().enumerate() {
                 encoded_filename[idx] = *c
             }
@@ -251,7 +251,7 @@ impl AmsdosFileName {
         };
 
         let extension = {
-            let mut encoded_extension = [' ' as u8; 3];
+            let mut encoded_extension = [b' '; 3];
             for (idx, c) in extension.as_bytes().iter().enumerate() {
                 encoded_extension[idx] = *c
             }
@@ -377,27 +377,27 @@ impl PartialEq for BlocIdx {
 
 #[allow(missing_docs)]
 impl BlocIdx {
-    pub fn is_valid(&self) -> bool {
+    pub fn is_valid(self) -> bool {
         match self {
             BlocIdx::Index(_) => true,
             _ => false,
         }
     }
 
-    pub fn value(&self) -> u8 {
-        self.into()
+    pub fn value(self) -> u8 {
+        (&self).into()
     }
 
     /// only valid for a valid block
     #[allow(clippy::cast_possible_truncation)]
-    pub fn track(&self) -> u8 {
-        (((self.value() as u16) << 1) / 9) as u8
+    pub fn track(self) -> u8 {
+        ((u16::from(self.value()) << 1) / 9) as u8
     }
 
     /// only valid for a valid block
     #[allow(clippy::cast_possible_truncation)]
-    pub fn sector(&self) -> u8 {
-        (((self.value() as u16) << 1) % 9) as u8
+    pub fn sector(self) -> u8 {
+        ((u16::from(self.value()) << 1) % 9) as u8
     }
 }
 
@@ -462,9 +462,7 @@ impl AmsdosEntry {
                     .map(|&b| BlocIdx::from(b))
                     .collect::<Vec<BlocIdx>>();
                 let mut array_blocs = [BlocIdx::default(); 16];
-                for i in 0..16 {
-                    array_blocs[i] = blocs[i];
-                }
+                array_blocs[..16].clone_from_slice(&blocs[..16]);
                 array_blocs
             },
         }
@@ -649,7 +647,7 @@ impl AmsdosCatalogEntry {
         Self {
             track: e1.track.min(e2.track),
             sector: e1.sector.min(e2.sector),
-            file_name: e1.file_name.clone(),
+            file_name: e1.file_name,
             read_only: e1.read_only,
             system: e1.system,
             entries_idx: {
@@ -691,21 +689,21 @@ pub struct AmsdosCatalog {
 }
 
 #[allow(missing_docs)]
-impl From<AmsdosEntries> for AmsdosCatalog {
-    fn from(entries: AmsdosEntries) -> Self {
+impl From<&AmsdosEntries> for AmsdosCatalog {
+    fn from(entries: &AmsdosEntries) -> Self {
         let mut novel: Vec<AmsdosCatalogEntry> = Vec::new();
 
         for current_entry in entries.without_erased_entries().map(|e| {
             AmsdosCatalogEntry::from((
                 entries.track(e).unwrap(),
                 entries.sector(e).unwrap(),
-                e.clone(),
+                *e,
             ))
         }) {
             let mut added = false;
-            for idx in 0..novel.len() {
-                if &novel[idx].file_name == &current_entry.file_name {
-                    novel[idx] = AmsdosCatalogEntry::merge_entries(&novel[idx], &current_entry);
+            for entry in &mut novel {
+                if entry.file_name == current_entry.file_name {
+                    *entry = AmsdosCatalogEntry::merge_entries(entry, &current_entry);
                     added = true;
                     break;
                 }
@@ -732,6 +730,11 @@ impl AmsdosCatalog {
     /// Returns the number of entries in the catalog
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    /// Check if the catalog is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Create an alphabetically sorted version of the catalog
@@ -767,7 +770,7 @@ impl AmsdosCatalog {
 #[allow(missing_docs)]
 impl AmsdosEntries {
     /// Generate a catalog that is more user friendly
-    pub fn to_amsdos_catalog(self) -> AmsdosCatalog {
+    pub fn to_amsdos_catalog(&self) -> AmsdosCatalog {
         AmsdosCatalog::from(self)
     }
 
@@ -856,7 +859,7 @@ impl AmsdosEntries {
 
     /// Return all the entries that correspond to a given file
     pub fn for_file(&self, filename: &AmsdosFileName) -> impl Iterator<Item = &AmsdosEntry> {
-        let filename: AmsdosFileName = filename.clone();
+        let filename: AmsdosFileName = *filename;
         self.entries
             .iter()
             .filter(move |&entry| entry.page_size > 0 && entry.belongs_to(&filename))
@@ -865,10 +868,11 @@ impl AmsdosEntries {
     /// Returns one available entry or None if there is no entry
     pub fn one_empty_entry(&self) -> Option<&AmsdosEntry> {
         let res = self.free_entries().take(1).collect::<Vec<_>>();
-        if res.len() > 0 {
-            Some(res[0])
-        } else {
+        if res.is_empty() {
             None
+        }
+        else{
+            Some(res[0])
         }
     }
 
@@ -877,24 +881,25 @@ impl AmsdosEntries {
     pub fn available_blocs(&self) -> Vec<BlocIdx> {
         // first 2 blocs are not available if we trust idsk. So  Ido the same
         let set = (2..=255)
-            .map(|b| BlocIdx::from(b))
-            .filter(BlocIdx::is_valid) // TODO I'm pretty sure there is womething wrong there with the erased value
+            .map(BlocIdx::from)
+            .filter(|&v| v.is_valid()) // TODO I'm pretty sure there is womething wrong there with the erased value
             .collect::<std::collections::BTreeSet<BlocIdx>>();
         let used = self
             .used_entries()
             .flat_map(|e| e.blocs.iter())
-            .map(|&b| b)
+            .copied()
             .collect::<std::collections::BTreeSet<BlocIdx>>();
-        set.difference(&used).map(|&b| b).collect::<Vec<BlocIdx>>()
+        set.difference(&used).copied().collect::<Vec<BlocIdx>>()
     }
 
     /// Returns one available bloc or None if there is no entry
     pub fn one_empty_bloc(&self) -> Option<BlocIdx> {
         let res = self.available_blocs();
-        if res.len() > 0 {
-            Some(res[0])
-        } else {
+        if res.is_empty() {
             None
+        }
+        else {
+            Some(res[0])
         }
     }
 }
@@ -1047,7 +1052,7 @@ impl AmsdosManager {
                 .for_file(&filename)
                 .map(Clone::clone)
                 .collect::<Vec<_>>();
-            if entries.len() == 0 {
+            if entries.is_empty() {
                 return None;
             }
             entries
@@ -1075,7 +1080,7 @@ impl AmsdosManager {
         is_system: bool,
         is_read_only: bool,
     ) -> Result<(), AmsdosError> {
-        let content: Vec<u8> = file.full_content().map(|&b| b).collect::<Vec<u8>>();
+        let content: Vec<u8> = file.full_content().copied().collect::<Vec<u8>>();
 
         let mut file_pos = 0;
         let file_size = content.len();
@@ -1104,13 +1109,13 @@ impl AmsdosManager {
             let nb_blocs = (page_size + 7) >> 3;
             let blocs = {
                 let mut blocs = [BlocIdx::default(); 16];
-                for b in 0..nb_blocs {
+                for bloc in blocs.iter_mut().take(nb_blocs) {
                     let bloc_idx = match self.catalog().one_empty_bloc() {
                         Some(bloc_idx) => bloc_idx,
                         None => return Err(AmsdosError::NoBlocAvailable),
                     };
                     assert!(bloc_idx.is_valid());
-                    blocs[b] = bloc_idx;
+                    *bloc = bloc_idx;
                     println!("Select bloc{:?}", bloc_idx);
                     self.update_bloc(
                         bloc_idx,
@@ -1374,7 +1379,7 @@ impl AmsdosHeader {
         self.content[1..9]
             .iter()
             .filter_map(|&c| {
-                if c == ' ' as u8 {
+                if c == b' ' {
                     None
                 } else {
                     Some(c as char)
@@ -1394,7 +1399,7 @@ impl AmsdosHeader {
         self.content[9..(9 + 3)]
             .iter()
             .filter_map(|&c| {
-                if c == ' ' as u8 {
+                if c == b' ' {
                     None
                 } else {
                     Some(c as char)
@@ -1444,15 +1449,17 @@ impl AmsdosHeader {
         self.get_16bits_value(26)
     }
 
+    #[allow(clippy::identity_op)]
     fn set_16bits_value(&mut self, value: u16, at: usize) -> &mut Self {
         self.content[at + 0] = (value % 256) as u8;
         self.content[at + 1] = (value / 256) as u8;
         self
     }
 
+    #[allow(clippy::identity_op)]
     fn get_16bits_value(&self, at: usize) -> u16 {
-        let low = self.content[at + 0] as u16;
-        let high = self.content[at + 1] as u16;
+        let low = u16::from(self.content[at + 0]);
+        let high = u16::from(self.content[at + 1]);
 
         256 * high + low
     }
@@ -1468,7 +1475,7 @@ impl AmsdosHeader {
     }
 
     pub fn compute_checksum(&self) -> u16 {
-        self.content[0..=66].iter().map(|&b| b as u16).sum::<u16>()
+        self.content[0..=66].iter().map(|&b| u16::from(b)).sum::<u16>()
     }
 
     /// Checks if the stored checksum correspond to the expected checksum
@@ -1577,7 +1584,7 @@ impl AmsdosFile {
 
     /// Returns the header + the content
     pub fn as_bytes(&self) -> Vec<u8> {
-        self.full_content().map(|&b| b).collect()
+        self.full_content().copied().collect()
     }
 
     /// Files are read from disc by chunks of the size of 2 sectors.

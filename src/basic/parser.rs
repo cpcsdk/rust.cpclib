@@ -228,7 +228,7 @@ pub fn hex_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
                     let value = digit.to_digit(16).unwrap_or(0);
                     res = value + (res * 16);
                 }
-                if res > u16::max_value() as u32 {
+                if res > u32::from(u16::max_value()) {
                     Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
                 } else {
                     Ok((remaining, res as u16))
@@ -254,7 +254,7 @@ pub fn dec_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
                     let value = digit.to_digit(10).unwrap_or(0);
                     res = value + (res * 10);
                 }
-                if res > u16::max_value() as u32 {
+                if res > u32::from(u16::max_value()) {
                     Err(::nom::Err::Error(error_position!(
                         input,
                         ErrorKind::Custom(0)
