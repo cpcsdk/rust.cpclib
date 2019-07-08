@@ -1,16 +1,13 @@
 ///! Locomotive basic parser routines.
-use nom::named_attr;
-use nom::types::CompleteStr;
-use nom::InputIter;
-use nom::InputLength;
 use nom::*;
-use nom::{line_ending, ErrorKind, IResult};
+use nom::character::complete::*;
+use nom::error::*;
 
 use crate::basic::tokens::*;
 use crate::basic::{BasicLine, BasicProgram};
 
 named_attr!(#[doc=" Parse complete basic program"],
-	pub parse_basic_program<CompleteStr<'_>, BasicProgram>, do_parse!(
+	pub parse_basic_program<&str, BasicProgram>, do_parse!(
 		lines: fold_many0!(
 			parse_basic_inner_line,
 			Vec::new(),
@@ -33,7 +30,7 @@ named_attr!(#[doc=" Parse complete basic program"],
 );
 
 named_attr!(#[doc=" Parse a line"],
-	pub parse_basic_line<CompleteStr<'_>, BasicLine>, do_parse!(
+	pub parse_basic_line<&str, BasicLine>, do_parse!(
 		line_number: dec_u16_inner >>
 		char!(' ') >> 
 		tokens: fold_many0!(
@@ -54,7 +51,7 @@ named_attr!(#[doc=" Parse a line"],
 );
 
 named_attr!(#[doc=" Parse a line BUT expect an end of line char"],
-	pub parse_basic_inner_line<CompleteStr<'_>, BasicLine>, do_parse!(
+	pub parse_basic_inner_line<&str, BasicLine>, do_parse!(
 		line: parse_basic_line >>
 		line_ending >>
 		(
@@ -64,7 +61,7 @@ named_attr!(#[doc=" Parse a line BUT expect an end of line char"],
 );
 
 named_attr!(#[doc=" Parse any token"],
-	pub parse_token<CompleteStr<'_>, BasicToken>, alt!(
+	pub parse_token<&str, BasicToken>, alt!(
 		parse_rem |
 		parse_simple_instruction |
 		parse_prefixed_instruction |
@@ -74,7 +71,7 @@ named_attr!(#[doc=" Parse any token"],
 );
 
 named_attr!(#[doc=" Parse a comment"],
-	pub parse_rem<CompleteStr<'_>, BasicToken>, do_parse!(
+	pub parse_rem<&str, BasicToken>, do_parse!(
 		sym: alt!(
 			tag_no_case!("REM") => 
 				{|_|{BasicTokenNoPrefix::Rem}} |
@@ -90,7 +87,7 @@ named_attr!(#[doc=" Parse a comment"],
 
 named_attr!(#[doc=" Parse the instructions that do not need a prefix byte
 	/// TODO Add all the other variants"],
-	pub parse_simple_instruction<CompleteStr<'_>, BasicToken>, do_parse!(
+	pub parse_simple_instruction<&str, BasicToken>, do_parse!(
 		token: alt!(
 			tag_no_case!("CALL") => {|_| BasicTokenNoPrefix::Call} |
 			tag_no_case!("INPUT") => {|_| BasicTokenNoPrefix::Input} |
@@ -103,7 +100,7 @@ named_attr!(#[doc=" Parse the instructions that do not need a prefix byte
 );
 
 named_attr!(#[doc=" TODO add the missing chars"],
-	pub parse_char<CompleteStr<'_>, BasicToken>, do_parse!(
+	pub parse_char<&str, BasicToken>, do_parse!(
 		token: alt!(
 			char!(':') => {|_| BasicTokenNoPrefix::StatementSeparator} |
 			char!(' ') => {|_| BasicTokenNoPrefix::CharSpace} |
@@ -170,7 +167,7 @@ named_attr!(#[doc=" TODO add the missing chars"],
 
 named_attr!(#[doc=" Parse the instructions that do not need a prefix byte
 /// TODO Add all the other instructions"],
-	pub parse_prefixed_instruction<CompleteStr<'_>, BasicToken>, do_parse!(
+	pub parse_prefixed_instruction<&str, BasicToken>, do_parse!(
 		token: alt!(
 			tag_no_case!("ABS") => {|_| BasicTokenPrefixed::Abs}
 		) >>
@@ -181,14 +178,14 @@ named_attr!(#[doc=" Parse the instructions that do not need a prefix byte
 );
 
 named_attr!(#[doc=" Parse a basic value"],
-	pub parse_basic_value<CompleteStr<'_>, BasicToken>, alt!(
+	pub parse_basic_value<&str, BasicToken>, alt!(
 		parse_hexadecimal_value_16bits |
 		parse_decimal_value_16bits
 	)
 );
 
 named_attr!(#[doc=" Parse an hexadecimal value"],
-    pub parse_hexadecimal_value_16bits<CompleteStr<'_>, BasicToken>, do_parse!(
+    pub parse_hexadecimal_value_16bits<&str, BasicToken>, do_parse!(
         tag_no_case!( "&") >>
         val: hex_u16_inner >>
         (
@@ -201,7 +198,7 @@ named_attr!(#[doc=" Parse an hexadecimal value"],
     );
 
 named_attr!(#[doc=" TODO"],
-    pub parse_decimal_value_16bits<CompleteStr<'_>, BasicToken>, do_parse!(
+    pub parse_decimal_value_16bits<&str, BasicToken>, do_parse!(
         val: dec_u16_inner >>
         (
 			BasicToken::Constant(
@@ -214,7 +211,7 @@ named_attr!(#[doc=" TODO"],
 
 /// XXX stolen to the asm parser
 #[inline]
-pub fn hex_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
+pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
     match is_a!(input, &b"0123456789abcdefABCDEF"[..]) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
@@ -240,7 +237,7 @@ pub fn hex_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
 
 /// XXX stolen to the asm parser
 #[inline]
-pub fn dec_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
+pub fn dec_u16_inner(input: &str) -> IResult<&str, u16> {
     match is_a!(input, &b"0123456789"[..]) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
@@ -257,7 +254,7 @@ pub fn dec_u16_inner(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, u16> {
                 if res > u32::from(u16::max_value()) {
                     Err(::nom::Err::Error(error_position!(
                         input,
-                        ErrorKind::Custom(0)
+                        ErrorKind::TooLarge /*Custom(0)*/
                     )))
                 } else {
                     Ok((remaining, res as u16))

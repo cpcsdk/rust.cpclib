@@ -58,7 +58,7 @@ log = {version="0.4.6", optional=true}
 simplelog = {version="0.5.3", optional=true}
 
 [dependencies.nom]
-version = "5.0.0-beta1"
+version = "5.0.0"
 
 [dev-dependencies] 
 pretty_assertions="0.5.1"

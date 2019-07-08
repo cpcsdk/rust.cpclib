@@ -1,9 +1,8 @@
 use custom_error::custom_error;
 /// Parser of the disc configuraiton used by the Arkos Loader
-use nom;
-use nom::types::CompleteStr;
 use nom::*;
-use nom::{eol, space0};
+use nom::error::*;
+use nom::character::complete::*;
 
 use itertools;
 use itertools::Itertools;
@@ -79,7 +78,7 @@ impl FromStr for DiscConfig {
                 }
             }
             Err(error) => Err(DiscConfigError::ParseError {
-                msg: error.to_string(),
+                msg: format!("{:?}", error),
             }),
         }
     }
@@ -121,7 +120,7 @@ impl fmt::Display for DiscConfig {
 
 #[allow(missing_docs)]
 impl DiscConfig {
-    /// A or B for a two headd dsk. Unspecified for a single headd disc
+    /// A or B for a two head dsk. Unspecified for a single head disc
     pub fn track_information_for_track<S: Into<Head>>(
         &self,
         head: S,
@@ -174,7 +173,7 @@ impl DiscConfig {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 /// Desribes tracks for a given group of tracks
 pub struct TrackGroup {
     /// Identifier of the tracks molded from this configuration
@@ -251,11 +250,11 @@ impl TrackGroup {
 
 #[allow(missing_docs)]
 impl TrackInformationList {
-    pub fn to_cfg(&self, double_headd: bool) -> Vec<TrackGroup> {
+    pub fn to_cfg(&self, double_head: bool) -> Vec<TrackGroup> {
         let mut single = self
             .list
             .iter()
-            .map(|t| t.to_cfg(double_headd))
+            .map(|t| t.to_cfg(double_head))
             .collect::<Vec<_>>();
 
         // elements need to be sorted before using group_by
@@ -305,9 +304,9 @@ impl TrackInformationList {
 /// Extend TrackInformation with the ability to extract its configuration
 #[allow(missing_docs)]
 impl TrackInformation {
-    pub fn to_cfg(&self, double_headd: bool) -> TrackGroup {
+    pub fn to_cfg(&self, double_head: bool) -> TrackGroup {
         let tracks = vec![self.track_number];
-        let head: Head = if double_headd {
+        let head: Head = if double_head {
             self.head_number.into()
         } else {
             Head::Unspecified
@@ -365,18 +364,18 @@ impl From<&ExtendedDsk> for DiscConfig {
     }
 }
 
-named!(value<CompleteStr<'_>, u16>, alt!(hex | dec));
+named!(value<&str, u16>, alt!(hex | dec));
 
 named!(
-    list_of_values<CompleteStr<'_>, Vec<u16>>,
+    list_of_values<&str, Vec<u16>>,
     separated_list!(tag!(","), value)
 );
 
-fn from_hex(input: CompleteStr<'_>) -> Result<u16, std::num::ParseIntError> {
+fn from_hex(input: &str) -> Result<u16, std::num::ParseIntError> {
     u16::from_str_radix(&input, 16)
 }
 
-fn from_dec(input: CompleteStr<'_>) -> Result<u16, std::num::ParseIntError> {
+fn from_dec(input: &str) -> Result<u16, std::num::ParseIntError> {
     u16::from_str_radix(&input, 10)
 }
 
@@ -389,18 +388,18 @@ fn is_dec_digit(c: char) -> bool {
 }
 
 named!(
-    hex<CompleteStr<'_>, u16>,
+    hex<&str, u16>,
     do_parse!(
         tag!("0x") >> value: map_res!(take_while_m_n!(1, 2, is_hex_digit), from_hex) >> (value)
     )
 );
 
 named!(
-    dec<CompleteStr<'_>, u16>,
+    dec<&str, u16>,
     map_res!(take_while!(is_dec_digit), from_dec)
 );
 
-named_args!(value_of_key<'a>(key: &str)<CompleteStr<'a>, u16>,
+named_args!(value_of_key<'a>(key: &str)<&'a str, u16>,
 	do_parse!(
 		space0 >>
 		tag_no_case!(key) >>
@@ -409,14 +408,14 @@ named_args!(value_of_key<'a>(key: &str)<CompleteStr<'a>, u16>,
 		space0 >>
 		val: value >>
 		space0 >>
-		opt!(eol) >>
+		opt!(line_ending) >>
 		(
 			val
 		)
 	)
 );
 
-named_args!(list_of_key<'a>(key: &str)<CompleteStr<'a>, Vec<u16>>,
+named_args!(list_of_key<'a>(key: &str)<&'a str, Vec<u16>>,
 	do_parse!(
 		space0 >>
 		tag_no_case!(key) >>
@@ -425,7 +424,7 @@ named_args!(list_of_key<'a>(key: &str)<CompleteStr<'a>, Vec<u16>>,
 		space0 >>
 		vals: list_of_values >>
 		space0 >>
-		opt!(eol) >>
+		opt!(line_ending) >>
 		(
 			vals
 		)
@@ -433,12 +432,12 @@ named_args!(list_of_key<'a>(key: &str)<CompleteStr<'a>, Vec<u16>>,
 );
 
 named!(
-    empty_line<CompleteStr<'_>, ()>,
-    do_parse!(space0 >> eol >> (()))
+    empty_line<&str, ()>,
+    do_parse!(space0 >> line_ending >> (()))
 );
 
 named!(
-    track_group_headd<CompleteStr<'_>, TrackGroup>,
+    track_group_head<&str, TrackGroup>,
     do_parse!(
         head: alt! (
 	
@@ -472,7 +471,7 @@ named!(
     )
 );
 
-named_attr!(#[doc="// TODO allow to write the information in a different order"],pub parse_config<CompleteStr<'_>, DiscConfig>,
+named_attr!(#[doc="// TODO allow to write the information in a different order"],pub parse_config<&str, DiscConfig>,
   do_parse!(
 		many0!(empty_line) >>
 	  nb_tracks: call!(value_of_key, "NbTrack") >>
@@ -484,7 +483,7 @@ named_attr!(#[doc="// TODO allow to write the information in a different order"]
 		track_groups: fold_many1!(
 			 preceded!(
 			  many0!(empty_line),
-			  track_group_headd
+			  track_group_head
 		   ),
 			 Vec::new(),
 			 |mut acc: Vec<_>, item|{
