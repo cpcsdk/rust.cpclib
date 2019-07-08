@@ -160,7 +160,7 @@ impl BasicProgram {
                     ))
                 }
             }
-            Err(e) => Err(format!("Error while parsing the Basic content: {}", e)),
+            Err(e) => Err(format!("Error while parsing the Basic content: {:?}", e)),
         }
     }
 

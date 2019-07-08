@@ -2,6 +2,8 @@ use crate::assembler::assembler::SymbolsTableCaseDependent;
 use crate::assembler::tokens::listing::*;
 use crate::assembler::tokens::*;
 use crate::assembler::AssemblerError;
+use crate::assembler::parser;
+use std::fmt;
 
 impl ListingElement for Token {
     /// Returns an estimation of the duration.
@@ -290,7 +292,7 @@ impl Listing {
     ) -> Result<(), AssemblerError> {
         parser::parse_z80_str(code.as_ref())
             .map_err(|e| AssemblerError::SyntaxError {
-                error: e.to_string(),
+                error: format!("{:?}", e),
             })
             .map(|(_res, local_tokens)| {
                 self.listing_mut().extend_from_slice(&local_tokens);
