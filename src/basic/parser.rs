@@ -2,217 +2,235 @@ use nom::character::complete::*;
 use nom::error::*;
 ///! Locomotive basic parser routines.
 use nom::*;
+use nom::combinator::*;
+use nom::sequence::*;
+use nom::branch::*;
+use nom::bytes::complete::*;
+use nom::multi::*;
 
 use crate::basic::tokens::*;
 use crate::basic::{BasicLine, BasicProgram};
 
-named_attr!(#[doc=" Parse complete basic program"],
-	pub parse_basic_program<&str, BasicProgram>, do_parse!(
-		lines: fold_many0!(
+/// Parse complete basic program"],
+pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram> {
+		let (input, lines) = fold_many0(
 			parse_basic_inner_line,
 			Vec::new(),
 			|mut acc:Vec<_>, item|{
 				acc.push(item);
 				acc
 			}
-		) >>
-		last: opt!(parse_basic_line) >>
-		opt!(line_ending) >>
-		( {
+		)(input)?;
+
+		let (input, last) = terminated(
+			opt(parse_basic_line),
+			opt(line_ending)
+		)(input)?;
+
+		
 			let mut lines = lines.clone();
 			if let Some(line) = last {
 				lines.push(line);
 			}
-			BasicProgram::new(lines)
-		  }
-		)
-	)
-);
 
-named_attr!(#[doc=" Parse a line"],
-	pub parse_basic_line<&str, BasicLine>, do_parse!(
-		line_number: dec_u16_inner >>
-		char!(' ') >> 
-		tokens: fold_many0!(
+			Ok((input, 
+			BasicProgram::new(lines)))
+}
+
+/// Parse a line
+	pub fn parse_basic_line(input: &str) -> IResult<&str, BasicLine>{
+		let (input, line_number) =  dec_u16_inner(input)?;
+
+		let (input, _) = char(' ')(input)?;
+		
+		let (input, tokens) = fold_many0(
 			parse_token,
 			Vec::new(),
 			|mut acc:Vec<_>, item|{
 				acc.push(item);
 				acc
 			}
-		) >>
-		(
+		)(input)?;
+
+
+		Ok((	
+			input,
 			BasicLine::new(
 				line_number,
 				&tokens
 			)
-		)
-	)
-);
+		))
+		
+	
+	}
 
-named_attr!(#[doc=" Parse a line BUT expect an end of line char"],
-	pub parse_basic_inner_line<&str, BasicLine>, do_parse!(
-		line: parse_basic_line >>
-		line_ending >>
-		(
-			line
-		)
-	)
-);
+/// Parse a line BUT expect an end of line char
+	pub fn parse_basic_inner_line(input: &str) -> IResult<&str, BasicLine> {
+		terminated(
+				parse_basic_line,
+				line_ending
+			)(input)
+		
+	}
 
-named_attr!(#[doc=" Parse any token"],
-	pub parse_token<&str, BasicToken>, alt!(
-		parse_rem |
-		parse_simple_instruction |
-		parse_prefixed_instruction |
-		parse_basic_value |
+/// Parse any token
+	pub fn parse_token(input: &str) -> IResult<&str, BasicToken> {
+		alt((
+		parse_rem ,
+		parse_simple_instruction ,
+		parse_prefixed_instruction ,
+		parse_basic_value ,
 		parse_char
-	)
-);
+	))(input)
+	}
 
-named_attr!(#[doc=" Parse a comment"],
-	pub parse_rem<&str, BasicToken>, do_parse!(
-		sym: alt!(
-			tag_no_case!("REM") => 
-				{|_|{BasicTokenNoPrefix::Rem}} |
-			char!('\'') => 
-				{|_| {BasicTokenNoPrefix::SymbolQuote}}
-		) >>
-		list: take_till!(|ch|{ch==':' ||ch=='\n'}) >>
-		(
+/// Parse a comment"],
+	pub fn parse_rem(input: &str) -> IResult<&str, BasicToken> {
+		let (input, sym) = alt((
+			map(tag_no_case("REM"), {|_|{BasicTokenNoPrefix::Rem}}),
+			map(char('\'') , {|_| {BasicTokenNoPrefix::SymbolQuote}})
+		))(input)?;
+
+		let (input, list) = take_till(|ch|{ch==':' ||ch=='\n'})(input)?;
+
+		Ok((
+			input,
 			BasicToken::Comment(sym, list.as_bytes().to_vec())
-		)
-	)
-);
+		))
+	
+	}
 
-named_attr!(#[doc=" Parse the instructions that do not need a prefix byte
-	/// TODO Add all the other variants"],
-	pub parse_simple_instruction<&str, BasicToken>, do_parse!(
-		token: alt!(
-			tag_no_case!("CALL") => {|_| BasicTokenNoPrefix::Call} |
-			tag_no_case!("INPUT") => {|_| BasicTokenNoPrefix::Input} |
-			tag_no_case!("PRINT") => {|_| BasicTokenNoPrefix::Print} 
-		) >>
-		(
-			BasicToken::SimpleToken(token)
-		)
-	)
-);
+/// Parse the instructions that do not need a prefix byte
+	/// TODO Add all the other variants"
+	pub fn parse_simple_instruction(input: &str) -> IResult<&str, BasicToken> {
+		map(alt((
+			map(tag_no_case("CALL") , {|_| BasicTokenNoPrefix::Call}),
+			map(tag_no_case("INPUT") , {|_| BasicTokenNoPrefix::Input}),
+			map(tag_no_case("PRINT") , {|_| BasicTokenNoPrefix::Print})
+		)),
+		|token| BasicToken::SimpleToken(token)
+		)(input)
+}
 
-named_attr!(#[doc=" TODO add the missing chars"],
-	pub parse_char<&str, BasicToken>, do_parse!(
-		token: alt!(
-			char!(':') => {|_| BasicTokenNoPrefix::StatementSeparator} |
-			char!(' ') => {|_| BasicTokenNoPrefix::CharSpace} |
+/// TODO add the missing chars
+	pub fn parse_char(input: &str) -> IResult<&str, BasicToken> {
+		map(
+		alt((
+			map(char(':') , {|_| BasicTokenNoPrefix::StatementSeparator} ),
+			map(char(' ') , {|_| BasicTokenNoPrefix::CharSpace} ),
 
-			char!('A') => {|_| BasicTokenNoPrefix::CharUpperA} |
-			char!('B') => {|_| BasicTokenNoPrefix::CharUpperB} |
-			char!('C') => {|_| BasicTokenNoPrefix::CharUpperC} |
-			char!('D') => {|_| BasicTokenNoPrefix::CharUpperD} |
-			char!('E') => {|_| BasicTokenNoPrefix::CharUpperE} |
-			char!('F') => {|_| BasicTokenNoPrefix::CharUpperF} |
-			char!('G') => {|_| BasicTokenNoPrefix::CharUpperG} |
-			char!('H') => {|_| BasicTokenNoPrefix::CharUpperH} |
-			char!('I') => {|_| BasicTokenNoPrefix::CharUpperI} |
-			char!('J') => {|_| BasicTokenNoPrefix::CharUpperJ} |
-			char!('K') => {|_| BasicTokenNoPrefix::CharUpperK} |
-			char!('L') => {|_| BasicTokenNoPrefix::CharUpperL} |
-			char!('M') => {|_| BasicTokenNoPrefix::CharUpperM} |
-			char!('N') => {|_| BasicTokenNoPrefix::CharUpperN} |
-			char!('O') => {|_| BasicTokenNoPrefix::CharUpperO} |
-			char!('P') => {|_| BasicTokenNoPrefix::CharUpperP} |
-			char!('Q') => {|_| BasicTokenNoPrefix::CharUpperQ} |
-			char!('R') => {|_| BasicTokenNoPrefix::CharUpperR} |
-			char!('S') => {|_| BasicTokenNoPrefix::CharUpperS} |
-			char!('T') => {|_| BasicTokenNoPrefix::CharUpperT} |
-			char!('U') => {|_| BasicTokenNoPrefix::CharUpperU} |
-			char!('V') => {|_| BasicTokenNoPrefix::CharUpperV} |
-			char!('W') => {|_| BasicTokenNoPrefix::CharUpperW} |
-			char!('X') => {|_| BasicTokenNoPrefix::CharUpperX} |
-			char!('Y') => {|_| BasicTokenNoPrefix::CharUpperY} |
-			char!('Z') => {|_| BasicTokenNoPrefix::CharUpperZ} |
+			map(char('A') , {|_| BasicTokenNoPrefix::CharUpperA} ),
+			map(char('B') , {|_| BasicTokenNoPrefix::CharUpperB} ),
+			map(char('C') , {|_| BasicTokenNoPrefix::CharUpperC} ),
+			map(char('D') , {|_| BasicTokenNoPrefix::CharUpperD} ),
+			map(char('E') , {|_| BasicTokenNoPrefix::CharUpperE} ),
+			map(char('F') , {|_| BasicTokenNoPrefix::CharUpperF} ),
+			map(char('G') , {|_| BasicTokenNoPrefix::CharUpperG} ),
+			map(char('H') , {|_| BasicTokenNoPrefix::CharUpperH} ),
+			map(char('I') , {|_| BasicTokenNoPrefix::CharUpperI} ),
+			map(char('J') , {|_| BasicTokenNoPrefix::CharUpperJ} ),
+			map(char('K') , {|_| BasicTokenNoPrefix::CharUpperK} ),
+			map(char('L') , {|_| BasicTokenNoPrefix::CharUpperL} ),
+			map(char('M') , {|_| BasicTokenNoPrefix::CharUpperM} ),
+			map(char('N') , {|_| BasicTokenNoPrefix::CharUpperN} ),
+			map(char('O') , {|_| BasicTokenNoPrefix::CharUpperO} ),
+			map(char('P') , {|_| BasicTokenNoPrefix::CharUpperP} ),
+			map(char('Q') , {|_| BasicTokenNoPrefix::CharUpperQ} ),
+			map(char('R') , {|_| BasicTokenNoPrefix::CharUpperR} ),
+			map(char('S') , {|_| BasicTokenNoPrefix::CharUpperS} ),
+			map(char('T') , {|_| BasicTokenNoPrefix::CharUpperT} ),
+			map(char('U') , {|_| BasicTokenNoPrefix::CharUpperU} ),
+			map(char('V') , {|_| BasicTokenNoPrefix::CharUpperV} ),
+			map(char('W') , {|_| BasicTokenNoPrefix::CharUpperW} ),
+			map(char('X') , {|_| BasicTokenNoPrefix::CharUpperX} ),
+			map(char('Y') , {|_| BasicTokenNoPrefix::CharUpperY} ),
+			map(char('Z') , {|_| BasicTokenNoPrefix::CharUpperZ} ),
 
-			char!('a') => {|_| BasicTokenNoPrefix::CharLowerA} |
-			char!('b') => {|_| BasicTokenNoPrefix::CharLowerB} |
-			char!('c') => {|_| BasicTokenNoPrefix::CharLowerC} |
-			char!('d') => {|_| BasicTokenNoPrefix::CharLowerD} |
-			char!('e') => {|_| BasicTokenNoPrefix::CharLowerE} |
-			char!('f') => {|_| BasicTokenNoPrefix::CharLowerF} |
-			char!('g') => {|_| BasicTokenNoPrefix::CharLowerG} |
-			char!('h') => {|_| BasicTokenNoPrefix::CharLowerH} |
-			char!('i') => {|_| BasicTokenNoPrefix::CharLowerI} |
-			char!('j') => {|_| BasicTokenNoPrefix::CharLowerJ} |
-			char!('k') => {|_| BasicTokenNoPrefix::CharLowerK} |
-			char!('l') => {|_| BasicTokenNoPrefix::CharLowerL} |
-			char!('m') => {|_| BasicTokenNoPrefix::CharLowerM} |
-			char!('n') => {|_| BasicTokenNoPrefix::CharLowerN} |
-			char!('o') => {|_| BasicTokenNoPrefix::CharLowerO} |
-			char!('p') => {|_| BasicTokenNoPrefix::CharLowerP} |
-			char!('q') => {|_| BasicTokenNoPrefix::CharLowerQ} |
-			char!('r') => {|_| BasicTokenNoPrefix::CharLowerR} |
-			char!('s') => {|_| BasicTokenNoPrefix::CharLowerS} |
-			char!('t') => {|_| BasicTokenNoPrefix::CharLowerT} |
-			char!('u') => {|_| BasicTokenNoPrefix::CharLowerU} |
-			char!('v') => {|_| BasicTokenNoPrefix::CharLowerV} |
-			char!('w') => {|_| BasicTokenNoPrefix::CharLowerW} |
-			char!('x') => {|_| BasicTokenNoPrefix::CharLowerX} |
-			char!('y') => {|_| BasicTokenNoPrefix::CharLowerY} |
-			char!('z') => {|_| BasicTokenNoPrefix::CharLowerZ} 
-		) >>
-		(
-			BasicToken::SimpleToken(token)
-		)
-	)
-);
+			map(char('a') , {|_| BasicTokenNoPrefix::CharLowerA} ),
+			map(char('b') , {|_| BasicTokenNoPrefix::CharLowerB} ),
+			map(char('c') , {|_| BasicTokenNoPrefix::CharLowerC} ),
+			map(char('d') , {|_| BasicTokenNoPrefix::CharLowerD} ),
+			map(char('e') , {|_| BasicTokenNoPrefix::CharLowerE} ),
+			map(char('f') , {|_| BasicTokenNoPrefix::CharLowerF} ),
+			map(char('g') , {|_| BasicTokenNoPrefix::CharLowerG} ),
+			map(char('h') , {|_| BasicTokenNoPrefix::CharLowerH} ),
+			map(char('i') , {|_| BasicTokenNoPrefix::CharLowerI} ),
+			map(char('j') , {|_| BasicTokenNoPrefix::CharLowerJ} ),
+			map(char('k') , {|_| BasicTokenNoPrefix::CharLowerK} ),
+			map(char('l') , {|_| BasicTokenNoPrefix::CharLowerL} ),
+			map(char('m') , {|_| BasicTokenNoPrefix::CharLowerM} ),
+			map(char('n') , {|_| BasicTokenNoPrefix::CharLowerN} ),
+			map(char('o') , {|_| BasicTokenNoPrefix::CharLowerO} ),
+			map(char('p') , {|_| BasicTokenNoPrefix::CharLowerP} ),
+			map(char('q') , {|_| BasicTokenNoPrefix::CharLowerQ} ),
+			map(char('r') , {|_| BasicTokenNoPrefix::CharLowerR} ),
+			map(char('s') , {|_| BasicTokenNoPrefix::CharLowerS} ),
+			map(char('t') , {|_| BasicTokenNoPrefix::CharLowerT} ),
+			map(char('u') , {|_| BasicTokenNoPrefix::CharLowerU} ),
+			map(char('v') , {|_| BasicTokenNoPrefix::CharLowerV} ),
+			map(char('w') , {|_| BasicTokenNoPrefix::CharLowerW} ),
+			map(char('x') , {|_| BasicTokenNoPrefix::CharLowerX} ),
+			map(char('y') , {|_| BasicTokenNoPrefix::CharLowerY} ),
+			map(char('z') , {|_| BasicTokenNoPrefix::CharLowerZ} )
+		)),
+		|token| BasicToken::SimpleToken(token)
+		)(input)
+	
+}
 
-named_attr!(#[doc=" Parse the instructions that do not need a prefix byte
+/// Parse the instructions that do not need a prefix byte
 /// TODO Add all the other instructions"],
-	pub parse_prefixed_instruction<&str, BasicToken>, do_parse!(
-		token: alt!(
-			tag_no_case!("ABS") => {|_| BasicTokenPrefixed::Abs}
-		) >>
-		(
-			BasicToken::PrefixedToken(token)
-		)
-	)
-);
+pub fn parse_prefixed_instruction(input: &str) -> IResult<&str, BasicToken> {
+		map(
+			alt((
+				value(BasicTokenPrefixed::Abs, tag_no_case("ABS")),
+				value(BasicTokenPrefixed::Abs, tag_no_case("ABS")), //TODO put the others
+			)),
+			|token| BasicToken::PrefixedToken(token)
+		)(input)
+}
 
-named_attr!(#[doc=" Parse a basic value"],
-	pub parse_basic_value<&str, BasicToken>, alt!(
-		parse_hexadecimal_value_16bits |
+/// Parse a basic value
+	pub fn parse_basic_value(input: &str) -> IResult<&str, BasicToken> {
+		 alt((
+		parse_hexadecimal_value_16bits ,
 		parse_decimal_value_16bits
-	)
-);
+	))(input)
+	}
 
-named_attr!(#[doc=" Parse an hexadecimal value"],
-    pub parse_hexadecimal_value_16bits<&str, BasicToken>, do_parse!(
-        tag_no_case!( "&") >>
-        val: hex_u16_inner >>
-        (
+/// Parse an hexadecimal value
+    pub fn parse_hexadecimal_value_16bits(input: &str) -> IResult<&str, BasicToken> {
+        map( 
+		preceded(
+			char('&'),
+			hex_u16_inner
+		),
+        |val|
 			BasicToken::Constant(
 				BasicTokenNoPrefix::ValueIntegerHexadecimal16bits,
 				BasicValue::new_integer(val)
 			)
 		)
-        )
-    );
+        (input)
+	}
 
-named_attr!(#[doc=" TODO"],
-    pub parse_decimal_value_16bits<&str, BasicToken>, do_parse!(
-        val: dec_u16_inner >>
-        (
+/// ...
+    pub fn parse_decimal_value_16bits(input: &str) -> IResult<&str, BasicToken> {
+        map(dec_u16_inner,
+		|val|
+        
 			BasicToken::Constant(
 				BasicTokenNoPrefix::ValueIntegerDecimal16bits,
 				BasicValue::new_integer(val)
 			)
-		)
-        )
-    );
+		
+        )(input)
+	}
 
 /// XXX stolen to the asm parser
 #[inline]
 pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
-    match is_a!(input, &b"0123456789abcdefABCDEF"[..]) {
+    match is_a("0123456789abcdefABCDEF")(input) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
             // Do not parse more than  characters for a u16
@@ -238,7 +256,7 @@ pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
 /// XXX stolen to the asm parser
 #[inline]
 pub fn dec_u16_inner(input: &str) -> IResult<&str, u16> {
-    match is_a!(input, &b"0123456789"[..]) {
+    match is_a("0123456789")(input) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
             // Do not parse more than 5 characters for a u16
@@ -270,7 +288,7 @@ mod test {
 
     #[test]
     fn check_number() {
-        assert!(dec_u16_inner(CompleteStr("10")).is_ok());
+        assert!(dec_u16_inner("10").is_ok());
 
         match hex_u16_inner("1234".into()) {
             Ok((res, value)) => {
@@ -279,7 +297,7 @@ mod test {
                 assert_eq!(0x1234, value);
             }
             Err(e) => {
-                panic!("{}", e);
+                panic!("{:?}", e);
             }
         }
 
@@ -296,7 +314,7 @@ mod test {
                 assert_eq!(bytes[2], 0x12);
             }
             Err(e) => {
-                panic!("{}", e);
+                panic!("{:?}", e);
             }
         }
     }
@@ -311,7 +329,7 @@ mod test {
                 line
             }
             Err(e) => {
-                panic!("{}", e);
+                panic!("{:?}", e);
             }
         }
     }
@@ -324,7 +342,7 @@ mod test {
                 assert_eq!(res.len(), 0, "Line as not been completly consummed");
             }
             Err(e) => {
-                panic!("{}", e);
+                panic!("{:?}", e);
             }
         }
     }
