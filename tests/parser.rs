@@ -47,8 +47,8 @@ mod tests {
     }
 
     #[test]
-    fn test_dec_u16() {
-        assert_eq!(get_val::<u16>(dec_u16("123")), 123);
+    fn test_dec_number() {
+        assert_eq!(get_val::<u16>(dec_number("123")), 123);
     }
 
     #[test]
@@ -57,23 +57,23 @@ mod tests {
     }
 
     #[test]
-    fn test_hex_u16() {
-        assert_eq!(get_val::<u16>(hex_u16("0x123")), 0x123);
-        assert_eq!(get_val::<u16>(hex_u16("0xffff")), 0xffff);
-        assert_eq!(get_val::<u16>(hex_u16("0x0000")), 0x0000);
-        assert_eq!(get_val::<u16>(hex_u16("0xc9fb")), 0xc9fb);
+    fn test_hex_number() {
+        assert_eq!(get_val::<u16>(hex_number("0x123")), 0x123);
+        assert_eq!(get_val::<u16>(hex_number("0xffff")), 0xffff);
+        assert_eq!(get_val::<u16>(hex_number("0x0000")), 0x0000);
+        assert_eq!(get_val::<u16>(hex_number("0xc9fb")), 0xc9fb);
     }
 
     #[test]
     #[should_panic]
-    fn test_dec_u16_neg() {
-        get_val::<u16>(dec_u16("-1"));
+    fn test_dec_number_neg() {
+        get_val::<u16>(dec_number("-1"));
     }
 
     #[test]
     #[should_panic]
-    fn test_hex_u16_neg() {
-        get_val::<u16>(hex_u16("-0x0"));
+    fn test_hex_number_neg() {
+        get_val::<u16>(hex_number("-0x0"));
     }
 
     #[test]
@@ -90,14 +90,14 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn test_dec_u16_overflow() {
-        get_val::<u16>(dec_u16("65536"));
+    fn test_dec_number_overflow() {
+        get_val::<u16>(dec_number("65536"));
     }
 
     #[test]
     #[should_panic]
-    fn test_hex_u16_overflow() {
-        get_val::<u16>(hex_u16("0x10000"));
+    fn test_hex_number_overflow() {
+        get_val::<u16>(hex_number("0x10000"));
     }
 
     #[test]
