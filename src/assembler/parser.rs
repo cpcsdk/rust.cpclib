@@ -1395,28 +1395,24 @@ pub fn string_expr(input: &str) -> IResult<&str, Expr> {
 /// Parse a label
 pub fn parse_label(input: &str) -> IResult<&str, String> {
     // Get the label
-    match do_parse!(
-        input,
-        first: one_of!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.") >> // XXX The inclusion of . is probably problematic
-        middle: is_a!("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.") >>
-        (
-            format!("{}{}",
+
+let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.")(input)?;
+let (input, middle) = is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")(input)?;
+
+let label = format!("{}{}",
                     first,
                     middle.iter_elements().collect::<String>()
-            )
+            );
 
-        )
-    ) {
-        Err(e) => Err(e),
-        Ok((remaining, label)) => {
+
             let impossible = ["af", "hl", "de", "bc", "ix", "iy", "ixl", "ixh"];
             if impossible.iter().any(|val| val == &label.to_lowercase()) {
                 Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
             } else {
-                Ok((remaining, label))
+                Ok((input, label))
             }
-        }
-    }
+        
+    
 }
 
 #[inline]
