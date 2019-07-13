@@ -1,11 +1,14 @@
-use nom;
-use nom::types::CompleteStr;
-use nom::{alpha1, space1};
-use nom::{alt, do_parse, named, tag_no_case};
+use nom::*;
+use nom::combinator::*;
+use nom::sequence::*;
+use nom::branch::*;
+use nom::bytes::complete::*;
+use nom::multi::*;
+use nom::character::complete::*;
 
 use std::str;
 
-#[derive(Debug)]
+#[derive(Debug, Clone )]
 pub(crate) enum XferCommand {
     Cd(Option<String>),
     Pwd,
@@ -17,48 +20,56 @@ pub(crate) enum XferCommand {
 
 // TODO find a way to reduce code duplicaiton
 
-named!(
-    ls_path<CompleteStr<'_>, XferCommand>,
-    do_parse!(
-        tag_no_case!("ls") >> space1 >> path: alpha1 >> (XferCommand::Ls(Some(path.to_string())))
-    )
-);
+fn ls_path(input: &str) -> IResult<&str, XferCommand> {
+    map(
+        preceded(tuple((
+        tag_no_case("ls"),
+        space1
+     )),
+      alpha1
+     ),
+      |path: &str|XferCommand::Ls(Some(path.to_string()))
+    )(input)
+}
 
-named!(
-    ls_no_path<CompleteStr<'_>, XferCommand>,
-    do_parse!(tag_no_case!("ls") >> (XferCommand::Ls(None)))
-);
+fn ls_no_path(input :&str) -> IResult<&str, XferCommand> {
+    value(
+        XferCommand::Ls(None),
+        tag_no_case("ls")
+    )(input)
+}
 
-named!(ls<CompleteStr<'_>, XferCommand>, alt!(ls_path | ls_no_path));
+fn ls(input: &str) -> IResult<&str, XferCommand> {
+    alt((ls_path, ls_no_path))(input)
+}
 
-named!(
-    cd_path<CompleteStr<'_>, XferCommand>,
-    do_parse!(
-        tag_no_case!("cd") >> space1 >> path: alpha1 >> (XferCommand::Cd(Some(path.to_string())))
-    )
-);
+fn  cd_path(input: &str) -> IResult<&str, XferCommand> {
+    map(preceded(tuple((
+        tag_no_case("cd"), 
+        space1
+     )),
+     alpha1
+     ), |path: &str| XferCommand::Cd(Some(path.to_string())))(input)
+    
+}
 
-named!(
-    cd_no_path<CompleteStr<'_>, XferCommand>,
-    do_parse!(tag_no_case!("cd") >> (XferCommand::Cd(None)))
-);
+fn cd_no_path(input: &str) -> IResult<&str, XferCommand> {
+    value(XferCommand::Cd(None), tag_no_case("cd"))(input)
+}
 
-named!(cd<CompleteStr<'_>, XferCommand>, alt!(cd_path | cd_no_path));
+fn cd(input: &str) -> IResult<&str, XferCommand> {
+    alt((cd_path , cd_no_path))(input)
+}
 
-named!(
-    no_arg<CompleteStr<'_>, XferCommand>,
-    alt!(
-        tag_no_case!("pwd") => 	{|_|{XferCommand::Pwd}} |
-        tag_no_case!("reboot") => 	{|_|{XferCommand::Reboot}} |
-        tag_no_case!("reset") => 	{|_|{XferCommand::Reset}}
-    )
-);
+fn no_arg(input: &str) -> IResult<&str, XferCommand> {
+    alt((
+        map(tag_no_case("pwd") , 	{|_|{XferCommand::Pwd}} ),
+        map(tag_no_case("reboot") , 	{|_|{XferCommand::Reboot}} ),
+        map(tag_no_case("reset") ,	{|_|{XferCommand::Reset}})
+    ))(input)
+}
 
-named!(
-    parse_command_inner<CompleteStr<'_>, XferCommand>,
-    alt!(cd | ls | no_arg)
-);
-
-pub(crate) fn parse_command(cmd: &str) -> nom::IResult<CompleteStr<'_>, XferCommand> {
-    parse_command_inner(cmd.into())
+/// Launch the parsing of the line
+pub(crate) fn parse_command(input: &str) -> IResult<&str, XferCommand> {
+    alt(( cd , ls , no_arg))(input)
 }
