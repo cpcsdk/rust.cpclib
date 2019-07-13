@@ -1672,43 +1672,48 @@ named_attr!(#[doc="TODO"],
     )
 );
 
-//TODO add stuff to manipulate any kind of data (value/label)
 
-named_attr!(#[doc="TODO"],pub factor< &str, Expr >, alt!(
+/// Get a factor
+pub fn factor(input: &str) -> IResult< &str, Expr > {
+     alt((
     // Manage functions
-      delimited!(space0, parse_hi_or_lo, space0)
-    | delimited!(space0, parse_duration, space0)
-    | delimited!(space0, parse_assemble, space0)
+      delimited(space0, parse_hi_or_lo, space0),
+      delimited(space0, parse_duration, space0),
+      delimited(space0, parse_assemble, space0),
+
     // manage values
-    | map!(
-        delimited!(
+    map(
+        delimited(
             space0, 
-            alt!(hex_u16 | bin_u16 | dec_u16), 
+            alt((hex_u16, bin_u16, dec_u16)), 
             space0
         ),
         |d:u16| {Expr::Value(d as i32)}
-        )
+    ),
+
     // manage $
-   | map!(
-        delimited!(
+   map(
+        delimited(
             space0, 
-            tag!("$"), 
+            tag("$"), 
             space0
         ),
         |_x|{Expr::Label(String::from("$"))}
-    )
+    ),
+
     // manage labels
-   | map!(
-        delimited!(
+   map(
+        delimited(
             space0, 
             parse_label , 
             space0),
         Expr::Label
-    )
-  | parens
+    ),
+
+   parens
   
-  )
-);
+  ))(input)
+}
 
 fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
     remainder.into_iter().fold(initial, |acc, pair| {
@@ -1733,32 +1738,57 @@ fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
     })
 }
 
-named_attr!(#[doc="TODO"],pub term< &str, Expr >, do_parse!(
-    initial: factor >>
-    remainder: many0!(
-           alt!(
-             do_parse!(tag!("*") >> mul: factor >> (Oper::Mul, mul)) |
-             do_parse!(tag!("%") >> _mod: factor >> (Oper::Mod, _mod)) |
-             do_parse!(tag!("/") >> div: factor >> (Oper::Div, div))
-           )
-         ) >>
-    (fold_exprs(initial, remainder))
-));
+/// Compute operations related to * % /
+pub fn term<'a>(input: &'a str) -> IResult< &'a str, Expr> {
+    let (input, initial) = dbg::dbg!(factor(input))?;
+    let (input, remainder) = dbg::dbg!(many0(
+           alt((
+               parse_oper(factor, "*", Oper::Mul),
+               parse_oper(factor, "%", Oper::Mod),
+               parse_oper(factor, "/", Oper::Div),
+           ))
+         )(input))?;
+    
+    Ok((input, fold_exprs(initial, remainder)))
+}
 
-named_attr!(#[doc="TODO"],pub expr< &str, Expr >, do_parse!(
-    initial: comp >>
-    remainder: many0!(
-        alt!(
-            do_parse!(tag!("<=") >> le: comp >> (Oper::LowerOrEqual, le) ) |
-            do_parse!(tag!(">=") >> ge: comp >> (Oper::GreaterOrEqual, ge) ) |
-            do_parse!(tag!("<") >> lt: comp >> (Oper::StrictlyLower, lt) ) |
-            do_parse!(tag!(">") >> gt: comp >> (Oper::StrictlyGreater, gt) ) |
-            do_parse!(tag!("==") >> eq: comp >> (Oper::Equal , eq) )  // TODO should be done even one step before
+
+/// Generate a parser of comparison symbol
+/// inner: the function the parse the right operand of the symbol
+/// pattern: the pattern to match in the source code
+/// symbol: the symbol corresponding to the operation
+fn parse_oper<'a, F>(inner: F , pattern: &'static str, symbol: Oper) -> impl Fn(&'a str) -> IResult<&'a str, (Oper, Expr)> 
+where F:Fn(&'a str) -> IResult<&'a str, Expr> {
+    move |input:&'a str| {
+
+        dbg::dbg!("Test ", pattern, "on", input, "with", &inner);
+
+        let (input, _) = dbg::dbg!(space0(input))?;
+        let (input, _) = dbg::dbg!(tag(pattern)(input))?;
+        let (input, _) = dbg::dbg!(space0(input))?;
+        let (input, operation) = dbg::dbg!(inner(input))?;
+
+        dbg::dbg!(
+            Ok((input, (symbol, operation)))
         )
-    ) >>
-    (fold_exprs(initial, remainder))
- )
-);
+    }
+}
+
+/// Parse an expression
+pub fn expr(input: &str) -> IResult<&str, Expr> {
+    let (input, initial) = dbg::dbg!(comp(input)?);
+    let (input, remainder) = many0(
+        alt((
+            parse_oper(comp, "<=", Oper::LowerOrEqual),
+            parse_oper(comp, "<", Oper::StrictlyLower),
+            parse_oper(comp, ">=", Oper::GreaterOrEqual),
+            parse_oper(comp, ">", Oper::StrictlyGreater),
+            parse_oper(comp, "==", Oper::Equal),
+        ))
+    )(input)?;
+
+    Ok((input, fold_exprs(initial, remainder)))
+}
 
 
 named_attr!(#[doc="TODO"],pub   parse_hi_or_lo <&str, Expr>, do_parse!(
@@ -1803,44 +1833,25 @@ named_attr!(#[doc="TODO"],pub parse_assemble <&str, Expr>, do_parse!(
     )
 ));
 
-named_attr!(#[doc="TODO"],pub comp<&str, Expr>, do_parse!(
-    initial: term >>
-    remainder: many0!(
-           alt!(
-             do_parse!(tag!("+") >> add: term >> (Oper::Add, add)) |
-             do_parse!(tag!("-") >> sub: term >> (Oper::Sub, sub)) |
 
-             do_parse!(
-                 alt!( 
-                     terminated!(tag!("&"), not!(tag!("&"))) |
-                     tag_no_case!("AND")
-                 ) >> 
-                 and: term >> 
-                 (Oper::BinaryAnd, and)
-            ) |
+/// Parse operation related to + - & | 
+pub fn comp(input: &str) -> IResult<&str, Expr> {
 
-            do_parse!(
-                 alt!( 
-                     terminated!(tag!("|"), not!(tag!("|"))) |
-                     tag_no_case!("OR")
-                 ) >> 
-                 and: term >> 
-                 (Oper::BinaryAnd, and)
-            ) |
-
-             do_parse!(
-                 alt!( 
-                     terminated!(tag!("^"), not!(tag!("^"))) |
-                     tag_no_case!("XOR")
-                 ) >> 
-                 and: term >> 
-                 (Oper::BinaryAnd, and)
-            ) 
-           )
-         ) >>
-    (fold_exprs(initial, remainder))
-    )
-);
+    let (input, initial) = dbg::dbg!(term(input))?;
+    let (input, remainder) = dbg::dbg!(many0(
+           alt((
+            parse_oper(term, "+", Oper::Add),
+            parse_oper(term, "-", Oper::Sub),
+            parse_oper(term, "&", Oper::BinaryAnd), // TODO check if it works and not compete with &&
+            parse_oper(term, "AND", Oper::BinaryAnd),
+            parse_oper(term, "|", Oper::BinaryAnd), // TODO check if it works and not compete with ||
+            parse_oper(term, "OR", Oper::BinaryOr),
+            parse_oper(term, "^", Oper::BinaryXor), // TODO check if it works and not compete with ^^
+            parse_oper(term, "XOR", Oper::BinaryXor),
+         ))
+    )(input))?;
+    Ok((input, fold_exprs(initial, remainder)))
+}
 
 /// Generate a string from a parsing error. Probably deprecated
 #[allow(clippy::needless_pass_by_value)]
