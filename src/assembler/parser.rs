@@ -213,8 +213,6 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>> {
         parse_z80_line_complete
     ))(input)?;
 
-    dbg::dbg!(tokens.clone());
-
     Ok((input2, tokens))
 
 }
@@ -972,50 +970,52 @@ pub fn parse_res_set_bit(input: &str) -> IResult<&str, Token> {
     ))
 }
 
-named_attr!(#[doc="TODO"],
-    pub parse_cp <&str, Token>, do_parse!(
-        tag_no_case!("CP") >>
-        space1 >>
-        operand:  alt!(
-            parse_register8 |
-            parse_hl_address |
-            parse_indexregister_with_index |
+/// Parse CP tokens
+ pub fn parse_cp(input: &str) -> IResult<&str, Token> {
+   map(
+       preceded(
+           parse_instr("CP"),
+        alt((
+            parse_register8 ,
+            parse_hl_address ,
+            parse_indexregister_with_index ,
             parse_expr 
-        ) >>
-        (
+        ))),
+        |operand|        
             Token::OpCode(
                 Mnemonic::Cp,
                 Some(operand),
                 None
             )
-        )
-    )
-);
+        
+    )(input)
+ }
 
-named_attr!(#[doc="TODO"],
-  pub parse_db_or_dw <&str, Token>, do_parse!(
-    is_db: alt!(
-        alt!(
-            tag_no_case!("DB") |
-            tag_no_case!("DEFB") 
-         )  => {|_| {true}} |
-        alt!(
-            tag_no_case!("DW") |
-            tag_no_case!("DEFW")
-         ) => {|_| {false}}
-    ) >>
-    space1 >>
-    expr: expr_list >>
-    ({
+
+/// Parse DB DW directives
+  pub fn parse_db_or_dw(input: &str) -> IResult<&str, Token> {
+    let (input, is_db) = alt((
+        map(alt((
+            tag_no_case("DB"),
+            tag_no_case("DEFB") 
+         )),  {|_| {true}}), 
+        map(alt((
+            tag_no_case("DW"),
+            tag_no_case("DEFW")
+         )), {|_| {false}})
+    ))(input)?;
+    
+    
+    let (input, expr) = preceded(space1,  expr_list)(input)?;
+    Ok((input,
         if is_db {
             Token::Defb(expr)
         }
         else {
             Token::Defw(expr)
         }
-    })
-  )
-);
+    ))
+  }
 
 /// Manage the call of a macro.
  pub fn parse_macro_call(input: &str) -> IResult<&str, Token> {
@@ -1044,108 +1044,140 @@ named_attr!(#[doc="TODO"],
     }
  }
 
-named_attr!(#[doc="TODO"],
-    pub parse_djnz<&str, Token>, do_parse!(
-        tag_no_case!("DJNZ") >>
-        space1 >>
-        expr: parse_expr >>
-        (Token::OpCode(Mnemonic::Djnz, Some(expr), None))
-    )
-);
 
-named_attr!(#[doc="TODO"],
-    pub expr_list <&str, Vec<Expr>>,
-        separated_nonempty_list!(
 
-            do_parse!(tag!(",") >> space0 >> ()),
+fn parse_instr(name: &str) -> impl Fn(&str) -> IResult<&str, ()> + '_{
+    move |input: &str| {
+        map(
+            tuple((
+            tag_no_case(name),
+            space1
+            )),
+            |_| ()
+        )(input)
+    }
+}
+
+/// ...
+pub fn parse_djnz(input: &str) -> IResult<&str, Token> {
+      map(
+          preceded(
+              parse_instr("DJNZ"),
+            parse_expr
+          ),
+        |expr| {
+            Token::OpCode(Mnemonic::Djnz, Some(expr), None)
+        }
+    )(input)
+}
+
+/// ...
+pub fn expr_list(input:&str) -> IResult<&str, Vec<Expr>> {
+        separated_nonempty_list(
+            tuple(( tag(","),  space0 )),
+            alt((expr, string_expr))
+        )(input)
+}
+
+/// ...
+pub fn parse_assert(input: &str) -> IResult<&str, Token> {
+        let (input, expr) = preceded(
+            parse_instr("ASSERT"),
             expr
-            )
-    );
+        )(input)?;
 
-named_attr!(#[doc="TODO"],
-    pub parse_assert <&str, Token>, do_parse!(
-        tag_no_case!("ASSERT") >>
-        space1 >>
-        expr: return_error!(
-            ErrorKind::Verify/*Custom(error_code::ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION)*/,
-            expr
-        ) >>
-        comment: opt!(
-            preceded!(
-                delimited!(space0, tag!(","), space0),
-                delimited!(tag!("\""), take_until!("\""), tag!("\""))
-            )
-        ) >>
-        (
-            Token::Assert(expr, comment.map(|s|{s.to_string()}))
+        let (input, comment) = opt(preceded(
+                delimited(space0, tag(","), space0),
+                delimited(tag("\""), take_until("\""), tag("\""))
+            )) (input)?;
+        
+        Ok((
+        
+            input, Token::Assert(expr, comment.map(|s|{s.to_string()}))
         )
     )
-);
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_align <&str, Token>, do_parse!(
-        tag_no_case!("ALIGN") >>
-        space1 >>
-        expr: return_error!(
-            ErrorKind::Verify/*Custom(error_code::ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION)*/,
+
+/// ...
+    pub fn parse_align(input: &str) -> IResult<&str, Token> {
+        map(
+            preceded(
+                parse_instr("ALIGN"),
+                expr
+            ),
+            |expr| {
+                Token::Align(expr, None)
+            }
+        )(input)
+}
+
+/// ...
+    pub fn parse_print(input: &str) -> IResult<&str, Token> {
+
+        map(
+            preceded(
+                parse_instr("PRINT"),
+                alt((
+                    map(expr,  {|e|{Left(e)}}),
+                    map(string_between_quotes, {|s:&str|{Right(s.to_string())}})
+                ))
+            ),
+            |exp| {
+                Token::Print(exp)
+            }
+        )(input)
+}
+
+fn parse_comma(input: &str) -> IResult<&str, ()> {
+    map(
+        tuple((
+            space0,
+            tag(","),
+            space0
+        )),
+        |_| ()
+    )(input)
+}
+
+/// ...
+    pub fn parse_protect(input: &str) -> IResult<&str, Token>  {
+        let (input, start) = preceded(
+            parse_instr("PROTECT"),
+            expr)(input)?;
+
+        let (input, end) = preceded(
+            parse_comma,
             expr
-        ) >>
-        (
-            Token::Align(expr, None)
-        )
-    )
-);
+        )(input)?;
 
-named_attr!(#[doc="TODO"],
-    pub parse_print <&str, Token>, do_parse!(
-        tag_no_case!("PRINT") >>
-        space1 >>
-        exp: alt!(
-            expr => {|e|{Left(e)}} |
-            string_between_quotes => {|s:&str|{Right(s.to_string())}}
-        ) >>
-        space0 >>
-        (
-            Token::Print(exp)
-        )
-    )
-);
 
-named_attr!(#[doc="TODO"],
-    pub parse_protect <&str, Token>, do_parse!(
-        tag_no_case!("PROTECT") >>
-        space1 >>
-        start: expr >>
-        space0 >>
-        tag!(",") >>
-        space0 >>
-        end: expr >>
-        (
+        Ok((
+            input,
             Token::Protect(start, end)
         )
     )
-);
+    }
 
-named_attr!(#[doc="TODO treat all the cases"],
-    pub parse_logical_operator<&str, Token>, do_parse!(
-        operator: alt!(
-            value!(Mnemonic::And, tag_no_case!("AND")) |
-            value!(Mnemonic::Or, tag_no_case!("Or")) |
-            value!(Mnemonic::Xor, tag_no_case!("Xor")) 
-        ) >>
+/// ...
+    pub fn parse_logical_operator(input: &str) -> IResult<&str, Token> {
 
-        space1 >>
+    let (input, operator) = alt((
+            value(Mnemonic::And, parse_instr("AND")),
+            value(Mnemonic::Or, parse_instr("Or")),
+            value(Mnemonic::Xor, parse_instr("Xor")) 
+        ))(input)?;
 
-
-         operand: alt!(
-            parse_register8 |
-            parse_hl_address |
-            parse_indexregister_with_index |
+    let (input, operand) = alt((
+            parse_register8 ,
+            parse_hl_address ,
+            parse_indexregister_with_index ,
             parse_expr
-        ) >>
+    ))(input)?;
 
 
-        (
+        Ok((
+            input,
             Token::OpCode(
                 operator,
                 Some(operand),
@@ -1153,25 +1185,24 @@ named_attr!(#[doc="TODO treat all the cases"],
             )
         )          
     )
-);
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_shifts <&str, Token>, do_parse! (
-        operator: alt!(
-            value!(Mnemonic::Sla, tag_no_case!("SLA")) |
-            value!(Mnemonic::Sra, tag_no_case!("SRA")) |
-            value!(Mnemonic::Srl, tag_no_case!("SRL")) 
-        ) >>
+///...
+pub fn parse_shifts(input: &str) -> IResult<&str, Token> {
+        let (input, operator) = alt((
+            value(Mnemonic::Sla, parse_instr("SLA")) ,
+            value(Mnemonic::Sra, parse_instr("SRA")) ,
+            value(Mnemonic::Srl, parse_instr("SRL")) 
+        ))(input)?;
 
-        space1 >>
-
-        operand: alt!(
-            parse_register8 |
-            parse_hl_address |
+        let (input, operand) = alt((
+            parse_register8 ,
+            parse_hl_address ,
             parse_indexregister_with_index
-        ) >>
+        ))(input)?;
 
-        (
+        Ok((
+            input,
             Token::OpCode(
                 operator,
                 Some(operand),
@@ -1181,15 +1212,16 @@ named_attr!(#[doc="TODO"],
 
 
     )
-);
+}
 
-named_attr!(#[doc="TODO"],
 
-    pub parse_add_or_adc <&str, Token>, alt!(
-        parse_add_or_adc_complete |
+/// ...
+pub fn parse_add_or_adc(input: &str) -> IResult<&str, Token> {
+    alt((
+        parse_add_or_adc_complete,
         parse_add_or_adc_shorten
-    )
-);
+    ))(input)
+}
 
 
 /// Parse ADC and ADD instructions
@@ -1256,157 +1288,170 @@ pub fn parse_add_or_adc_complete(input: &str) -> IResult <&str, Token> {
     Ok((input, Token::OpCode(add_or_adc, Some(first), Some(second))))
 }
 
-// TODO Find a way to not duplicate code with complete version
-named_attr!(#[doc="TODO"],
-    pub parse_add_or_adc_shorten <&str, Token>, do_parse!(
-        add_or_adc: alt!(
-            value!(Mnemonic::Adc, tag_no_case!("ADC")) |
-            value!(Mnemonic::Add, tag_no_case!("ADD"))
-        ) >>
+/// TODO Find a way to not duplicate code with complete version
+pub fn parse_add_or_adc_shorten(input: &str) -> IResult<&str, Token> {
+        let (input, add_or_adc) = alt((
+            value(Mnemonic::Adc, parse_instr("ADC")),
+            value(Mnemonic::Add, parse_instr("ADD"))
+        ))(input)?;
 
-        space1 >>
-
-        second: alt!(parse_register8 | parse_hl_address | parse_indexregister_with_index | parse_expr)
-        >>
-        (Token::OpCode(add_or_adc, Some(DataAccess::Register8(Register8::A)), Some(second)))
+        let (input, second) = alt((parse_register8,  parse_hl_address , parse_indexregister_with_index , parse_expr))(input)?;
+        
+        
+        Ok((input, Token::OpCode(add_or_adc, Some(DataAccess::Register8(Register8::A)), Some(second)))
     )
-);
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_push_n_pop <&str, Token>, do_parse!(
-        push_or_pop: alt!(
-            value!(Mnemonic::Push, tag_no_case!("PUSH")) |
-            value!(Mnemonic::Pop, tag_no_case!("POP"))) >>
-        space1 >>
-        register: alt!(parse_register16 | parse_indexregister16) >>
-        (
+/// ...
+pub fn parse_push_n_pop(input: &str) -> IResult <&str, Token> {
+        let (input, push_or_pop) =  alt((
+            value(Mnemonic::Push, parse_instr("PUSH")),
+            value(Mnemonic::Pop, parse_instr("POP"))
+        ))(input)?;
+
+        let (input, register) = alt((parse_register16, parse_indexregister16))(input)?;
+
+        Ok((
+            input,
             Token::OpCode(push_or_pop, Some(register), None)
         )
         )
-    );
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_ret <&str, Token>, do_parse!(
-        tag_no_case!("RET") >>
-        cond: opt!(preceded!(space1, parse_flag_test)) >>
-        (
+/// ...
+pub fn parse_ret(input: &str) -> IResult<&str, Token> {
+        map(
+            preceded(
+                tag_no_case("RET"),
+                opt(preceded(space1, parse_flag_test))
+            ),
+            |cond| {
+        
             Token::OpCode(Mnemonic::Ret, if cond.is_some() {Some(DataAccess::FlagTest(cond.unwrap()))} else {None}, None)
-        )
-    )
-);
+            }
+    )(input)
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_inc_dec<&str, Token>, do_parse!(
-        inc_or_dec: alt!(
-            value!(Mnemonic::Inc, tag_no_case!("INC") ) |
-            value!(Mnemonic::Dec, tag_no_case!("DEC"))) >>
-        space1 >>
-        register: alt!(
-            parse_register16 | parse_register8 | parse_register_sp
-            ) >>
-        (
+/// ...
+pub fn parse_inc_dec(input: &str) -> IResult<&str, Token> {
+        let (input, inc_or_dec) = alt((
+            value(Mnemonic::Inc, parse_instr("INC") ) ,
+            value(Mnemonic::Dec, parse_instr("DEC"))
+            ))(input)?;
+        
+        let (input, register) = alt((
+            parse_register16,  parse_register8,  parse_register_sp
+            ))(input)?;
+
+
+        Ok((
+            input,
             Token::OpCode(inc_or_dec, Some(register), None)
         )
         )
-    );
+}
 
-named_attr!(#[doc="TODO"],// TODO manage other out formats
-    pub parse_out<&str, Token>, do_parse!(
-        tag_no_case!("OUT") >>
+/// TODO manage other out formats
+pub fn parse_out(input: &str) -> IResult <&str, Token> {
+    
+    map(
+        preceded(
+    tuple((
+        parse_instr("OUT"),
+        tag("("),
+        space0,
+        tag_no_case("C"),
+        space0,
+        tag(")"),
+        space0,
+        tag(","),
+        space0
+    )), 
 
-        space1 >>
-
-        tag!("(") >>
-        space0 >>
-        tag_no_case!("C") >>
-        space0 >>
-        tag!(")") >>
-
-        space0 >>
-        tag!(",") >>
-        space0 >>
-
-        reg : parse_register8 >>
-        (
+         parse_register8),
+         |reg|
+        
             Token::OpCode(
                 Mnemonic::Out, 
                 Some(DataAccess::Register8(Register8::C)),
                 Some(reg)
             )
+        
+
+    )(input)
+}
+
+/// TODO manage other in formats
+    pub fn parse_in(input: &str) -> IResult<&str, Token> {
+    map(
+        delimited(
+            parse_instr("IN"),
+            parse_register8,
+            tuple((
+
+        space0,
+        tag(","),
+        space0,
+        tag("("),
+        space0,
+        tag_no_case("C"),
+        space0,
+        tag(")")
+            ))
         )
+            ,
 
-    )
-);
-
-named_attr!(#[doc="TODO"],// TODO manage other out formats
-    pub parse_in<&str, Token>, do_parse!(
-        tag_no_case!("IN") >>
-
-        space1 >>
-        reg : parse_register8 >>
-
-        space0 >>
-        tag!(",") >>
-        space0 >>
-
-
-        tag!("(") >>
-        space0 >>
-        tag_no_case!("C") >>
-        space0 >>
-        tag!(")") >>
-        (
+        |reg|
             Token::OpCode(
                 Mnemonic::In, 
                 Some(DataAccess::Register8(Register8::C)),
                 Some(reg)
             )
-        )
+        
 
-    )
-);
+    )(input)
+    }
 
-named_attr!(#[doc="TODO remove multispace
- TODO reduce the flag space for jr"],
-    parse_call_jp_or_jr<&str, Token>,
-    do_parse!(
-        call_jp_or_jr:
-            alt!(
-                value!(Mnemonic::Jp, tag_no_case!("JP"))
-                    | value!(Mnemonic::Jr, tag_no_case!("JR"))
-                    | value!(Mnemonic::Call, tag_no_case!("CALL"))
-            )
-            >> space1
-            >> flag_test:
-                opt!(terminated!(
+/// TODO reduce the flag space for jr"],
+pub fn parse_call_jp_or_jr(input: &str) -> IResult<&str, Token> {
+    let (input, call_jp_or_jr) = 
+            alt((
+                value(Mnemonic::Jp, parse_instr("JP")),
+                value(Mnemonic::Jr, parse_instr("JR")),
+                value(Mnemonic::Call, parse_instr("CALL"))
+            ))(input)?;
+
+        let (input, flag_test) = 
+                opt(terminated(
                     parse_flag_test,
-                    delimited!(space0, tag!(","), space0)
-                ))
-            >> dst: expr
-            >> ({
+                    delimited(space0, tag(","), space0)
+                ))(input)?;
+
+        let (input, dst) = expr(input)?;
+
+        
                 let flag_test = if flag_test.is_some() {
                     Some(DataAccess::FlagTest(flag_test.unwrap()))
                 } else {
                     None
                 };
-                Token::OpCode(call_jp_or_jr, flag_test, Some(DataAccess::Expression(dst)))
-            })
-    )
-);
 
-named_attr!(#[doc="TODO"],
-    parse_flag_test<&str, FlagTest>,
-    alt!(
-        value!(FlagTest::NZ, tag_no_case!("NZ"))
-            | value!(FlagTest::Z, tag_no_case!("Z"))
-            | value!(FlagTest::NC, tag_no_case!("NC"))
-            | value!(FlagTest::C, tag_no_case!("C"))
-            | value!(FlagTest::PO, tag_no_case!("PO"))
-            | value!(FlagTest::PE, tag_no_case!("PE"))
-            | value!(FlagTest::P, tag_no_case!("P"))
-            | value!(FlagTest::M, tag_no_case!("M"))
-    )
-);
+                Ok((input,Token::OpCode(call_jp_or_jr, flag_test, Some(DataAccess::Expression(dst)))))
+}
+
+/// ...
+pub fn parse_flag_test(input: &str) -> IResult<&str, FlagTest> {
+    alt((
+        value(FlagTest::NZ, tag_no_case("NZ")),
+             value(FlagTest::Z, tag_no_case("Z")),
+             value(FlagTest::NC, tag_no_case("NC")),
+             value(FlagTest::C, tag_no_case("C")),
+             value(FlagTest::PO, tag_no_case("PO")),
+             value(FlagTest::PE, tag_no_case("PE")),
+             value(FlagTest::P, tag_no_case("P")),
+             value(FlagTest::M, tag_no_case("M")),
+    ))(input)
+}
 
 /*
 /// XXX to remove as soon as possible
