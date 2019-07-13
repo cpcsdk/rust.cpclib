@@ -125,16 +125,49 @@ pub fn parse_str(code: &str) -> Result<Listing, AssemblerError> {
     parse_str_with_context(code, &ParserContext::default())
 }
 
+/// nom many0 does not seem to fit our parser requirements
+pub fn my_many0<'a, O, E, F>(f: F) -> impl Fn(&'a str) -> IResult<&'a str, Vec<O>, E>
+where
+  F: Fn(&'a str) -> IResult<&'a str, O, E>,
+  E: ParseError<&'a str>,
+{
+  move |i: &'a str| {
+    let mut acc = Vec::with_capacity(4);
+    let mut i = i.clone();
+    loop {
+      match f(i.clone()) {
+        Err(Err::Error(_)) => return Ok((i, acc)),
+        Err(e) => return Err(e),
+        Ok((i1, o)) => {
+          if i1 == i {
+            return Ok((i, acc));
+          }
+
+          i = i1;
+          acc.push(o);
+        }
+      }
+    }
+  }
+}
+
+
 /// Parse a complete code
 pub fn parse_z80_code(input: &str) ->IResult <&str, Listing> {
 
-    let (input, tmp) = many0(parse_z80_line)(input)?;
-    let mut res: Vec<Token> = Vec::new();
-    for list in tmp {
-        res.extend(list);
+    let (input, tokens) = my_many0(parse_z80_line)(input)?;
+    if input.is_empty() {
+        let mut res: Vec<Token> = Vec::new();
+        for list in tokens {
+            res.extend(list);
+        }
+        
+        Ok((input, res.into()))
     }
-    
-    Ok((input, res.into()))
+    else {
+        // Everything should have been consumed
+        return Err(Err::Error(nom::error::ParseError::<&str>::from_error_kind(input, ErrorKind::Many0)))
+    }
 }
 
 /// For an unknwon reason, the parse_z80_code function fails when there is no comment...
@@ -167,7 +200,6 @@ pub fn parse_z80_str(code: &str) -> IResult<&str, Listing> {
 /// Parse a single line of Z80. Code useing directive on several lines cannot work
 pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>> {
     alt((
-        map(many1(line_ending), {|_|{Vec::new()}}),
         parse_empty_line,
         map(parse_repeat, {|repeat| vec![repeat]}),
         map(parse_macro, {|m| vec![m]}),
@@ -364,7 +396,7 @@ pub fn parse_basic_hide_lines(input: &str) -> IResult<&str, Vec<u16>> {
         )(input)
 }
 
-/// TODO
+/// TODO - currently consume several lines. Should do it only one time
 pub fn parse_empty_line(input: &str) -> IResult<&str, Vec<Token>> {
         let (input, _) = opt(line_ending)(input)?;
         let (input, comment) = preceded(space0, opt(comment))(input)?;
@@ -897,33 +929,33 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
 
 /// Parse RES, SET and BIT instructions
 pub fn parse_res_set_bit(input: &str) -> IResult<&str, Token> {
-    let (input, res_or_set) = dbg::dbg!(alt((
+    let (input, res_or_set) = alt((
         value(Mnemonic::Res, tag_no_case("RES")),
         value(Mnemonic::Bit, tag_no_case("BIT")),
         value(Mnemonic::Set, tag_no_case("SET"))
-    ))(input))?;
+    ))(input)?;
 
-    let (input, bit) = dbg::dbg!(preceded(
+    let (input, bit) = preceded(
         space1,
         parse_expr
-    )(input))?;
+    )(input)?;
 
-    let (input, _) = dbg::dbg!(delimited(
+    let (input, _) = delimited(
         space0, 
         tag(","), 
         space0
-    )(input))?;
+    )(input)?;
 
-    let (input, operand) = dbg::dbg!(alt((
+    let (input, operand) = alt((
         parse_register8,
         parse_hl_address,
         parse_indexregister_with_index
-    ))(input))?;
+    ))(input)?;
 
-    dbg::dbg!(Ok((
+    Ok((
         input,
         Token::OpCode(res_or_set, Some(bit), Some(operand))
-    )))
+    ))
 }
 
 named_attr!(#[doc="TODO"],
@@ -1851,14 +1883,14 @@ fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
 
 /// Compute operations related to * % /
 pub fn term<'a>(input: &'a str) -> IResult< &'a str, Expr> {
-    let (input, initial) = dbg::dbg!(factor(input))?;
-    let (input, remainder) = dbg::dbg!(many0(
+    let (input, initial) = factor(input)?;
+    let (input, remainder) = many0(
            alt((
                parse_oper(factor, "*", Oper::Mul),
                parse_oper(factor, "%", Oper::Mod),
                parse_oper(factor, "/", Oper::Div),
            ))
-         )(input))?;
+         )(input)?;
     
     Ok((input, fold_exprs(initial, remainder)))
 }
@@ -1872,22 +1904,20 @@ fn parse_oper<'a, F>(inner: F , pattern: &'static str, symbol: Oper) -> impl Fn(
 where F:Fn(&'a str) -> IResult<&'a str, Expr> {
     move |input:&'a str| {
 
-        dbg::dbg!("Test ", pattern, "on", input, "with", &inner);
+        let (input, _) = space0(input)?;
+        let (input, _) = tag(pattern)(input)?;
+        let (input, _) = space0(input)?;
+        let (input, operation) = inner(input)?;
 
-        let (input, _) = dbg::dbg!(space0(input))?;
-        let (input, _) = dbg::dbg!(tag(pattern)(input))?;
-        let (input, _) = dbg::dbg!(space0(input))?;
-        let (input, operation) = dbg::dbg!(inner(input))?;
-
-        dbg::dbg!(
+        
             Ok((input, (symbol, operation)))
-        )
+       
     }
 }
 
 /// Parse an expression
 pub fn expr(input: &str) -> IResult<&str, Expr> {
-    let (input, initial) = dbg::dbg!(comp(input)?);
+    let (input, initial) = comp(input)?;
     let (input, remainder) = many0(
         alt((
             parse_oper(comp, "<=", Oper::LowerOrEqual),
@@ -1977,8 +2007,8 @@ pub fn parse_assemble(input: &str)  -> IResult<&str, Expr> {
 /// Parse operation related to + - & | 
 pub fn comp(input: &str) -> IResult<&str, Expr> {
 
-    let (input, initial) = dbg::dbg!(term(input))?;
-    let (input, remainder) = dbg::dbg!(many0(
+    let (input, initial) = term(input)?;
+    let (input, remainder) = many0(
            alt((
             parse_oper(term, "+", Oper::Add),
             parse_oper(term, "-", Oper::Sub),
@@ -1989,7 +2019,7 @@ pub fn comp(input: &str) -> IResult<&str, Expr> {
             parse_oper(term, "^", Oper::BinaryXor), // TODO check if it works and not compete with ^^
             parse_oper(term, "XOR", Oper::BinaryXor),
          ))
-    )(input))?;
+    )(input)?;
     Ok((input, fold_exprs(initial, remainder)))
 }
 
