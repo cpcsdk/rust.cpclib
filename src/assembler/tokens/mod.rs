@@ -12,7 +12,6 @@ pub use self::listing::*;
 pub use self::registers::*;
 pub use self::tokens::*;
 
-
 #[cfg(test)]
 mod test {
     use crate::assembler::tokens::{

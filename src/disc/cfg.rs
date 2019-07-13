@@ -1,7 +1,7 @@
 use custom_error::custom_error;
+use nom::character::complete::*;
 /// Parser of the disc configuraiton used by the Arkos Loader
 use nom::*;
-use nom::character::complete::*;
 
 use itertools;
 use itertools::Itertools;

@@ -1,8 +1,8 @@
 use crate::assembler::assembler::SymbolsTableCaseDependent;
+use crate::assembler::parser;
 use crate::assembler::tokens::listing::*;
 use crate::assembler::tokens::*;
 use crate::assembler::AssemblerError;
-use crate::assembler::parser;
 use std::fmt;
 
 impl ListingElement for Token {

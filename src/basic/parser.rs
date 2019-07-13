@@ -1,7 +1,7 @@
-///! Locomotive basic parser routines.
-use nom::*;
 use nom::character::complete::*;
 use nom::error::*;
+///! Locomotive basic parser routines.
+use nom::*;
 
 use crate::basic::tokens::*;
 use crate::basic::{BasicLine, BasicProgram};

@@ -137,14 +137,8 @@ mod tests {
     fn fn_test_label() {
         assert_eq!(parse_label("label").ok().unwrap().1, "label");
         assert_eq!(parse_label("label").ok().unwrap().1, "label");
-        assert_eq!(
-            parse_label("module.label").ok().unwrap().1,
-            "module.label"
-        );
-        assert_eq!(
-            parse_label("label15").ok().unwrap().1,
-            "label15"
-        );
+        assert_eq!(parse_label("module.label").ok().unwrap().1, "module.label");
+        assert_eq!(parse_label("label15").ok().unwrap().1, "label15");
         assert_eq!(parse_label(".label").ok().unwrap().1, ".label");
 
         let code = "label";
@@ -221,9 +215,7 @@ mod tests {
         assert_matches!(tokens[0], Token::Label(_));
         assert_matches!(tokens[1], Token::Org(_, _));
 
-        let tokens = get_val(parse_z80_line(
-            "label ORG 0x1000 : ORG 0x000 : ORG 10",
-        ));
+        let tokens = get_val(parse_z80_line("label ORG 0x1000 : ORG 0x000 : ORG 10"));
         assert_eq!(tokens.len(), 4);
         assert_matches!(tokens[0], Token::Label(_));
         assert_matches!(tokens[1], Token::Org(_, _));
@@ -231,7 +223,7 @@ mod tests {
 
         let tokens = get_val(parse_z80_line(
             "label ORG 0x1000 : ORG 0x000 : ORG 10 ; fdfs",
-       ));
+        ));
         assert_eq!(tokens.len(), 5);
         assert_matches!(tokens[0], Token::Label(_));
         assert_matches!(tokens[1], Token::Org(_, _));
@@ -419,7 +411,6 @@ mod tests {
 
     #[test]
     fn fn_test_empty() {
-
         let code = "\n";
         let tokens = get_val(parse_empty_line(code));
         assert_eq!(tokens.len(), 0);
@@ -427,7 +418,6 @@ mod tests {
         let code = ";with comment\n";
         let tokens = get_val(parse_empty_line(code));
         assert_eq!(tokens.len(), 1);
-
 
         let code = "\n\n";
         let (code, _) = parse_empty_line(code).unwrap();
@@ -438,7 +428,6 @@ mod tests {
         let code = "\n\n";
         let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 0);
-
 
         let code = "";
         let tokens = get_val(parse_z80_code(code));
@@ -865,13 +854,11 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn test_basic_inclusion() {
-        let code =  
-            "        LOCOMOTIVE toto, titi
+        let code = "        LOCOMOTIVE toto, titi
 10 ' fkdslfslkf
 20 call {toto}
 30 call {titi}
-        ENDLOCOMOTIVE"
-        ;
+        ENDLOCOMOTIVE";
 
         let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 1);
@@ -879,13 +866,11 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn test_basic_inclusion2() {
-        let code =  
-            "        LOCOMOTIVE toto_1, titi_2
+        let code = "        LOCOMOTIVE toto_1, titi_2
 10 ' fkdslfslkf
 20 call {toto_1}
 30 call {titi_2}
-        ENDLOCOMOTIVE"
-        ;
+        ENDLOCOMOTIVE";
 
         let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 1);
@@ -893,28 +878,22 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn test_if() {
-        let code =  
-            "IF expression
+        let code = "IF expression
         ld a, b
         ld a, b
         ld a, b
-    ENDIF"
-        ;
+    ENDIF";
         println!("{:?}", parse_conditional(code));
         let _tokens = get_val(parse_conditional(code));
 
-        let code =  
-            "IF expression
+        let code = "IF expression
         ld a, b : ld a, b : ld a, b
-    ENDIF"
-        ;
+    ENDIF";
         println!("{:?}", parse_conditional(code));
         let _tokens = get_val(parse_conditional(code));
 
-        let code =  
-            "IF expression : ld a, b : ld a, b : ld a, b
-    ENDIF"
-        ;
+        let code = "IF expression : ld a, b : ld a, b : ld a, b
+    ENDIF";
         println!("{:?}", parse_conditional(code));
         let _tokens = get_val(parse_conditional(code));
 
@@ -925,33 +904,27 @@ INC_H equ opcode(inc h)
         let tokens = get_val(parse_conditional(code));
         */
 
-        let code =  
-            "IF expression
+        let code = "IF expression
         ld a, b
         ld a, b
         call label
         ld a, b
-    ENDIF"
-        ;
+    ENDIF";
 
         let _tokens = get_val(parse_conditional(code));
 
-        let code =  
-            "\tIF expression
+        let code = "\tIF expression
         ld a, b
         ld a, b
         call label
         ld a, b
-    ENDIF"
-        ;
+    ENDIF";
         let _tokens = get_val(parse_z80_code(code));
 
-        let code =  
-            "\t	if ENABLE_CATART_DISPLAY
+        let code = "\t	if ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
-    "
-        ;
+    ";
         let _tokens = get_val(parse_z80_code(code));
 
         get_val(parse_z80_code(
@@ -961,12 +934,10 @@ INC_H equ opcode(inc h)
             .into(),
         ));
 
-        let code =  
-            "\t	ifdef ENABLE_CATART_DISPLAY
+        let code = "\t	ifdef ENABLE_CATART_DISPLAY
 		call blabla
 	endif
-    "
-        ;
+    ";
         let _tokens = get_val(parse_z80_code(code));
 
         println!("{:?}", parse_label("crtc_display_catart_if_needed".into()));
@@ -975,28 +946,22 @@ INC_H equ opcode(inc h)
             parse_z80_code(" call crtc_display_catart_if_needed".into())
         );
 
-        let code =  
-            "\t	ifdef ENABLE_CATART_DISPLAY
+        let code = "\t	ifdef ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
-    "
-        ;
+    ";
         let _tokens = get_val(parse_z80_code(code));
 
-        let code =  
-            "\t	ifndef ENABLE_CATART_DISPLAY
+        let code = "\t	ifndef ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
-    "
-        ;
+    ";
         let _tokens = get_val(parse_z80_code(code));
 
-        let code =  
-            "\t	ifnot ENABLE_CATART_DISPLAY
+        let code = "\t	ifnot ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
-    "
-        ;
+    ";
         let _tokens = get_val(parse_z80_code(code));
 
         let code =  
@@ -1012,8 +977,7 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn test_real_case() {
-        let code =  
-            "
+        let code = "
 .first_line
                     ; end code : 9 nops
     pop de              ; 4
@@ -1024,8 +988,7 @@ INC_H equ opcode(inc h)
     defs 64 - 4  ; 60
     dec a               ; 1
     jr nz, .other_lines ; 3
-    "
-        ;
+    ";
 
         let tokens = get_val(parse_z80_code(code));
         println!("{:?}", tokens);
@@ -1065,7 +1028,6 @@ INC_H equ opcode(inc h)
             Ok(("", String::from("3")))
         );
     }
-
 
     fn comp_test() {
         assert_eq!(
