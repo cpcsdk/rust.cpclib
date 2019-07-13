@@ -199,7 +199,7 @@ pub fn parse_z80_str(code: &str) -> IResult<&str, Listing> {
 
 /// Parse a single line of Z80. Code useing directive on several lines cannot work
 pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>> {
-    alt((
+    let (input2, tokens) = alt((
         parse_empty_line,
         map(parse_repeat, {|repeat| vec![repeat]}),
         map(parse_macro, {|m| vec![m]}),
@@ -208,7 +208,12 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>> {
         map(preceded(space1, parse_conditional), {|cond| vec![cond]}),
         parse_z80_line_label_only,
         parse_z80_line_complete
-    ))(input)
+    ))(input)?;
+
+    dbg::dbg!(tokens.clone());
+
+    Ok((input2, tokens))
+
 }
 
 /// TODO
@@ -292,6 +297,8 @@ pub fn parse_repeat(input: &str) -> IResult<&str, Token> {
         )(input)?;
 
         let (input, count) = expr(input)?;
+
+
         let (input, inner) = opt(parse_z80_code)(input)?;
 
         let (input, _) = tuple((
@@ -398,8 +405,8 @@ pub fn parse_basic_hide_lines(input: &str) -> IResult<&str, Vec<u16>> {
 
 /// TODO - currently consume several lines. Should do it only one time
 pub fn parse_empty_line(input: &str) -> IResult<&str, Vec<Token>> {
-        let (input, _) = opt(line_ending)(input)?;
-        let (input, comment) = preceded(space0, opt(comment))(input)?;
+       // let (input, _) = opt(line_ending)(input)?;
+        let (input, comment) = delimited(space0, opt(comment), space0)(input)?;
         let (input, _) = alt((line_ending, eof))(input)?;
 
             let mut res = Vec::new();

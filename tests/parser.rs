@@ -431,15 +431,14 @@ mod tests {
 
         let code = "\n\n";
         let (code, _) = parse_empty_line(code).unwrap();
+        assert_eq!(code, "\n");
+        let (code, _) = parse_empty_line(code).unwrap();
         assert_eq!(code, "");
 
         let code = "\n\n";
         let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 0);
 
-        let code = "\n\n";
-        let tokens = get_val(parse_empty_line(code));
-        assert_eq!(tokens.len(), 0);
 
         let code = "";
         let tokens = get_val(parse_z80_code(code));
@@ -588,7 +587,7 @@ mod tests {
         let z80 = "  repeat 5
             endrepeat
             ";
-        let res = parse_repeat(z80);
+        let res = dbg!(parse_repeat(z80));
         assert!(res.is_ok());
     }
 
