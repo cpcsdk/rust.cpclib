@@ -782,11 +782,11 @@ pub fn parse_cp(input: &str) -> IResult<&str, Token> {
 /// Parse DB DW directives
 pub fn parse_db_or_dw(input: &str) -> IResult<&str, Token> {
     let (input, is_db) = alt((
-        map(alt((tag_no_case("DB"), tag_no_case("DEFB"))), { |_| true }),
-        map(alt((tag_no_case("DW"), tag_no_case("DEFW"))), { |_| false }),
+        map(alt((parse_instr("DB"), parse_instr("DEFB"))), { |_| true }),
+        map(alt((parse_instr("DW"), parse_instr("DEFW"))), { |_| false }),
     ))(input)?;
 
-    let (input, expr) = preceded(space1, expr_list)(input)?;
+    let (input, expr) = expr_list(input)?;
     Ok((
         input,
         if is_db {
@@ -1588,7 +1588,7 @@ where
 {
     move |input: &'a str| {
         let (input, _) = space0(input)?;
-        let (input, _) = tag(pattern)(input)?;
+        let (input, _) = tag_no_case(pattern)(input)?;
         let (input, _) = space0(input)?;
         let (input, operation) = inner(input)?;
 
