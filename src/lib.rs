@@ -1,5 +1,4 @@
 // TryFrom is used in the assembler stuff
-#![feature(type_alias_enum_variants)]
 #![feature(type_ascription)]
 #![feature(custom_attribute)]
 #![feature(proc_macro_hygiene)]

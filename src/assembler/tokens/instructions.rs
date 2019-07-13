@@ -381,8 +381,8 @@ impl<'a> TryFrom<&'a str> for Token {
             let res = parse_z80_str(value);
             match res {
                 Ok(tokens) => tokens.1,
-                Err(e) => {
-                    return Err(decode_parsing_error(value, e));
+                Err(_e) => {
+                    return Err("ERROR -- need to code why ...".to_owned());
                 }
             }
         };

@@ -6,6 +6,7 @@ use nom::*;
 use nom::branch::*;
 use nom::combinator::*;
 use nom::sequence::*;
+use nom::multi::*;
 use nom::error::*;
 use nom::character::complete::*;
 use nom::character::complete::multispace1 as multispace;
@@ -22,9 +23,13 @@ use either::*;
 use std::str::FromStr;
 
 
+/// ...
 pub mod error_code {
+    /// ...
     pub const ASSERT_MUST_BE_FOLLOWED_BY_AN_EXPRESSION: u32 = 128;
+    /// ...
     pub const INVALID_ARGUMENT: u32 = 129;
+    /// ...
     pub const UNABLE_TO_PARSE_INNER_CONTENT: u32 = 130;
 }
 
@@ -149,11 +154,10 @@ named_attr! (
     );
 
 /// For an unknwon reason, the parse_z80_code function fails when there is no comment...
+/// // Mainly used for test
 /// This one is a workaround as still as the other is not fixed
 // RODO ASAP #[deprecated]
-pub fn parse_z80_str(code: &str) -> Result<(&str, Listing), Err<&str>> {
-    unimplemented!()
-    /*
+pub fn parse_z80_str(code: &str) -> IResult<&str, Listing> {
     let mut tokens = Vec::new();
     let mut rest = None;
     let src = "<str>";
@@ -168,12 +172,12 @@ pub fn parse_z80_str(code: &str) -> Result<(&str, Listing), Err<&str>> {
             Err(e) => {
                 let error_string = format!("Error at line {}: {}", line_number, line);
                 eprintln!("{}:{} ({}) {}", src, line_number, line, error_string);
-                return Err(e);
+                return Err(e)
+                
             }
         }
     }
     Ok((rest.unwrap(), tokens.into()))
-    */
 }
 
 // TODO find a way to not use the alternative stuff
@@ -364,55 +368,83 @@ named_attr!(#[doc="TODO"],
         )
     );
 
-// TODO add an argument o manage cases like '... : ENDIF'
-named_attr!(#[doc="TODO"],
-    pub parse_z80_line_complete <&str, Vec<Token>>, do_parse!(
-        opt!(line_ending) >>
-        label: opt!(parse_label) >>
-       // opt!(char!(':')) >> // XXX need to move that
-        space1 >>
-        opcode: alt!(parse_token | parse_directive) >>
-        additional_opcodes: fold_many0!(
-                do_parse!(
-                    space0 >>
- //                   alt!(
-                        tag!(":") >>
-   //                     delimited!(space0, tag!("\n"), space1)
-     //               ) >>
-                    space0 >>
-                    inner_opcode:return_error!(
-                                        ErrorKind::Fix/*Custom(error_code::INVALID_ARGUMENT)*/,
-                                        alt!(parse_token | parse_directive)
-                                        )>>
-                    (inner_opcode)
-                ),
+
+fn parse_single_token(first: bool) -> impl Fn(&str) -> IResult<&str, Token> {
+    move |input: &str| {
+
+        // Do not match ':' for the first case
+        let input = if first {
+            input
+        }
+        else {
+            let (input, _) = delimited(
+                space0,
+                char(':'),
+                space0)(input)?;
+            input
+        };
+        
+        // Get the token
+        let (input, opcode) = alt(( parse_token, parse_directive))(input)?;
+
+        Ok((input, opcode))
+    }
+}
+
+fn eof(input:&str) -> IResult<&str, &str> {
+      if input.len() == 0 {
+        Ok((input, input))
+      } else {
+        Err(Err::Error(error_position!(input, ErrorKind::Eof)))
+      }
+}
+
+/// Parse a line
+/// TODO add an argument o manage cases like '... : ENDIF'
+pub fn parse_z80_line_complete(input:&str) -> IResult<&str, Vec<Token>> {
+        // Eat previous line ending
+        let (input, _) = opt(line_ending)(input)?;
+
+        // Eat optional label
+        let (input, label) = opt(parse_label)(input)?;
+        let (input, _) = space1(input)?;
+
+        // Eat first token or directive
+        let (input, opcode) = parse_single_token(true)(input)?;
+        
+        // Eat the additional opcodes
+        let (input, additional_opcodes) = fold_many0(
+                parse_single_token(false),
                 Vec::new(),
                 |mut acc: Vec<_>, item| {
                     acc.push(item);
                     acc
                 }
 
-        ) >>
-        space0 >>
-        comment: opt!(comment) >>
-        alt!(line_ending | eof!()) >>
-        ({
-            let mut tokens = Vec::new();
-            if label.is_some() {
-                tokens.push(Token::Label(label.unwrap()));
-            }
-            tokens.push(opcode);
-            for opcode in additional_opcodes {
-                tokens.push(opcode);
-            }
-            if comment.is_some() {
-                tokens.push(comment.unwrap());
-            }
+        )(input)?;
 
-            tokens
-        })
-        )
-    );
+        // Eat final comment
+        let (input, _) = space0(input)?;
+        let (input, comment) = opt(comment)(input)?;
+
+        // Ensure it is the end of line of file
+        let (input, _) = alt((line_ending, eof))(input)?;
+
+        // Build the result
+        let mut tokens = Vec::new();
+        if label.is_some() {
+            tokens.push(Token::Label(label.unwrap()));
+        }
+        tokens.push(opcode);
+        for opcode in additional_opcodes {
+            tokens.push(opcode);
+        }
+        if comment.is_some() {
+            tokens.push(comment.unwrap());
+        }
+
+        Ok((input, tokens))
+}
 
 // No opcodes are expected there.
 // Initially it was supposed to manage lines with only labels, however it has been extended
@@ -665,7 +697,9 @@ fn parse_conditional_condition(code: u8) -> impl Fn(&str) -> IResult<&str, TestK
 
          IFNDEF_CODE => {
             map(parse_label, |l|{TestKind::LabelDoesNotExist(l)})(input) 
-         }
+         },
+
+         _ => unreachable!()
      } 
   }
 }
@@ -1021,6 +1055,8 @@ named_attr!(#[doc="TODO"],
     )
 );
 
+
+/// Parse ADC and ADD instructions
 pub fn parse_add_or_adc_complete(input: &str) -> IResult <&str, Token> {
     let (input, add_or_adc) = alt((
         value(Mnemonic::Adc, tag_no_case("ADC")),
@@ -1637,11 +1673,8 @@ named_attr!(#[doc="TODO"],
 );
 
 //TODO add stuff to manipulate any kind of data (value/label)
-<<<<<<< HEAD
-named_attr!(#[doc="TODO"],pub factor< CompleteStr<'_>, Expr >, alt_complete!(
-=======
+
 named_attr!(#[doc="TODO"],pub factor< &str, Expr >, alt!(
->>>>>>> More advance in nom5 conversion
     // Manage functions
       delimited!(space0, parse_hi_or_lo, space0)
     | delimited!(space0, parse_duration, space0)
@@ -1811,7 +1844,7 @@ named_attr!(#[doc="TODO"],pub comp<&str, Expr>, do_parse!(
 
 /// Generate a string from a parsing error. Probably deprecated
 #[allow(clippy::needless_pass_by_value)]
-pub fn decode_parsing_error(orig: &str, e: ::nom::Err<&str>) -> String {
+pub fn decode_parsing_error(_orig: &str, _e: ::nom::Err<&str>) -> String {
     unimplemented!("pub fn decode_parsing_error(orig: &str, e: ::nom::Err<&str>) -> String")
     /*
     let error_string;
