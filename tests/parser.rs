@@ -1053,6 +1053,14 @@ INC_H equ opcode(inc h)
         );
     }
 
+
+    fn comp_test() {
+        assert_eq!(
+            comp("1 ").map(|(i, x)| (i, format!("{:?}", x))),
+            Ok(("", String::from("1")))
+        );
+    }
+
     #[test]
     fn term_test() {
         assert_eq!(
