@@ -91,7 +91,10 @@ impl ParserContext {
     }
 }
 
-const FORBIDDEN_MACRO_NAMES: &[&str] = &["ENDR", "ENDREPEAT", "ENDREP"];
+const FORBIDDEN_MACRO_NAMES: &[&str] = &[
+    "ENDR", "ENDREPEAT", "ENDREP", // repeat macro
+    "DEPHASE", "REND" // rorg macro
+];
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
 /// In case of success loop over all the tokens in order to expand those that read files
@@ -221,18 +224,23 @@ pub fn parse_rorg(input: &str) -> IResult<&str, Token> {
 
     let (input, _) = line_ending(input)?;
 
-    let (input, inner) = opt(parse_z80_code)(input)?;
+        let (input, inner) = map(many0(parse_z80_line), |tokens| {
+        let mut inner: Vec<Token> = Vec::new();
+        for group in &tokens {
+            inner.extend_from_slice(&group);
+        }
+        inner
+    })(input)?;
+
+
+
     let (input, _) = preceded(space0, alt((tag_no_case("DEPHASE"), tag_no_case("REND"))))(input)?;
 
     Ok((
         input,
         Token::Rorg(
             exp,
-            if inner.is_some() {
-                inner.unwrap()
-            } else {
-                Vec::new().into()
-            },
+            inner.into()
         ),
     ))
 }
