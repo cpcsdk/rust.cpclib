@@ -9,7 +9,6 @@ use nom::sequence::*;
 use nom::multi::*;
 use nom::error::*;
 use nom::character::complete::*;
-use nom::character::complete::multispace1 as multispace;
 use nom::bytes::complete::tag_no_case;
 use nom::bytes::complete::tag;
 use nom::bytes::complete::*;
@@ -92,6 +91,10 @@ impl ParserContext {
         None
     }
 }
+
+const FORBIDDEN_MACRO_NAMES : &[&str] = &[
+    "ENDR", "ENDREPEAT", "ENDREP"
+];
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
 /// In case of success loop over all the tokens in order to expand those that read files
@@ -219,7 +222,7 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>> {
 /// TODO
     pub fn parse_rorg(input: &str) -> IResult<&str, Token> {
         
-        let (input, _) = opt(multispace)(input)?;
+        let (input, _) = space0(input)?;
         let (input, _) = alt((
             tag_no_case("PHASE"),
             tag_no_case("RORG")
@@ -235,7 +238,7 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>> {
 
         let (input, inner) =  opt(parse_z80_code)(input)?;
         let (input, _) = preceded(
-            multispace,
+            space0,
             alt((
                 tag_no_case("DEPHASE"),
                 tag_no_case("REND")
@@ -258,7 +261,7 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>> {
 /// TODO
 pub fn parse_macro(input: &str) -> IResult<&str, Token> {
         let (input, _) = delimited(
-            opt(multispace),
+            space0,
             tag_no_case("MACRO"),
             space1
         )(input)?;
@@ -267,7 +270,7 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token> {
         // TODO treat args
 
         let (input, content) = preceded(
-            multispace,
+            space0,
             many_till(
                 take(1usize),
                 tag_no_case("ENDM")
@@ -287,7 +290,7 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token> {
 /// TODO
 pub fn parse_repeat(input: &str) -> IResult<&str, Token> {
         let (input, _) = delimited(
-            opt(multispace),
+            space0,
             alt((
                 tag_no_case("REPEAT"),
                 tag_no_case("REPT"),
@@ -299,10 +302,19 @@ pub fn parse_repeat(input: &str) -> IResult<&str, Token> {
         let (input, count) = expr(input)?;
 
 
-        let (input, inner) = opt(parse_z80_code)(input)?;
+        let (input, inner) = map(
+            many0(parse_z80_line),
+            |tokens|{
+                let mut inner:Vec<Token> = Vec::new();
+                for group in &tokens {
+                    inner.extend_from_slice(&group);
+                }
+                inner
+            }
+        )(input)?;
 
         let (input, _) = tuple((
-            multispace,
+            space0,
             alt((
                 tag_no_case("ENDREPEAT"), 
                 tag_no_case("ENDREPT"), 
@@ -316,12 +328,7 @@ pub fn parse_repeat(input: &str) -> IResult<&str, Token> {
             input,
             Token::Repeat(
                 count, 
-                if inner.is_some() {
-                    inner.unwrap()
-                }
-                else {
-                    Vec::new().into()
-                },
+                BaseListing::from(inner),
                 None
             )
         ))
@@ -330,7 +337,7 @@ pub fn parse_repeat(input: &str) -> IResult<&str, Token> {
 /// TODO
 pub fn parse_basic(input: &str) -> IResult<&str, Token> {
     let (input, _) = tuple((
-            opt(multispace),
+            space0,
             tag_no_case("LOCOMOTIVE"),
             space0
     ))(input)?;
@@ -360,10 +367,10 @@ pub fn parse_basic(input: &str) -> IResult<&str, Token> {
         let (input, hidden_lines) = opt(
                     terminated(
                         preceded(
-                            opt(multispace),
+                            space0,
                             parse_basic_hide_lines
                         ),
-                        multispace
+                        space0
                     )
         )(input)?;
 
@@ -874,7 +881,7 @@ pub fn parse_ld_fake(input: &str) -> IResult<&str, Token> {
 pub fn parse_ld_normal(input: &str) -> IResult<&str, Token> {
         
         let (input, _) = tuple((
-            opt(multispace),
+            space0,
             tag_no_case("LD"),
             space1
         ))(input)?;
@@ -1010,20 +1017,32 @@ named_attr!(#[doc="TODO"],
   )
 );
 
-named_attr!(#[doc="TODO"],
-    pub parse_macro_call <&str, Token>, do_parse!(
-        name: parse_label >>
-        args: opt!(
-            alt!(
-                expr_list |
-                tag_no_case!("(void)") => {|_| Vec::new()}
-            )
-        ) >>
-        (
-            Token::MacroCall(name, args.unwrap_or_default())
-        )
-    )
-);
+/// Manage the call of a macro.
+ pub fn parse_macro_call(input: &str) -> IResult<&str, Token> {
+
+     let (input, name) = parse_label(input)?;
+
+
+    // Check if the macro name is allowed
+    if FORBIDDEN_MACRO_NAMES.iter().find(|&&a| a.to_lowercase() == name.to_lowercase()).is_some() {
+        Err(Err::Error(nom::error::ParseError::<&str>::from_error_kind(input, ErrorKind::AlphaNumeric)))
+
+    }
+    else {
+        let (input, args) = opt(
+                alt((
+                    expr_list,
+                    map(tag_no_case("(void)"), {|_| Vec::new()})
+                ))
+            )(input)?;
+
+            Ok((
+                input,
+                Token::MacroCall(name, args.unwrap_or_default())
+            ))
+        
+    }
+ }
 
 named_attr!(#[doc="TODO"],
     pub parse_djnz<&str, Token>, do_parse!(
@@ -1361,7 +1380,7 @@ named_attr!(#[doc="TODO remove multispace
             >> flag_test:
                 opt!(terminated!(
                     parse_flag_test,
-                    delimited!(opt!(multispace), tag!(","), opt!(multispace))
+                    delimited!(space0, tag!(","), space0)
                 ))
             >> dst: expr
             >> ({
