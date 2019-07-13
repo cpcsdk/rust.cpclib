@@ -125,34 +125,17 @@ pub fn parse_str(code: &str) -> Result<Listing, AssemblerError> {
     parse_str_with_context(code, &ParserContext::default())
 }
 
-named_attr! (
-    #[doc="TODO"],
-    pub parse_z80_code <&str, Listing>,
-    do_parse!(
-//        // Skip empty beginning
-//       many0!(parse_empty_line) >>
-//        opt!(line_ending) >>
+/// Parse a complete code
+pub fn parse_z80_code(input: &str) ->IResult <&str, Listing> {
 
-        // Get optional code
-        tmp: many0!(
-                parse_z80_line
-        ) >>
-
-//        // Skip empty end
-//        many0!(parse_empty_line) >>
-
-        ({
-            let mut res: Vec<Token> = Vec::new();
-            for list in tmp {
-
-         //       println!("Current list: {:?}", &list);
-                res.append(&mut (list.clone()) );
-            }
-         //   println!("Opcodes: {:?}", &res);
-            res.into()
-        })
-        )
-    );
+    let (input, tmp) = many0(parse_z80_line)(input)?;
+    let mut res: Vec<Token> = Vec::new();
+    for list in tmp {
+        res.extend(list);
+    }
+    
+    Ok((input, res.into()))
+}
 
 /// For an unknwon reason, the parse_z80_code function fails when there is no comment...
 /// // Mainly used for test
@@ -376,7 +359,7 @@ pub fn parse_basic_hide_lines(input: &str) -> IResult<&str, Vec<u16>> {
             ),
             preceded(
                 space0,
-                dec_u16
+                dec_number
             )
         )(input)
 }
@@ -526,39 +509,46 @@ pub fn parse_z80_line_label_only(input: &str) -> IResult<&str, Vec<Token>> {
             }
 }
 
-named_attr!(#[doc="TODO"],
-    parse_include<&str, Token>,
-    do_parse!(
-        tag_no_case!("INCLUDE")
-            >> space1
-            >> fname:
-                alt!(
-                    preceded!(
-                        tag!("\""), 
-                        terminated!(take_until!("\""), take!(1)))
-                        | preceded!(
-                            tag!("'"), 
-                            terminated!(take_until1!("'"), take!(1)))
-                )
-            >> (Token::Include(fname.to_string(), None))
-    )
-);
+/// Parser for file names in appropriate directives
+pub fn parse_fname(input: &str) -> IResult<&str, &str> {
+    alt((
+                    preceded(
+                        tag("\""), 
+                        terminated(take_until("\""), take(1usize))),
 
-named_attr!(#[doc="TODO add the missing optional parameters"],
-    parse_incbin<&str, Token>,
-    do_parse!(
-        transformation:
-            alt!(
-                tag_no_case!("INCBIN") => {|_| {BinaryTransformation::None}} |
-                tag_no_case!("INCEXO") => {|_| {BinaryTransformation::Exomizer}}
-            )
-            >> space1
-            >> fname:
-                alt!(
-                    preceded!(tag!("\""), terminated!(take_until1!("\""), take!(1)))
-                        | preceded!(tag!("'"), terminated!(take_until1!("'"), take!(1)))
-                )
-            >> (Token::Incbin(
+                    preceded(
+                            tag("'"), 
+                            terminated(take_until("'"), take(1usize)))
+                ))(input)
+}
+
+/// Parser for the include directive
+pub fn parse_include(input: &str) -> IResult<&str, Token> {
+        let (input, fname) = preceded(
+            tuple((
+                tag_no_case("INCLUDE"),
+                space1
+            )),
+            parse_fname
+        )(input)?;
+
+        Ok((input, Token::Include(fname.to_string(), None)))
+}
+
+
+/// Parse for the various binary include directives
+pub fn parse_incbin(input: &str) -> IResult <&str, Token> {
+        let (input, transformation) = alt((
+                map(tag_no_case("INCBIN"), {|_| {BinaryTransformation::None}}),
+                map(tag_no_case("INCEXO"), {|_| {BinaryTransformation::Exomizer}})
+            ))(input)?;
+
+        let (input, fname) = preceded(
+            space1,
+            parse_fname
+        )(input)?;
+
+        Ok((input, Token::Incbin(
                 fname.to_string(),
                 None,
                 None,
@@ -568,149 +558,166 @@ named_attr!(#[doc="TODO add the missing optional parameters"],
                 transformation
             ))
     )
-);
+}
 
-named_attr!(#[doc="TODO"],
-    parse_undef<&str, Token>,
-    do_parse!(tag_no_case!("UNDEF") >> space1 >> label: parse_label >> (Token::Undef(label)))
-);
+/// Parse  UNDEF directive.
+pub fn parse_undef(input: &str) ->IResult<&str, Token> {
+    let (input, label) = preceded(
+        tuple((
+            tag_no_case("UNDEF"),
+            space1
+         )),
+        parse_label)(input)?;
+        
+    Ok((input, Token::Undef(label)))
+}
 
-named_attr!(#[doc="TODO"],
-    parse_token<&str, Token>,
-    alt!(
-        parse_ex_af
-            | parse_ex_hl_de
-            | parse_logical_operator
-            | parse_add_or_adc
-            | parse_cp
-            | parse_djnz
-            | parse_ld
-            | parse_inc_dec
-            | parse_out
-            | parse_in
-            | parse_call_jp_or_jr
-            | parse_opcode_no_arg
-            | parse_push_n_pop
-            | parse_res_set_bit
-            | parse_shifts
-            | parse_ret
-    )
-);
+/// Parse the opcodes. TODO rename as parse_opcode ...
+pub fn parse_token(input: &str) -> IResult<&str, Token> {
+    alt((
+        parse_ex_af,
+             parse_ex_hl_de,
+             parse_logical_operator,
+             parse_add_or_adc,
+             parse_cp,
+             parse_djnz,
+             parse_ld,
+             parse_inc_dec,
+             parse_out,
+             parse_in,
+             parse_call_jp_or_jr,
+             parse_opcode_no_arg,
+             parse_push_n_pop,
+             parse_res_set_bit,
+             parse_shifts,
+            parse_ret
+    ))(input)
+}
 
-named_attr!(#[doc="TODO"],
-    parse_ex_af<&str, Token>,
-    do_parse!(
-        tag_no_case!("EX")
-            >> space1
-            >> tag_no_case!("AF")
-            >> space0
-            >> char!(',')
-            >> space0
-            >> tag_no_case!("AF'")
-            >> (Token::OpCode(Mnemonic::ExAf, None, None))
-    )
-);
 
-named_attr!(#[doc="TODO"],
-    parse_ex_hl_de<&str, Token>,
-    do_parse!(
-        tag_no_case!("EX")
-            >> space1
-            >> tag_no_case!("HL")
-            >> space0
-            >> char!(',')
-            >> space0
-            >> tag_no_case!("DE")
-            >> (Token::OpCode(Mnemonic::ExHlDe, None, None))
-    )
-);
+/// Parse ex af, af' instruction
+pub fn parse_ex_af(input: &str) -> IResult<&str, Token> {
+    value(
+        Token::OpCode(Mnemonic::ExAf, None, None),
+        tuple((
+            tag_no_case("EX"),
+            space1,
+            tag_no_case("AF"),
+            space0,
+            char(','),
+            space0,
+            tag_no_case("AF'")           
+        ))
+    )(input)
+    
+}
 
-named_attr!(#[doc="TODO"],
-    parse_directive<&str, Token>,
-    alt!(
-        parse_assert
-            | parse_align
-            | parse_breakpoint
-            | parse_org
-            | parse_defs
-            | parse_include
-            | parse_incbin
-            | parse_db_or_dw
-            | parse_print
-            | parse_protect
-            | parse_stable_ticker
-            | parse_undef
-            | parse_noarg_directive
-            | parse_macro_call
-    )
-);
+/// Parse ex hl, de instruction
+pub fn parse_ex_hl_de(input: &str) -> IResult<&str, Token> {
+    value(
+        Token::OpCode(Mnemonic::ExHlDe, None, None),
+        tuple((
+        tag_no_case("EX"),
+           space1,
+            tag_no_case("HL"),
+           space0,
+            char(','),
+            space0,
+             tag_no_case("DE"),
+            
+    ))
+        )(input)
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_noarg_directive <&str, Token>,
-    alt!(
-        value!(Token::List, tag_no_case!("list")) |
-        value!(Token::NoList, tag_no_case!("nolist"))
-    )
-);
+/// Parse any directive
+pub fn parse_directive(input: &str) -> IResult<&str, Token> {
+    alt((
+        parse_assert,
+             parse_align,
+             parse_breakpoint,
+             parse_org,
+             parse_defs,
+             parse_include,
+             parse_incbin,
+             parse_db_or_dw,
+             parse_print,
+             parse_protect,
+             parse_stable_ticker,
+             parse_undef,
+             parse_noarg_directive,
+             parse_macro_call,
+    ))(input)
+}
+
+/// Parse directives with no arguments
+pub fn parse_noarg_directive(input: &str) -> IResult<&str, Token> {
+    alt((
+        value(Token::List, tag_no_case("list")),
+        value(Token::NoList, tag_no_case("nolist"))
+    ))(input)
+}
 
 const IF_CODE: u8 = 0;
 const IFNOT_CODE: u8 = 1;
 const IFDEF_CODE: u8 = 2;
 const IFNDEF_CODE: u8 = 4;
 
-named_attr!(#[doc="Parse if expression.TODO finish the implementation in order to have ELSEIF and ELSE branches"],
-    pub parse_conditional<&str, Token>, do_parse!(
+/// Parse if expression.TODO finish the implementation in order to have ELSEIF and ELSE branches"
+pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
 
         // Gest the kind of test to do
-        test_kind: alt!(
-            value!(IF_CODE, tag_no_case!("IF")) |
-            value!(IFNOT_CODE, tag_no_case!("IFNOT")) |
-            value!(IFDEF_CODE, tag_no_case!("IFDEF")) |
-            value!(IFNDEF_CODE, tag_no_case!("IFNDEF"))
-         ) >>
+        let (input, test_kind) = alt((
+            value(IF_CODE, tag_no_case("IF")),
+            value(IFNOT_CODE, tag_no_case("IFNOT")),
+            value(IFDEF_CODE, tag_no_case("IFDEF")),
+            value(IFNDEF_CODE, tag_no_case("IFNDEF"))
+         ))(input)?;
 
         // Get the corresponding test
-        cond: delimited!(
+        let (input, cond) = delimited(
             space1, 
             parse_conditional_condition(test_kind), 
             space0
-        ) >>
+        )(input)?;
         
-        alt!(line_ending | tag!(":")) >>
+        let (input, _) = alt((line_ending ,tag(":")))(input)?;
 
-        code: return_error!(
-            ErrorKind::Verify/*Custom(error_code::UNABLE_TO_PARSE_INNER_CONTENT)*/,
-            parse_z80_code
-        ) >>
+        let (input, code) = parse_z80_code(input)?;
+    
 
 
-        r#else: opt!(
-            preceded!(
-                delimited!(
+        let (input, r#else) = opt(
+            preceded(
+                delimited(
                     space0, 
-                    tag_no_case!("ELSE"), 
-                    alt!( 
-                        terminated!(space0, line_ending) | 
-                        tag!(":")
-                    )
+                    tag_no_case("ELSE"), 
+                    alt(( 
+                        terminated(space0, line_ending),
+                        tag(":")
+                    ))
                 ),
                 parse_z80_code
             )
-        ) >>
+        )(input)?;
 
-        alt!( space1 | delimited!(space0, tag!(":"), space0)) >>
+        
+        let (input, _) = tuple((
+            alt(( space1, 
+            delimited(space0, tag(":"), space0))
+             ),
 
 
-        tag_no_case!("ENDIF") >>
+        tag_no_case("ENDIF")))(input)?;
 
-        (
+        Ok((
+            input,
             Token::If(
                 vec![(cond, code)],
                 r#else
             )
-        )
-    )    
-);
+        ))
+        
+}
 
 /// Read the condition part in the parse_conditional macro
 fn parse_conditional_condition(code: u8) -> impl Fn(&str) -> IResult<&str, TestKind> {
@@ -738,100 +745,131 @@ fn parse_conditional_condition(code: u8) -> impl Fn(&str) -> IResult<&str, TestK
   }
 }
 
-named_attr!(#[doc="TODO"],
-    parse_breakpoint<&str, Token>,
-    do_parse!(
-        tag_no_case!("BREAKPOINT")
-            >> exp: opt!(preceded!(space1, expr))
-            >> (Token::Breakpoint(exp))
-    )
-);
+/// Parse a breakpint instruction
+pub fn parse_breakpoint(input: &str) -> IResult<&str, Token> {
+    map(
+        preceded(
+             tag_no_case("BREAKPOINT"),
+            opt(expr)
+        ),
+        |exp|{
+            Token::Breakpoint(exp)
+        }
+    )(input)
+}
 
-named_attr!(#[doc="TODO"],
-    parse_stable_ticker<&str, Token>,
-    alt!(parse_stable_ticker_start | parse_stable_ticker_stop)
-);
+/// Parse tickin directives
+pub fn parse_stable_ticker(input: &str) -> IResult<&str, Token> {
+    alt((parse_stable_ticker_start,  parse_stable_ticker_stop))(input)
+}
 
-named_attr!(#[doc="TODO"],
-    parse_stable_ticker_start<&str, Token>,
-    do_parse!(
-        opt!(tag_no_case!("stable"))
-            >> tag_no_case!("ticker")
-            >> space1
-            >> tag_no_case!("start")
-            >> space1
-            >> name: parse_label
-            >> (Token::StableTicker(StableTickerAction::Start(name)))
-    )
-);
+/// Parse begining of ticker
+pub fn parse_stable_ticker_start(input: &str) -> IResult<&str, Token> {
+    map(
+        preceded(tuple((
+            opt(tag_no_case("stable")),
+            tag_no_case("ticker"),
+            space1,
+            tag_no_case("start"),
+            space1
+        )),
+        parse_label
+        ),
+        |name| {
+            Token::StableTicker(StableTickerAction::Start(name))
+        }
+    )(input)
+}
 
-named_attr!(#[doc="TODO"],
-    parse_stable_ticker_stop<&str, Token>,
-    do_parse!(
-        opt!(tag_no_case!("stable"))
-            >> tag_no_case!("ticker")
-            >> space1
-            >> tag_no_case!("stop")
-            >> (Token::StableTicker(StableTickerAction::Stop))
-    )
-);
+/// Parse end of ticker
+pub fn    parse_stable_ticker_stop(input: &str) -> IResult<&str, Token> {
 
-named_attr!(#[doc="TODO"],
-    pub parse_ld <&str, Token>,
-        alt!(
-            parse_ld_fake  |
+    value(
+        Token::StableTicker(StableTickerAction::Stop),
+        tuple((
+             opt(tag_no_case("stable")),
+            tag_no_case("ticker"),
+            space1,
+            tag_no_case("stop"),           
+        ))
+    )(input)
+}
+
+/// Parse fake and real LD instructions
+pub fn parse_ld(input: &str) -> IResult<&str, Token> {
+        alt((
+            parse_ld_fake,
             parse_ld_normal
-    )
-);
+    ))(input)
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_ld_fake <&str, Token>, do_parse!(
-        tag_no_case!("LD") >>
-        space1 >>
-        dst: parse_register16 >>
-        opt!(space1) >>
-        tag!(",") >>
-        opt!(space1) >>
-        src: parse_register16 >>
-        not!(alphanumeric1)>>
-         (
-             Token::OpCode(Mnemonic::Ld, Some(dst), Some(src))
-         )
-    )
-);
+/// Parse artifical LD instruction (would be replaced by several real instructions)
+pub fn parse_ld_fake(input: &str) -> IResult<&str, Token> {
+        
+    let (input, _) = tuple((
+            tag_no_case("LD"),
+            space1
+    ))(input)?;
+       
+    let (input, dst) = parse_register16(input)?;
 
-named_attr!(#[doc="TODO"],
-    pub parse_ld_normal <&str, Token>, do_parse!(
-        opt!(multispace) >>
-        tag_no_case!("LD") >>
-        space1 >>
-        dst: return_error!(
-            ErrorKind::Verify/*Custom(error_code::INVALID_ARGUMENT)*/,
-            alt!( parse_reg_address |
-                           parse_register_sp |
-                           parse_register16 |
-                           parse_register8 |
-                           parse_indexregister16 |
-                           parse_indexregister8 |
-                           parse_register_i |
-                           parse_address)
-        ) >>
-        space0 >>
-        tag!(",") >>
-        space0 >>
+    let (input, _) = tuple((
+        space0,
+        tag(","),
+        space0,
+    ))(input)?;
+
+    let (input, src) = parse_register16(input)?;
+
+
+   
+
+    Ok((
+      input,  
+    Token::OpCode(Mnemonic::Ld, Some(dst), Some(src))
+        
+    ))
+}
+
+/// Parse the valids LD versions
+pub fn parse_ld_normal(input: &str) -> IResult<&str, Token> {
+        
+        let (input, _) = tuple((
+            opt(multispace),
+            tag_no_case("LD"),
+            space1
+        ))(input)?;
+
+        let (input, dst) =  alt((
+             parse_reg_address,
+                           parse_register_sp ,
+                           parse_register16 ,
+                           parse_register8 ,
+                           parse_indexregister16 ,
+                           parse_indexregister8 ,
+                           parse_register_i ,
+                           parse_address
+                           ))(input)?;
+
+        let (input, _) = tuple((
+                space0,
+                tag(","),
+                space0
+        ))(input)?;
+
         // src possibilities depend on dst
-        src: return_error!(
-            ErrorKind::Verify/*Custom(error_code::INVALID_ARGUMENT)*/,
-            parse_ld_normal_src(&dst)
-        )
-         >>
-        (Token::OpCode(Mnemonic::Ld, Some(dst), Some(src)))
-        )
-    );
+        let (input, src) = parse_ld_normal_src(&dst)(input)?;
+        
+        Ok((
+            input,
+            Token::OpCode(Mnemonic::Ld, Some(dst), Some(src))
+            ))
+}
+
 
 /// Parse the source of LD depending on its destination
-fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataAccess>  + '_ {
-     move |input: &str| {
+fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataAccess> +'_ {
+     move |input: & str| {
         if dst.is_register16() | dst.is_indexregister16() {
             alt( (parse_address, parse_expr) ) (input)
         }
@@ -1322,45 +1360,65 @@ named_attr!(#[doc="TODO"],
     );
 */
 
-named_attr!(#[doc="TODO"],
-    pub parse_register16 <&str, DataAccess>,
-        alt!(
-            parse_register_hl |
-            parse_register_bc |
-            parse_register_de |
+
+/// Parse any standard 16bits register
+/// TODO rename to emphasize it is standard reigsters
+pub fn parse_register16(input: &str) -> IResult<&str, DataAccess> {
+        alt((
+            parse_register_hl ,
+            parse_register_bc ,
+            parse_register_de ,
             parse_register_af
-        ) 
-);
+        ))(input)
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_register8 <&str, DataAccess>, 
-        alt!(
-            parse_register_a |
-            parse_register_b |
-            parse_register_c |
-            parse_register_d |
-            parse_register_e |
-            parse_register_h |
+/// Parse any standard 16bits register
+/// TODO rename to emphasize it is standard reigsters
+pub fn parse_register8(input: &str) -> IResult <&str, DataAccess> {
+        alt((
+            parse_register_a ,
+            parse_register_b ,
+            parse_register_c ,
+            parse_register_d ,
+            parse_register_e ,
+            parse_register_h ,
             parse_register_l
-        )
-);
+        ))(input)
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_register_i <&str, DataAccess> , 
-    value!(DataAccess::SpecialRegisterI, preceded!(tag_no_case!("I"), not!(alphanumeric1)))
-);
+/// Parse register i
+pub fn parse_register_i(input: &str) -> IResult<&str, DataAccess> {
+    value(
+        DataAccess::SpecialRegisterI, 
+        tuple((
+            tag_no_case("I"), 
+            not(alphanumeric1)
+        ))
+    )(input)
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_register_r <&str, DataAccess> , 
-    value!(DataAccess::SpecialRegisterR, preceded!(tag_no_case!("R"), not!(alphanumeric1)))
-);
+/// Parse register r
+pub fn parse_register_r(input: &str) -> IResult<&str, DataAccess> {
+    value(
+        DataAccess::SpecialRegisterR, 
+        tuple((
+            tag_no_case("R"), 
+            not(alphanumeric1)
+        ))
+    )(input)
+}
 
 macro_rules! parse_any_register8 {
     ($name: ident, $char:expr, $reg:expr) => {
-        named_attr!(#[doc="TODO"],
-            pub $name <&str, DataAccess> ,
-            value!(DataAccess::Register8($reg), preceded!(tag_no_case!($char), not!(alphanumeric1)))
-        );
+        /// Parse register $char
+        pub fn $name(input: &str) -> IResult<&str, DataAccess> {
+            value(
+                DataAccess::Register8($reg), 
+                tuple((
+                    tag_no_case($char), 
+                    not(alphanumeric1)))
+            )(input)
+        }
 };
 }
 
@@ -1372,131 +1430,141 @@ parse_any_register8!(parse_register_e, "e", Register8::E);
 parse_any_register8!(parse_register_h, "h", Register8::H);
 parse_any_register8!(parse_register_l, "l", Register8::L);
 
-named_attr!(#[doc="TODO"],
-    parse_register_sp<&str, DataAccess>,
-    do_parse!(
-        preceded!(tag_no_case!("SP"), not!(alphanumeric1))
-            >> (DataAccess::Register16(Register16::Sp))
-    )
-);
 
-named_attr!(#[doc="TODO"],
-    parse_register_hl<&str, DataAccess>,
-    do_parse!(
-        preceded!(tag_no_case!("HL"), not!(alphanumeric1))
-            >> (DataAccess::Register16(Register16::Hl))
-    )
-);
 
-named_attr!(#[doc="TODO"],
-    parse_register_bc<&str, DataAccess>,
-    do_parse!(
-        preceded!(tag_no_case!("BC"), not!(alphanumeric1))
-            >> (DataAccess::Register16(Register16::Bc))
-    )
-);
+/// Produce the function that parse a given register
+fn register16_parser<'a>(representation: &'static str, register: Register16) -> impl Fn(&'a str) -> IResult<&'a str, DataAccess> {
+    move |input: &'a str| {
+        value(
+            DataAccess::Register16(register),
+            tuple((
+                tag_no_case(representation),
+                not(alphanumeric1)
+            ))
+        )(input)
+    }
+}
 
-named_attr!(#[doc="TODO"],
-    parse_register_de<&str, DataAccess>,
-    do_parse!(
-        preceded!(tag_no_case!("DE"), not!(alphanumeric1))
-            >> (DataAccess::Register16(Register16::De))
-    )
-);
+macro_rules! parse_any_register16 {
+    ($name: ident, $char:expr, $reg:expr) => {
+            /// Parse the $char register and return it as a DataAccess
+            pub fn $name(input: &str) -> IResult<&str, DataAccess> {
+                register16_parser($char, $reg)(input)
+            }
+};
+}
 
-named_attr!(#[doc="TODO"],
-    parse_register_af<&str, DataAccess>,
-    do_parse!(
-        preceded!(tag_no_case!("AF"), not!(alphanumeric1))
-            >> (DataAccess::Register16(Register16::Af))
-    )
-);
+parse_any_register16!(parse_register_sp, "SP", Register16::Sp);
+parse_any_register16!(parse_register_af, "AF", Register16::Af);
+parse_any_register16!(parse_register_bc, "BC", Register16::Bc);
+parse_any_register16!(parse_register_de, "DE", Register16::De);
+parse_any_register16!(parse_register_hl, "HL", Register16::Hl);
 
-named_attr!(#[doc="TODO"],
-    pub parse_indexregister8 <&str, DataAccess>, do_parse!(
-        reg: alt!(
-            tag_no_case!("IXH") => { |_| IndexRegister8::Ixh} |
-            tag_no_case!("IXL") => { |_| IndexRegister8::Ixl} |
-            tag_no_case!("IYH") => { |_| IndexRegister8::Iyh} |
-            tag_no_case!("IYL") => { |_| IndexRegister8::Iyl}
-            )
-        >>
-        (DataAccess::IndexRegister8(reg))
-    )
-);
 
-named_attr!(#[doc="TODO"],
-    parse_indexregister16<&str, DataAccess>,
-    do_parse!(
-        reg: alt!(
-        tag_no_case!("IX") => { |_| IndexRegister16::Ix} |
-        tag_no_case!("IY") => { |_| IndexRegister16::Iy}
-        ) >> (DataAccess::IndexRegister16(reg))
-    )
-);
 
-named_attr!(#[doc="Parse the use of an indexed register as (IX + 5)"],
-    parse_indexregister_with_index<&str, DataAccess>,
-    do_parse!(
-        tag!("(")
-            >> space0
-            >> reg: parse_indexregister16
-            >> space0
-            >> _op: alt!(value!(Oper::Add, tag!("+")) | value!(Oper::Sub, tag!("-")))
-            >> space0
-            >> expr: expr
-            >> space0
-            >> tag!(")")
-            >> ({
-                let target = reg.get_indexregister16().unwrap();
-                DataAccess::IndexRegister16WithIndex(target, expr)
-            })
-    )
-);
+/// Parse and indexed register in 8bits
+pub fn parse_indexregister8(input: &str) -> IResult<&str, DataAccess> {
+        terminated(map(
+            alt((
+                map(tag_no_case("IXH"), { |_| IndexRegister8::Ixh}),
+                map(tag_no_case("IXL"), { |_| IndexRegister8::Ixl}),
+                map(tag_no_case("IYH"), { |_| IndexRegister8::Iyh}),
+                map(tag_no_case("IYL"), { |_| IndexRegister8::Iyl})
+            )),
+            |reg| DataAccess::IndexRegister8(reg)
+    ), not(alphanumeric1))(input)
+}
 
-named_attr!(#[doc="Parse an address access `(expression)`"],
-    pub parse_address <&str, DataAccess>,
-    do_parse!(
-        tag!("(") >>
-        address: expr >>
-        tag!(")") >>
-        (
-            DataAccess::Memory(address)
+/// Parse a 16 bits indexed register
+pub fn parse_indexregister16(input: &str) -> IResult<&str, DataAccess> {
+    terminated(map(
+        alt((
+            map(tag_no_case("IX"), { |_| IndexRegister16::Ix}),
+            map(tag_no_case("IY"), { |_| IndexRegister16::Iy})
+        )),
+        |reg|DataAccess::IndexRegister16(reg)
+    ), not(alphanumeric1))(input)
+}
+
+/// Parse the use of an indexed register as (IX + 5)"
+pub fn parse_indexregister_with_index(input: &str) -> IResult<&str, DataAccess> {
+             
+    let (input, reg) = preceded(
+        tuple((
+            tag("("),
+            space0
+        )),
+        parse_indexregister16
+    )(input)?;
+
+            
+    let (input, op) = preceded(
+        space0,
+         alt((
+             value(Oper::Add, tag("+")),
+             value(Oper::Sub, tag("-"))
+        ))
+    )(input)?;
+
+
+    let (input, expr) = terminated(
+        expr,
+        tuple((
+            space0,
+            tag(")")
+        ))
+    )(input)?;
+
+    Ok((
+        input,
+        DataAccess::IndexRegister16WithIndex(
+            reg.get_indexregister16().unwrap(),
+            match op {
+                Oper::Add => expr,
+                Oper::Sub => expr.neg(),
+                _ => unreachable!()
+            }
         )
-    )
+    ))
+}
 
-);
+/// Parse an address access `(expression)`
+pub fn parse_address(input: &str) -> IResult<&str, DataAccess> {
+    map(
+        delimited(
+            tag("("), 
+            expr, 
+            preceded(space0, tag(")"))
+        ),
+        |address|DataAccess::Memory(address)
+    )(input)
+}
 
-named_attr!(#[doc="Parse (R16)"],
-    pub parse_reg_address <&str, DataAccess>,
-    do_parse!(
-        tag!("(") >>
-        space0 >>
-        reg: parse_register16 >>
-        space0 >>
-        tag!(")") >>
-        (
-            DataAccess::MemoryRegister16(reg.get_register16().unwrap())
+/// Parse (R16)
+pub fn parse_reg_address(input: &str) -> IResult<&str, DataAccess> {
+    map(
+        delimited(
+            terminated(tag("("), space0),
+            parse_register16,
+            preceded(space0, tag(")"))
+        ),
+        |reg| DataAccess::MemoryRegister16(reg.get_register16().unwrap())
+    )(input)
+}
+
+/// Parse (HL)
+pub fn parse_hl_address(input: &str) -> IResult<&str, DataAccess> {
+    value(
+        DataAccess::MemoryRegister16(Register16::Hl),
+        delimited(
+            terminated(tag("("), space0),
+            parse_register_hl,
+            preceded(space0, tag(")"))
         )
-    )
+    )(input)
+}
 
-);
-
-named_attr!(#[doc="Parse (HL)"],
-    pub parse_hl_address<&str, DataAccess>,
-    do_parse!(
-        tag!("(") >>
-        space0 >>
-        tag_no_case!("HL") >>
-        space0 >>
-        tag!(")") >>
-        (
-            DataAccess::MemoryRegister16(Register16::Hl)
-        )
-    )
-);
-
-/// Parse and expression and returns it inside a DataAccession::Expression
+/// Parse an expression and returns it inside a DataAccession::Expression
 pub fn parse_expr(input: &str) -> IResult<&str, DataAccess> {
     let (input, expr) = expr(input)?;
     Ok((input, DataAccess::Expression(expr)))
@@ -1554,15 +1622,15 @@ pub fn parse_opcode_no_arg(input: &str) -> IResult<&str, Token> {
 
 /// Read a value
 pub fn parse_value(input: &str) -> IResult<&str, Expr> {
-        let (input, val) = alt((hex_u16, dec_u16, bin_u16))(input)?;
+        let (input, val) = alt((hex_number, dec_number, bin_u16))(input)?;
         Ok((input, Expr::Value(val as i32)))
 }
 
 /// Read an hexadecimal value
-pub fn hex_u16(input: &str) ->IResult<&str, u16> {
+pub fn hex_number(input: &str) ->IResult<&str, u16> {
         preceded(
             alt((tag_no_case("0x"), tag("#"), tag("&"))),
-            hex_u16_inner
+                inner_hex
         )(input)
 }
 
@@ -1620,8 +1688,8 @@ pub fn parse_label(input: &str) -> IResult<&str, String> {
 
 #[inline]
 /// Parse an usigned 16 bit number
-pub fn dec_u16(input: &str) -> IResult<&str, u16> {
-    match is_a!(input, &b"0123456789"[..]) {
+pub fn dec_number(input: &str) -> IResult<&str, u16> {
+    match is_a("0123456789")(input) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
             // Do not parse more than 5 characters for a u16
@@ -1647,29 +1715,9 @@ pub fn dec_u16(input: &str) -> IResult<&str, u16> {
     }
 }
 
-/// Parse a binary number
-pub fn bin_u16(input: &str) -> IResult<&str, u16> {
-    preceded(
-        alt(( tag_no_case("0b"), tag_no_case("%"))),
-        fold_many1( 
-            alt((
-                value(0, tag("0")),
-                value(1, tag("1"))
-            )),
-            0, 
-            |mut acc: u16, item: u16| {
-                acc *= 2;
-                acc += item;
-                acc
-            }
-        )
-    )(input)
-}
-
-#[inline]
-/// Parse hexadecimal 16 bits number
-pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
-    match is_a!(input, &b"0123456789abcdefABCDEF"[..]) {
+/// Read an hexidecimal value
+pub fn inner_hex(input: &str) -> IResult<&str, u16> {
+    match is_a("0123456789abcdefABCDEF")(input) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
             // Do not parse more than  characters for a u16
@@ -1693,7 +1741,24 @@ pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
 }
 
 
-
+/// Parse a binary number
+pub fn bin_u16(input: &str) -> IResult<&str, u16> {
+    preceded(
+        alt(( tag_no_case("0b"), tag_no_case("%"))),
+        fold_many1( 
+            alt((
+                value(0, tag("0")),
+                value(1, tag("1"))
+            )),
+            0, 
+            |mut acc: u16, item: u16| {
+                acc *= 2;
+                acc += item;
+                acc
+            }
+        )
+    )(input)
+}
 /*
 /// Parse an ASM file an returns the stream of tokens.
 pub fn parse_file(fname: String) -> Vec<Token> {
@@ -1731,7 +1796,7 @@ pub fn factor(input: &str) -> IResult< &str, Expr > {
     map(
         delimited(
             space0, 
-            alt((hex_u16, bin_u16, dec_u16)), 
+            alt((hex_number, bin_u16, dec_number)), 
             space0
         ),
         |d:u16| {Expr::Value(d as i32)}
