@@ -92,9 +92,12 @@ impl ParserContext {
 }
 
 const FORBIDDEN_MACRO_NAMES: &[&str] = &[
-    "ENDR", "ENDREPEAT", "ENDREP", // repeat directive
-    "DEPHASE", "REND", // rorg directive
-    "ENDIF" // if directive
+    "ENDR",
+    "ENDREPEAT",
+    "ENDREP", // repeat directive
+    "DEPHASE",
+    "REND",  // rorg directive
+    "ENDIF", // if directive
 ];
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
@@ -238,17 +241,9 @@ pub fn parse_rorg(input: &str) -> IResult<&str, Token> {
 
     let (input, inner) = inner_code(input)?;
 
-
-
     let (input, _) = preceded(space0, alt((tag_no_case("DEPHASE"), tag_no_case("REND"))))(input)?;
 
-    Ok((
-        input,
-        Token::Rorg(
-            exp,
-            inner.into()
-        ),
-    ))
+    Ok((input, Token::Rorg(exp, inner.into())))
 }
 
 /// TODO
@@ -288,7 +283,7 @@ pub fn parse_repeat(input: &str) -> IResult<&str, Token> {
 
     let (input, count) = expr(input)?;
 
-    let (input, inner)  = inner_code(input)?;
+    let (input, inner) = inner_code(input)?;
 
     let (input, _) = tuple((
         space0,
@@ -614,7 +609,10 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
         tag_no_case("ENDIF"),
     ))(input)?;
 
-    Ok((input, Token::If(vec![(cond, code.into())], r#else.map(BaseListing::from))))
+    Ok((
+        input,
+        Token::If(vec![(cond, code.into())], r#else.map(BaseListing::from)),
+    ))
 }
 
 /// Read the condition part in the parse_conditional macro
@@ -1404,23 +1402,18 @@ pub fn string_expr(input: &str) -> IResult<&str, Expr> {
 pub fn parse_label(input: &str) -> IResult<&str, String> {
     // Get the label
 
-let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.")(input)?;
-let (input, middle) = is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")(input)?;
+    let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.")(input)?;
+    let (input, middle) =
+        is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")(input)?;
 
-let label = format!("{}{}",
-                    first,
-                    middle.iter_elements().collect::<String>()
-            );
+    let label = format!("{}{}", first, middle.iter_elements().collect::<String>());
 
-
-            let impossible = ["af", "hl", "de", "bc", "ix", "iy", "ixl", "ixh"];
-            if impossible.iter().any(|val| val == &label.to_lowercase()) {
-                Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
-            } else {
-                Ok((input, label))
-            }
-        
-    
+    let impossible = ["af", "hl", "de", "bc", "ix", "iy", "ixl", "ixh"];
+    if impossible.iter().any(|val| val == &label.to_lowercase()) {
+        Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+    } else {
+        Ok((input, label))
+    }
 }
 
 #[inline]
