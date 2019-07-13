@@ -92,8 +92,9 @@ impl ParserContext {
 }
 
 const FORBIDDEN_MACRO_NAMES: &[&str] = &[
-    "ENDR", "ENDREPEAT", "ENDREP", // repeat macro
-    "DEPHASE", "REND" // rorg macro
+    "ENDR", "ENDREPEAT", "ENDREP", // repeat directive
+    "DEPHASE", "REND", // rorg directive
+    "ENDIF" // if directive
 ];
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
@@ -586,18 +587,18 @@ const IFNDEF_CODE: u8 = 4;
 pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
     // Gest the kind of test to do
     let (input, test_kind) = alt((
-        value(IF_CODE, tag_no_case("IF")),
-        value(IFNOT_CODE, tag_no_case("IFNOT")),
-        value(IFDEF_CODE, tag_no_case("IFDEF")),
-        value(IFNDEF_CODE, tag_no_case("IFNDEF")),
+        value(IF_CODE, parse_instr("IF")),
+        value(IFNOT_CODE, parse_instr("IFNOT")),
+        value(IFDEF_CODE, parse_instr("IFDEF")),
+        value(IFNDEF_CODE, parse_instr("IFNDEF")),
     ))(input)?;
 
     // Get the corresponding test
-    let (input, cond) = delimited(space1, parse_conditional_condition(test_kind), space0)(input)?;
+    let (input, cond) = terminated(parse_conditional_condition(test_kind), space0)(input)?;
 
     let (input, _) = alt((line_ending, tag(":")))(input)?;
 
-    let (input, code) = parse_z80_code(input)?;
+    let (input, code) = inner_code(input)?;
 
     let (input, r#else) = opt(preceded(
         delimited(
@@ -605,7 +606,7 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
             tag_no_case("ELSE"),
             alt((terminated(space0, line_ending), tag(":"))),
         ),
-        parse_z80_code,
+        inner_code,
     ))(input)?;
 
     let (input, _) = tuple((
@@ -613,7 +614,7 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
         tag_no_case("ENDIF"),
     ))(input)?;
 
-    Ok((input, Token::If(vec![(cond, code)], r#else)))
+    Ok((input, Token::If(vec![(cond, code.into())], r#else.map(BaseListing::from))))
 }
 
 /// Read the condition part in the parse_conditional macro
