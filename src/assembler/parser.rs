@@ -12,6 +12,7 @@ use nom::character::complete::*;
 use nom::character::complete::multispace1 as multispace;
 use nom::bytes::complete::tag_no_case;
 use nom::bytes::complete::tag;
+use nom::bytes::complete::*;
 
 
 use std::path::PathBuf;
@@ -180,43 +181,49 @@ pub fn parse_z80_str(code: &str) -> IResult<&str, Listing> {
     Ok((rest.unwrap(), tokens.into()))
 }
 
-// TODO find a way to not use the alternative stuff
-named_attr!(#[doc="TODO"],
-    pub parse_z80_line<&str, Vec<Token>>,
-        alt!(
-            many1!(line_ending) => {|_|{Vec::new()}} |
-            parse_empty_line |
-            parse_repeat => {|repeat| vec![repeat]} |
-            parse_macro => {|m| vec![m]} |
-            parse_basic => {|basic| vec![basic]}|
-            parse_rorg => {|rorg| vec![rorg]}|
-            preceded!(space1, parse_conditional) => {|cond| vec![cond]}|
-            parse_z80_line_label_only |
-            parse_z80_line_complete
-        )
-    );
+/// Parse a single line of Z80. Code useing directive on several lines cannot work
+pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>> {
+    alt((
+        map(many1(line_ending), {|_|{Vec::new()}}),
+        parse_empty_line,
+        map(parse_repeat, {|repeat| vec![repeat]}),
+        map(parse_macro, {|m| vec![m]}),
+        map(parse_basic, {|basic| vec![basic]}),
+        map(parse_rorg, {|rorg| vec![rorg]}),
+        map(preceded(space1, parse_conditional), {|cond| vec![cond]}),
+        parse_z80_line_label_only,
+        parse_z80_line_complete
+    ))(input)
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_rorg <&str, Token>, do_parse!(
-        opt!(multispace) >>
-        alt!(
-            tag_no_case!("PHASE") |
-            tag_no_case!("RORG")
-        ) >>
-        space1 >>
-        exp: expr >>
-        space0 >>
-        line_ending >>
-        inner: opt!(add_return_error!(
-            ErrorKind::Verify/*Custom(error_code::UNABLE_TO_PARSE_INNER_CONTENT)*/,
-            parse_z80_code
-        )) >> 
-        multispace >>
-        alt!(
-            tag_no_case!("DEPHASE") |
-            tag_no_case!("REND")
-        ) >>
-        (
+/// TODO
+    pub fn parse_rorg(input: &str) -> IResult<&str, Token> {
+        
+        let (input, _) = opt(multispace)(input)?;
+        let (input, _) = alt((
+            tag_no_case("PHASE"),
+            tag_no_case("RORG")
+        ))(input)?;
+
+        let (input, exp) = delimited(
+            space1,
+            expr,
+            space0
+        )(input)?;
+
+        let (input, _) = line_ending(input)?;
+
+        let (input, inner) =  opt(parse_z80_code)(input)?;
+        let (input, _) = preceded(
+            multispace,
+            alt((
+                tag_no_case("DEPHASE"),
+                tag_no_case("REND")
+            ))
+        )(input)?;
+
+        Ok((
+            input,
             Token::Rorg(exp,
                 if inner.is_some() {
                     inner.unwrap()
@@ -225,52 +232,66 @@ named_attr!(#[doc="TODO"],
                     Vec::new().into()
                 }
             )
-        )
-    )
-);
+        ))
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_macro<&str, Token>, do_parse!(
-        opt!(multispace) >>
-        tag_no_case!("MACRO") >>
-        space1 >>
-        name: parse_label >> // TODO use a specific function for that
+/// TODO
+pub fn parse_macro(input: &str) -> IResult<&str, Token> {
+        let (input, _) = delimited(
+            opt(multispace),
+            tag_no_case("MACRO"),
+            space1
+        )(input)?;
+
+        let (input, name) = parse_label(input)?;  // TODO use a specific function for that
         // TODO treat args
-        multispace >>
-        content: many_till!(
-            take!(1),
-            tag_no_case!("ENDM")
-        ) >>
-        (
+
+        let (input, content) = preceded(
+            multispace,
+            many_till(
+                take(1usize),
+                tag_no_case("ENDM")
+            )
+        )(input)?;
+
+        Ok((
+            input,
             Token::Macro(
                 name,
                 Vec::new(),
                 content.0.iter().map(|s|->String{s.to_string()}).collect::<String>()
             )
-        )
-    )
-);
+        ))
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_repeat<&str, Token>, do_parse!(
-        opt!(multispace) >>
-        alt!(
-            tag_no_case!("REPEAT") | 
-            tag_no_case!("REPT") | 
-            tag_no_case!("REP")
-         ) >>
-        space1 >>
-        count: expr >>
-        inner: opt!(parse_z80_code) >> 
-        multispace >>
-        alt!(
-            tag_no_case!("ENDREPEAT") 
-            | tag_no_case!("ENDREPT") 
-            | tag_no_case!("ENDREP")
-            | tag_no_case!("ENDR")
-         ) >>
-        space0 >>
-        (
+/// TODO
+pub fn parse_repeat(input: &str) -> IResult<&str, Token> {
+        let (input, _) = delimited(
+            opt(multispace),
+            alt((
+                tag_no_case("REPEAT"),
+                tag_no_case("REPT"),
+                tag_no_case("REP")
+            )),
+            space1
+        )(input)?;
+
+        let (input, count) = expr(input)?;
+        let (input, inner) = opt(parse_z80_code)(input)?;
+
+        let (input, _) = tuple((
+            multispace,
+            alt((
+                tag_no_case("ENDREPEAT"), 
+                tag_no_case("ENDREPT"), 
+                tag_no_case("ENDREP"),
+                tag_no_case("ENDR")
+            )),
+            space0
+        ))(input)?;
+
+        Ok((
+            input,
             Token::Repeat(
                 count, 
                 if inner.is_some() {
@@ -281,45 +302,58 @@ named_attr!(#[doc="TODO"],
                 },
                 None
             )
-        )
-    )
-);
+        ))
+}
 
-named_attr!(#[doc="Parse a Basic bloc"],
-    pub parse_basic<&str, Token>, do_parse!(
-        opt!(multispace) >>
-        tag_no_case!("LOCOMOTIVE") >>
-        space0 >>
-        args: opt!(
-            separated_nonempty_list!(
-                preceded!(
+/// TODO
+pub fn parse_basic(input: &str) -> IResult<&str, Token> {
+    let (input, _) = tuple((
+            opt(multispace),
+            tag_no_case("LOCOMOTIVE"),
+            space0
+    ))(input)?;
+
+    let (input,args) = opt(
+            separated_nonempty_list(
+                preceded(
                     space0, 
-                    char!(',')
+                    char(',')
                 ),
-                preceded!(
+                preceded(
                     space0,
-                    map!(
+                    map(
                         parse_label,
                         |s|{s.to_string()}
                     )
                 )    
             )
-        ) >>
-        space0 >>
-        opt!(tag!("\r")) >>
-        tag!("\n") >>
-        hidden_lines: opt!(
-                    terminated!(
-                        preceded!(
-                            opt!(multispace),
+        )(input)?;
+
+        let (input, _) = tuple((
+            space0,
+            opt(tag("\r")),
+            tag("\n")
+        ))(input)?;
+
+        let (input, hidden_lines) = opt(
+                    terminated(
+                        preceded(
+                            opt(multispace),
                             parse_basic_hide_lines
                         ),
                         multispace
                     )
-        ) >>
-        basic: take_until!("ENDLOCOMOTIVE") >> tag_no_case!("ENDLOCOMOTIVE")>>
-        space0 >>
-        (
+        )(input)?;
+
+        let (input, basic) = take_until("ENDLOCOMOTIVE")(input)?; 
+        
+        let (input, _) = tuple((
+            tag_no_case("ENDLOCOMOTIVE"),
+            space0 
+        ))(input)?;
+
+        Ok(
+        (input,
             Token::Basic(
                 args,
                 hidden_lines,
@@ -327,46 +361,41 @@ named_attr!(#[doc="Parse a Basic bloc"],
             )
         )
     )
-);
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_basic_hide_lines<&str, Vec<u16>>, do_parse!(
-        tag_no_case!("HIDE_LINES") >>
-        space1 >>
-        lines: separated_nonempty_list!(
-            preceded!(
+/// Parse the instruction to hide basic lines
+pub fn parse_basic_hide_lines(input: &str) -> IResult<&str, Vec<u16>> {
+    let (input, _) = tuple((
+            tag_no_case("HIDE_LINES"),
+            space1
+    ))(input)?;
+    separated_nonempty_list(
+            preceded(
                 space0,
-                char!(',')
+                char(',')
             ),
-            preceded!(
+            preceded(
                 space0,
                 dec_u16
             )
-        ) >>
-        (
-            lines
-        )
-    )
-);
+        )(input)
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_empty_line<&str, Vec<Token>>, do_parse!(
-        opt!(line_ending) >>
-            space0 >>
-            comment: opt!(comment) >>
-            alt!(
-                line_ending |
-                eof!()
-            )>>
-        ({
+/// TODO
+pub fn parse_empty_line(input: &str) -> IResult<&str, Vec<Token>> {
+        let (input, _) = opt(line_ending)(input)?;
+        let (input, comment) = preceded(space0, opt(comment))(input)?;
+        let (input, _) = alt((line_ending, eof))(input)?;
+
             let mut res = Vec::new();
             if comment.is_some() {
                 res.push(comment.unwrap());
             }
-            res
-        })
-        )
-    );
+
+        Ok((
+            input, res
+        ))
+}
 
 
 fn parse_single_token(first: bool) -> impl Fn(&str) -> IResult<&str, Token> {
@@ -446,35 +475,41 @@ pub fn parse_z80_line_complete(input:&str) -> IResult<&str, Vec<Token>> {
         Ok((input, tokens))
 }
 
-// No opcodes are expected there.
-// Initially it was supposed to manage lines with only labels, however it has been extended
-// to labels fallowed by specific commands.
-named_attr!(#[doc="TODO"],
-       pub parse_z80_line_label_only <&str, Vec<Token>>, do_parse!(
-        opt!(line_ending) >>
-            label: parse_label >>
+/// No opcodes are expected there.
+/// Initially it was supposed to manage lines with only labels, however it has been extended
+/// to labels fallowed by specific commands.
+pub fn parse_z80_line_label_only(input: &str) -> IResult<&str, Vec<Token>> {
+    let (input, label) = preceded(
+        opt(line_ending),
+        parse_label
+    )(input)?;
+
 
             // TODO make these stuff alternatives ...
             // Manage Equ
-            equ: opt!(
-                preceded!(
-                    preceded!(
+        let (input, equ) = opt(
+                preceded(
+                    preceded(
                         space1,
-                        tag_no_case!("EQU")
+                        tag_no_case("EQU")
                     ),
-                    preceded!(
+                    preceded(
                             space1,
                             expr
-                            )
-                        )
-            )
-            >>
+                    )
+                )
+        )(input)?;
 
            // opt!(char!(':')) >>
-            space0 >>
-            comment: opt!(comment) >>
-            alt!(line_ending | eof!()) >>
-            ({
+
+        let (input, comment) = delimited(
+            space0,
+            opt(comment),
+            alt((line_ending, eof))
+        )(input)?;
+
+
+            {
                 let mut tokens = Vec::new();
 
                 if equ.is_some() {
@@ -487,10 +522,9 @@ named_attr!(#[doc="TODO"],
                     tokens.push(comment.unwrap());
                 }
 
-                tokens
-            })
-            )
-        );
+                Ok((input, tokens))
+            }
+}
 
 named_attr!(#[doc="TODO"],
     parse_include<&str, Token>,
@@ -823,30 +857,36 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
      }
 }
 
-named_attr!(#[doc="TODO"],
-    pub parse_res_set_bit <&str, Token>, do_parse!(
-        res_or_set: alt!(
-            tag_no_case!("RES") => { |_|Mnemonic::Res} |
-            tag_no_case!("BIT") => { |_|Mnemonic::Bit} |
-            tag_no_case!("SET") => { |_|Mnemonic::Set}
-        ) >>
+/// Parse RES, SET and BIT instructions
+pub fn parse_res_set_bit(input: &str) -> IResult<&str, Token> {
+    let (input, res_or_set) = dbg::dbg!(alt((
+        value(Mnemonic::Res, tag_no_case("RES")),
+        value(Mnemonic::Bit, tag_no_case("BIT")),
+        value(Mnemonic::Set, tag_no_case("SET"))
+    ))(input))?;
 
-        space1 >>
+    let (input, bit) = dbg::dbg!(preceded(
+        space1,
+        parse_expr
+    )(input))?;
 
-        bit: parse_expr >>
+    let (input, _) = dbg::dbg!(delimited(
+        space0, 
+        tag(","), 
+        space0
+    )(input))?;
 
-        delimited!(space0, tag!(","), space0) >>
+    let (input, operand) = dbg::dbg!(alt((
+        parse_register8,
+        parse_hl_address,
+        parse_indexregister_with_index
+    ))(input))?;
 
-        operand: alt!(
-            parse_register8 |
-            parse_hl_address |
-            parse_indexregister_with_index
-        )>> 
-        (
-            Token::OpCode(res_or_set, Some(bit), Some(operand))
-        )
-    )
-);
+    dbg::dbg!(Ok((
+        input,
+        Token::OpCode(res_or_set, Some(bit), Some(operand))
+    )))
+}
 
 named_attr!(#[doc="TODO"],
     pub parse_cp <&str, Token>, do_parse!(
@@ -1456,94 +1496,100 @@ named_attr!(#[doc="Parse (HL)"],
     )
 );
 
-named_attr!(#[doc="Parse and expression and returns it inside a DataAccession::Expression"],
-    pub parse_expr <&str, DataAccess>,
-    do_parse!(
-        expr: expr >>
-        (
-            DataAccess::Expression(expr)
-        )
-        )
-    );
+/// Parse and expression and returns it inside a DataAccession::Expression
+pub fn parse_expr(input: &str) -> IResult<&str, DataAccess> {
+    let (input, expr) = expr(input)?;
+    Ok((input, DataAccess::Expression(expr)))
+}
 
-named_attr!(#[doc="TODO"],
-    pub parse_org <&str, Token>, do_parse!(
-        tag_no_case!("ORG") >>
-        space1 >>
-        val: expr >>
-        (Token::Org(val, None))
-    )
-);
+/// Parse standard org directive
+pub fn parse_org(input: &str) -> IResult<&str, Token> {
+    let (input, _) = tuple((
+         tag_no_case("ORG"),
+        space1
+    ))(input)?;
 
-named_attr!(#[doc="TODO"],
-    pub parse_defs <&str, Token>, do_parse!(
-        tag_no_case!("DEFS") >>
-        space1 >>
-        val: expr >>
-        (Token::Defs(val, None))
-        )
-    );
+    let (input, val) = expr(input)?;
+    
+    Ok((input, Token::Org(val, None)))
+}
 
-named_attr!(#[doc="TODO"],
-  pub parse_opcode_no_arg <&str, Token>,
-    do_parse!(
-    res:alt!(
-        tag_no_case!("DI") => { |_| Mnemonic::Di } |
-        tag_no_case!("EI") => { |_| Mnemonic::Ei } |
-        tag_no_case!("EXX") => { |_| Mnemonic::Exx } |
-        tag_no_case!("HALT") => {|_| Mnemonic::Halt } |
-        tag_no_case!("LDIR") => { |_| Mnemonic::Ldir } |
-        tag_no_case!("LDDR") => { |_| Mnemonic::Lddr } |
-        tag_no_case!("LDI") => { |_| Mnemonic::Ldi } |
-        tag_no_case!("LDD") => { |_| Mnemonic::Ldd } |
-        tag_no_case!("NOPS2") => { |_| Mnemonic::Nops2 } |
-        tag_no_case!("NOP") => { |_| Mnemonic::Nop } |
-        tag_no_case!("OUTD") => { |_| Mnemonic::Outd } |
-        tag_no_case!("OUTI") => { |_| Mnemonic::Outi } |
-        tag_no_case!("RRA") => {|_| Mnemonic::Rra } |
-        value!(Mnemonic::Scf, tag_no_case!("SCF")) |
-        value!(Mnemonic::Ind, tag_no_case!("IND")) |
-        value!(Mnemonic::Indr, tag_no_case!("INDR")) |
-        value!(Mnemonic::Ini, tag_no_case!("INI")) |
-        value!(Mnemonic::Inir, tag_no_case!("INIR"))
-      )
-    >> (Token::OpCode(res, None, None) )
-    )
-);
+/// Parse defs instruction. TODO add optional parameters
+pub fn parse_defs(input: &str) -> IResult<&str, Token> {
+    let (input, _) = tuple((
+         tag_no_case("DEFS"),
+        space1
+    ))(input)?;
 
-named_attr!(#[doc="TODO"],
-    pub parse_value <&str, Expr>, do_parse!(
-        val: alt!(hex_u16 | dec_u16 | bin_u16) >>
-        (Expr::Value(val as i32))
-        )
-    );
+    let (input, val) = expr(input)?;
+    
+    Ok((input, Token::Defs (val, None)))
+}
 
-named_attr!(#[doc="TODO"],
-    pub hex_u16 <&str, u16>, do_parse!(
-        alt!(tag_no_case!("0x") | tag!("#") | tag!("&")) >>
-        val: hex_u16_inner >>
-        (val)
-        )
-    );
+/// Parse any opcode having no argument
+pub fn parse_opcode_no_arg(input: &str) -> IResult<&str, Token> {
+    let (input, mnemonic) = alt((
+        map(tag_no_case("DI") , { |_| Mnemonic::Di }),
+        map(tag_no_case("EI") , { |_| Mnemonic::Ei }),
+        map(tag_no_case("EXX") , { |_| Mnemonic::Exx }) ,
+        map(tag_no_case("HALT") , {|_| Mnemonic::Halt }) ,
+        map(tag_no_case("LDIR") , { |_| Mnemonic::Ldir }) ,
+        map(tag_no_case("LDDR"), { |_| Mnemonic::Lddr }) ,
+        map(tag_no_case("LDI") , { |_| Mnemonic::Ldi }) ,
+        map(tag_no_case("LDD") , { |_| Mnemonic::Ldd }) ,
+        map(tag_no_case("NOPS2") , { |_| Mnemonic::Nops2 }) ,
+        map(tag_no_case("NOP") , { |_| Mnemonic::Nop }) ,
+        map(tag_no_case("OUTD") , { |_| Mnemonic::Outd }) ,
+        map(tag_no_case("OUTI") , { |_| Mnemonic::Outi }) ,
+        map(tag_no_case("RRA") , {|_| Mnemonic::Rra }) ,
+        value(Mnemonic::Scf, tag_no_case("SCF")) ,
+        value(Mnemonic::Ind, tag_no_case("IND")) ,
+        value(Mnemonic::Indr, tag_no_case("INDR")) ,
+        value(Mnemonic::Ini, tag_no_case("INI")) ,
+        value(Mnemonic::Inir, tag_no_case("INIR"))
+      ))(input)?;
 
-named_attr!(#[doc="Parse a comment that start by `;` and ends at the end of the line."],
-    comment<&str, Token>,
-    map!(
-        preceded!(tag!(";"), take_till!(|ch| ch == '\n')),
-        |string| Token::Comment(string.iter_elements().collect::<String>())
-    )
-);
+    Ok((input, Token::OpCode(mnemonic, None, None) ))
+ }
 
-// Usefull later for db
-named_attr!(#[doc="TODO"],pub string_between_quotes<&str, &str>, delimited!(char!('\"'), is_not!("\""), char!('\"')));
+/// Read a value
+pub fn parse_value(input: &str) -> IResult<&str, Expr> {
+        let (input, val) = alt((hex_u16, dec_u16, bin_u16))(input)?;
+        Ok((input, Expr::Value(val as i32)))
+}
 
-named_attr!(#[doc="TODO"],
-    pub string_expr<&str, Expr>,
-    map!(
+/// Read an hexadecimal value
+pub fn hex_u16(input: &str) ->IResult<&str, u16> {
+        preceded(
+            alt((tag_no_case("0x"), tag("#"), tag("&"))),
+            hex_u16_inner
+        )(input)
+}
+
+/// Parse a comment that start by `;` and ends at the end of the line.
+pub fn comment(input: &str) -> IResult<&str, Token> {
+    map(
+        preceded(
+            tag(";"), 
+            take_till(|ch| ch == '\n')
+        ),
+        |string: &str| Token::Comment(
+            string.iter_elements().collect::<String>())
+    )(input)
+}
+
+/// Usefull later for db
+pub fn string_between_quotes(input:&str) -> IResult<&str, &str> {
+    delimited(char('\"'), is_not("\""), char('\"'))(input)
+}
+
+/// TODO
+pub fn string_expr(input: &str) -> IResult<&str, Expr> {
+    map(
         string_between_quotes,
         |string| Expr::String(string.to_string())
-    )
-);
+    )(input)
+}
 
 /// Parse a label
 pub fn parse_label(input: &str) -> IResult<&str, String> {
@@ -1601,24 +1647,24 @@ pub fn dec_u16(input: &str) -> IResult<&str, u16> {
     }
 }
 
-named_attr!(#[doc="TODO"],
-pub bin_u16<&str, u16>, do_parse!(
-    alt!( tag_no_case!("0b") | tag_no_case!("%")) >>
-    value: fold_many1!( 
-        alt!(
-            tag!("0") => {|_|{0}} |
-            tag!("1") => {|_|{1}}
-        ),
-         0, 
-        |mut acc: u16, item: u16| {
-            acc *= 2;
-            acc += item;
-            acc
-        }
-    )
-
-    >> (value)
-));
+/// Parse a binary number
+pub fn bin_u16(input: &str) -> IResult<&str, u16> {
+    preceded(
+        alt(( tag_no_case("0b"), tag_no_case("%"))),
+        fold_many1( 
+            alt((
+                value(0, tag("0")),
+                value(1, tag("1"))
+            )),
+            0, 
+            |mut acc: u16, item: u16| {
+                acc *= 2;
+                acc += item;
+                acc
+            }
+        )
+    )(input)
+}
 
 #[inline]
 /// Parse hexadecimal 16 bits number
@@ -1663,14 +1709,14 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 
 // XXX Code greatly inspired from https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs
 
-named_attr!(#[doc="TODO"],
-    parens<&str, Expr>,
-    delimited!(
-        delimited!(space0, tag!("("), space0),
-        map!(map!(expr, Box::new), Expr::Paren),
-        delimited!(space0, tag!(")"), space0)
-    )
-);
+/// Read a parenthesed expression
+pub fn parens(input: &str) -> IResult<&str, Expr> {
+    delimited(
+        delimited(space0, tag("("), space0),
+        map(map(expr, Box::new), Expr::Paren),
+        delimited(space0, tag(")"), space0)
+    )(input)
+}
 
 
 /// Get a factor
@@ -1791,47 +1837,76 @@ pub fn expr(input: &str) -> IResult<&str, Expr> {
 }
 
 
-named_attr!(#[doc="TODO"],pub   parse_hi_or_lo <&str, Expr>, do_parse!(
-        hi_or_lo: alt!(
-            value!(Function::Hi, tag_no_case!("HI")) |
-            value!(Function::Lo, tag_no_case!("LO")) 
-        ) >>
-        space0 >>
-        tag!("(") >>
-        space0 >>
-        exp: expr >>
-        space0 >>
-        tag!(")") >>
-        (
+
+
+/// TODO generalize to other functions
+pub fn   parse_hi_or_lo(input: &str) -> IResult <&str, Expr> {
+    let (input,    hi_or_lo) =  alt((
+            value(Function::Hi, tag_no_case("HI")),
+            value(Function::Lo, tag_no_case("LO")) 
+        ))(input)?;
+
+    let (input, _) = tuple((
+        space0,
+        tag("("),
+        space0
+    ))(input)?;
+
+    let (input, exp) = expr(input)?;
+
+    let (input, _) = tuple((
+        space0,
+        tag(")")
+    ))(input)?;
+
+    Ok((
+            input,
             match hi_or_lo {
                 Function::Hi => Expr::High(Box::new(exp)),
                 Function::Lo => Expr::Low(Box::new(exp)),
             }
-        )
-    )
-);
+    ))
+    
+}
 
-named_attr!(#[doc="TODO"],pub parse_duration <&str, Expr>, do_parse!(
-    tag_no_case!("duration(") >>
-    space0 >>
-    token: parse_token >>
-    space0 >>
-    tag!(")") >>
-    (
+/// Parser for functions taking into argument a token
+pub fn token_function<'a>(function_name: &'static str) -> impl Fn(&'a str) -> IResult<&str, Token> {
+    move|input: &'a str| {
+        let (input, _) = tuple((
+            tag_no_case(function_name),
+            space0,
+            char('('),
+            space0
+        ))(input)?;
+
+        let (input, token) = parse_token(input)?;
+
+        let (input, _) = tuple((
+            space0,
+            tag(")")
+        ))(input)?;
+
+        Ok((input, token))
+    }
+}
+
+/// Parse the duration function
+pub fn parse_duration(input: &str) -> IResult<&str, Expr> {
+    let (input, token) = token_function("duration")(input)?;
+    Ok((
+        input,
         Expr::Duration(Box::new(token))
-    )
-));
+    ))
+}
 
-named_attr!(#[doc="TODO"],pub parse_assemble <&str, Expr>, do_parse!(
-    tag_no_case!("opcode(") >>
-    space0 >>
-    token: parse_token >>
-    space0 >>
-    tag!(")") >>
-    (
+/// Parse the single opcode assembling function
+pub fn parse_assemble(input: &str)  -> IResult<&str, Expr> {
+    let (input, token) = token_function("opcode")(input)?;
+    Ok((
+        input,
         Expr::OpCode(Box::new(token))
-    )
-));
+    ))
+}
 
 
 /// Parse operation related to + - & | 
