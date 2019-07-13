@@ -215,6 +215,17 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>> {
     Ok((input2, tokens))
 }
 
+/// Workaround because many0 is not used in the main root function
+fn inner_code(input: &str) -> IResult<&str, Vec<Token>> {
+    map(many0(parse_z80_line), |tokens| {
+        let mut inner: Vec<Token> = Vec::new();
+        for group in &tokens {
+            inner.extend_from_slice(&group);
+        }
+        inner
+    })(input)
+}
+
 /// TODO
 pub fn parse_rorg(input: &str) -> IResult<&str, Token> {
     let (input, _) = space0(input)?;
@@ -224,13 +235,7 @@ pub fn parse_rorg(input: &str) -> IResult<&str, Token> {
 
     let (input, _) = line_ending(input)?;
 
-        let (input, inner) = map(many0(parse_z80_line), |tokens| {
-        let mut inner: Vec<Token> = Vec::new();
-        for group in &tokens {
-            inner.extend_from_slice(&group);
-        }
-        inner
-    })(input)?;
+    let (input, inner) = inner_code(input)?;
 
 
 
@@ -282,13 +287,7 @@ pub fn parse_repeat(input: &str) -> IResult<&str, Token> {
 
     let (input, count) = expr(input)?;
 
-    let (input, inner) = map(many0(parse_z80_line), |tokens| {
-        let mut inner: Vec<Token> = Vec::new();
-        for group in &tokens {
-            inner.extend_from_slice(&group);
-        }
-        inner
-    })(input)?;
+    let (input, inner)  = inner_code(input)?;
 
     let (input, _) = tuple((
         space0,
