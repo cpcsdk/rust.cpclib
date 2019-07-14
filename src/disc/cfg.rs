@@ -1,15 +1,14 @@
 use custom_error::custom_error;
-use nom::character::complete::*;
-/// Parser of the disc configuraiton used by the Arkos Loader
-
-use nom::*;
-use nom::combinator::*;
-use nom::sequence::*;
-use nom::branch::*;
-use nom::bytes::complete::*;
-use nom::multi::*;
 use itertools;
 use itertools::Itertools;
+use nom::branch::*;
+use nom::bytes::complete::*;
+use nom::character::complete::*;
+use nom::combinator::*;
+use nom::multi::*;
+use nom::sequence::*;
+/// Parser of the disc configuraiton used by the Arkos Loader
+use nom::*;
 use std::iter::Iterator;
 
 use crate::disc::edsk::*;
@@ -368,7 +367,7 @@ impl From<&ExtendedDsk> for DiscConfig {
     }
 }
 
-fn number(input: &str) -> IResult<&str, u16>{
+fn number(input: &str) -> IResult<&str, u16> {
     alt((hex, dec))(input)
 }
 
@@ -395,7 +394,7 @@ fn is_dec_digit(c: char) -> bool {
 fn hex(input: &str) -> IResult<&str, u16> {
     preceded(
         tag("0x"),
-        map_res(take_while_m_n(1, 2, is_hex_digit), from_hex)
+        map_res(take_while_m_n(1, 2, is_hex_digit), from_hex),
     )(input)
 }
 
@@ -404,140 +403,94 @@ fn dec(input: &str) -> IResult<&str, u16> {
 }
 
 fn value_of_key<'a>(key: &'static str) -> impl Fn(&'a str) -> IResult<&'a str, u16> {
-	move |input: &'a str| {
-        delimited(tuple((
-		space0,
-		tag_no_case(key),
-		space0,
-		tag("="),
-		space0
-        )),
-
-		number,
-
-        tuple((
-		space0,
-		opt(line_ending)
-        ))
-		)(input)
-    }
-}
-
-fn list_of_key<'a>(key: &'static str) -> impl Fn(&'a str)-> IResult<&'a str, Vec<u16>> {
     move |input: &'a str| {
-	delimited(tuple((
-		space0,
-		tag_no_case(key),
-		space0,
-		tag("="),
-		space0
-        )),
-
-		 list_of_values,
-
-		tuple((space0,
-		opt(line_ending)))
-		
-	)(input)
+        delimited(
+            tuple((space0, tag_no_case(key), space0, tag("="), space0)),
+            number,
+            tuple((space0, opt(line_ending))),
+        )(input)
     }
 }
 
-fn empty_line(input:&str) -> IResult<&str, ()> {
-    value(
-        (),
-        tuple((space0, line_ending))
-    )(input)
+fn list_of_key<'a>(key: &'static str) -> impl Fn(&'a str) -> IResult<&'a str, Vec<u16>> {
+    move |input: &'a str| {
+        delimited(
+            tuple((space0, tag_no_case(key), space0, tag("="), space0)),
+            list_of_values,
+            tuple((space0, opt(line_ending))),
+        )(input)
+    }
+}
+
+fn empty_line(input: &str) -> IResult<&str, ()> {
+    value((), tuple((space0, line_ending)))(input)
 }
 
 fn track_group_head(input: &str) -> IResult<&str, TrackGroup> {
     let (input, head) = alt((
-	
         delimited(
-            tag_no_case("[Track-"), 
+            tag_no_case("[Track-"),
             alt((
-                value( Head::A, tag_no_case("A")),
-                value( Head::B, tag_no_case("B"))
+                value(Head::A, tag_no_case("A")),
+                value(Head::B, tag_no_case("B")),
             )),
-            tag_no_case(":")
+            tag_no_case(":"),
         ),
-
-        value( Head::Unspecified, tag_no_case("[Track:") )
+        value(Head::Unspecified, tag_no_case("[Track:")),
     ))(input)?;
 
-
-    let (input, tracks) = terminated(
-            list_of_values,
-            tuple((
-             tag_no_case("]"),
-             many0(empty_line))))(input)?;
-
+    let (input, tracks) =
+        terminated(list_of_values, tuple((tag_no_case("]"), many0(empty_line))))(input)?;
 
     // TODO modify the remaining part in order to allow any order
 
-    let (input, sector_size) = terminated(
-            value_of_key("SectorSize"),
-             many0(empty_line)
-    )(input)?;
+    let (input, sector_size) = terminated(value_of_key("SectorSize"), many0(empty_line))(input)?;
 
-
-    let (input, gap3) = terminated(
-        value_of_key("Gap3"),
-        many0(empty_line)
-    )(input)?;
+    let (input, gap3) = terminated(value_of_key("Gap3"), many0(empty_line))(input)?;
 
     let (input, sector_id) = list_of_key("SectorId")(input)?;
 
     let (input, sector_id_head) = list_of_key("SectorIdHead")(input)?;
 
-    Ok((input,
-    TrackGroup {
-                tracks: tracks.iter().map(|v| *v as u8).collect::<Vec<u8>>(),
-                head: head,
-                sector_size,
-                gap3: gap3 as u8,
-                sector_id: sector_id.iter().map(|&v| v as u8).collect::<Vec<_>>(),
-                sector_id_head: sector_id_head.iter().map(|&v| v as u8).collect::<Vec<_>>(),
-            })
-    )
+    Ok((
+        input,
+        TrackGroup {
+            tracks: tracks.iter().map(|v| *v as u8).collect::<Vec<u8>>(),
+            head: head,
+            sector_size,
+            gap3: gap3 as u8,
+            sector_id: sector_id.iter().map(|&v| v as u8).collect::<Vec<_>>(),
+            sector_id_head: sector_id_head.iter().map(|&v| v as u8).collect::<Vec<_>>(),
+        },
+    ))
 }
-
 
 /// TODO allow to write the information in a different order
 pub fn parse_config(input: &str) -> IResult<&str, DiscConfig> {
-  let (input, nb_tracks) = preceded(
-		many0(empty_line),
-	  value_of_key("NbTrack")
-  )(input)?;
+    let (input, nb_tracks) = preceded(many0(empty_line), value_of_key("NbTrack"))(input)?;
 
-	let (input, nb_heads) = preceded(
+    let (input, nb_heads) = preceded(
         many0(empty_line),
-	    alt((
-          value_of_key("NbHead"),
-          value_of_key("NbSide")
-       ))
+        alt((value_of_key("NbHead"), value_of_key("NbSide"))),
     )(input)?;
 
-	let (input, track_groups) = fold_many1(
-			 preceded(
-			  many0(empty_line),
-			  track_group_head
-		   ),
-			 Vec::new(),
-			 |mut acc: Vec<_>, item|{
-				 acc.push(item);
-				 acc
-			 }
-		 )(input)?;
+    let (input, track_groups) = fold_many1(
+        preceded(many0(empty_line), track_group_head),
+        Vec::new(),
+        |mut acc: Vec<_>, item| {
+            acc.push(item);
+            acc
+        },
+    )(input)?;
 
-	Ok((input,
-		DiscConfig {
-			nb_tracks: nb_tracks as _,
-			nb_heads: nb_heads as _,
-			track_groups
-		}
-	)
-
-  )
+    Ok((
+        input,
+        DiscConfig {
+            nb_tracks: nb_tracks as _,
+            nb_heads: nb_heads as _,
+            track_groups,
+        },
+    ))
 }
 
 #[cfg(test)]

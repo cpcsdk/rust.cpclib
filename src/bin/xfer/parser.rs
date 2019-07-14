@@ -1,14 +1,14 @@
-use nom::*;
-use nom::combinator::*;
-use nom::sequence::*;
 use nom::branch::*;
 use nom::bytes::complete::*;
-use nom::multi::*;
 use nom::character::complete::*;
+use nom::combinator::*;
+use nom::multi::*;
+use nom::sequence::*;
+use nom::*;
 
 use std::str;
 
-#[derive(Debug, Clone )]
+#[derive(Debug, Clone)]
 pub(crate) enum XferCommand {
     Cd(Option<String>),
     Pwd,
@@ -22,35 +22,24 @@ pub(crate) enum XferCommand {
 
 fn ls_path(input: &str) -> IResult<&str, XferCommand> {
     map(
-        preceded(tuple((
-        tag_no_case("ls"),
-        space1
-     )),
-      alpha1
-     ),
-      |path: &str|XferCommand::Ls(Some(path.to_string()))
+        preceded(tuple((tag_no_case("ls"), space1)), alpha1),
+        |path: &str| XferCommand::Ls(Some(path.to_string())),
     )(input)
 }
 
-fn ls_no_path(input :&str) -> IResult<&str, XferCommand> {
-    value(
-        XferCommand::Ls(None),
-        tag_no_case("ls")
-    )(input)
+fn ls_no_path(input: &str) -> IResult<&str, XferCommand> {
+    value(XferCommand::Ls(None), tag_no_case("ls"))(input)
 }
 
 fn ls(input: &str) -> IResult<&str, XferCommand> {
     alt((ls_path, ls_no_path))(input)
 }
 
-fn  cd_path(input: &str) -> IResult<&str, XferCommand> {
-    map(preceded(tuple((
-        tag_no_case("cd"), 
-        space1
-     )),
-     alpha1
-     ), |path: &str| XferCommand::Cd(Some(path.to_string())))(input)
-    
+fn cd_path(input: &str) -> IResult<&str, XferCommand> {
+    map(
+        preceded(tuple((tag_no_case("cd"), space1)), alpha1),
+        |path: &str| XferCommand::Cd(Some(path.to_string())),
+    )(input)
 }
 
 fn cd_no_path(input: &str) -> IResult<&str, XferCommand> {
@@ -58,18 +47,18 @@ fn cd_no_path(input: &str) -> IResult<&str, XferCommand> {
 }
 
 fn cd(input: &str) -> IResult<&str, XferCommand> {
-    alt((cd_path , cd_no_path))(input)
+    alt((cd_path, cd_no_path))(input)
 }
 
 fn no_arg(input: &str) -> IResult<&str, XferCommand> {
     alt((
-        map(tag_no_case("pwd") , 	{|_|{XferCommand::Pwd}} ),
-        map(tag_no_case("reboot") , 	{|_|{XferCommand::Reboot}} ),
-        map(tag_no_case("reset") ,	{|_|{XferCommand::Reset}})
+        map(tag_no_case("pwd"), { |_| XferCommand::Pwd }),
+        map(tag_no_case("reboot"), { |_| XferCommand::Reboot }),
+        map(tag_no_case("reset"), { |_| XferCommand::Reset }),
     ))(input)
 }
 
 /// Launch the parsing of the line
 pub(crate) fn parse_command(input: &str) -> IResult<&str, XferCommand> {
-    alt(( cd , ls , no_arg))(input)
+    alt((cd, ls, no_arg))(input)
 }
