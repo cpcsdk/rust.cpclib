@@ -1,8 +1,13 @@
 use custom_error::custom_error;
 use nom::character::complete::*;
 /// Parser of the disc configuraiton used by the Arkos Loader
-use nom::*;
 
+use nom::*;
+use nom::combinator::*;
+use nom::sequence::*;
+use nom::branch::*;
+use nom::bytes::complete::*;
+use nom::multi::*;
 use itertools;
 use itertools::Itertools;
 use std::iter::Iterator;
@@ -363,12 +368,13 @@ impl From<&ExtendedDsk> for DiscConfig {
     }
 }
 
-named!(value<&str, u16>, alt!(hex | dec));
+fn number(input: &str) -> IResult<&str, u16>{
+    alt((hex, dec))(input)
+}
 
-named!(
-    list_of_values<&str, Vec<u16>>,
-    separated_list!(tag!(","), value)
-);
+fn list_of_values(input: &str) -> IResult<&str, Vec<u16>> {
+    separated_list(tag(","), number)(input)
+}
 
 fn from_hex(input: &str) -> Result<u16, std::num::ParseIntError> {
     u16::from_str_radix(&input, 16)
@@ -386,80 +392,105 @@ fn is_dec_digit(c: char) -> bool {
     c.is_digit(10)
 }
 
-named!(
-    hex<&str, u16>,
-    do_parse!(
-        tag!("0x") >> value: map_res!(take_while_m_n!(1, 2, is_hex_digit), from_hex) >> (value)
-    )
-);
+fn hex(input: &str) -> IResult<&str, u16> {
+    preceded(
+        tag("0x"),
+        map_res(take_while_m_n(1, 2, is_hex_digit), from_hex)
+    )(input)
+}
 
-named!(
-    dec<&str, u16>,
-    map_res!(take_while!(is_dec_digit), from_dec)
-);
+fn dec(input: &str) -> IResult<&str, u16> {
+    map_res(take_while(is_dec_digit), from_dec)(input)
+}
 
-named_args!(value_of_key<'a>(key: &str)<&'a str, u16>,
-	do_parse!(
-		space0 >>
-		tag_no_case!(key) >>
-		space0 >>
-		tag!("=") >>
-		space0 >>
-		val: value >>
-		space0 >>
-		opt!(line_ending) >>
-		(
-			val
-		)
-	)
-);
+fn value_of_key<'a>(key: &'static str) -> impl Fn(&'a str) -> IResult<&'a str, u16> {
+	move |input: &'a str| {
+        delimited(tuple((
+		space0,
+		tag_no_case(key),
+		space0,
+		tag("="),
+		space0
+        )),
 
-named_args!(list_of_key<'a>(key: &str)<&'a str, Vec<u16>>,
-	do_parse!(
-		space0 >>
-		tag_no_case!(key) >>
-		space0 >>
-		tag!("=") >>
-		space0 >>
-		vals: list_of_values >>
-		space0 >>
-		opt!(line_ending) >>
-		(
-			vals
-		)
-	)
-);
+		number,
 
-named!(
-    empty_line<&str, ()>,
-    do_parse!(space0 >> line_ending >> (()))
-);
+        tuple((
+		space0,
+		opt(line_ending)
+        ))
+		)(input)
+    }
+}
 
-named!(
-    track_group_head<&str, TrackGroup>,
-    do_parse!(
-        head: alt! (
+fn list_of_key<'a>(key: &'static str) -> impl Fn(&'a str)-> IResult<&'a str, Vec<u16>> {
+    move |input: &'a str| {
+	delimited(tuple((
+		space0,
+		tag_no_case(key),
+		space0,
+		tag("="),
+		space0
+        )),
+
+		 list_of_values,
+
+		tuple((space0,
+		opt(line_ending)))
+		
+	)(input)
+    }
+}
+
+fn empty_line(input:&str) -> IResult<&str, ()> {
+    value(
+        (),
+        tuple((space0, line_ending))
+    )(input)
+}
+
+fn track_group_head(input: &str) -> IResult<&str, TrackGroup> {
+    let (input, head) = alt((
 	
-	delimited!(
-		tag_no_case!("[Track-"), 
-		alt!(
-			tag_no_case!("A") => {|_|{Head::A}} |
-			tag_no_case!("B") => {|_|{Head::B}}
-		),
-	 tag_no_case!(":")
- ) |
+        delimited(
+            tag_no_case("[Track-"), 
+            alt((
+                value( Head::A, tag_no_case("A")),
+                value( Head::B, tag_no_case("B"))
+            )),
+            tag_no_case(":")
+        ),
 
- tag_no_case!("[Track:")  => {|_| {Head::Unspecified}})
-            >> tracks: list_of_values
-            >> tag_no_case!("]")
-            >> many0!(empty_line)
-            >> sector_size: call!(value_of_key, "SectorSize")
-            >> many0!(empty_line)
-            >> gap3: call!(value_of_key, "Gap3")
-            >> many0!(empty_line)
-            >> sector_id: call!(list_of_key, "SectorId")
-            >> sector_id_head: call!(list_of_key, "SectorIdHead")
-            >> (TrackGroup {
+        value( Head::Unspecified, tag_no_case("[Track:") )
+    ))(input)?;
+
+
+    let (input, tracks) = terminated(
+            list_of_values,
+            tuple((
+             tag_no_case("]"),
+             many0(empty_line))))(input)?;
+
+
+    // TODO modify the remaining part in order to allow any order
+
+    let (input, sector_size) = terminated(
+            value_of_key("SectorSize"),
+             many0(empty_line)
+    )(input)?;
+
+
+    let (input, gap3) = terminated(
+        value_of_key("Gap3"),
+        many0(empty_line)
+    )(input)?;
+
+    let (input, sector_id) = list_of_key("SectorId")(input)?;
+
+    let (input, sector_id_head) = list_of_key("SectorIdHead")(input)?;
+
+    Ok((input,
+    TrackGroup {
                 tracks: tracks.iter().map(|v| *v as u8).collect::<Vec<u8>>(),
                 head: head,
                 sector_size,
@@ -468,20 +499,27 @@ named!(
                 sector_id_head: sector_id_head.iter().map(|&v| v as u8).collect::<Vec<_>>(),
             })
     )
-);
+}
 
-named_attr!(#[doc="// TODO allow to write the information in a different order"],pub parse_config<&str, DiscConfig>,
-  do_parse!(
-		many0!(empty_line) >>
-	  nb_tracks: call!(value_of_key, "NbTrack") >>
-		many0!(empty_line) >>
-	  nb_heads: alt!(
-          call!(value_of_key, "NbHead") |
-          call!(value_of_key, "NbSide")
-       ) >>
-		track_groups: fold_many1!(
-			 preceded!(
-			  many0!(empty_line),
+
+/// TODO allow to write the information in a different order
+pub fn parse_config(input: &str) -> IResult<&str, DiscConfig> {
+  let (input, nb_tracks) = preceded(
+		many0(empty_line),
+	  value_of_key("NbTrack")
+  )(input)?;
+
+	let (input, nb_heads) = preceded(
+        many0(empty_line),
+	    alt((
+          value_of_key("NbHead"),
+          value_of_key("NbSide")
+       ))
+    )(input)?;
+
+	let (input, track_groups) = fold_many1(
+			 preceded(
+			  many0(empty_line),
 			  track_group_head
 		   ),
 			 Vec::new(),
@@ -489,8 +527,9 @@ named_attr!(#[doc="// TODO allow to write the information in a different order"]
 				 acc.push(item);
 				 acc
 			 }
-		 ) >>
-	(
+		 )(input)?;
+
+	Ok((input,
 		DiscConfig {
 			nb_tracks: nb_tracks as _,
 			nb_heads: nb_heads as _,
@@ -499,7 +538,7 @@ named_attr!(#[doc="// TODO allow to write the information in a different order"]
 	)
 
   )
-);
+}
 
 #[cfg(test)]
 mod tests {
@@ -526,10 +565,10 @@ mod tests {
 
     #[test]
     fn parse_value() {
-        let res = value("0x10 ".into());
+        let res = number("0x10 ".into());
         assert!(res.is_ok());
 
-        let res = value("10 ".into());
+        let res = number("10 ".into());
         assert!(res.is_ok());
     }
 
@@ -551,7 +590,7 @@ mod tests {
 
     #[test]
     fn test_value_of_key() {
-        let res = value_of_key("NbTrack = 80".into(), "NbTrack");
+        let res = value_of_key("NbTrack")("NbTrack = 80".into());
         println!("{:?}", &res);
         assert!(res.is_ok());
     }
