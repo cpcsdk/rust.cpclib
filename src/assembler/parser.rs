@@ -12,7 +12,6 @@ use nom::sequence::*;
 #[allow(missing_docs)]
 use nom::*;
 
-
 use std::path::PathBuf;
 
 use crate::assembler::tokens::*;
@@ -20,7 +19,6 @@ use crate::assembler::AssemblerError;
 use either::*;
 
 use std::str::FromStr;
-
 
 /// ...
 pub mod error_code {
@@ -819,7 +817,6 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token> {
     }
 }
 
-
 fn parse_instr(name: &str) -> impl Fn(&str) -> IResult<&str, ()> + '_ {
     move |input: &str| map(tuple((tag_no_case(name), space1)), |_| ())(input)
 }
@@ -916,7 +913,6 @@ pub fn parse_shifts(input: &str) -> IResult<&str, Token> {
 
     Ok((input, Token::OpCode(operator, Some(operand), None)))
 }
-
 
 /// ...
 pub fn parse_add_or_adc(input: &str) -> IResult<&str, Token> {
@@ -1508,7 +1504,6 @@ pub fn parens(input: &str) -> IResult<&str, Expr> {
         delimited(space0, tag(")"), space0),
     )(input)
 }
-
 
 /// Get a factor
 pub fn factor(input: &str) -> IResult<&str, Expr> {
