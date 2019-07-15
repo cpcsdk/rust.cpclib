@@ -200,8 +200,16 @@ impl DisplayAddress {
         Self::new(page, false, 0)
     }
 
+    /// Generate an address that allow to display overscan picture from the given page
     pub fn new_overscan_from_page(page: u16) -> Self {
         Self::new(page, true, 0)
+    }
+
+    /// Generate an overscan address where each line is contained in a single bank
+    pub fn new_overscan_from_page_one_bank_per_line(page: u16, char_width: u16) -> Self {
+        // number of words missing
+        let delta = (0x800%(char_width*2))/2;
+        Self::new(page, true, delta)
     }
 
     pub fn new_standard_from_address(_address: u16) -> Self {
@@ -648,14 +656,26 @@ impl TileVerticalCapture {
 
 #[allow(missing_docs)]
 impl OutputFormat {
+    /// Generate output format for a linear sprite
     pub fn create_linear_encoded_sprite() -> Self {
         Self::LinearEncodedSprite
     }
 
+    /// Generate output format for an overscan screen
     pub fn create_overscan_cpc_memory() -> Self {
         Self::CPCMemory {
             output_dimension: CPCScreenDimension::overscan(),
             display_address: DisplayAddress::new_overscan_from_page(2), // we do not care of the page
+        }
+    }
+
+    /// Generate output format for an overscan screen for which each imageline is in a single bank (this is not the case for the standard overscan)
+    pub fn create_overscan_cpc_memory_one_bank_per_line() -> Self {
+        let output_dimension = CPCScreenDimension::overscan();
+        let display_address = DisplayAddress::new_overscan_from_page_one_bank_per_line(2, output_dimension.nb_word_columns() as _);
+        Self::CPCMemory {
+            output_dimension,
+            display_address
         }
     }
 
