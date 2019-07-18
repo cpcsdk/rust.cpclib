@@ -374,6 +374,11 @@ impl DisplayAddress {
         self.page_start() + self.offset() * 2
     }
 
+    /// Change the adress to point to the previous word
+    pub fn move_to_previous_word(&mut self) {
+        unimplemented!()
+    }
+
     /// Assume the object represent the character of interest and move to next one
     pub fn move_to_next_word(&mut self) {
         let was_overscan = self.is_overscan();
@@ -440,6 +445,70 @@ pub enum OutputFormat {
         grid_height: GridHeightCapture,
     },
 }
+
+
+
+#[allow(missing_docs)]
+impl OutputFormat {
+
+    /// For formats manipulating a display address, modify it vertically in order to make scroll the image
+    pub fn vertically_shift_display_address(&mut self, delta: i32) {
+        match self {
+            Self::CPCMemory {
+                output_dimension,
+                display_address
+            } => {
+                
+                if delta >= 0 {
+                    for _ in  0..delta*i32::from(output_dimension.nb_word_columns()) {
+                        display_address.move_to_next_word();
+                    }
+                }
+                else {
+                    for _ in  0..(-delta)*i32::from(output_dimension.nb_word_columns()) {
+                        display_address.move_to_previous_word();
+                    }
+                }
+            },
+            _ => {
+
+            }
+        }
+    }
+
+    /// Generate output format for a linear sprite
+    pub fn create_linear_encoded_sprite() -> Self {
+        Self::LinearEncodedSprite
+    }
+
+    /// Generate output format for an overscan screen
+    pub fn create_overscan_cpc_memory() -> Self {
+        Self::CPCMemory {
+            output_dimension: CPCScreenDimension::overscan(),
+            display_address: DisplayAddress::new_overscan_from_page(2), // we do not care of the page
+        }
+    }
+
+    /// Generate output format for an overscan screen for which each imageline is in a single bank (this is not the case for the standard overscan)
+    pub fn create_overscan_cpc_memory_one_bank_per_line() -> Self {
+        let output_dimension = CPCScreenDimension::overscan();
+        let display_address = DisplayAddress::new_overscan_from_page_one_bank_per_line(2, output_dimension.nb_word_columns() as _);
+        Self::CPCMemory {
+            output_dimension,
+            display_address
+        }
+    }
+
+    pub fn create_standard_cpc_memory() -> Self {
+        Self::CPCMemory {
+            output_dimension: CPCScreenDimension::standard(),
+            display_address: DisplayAddress::new_standard_from_page(2),
+        }
+    }
+}
+
+
+
 
 /// Defines the width of the capture
 #[derive(Debug, Clone, Copy)]
@@ -731,38 +800,6 @@ impl TileVerticalCapture {
     }
 }
 
-#[allow(missing_docs)]
-impl OutputFormat {
-    /// Generate output format for a linear sprite
-    pub fn create_linear_encoded_sprite() -> Self {
-        Self::LinearEncodedSprite
-    }
-
-    /// Generate output format for an overscan screen
-    pub fn create_overscan_cpc_memory() -> Self {
-        Self::CPCMemory {
-            output_dimension: CPCScreenDimension::overscan(),
-            display_address: DisplayAddress::new_overscan_from_page(2), // we do not care of the page
-        }
-    }
-
-    /// Generate output format for an overscan screen for which each imageline is in a single bank (this is not the case for the standard overscan)
-    pub fn create_overscan_cpc_memory_one_bank_per_line() -> Self {
-        let output_dimension = CPCScreenDimension::overscan();
-        let display_address = DisplayAddress::new_overscan_from_page_one_bank_per_line(2, output_dimension.nb_word_columns() as _);
-        Self::CPCMemory {
-            output_dimension,
-            display_address
-        }
-    }
-
-    pub fn create_standard_cpc_memory() -> Self {
-        Self::CPCMemory {
-            output_dimension: CPCScreenDimension::standard(),
-            display_address: DisplayAddress::new_standard_from_page(2),
-        }
-    }
-}
 
 /// Embeds the conversion output
 /// There must be one implementation per OuputFormat
