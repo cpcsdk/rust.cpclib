@@ -225,6 +225,13 @@ impl ColorMatrix {
         self.data[y][x] = ink;
     }
 
+    /// Add a line within the image
+    /// Panic if impossible
+    pub fn add_line(&mut self, position: usize, line:&[Ink]) {
+        assert_eq!(line.len(), self.width() as usize);
+        self.data.insert(position, line.to_vec());
+    }
+
     /// Returns a reference on the wanted line of inks
     pub fn get_line(&self, y: usize) -> &[Ink] {
         &self.data[y]

@@ -11,22 +11,97 @@ use std::path::Path;
 use crate::ga::*;
 use crate::image::*;
 
-/// List of all the possible transformations applicable to a ColorMAtrix
+/// Encode the position of a line to transform in the source image
 #[derive(Copy, Clone, Debug)]
+pub enum TransformationLinePosition {
+    /// This is the very first line of the image
+    First,
+    /// This is the very last line of the image
+    Last,
+    /// This is a specific index
+    Index(usize)
+}
+
+impl TransformationLinePosition {
+    /// Get the absolute position regarding the image size
+    pub fn absolute_position(self, height: usize) -> Option<usize> {
+        match self {
+            TransformationLinePosition::First => Some(0),
+            TransformationLinePosition::Last => Some(height-1),
+            TransformationLinePosition::Index(idx) => {
+                if idx >= height {
+                    None
+                }
+                else {
+                    Some(idx)
+                }
+            }
+        }
+    }
+}
+
+/// List of all the possible transformations applicable to a ColorMatrix
+#[derive(Clone, Debug)]
 pub enum Transformation {
     /// When using mode 0, do not read all the pixels lines
     SkipOddPixels,
+    /// Add artifical blank lines. The line is build by repeating the background the right amount of time
+    BlankLines{
+        /// The pattern to use to fill the background
+        pattern: Vec<Ink>, 
+        /// The location of the line within the image
+        position: TransformationLinePosition, 
+        /// The amount of lines to add
+        amount: u16
+    }
 }
 
 impl Transformation {
     /// Apply the transformation to the given image
-    pub fn apply(self, matrix: &ColorMatrix) -> ColorMatrix {
+    pub fn apply(&self, matrix: &ColorMatrix) -> ColorMatrix {
         match self {
             Self::SkipOddPixels => {
                 let mut res = matrix.clone();
                 res.remove_odd_columns();
                 res
+            },
+
+            Self::BlankLines{
+                pattern,
+                position,
+                amount
+            } => {
+                // Build the line according to the background pattern
+                let line = {
+                    let mut lines = Vec::new();
+                    for idx in 0..(matrix.width() as usize) {
+                        lines.push(pattern[idx%pattern.len()]);
+                    }
+                    lines
+                };
+
+                // Get the real position (will not change over the additions)
+                let position = position
+                                    .absolute_position(matrix.height() as _)
+                                    .unwrap();
+
+                // Modify the image
+                let mut res = matrix.clone();
+                (0..*amount).into_iter().for_each(|_| {
+                     res.add_line(position, &line);
+                });
+                res
             }
+
+        }
+    }
+
+    /// Create a transformation that adds blank lines
+    pub fn blank_lines(pattern: &[Ink], position: TransformationLinePosition, amount: u16) -> Self {
+        Self::BlankLines{
+            pattern: pattern.to_vec(),
+            position,
+            amount
         }
     }
 }
@@ -35,7 +110,7 @@ impl Transformation {
 #[derive(Clone, Debug)]
 pub struct TransformationsList {
     /// list of transformations
-    transformations: Vec<Transformation>,
+    transformations: Vec<Transformation>
 }
 
 impl Default for TransformationsList {
@@ -49,8 +124,10 @@ impl Default for TransformationsList {
 #[allow(missing_docs)]
 impl TransformationsList {
     /// Create an empty list of transformations
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(transformations: &[Transformation]) -> Self {
+        TransformationsList {
+            transformations: transformations.to_vec()
+        }
     }
 
     /// Add a transformation that remove one pixel column out of two
@@ -847,7 +924,7 @@ impl<'a> ImageConverter<'a> {
             palette: None,
             mode: Mode::Zero, // TODO make the mode an optional argument,
             output,
-            transformations: TransformationsList::new(),
+            transformations: TransformationsList::default(),
         };
 
         converter.apply_sprite_conversion(&sprite)
