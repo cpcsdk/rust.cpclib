@@ -1136,6 +1136,9 @@ pub fn assemble_opcode(
         ),
         Mnemonic::Ret => assemble_ret(arg1),
 
+        Mnemonic::Sub => {
+            env.assemble_sub( arg1.as_ref().unwrap())
+        },
         Mnemonic::Sla | Mnemonic::Sra | Mnemonic::Srl => {
             env.assemble_shift(mnemonic, arg1.as_ref().unwrap())
         }
@@ -1414,11 +1417,50 @@ impl Env {
                 )
             }
 
-            _ => unimplemented!("aseemble_bit {:?} {:?}", arg1, arg2),
+            _ => unimplemented!("assemble_bit {:?} {:?}", arg1, arg2),
         }
 
         Ok(bytes)
     }
+
+        
+    pub fn assemble_sub(&mut self, arg: &DataAccess) -> Result<Bytes, AssemblerError> {
+        let mut bytes = Bytes::new();
+        
+        match arg {
+            DataAccess::Expression(ref exp) => {
+                let val = (self.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
+                bytes.push(0xd6);
+                bytes.push(val);
+
+            },
+
+            DataAccess::Register8(ref _reg) => {
+                unimplemented!();
+            },
+
+            DataAccess::IndexRegister8(ref _reg) => {
+                unimplemented!();
+            }
+
+            DataAccess::MemoryRegister16(Register16::Hl) => {
+                bytes.push(0x96);
+            },
+
+            DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
+                let val = (self.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
+
+                bytes.push(indexed_register16_to_code(*reg));
+                bytes.push(val);
+            },
+            _ => {
+                unreachable!();
+            }
+        }
+
+        Ok(bytes)
+    }
+
 
     pub fn assemble_shift(
         &mut self,
