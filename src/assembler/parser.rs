@@ -507,6 +507,7 @@ pub fn parse_token(input: &str) -> IResult<&str, Token> {
         parse_push_n_pop,
         parse_res_set_bit,
         parse_shifts,
+        parse_sub,
         parse_ret,
     ))(input)
 }
@@ -917,6 +918,15 @@ pub fn parse_shifts(input: &str) -> IResult<&str, Token> {
 /// ...
 pub fn parse_add_or_adc(input: &str) -> IResult<&str, Token> {
     alt((parse_add_or_adc_complete, parse_add_or_adc_shorten))(input)
+}
+
+/// TODO Finish to implement all the cases
+pub fn parse_sub(input: &str) -> IResult<&str, Token> {
+    let (input, _) = tag_no_case("SUB")(input)?;
+    let (input, _) = space1(input)?;
+    let (input, value) = expr(input)?;
+
+    Ok((input, Token::OpCode(Mnemonic::Sub, Some(value.into()), None)))
 }
 
 /// Parse ADC and ADD instructions

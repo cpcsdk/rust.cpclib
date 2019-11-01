@@ -57,6 +57,7 @@ pub enum Mnemonic {
     Rra,
     Res,
     Ret,
+    Sub,
     Scf,
     Set,
     Sla,
@@ -111,6 +112,7 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Sla => write!(f, "SLA"),
             Mnemonic::Sra => write!(f, "SRA"),
             Mnemonic::Srl => write!(f, "SRL"),
+            Mnemonic::Sub => write!(f, "SUB"),
             Mnemonic::Xor => write!(f, "XOR"),
         }
     }

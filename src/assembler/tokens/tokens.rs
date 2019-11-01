@@ -193,6 +193,16 @@ impl ListingElement for Token {
                         _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
                     },
 
+                    &Mnemonic::Sub => match arg1 {
+                        Some(DataAccess::Register8(_)) => 1,
+                        Some(DataAccess::IndexRegister8(_)) => 2,
+                        Some(DataAccess::Expression(_)) => 2,
+                        Some(DataAccess::MemoryRegister16(Register16::Hl)) => 2,
+                        Some(DataAccess::IndexRegister16WithIndex(_, _)) => 5,
+                        _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
+
+                    },
+
                     _ => panic!(
                         "Duration not set for {:?}, {:?}, {:?}",
                         mnemonic, arg1, arg2
