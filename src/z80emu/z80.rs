@@ -78,6 +78,23 @@ impl Register8 {
         let new = self.value() | (1 << bit);
         self.set(new);
     }
+
+    pub fn and(&mut self, value: u8) {
+        let new = self.value() & value;
+        self.set(new);
+    }
+
+
+    pub fn or(&mut self, value: u8) {
+        let new = self.value() | value;
+        self.set(new);
+    }
+
+
+    pub fn xor(&mut self, value: u8) {
+        let new = self.value() ^ value;
+        self.set(new);
+    }
 }
 
 /// Represents a 16 bits register by decomposing it in 2 8 bits registers
@@ -343,6 +360,41 @@ impl Z80 {
             Some(DataAccess::Register8(from)),
         ));
     }
+}
+
+
+// https://www.msx.org/wiki/Assembler_for_Dummies_%28Z80%29#Flags
+#[allow(unused)]
+pub enum FlagPos {
+    // bit 7, SF, Sign flag. This is copy of the results most significant bit. If the bit is set (= 1 = "M") "Minus" the 2-complement value is negative other ways the result is positive (= 0 = "P") "Plus". Note that this flag can be used only with conditional JP-instruction.
+    Sign=7,
+
+    // bit 6, ZF, Zero flag. If the result of mathematical operation is zero the bit is set (= 1 = "Z") other ways the bit is reset (= 0 = "NZ") "Not zero"
+    Zero=6,
+
+    // Bit 5, YF, copy of the results 5th bit. 
+    Y = 5,
+
+    // Bit 4, HF, "Half-carry" from bit 3 to 4. Z80 uses this internally for BCD correction.
+    HalfCarry = 4,
+
+    // Bit 3, XF, copy of the results 3rd bit. 
+    X = 3,
+
+    // Bit 2, PF/VF, Parity flag. This is copy of the results least significant bit. If the bit is set (= 1 = "PO") the parity is odd otherways the result is even. (= 0 = "PE") On some cases this bit might be used to indicate 2-compliment signed overflow.(VF) Note that this flag can be used only with conditional JP-instruction. 
+    Parity = 2,
+
+    // Bit 1, NF, this bit is used by Z80 internally to indicate if last operation was addition or subtraction (needed for BCD correction)
+    N = 1,
+
+    // Bit 0, CF, Carry flag = Overflow bit. This bit is the most high bit that did not fit to the result. In addition to large calculations and bit transfers it is mostly used in comparisons to see if the subtraction result was smaller or greater than zero. If the carry flag was set (= 1 = "C") the result did overflow. Other ways the flag is reset (= 0 = "NC") "No carry". Please note that 8bit INC/DEC commands do not update this flag. 
+    Carry = 0
+}
+
+#[allow(unused)]
+struct ExtraFlags {
+    iff1: u8,
+    iff2: u8
 }
 
 #[cfg(test)]

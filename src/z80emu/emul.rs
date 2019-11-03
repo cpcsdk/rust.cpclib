@@ -45,6 +45,11 @@ impl Z80 {
                 _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2),
             },
 
+            Mnemonic::And => {
+                let val = self.get_value(arg1.unwrap()).unwrap() as _;
+                self.get_register_8_mut(&Register8::A.into()).and(val);
+            },
+
             Mnemonic::Res => {
                 let bit = self.get_value(arg1.unwrap()).unwrap() as _;
                 self.get_register_8_mut(arg2.unwrap()).res_bit(bit)
@@ -91,6 +96,18 @@ impl Z80 {
                     self.get_register_16_mut(arg1.unwrap()).dec()
                 }
                 _ => unreachable!(),
+            },
+
+            Mnemonic::Jr => match (arg1, arg2) {
+                (None, _) => unimplemented! {
+
+                },
+
+                (Some(DataAccess::FlagTest(ref flag)), _) => {
+                    let _flag_set = self.is_flag_active(flag);
+                },
+
+                _ => unreachable!()
             },
 
             Mnemonic::Ld => match (arg1, arg2) {
@@ -158,6 +175,12 @@ impl Z80 {
             DataAccess::FlagTest(_) => panic!(),
             _ => unimplemented!(),
         }
+    }
+
+    /// Return true if the flag is active
+    fn is_flag_active(&self, flag: &FlagTest) -> bool {
+
+        flag.is_active(self.f().value())
     }
 
     /// Returns the register encoded by the DataAccess
@@ -253,5 +276,42 @@ impl Z80 {
         let address = self.read_memory_word(self.sp().value());
         self.sp_mut().add(2);
         self.pc_mut().set(address);
+    }
+}
+
+
+
+/// Add extra functionality to flag test
+impl FlagTest {
+
+
+    /// Return true if the flag is active given the f value
+    pub fn is_active(self, f_value: u8) -> bool {
+        (match self {
+            Self::C => f_value & (1 << FlagPos::Carry as u8),
+            Self::NC => !(f_value & (1 << FlagPos::Carry as u8)),
+
+            Self::Z => f_value & (1 << FlagPos::Zero as u8),
+            Self::NZ => !(f_value & (1 << FlagPos::Zero as u8)),
+
+            Self::PO => f_value & (1 << FlagPos::Parity as u8),
+            Self::PE => !(f_value & (1 << FlagPos::Parity as u8)),
+
+            Self::P => f_value & (1 << FlagPos::Sign as u8),
+            Self::M => !(f_value & (1 << FlagPos::Sign as u8)),
+        }) != 0
+    }
+
+}
+
+
+#[cfg(test)]
+mod test {
+    use crate::assembler::tokens::registers::FlagTest;
+
+    #[test]
+    fn test_flags() {
+        assert!(FlagTest::Z.is_active(0b01000000));
+        assert!(FlagTest::NZ.is_active(0b00000000));
     }
 }
