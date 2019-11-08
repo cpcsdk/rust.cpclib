@@ -14,15 +14,16 @@
 #![allow(unused)]
 
 use clap;
-use notify;
+
+use crossbeam_channel::unbounded;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use std::time::Duration;
+
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 use std::path::Path;
 use tempfile::Builder;
 
-use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
-use std::sync::mpsc::channel;
-use std::time::Duration;
 
 use cpclib::assembler::assembler::visit_tokens_all_passes;
 use cpclib::assembler::parser::parse_z80_str;
@@ -204,7 +205,7 @@ fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
 fn convert(matches: &ArgMatches<'_>) -> Result<(), String> {
     let input_file = matches.value_of("SOURCE").unwrap();
     let output_mode = matches.value_of("MODE").unwrap().parse::<u8>().unwrap();
-    let mut transformations = TransformationsList::new();
+    let mut transformations = TransformationsList::default();
 
     if matches.is_present("SKIP_ODD_PIXELS") {
         transformations = transformations.skip_odd_pixels();
@@ -502,39 +503,30 @@ fn main() {
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
         if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
-            println!("Watching for file modification...");
-            // Create a channel to receive the events.
-            let (tx, rx) = channel();
+                        // Create a channel to receive the events.
+            let (tx, rx) = unbounded();
 
             // Automatically select the best implementation for your platform.
-            // You can also access each implementation directly e.g. INotifyWatcher.
-            let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2)).unwrap();
+            let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2)).expect("Unable to install watcher");
 
             // Add a path to be watched. All files and directories at that path and
             // below will be monitored for changes.
-            watcher
-                .watch(
-                    matches.value_of("SOURCE").unwrap(),
-                    RecursiveMode::NonRecursive,
-                )
-                .expect("Unable to watch the file");
+            watcher.watch(matches.value_of("SOURCE").unwrap(), RecursiveMode::NonRecursive).expect("Unable to watch file.");
 
-            // This is a simple loop, but you may want to use more complex logic here,
-            // for example to handle I/O.
             loop {
                 match rx.recv() {
-                    Ok(event) => {
-                        if let DebouncedEvent::Write(_) = event {
-                            println!("Image modified. Launch new conversion");
-
-                            if let Err(e) = convert(&matches) {
+                Ok(Ok(notify::Event{ kind: notify::EventKind::Modify(_),  ..})) |
+                Ok(Ok(notify::Event{ kind: notify::EventKind::Create(_),  ..}))
+                => {
+                                     if let Err(e) = convert(&matches) {
                                 eprintln!("[ERROR] Unable to convert the image {}", e);
-                            }
                         }
-                    }
-                    Err(e) => println!("watch error: {:?}", e),
-                }
+                },
+                Err(err) => println!("watch error: {:?}", err),
+                _ => {}
+                };
             }
+            
         }
     }
 }
