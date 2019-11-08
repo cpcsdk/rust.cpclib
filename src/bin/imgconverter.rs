@@ -511,7 +511,8 @@ fn main() {
 
             // Add a path to be watched. All files and directories at that path and
             // below will be monitored for changes.
-            watcher.watch(matches.value_of("SOURCE").unwrap(), RecursiveMode::NonRecursive).expect("Unable to watch file.");
+            watcher.watch(matches.value_of("SOURCE").unwrap()
+            , RecursiveMode::NonRecursive).expect("Unable to watch file.");
 
             loop {
                 match rx.recv() {

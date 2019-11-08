@@ -5,20 +5,22 @@ impl Z80 {
     /// Execute the given token.
     /// XXX Currently only OpCode are managed whereas some other
     /// tokens also have a sense there
+    /// BUGGY flags are not properly updated
     pub fn execute(&mut self, opcode: &Token) {
+        self.pc_mut().add(opcode.number_of_bytes().unwrap() as _);
+
         match opcode {
+
             Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 self.execute_opcode(*mnemonic, arg1.as_ref(), arg2.as_ref());
             }
             _ => panic!("{:?} is not yet handled", opcode),
         }
 
-        // TODO use a cache to speed up that
-        let opcode_size = opcode.number_of_bytes().unwrap();
-        self.pc_mut().add(opcode_size as _);
     }
 
-    /// Execute the given opcode. Parameters are assumed to be valid
+    /// Execute the given opcode. Parameters are assumed to be valid.
+    /// PC has already been incremented
     fn execute_opcode(
         &mut self,
         mnemonic: Mnemonic,
@@ -26,24 +28,41 @@ impl Z80 {
         arg2: Option<&DataAccess>,
     ) {
         match mnemonic {
-            Mnemonic::Add => match (arg1, arg2) {
+            Mnemonic::Add  => match (arg1, arg2) {
                 (
                     Some(&DataAccess::Register8(crate::assembler::tokens::Register8::A)),
-                    Some(&DataAccess::Register8(_)),
+                    Some(_),
                 ) => {
-                    let val = self.get_register_8(arg2.unwrap()).value();
-                    self.get_register_8_mut(arg1.unwrap()).add(val);
+                    let val = self.get_value(arg1.unwrap()).unwrap();
+                    self.get_register_8_mut(arg1.unwrap()).add(val as _);
                 }
+                
 
                 (
                     Some(&DataAccess::Register16(crate::assembler::tokens::Register16::Hl)),
                     Some(_),
                 ) => {
                     let val = self.get_value(arg2.unwrap()).unwrap();
-                    self.get_register_16_mut(arg1.unwrap()).add(val);
+                    if mnemonic == Mnemonic::Add {
+                        self.get_register_16_mut(arg1.unwrap()).add(val);
+                    }
+                    else {
+                        self.get_register_16_mut(arg1.unwrap()).sub(val);
+                    }
                 }
                 _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2),
             },
+
+             Mnemonic::Sub => {
+                 match (arg1, arg2) {
+                     (Some(_), None) => {
+                         let val = self.get_value(arg1.unwrap()).unwrap();
+                         self.a_mut().sub(val as _);
+                     },
+                     _ => unimplemented!()
+                 }
+             }
+
 
             Mnemonic::And => {
                 let val = self.get_value(arg1.unwrap()).unwrap() as _;
@@ -104,7 +123,12 @@ impl Z80 {
                 },
 
                 (Some(DataAccess::FlagTest(ref flag)), _) => {
-                    let _flag_set = self.is_flag_active(flag);
+                    if self.is_flag_active(flag) {
+                        // BUGGY when label are used
+                        // it would be better to ensure there are never labels in the stream of opcodes
+                        let value = self.get_value(arg2.unwrap()).unwrap();
+                        self.pc_mut().add(value);
+                    }
                 },
 
                 _ => unreachable!()
