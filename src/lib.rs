@@ -100,5 +100,4 @@ pub mod util {
             source.parse::<u32>().expect(&error)
         }
     }
-
 }

@@ -14,5 +14,4 @@ mod test {
 
         assert_eq!(de_res, de_expected);
     }
-
 }

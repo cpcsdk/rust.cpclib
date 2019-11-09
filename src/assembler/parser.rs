@@ -926,7 +926,10 @@ pub fn parse_sub(input: &str) -> IResult<&str, Token> {
     let (input, _) = space1(input)?;
     let (input, value) = expr(input)?;
 
-    Ok((input, Token::OpCode(Mnemonic::Sub, Some(value.into()), None)))
+    Ok((
+        input,
+        Token::OpCode(Mnemonic::Sub, Some(value.into()), None),
+    ))
 }
 
 /// Parse ADC and ADD instructions

@@ -227,7 +227,7 @@ impl ColorMatrix {
 
     /// Add a line within the image
     /// Panic if impossible
-    pub fn add_line(&mut self, position: usize, line:&[Ink]) {
+    pub fn add_line(&mut self, position: usize, line: &[Ink]) {
         assert_eq!(line.len(), self.width() as usize);
         self.data.insert(position, line.to_vec());
     }
@@ -425,7 +425,7 @@ impl ColorMatrix {
             // get the pens for the current line
             let pens = self.get_line(y).iter().enumerate().map(|(x, ink)|-> Pen {
                 let pen = line_palette.get_pen_for_ink(*ink);
-                if let Some(pen) = pen { 
+                if let Some(pen) = pen {
                     pen
                 } else {
                         eprintln!("

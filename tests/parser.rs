@@ -964,12 +964,12 @@ INC_H equ opcode(inc h)
     ";
         let _tokens = get_val(parse_z80_code(code));
 
-        let code =  
+        let code =
             "\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\n"
         ;
         let _tokens = get_val(parse_z80_code(code));
 
-        let code =  
+        let code =
             "STACK_SIZE equ 20 ; XXX Very small stack; hope 10 calls is enough\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\nSTACK_END"
         ;
         let _tokens = get_val(parse_z80_code(code));

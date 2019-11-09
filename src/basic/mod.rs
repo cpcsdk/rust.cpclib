@@ -402,5 +402,4 @@ mod test {
 
         assert_eq!(bytes, expected);
     }
-
 }

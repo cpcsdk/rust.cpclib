@@ -19,7 +19,7 @@ pub enum TransformationLinePosition {
     /// This is the very last line of the image
     Last,
     /// This is a specific index
-    Index(usize)
+    Index(usize),
 }
 
 impl TransformationLinePosition {
@@ -27,12 +27,11 @@ impl TransformationLinePosition {
     pub fn absolute_position(self, height: usize) -> Option<usize> {
         match self {
             TransformationLinePosition::First => Some(0),
-            TransformationLinePosition::Last => Some(height-1),
+            TransformationLinePosition::Last => Some(height - 1),
             TransformationLinePosition::Index(idx) => {
                 if idx >= height {
                     None
-                }
-                else {
+                } else {
                     Some(idx)
                 }
             }
@@ -46,14 +45,14 @@ pub enum Transformation {
     /// When using mode 0, do not read all the pixels lines
     SkipOddPixels,
     /// Add artifical blank lines. The line is build by repeating the background the right amount of time
-    BlankLines{
+    BlankLines {
         /// The pattern to use to fill the background
-        pattern: Vec<Ink>, 
+        pattern: Vec<Ink>,
         /// The location of the line within the image
-        position: TransformationLinePosition, 
+        position: TransformationLinePosition,
         /// The amount of lines to add
-        amount: u16
-    }
+        amount: u16,
+    },
 }
 
 impl Transformation {
@@ -64,44 +63,41 @@ impl Transformation {
                 let mut res = matrix.clone();
                 res.remove_odd_columns();
                 res
-            },
+            }
 
-            Self::BlankLines{
+            Self::BlankLines {
                 pattern,
                 position,
-                amount
+                amount,
             } => {
                 // Build the line according to the background pattern
                 let line = {
                     let mut lines = Vec::new();
                     for idx in 0..(matrix.width() as usize) {
-                        lines.push(pattern[idx%pattern.len()]);
+                        lines.push(pattern[idx % pattern.len()]);
                     }
                     lines
                 };
 
                 // Get the real position (will not change over the additions)
-                let position = position
-                                    .absolute_position(matrix.height() as _)
-                                    .unwrap();
+                let position = position.absolute_position(matrix.height() as _).unwrap();
 
                 // Modify the image
                 let mut res = matrix.clone();
                 (0..*amount).into_iter().for_each(|_| {
-                     res.add_line(position, &line);
+                    res.add_line(position, &line);
                 });
                 res
             }
-
         }
     }
 
     /// Create a transformation that adds blank lines
     pub fn blank_lines(pattern: &[Ink], position: TransformationLinePosition, amount: u16) -> Self {
-        Self::BlankLines{
+        Self::BlankLines {
             pattern: pattern.to_vec(),
             position,
-            amount
+            amount,
         }
     }
 }
@@ -110,7 +106,7 @@ impl Transformation {
 #[derive(Clone, Debug)]
 pub struct TransformationsList {
     /// list of transformations
-    transformations: Vec<Transformation>
+    transformations: Vec<Transformation>,
 }
 
 impl Default for TransformationsList {
@@ -126,7 +122,7 @@ impl TransformationsList {
     /// Create an empty list of transformations
     pub fn new(transformations: &[Transformation]) -> Self {
         TransformationsList {
-            transformations: transformations.to_vec()
+            transformations: transformations.to_vec(),
         }
     }
 
@@ -285,7 +281,7 @@ impl DisplayAddress {
     /// Generate an overscan address where each line is contained in a single bank
     pub fn new_overscan_from_page_one_bank_per_line(page: u16, char_width: u16) -> Self {
         // number of words missing
-        let delta = (0x800%(char_width*2))/2;
+        let delta = (0x800 % (char_width * 2)) / 2;
         Self::new(page, true, delta)
     }
 
@@ -446,33 +442,26 @@ pub enum OutputFormat {
     },
 }
 
-
-
 #[allow(missing_docs)]
 impl OutputFormat {
-
     /// For formats manipulating a display address, modify it vertically in order to make scroll the image
     pub fn vertically_shift_display_address(&mut self, delta: i32) {
         match self {
             Self::CPCMemory {
                 output_dimension,
-                display_address
+                display_address,
             } => {
-                
                 if delta >= 0 {
-                    for _ in  0..delta*i32::from(output_dimension.nb_word_columns()) {
+                    for _ in 0..delta * i32::from(output_dimension.nb_word_columns()) {
                         display_address.move_to_next_word();
                     }
-                }
-                else {
-                    for _ in  0..(-delta)*i32::from(output_dimension.nb_word_columns()) {
+                } else {
+                    for _ in 0..(-delta) * i32::from(output_dimension.nb_word_columns()) {
                         display_address.move_to_previous_word();
                     }
                 }
-            },
-            _ => {
-
             }
+            _ => {}
         }
     }
 
@@ -492,10 +481,13 @@ impl OutputFormat {
     /// Generate output format for an overscan screen for which each imageline is in a single bank (this is not the case for the standard overscan)
     pub fn create_overscan_cpc_memory_one_bank_per_line() -> Self {
         let output_dimension = CPCScreenDimension::overscan();
-        let display_address = DisplayAddress::new_overscan_from_page_one_bank_per_line(2, output_dimension.nb_word_columns() as _);
+        let display_address = DisplayAddress::new_overscan_from_page_one_bank_per_line(
+            2,
+            output_dimension.nb_word_columns() as _,
+        );
         Self::CPCMemory {
             output_dimension,
-            display_address
+            display_address,
         }
     }
 
@@ -506,9 +498,6 @@ impl OutputFormat {
         }
     }
 }
-
-
-
 
 /// Defines the width of the capture
 #[derive(Debug, Clone, Copy)]
@@ -799,7 +788,6 @@ impl TileVerticalCapture {
         unimplemented!("TODO once someone will code it")
     }
 }
-
 
 /// Embeds the conversion output
 /// There must be one implementation per OuputFormat

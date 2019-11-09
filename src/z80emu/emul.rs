@@ -1,6 +1,6 @@
+use crate::assembler::assembler::SymbolsTableCaseDependent;
 use crate::assembler::tokens::*;
 use crate::z80emu::z80::*;
-use crate::assembler::assembler::SymbolsTableCaseDependent;
 
 impl Z80 {
     /// Execute the given token.
@@ -8,17 +8,17 @@ impl Z80 {
     /// tokens also have a sense there
     /// BUGGY flags are not properly updated
     pub fn execute(&mut self, opcode: &Token) {
-        self.context.symbols.set_symbol_to_value("$", self.pc().value() as _);
+        self.context
+            .symbols
+            .set_symbol_to_value("$", self.pc().value() as _);
         self.pc_mut().add(opcode.number_of_bytes().unwrap() as _);
 
         match opcode {
-
             Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 self.execute_opcode(*mnemonic, arg1.as_ref(), arg2.as_ref());
             }
             _ => panic!("{:?} is not yet handled", opcode),
         }
-
     }
 
     /// Execute the given opcode. Parameters are assumed to be valid.
@@ -30,15 +30,11 @@ impl Z80 {
         arg2: Option<&DataAccess>,
     ) {
         match mnemonic {
-            Mnemonic::Add  => match (arg1, arg2) {
-                (
-                    Some(&DataAccess::Register8(crate::assembler::tokens::Register8::A)),
-                    Some(_),
-                ) => {
+            Mnemonic::Add => match (arg1, arg2) {
+                (Some(&DataAccess::Register8(crate::assembler::tokens::Register8::A)), Some(_)) => {
                     let val = self.get_value(arg1.unwrap()).unwrap();
                     self.get_register_8_mut(arg1.unwrap()).add(val as _);
                 }
-                
 
                 (
                     Some(&DataAccess::Register16(crate::assembler::tokens::Register16::Hl)),
@@ -47,29 +43,25 @@ impl Z80 {
                     let val = self.get_value(arg2.unwrap()).unwrap();
                     if mnemonic == Mnemonic::Add {
                         self.get_register_16_mut(arg1.unwrap()).add(val);
-                    }
-                    else {
+                    } else {
                         self.get_register_16_mut(arg1.unwrap()).sub(val);
                     }
                 }
                 _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2),
             },
 
-             Mnemonic::Sub => {
-                 match (arg1, arg2) {
-                     (Some(_), None) => {
-                         let val = self.get_value(arg1.unwrap()).unwrap();
-                         self.a_mut().sub(val as _);
-                     },
-                     _ => unimplemented!()
-                 }
-             }
-
+            Mnemonic::Sub => match (arg1, arg2) {
+                (Some(_), None) => {
+                    let val = self.get_value(arg1.unwrap()).unwrap();
+                    self.a_mut().sub(val as _);
+                }
+                _ => unimplemented!(),
+            },
 
             Mnemonic::And => {
                 let val = self.get_value(arg1.unwrap()).unwrap() as _;
                 self.get_register_8_mut(&Register8::A.into()).and(val);
-            },
+            }
 
             Mnemonic::Res => {
                 let bit = self.get_value(arg1.unwrap()).unwrap() as _;
@@ -123,30 +115,32 @@ impl Z80 {
                 dbg!(arg2);
                 let delta = match arg2 {
                     Some(&DataAccess::Expression(Expr::Label(_))) => {
-                        self.get_value(arg2.unwrap()).unwrap() as i32 - self.get_value(&DataAccess::Expression(Expr::Label("$".to_owned()))).unwrap() as i32 -2
-                    },
-                    _ => self.get_value(arg2.unwrap()).unwrap() as i32
+                        self.get_value(arg2.unwrap()).unwrap() as i32
+                            - self
+                                .get_value(&DataAccess::Expression(Expr::Label("$".to_owned())))
+                                .unwrap() as i32
+                            - 2
+                    }
+                    _ => self.get_value(arg2.unwrap()).unwrap() as i32,
                 };
                 if match arg1 {
-
-                    None =>  true,
+                    None => true,
                     Some(DataAccess::FlagTest(ref flag)) => self.is_flag_active(flag),
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 } {
                     if delta > 0 {
                         self.pc_mut().add(delta as _);
-                    }
-                    else if delta < 0 {
+                    } else if delta < 0 {
                         self.pc_mut().sub(-delta as _);
                     }
                 }
-            },
+            }
 
             Mnemonic::Jp => match (arg1, arg2) {
-                (None, Some(_)) =>  {
+                (None, Some(_)) => {
                     let value = self.get_value(arg2.unwrap()).unwrap();
                     self.pc_mut().set(value);
-                },
+                }
 
                 (Some(DataAccess::FlagTest(ref flag)), _) => {
                     if self.is_flag_active(flag) {
@@ -155,9 +149,9 @@ impl Z80 {
                         let value = self.get_value(arg2.unwrap()).unwrap();
                         self.pc_mut().set(value);
                     }
-                },
+                }
 
-                _ => unreachable!()
+                _ => unreachable!(),
             },
 
             Mnemonic::Ld => match (arg1, arg2) {
@@ -229,7 +223,6 @@ impl Z80 {
 
     /// Return true if the flag is active
     fn is_flag_active(&self, flag: &FlagTest) -> bool {
-
         flag.is_active(self.f().value())
     }
 
@@ -322,7 +315,7 @@ impl Z80 {
     }
 
     /// Replace the current symbol table by a copy of the one in argument
-    pub fn setup_symbol_table(& mut self, symbols: &SymbolsTableCaseDependent) {
+    pub fn setup_symbol_table(&mut self, symbols: &SymbolsTableCaseDependent) {
         self.context.symbols = symbols.clone();
     }
 
@@ -334,12 +327,8 @@ impl Z80 {
     }
 }
 
-
-
 /// Add extra functionality to flag test
 impl FlagTest {
-
-
     /// Return true if the flag is active given the f value
     pub fn is_active(self, f_value: u8) -> bool {
         (match self {
@@ -356,15 +345,13 @@ impl FlagTest {
             Self::M => !(f_value & (1 << FlagPos::Sign as u8)),
         }) != 0
     }
-
 }
-
 
 #[cfg(test)]
 mod test {
+    use crate::assembler::assembler::SymbolsTableCaseDependent;
     use crate::assembler::tokens::registers::FlagTest;
     use crate::z80emu::*;
-    use crate::assembler::assembler::SymbolsTableCaseDependent;
 
     #[test]
     fn test_flags() {
@@ -372,7 +359,7 @@ mod test {
         assert!(FlagTest::NZ.is_active(0b00000000));
     }
 
- #[test]
+    #[test]
     fn jp_value() {
         use crate::assembler::tokens::*;
 
@@ -380,19 +367,15 @@ mod test {
         z80.pc_mut().set(0x4000);
 
         assert_eq!(z80.pc().value(), 0x4000);
- 
-        z80.execute(
-            &Token::OpCode(
-                Mnemonic::Jp,
-                None,
-                Some(DataAccess::Expression(Expr::Value(0x4000)))
-            )
-        );
+
+        z80.execute(&Token::OpCode(
+            Mnemonic::Jp,
+            None,
+            Some(DataAccess::Expression(Expr::Value(0x4000))),
+        ));
 
         assert_eq!(z80.pc().value(), 0x4000);
-
     }
-
 
     #[test]
     fn jp_symbol() {
@@ -406,14 +389,12 @@ mod test {
         z80.pc_mut().set(0x4000);
 
         assert_eq!(z80.pc().value(), 0x4000);
- 
-        z80.execute(
-            &Token::OpCode(
-                Mnemonic::Jp,
-                None,
-                Some(DataAccess::Expression(Expr::Label("LABEL".to_owned())))
-            )
-        );
+
+        z80.execute(&Token::OpCode(
+            Mnemonic::Jp,
+            None,
+            Some(DataAccess::Expression(Expr::Label("LABEL".to_owned()))),
+        ));
 
         assert_eq!(z80.pc().value(), 0x4000);
     }
@@ -426,18 +407,15 @@ mod test {
         z80.pc_mut().set(0x4000);
 
         assert_eq!(z80.pc().value(), 0x4000);
- 
-        z80.execute(
-            &Token::OpCode(
-                Mnemonic::Jp,
-                None,
-                Some(DataAccess::Expression(Expr::Label("$".to_owned())))
-            )
-        );
+
+        z80.execute(&Token::OpCode(
+            Mnemonic::Jp,
+            None,
+            Some(DataAccess::Expression(Expr::Label("$".to_owned()))),
+        ));
 
         assert_eq!(z80.pc().value(), 0x4000);
     }
-
 
     #[test]
     fn jr_dollar() {
@@ -447,16 +425,13 @@ mod test {
         z80.pc_mut().set(0x4000);
 
         assert_eq!(z80.pc().value(), 0x4000);
- 
-        z80.execute(
-            &Token::OpCode(
-                Mnemonic::Jr,
-                None,
-                Some(DataAccess::Expression(Expr::Label("$".to_owned())))
-            )
-        );
+
+        z80.execute(&Token::OpCode(
+            Mnemonic::Jr,
+            None,
+            Some(DataAccess::Expression(Expr::Label("$".to_owned()))),
+        ));
 
         assert_eq!(z80.pc().value(), 0x4000);
     }
-
 }
