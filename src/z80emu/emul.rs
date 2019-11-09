@@ -1,5 +1,6 @@
 use crate::assembler::tokens::*;
 use crate::z80emu::z80::*;
+use crate::assembler::assembler::SymbolsTableCaseDependent;
 
 impl Z80 {
     /// Execute the given token.
@@ -128,6 +129,24 @@ impl Z80 {
                         // it would be better to ensure there are never labels in the stream of opcodes
                         let value = self.get_value(arg2.unwrap()).unwrap();
                         self.pc_mut().add(value);
+                    }
+                },
+
+                _ => unreachable!()
+            },
+
+            Mnemonic::Jp => match (arg1, arg2) {
+                (None, Some(_)) =>  {
+                    let value = self.get_value(arg2.unwrap()).unwrap();
+                    self.pc_mut().set(value);
+                },
+
+                (Some(DataAccess::FlagTest(ref flag)), _) => {
+                    if self.is_flag_active(flag) {
+                        // BUGGY when label are used
+                        // it would be better to ensure there are never labels in the stream of opcodes
+                        let value = self.get_value(arg2.unwrap()).unwrap();
+                        self.pc_mut().set(value);
                     }
                 },
 
@@ -289,10 +308,15 @@ impl Z80 {
 
     #[allow(clippy::cast_sign_loss)]
     fn eval_expr(&self, expr: &Expr) -> Option<u16> {
-        match expr.eval() {
+        match expr.resolve(&self.context.symbols) {
             Ok(val) => Some(val.abs() as u16),
             Err(_) => None,
         }
+    }
+
+    /// Replace the current symbol table by a copy of the one in argument
+    pub fn setup_symbol_table(& mut self, symbols: &SymbolsTableCaseDependent) {
+        self.context.symbols = symbols.clone();
     }
 
     /// Execute the RET instruction
@@ -332,10 +356,60 @@ impl FlagTest {
 #[cfg(test)]
 mod test {
     use crate::assembler::tokens::registers::FlagTest;
+    use crate::z80emu::*;
+    use crate::assembler::assembler::SymbolsTableCaseDependent;
 
     #[test]
     fn test_flags() {
         assert!(FlagTest::Z.is_active(0b01000000));
         assert!(FlagTest::NZ.is_active(0b00000000));
     }
+
+ #[test]
+    fn jp_value() {
+        use crate::assembler::tokens::*;
+
+        let mut z80 = Z80::default();
+        z80.pc_mut().set(0x4000);
+
+        assert_eq!(z80.pc().value(), 0x4000);
+ 
+        z80.execute(
+            &Token::OpCode(
+                Mnemonic::Jp,
+                None,
+                Some(DataAccess::Expression(Expr::Value(0x4000)))
+            )
+        );
+
+        assert_eq!(z80.pc().value(), 0x4000);
+
+    }
+
+
+    #[test]
+    fn jp_symbol() {
+        use crate::assembler::tokens::*;
+
+        let mut z80 = Z80::default();
+        let mut symbols = SymbolsTableCaseDependent::default();
+        symbols.set_symbol_to_value("LABEL", 0x4000);
+        z80.setup_symbol_table(&symbols);
+
+        z80.pc_mut().set(0x4000);
+
+        assert_eq!(z80.pc().value(), 0x4000);
+ 
+        z80.execute(
+            &Token::OpCode(
+                Mnemonic::Jp,
+                None,
+                Some(DataAccess::Expression(Expr::Label("LABEL".to_owned())))
+            )
+        );
+
+        assert_eq!(z80.pc().value(), 0x4000);
+
+    }
+
 }

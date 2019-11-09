@@ -1,4 +1,6 @@
 use crate::assembler::tokens::*;
+use crate::assembler::assembler::SymbolsTableCaseDependent;
+
 use num::integer::Integer;
 use num::traits::{WrappingAdd, WrappingSub};
 use num::One;
@@ -141,9 +143,17 @@ impl Register16 {
     }
 }
 
+/// Contains all needed stuff to make the emulation that does not belong to the CPU
+/// This enable the execution of tokens that contains symbolic values
+#[derive(Default, Debug, Clone)]
+pub struct EmulationContext {
+    /// The symbol table that can be used when ev
+    pub(crate) symbols: SymbolsTableCaseDependent
+}
+
 /// Highly simplify z80 model.
 /// TODO Add memory
-#[derive(Default, Debug, Copy, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Z80 {
     reg_pc: Register16,
     reg_sp: Register16,
@@ -165,6 +175,8 @@ pub struct Z80 {
     reg_bc_prime: Register16,
     reg_de_prime: Register16,
     reg_hl_prime: Register16,
+
+    pub(crate) context: EmulationContext
 }
 
 #[allow(missing_docs)]
@@ -523,4 +535,7 @@ mod tests {
         assert_eq!(z80.pc().value(), 0x4005);
         assert_eq!(z80.de().value(), 0xc001);
     }
+
+
+   
 }
