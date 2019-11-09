@@ -200,7 +200,6 @@ impl ListingElement for Token {
                         Some(DataAccess::MemoryRegister16(Register16::Hl)) => 2,
                         Some(DataAccess::IndexRegister16WithIndex(_, _)) => 5,
                         _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
-
                     },
 
                     _ => panic!(

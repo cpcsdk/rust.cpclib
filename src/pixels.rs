@@ -158,7 +158,6 @@ pub mod mode1 {
         return byte
 
     */
-
 }
 
 /// Mode 0 pixels specific operations

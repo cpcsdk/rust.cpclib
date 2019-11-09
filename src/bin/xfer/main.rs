@@ -18,8 +18,8 @@ use std::path::Path;
 
 mod interact;
 mod parser;
-use hotwatch::{Hotwatch, Event};
 use cpclib as cpc;
+use hotwatch::{Event, Hotwatch};
 
 use crossbeam_channel::unbounded;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -27,32 +27,32 @@ use std::time::Duration;
 
 /// Send and run the file on the CPC.
 /// Snapshot V3 are downgraded to the V2 version
-fn send_and_run_file(xfer: & cpc::xfer::CpcXfer, fname: &str) {
-        let mut done = false;
-        // Snapshot needs to be converted in V2 format and handled differently
-        if let Some(extension) = std::path::Path::new(fname).extension() {
-            let extension = extension.to_str().unwrap().to_ascii_lowercase();
-            if extension == "sna" {
-                let sna = crate::cpc::sna::Snapshot::load(fname);
-                if sna.version_header() == 3 {
-                    eprintln!("Need to downgrade SNA version");
-                    let sna_fname = std::path::Path::new(fname)
-                        .file_name()
-                        .unwrap()
-                        .to_str()
-                        .unwrap();
-                    sna.save(sna_fname, crate::cpc::sna::SnapshotVersion::V2)
-                        .unwrap();
-                    xfer.upload_and_run(sna_fname, None)
-                        .expect("Unable to launch SNA");
-                    done = true;
-                }
+fn send_and_run_file(xfer: &cpc::xfer::CpcXfer, fname: &str) {
+    let mut done = false;
+    // Snapshot needs to be converted in V2 format and handled differently
+    if let Some(extension) = std::path::Path::new(fname).extension() {
+        let extension = extension.to_str().unwrap().to_ascii_lowercase();
+        if extension == "sna" {
+            let sna = crate::cpc::sna::Snapshot::load(fname);
+            if sna.version_header() == 3 {
+                eprintln!("Need to downgrade SNA version");
+                let sna_fname = std::path::Path::new(fname)
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap();
+                sna.save(sna_fname, crate::cpc::sna::SnapshotVersion::V2)
+                    .unwrap();
+                xfer.upload_and_run(sna_fname, None)
+                    .expect("Unable to launch SNA");
+                done = true;
             }
         }
-        if !done {
-            xfer.upload_and_run(fname, None)
-                .expect("Unable to launch file")
-        };
+    }
+    if !done {
+        xfer.upload_and_run(fname, None)
+            .expect("Unable to launch file")
+    };
 }
 
 fn main() -> Result<(), cpc::xfer::XferError> {
@@ -148,25 +148,32 @@ fn main() -> Result<(), cpc::xfer::XferError> {
             let (tx, rx) = unbounded();
 
             // Automatically select the best implementation for your platform.
-            let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2)).expect("Unable to install watcher");
+            let mut watcher: RecommendedWatcher =
+                Watcher::new(tx, Duration::from_secs(2)).expect("Unable to install watcher");
 
             // Add a path to be watched. All files and directories at that path and
             // below will be monitored for changes.
-            watcher.watch(fname, RecursiveMode::NonRecursive).expect("Unable to watch file.");
+            watcher
+                .watch(fname, RecursiveMode::NonRecursive)
+                .expect("Unable to watch file.");
 
             loop {
                 match rx.recv() {
-                Ok(Ok(notify::Event{ kind: notify::EventKind::Modify(_),  ..})) |
-                Ok(Ok(notify::Event{ kind: notify::EventKind::Create(_),  ..}))
-                => {
-                    println!("File modified");
-                    send_and_run_file(&xfer, fname);
-                },
-                Err(err) => println!("watch error: {:?}", err),
-                _ => {}
+                    Ok(Ok(notify::Event {
+                        kind: notify::EventKind::Modify(_),
+                        ..
+                    }))
+                    | Ok(Ok(notify::Event {
+                        kind: notify::EventKind::Create(_),
+                        ..
+                    })) => {
+                        println!("File modified");
+                        send_and_run_file(&xfer, fname);
+                    }
+                    Err(err) => println!("watch error: {:?}", err),
+                    _ => {}
                 };
             }
-
         }
     } else if let Some(x_opt) = matches.subcommand_matches("-x") {
         let fname = x_opt.value_of("fname").unwrap();

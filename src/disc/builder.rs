@@ -33,7 +33,8 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
         }
         .into();
         track.track_size =
-            u16::from(edsk.disc_information_bloc.track_size_table[track_idx as usize]) * 256 + 512; // XXX Need to see why I had to add these 512 bytes ...
+            u16::from(edsk.disc_information_bloc.track_size_table[track_idx as usize]) * 256 + 512;
+        // XXX Need to see why I had to add these 512 bytes ...
     }
 
     // Update the tracks stuff

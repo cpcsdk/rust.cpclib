@@ -349,7 +349,7 @@ impl fmt::Display for Token {
                 write!(f, "\tENDREPEAT")
             },
 
-            Token::StableTicker(ref ticker) 
+            Token::StableTicker(ref ticker)
                 => {
                     match ticker {
                         StableTickerAction::Start(ref label) => {

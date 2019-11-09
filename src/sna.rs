@@ -1152,7 +1152,8 @@ impl Snapshot {
                 if memory.len() < max_memory {
                     memory = memory.increased_size();
                 }
-                memory.memory_mut()[address..max_memory].copy_from_slice(&content); // TODO treat the case where extra memory is used as `memroy` may need to be extended
+                memory.memory_mut()[address..max_memory].copy_from_slice(&content);
+                // TODO treat the case where extra memory is used as `memroy` may need to be extended
             }
         }
         memory.memory()[..max_memory].to_vec()
@@ -1308,5 +1309,4 @@ mod tests {
     fn test_increase2() {
         SnapshotMemory::default_128().increased_size();
     }
-
 }

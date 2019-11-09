@@ -19,11 +19,9 @@ use crossbeam_channel::unbounded;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::time::Duration;
 
-
 use clap::{App, Arg, ArgMatches, SubCommand};
 use std::path::Path;
 use tempfile::Builder;
-
 
 use cpclib::assembler::assembler::visit_tokens_all_passes;
 use cpclib::assembler::parser::parse_z80_str;
@@ -279,7 +277,6 @@ fn convert(matches: &ArgMatches<'_>) -> Result<(), String> {
 
         if sub_dsk.is_some() {
             // TODO create the linker
-
         }
         if sub_sna.is_some() || sub_m4.is_some() {
             // Create a snapshot with a standard screen
@@ -503,31 +500,40 @@ fn main() {
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
         if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
-                        // Create a channel to receive the events.
+            // Create a channel to receive the events.
             let (tx, rx) = unbounded();
 
             // Automatically select the best implementation for your platform.
-            let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2)).expect("Unable to install watcher");
+            let mut watcher: RecommendedWatcher =
+                Watcher::new(tx, Duration::from_secs(2)).expect("Unable to install watcher");
 
             // Add a path to be watched. All files and directories at that path and
             // below will be monitored for changes.
-            watcher.watch(matches.value_of("SOURCE").unwrap()
-            , RecursiveMode::NonRecursive).expect("Unable to watch file.");
+            watcher
+                .watch(
+                    matches.value_of("SOURCE").unwrap(),
+                    RecursiveMode::NonRecursive,
+                )
+                .expect("Unable to watch file.");
 
             loop {
                 match rx.recv() {
-                Ok(Ok(notify::Event{ kind: notify::EventKind::Modify(_),  ..})) |
-                Ok(Ok(notify::Event{ kind: notify::EventKind::Create(_),  ..}))
-                => {
-                                     if let Err(e) = convert(&matches) {
-                                eprintln!("[ERROR] Unable to convert the image {}", e);
+                    Ok(Ok(notify::Event {
+                        kind: notify::EventKind::Modify(_),
+                        ..
+                    }))
+                    | Ok(Ok(notify::Event {
+                        kind: notify::EventKind::Create(_),
+                        ..
+                    })) => {
+                        if let Err(e) = convert(&matches) {
+                            eprintln!("[ERROR] Unable to convert the image {}", e);
                         }
-                },
-                Err(err) => println!("watch error: {:?}", err),
-                _ => {}
+                    }
+                    Err(err) => println!("watch error: {:?}", err),
+                    _ => {}
                 };
             }
-            
         }
     }
 }

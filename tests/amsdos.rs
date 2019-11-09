@@ -229,5 +229,4 @@ mod tests {
 
         assert_eq!(&file.content(), &file2.content());
     }
-
 }

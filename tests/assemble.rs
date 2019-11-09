@@ -104,5 +104,4 @@ mod tests {
         assert!(size.is_ok());
         assert_eq!(size.ok().unwrap(), 1 + 1 + 1 + 3 + 60 + 1 + 2);
     }
-
 }
