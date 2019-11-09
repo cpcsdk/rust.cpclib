@@ -8,6 +8,7 @@ impl Z80 {
     /// tokens also have a sense there
     /// BUGGY flags are not properly updated
     pub fn execute(&mut self, opcode: &Token) {
+        self.context.symbols.set_symbol_to_value("$", self.pc().value() as _);
         self.pc_mut().add(opcode.number_of_bytes().unwrap() as _);
 
         match opcode {
@@ -409,7 +410,26 @@ mod test {
         );
 
         assert_eq!(z80.pc().value(), 0x4000);
+    }
 
+    #[test]
+    fn jp_dollar() {
+        use crate::assembler::tokens::*;
+
+        let mut z80 = Z80::default();
+        z80.pc_mut().set(0x4000);
+
+        assert_eq!(z80.pc().value(), 0x4000);
+ 
+        z80.execute(
+            &Token::OpCode(
+                Mnemonic::Jp,
+                None,
+                Some(DataAccess::Expression(Expr::Label("$".to_owned())))
+            )
+        );
+
+        assert_eq!(z80.pc().value(), 0x4000);
     }
 
 }
