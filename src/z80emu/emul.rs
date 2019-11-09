@@ -119,21 +119,27 @@ impl Z80 {
                 _ => unreachable!(),
             },
 
-            Mnemonic::Jr => match (arg1, arg2) {
-                (None, _) => unimplemented! {
+            Mnemonic::Jr => {
+                dbg!(arg2);
+                let delta = match arg2 {
+                    Some(&DataAccess::Expression(Expr::Label(_))) => {
+                        self.get_value(arg2.unwrap()).unwrap() as i32 - self.get_value(&DataAccess::Expression(Expr::Label("$".to_owned()))).unwrap() as i32 -2
+                    },
+                    _ => self.get_value(arg2.unwrap()).unwrap() as i32
+                };
+                if match arg1 {
 
-                },
-
-                (Some(DataAccess::FlagTest(ref flag)), _) => {
-                    if self.is_flag_active(flag) {
-                        // BUGGY when label are used
-                        // it would be better to ensure there are never labels in the stream of opcodes
-                        let value = self.get_value(arg2.unwrap()).unwrap();
-                        self.pc_mut().add(value);
+                    None =>  true,
+                    Some(DataAccess::FlagTest(ref flag)) => self.is_flag_active(flag),
+                    _ => unreachable!()
+                } {
+                    if delta > 0 {
+                        self.pc_mut().add(delta as _);
                     }
-                },
-
-                _ => unreachable!()
+                    else if delta < 0 {
+                        self.pc_mut().sub(-delta as _);
+                    }
+                }
             },
 
             Mnemonic::Jp => match (arg1, arg2) {
@@ -424,6 +430,27 @@ mod test {
         z80.execute(
             &Token::OpCode(
                 Mnemonic::Jp,
+                None,
+                Some(DataAccess::Expression(Expr::Label("$".to_owned())))
+            )
+        );
+
+        assert_eq!(z80.pc().value(), 0x4000);
+    }
+
+
+    #[test]
+    fn jr_dollar() {
+        use crate::assembler::tokens::*;
+
+        let mut z80 = Z80::default();
+        z80.pc_mut().set(0x4000);
+
+        assert_eq!(z80.pc().value(), 0x4000);
+ 
+        z80.execute(
+            &Token::OpCode(
+                Mnemonic::Jr,
                 None,
                 Some(DataAccess::Expression(Expr::Label("$".to_owned())))
             )
