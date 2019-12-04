@@ -1193,8 +1193,7 @@ impl<'a> ImageConverter<'a> {
         let used_pages = used_pages
             .iter()
             .sorted()
-            .iter()
-            .map(|idx| pages[**idx as usize])
+            .map(|idx| pages[*idx as usize])
             .collect::<Vec<_>>();
 
         if is_overscan && used_pages.len() != 2 {
