@@ -27,26 +27,24 @@ lazy_static= "1.2.0"
 matches = "0.1.8"
 memchr = "2.1.1"
 num="0.2"
-slice-of-array="0.2.1"
 serde = {version="1.0", features=["derive"]}
 smallvec = "0.6.6"
 strsim = "0.8.0"
 tempfile="3.0.4"
-vecmath = "0.3.1"
 dbg = "1.0.4"
 num_enum = "0.2.2"
 custom_error = "1.6.0"
 paste = "0.1"
-casey = "0.1.1"
+
+built = {version="0.3.0", optional=true}
+semver = {version="0.9.0", optional=true}
 
 path-absolutize = {version="1.1.3", optional=true}
 curl = {version="0.4.19", optional=true}
 reqwest = {version="0.9.5", optional=true}
 
 clap = {version="2.32.0", optional=true}
-built = {version="0.3.0", optional=true}
 time = {version="0.1.40", optional=true}
-semver = {version="0.9.0", optional=true}
 exitcode = {version="1.1.2", optional=true}
 
 
@@ -79,45 +77,45 @@ dskmanager = ["clap"]
 catalog = ["clap", "log", "simplelog"]
 hideur = ["clap"]
 basic = ["clap"]
-asm = ["clap", "built", "semver", "time"]
+asm = ["clap",  "semver", "time"]
 
 [[bin]]
 name = "snapshot"
 path = "src/bin/snapshot.rs"
-required-features = ["snapshot"]
+required-features = ["built","snapshot"]
 
 [[bin]]
 name = "xfer"
 path = "src/bin/xfer/main.rs"
-required-features = ["xfer"]
+required-features = ["built","xfer"]
 
 [[bin]]
 name = "imgconverter"
 path = "src/bin/imgconverter.rs"
 #required-features = ["xferlib", "imgconverter"]
-required-features = ["imgconverter"]
+required-features = ["built","imgconverter"]
 
 [[bin]]
 name = "dskmanager"
 path = "src/bin/dsk_manager.rs"
-required-features = ["dskmanager"]
+required-features = ["built","dskmanager"]
 
 [[bin]]
 name = "hideur"
 path = "src/bin/hideur.rs"
-required-features = ["hideur"]
+required-features = ["built","hideur"]
 
 [[bin]]
 name = "locomotive"
 path = "src/bin/locomotive.rs"
-required-features = ["basic"]
+required-features = ["built","basic"]
 
 [[bin]]
 name = "basm"
 path = "src/bin/basm.rs"
-required-features = ["asm"]
+required-features = ["built","asm"]
 
 [[bin]]
 name = "catalog"
 path = "src/bin/catalog.rs"
-required-features = ["catalog"]
+required-features = ["built","catalog"]
