@@ -10,87 +10,33 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter, Result};
 use std::ops::Add;
 
-const INK0: im::Rgba<u8> = im::Rgba {
-    data: [0, 0, 0, 255],
-};
-const INK1: im::Rgba<u8> = im::Rgba {
-    data: [0x00, 0x00, 0x80, 255],
-};
-const INK2: im::Rgba<u8> = im::Rgba {
-    data: [0x00, 0x00, 0xFF, 255],
-};
-const INK3: im::Rgba<u8> = im::Rgba {
-    data: [0x80, 0x00, 0x00, 255],
-};
-const INK4: im::Rgba<u8> = im::Rgba {
-    data: [0x80, 0x00, 0x80, 255],
-};
-const INK5: im::Rgba<u8> = im::Rgba {
-    data: [0x80, 0x00, 0xFF, 255],
-};
-const INK6: im::Rgba<u8> = im::Rgba {
-    data: [0xFF, 0x00, 0x00, 255],
-};
-const INK7: im::Rgba<u8> = im::Rgba {
-    data: [0xFF, 0x00, 0x80, 255],
-};
-const INK8: im::Rgba<u8> = im::Rgba {
-    data: [0xFF, 0x00, 0xFF, 255],
-};
-const INK9: im::Rgba<u8> = im::Rgba {
-    data: [0x00, 0x80, 0x00, 255],
-};
-const INK10: im::Rgba<u8> = im::Rgba {
-    data: [0x00, 0x80, 0x80, 255],
-};
-const INK11: im::Rgba<u8> = im::Rgba {
-    data: [0x00, 0x80, 0xFF, 255],
-};
-const INK12: im::Rgba<u8> = im::Rgba {
-    data: [0x80, 0x80, 0x00, 255],
-};
-const INK13: im::Rgba<u8> = im::Rgba {
-    data: [0x80, 0x80, 0x80, 255],
-};
-const INK14: im::Rgba<u8> = im::Rgba {
-    data: [0x80, 0x80, 0xFF, 255],
-};
-const INK15: im::Rgba<u8> = im::Rgba {
-    data: [0xFF, 0x80, 0x00, 255],
-};
-const INK16: im::Rgba<u8> = im::Rgba {
-    data: [0xFF, 0x80, 0x80, 255],
-};
-const INK17: im::Rgba<u8> = im::Rgba {
-    data: [0xFF, 0x80, 0xFF, 255],
-};
-const INK18: im::Rgba<u8> = im::Rgba {
-    data: [0x00, 0xFF, 0x00, 255],
-};
-const INK19: im::Rgba<u8> = im::Rgba {
-    data: [0x00, 0xFF, 0x80, 255],
-};
-const INK20: im::Rgba<u8> = im::Rgba {
-    data: [0x00, 0xFF, 0xFF, 255],
-};
-const INK21: im::Rgba<u8> = im::Rgba {
-    data: [0x80, 0xFF, 0x00, 255],
-};
-const INK22: im::Rgba<u8> = im::Rgba {
-    data: [0x80, 0xFF, 0x80, 255],
-};
-const INK23: im::Rgba<u8> = im::Rgba {
-    data: [0x80, 0xFF, 0xFF, 255],
-};
-const INK24: im::Rgba<u8> = im::Rgba {
-    data: [0xFF, 0xFF, 0x00, 255],
-};
-const INK25: im::Rgba<u8> = im::Rgba {
-    data: [0xFF, 0xFF, 0x80, 255],
-};
-const INK26: im::Rgba<u8> = im::Rgba {
-    data: [0xFF, 0xFF, 0xFF, 255],
-};
+const INK0: im::Rgba<u8> = im::Rgba([0, 0, 0, 255]);
+const INK1: im::Rgba<u8> = im::Rgba([0x00, 0x00, 0x80, 255]);
+const INK2: im::Rgba<u8> = im::Rgba([0x00, 0x00, 0xFF, 255]);
+const INK3: im::Rgba<u8> = im::Rgba([0x80, 0x00, 0x00, 255]);
+const INK4: im::Rgba<u8> = im::Rgba([0x80, 0x00, 0x80, 255]);
+const INK5: im::Rgba<u8> = im::Rgba([0x80, 0x00, 0xFF, 255]);
+const INK6: im::Rgba<u8> = im::Rgba([0xFF, 0x00, 0x00, 255]);
+const INK7: im::Rgba<u8> = im::Rgba([0xFF, 0x00, 0x80, 255]);
+const INK8: im::Rgba<u8> = im::Rgba([0xFF, 0x00, 0xFF, 255]);
+const INK9: im::Rgba<u8> = im::Rgba([0x00, 0x80, 0x00, 255]);
+const INK10: im::Rgba<u8> = im::Rgba([0x00, 0x80, 0x80, 255]);
+const INK11: im::Rgba<u8> = im::Rgba([0x00, 0x80, 0xFF, 255]);
+const INK12: im::Rgba<u8> = im::Rgba([0x80, 0x80, 0x00, 255]);
+const INK13: im::Rgba<u8> = im::Rgba([0x80, 0x80, 0x80, 255]);
+const INK14: im::Rgba<u8> = im::Rgba([0x80, 0x80, 0xFF, 255]);
+const INK15: im::Rgba<u8> = im::Rgba([0xFF, 0x80, 0x00, 255]);
+const INK16: im::Rgba<u8> = im::Rgba([0xFF, 0x80, 0x80, 255]);
+const INK17: im::Rgba<u8> = im::Rgba([0xFF, 0x80, 0xFF, 255]);
+const INK18: im::Rgba<u8> = im::Rgba([0x00, 0xFF, 0x00, 255]);
+const INK19: im::Rgba<u8> = im::Rgba([0x00, 0xFF, 0x80, 255]);
+const INK20: im::Rgba<u8> = im::Rgba([0x00, 0xFF, 0xFF, 255]);
+const INK21: im::Rgba<u8> = im::Rgba([0x80, 0xFF, 0x00, 255]);
+const INK22: im::Rgba<u8> = im::Rgba([0x80, 0xFF, 0x80, 255]);
+const INK23: im::Rgba<u8> = im::Rgba([0x80, 0xFF, 0xFF, 255]);
+const INK24: im::Rgba<u8> = im::Rgba ([0xFF, 0xFF, 0x00, 255]);
+const INK25: im::Rgba<u8> = im::Rgba([0xFF, 0xFF, 0x80, 255]);
+const INK26: im::Rgba<u8> = im::Rgba([0xFF, 0xFF, 0xFF, 255]);
 
 /// Number of inks managed by the system. Do not take into account the few duplicates
 const NB_INKS: u8 = 27;
