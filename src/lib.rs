@@ -1,6 +1,9 @@
 // TryFrom is used in the assembler stuff
 #![feature(type_ascription)]
-#![feature(custom_attribute)]
+
+#![feature(register_attr)]
+#![register_attr(get)]
+
 #![feature(proc_macro_hygiene)]
 #![feature(vec_drain_as_slice)]
 // Notes for later when clippy will work:

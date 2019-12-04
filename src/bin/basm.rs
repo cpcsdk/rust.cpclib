@@ -12,7 +12,6 @@
 )]
 #![deny(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation)]
-#![feature(custom_attribute)]
 
 use std::fs::File;
 use std::io;
