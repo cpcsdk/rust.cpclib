@@ -52,7 +52,11 @@ where
 }
 
 fn main() -> std::io::Result<()> {
-    TermLogger::init(LevelFilter::Debug, Config::default()).expect("Unable to build logger");
+    TermLogger::init(
+        LevelFilter::Debug, 
+        Config::default(),
+        TerminalMode::Mixed
+    ).expect("Unable to build logger");
 
     let matches = App::new("catalog")
 					.about("Amsdos catalog manipulation tool.")

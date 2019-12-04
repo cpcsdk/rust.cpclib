@@ -4,7 +4,7 @@ use image as im;
 
 use crate::ga::*;
 use crate::pixels;
-use itertools::{flatten, Itertools};
+use itertools::Itertools;
 use std::collections::HashSet;
 
 /// Screen mode
@@ -259,13 +259,13 @@ impl ColorMatrix {
 
     /// Return the number of different inks in the image
     pub fn nb_inks(&self) -> usize {
-        flatten(self.data.iter()).unique().count()
+        self.data.iter().flatten().unique().count()
     }
 
     /// Returns the palette used (as soon as there is less than 16 inks)
     pub fn extract_palette(&self) -> Palette {
         let mut p = Palette::empty();
-        for (idx, color) in flatten(self.data.iter()).unique().enumerate() {
+        for (idx, color) in self.data.iter().flatten().unique().enumerate() {
             if idx >= 16 {
                 panic!("[ERROR] your picture uses more than 16 different colors. Palette: {:?}. Wrong ink: {:?}", p, color);
             }
@@ -277,7 +277,8 @@ impl ColorMatrix {
     /// Modify the image in order to keep the right amount of inks
     pub fn reduce_colors_for_mode(&mut self, mode: Mode) {
         // Get the reduced palette
-        let inks = flatten(self.data.iter())
+        let inks = self.data.iter()
+            .flatten()
             .unique()
             .copied()
             .collect::<Vec<Ink>>();
