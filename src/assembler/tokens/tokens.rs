@@ -11,7 +11,8 @@ impl ListingElement for Token {
     #[allow(clippy::match_same_arms)]
     fn estimated_duration(&self) -> Result<usize, String> {
         let duration = match self {
-            Token::Breakpoint(_)
+            Token::Assert(_, _)
+            | Token::Breakpoint(_)
             | Token::Comment(_)
             | Token::Label(_)
             | Token::Equ(_, _)

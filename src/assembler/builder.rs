@@ -12,6 +12,13 @@ pub fn label<S: AsRef<str>>(label: S) -> Token {
     Token::Label(label.as_ref().to_owned())
 }
 
+/**
+ * Generate an ASSERT token from the string description of the expression
+ */
+pub fn assert_str<S: AsRef<str>>(expr: S) -> Token {
+    Token::Assert(expr.as_ref().into(), None)
+}
+
 #[allow(missing_docs)]
 pub fn comment<S: AsRef<str>>(label: S) -> Token {
     Token::Comment(label.as_ref().to_owned())
