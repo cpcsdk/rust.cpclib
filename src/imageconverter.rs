@@ -93,9 +93,9 @@ impl Transformation {
     }
 
     /// Create a transformation that adds blank lines
-    pub fn blank_lines(pattern: &[Ink], position: TransformationLinePosition, amount: u16) -> Self {
+    pub fn blank_lines<I:Into<Ink> + Copy>(pattern: &[I], position: TransformationLinePosition, amount: u16) -> Self {
         Self::BlankLines {
-            pattern: pattern.to_vec(),
+            pattern: pattern.iter().map(|&i| i.into()).collect::<Vec<Ink>>(),
             position,
             amount,
         }

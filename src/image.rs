@@ -386,7 +386,7 @@ impl ColorMatrix {
         buffer
     }
 
-    /// Convert the matrix as a sprite, given the right mode and an optionnal palette
+    /// Convert the matrix as a sprite, given the right mode and an optional palette
     pub fn as_sprite(&self, mode: Mode, palette: Option<Palette>) -> Sprite {
         // Extract the palette is not provided as an argument
         let palette = palette.unwrap_or_else(|| self.extract_palette());
