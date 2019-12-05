@@ -54,21 +54,28 @@ impl From<&str> for Expr {
         Expr::Label(src.to_string())
     }
 }
-impl From<i32> for Expr {
-    fn from(src: i32) -> Self {
-        Expr::Value(src)
-    }
-}
-impl From<u8> for Expr {
-    fn from(src: u8) -> Self {
-        Expr::Value(i32::from(src))
-    }
+
+// Macro to generate all the converters from one number to an expression
+macro_rules! convert_number_to_expr {
+    ( $($i:ty)* ) => {
+        $(
+            #[allow(trivial_numeric_casts)]
+            impl From<$i> for Expr {
+                fn from(src: $i) -> Self {
+                    Expr::Value(src as _)
+                }    
+            }
+        )*
+    };
 }
 
+convert_number_to_expr!(i32 i16 i8 u8 u16 u32);
+
 /*
+// impossible to implement now
 impl<N: num::ToPrimitive> From<N> for Expr {
     fn from(src: N) -> Expr {
-        Expr::Value(num.to_i32().unwrap())
+        Expr::Value(src.to_i32().unwrap())
     }
 }
 
