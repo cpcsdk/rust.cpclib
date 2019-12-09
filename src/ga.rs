@@ -379,6 +379,16 @@ where
     }
 }
 
+impl<T> From<[T;16]> for Palette
+where
+    Ink:From<T>,
+    T: Copy,
+{
+    fn from(items: [T;16]) -> Self {
+        items.to_vec().into()
+    }
+}
+
 /// Create a palette with the right inks
 /// Usage
 /// `palette![1, 2, 3]`
