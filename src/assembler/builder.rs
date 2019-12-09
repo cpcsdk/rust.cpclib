@@ -1,5 +1,6 @@
 ///! Utility code to build more easily tokens to manipulate in code generators
 use crate::assembler::tokens::*;
+
 use paste;
 
 #[allow(missing_docs)]
@@ -19,9 +20,45 @@ pub fn assert_str<S: AsRef<str>>(expr: S) -> Token {
     Token::Assert(expr.as_ref().into(), None)
 }
 
+
+/// Generate a call
+
+
 #[allow(missing_docs)]
 pub fn comment<S: AsRef<str>>(label: S) -> Token {
     Token::Comment(label.as_ref().to_owned())
+}
+
+/// Generate defs directive
+pub fn defs_expr<E: Into<Expr>>(expr: E) -> Token {
+    Token::Defs(expr.into(), None)
+}
+
+/// Generate defs directive
+pub fn defs_expr_expr<E1: Into<Expr>, E2: Into<Expr>>(count: E1, value: E2) -> Token {
+    Token::Defs(count.into(), value.into().into())
+}
+
+/// DJNZ opcode
+pub fn djnz_expr<E: Into<Expr>>(expr:E) -> Token {
+    mnemonic_with_single_expr(Mnemonic::Djnz, expr)
+}
+
+/// Call opcode
+pub fn call_expr<E: Into<Expr>>(expr:E) -> Token {
+    mnemonic_with_single_expr(Mnemonic::Call, expr)
+}
+
+
+
+/// Use this function to generate tokens having a mnemonic with a single expression argument
+/// TODO write a macro instead and automatically generate all the cases
+fn mnemonic_with_single_expr<E: Into<Expr>>(mne: Mnemonic, expr:E) -> Token{
+    Token::OpCode(
+        mne,
+        Some(expr.into().into()),
+        None
+    )
 }
 
 #[allow(missing_docs)]
@@ -139,6 +176,15 @@ pub fn pop_iy() -> Token {
     )
 }
 
+/// Ret token
+pub fn ret() -> Token {
+    Token::OpCode(
+        Mnemonic::Ret,
+        None,
+        None
+    )
+}
+
 #[allow(missing_docs)]
 pub fn breakpoint_winape() -> Token {
     Token::Defb(vec![Expr::Value(0xed), Expr::Value(0xff)])
@@ -211,6 +257,32 @@ ld_r16_expr! {
     )
 }
 */
+
+
+macro_rules! ld_r8_expr {
+    ($($reg:ident, $name:ident)*) => {$(
+        paste::item_with_macros! {
+            /// Generate the opcode LD $reg, expr
+            #[allow(missing_docs)] pub fn [<ld_ $name _expr>]<E: Into<Expr>> (val: E) -> Token {
+                token_for_opcode_two_args(
+                    Mnemonic::Ld,
+                    Register8::$reg.into(),
+                    val.into().into()
+                )
+            }
+        }
+    )*}
+}
+
+ld_r8_expr! {
+    A,a
+    B,b
+    C,c
+    D,d
+    E,e
+    H,h
+    L,l
+}
 
 #[allow(missing_docs)]
 pub fn ld_d_mem_hl() -> Token {
@@ -332,4 +404,58 @@ pub fn token_for_opcode_latest_arg(mne: Mnemonic, data2: DataAccess) -> Token {
 #[allow(missing_docs)]
 pub fn token_for_opcode_two_args(mne: Mnemonic, data1: DataAccess, data2: DataAccess) -> Token {
     Token::OpCode(mne, Some(data1), Some(data2))
+}
+
+/// Code function that generate Listing instead of Tokens
+pub mod routines {
+    use crate::assembler::tokens::tokens::Listing;
+    use crate::assembler::builder::*;
+
+    /// Generate the listing that handle a wait loop
+    /// Idea comes from Rhino/Batman Group http://cpcrulez.fr/forum/viewtopic.php?p=15827#p15827
+
+    #[allow(dead_code)]
+    pub fn wait(mut duration: u32) -> Listing {
+        
+
+    let wait_code_for = |l_duration| {
+        assert!(l_duration > 0);
+        let loops = (l_duration-1) / 4;
+        let loopsx4 = loops*4;
+        let nops = l_duration - loopsx4 - 1;
+
+        let mut listing = Listing::default();
+        if loops != 0 {
+            listing.push(ld_b_expr(loops));
+            listing.push(djnz_expr("$"));
+        }
+
+        listing.push(defs_expr_expr(nops, 0));
+        listing
+    };
+
+        let mut full_code = Listing::new();
+        while duration > 1024 {
+            full_code.inject_listing(&wait_code_for(1024));
+            duration -= 1024;
+        }
+        if duration != 0 {
+            full_code.inject_listing(&wait_code_for(duration));
+        }
+
+        full_code
+    }
+}
+
+
+
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+fn test_wait() {
+    // This test cannot run. The time must be obtained by emulating the code
+    assert_eq!(20, wait(20).estimated_duration())
+}
 }
