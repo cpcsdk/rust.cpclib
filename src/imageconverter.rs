@@ -56,6 +56,15 @@ pub enum Transformation {
 }
 
 impl Transformation {
+    /// Apply the transformation to the list of colormatrix
+    /// TODO find a way to use the same function name than for a ColorMatrix
+    pub fn apply_to_list(&self, list: &ColorMatrixList) -> ColorMatrixList {
+        list.to_vec().iter()
+            .map(|matrix|{self.apply(matrix)})
+            .collect::<Vec<ColorMatrix>>()
+            .into()
+    }
+
     /// Apply the transformation to the given image
     pub fn apply(&self, matrix: &ColorMatrix) -> ColorMatrix {
         match self {
@@ -411,6 +420,7 @@ impl DisplayAddress {
 #[allow(missing_docs)]
 pub enum OutputFormat {
     /// Mode specific bytes are stored consecutively in a linear way (line 0, line 1, ... line n)
+    /// To be converted on the fly as a specific TileEncoded scheme
     LinearEncodedSprite,
 
     /// Chuncky output where each pixel is encoded in one byte (and is supposed to be vertically duplicated)
@@ -599,11 +609,63 @@ impl HorizontalWordCounter for StartFromLeftAndFlipAtTheEndOfLine {
     }
 }
 
+/// Structure to manage the horizontal movement of the sprite cursor
+#[derive(Debug, Copy, Clone)]
+pub struct StandardHorizontalCounter {
+    left_to_right: bool,
+    current_step: usize,
+    // We cannot have sprite of width 
+    nb_columns: Option<std::num::NonZeroUsize>
+}
+
+impl StandardHorizontalCounter {
+    /// Generate a counter for always copy from left to right
+    pub fn always_from_left_to_right() -> StandardHorizontalCounter {
+        StandardHorizontalCounter {
+            left_to_right: true,
+            current_step: 0,
+            nb_columns: None
+        }
+    }
+
+    /// Generate a counter for always copy from right to left
+    /// The number of columns MUST be specified in some way
+    pub fn always_from_right_to_left() -> StandardHorizontalCounter {
+        StandardHorizontalCounter {
+            left_to_right: false,
+            current_step: 0,
+            nb_columns: None
+        }
+    }
+}
+
+#[allow(missing_docs)]
+impl HorizontalWordCounter for StandardHorizontalCounter {
+    fn get_column_index(&self) -> usize {
+        if self.left_to_right {
+            self.current_step
+        }
+        else {
+            usize::from(self.nb_columns.unwrap()) - self.current_step
+        }
+    }
+
+    fn next(&mut self) {
+        self.current_step += 1;
+    }
+
+    fn line_ended(&mut self) {
+        self.current_step = 0;
+    }
+}
+
 #[allow(missing_docs)]
 impl TileHorizontalCapture {
     pub fn counter(self) -> Box<dyn HorizontalWordCounter> {
         match self {
-            Self::AlwaysFromLeftToRight => unimplemented!(),
+            Self::AlwaysFromLeftToRight => {
+                Box::new(StandardHorizontalCounter::always_from_left_to_right())
+            },
             Self::AlwaysFromRightToLeft => unimplemented!(),
             Self::StartFromRightAndFlipAtTheEndOfLine => unimplemented!(),
             Self::StartFromLeftAndFlipAtTheEndOfLine => {
@@ -906,7 +968,7 @@ impl<'a> ImageConverter<'a> {
         mode: Mode,
         transformations: TransformationsList,
         output: &'a OutputFormat,
-    ) -> Result<Output, String>
+    ) -> anyhow::Result<Output>
     where
         P: AsRef<Path>,
     {
@@ -919,7 +981,7 @@ impl<'a> ImageConverter<'a> {
         mode: Mode,
         transformations: TransformationsList,
         output: &'a OutputFormat,
-    ) -> Result<Output, String> {
+    ) -> anyhow::Result<Output> {
         let mut converter = ImageConverter {
             palette,
             mode,
@@ -944,7 +1006,7 @@ impl<'a> ImageConverter<'a> {
     }
 
     /// Makes the conversion of the provided sprite to the expected format
-    pub fn import(sprite: &Sprite, output: &'a OutputFormat) -> Result<Output, String> {
+    pub fn import(sprite: &Sprite, output: &'a OutputFormat) -> anyhow::Result<Output> {
         let mut converter = ImageConverter {
             palette: None,
             mode: Mode::Zero, // TODO make the mode an optional argument,
@@ -974,7 +1036,7 @@ impl<'a> ImageConverter<'a> {
     }
 
     /// Manage the conversion on the given sprite
-    fn apply_sprite_conversion(&mut self, sprite: &Sprite) -> Result<Output, String> {
+    fn apply_sprite_conversion(&mut self, sprite: &Sprite) -> anyhow::Result<Output> {
         let output = self.output.clone();
 
         match output {
@@ -1009,7 +1071,7 @@ impl<'a> ImageConverter<'a> {
 
     /// Produce the linearized version of the sprite.
     /// TODO add size constraints to keep a small part of the sprite
-    fn linearize_sprite(&mut self, sprite: &Sprite) -> Result<Output, String> {
+    fn linearize_sprite(&mut self, sprite: &Sprite) -> anyhow::Result<Output> {
         Ok(Output::LinearEncodedSprite {
             data: sprite.to_linear_vec(),
             palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set
@@ -1028,7 +1090,7 @@ impl<'a> ImageConverter<'a> {
         grid_width: GridWidthCapture,
         grid_height: GridHeightCapture,
         sprite: &Sprite,
-    ) -> Result<Output, String> {
+    ) -> anyhow::Result<Output> {
         // Compute the real value of the arguments
         let tile_width = match tile_width {
             TileWidthCapture::FullWidth => sprite.byte_width(),
@@ -1099,13 +1161,13 @@ impl<'a> ImageConverter<'a> {
         sprite: &Sprite,
         dim: CPCScreenDimension,
         display_address: DisplayAddress,
-    ) -> Result<Output, String> {
+    ) -> anyhow::Result<Output> {
         let screen_width = u32::from(dim.width(sprite.mode().unwrap()));
         let screen_height = u32::from(dim.height());
 
         // Check if the destination is compatible
         if screen_width < sprite.pixel_width() {
-            return Err(format!(
+            return Err(anyhow::anyhow!(
                 "The image width ({}) is larger than the cpc screen width ({})",
                 sprite.pixel_width(),
                 screen_width
@@ -1119,7 +1181,7 @@ impl<'a> ImageConverter<'a> {
         }
 
         if screen_height < sprite.height() {
-            return Err(format!(
+            return Err(anyhow::anyhow!(
                 "The image height ({}) is larger than the cpc screen height ({})",
                 sprite.height(),
                 screen_height
@@ -1138,7 +1200,7 @@ impl<'a> ImageConverter<'a> {
         let mut used_pages = HashSet::new();
         let is_overscan = dim.use_two_banks();
         if !is_overscan && display_address.is_overscan() {
-            return Err(format!(
+            return Err(anyhow::anyhow!(
                 "Image requires an overscan configuration for R12/R13={:?}",
                 display_address
             ));
@@ -1197,7 +1259,7 @@ impl<'a> ImageConverter<'a> {
             .collect::<Vec<_>>();
 
         if is_overscan && used_pages.len() != 2 {
-            return Err(format!(
+            return Err(anyhow::anyhow!(
                 "An overscan screen is requested but {} pages has been feed",
                 used_pages.len()
             ));
