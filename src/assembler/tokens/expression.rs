@@ -69,7 +69,7 @@ macro_rules! convert_number_to_expr {
     };
 }
 
-convert_number_to_expr!(i32 i16 i8 u8 u16 u32);
+convert_number_to_expr!(i32 i16 i8 u8 u16 u32 usize);
 
 /*
 // impossible to implement now
