@@ -13,6 +13,7 @@ categories = ["command-line-utilities", "development-tools", "emulators"]
 
 [dependencies]
 arrayref= "0.3.5"
+anyhow = "1.0"
 bitsets = "0.1.1"
 bitfield = "0.13.2"
 bitflags = "1.2.1"
@@ -21,6 +22,8 @@ delegate = "0.3.0"
 either = "1.5.3"
 failure = "0.1.6"
 getset = "0.0.9"
+gif = "0.10.0"
+gif-dispose = "2.2.0"
 itertools= "0.8.2"
 image = "0.22.3"
 lazy_static= "1.4.0"

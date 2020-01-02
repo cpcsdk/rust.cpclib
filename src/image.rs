@@ -6,6 +6,7 @@ use crate::ga::*;
 use crate::pixels;
 use itertools::Itertools;
 use std::collections::HashSet;
+use anyhow;
 
 /// Screen mode
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -156,6 +157,21 @@ pub struct ColorMatrix {
     data: Vec<Vec<Ink>>,
 }
 
+
+    /// We have to choose a strategy when reducing the number of colors of an image.
+/// This enumeration allows to set up them
+#[derive(Debug, Copy, Clone)]
+pub enum ColorConversionStrategy {
+    /// Impossible colors are replace by the first possible ink
+    ReplaceWrongColorByFirstColor,
+    /// The color is replaced by the closest one
+    ReplaceWrongColorByClosestInk,
+    /// An error is generated
+    Fail
+}
+
+
+
 #[allow(missing_docs)]
 impl ColorMatrix {
     /// Create a new empty color matrix for the given dimensions
@@ -274,8 +290,9 @@ impl ColorMatrix {
         p
     }
 
+
     /// Modify the image in order to keep the right amount of inks
-    pub fn reduce_colors_for_mode(&mut self, mode: Mode) {
+    pub fn reduce_colors_for_mode(&mut self, mode: Mode, strategy: ColorConversionStrategy) -> Result<(), anyhow::Error> {
         // Get the reduced palette
         let inks = self.data.iter()
             .flatten()
@@ -285,14 +302,27 @@ impl ColorMatrix {
         let max_count = mode.max_colors().min(inks.len());
         let inks = &inks[..max_count];
 
-        // Replace all wrong inks by first possible ink
+        self.reduce_colors_with(inks, strategy)
+    }
+
+    /// Modify the image in order to use only the provided palette
+    pub fn reduce_colors_with(&mut self, inks: &[Ink], strategy: ColorConversionStrategy) -> Result<(), anyhow::Error> {
         for y in 0..(self.height() as usize) {
             for x in 0..(self.width() as usize) {
-                if !inks.contains(&self.data[y][x]) {
-                    self.data[y][x] = inks[0];
+                let ink = &mut self.data[y][x];
+                if !inks.contains(ink) {
+                    match strategy {
+                        ColorConversionStrategy::ReplaceWrongColorByFirstColor => { *ink = inks[0];},
+                        ColorConversionStrategy::ReplaceWrongColorByClosestInk => { unimplemented!()},
+                        ColorConversionStrategy::Fail => {
+                            return Err(anyhow::anyhow!("{:?} not available in {:?} at [{}, {}]", ink, inks, x, y));
+                        }
+                    }
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Get the width (in bytes) of the image
@@ -454,6 +484,126 @@ impl ColorMatrix {
         }
     }
 }
+
+
+/// Animation are stored in lists of ColorMatrices of same sze
+#[derive(Debug)]
+pub struct ColorMatrixList(Vec<ColorMatrix>);
+
+impl From<Vec<ColorMatrix>> for ColorMatrixList {
+    fn from(src: Vec<ColorMatrix>) -> Self {
+        ColorMatrixList(src)
+    }
+}
+
+impl Into<Vec<ColorMatrix>> for &ColorMatrixList {
+    fn into(self) -> Vec<ColorMatrix> {
+        self.0.clone()
+    }
+}
+
+impl std::ops::Deref for ColorMatrixList {
+    type Target = Vec<ColorMatrix>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl ColorMatrixList {
+    /// Provide a Vec version of the items
+    pub fn to_vec(&self) -> Vec<ColorMatrix> {
+        self.into()
+    }
+
+    /// Animations are stored within GIF files.
+    /// TODO allow over kind of image data
+    pub fn convert_from_fname(fname: &str, conversion: ConversionRule) -> anyhow::Result<Self> {
+        use std::fs::File;
+        use gif::SetParameter;
+
+        // Decode a gif into frames
+        let file_in = File::open(fname)?;
+        let mut decoder = gif::Decoder::new(file_in);
+        decoder.set(gif::ColorOutput::Indexed);
+        let mut reader = decoder.read_info()?;
+        let mut screen = gif_dispose::Screen::new_reader(&reader);
+
+        let mut matrix_list = ColorMatrixList(Vec::new());
+        while let Some(frame) = reader.read_next_frame()? {
+            screen.blit_frame(&frame)?;
+
+            let content = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::from_raw(
+                screen.pixels.width() as u32, 
+                screen.pixels.height() as u32, 
+                screen.pixels.buf().iter()
+                .map(|pix| [pix.r, pix.g, pix.b].to_vec())
+                .flatten().collect::<Vec<u8>>()
+            ).unwrap();
+
+            matrix_list.0.push(ColorMatrix::convert(&content, conversion));
+        }
+
+        Ok(matrix_list)
+    }
+
+    /// Delegate the color reduction to the underlying ColorMatrix objects
+    pub fn reduce_colors_with(&mut self, inks: &[Ink], strategy: ColorConversionStrategy) -> Result<(), anyhow::Error> {
+        self.0.iter_mut().map(
+            |matrix| {
+                matrix.reduce_colors_with(inks, strategy)
+            }
+        ).collect()
+    }
+
+    /// Number of frames in the animation
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Assume there is one sprite at least and all of them have the same size
+    pub fn width(&self) -> u32 {
+        self.0[0].width()
+    }
+
+    /// Assume there is one sprite at least and all of them have the same size
+    pub fn height(&self) -> u32 {
+        self.0[0].height()
+    }
+
+    /// Convert each matrice as a sprite using the same conversion method
+    pub fn as_sprites(&self, mode: Mode, palette: Option<Palette>) -> SpriteList {
+        self.to_vec().iter().map(
+            |matrix| {
+                matrix.as_sprite(mode, palette.clone())
+            }
+        )
+        .collect::<Vec<Sprite>>()
+        .into()
+    }
+    
+}
+
+/// List of sprites for animations
+#[derive(Debug)]
+pub struct SpriteList(Vec<Sprite>);
+
+impl From<Vec<Sprite>> for SpriteList {
+    fn from(src: Vec<Sprite>) -> Self {
+        SpriteList(src)
+    }
+}
+
+
+impl std::ops::Deref for SpriteList {
+    type Target = Vec<Sprite>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+
+
+
 
 /// A Sprite corresponds to a set of bytes encoded to the right CPC pixel format for a given
 /// palette.
