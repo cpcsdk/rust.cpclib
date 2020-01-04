@@ -330,6 +330,9 @@ impl fmt::Display for Token {
             Token::Include(ref fname, _)
                 => write!(f, "INCLUDE \"{}\"", fname),
 
+            Token::Incbin(ref fname, None, None, None, None, None, BinaryTransformation::None) 
+                => write!(f, "INCBIN \"{}\"", fname),
+
             Token::Print(ref exp)
                 => write!(f, "PRINT {}", exp),
 

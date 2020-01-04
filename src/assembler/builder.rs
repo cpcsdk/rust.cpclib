@@ -39,6 +39,11 @@ pub fn defs_expr_expr<E1: Into<Expr>, E2: Into<Expr>>(count: E1, value: E2) -> T
     Token::Defs(count.into(), value.into().into())
 }
 
+/// Generate defw directive with one argument
+pub fn defw<E:Into<Expr>>(val: E) -> Token {
+    Token::Defw(vec![val.into()])
+}
+
 /// DJNZ opcode
 pub fn djnz_expr<E: Into<Expr>>(expr:E) -> Token {
     mnemonic_with_single_expr(Mnemonic::Djnz, expr)
@@ -204,6 +209,12 @@ pub fn jp_label(label: &str) -> Token {
 pub fn exx() -> Token {
     token_for_opcode_no_arg(Mnemonic::Exx)
 }
+
+#[allow(missing_docs)]
+pub fn incbin<S: AsRef<str>>(fname: S) -> Token {
+    Token::Incbin(fname.as_ref().to_string(), None, None, None, None, None, BinaryTransformation::None)
+}
+
 
 #[allow(missing_docs)]
 pub fn inc_l() -> Token {

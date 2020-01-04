@@ -402,6 +402,19 @@ impl ColorMatrix {
         Self { data }
     }
 
+    /// From a ColorMatrix computed with the diff method, returns the (x,y) coordinates having a difference
+    pub fn diff_to_positions(&self) -> Vec<(usize, usize)> {
+        let mut res = Vec::new();
+        for x in 0..(self.width() as usize) {
+            for y in 0..(self.height() as usize) {
+                if self.data[y][x] == Ink::from(0) {
+                    res.push((x,y));
+                }
+            }
+        }
+        res
+    }
+
     /// Convert the buffer as an image
     pub fn as_image(&self) -> im::ImageBuffer<im::Rgba<u8>, Vec<u8>> {
         let mut buffer: im::ImageBuffer<im::Rgba<u8>, Vec<u8>> =
@@ -509,6 +522,44 @@ impl std::ops::Deref for ColorMatrixList {
     }
 }
 
+/// Defines potential constraints when automatically cropping the image
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum HorizontalCropConstraint {
+    /// No constrain at all
+    None,
+    /// Consider we are working in a specific and screen mode and bytes must be full
+    CompleteByteForMode(Mode)
+}
+
+/// Defines how cropping occurs horizontally
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum HorizontalCrop {
+    /// Cropping only on right
+    Right(HorizontalCropConstraint),
+    /// Cropping only on left
+    Left(HorizontalCropConstraint),
+    /// Cropping on left and right
+    Both(HorizontalCropConstraint, HorizontalCropConstraint),
+    /// No horinzotnalropping
+    None
+}
+
+
+
+/// Defines how cropping occurs vertically
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum VerticalCrop {
+    /// Cropping only on top
+    Top,
+    /// Cropping only on botton
+    Bottom,
+    /// Cropping on top and bottom
+    Both,
+    /// No vertical cropping
+    None
+}
+
+
 impl ColorMatrixList {
     /// Provide a Vec version of the items
     pub fn to_vec(&self) -> Vec<ColorMatrix> {
@@ -581,6 +632,122 @@ impl ColorMatrixList {
         .into()
     }
     
+
+    /// Crop each matrix in order to only keep the maximal window where at least one pixel change over the animation
+    pub fn crop(&mut self, hor_conf: HorizontalCrop, vert_conf: VerticalCrop) -> Self {
+        use std::collections::BTreeSet;
+
+        // Collect the lines/row modified
+        let (modified_x, modified_y) = {
+            let mut modified_x = BTreeSet::new();
+            let mut modified_y = BTreeSet::new();
+
+            for (mata, matb) in self.0.iter().tuple_windows() {
+                let diff = mata.diff(matb);
+                let diff_coords = diff.diff_to_positions();
+
+                diff_coords.iter().for_each(|(x,y)| {
+                    modified_x.insert(*x);
+                    modified_y.insert(*y);
+                });
+            }
+
+            (modified_x.iter().map(|x|*x as u32).collect::<Vec<_>>(), 
+            modified_y.iter().map(|y|*y as u32).collect::<Vec<_>>())
+        };
+
+        // Make the croping on the left (first column to keep)
+        let mut start_x = match hor_conf {
+            HorizontalCrop::Both(_, _) | HorizontalCrop::Left(_) => {
+            let mut current_x = 0;
+            while current_x < self.width()-1 && current_x < modified_x[0] {
+                current_x += 1;
+            }
+            current_x
+            }, 
+            _ => {
+                0
+            }
+        } as usize;
+
+        // Make the cropping on the right (last column to keep)
+        let mut stop_x = match hor_conf {
+            HorizontalCrop::Both(_,_) | HorizontalCrop::Right(_) => {
+            let mut current_x = self.width() - 1;
+            while current_x > 0 && current_x > *modified_x.last().unwrap() {
+                current_x -=1;
+            }
+            current_x
+        }, 
+        _ => {
+            self.width() -1
+        }
+     } as usize;
+
+        // Make the cropping to the top
+        let start_y = match vert_conf {
+            VerticalCrop::Both |  VerticalCrop::Top => {
+            let mut current_y = 0;
+            while current_y < self.height()-1 && current_y < modified_y[0] {
+                current_y += 1;
+            }
+            current_y
+        },
+        _ =>  {
+            0
+        }} as usize;
+
+        // Make the cropping to the bottom
+        let stop_y = match vert_conf {
+            VerticalCrop::Both | VerticalCrop::Bottom => {
+            let mut current_y = self.height() - 1;
+            while current_y > 0 && current_y > *modified_y.last().unwrap() {
+                current_y -=1;
+            }
+            current_y
+        },
+        _ => {
+            self.height() -1
+        }} as usize;
+
+        // Ensure horizontal start constraint is respected
+        match hor_conf {
+            HorizontalCrop::Left(HorizontalCropConstraint::CompleteByteForMode(ref mode)) |
+            HorizontalCrop::Both(HorizontalCropConstraint::CompleteByteForMode(ref mode), _) => {
+                while start_x%mode.nb_pixels_per_byte() != 0 {
+                    start_x -= 1;
+                }
+            },
+            _ => {}
+        }
+
+        // Ensure horizontal stop contraint is respected
+        match hor_conf {
+            HorizontalCrop::Right(HorizontalCropConstraint::CompleteByteForMode(ref mode)) |
+            HorizontalCrop::Both(_, HorizontalCropConstraint::CompleteByteForMode(ref mode)) => {
+                while (stop_x+1)%mode.nb_pixels_per_byte() != 0 {
+                    stop_x += 1;
+                }
+            },
+            _ => {}
+        }
+
+        // Return the selected window
+       self.window(start_x, start_y, stop_x-start_x+1, stop_y-start_y+1)
+    }
+
+    /// Apply the window operator on each ColorMatrix
+    pub fn window(&self, start_x: usize, start_y: usize, width: usize, height: usize) -> Self {
+        self.to_vec().iter().map(
+            |matrix| {
+                matrix.window(start_x, start_y, width, height)
+            }
+        )
+        .collect::<Vec<ColorMatrix>>()
+        .into()
+    }
+
+
 }
 
 /// List of sprites for animations
