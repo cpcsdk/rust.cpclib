@@ -34,6 +34,8 @@ use cpclib::sna::*;
 use std::fs::File;
 use std::io::Write;
 
+use anyhow;
+
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
 
@@ -200,7 +202,7 @@ fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
 // TODO - Add the ability to import a target palette
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
-fn convert(matches: &ArgMatches<'_>) -> Result<(), String> {
+fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let input_file = matches.value_of("SOURCE").unwrap();
     let output_mode = matches.value_of("MODE").unwrap().parse::<u8>().unwrap();
     let mut transformations = TransformationsList::default();
@@ -335,7 +337,7 @@ fn convert(matches: &ArgMatches<'_>) -> Result<(), String> {
     Ok(())
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = App::new("CPC image conversion tool")
                     .version("0.1")
                     .author("Krusty/Benediction")
@@ -469,7 +471,7 @@ fn main() {
                         .about("Directly send the code on the M4 through a snapshot")
                         .arg(
                             Arg::with_name("CPCM4")
-                            .takes_value(true)
+                                .takes_value(true)
                             .help("Address of the M4")
                             .required(true)
                         )
@@ -500,40 +502,26 @@ fn main() {
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
         if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
-            // Create a channel to receive the events.
-            let (tx, rx) = unbounded();
 
-            // Automatically select the best implementation for your platform.
-            let mut watcher: RecommendedWatcher =
-                Watcher::new(tx, Duration::from_secs(2)).expect("Unable to install watcher");
+            let (tx, rx) = std::sync::mpsc::channel();
+            let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| tx.send(res).unwrap())?;
+            watcher.watch(matches.value_of("SOURCE").unwrap(), RecursiveMode::NonRecursive)?;
 
-            // Add a path to be watched. All files and directories at that path and
-            // below will be monitored for changes.
-            watcher
-                .watch(
-                    matches.value_of("SOURCE").unwrap(),
-                    RecursiveMode::NonRecursive,
-                )
-                .expect("Unable to watch file.");
-
-            loop {
-                match rx.recv() {
-                    Ok(Ok(notify::Event {
-                        kind: notify::EventKind::Modify(_),
-                        ..
-                    }))
-                    | Ok(Ok(notify::Event {
-                        kind: notify::EventKind::Create(_),
-                        ..
-                    })) => {
+            for res in rx {
+                match res {
+                   Ok(notify::event::Event{kind: notify::event::EventKind::Modify(_), ..}) |
+                   Ok(notify::event::Event{kind: notify::event::EventKind::Create(_), ..})
+                    => {
                         if let Err(e) = convert(&matches) {
                             eprintln!("[ERROR] Unable to convert the image {}", e);
                         }
-                    }
-                    Err(err) => println!("watch error: {:?}", err),
-                    _ => {}
-                };
+                   },
+                   _ => {}
+                }
             }
+
         }
     }
+
+    Ok(())
 }

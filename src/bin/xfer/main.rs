@@ -15,6 +15,7 @@
 
 use clap;
 use std::path::Path;
+use anyhow;
 
 mod interact;
 mod parser;
@@ -55,7 +56,7 @@ fn send_and_run_file(xfer: &cpc::xfer::CpcXfer, fname: &str) {
     };
 }
 
-fn main() -> Result<(), cpc::xfer::XferError> {
+fn main() -> anyhow::Result<()> {
     let matches = clap::App::new("CPC xfer to M4")
         .author("Krusty/Benediction")
         .about("RUST version of the communication tool between a PC and a CPC through the CPC Wifi card")
@@ -138,43 +139,29 @@ fn main() -> Result<(), cpc::xfer::XferError> {
     } else if matches.is_present("-s") {
         xfer.reset_cpc()?;
     } else if let Some(y_opt) = matches.subcommand_matches("-y") {
-        let fname = y_opt.value_of("fname").unwrap();
+        let fname: String = y_opt.value_of("fname").unwrap().to_string();
 
         // Simple file sending
-        send_and_run_file(&xfer, fname);
+        send_and_run_file(&xfer, &fname);
 
         if y_opt.is_present("WATCH") {
-            // Create a channel to receive the events.
-            let (tx, rx) = unbounded();
+            let (tx, rx) = std::sync::mpsc::channel();
+            let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| tx.send(res).unwrap())?;
+            watcher.watch(&fname, RecursiveMode::NonRecursive)?;
 
-            // Automatically select the best implementation for your platform.
-            let mut watcher: RecommendedWatcher =
-                Watcher::new(tx, Duration::from_secs(2)).expect("Unable to install watcher");
-
-            // Add a path to be watched. All files and directories at that path and
-            // below will be monitored for changes.
-            watcher
-                .watch(fname, RecursiveMode::NonRecursive)
-                .expect("Unable to watch file.");
-
-            loop {
-                match rx.recv() {
-                    Ok(Ok(notify::Event {
-                        kind: notify::EventKind::Modify(_),
-                        ..
-                    }))
-                    | Ok(Ok(notify::Event {
-                        kind: notify::EventKind::Create(_),
-                        ..
-                    })) => {
-                        println!("File modified");
-                        send_and_run_file(&xfer, fname);
-                    }
-                    Err(err) => println!("watch error: {:?}", err),
-                    _ => {}
-                };
+            for res in rx {
+                match res {
+                   Ok(notify::event::Event{kind: notify::event::EventKind::Modify(_), ..}) |
+                   Ok(notify::event::Event{kind: notify::event::EventKind::Create(_), ..})
+                    => {
+                       send_and_run_file(&xfer, &fname);
+                   },
+                   _ => {}
+                }
             }
+
         }
+
     } else if let Some(x_opt) = matches.subcommand_matches("-x") {
         let fname = x_opt.value_of("fname").unwrap();
         xfer.run(fname)?; /*.expect("Unable to launch file on CPC.");*/
