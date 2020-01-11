@@ -11,25 +11,25 @@ use std::path::Path;
 use crate::ga::*;
 use crate::image::*;
 
-/// Encode the position of a line to transform in the source image
+/// Encode the position of a line or column to transform in the source image
 #[derive(Copy, Clone, Debug)]
-pub enum TransformationLinePosition {
-    /// This is the very first line of the image
+pub enum TransformationPosition {
+    /// This is the very first line or column of the image
     First,
-    /// This is the very last line of the image
+    /// This is the very last line or column of the image
     Last,
     /// This is a specific index
     Index(usize),
 }
 
-impl TransformationLinePosition {
+impl TransformationPosition {
     /// Get the absolute position regarding the image size
-    pub fn absolute_position(self, height: usize) -> Option<usize> {
+    pub fn absolute_position(self, size: usize) -> Option<usize> {
         match self {
             TransformationLinePosition::First => Some(0),
-            TransformationLinePosition::Last => Some(height - 1),
+            TransformationLinePosition::Last => Some(size - 1),
             TransformationLinePosition::Index(idx) => {
-                if idx >= height {
+                if idx >= size {
                     None
                 } else {
                     Some(idx)
@@ -38,6 +38,12 @@ impl TransformationLinePosition {
         }
     }
 }
+
+/// Type that represent the position in a line of the image
+pub type TransformationLinePosition = TransformationPosition;
+/// Type that represent the position in a column of the image
+pub type TransformationColumnPosition = TransformationPosition;
+
 
 /// List of all the possible transformations applicable to a ColorMatrix
 #[derive(Clone, Debug)]
@@ -49,10 +55,20 @@ pub enum Transformation {
         /// The pattern to use to fill the background
         pattern: Vec<Ink>,
         /// The location of the line within the image
-        position: TransformationLinePosition,
+        position: TransformationPosition,
         /// The amount of lines to add
         amount: u16,
     },
+
+    /// Add artificial blank columns given a pattern
+    BlankColumns {
+        /// The pattern to use to fill the background
+        pattern: Vec<Ink>,
+        /// The location of the column within the image
+        position: TransformationPosition,
+        /// The amount of columns to add
+        amount: u16
+    }
 }
 
 impl Transformation {
@@ -72,7 +88,7 @@ impl Transformation {
                 let mut res = matrix.clone();
                 res.remove_odd_columns();
                 res
-            }
+            },
 
             Self::BlankLines {
                 pattern,
@@ -97,6 +113,29 @@ impl Transformation {
                     res.add_line(position, &line);
                 });
                 res
+            },
+
+            Self::BlankColumns {
+                pattern,
+                position,
+                amount
+            } => {
+                let column = {
+                    let mut column = Vec::new();
+                    for idx in 0..(matrix.height() as usize) {
+                        column.push(pattern[idx % pattern.len()])
+                    }
+                    column
+                };
+
+                let position = position.absolute_position(matrix.width() as _).unwrap();
+
+                let mut res = matrix.clone();
+                (0..*amount).into_iter().for_each(|_|{
+                    res.add_column(position, &column);
+                });
+
+                res
             }
         }
     }
@@ -107,6 +146,15 @@ impl Transformation {
             pattern: pattern.iter().map(|&i| i.into()).collect::<Vec<Ink>>(),
             position,
             amount,
+        }
+    }
+
+    /// Create a transformation that adds blanck columns
+    pub fn blank_columns<I:Into<Ink> + Copy>(pattern: &[I], position: TransformationColumnPosition, amount: u16) -> Self {
+        Self::BlankColumns {
+            pattern: pattern.iter().map(|&i| i.into()).collect::<Vec<_>>(),
+            position,
+            amount
         }
     }
 }
