@@ -253,6 +253,20 @@ impl ColorMatrix {
         &self.data[y]
     }
 
+    /// Return a mutable version of the line. Care needs to be taken in order to not destroy the data structure
+    fn get_line_mut(&mut self, y: usize) -> &mut Vec<Ink> {
+        &mut self.data[y]
+    }
+
+    /// Add a column within the image
+    /// Panic if impossible
+    pub fn add_column(&mut self, position: usize, column: &[Ink]) {
+        assert_eq!(column.len(), self.height() as usize);
+        for (row, ink) in column.iter().enumerate() {
+            self.get_line_mut(row).insert(position, *ink);
+        }
+    }
+
     /// Build a vector of Inks that contains all the inks of the given column
     pub fn get_column(&self, x: usize) -> Vec<Ink> {
         self.data.iter().map(|line| line[x]).collect::<Vec<Ink>>()
