@@ -119,13 +119,19 @@ impl<'a> XferInteractorHelper<'a> {
 
         let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
         for file in self.xfer.current_folder_content().unwrap().files() {
-            let fname = file.fname();
-            if fname.starts_with(word) {
-                entries.push(Pair{
-                    display: fname.into(),
-                    replacement: fname.into()
-                });
+            let fname1 = file.fname();
+            let fname2 = ("./".to_owned() + &fname1);
+
+            for &fname in [fname1, &fname2].iter() {
+
+                if fname.starts_with(word) {
+                    entries.push(Pair{
+                        display: fname.into(),
+                        replacement: fname.into()
+                    });
+                }
             }
+
         }
 
         Ok((start, entries))
