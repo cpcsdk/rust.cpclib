@@ -9,14 +9,16 @@ use termize;
 
 use rustyline::config::OutputStreamType;
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
+use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline_derive::{Helper, Validator, Highlighter, Hinter};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
 
 /// Help to add autocompletion.
 /// Done currently with filname, will be done later with M4 file names
-#[derive(Helper, Validator, Highlighter, Hinter)]
+#[derive(Helper, Validator, Highlighter)]
 struct XferInteractorHelper {
     completer: FilenameCompleter,
+    hinter: HistoryHinter,
 }
 
 
@@ -31,6 +33,12 @@ impl Completer for XferInteractorHelper {
         ctx: &Context<'_>,
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         self.completer.complete(line, pos, ctx)
+    }
+}
+
+impl Hinter for XferInteractorHelper {
+    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
+        self.hinter.hint(line, pos, ctx)
     }
 }
 
@@ -183,7 +191,8 @@ ls                  List the files in the current M4 directory.
             .output_stream(OutputStreamType::Stdout)
             .build();
         let h = XferInteractorHelper {
-            completer: FilenameCompleter::new()
+            completer: FilenameCompleter::new(),
+            hinter: HistoryHinter {}
         };
 
         let mut rl = Editor::with_config(config);
