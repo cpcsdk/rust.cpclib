@@ -156,8 +156,8 @@ impl CpcXfer {
     }
 
     /// Remove the file whose complete path is provided
-    pub fn rm(&self, path: &str) -> Result<(), XferError> {
-        self.simple_query(&[("rm", path)])?;
+    pub fn rm<S: AsRef<str>>(&self, path: S) -> Result<(), XferError> {
+        self.simple_query(&[("rm", path.as_ref())])?;
         Ok(())
     }
 
@@ -343,7 +343,7 @@ impl CpcXfer {
         }
     }
 
-    fn ls_request(&self, folder: &str) -> Result<(), XferError> {
+    pub fn ls_request(&self, folder: &str) -> Result<(), XferError> {
         let mut easy = Easy::new();
         let folder = easy.url_encode(folder.as_bytes());
         easy.get(true)?;

@@ -19,7 +19,7 @@ use subprocess::Exec;
 /// Done currently with filname, will be done later with M4 file names
 #[derive(Helper, Validator, Highlighter)]
 struct XferInteractorHelper<'a> {
-    commands: [&'a str;7],
+    commands: Vec<&'static str>,
     completer: FilenameCompleter,
     hinter: HistoryHinter,
     xfer: &'a CpcXfer // TODO find a way to not share xfer there in order to not lost time to do too much calls to M4
@@ -69,7 +69,7 @@ impl<'a> Completer for XferInteractorHelper<'a> {
 
         // Ensure local completion is only done for launch (at the moment)
         match command {
-            Some("launch") => {complete.extend(local.1)},
+            Some("launch") | Some("put") => {complete.extend(local.1)},
             _ => {}
         }
         
@@ -114,6 +114,26 @@ cfg_if::cfg_if! {
 
 impl<'a> XferInteractorHelper<'a> {
 
+    pub fn new(xfer: &'a CpcXfer) -> Self {
+    
+        XferInteractorHelper {
+            completer: FilenameCompleter::new(),
+            hinter: HistoryHinter {},
+            xfer: xfer,
+            commands: vec![
+                "rm", "del", "delete", "era",
+                "cd",
+                "exit",
+                "launch",
+                "ls",
+                "put",
+                "pwd",
+                "reset",
+                "reboot"
+            ]
+        }
+    }
+    
 
     /// Make the completion on the M4 filename
     fn complete_m4_path_name(&self, line: &str, pos:usize, ctx: &Context<'_> ) -> Result<(usize, Vec<Pair>), ReadlineError> {
@@ -191,6 +211,7 @@ impl<'a> XferInteractor<'a> {
                     println!("help       Displays the help.
 cd <folder>         Goes to <folder> in the M4.
 exit                Leaves the program.
+rm <file>           Remove the file for the M4. Synonyms: era, del, delete. 
 pwd                 Prints the current M4 directory.
 reboot              Reboot.
 reset               Reset.
@@ -254,6 +275,36 @@ ls                  List the files in the current M4 directory.
                     else {
                         self.cwd = self.xfer.current_working_directory().unwrap()
                     }
+                }
+
+                XferCommand::Era(path) => {
+                    let res = self.xfer.rm(path);
+                    if res.is_err() {
+                        eprintln!("{}", res.err().unwrap());
+                        return;
+                    }
+                }
+
+                XferCommand::Put(arg1) => {
+                    let path = std::path::Path::new(&arg1);
+                    if !path.exists() {
+                        eprintln!("{} does not exists", arg1);
+                        return;
+                    }
+
+                    let destination = self.cwd.clone();
+
+                    // Put the file
+                    let res = self.xfer.upload(
+                        &path,
+                        &destination,
+                        None
+                    );
+                    if res.is_err() {
+                        eprintln!("{}", res.err().unwrap());
+                        return;
+                    }
+
                 }
 
                 XferCommand::LaunchHost(path) => {
@@ -328,20 +379,9 @@ ls                  List the files in the current M4 directory.
             .edit_mode(EditMode::Emacs)
             .output_stream(OutputStreamType::Stdout)
             .build();
-        let h = XferInteractorHelper {
-            completer: FilenameCompleter::new(),
-            hinter: HistoryHinter {},
-            xfer: self.xfer,
-            commands: [
-                "cd",
-                "exit",
-                "launch",
-                "ls",
-                "pwd",
-                "reset",
-                "reboot"
-            ]
-        };
+        let h = XferInteractorHelper::new(self.xfer);
+        
+
 
         let mut rl = Editor::with_config(config);
         rl.set_helper(Some(h));
