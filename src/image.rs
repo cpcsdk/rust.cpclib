@@ -7,6 +7,7 @@ use crate::pixels;
 use itertools::Itertools;
 use std::collections::HashSet;
 use anyhow;
+use anyhow::Context;
 
 /// Screen mode
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -351,8 +352,10 @@ impl ColorMatrix {
     pub fn convert_from_fname(
         fname: &str,
         conversion: ConversionRule,
-    ) -> Result<Self, im::ImageError> {
-        let img = im::open(fname)?;
+    ) -> anyhow::Result<Self> {
+        let img = im::open(fname).with_context(||{
+            format!("{} does not exists.", fname)
+        })?;
         Ok(Self::convert(&img.to_rgb(), conversion))
     }
 

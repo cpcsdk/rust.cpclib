@@ -14,8 +14,12 @@ pub(crate) enum XferCommand {
     Pwd,
     Reset,
     Reboot,
+    Help,
     Ls(Option<String>),
-    Local(Option<String>),
+    /// Launch a file from the host
+    LaunchHost(String),
+    /// Launch a file from the M4
+    LaunchM4(String),
 }
 
 // TODO find a way to reduce code duplicaiton
@@ -37,7 +41,7 @@ fn ls(input: &str) -> IResult<&str, XferCommand> {
 
 fn cd_path(input: &str) -> IResult<&str, XferCommand> {
     map(
-        preceded(tuple((tag_no_case("cd"), space1)), alpha1),
+        preceded(tuple((tag_no_case("cd"), space1)), rest),
         |path: &str| XferCommand::Cd(Some(path.to_string())),
     )(input)
 }
@@ -50,15 +54,28 @@ fn cd(input: &str) -> IResult<&str, XferCommand> {
     alt((cd_path, cd_no_path))(input)
 }
 
+
+fn launch(input: &str) -> IResult<&str, XferCommand> {
+    map(
+        preceded(
+            tuple((tag_no_case("launch"), space1)), 
+            rest
+        ),
+        |path: &str| XferCommand::LaunchHost(path.to_string())
+    )(input)
+}
+
 fn no_arg(input: &str) -> IResult<&str, XferCommand> {
     alt((
         map(tag_no_case("pwd"), { |_| XferCommand::Pwd }),
+        map(tag_no_case("help"), { |_| XferCommand::Help }),
         map(tag_no_case("reboot"), { |_| XferCommand::Reboot }),
         map(tag_no_case("reset"), { |_| XferCommand::Reset }),
+        map(rest, {|fname: &str| XferCommand::LaunchM4(fname.to_string())})
     ))(input)
 }
 
 /// Launch the parsing of the line
 pub(crate) fn parse_command(input: &str) -> IResult<&str, XferCommand> {
-    alt((cd, ls, no_arg))(input)
+    alt((cd, ls, launch, no_arg))(input)
 }
