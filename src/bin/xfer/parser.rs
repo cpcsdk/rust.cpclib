@@ -11,6 +11,7 @@ use std::str;
 #[derive(Debug, Clone)]
 pub(crate) enum XferCommand {
     Cd(Option<String>),
+    Exit,
     Pwd,
     Reset,
     Reboot,
@@ -83,6 +84,7 @@ fn no_arg(input: &str) -> IResult<&str, XferCommand> {
         map(tag_no_case("help"), { |_| XferCommand::Help }),
         map(tag_no_case("reboot"), { |_| XferCommand::Reboot }),
         map(tag_no_case("reset"), { |_| XferCommand::Reset }),
+        map(tag_no_case("exit"), { |_| XferCommand::Exit }),
         map(rest, {|fname: &str| XferCommand::LaunchM4(fname.to_string())})
     ))(input)
 }
