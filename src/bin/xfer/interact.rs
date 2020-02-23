@@ -17,6 +17,7 @@ use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress
 /// Done currently with filname, will be done later with M4 file names
 #[derive(Helper, Validator, Highlighter)]
 struct XferInteractorHelper<'a> {
+    commands: [&'a str;6],
     completer: FilenameCompleter,
     hinter: HistoryHinter,
     xfer: &'a CpcXfer // TODO find a way to not share xfer there in order to not lost time to do too much calls to M4
@@ -42,9 +43,29 @@ impl<'a> Completer for XferInteractorHelper<'a> {
 
         let mut complete = Vec::with_capacity(local.1.len() + commands.1.len() + m4.1.len());
 
-        // TODO make conditional extend based on the command to launch
+        // Retreive the command in order to filter the autocompletion
+        let command = line.trim().split(' ').next();
+        // and get its position
+        let start = {
+            let mut idx = 0;
+            for c in line.chars() {
+                if c == ' ' || c == '\t' {
+                    idx +=1;
+                }
+                else {
+                    break;
+                }
+            }
+            idx
+        };
+
+        // Ensure command completion is only done for the first word
+        if start == local.0 {
+            complete.extend(commands.1);
+        }
+
+
         complete.extend(local.1);
-        complete.extend(commands.1);
         complete.extend(m4.1);
 
         Ok((local.0, complete))
@@ -104,20 +125,13 @@ impl<'a> XferInteractorHelper<'a> {
     /// Search the possible command names for completion
     /// TODO do it only when first word
     fn complete_command_name(&self, line: &str, pos: usize, ctx: &Context<'_> ) -> Result<(usize, Vec<Pair>), ReadlineError> {
-        let commands = [
-            "cd",
-            "launch",
-            "ls",
-            "pwd",
-            "reset",
-            "reboot"
-        ];
+
 
         let mut entries: Vec<Pair> = Vec::new();
         
         let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
         // TODO check if it is the very first word
-        for command in commands.iter() {
+        for command in self.commands.iter() {
             if command.starts_with(word) {
                 entries.push(Pair {
                     display: command.to_string(),
@@ -288,7 +302,15 @@ ls                  List the files in the current M4 directory.
         let h = XferInteractorHelper {
             completer: FilenameCompleter::new(),
             hinter: HistoryHinter {},
-            xfer: self.xfer
+            xfer: self.xfer,
+            commands: [
+                "cd",
+                "launch",
+                "ls",
+                "pwd",
+                "reset",
+                "reboot"
+            ]
         };
 
         let mut rl = Editor::with_config(config);
