@@ -332,7 +332,13 @@ impl CpcXfer {
                 let absolute = Path::new(&cwd).join(relative);
 
                 let absolute = absolute.absolutize().unwrap();
-                Ok(absolute.to_str().unwrap().into())
+                let path: String = absolute.to_str().unwrap().into();
+                if cfg!(target_os = "windows")
+                {
+                    return Ok(path.replace("C:\\", "/"));
+                }
+
+                Ok(path)
             }
         }
     }
