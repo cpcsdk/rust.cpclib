@@ -16,13 +16,14 @@ use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress
 /// Help to add autocompletion.
 /// Done currently with filname, will be done later with M4 file names
 #[derive(Helper, Validator, Highlighter)]
-struct XferInteractorHelper {
+struct XferInteractorHelper<'a> {
     completer: FilenameCompleter,
     hinter: HistoryHinter,
+    xfer: &'a CpcXfer // TODO find a way to not share xfer there in order to not lost time to do too much calls to M4
 }
 
 
-impl Completer for XferInteractorHelper {
+impl<'a> Completer for XferInteractorHelper<'a> {
     type Candidate = Pair;
 
     /// TODO add M4 completion
@@ -33,7 +34,8 @@ impl Completer for XferInteractorHelper {
         ctx: &Context<'_>,
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         //self.completer.complete(line, pos, ctx)
-        self.complete_command_name(line, pos, ctx)
+       // self.complete_command_name(line, pos, ctx)
+       self.complete_m4_path_name(line, pos, ctx)
     }
 }
 
@@ -66,7 +68,29 @@ cfg_if::cfg_if! {
 }
 
 
-impl XferInteractorHelper {
+impl<'a> XferInteractorHelper<'a> {
+
+
+    /// Make the completion on the M4 filename
+    fn complete_m4_path_name(&self, line: &str, pos:usize, ctx: &Context<'_> ) -> Result<(usize, Vec<Pair>), ReadlineError> {
+        let mut entries: Vec<Pair> = Vec::new();
+
+        let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
+        for file in self.xfer.current_folder_content().unwrap().files() {
+            let fname = file.fname();
+            if fname.starts_with(word) {
+                entries.push(Pair{
+                    display: fname.into(),
+                    replacement: fname.into()
+                });
+            }
+        }
+
+        Ok((start, entries))
+    }
+
+    /// Search the possible command names for completion
+    /// TODO do it only when first word
     fn complete_command_name(&self, line: &str, pos: usize, ctx: &Context<'_> ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let commands = [
             "cd",
@@ -95,7 +119,7 @@ impl XferInteractorHelper {
     }
 }
 
-impl Hinter for XferInteractorHelper {
+impl<'a> Hinter for XferInteractorHelper<'a> {
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
         self.hinter.hint(line, pos, ctx)
     }
@@ -251,7 +275,8 @@ ls                  List the files in the current M4 directory.
             .build();
         let h = XferInteractorHelper {
             completer: FilenameCompleter::new(),
-            hinter: HistoryHinter {}
+            hinter: HistoryHinter {},
+            xfer: self.xfer
         };
 
         let mut rl = Editor::with_config(config);
