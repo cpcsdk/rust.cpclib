@@ -5,6 +5,7 @@ use nom::combinator::*;
 use nom::multi::*;
 use nom::sequence::*;
 use nom::*;
+use nom::character::is_space;
 
 use std::str;
 
@@ -12,6 +13,11 @@ use std::str;
 pub(crate) enum XferCommand {
     Cd(Option<String>),
     Exit,
+    /// Put a file on the M4
+    Put(String),
+    /// Remove a file on the M4
+    Era(String),
+    /// Request the current working directory
     Pwd,
     Reset,
     Reboot,
@@ -78,18 +84,50 @@ fn local(input:&str)-> IResult<&str, XferCommand> {
     )(input)
 }
 
+
+/// PUT a file on the M4 with defining a directory
+fn put(input: &str) -> IResult<&str, XferCommand> {
+
+    map(
+        preceded(
+            tuple((tag_no_case("put"), space1)),
+            take_till(|c:char| c.is_whitespace())
+        ),
+        |path: &str| XferCommand::Put(path.to_string())
+    )(input)
+}
+
+/// Delete a file from the M4
+fn rm(input: &str) -> IResult<&str, XferCommand> {
+
+    map(
+        preceded(
+            tuple(( alt((
+                        tag_no_case("rm"),
+                        tag_no_case("delete"),
+                        tag_no_case("del"),
+                        tag_no_case("era")
+                    )), 
+                space1)),
+            take_till(|c:char| c.is_whitespace())
+        ),
+        |path: &str| XferCommand::Era(path.to_string())
+    )(input)
+}
+
+
 fn no_arg(input: &str) -> IResult<&str, XferCommand> {
     alt((
         map(tag_no_case("pwd"), { |_| XferCommand::Pwd }),
         map(tag_no_case("help"), { |_| XferCommand::Help }),
         map(tag_no_case("reboot"), { |_| XferCommand::Reboot }),
         map(tag_no_case("reset"), { |_| XferCommand::Reset }),
-        map(tag_no_case("exit"), { |_| XferCommand::Exit }),
+        map(alt((tag_no_case("exit"), tag_no_case("quit"))), { |_| XferCommand::Exit }),
         map(rest, {|fname: &str| XferCommand::LaunchM4(fname.to_string())})
     ))(input)
 }
 
 /// Launch the parsing of the line
 pub(crate) fn parse_command(input: &str) -> IResult<&str, XferCommand> {
-    alt((cd, ls, launch, local, no_arg))(input)
+    alt((cd, ls, launch, local, put, rm, no_arg))(input)
 }
