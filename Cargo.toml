@@ -53,6 +53,8 @@ exitcode = { version = "1.1.2", optional = true }
 
 
 rustyline = { version = "6.0.0", optional = true }
+rustyline-derive = {version="0.3.0", optional= true}
+
 term_grid = {version="0.1.7", optional= true}
 termize = {version="0.1.1", optional= true}
 
@@ -73,7 +75,7 @@ built = "0.3.2"
 
 [features]
 xferlib = [	"curl", "reqwest", "path-absolutize"]
-xfer = ["clap", "rustyline", 'notify', 'crossbeam-channel', 'term_grid', 'termize']
+xfer = ["clap", "rustyline", "rustyline-derive", 'notify', 'crossbeam-channel', 'term_grid', 'termize']
 snapshot = ["clap", "built", "time", "semver"]
 imgconverter = ["clap", 'notify', "exitcode"]
 dskmanager = ["clap"]
