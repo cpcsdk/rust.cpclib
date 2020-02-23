@@ -13,6 +13,8 @@ use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline_derive::{Helper, Validator, Highlighter, Hinter};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
 
+use subprocess::Exec;
+
 /// Help to add autocompletion.
 /// Done currently with filname, will be done later with M4 file names
 #[derive(Helper, Validator, Highlighter)]
@@ -193,6 +195,7 @@ reset               Reset.
 <fname>             Launch <fname> from the M4.
 launch <fname>      Launch <fname> from the host machine.
 ls                  List the files in the current M4 directory.
+!<command>          Launch <command> on the host machine.
                     ")
 
                 },
@@ -275,6 +278,10 @@ ls                  List the files in the current M4 directory.
                         eprintln!("{}", res.err().unwrap());
                         return;
                     }
+                }
+
+                XferCommand::LocalCommand(command) => {
+                    Exec::shell(command).join(); // ignore failure
                 }
 
                 XferCommand::Reboot => {

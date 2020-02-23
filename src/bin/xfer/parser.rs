@@ -20,6 +20,8 @@ pub(crate) enum XferCommand {
     LaunchHost(String),
     /// Launch a file from the M4
     LaunchM4(String),
+    /// Launch a command on the host machine
+    LocalCommand(String)
 }
 
 // TODO find a way to reduce code duplicaiton
@@ -65,6 +67,16 @@ fn launch(input: &str) -> IResult<&str, XferCommand> {
     )(input)
 }
 
+fn local(input:&str)-> IResult<&str, XferCommand> {
+    map(
+        preceded(
+            tuple((tag_no_case("!"), space0)), 
+            rest
+        ),
+        |path: &str| XferCommand::LocalCommand(path.to_string())
+    )(input)
+}
+
 fn no_arg(input: &str) -> IResult<&str, XferCommand> {
     alt((
         map(tag_no_case("pwd"), { |_| XferCommand::Pwd }),
@@ -77,5 +89,5 @@ fn no_arg(input: &str) -> IResult<&str, XferCommand> {
 
 /// Launch the parsing of the line
 pub(crate) fn parse_command(input: &str) -> IResult<&str, XferCommand> {
-    alt((cd, ls, launch, no_arg))(input)
+    alt((cd, ls, launch, local, no_arg))(input)
 }
