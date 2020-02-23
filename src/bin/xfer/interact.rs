@@ -33,9 +33,21 @@ impl<'a> Completer for XferInteractorHelper<'a> {
         pos: usize,
         ctx: &Context<'_>,
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
-        //self.completer.complete(line, pos, ctx)
-       // self.complete_command_name(line, pos, ctx)
-       self.complete_m4_path_name(line, pos, ctx)
+        let local = self.completer.complete(line, pos, ctx)?;
+        let commands = self.complete_command_name(line, pos, ctx)?;
+        let m4 = self.complete_m4_path_name(line, pos, ctx)?;
+
+        assert_eq!( local.0, commands.0);
+        assert_eq!( local.0, m4.0);
+
+        let mut complete = Vec::with_capacity(local.1.len() + commands.1.len() + m4.1.len());
+
+        // TODO make conditional extend based on the command to launch
+        complete.extend(local.1);
+        complete.extend(commands.1);
+        complete.extend(m4.1);
+
+        Ok((local.0, complete))
     }
 }
 
