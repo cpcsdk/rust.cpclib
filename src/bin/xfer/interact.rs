@@ -8,7 +8,7 @@ use term_grid::{Grid, GridOptions, Direction, Filling};
 use termize;
 
 use rustyline::config::OutputStreamType;
-use rustyline::completion::{Completer, FilenameCompleter, Pair};
+use rustyline::completion::{Completer, FilenameCompleter, Pair, extract_word};
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline_derive::{Helper, Validator, Highlighter, Hinter};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
@@ -32,7 +32,66 @@ impl Completer for XferInteractorHelper {
         pos: usize,
         ctx: &Context<'_>,
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
-        self.completer.complete(line, pos, ctx)
+        //self.completer.complete(line, pos, ctx)
+        self.complete_command_name(line, pos, ctx)
+    }
+}
+
+// stolen to rustyline ccode as it is not public
+const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
+cfg_if::cfg_if! {
+    if #[cfg(unix)] {
+        // rl_basic_word_break_characters, rl_completer_word_break_characters
+        const DEFAULT_BREAK_CHARS: [u8; 18] = [
+            b' ', b'\t', b'\n', b'"', b'\\', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&',
+            b'{', b'(', b'\0',
+        ];
+        const ESCAPE_CHAR: Option<char> = Some('\\');
+        // In double quotes, not all break_chars need to be escaped
+        // https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
+        const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
+    } else if #[cfg(windows)] {
+        // Remove \ to make file completion works on windows
+        const DEFAULT_BREAK_CHARS: [u8; 17] = [
+            b' ', b'\t', b'\n', b'"', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&', b'{',
+            b'(', b'\0',
+        ];
+        const ESCAPE_CHAR: Option<char> = None;
+        const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate: only '"' ?
+    } else if #[cfg(target_arch = "wasm32")] {
+        const DEFAULT_BREAK_CHARS: [u8; 0] = [];
+        const ESCAPE_CHAR: Option<char> = None;
+        const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 0] = [];
+    }
+}
+
+
+impl XferInteractorHelper {
+    fn complete_command_name(&self, line: &str, pos: usize, ctx: &Context<'_> ) -> Result<(usize, Vec<Pair>), ReadlineError> {
+        let commands = [
+            "cd",
+            "launch",
+            "ls",
+            "pwd",
+            "reset",
+            "reboot"
+        ];
+
+        let mut entries: Vec<Pair> = Vec::new();
+        
+        let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
+        // TODO check if it is the very first word
+        for command in commands.iter() {
+            if command.starts_with(word) {
+                entries.push(Pair {
+                    display: command.to_string(),
+                    replacement: command.to_string(),
+                })
+            }
+        }
+
+
+        Ok((start, entries))
     }
 }
 
