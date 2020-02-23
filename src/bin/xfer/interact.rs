@@ -3,11 +3,36 @@ use rustyline;
 
 use rustyline::error::ReadlineError;
 
-use rustyline::Editor;
-
 use crate::parser::{parse_command, XferCommand};
 use term_grid::{Grid, GridOptions, Direction, Filling};
 use termize;
+
+use rustyline::config::OutputStreamType;
+use rustyline::completion::{Completer, FilenameCompleter, Pair};
+use rustyline_derive::{Helper, Validator, Highlighter, Hinter};
+use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
+
+/// Help to add autocompletion.
+/// Done currently with filname, will be done later with M4 file names
+#[derive(Helper, Validator, Highlighter, Hinter)]
+struct XferInteractorHelper {
+    completer: FilenameCompleter,
+}
+
+
+impl Completer for XferInteractorHelper {
+    type Candidate = Pair;
+
+    /// TODO add M4 completion
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        ctx: &Context<'_>,
+    ) -> Result<(usize, Vec<Pair>), ReadlineError> {
+        self.completer.complete(line, pos, ctx)
+    }
+}
 
 
 /// The object htat manages the interaction.
@@ -30,11 +55,12 @@ impl<'a> XferInteractor<'a> {
                 XferCommand::Help => {
                     println!("help       Displays the help.
 cd <folder>         Goes to <folder> in the M4.
-pwd                 Prints the current M4 folder directory.
+pwd                 Prints the current M4 directory.
 reboot              Reboot.
 reset               Reset.
 <fname>             Launch <fname> from the M4.
 launch <fname>      Launch <fname> from the host machine.
+ls                  List the files in the current M4 directory.
                     ")
 
                 },
@@ -148,7 +174,21 @@ launch <fname>      Launch <fname> from the host machine.
     /// Manage the interactive loop
     fn r#loop(&mut self) {
         let history = "history.m4";
-        let mut rl = Editor::<()>::new();
+
+        let config = Config::builder()
+            .history_ignore_space(true)
+            .history_ignore_dups(true)
+            .completion_type(CompletionType::List)
+            .edit_mode(EditMode::Emacs)
+            .output_stream(OutputStreamType::Stdout)
+            .build();
+        let h = XferInteractorHelper {
+            completer: FilenameCompleter::new()
+        };
+
+        let mut rl = Editor::with_config(config);
+        rl.set_helper(Some(h));
+
         if rl.load_history(history).is_err() {
             println!("No previous history to load.");
         }
