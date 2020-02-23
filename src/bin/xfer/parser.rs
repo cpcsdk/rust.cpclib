@@ -26,7 +26,7 @@ pub(crate) enum XferCommand {
 
 fn ls_path(input: &str) -> IResult<&str, XferCommand> {
     map(
-        preceded(tuple((tag_no_case("ls"), space1)), alpha1),
+        preceded(tuple((tag_no_case("ls"), space1)), rest),
         |path: &str| XferCommand::Ls(Some(path.to_string())),
     )(input)
 }
