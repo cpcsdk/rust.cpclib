@@ -44,7 +44,8 @@ impl<'a> Completer for XferInteractorHelper<'a> {
         let mut complete = Vec::with_capacity(local.1.len() + commands.1.len() + m4.1.len());
 
         // Retreive the command in order to filter the autocompletion
-        let command = line.trim().split(' ').next();
+        let command = line.trim().split(' ').next().map(str::to_lowercase);
+        let command = command.as_ref().map(String::as_str);
         // and get its position
         let start = {
             let mut idx = 0;
@@ -64,9 +65,17 @@ impl<'a> Completer for XferInteractorHelper<'a> {
             complete.extend(commands.1);
         }
 
-
-        complete.extend(local.1);
-        complete.extend(m4.1);
+        // Ensure local completion is only done for launch (at the moment)
+        match command {
+            Some("launch") => {complete.extend(local.1)},
+            _ => {}
+        }
+        
+        // Ensure M4 completion is not used for launch
+        match command {
+            Some("launch") => {},
+            _ => {complete.extend(m4.1)}
+        }
 
         Ok((local.0, complete))
     }
