@@ -37,6 +37,13 @@ pub struct M4File {
     size: String,
 }
 
+impl M4File {
+    /// Return the filname
+    pub fn fname(&self) -> &str {
+        &self.fname
+    }
+}
+
 impl From<&str> for M4File {
     fn from(line: &str) -> Self {
         let mut splitted = line.split(',');
@@ -97,9 +104,10 @@ pub struct CpcXfer {
 
 #[allow(missing_docs)]
 impl CpcXfer {
-    pub fn new(hostname: &str) -> Self {
+    /// Create the CpcXfer given an address
+    pub fn new<S: AsRef<str>>(hostname: S) -> Self {
         Self {
-            hostname: String::from(hostname),
+            hostname: String::from(hostname.as_ref()),
         }
     }
 

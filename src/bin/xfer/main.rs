@@ -13,6 +13,7 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
+use std::env;
 use clap;
 use std::path::Path;
 use anyhow;
@@ -36,7 +37,7 @@ fn send_and_run_file(xfer: &cpc::xfer::CpcXfer, fname: &str) {
         if extension == "sna" {
             let sna = crate::cpc::sna::Snapshot::load(fname);
             if sna.version_header() == 3 {
-                eprintln!("Need to downgrade SNA version");
+                eprintln!("Need to downgrade SNA version. TODO check if it is sill necessary (I thinl not)");
                 let sna_fname = std::path::Path::new(fname)
                     .file_name()
                     .unwrap()
@@ -62,8 +63,8 @@ fn main() -> anyhow::Result<()> {
         .about("RUST version of the communication tool between a PC and a CPC through the CPC Wifi card")
         .arg(
             clap::Arg::with_name("CPCADDR")
-            .help("Specify the address of the M4.")
-            .required(true) // Make it optional later
+            .help("Specify the address of the M4. This argument is optional. If not set up, the content of the environment variable CPCIP is used.")
+            .required(false) 
         )
         .subcommand(
             clap::SubCommand::with_name("-r")
@@ -130,8 +131,19 @@ fn main() -> anyhow::Result<()> {
         )
         .get_matches();
 
-    // TODO manage the retreival of env var
-    let hostname = matches.value_of("CPCADDR").unwrap();
+    // Retreivethe hostname from the args or from the environment
+    let hostname: String = 
+    match matches.value_of("CPCADDR") {
+        Some(cpcaddr) => cpcaddr.to_string(),
+        None => { 
+            match env::var("CPCIP") {
+                Ok(cpcaddr) => cpcaddr.to_string(),
+                Err(_) => panic!("You should provide the CPCADDR argument or set the CPCIP environmeent variable")
+            }
+
+        }
+    };
+    
     let xfer = cpc::xfer::CpcXfer::new(hostname);
 
     if matches.is_present("-r") {
@@ -177,7 +189,8 @@ fn main() -> anyhow::Result<()> {
         xfer.cd(cd_opt.value_of("directory").unwrap())
             .expect("Unable to move in the requested folder.");
     } else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
-        interact::start(&xfer);
+        println!("Benediction welcomes you to the interactive mode for M4.");
+        interact::XferInteractor::start(&xfer);
     }
 
     Ok(())
