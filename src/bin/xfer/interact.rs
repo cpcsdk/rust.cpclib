@@ -19,7 +19,7 @@ use subprocess::Exec;
 /// Done currently with filname, will be done later with M4 file names
 #[derive(Helper, Validator, Highlighter)]
 struct XferInteractorHelper<'a> {
-    commands: [&'a str;6],
+    commands: [&'a str;7],
     completer: FilenameCompleter,
     hinter: HistoryHinter,
     xfer: &'a CpcXfer // TODO find a way to not share xfer there in order to not lost time to do too much calls to M4
@@ -175,7 +175,8 @@ pub struct XferInteractor<'a> {
     /// Reference to the cpc xfer
     xfer: &'a CpcXfer,
     /// Current Working Directory
-    cwd: String
+    cwd: String,
+    exit: bool
 }
 
 impl<'a> XferInteractor<'a> {
@@ -189,6 +190,7 @@ impl<'a> XferInteractor<'a> {
                 XferCommand::Help => {
                     println!("help       Displays the help.
 cd <folder>         Goes to <folder> in the M4.
+exit                Leaves the program.
 pwd                 Prints the current M4 directory.
 reboot              Reboot.
 reset               Reset.
@@ -199,6 +201,10 @@ ls                  List the files in the current M4 directory.
                     ")
 
                 },
+
+                XferCommand::Exit => {
+                    self.exit = true;
+                }
 
                 XferCommand::Pwd => match self.xfer.current_working_directory() {
                     Ok(pwd) => {
@@ -304,7 +310,8 @@ ls                  List the files in the current M4 directory.
         let cwd = xfer.current_working_directory().unwrap();
         let mut interactor = XferInteractor {
             xfer: xfer,
-            cwd
+            cwd,
+            exit: false
         };
         interactor.r#loop();
 
@@ -327,6 +334,7 @@ ls                  List the files in the current M4 directory.
             xfer: self.xfer,
             commands: [
                 "cd",
+                "exit",
                 "launch",
                 "ls",
                 "pwd",
@@ -342,7 +350,7 @@ ls                  List the files in the current M4 directory.
             println!("No previous history to load.");
         }
 
-        loop {
+        while !self.exit {
             // Build the prompt value
             let prompt = format!(
                 "arnold@{}:{} $ ", 
