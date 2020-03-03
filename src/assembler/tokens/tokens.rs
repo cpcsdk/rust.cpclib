@@ -4,6 +4,7 @@ use crate::assembler::tokens::listing::*;
 use crate::assembler::tokens::*;
 use crate::assembler::AssemblerError;
 use std::fmt;
+use std::iter::FromIterator;
 
 impl ListingElement for Token {
     /// Returns an estimation of the duration.
@@ -242,6 +243,22 @@ impl ListingElement for Token {
 
 /// Standard listing is a specific implementation
 pub type Listing = BaseListing<Token>;
+
+impl FromIterator<Token> for Listing {
+    fn from_iter<I: IntoIterator<Item=Token>>(src: I) -> Self {
+        let mut new = Self::default();
+        new.listing = src.into_iter().collect::<Vec<Token>>();
+        new
+    }
+}
+
+impl From<&[u8]> for Listing {
+    fn from(src: &[u8]) -> Listing {
+        src.iter().map(|&b|{
+            Token::from(b)
+        }).collect::<Listing>()
+    }
+}
 
 impl fmt::Display for Listing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

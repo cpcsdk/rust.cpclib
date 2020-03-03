@@ -42,7 +42,11 @@ pub struct ParserContext {
 #[allow(missing_docs)]
 impl ParserContext {
     pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
-        self.current_filename = Some(file.into().canonicalize().unwrap())
+        let file = file.into();
+        self.current_filename = Some(
+            file.canonicalize()
+                .unwrap_or(file)
+        )
     }
 
     /// Add a search path and ensure it is ABSOLUTE
@@ -50,16 +54,18 @@ impl ParserContext {
         self.search_path.push(path.into().canonicalize().unwrap())
     }
 
-    /// Add the folder that contains the given file. Panic if there are issues with the filename
+    /// Add the folder that contains the given file. Ignore if there are issues with the filename
     pub fn add_search_path_from_file<P: Into<PathBuf>>(&mut self, file: P) {
         let path = file
             .into()
-            .canonicalize()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .to_owned();
-        self.add_search_path(path);
+            .canonicalize();
+        if let Ok(path) = path {
+            let path = path
+                .parent()
+                .unwrap()
+                .to_owned();
+            self.add_search_path(path);
+        }
     }
 
     /// Return the real path name that correspond to the requested file
