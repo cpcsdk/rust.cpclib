@@ -378,6 +378,12 @@ impl fmt::Display for Token {
     }
 }
 
+impl From<u8> for Token {
+    fn from(byte: u8) -> Self {
+        Self::Defb(vec![byte.into()])
+    }
+}
+
 impl<'a> TryFrom<&'a str> for Token {
     type Error = String;
 

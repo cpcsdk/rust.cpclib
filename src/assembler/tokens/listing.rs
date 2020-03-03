@@ -21,9 +21,9 @@ pub trait ListingElement {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaseListing<T: Clone + ListingElement> {
     /// Ordered list of the tokens
-    listing: Vec<T>,
+    pub(crate) listing: Vec<T>,
     /// Duration of the listing execution. Manually set by user
-    duration: Option<usize>,
+    pub(crate) duration: Option<usize>,
 }
 
 impl<T: Clone + ListingElement> From<Vec<T>> for BaseListing<T> {

@@ -67,13 +67,21 @@ impl From<AssemblerError> for BasmError {
 /// Parse the given code.
 /// TODO read options to configure the search path
 fn parse(matches: &ArgMatches<'_>) -> Result<Listing, BasmError> {
-    let filename = matches.value_of("INPUT").unwrap();
+    
 
-    let code = {
-        let mut f = File::open(filename)?;
-        let mut content = String::new();
-        f.read_to_string(&mut content)?;
-        content
+    let (filename, code) = {
+        if let Some(filename) = matches.value_of("INPUT") {
+            let mut f = File::open(filename)?;
+            let mut content = String::new();
+            f.read_to_string(&mut content)?;
+            (filename, content)
+        }
+        else if let Some(code) = matches.value_of("INLINE") {
+            ("<inline code>", format!(" {}", code))
+        }
+        else {
+            panic!("No code provided to assemble");
+        }
     };
 
     let mut context = ParserContext::default();
@@ -118,8 +126,13 @@ fn assemble(matches: &ArgMatches<'_>, listing: &Listing) -> Result<Env, BasmErro
 /// Save the provided result
 /// TODO manage the various save options
 fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
-    let single_binary = true;
-    if single_binary {
+    // Collect the produced bytes
+    let binary = env.produced_bytes();
+
+    if matches.is_present("DB_LIST") {
+        println!("{}", Listing::from(env.produced_bytes().as_ref()));
+    }
+    else {
         let pc_filename = matches.value_of("OUTPUT").unwrap();
         let amsdos_filename = AmsdosFileName::from(pc_filename);
 
@@ -130,8 +143,6 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
             });
         }
 
-        // Collect the produced bytes
-        let binary = env.produced_bytes();
 
         // Compute the headers if needed
         let header = if matches.is_present("BINARY_HEADER") {
@@ -162,7 +173,10 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
     Ok(())
 }
 
+/// Launch the assembling of everythin
 fn process(matches: &ArgMatches<'_>) -> Result<(), BasmError> {
+
+    // standard assembling
     let listing = parse(matches)?;
     let env = assemble(matches, &listing)?;
     save(matches, &env)
@@ -177,23 +191,42 @@ fn main() {
     let matches = App::new("basm")
 					.version(built_info::PKG_VERSION)
 					.author("Krusty/Benediction")
-					.about("Benediction ASM -- z80 assembler that taylor Amastrad CPC")
+					.about("Benediction ASM -- z80 assembler that taylor Amstrad CPC")
 					.before_help(&desc_before[..])
-					.after_help("Work In Progress")
+                    .after_help("Work In Progress")
+                    .arg(
+                        Arg::with_name("INLINE")
+                            .help("Z80 code is provided inline")
+                            .long("inline")
+                            .takes_value(true)
+                    )
+                    .arg(
+						Arg::with_name("INPUT")
+							.help("Input file to read.")
+							.takes_value(true)
+                    )
+                    .group(
+                        ArgGroup::with_name("ANY_INPUT")
+                            .args(&["INLINE", "INPUT"])
+                            .required(true)
+                    )
 					.arg(
 						Arg::with_name("OUTPUT")
 							.help("Filename of the output.")
 							.short("o")
 							.long("output")
 							.takes_value(true)
-							.required(true)
 					)
 					.arg(
-						Arg::with_name("INPUT")
-							.help("Input file to read.")
-							.takes_value(true)
-							.required(true)
-					)
+                        Arg::with_name("DB_LIST")
+                        .help("Write a db list on screen (usefull to get the value of an opcode)")
+                        .long("db")
+                    )
+                    .group(
+                        ArgGroup::with_name("ANY_OUTPUT")
+                            .args(&["DB_LIST", "OUTPUT"])
+                            .required(true)
+                    )
 					.arg(
 						Arg::with_name("BASIC_HEADER")
 							.help("Request a Basic header (the very first instruction has to be the LOCOMOTIVE directive.")
