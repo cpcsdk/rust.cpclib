@@ -237,10 +237,10 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
 }
 
 macro_rules! ld_r16_expr {
-    ($($reg:ident, $name:ident)*) => {$(
+    ($($reg:ident)*) => {$(
         paste::item_with_macros! {
             /// Generate the opcode LD $reg, expr
-            #[allow(missing_docs)] pub fn [<ld_ $name _expr>] (val: Expr) -> Token {
+            #[allow(missing_docs)] pub fn [<ld_ $reg:lower _expr>] (val: Expr) -> Token {
                 token_for_opcode_two_args(
                     Mnemonic::Ld,
                     Register16::$reg.into(),
@@ -253,10 +253,10 @@ macro_rules! ld_r16_expr {
 
 // TODO remove these extra uneeded arguments
 ld_r16_expr! {
-    Af,af
-    Bc,bc
-    De,de
-    Hl,hl
+    Af
+    Bc
+    De
+    Hl
 }
 
 /*
@@ -271,10 +271,10 @@ ld_r16_expr! {
 
 
 macro_rules! ld_r8_expr {
-    ($($reg:ident, $name:ident)*) => {$(
+    ($($reg:ident)*) => {$(
         paste::item_with_macros! {
             /// Generate the opcode LD $reg, expr
-            #[allow(missing_docs)] pub fn [<ld_ $name _expr>]<E: Into<Expr>> (val: E) -> Token {
+            #[allow(missing_docs)] pub fn [<ld_ $reg:lower _expr>]<E: Into<Expr>> (val: E) -> Token {
                 token_for_opcode_two_args(
                     Mnemonic::Ld,
                     Register8::$reg.into(),
@@ -286,13 +286,13 @@ macro_rules! ld_r8_expr {
 }
 
 ld_r8_expr! {
-    A,a
-    B,b
-    C,c
-    D,d
-    E,e
-    H,h
-    L,l
+    A
+    B
+    C
+    D
+    E
+    H
+    L
 }
 
 #[allow(missing_docs)]
@@ -466,7 +466,16 @@ pub mod routines {
 mod tests {
     #[test]
 fn test_wait() {
+    use super::*;
+
     // This test cannot run. The time must be obtained by emulating the code
-    assert_eq!(20, wait(20).estimated_duration())
+    assert_eq!(Ok(20), routines::wait(20).estimated_duration())
+}
+
+#[test]
+fn test_ld_r16() {
+    use super::*;
+    // just check if it compiles
+    ld_af_expr(0.into());
 }
 }
