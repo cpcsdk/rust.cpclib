@@ -70,6 +70,9 @@ pub mod asm;
 /// Z80 tokens manipulations. Useable
 pub mod assembler;
 
+/// Disassembling stuff
+pub mod disass;
+
 /// Basic program manipulation. WIP
 pub mod basic;
 

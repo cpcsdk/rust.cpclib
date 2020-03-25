@@ -3,6 +3,11 @@ use crate::assembler::tokens::*;
 
 use paste;
 
+/// NOP instruction
+pub fn nop() -> Token {
+    token_for_opcode_no_arg(Mnemonic::Nop)
+}
+
 #[allow(missing_docs)]
 pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {
     Token::Equ(label.as_ref().to_owned(), expr.into())
@@ -37,6 +42,11 @@ pub fn defs_expr<E: Into<Expr>>(expr: E) -> Token {
 /// Generate defs directive
 pub fn defs_expr_expr<E1: Into<Expr>, E2: Into<Expr>>(count: E1, value: E2) -> Token {
     Token::Defs(count.into(), value.into().into())
+}
+
+/// Generate defw directive with one argument
+pub fn defb<E:Into<Expr>>(val: E) -> Token {
+    Token::Defb(vec![val.into()])
 }
 
 /// Generate defw directive with one argument
@@ -216,15 +226,37 @@ pub fn incbin<S: AsRef<str>>(fname: S) -> Token {
 }
 
 
-#[allow(missing_docs)]
-pub fn inc_l() -> Token {
-    inc_register8(Register8::L)
-}
 
-#[allow(missing_docs)]
-pub fn inc_register8(reg: Register8) -> Token {
-    token_for_opcode_one_arg(Mnemonic::Inc, reg.into())
+macro_rules! inc_r8 {
+    ($($reg:ident)*) => {$(
+        paste::item_with_macros! {
+            /// Generate the opcode inc $reg
+            #[allow(missing_docs)] pub fn [<inc_ $reg:lower>] () -> Token {
+                token_for_opcode_one_arg(
+                    Mnemonic::Inc,
+                    Register8::$reg.into()
+                )
+            }
+        }
+    )*}
 }
+inc_r8! { A B C D E H L}
+
+macro_rules! inc_r16 {
+    ($($reg:ident)*) => {$(
+        paste::item_with_macros! {
+            /// Generate the opcode inc $reg
+            #[allow(missing_docs)] pub fn [<inc_ $reg:lower>] () -> Token {
+                token_for_opcode_one_arg(
+                    Mnemonic::Inc,
+                    Register16::$reg.into()
+                )
+            }
+        }
+    )*}
+}
+inc_r16! {Af Bc De Hl}
+
 
 /// I have clear doubt that  this exists really
 #[allow(missing_docs)]
@@ -258,16 +290,6 @@ ld_r16_expr! {
     De
     Hl
 }
-
-/*
-#[allow(missing_docs)] pub fn ld_de_expr(val: Expr) -> Token {
-    token_for_opcode_two_args(
-        Mnemonic::Ld,
-        Register16::De.into(),
-        val.into()
-    )
-}
-*/
 
 
 macro_rules! ld_r8_expr {
