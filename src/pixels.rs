@@ -320,7 +320,7 @@ pub mod mode0 {
 
     /// Generate the needed table to write a masked sprite on screen when mask_pen corresponds to the pen of the background.
     /// Code for the display
-    /// ld e, sprite byte
+    /// ld e, sprite byte to display
     /// ld d, mask_table / 256
     /// ld a, (de) ; get the mask
     /// and (hl) ; set to 0 all pixels that will be replaced
@@ -331,17 +331,20 @@ pub mod mode0 {
     /// 
     /// untested code ..
     pub fn generate_sprite_transparency_for_pen0() -> [u8;256] {
+        // Build the bit mask for the given pen
         let pen_to_mask = |pen: Pen| -> Pen {
-            if pen.number() == 0 {
-                15.into()
+            if pen.number() == 0 { // scren pen must be reseted when sprite as pixels to be drawn
+                0xf.into()
             }
             else {
-                0.into()
+                0x0.into()
             }
         };
 
+        // Masking table to construct
         let mut table = [0; 256];
 
+        // Generate the table
         for (idx, byte) in (0..=255).into_iter().enumerate() {
             let (pen0, pen1) = byte_to_pens(byte);
             table[idx] = pens_to_byte(
