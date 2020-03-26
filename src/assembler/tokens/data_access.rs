@@ -117,6 +117,13 @@ impl DataAccess {
         }
     }
 
+    pub fn is_register_sp(&self) -> bool {
+        match self {
+            DataAccess::Register16(Register16::Sp) => true,
+            _ => false
+        }
+    }
+
     pub fn is_register_i(&self) -> bool {
         match self {
             DataAccess::SpecialRegisterI => true,

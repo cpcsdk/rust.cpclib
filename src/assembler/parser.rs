@@ -500,6 +500,7 @@ pub fn parse_token(input: &str) -> IResult<&str, Token> {
     alt((
         parse_ex_af,
         parse_ex_hl_de,
+        parse_ex_mem_sp,
         parse_logical_operator,
         parse_add_or_adc,
         parse_cp,
@@ -514,6 +515,7 @@ pub fn parse_token(input: &str) -> IResult<&str, Token> {
         parse_res_set_bit,
         parse_shifts,
         parse_sub,
+        parse_sbc,
         parse_ret,
     ))(input)
 }
@@ -525,10 +527,8 @@ pub fn parse_ex_af(input: &str) -> IResult<&str, Token> {
         tuple((
             tag_no_case("EX"),
             space1,
-            tag_no_case("AF"),
-            space0,
-            char(','),
-            space0,
+            parse_register_af,
+            parse_comma,
             tag_no_case("AF'"),
         )),
     )(input)
@@ -538,16 +538,49 @@ pub fn parse_ex_af(input: &str) -> IResult<&str, Token> {
 pub fn parse_ex_hl_de(input: &str) -> IResult<&str, Token> {
     value(
         Token::OpCode(Mnemonic::ExHlDe, None, None),
+
+        alt((
+            tuple((
+                tag_no_case("EX"),
+                space1,
+                parse_register_hl,
+                parse_comma,
+                parse_register_de,
+            )),
+
+            tuple((
+                tag_no_case("EX"),
+                space1,
+                parse_register_de,
+                parse_comma,
+                parse_register_hl,
+            ))
+        ))
+    )(input)
+}
+
+/// Parse ex (sp), hl
+pub fn parse_ex_mem_sp(input: &str) -> IResult<&str, Token> {
+   let (input, destination) =
         tuple((
             tag_no_case("EX"),
             space1,
-            tag_no_case("HL"),
+
+            char('('),
             space0,
-            char(','),
+            parse_register_sp,
             space0,
-            tag_no_case("DE"),
-        )),
-    )(input)
+            char(')'),
+
+            parse_comma,
+
+            alt((
+                parse_register_hl,
+                parse_indexregister16
+            ))
+        ))(input)?;
+
+    Ok((input, Token::OpCode(Mnemonic::ExMemSp, Some(destination.8), None)))
 }
 
 /// Parse any directive
@@ -724,16 +757,36 @@ pub fn parse_ld_normal(input: &str) -> IResult<&str, Token> {
 /// Parse the source of LD depending on its destination
 fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataAccess> + '_ {
     move |input: &str| {
-        if dst.is_register16() | dst.is_indexregister16() {
+        if dst.is_register_sp() {
+            alt((
+                parse_register_hl,
+                parse_indexregister16,
+                parse_address, parse_expr
+            ))(input)
+        }
+        else if dst.is_register16() | dst.is_indexregister16() {
             alt((parse_address, parse_expr))(input)
         } else if dst.is_register8() {
-            alt((
-                parse_indexregister_with_index,
-                parse_hl_address,
-                parse_address,
-                parse_expr,
-                parse_register8,
-            ))(input)
+            // todo find a way to merge them together
+            if dst.is_register_a() {
+                alt((
+                    parse_indexregister_with_index,
+                    parse_reg_address,
+                    parse_address,
+                    parse_expr,
+                    parse_register8,
+                ))(input)
+            }
+            else {
+                alt((
+                    parse_indexregister_with_index,
+                    parse_hl_address,
+                    parse_address,
+                    parse_expr,
+                    parse_register8,
+                ))(input)
+            }
+
         } else if dst.is_memory() {
             alt((parse_register16, parse_register8, parse_register_sp))(input)
         } else if dst.is_address_in_register16() {
@@ -932,15 +985,53 @@ pub fn parse_add_or_adc(input: &str) -> IResult<&str, Token> {
     alt((parse_add_or_adc_complete, parse_add_or_adc_shorten))(input)
 }
 
-/// TODO Finish to implement all the cases
+/// Substraction with A register
 pub fn parse_sub(input: &str) -> IResult<&str, Token> {
     let (input, _) = tag_no_case("SUB")(input)?;
     let (input, _) = space1(input)?;
-    let (input, value) = expr(input)?;
+    let (input, operand) = alt((
+        parse_register8,
+        parse_indexregister8,
+        parse_hl_address,
+        parse_indexregister_with_index,
+        parse_expr
+    ))(input)?;
 
     Ok((
         input,
-        Token::OpCode(Mnemonic::Sub, Some(value.into()), None),
+        Token::OpCode(Mnemonic::Sub, Some(operand), None),
+    ))
+}
+
+/// Par se the SBC instruction
+pub fn parse_sbc(input: &str) -> IResult<&str, Token> {
+    let (input, _) = tag_no_case("SBC")(input)?;
+    let (input, _) = space1(input)?;
+    let (input, opera) = alt((
+        parse_register_a,
+        parse_register_hl
+    ))(input)?;
+    let (input, _) = parse_comma(input)?;
+
+    let (input, operb) = if opera.is_register_a() {
+        alt((
+            parse_register8,
+            parse_indexregister8,
+            parse_hl_address,
+            parse_indexregister_with_index,
+            parse_expr
+        ))(input)
+    }
+    else {
+        alt((
+            parse_register16,
+            parse_register_sp
+        ))(input)
+    }?;
+
+    Ok((
+        input,
+        Token::OpCode(Mnemonic::Sbc, Some(opera), Some(operb))
     ))
 }
 
@@ -1053,7 +1144,7 @@ pub fn parse_inc_dec(input: &str) -> IResult<&str, Token> {
         value(Mnemonic::Dec, parse_instr("DEC")),
     ))(input)?;
 
-    let (input, register) = alt((parse_register16, parse_register8, parse_register_sp))(input)?;
+    let (input, register) = alt((parse_register16, parse_register8, parse_register_sp, parse_hl_address))(input)?;
 
     Ok((input, Token::OpCode(inc_or_dec, Some(register), None)))
 }
@@ -1125,7 +1216,10 @@ pub fn parse_call_jp_or_jr(input: &str) -> IResult<&str, Token> {
         delimited(space0, tag(","), space0),
     ))(input)?;
 
-    let (input, dst) = expr(input)?;
+    let (input, dst) = alt((
+        parse_hl_address,
+        parse_expr
+    ))(input)?;
 
     let flag_test = if flag_test.is_some() {
         Some(DataAccess::FlagTest(flag_test.unwrap()))
@@ -1135,7 +1229,7 @@ pub fn parse_call_jp_or_jr(input: &str) -> IResult<&str, Token> {
 
     Ok((
         input,
-        Token::OpCode(call_jp_or_jr, flag_test, Some(DataAccess::Expression(dst))),
+        Token::OpCode(call_jp_or_jr, flag_test, Some(dst)),
     ))
 }
 
