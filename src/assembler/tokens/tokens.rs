@@ -3,7 +3,6 @@ use crate::assembler::parser;
 use crate::assembler::tokens::listing::*;
 use crate::assembler::tokens::*;
 use crate::assembler::AssemblerError;
-use crate::disass::disassemble;
 
 use std::fmt;
 use std::iter::FromIterator;
@@ -22,37 +21,12 @@ impl ListingElement for Token {
             | Token::Protect(_, _) => 0,
 
             // Here, there is a strong limitation => it will works only if no symbols are used
-            Token::Defs(ref expr, ref value) => {
-                use crate::assembler::assembler::assemble_defs;
-                use crate::assembler::assembler::Env;
+            Token::Defw(_) | Token::Defb(_) | Token::Defs(_, _) => {
 
-                let bytes = assemble_defs(expr, value.as_ref(), &Env::default())
-                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})?;
-                disassemble(&bytes).and_then(|lst|{
-                    lst.estimated_duration()
-                })?
-            },
-
-            Token::Defb(ref _expr) => {
-                use crate::assembler::assembler::assemble_db_or_dw;
-                use crate::assembler::assembler::Env;
-
-                let bytes = assemble_db_or_dw(self, &Env::default())
-                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})?;
-                disassemble(&bytes).and_then(|lst|{
-                    lst.estimated_duration()
-                })?
-            }
-
-            Token::Defw(ref _expr) => {
-                use crate::assembler::assembler::assemble_db_or_dw;
-                use crate::assembler::assembler::Env;
-
-                let bytes = assemble_db_or_dw(self, &Env::default())
-                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})?;
-                disassemble(&bytes).and_then(|lst|{
-                    lst.estimated_duration()
-                })?
+                self.disassemble_data()
+                    .and_then(|lst|{
+                        lst.estimated_duration()
+                    })?
             }
 
             Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {

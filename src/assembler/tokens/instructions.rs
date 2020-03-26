@@ -483,6 +483,38 @@ impl Token {
         }
     }
 
+    /// Generate the listing of opcodes for directives that contain data Defb/defw/Defs in order to have
+    /// mnemonics. Fails when some values are not opcodes
+    pub fn disassemble_data(&self) -> Result<Listing, String> {
+        match self {
+            Token::Defs(ref expr, ref value) => {
+                use crate::assembler::assembler::Env;
+                use crate::disass::disassemble;
+
+                assemble_defs(expr, value.as_ref(), &Env::default())
+                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
+                            .and_then(|bytes| disassemble(&bytes) )
+            },
+
+            Token::Defb(_) | Token::Defw(_) => {
+                use crate::assembler::assembler::Env;
+                use crate::disass::disassemble;
+
+                assemble_db_or_dw(self, &Env::default())
+                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
+                            .and_then(|bytes| disassemble(&bytes))
+
+            },
+
+            _ => {
+                let mut lst = Listing::new();
+                lst.push(self.clone());
+                Ok(lst)
+            }
+        }
+
+    }
+
     /// Modify the few tokens that need to read files
     /// TODO refactor file reading of filename search
     pub fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
@@ -558,6 +590,7 @@ impl Token {
         let table = &mut table;
         self.to_bytes_with_context(table)
     }
+
 
     /// Assemble the symbol taking into account some context, but never modify this context
     #[allow(clippy::match_same_arms)]
