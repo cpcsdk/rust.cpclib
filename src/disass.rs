@@ -540,15 +540,19 @@ mod test {
                 continue;
             }
 
+            println!("{} : {}", code, repr);
+
             // TODO add test for opcodes with operandes
             if repr.contains("nnnn") {
+                let disass = disassemble(&[code, 0x12, 0x34]);
+                assert_eq!(repr.replace("nnnn", "0x3412").replace(" ", ""), disass.unwrap().to_string().trim().replace(" ", ""))
 
             }
             else if repr.contains("nn") {
 
             }
             else {
-                println!("{} : {}", code, repr);
+
                 let disass = disassemble(&[code]);
 
                 if !repr.contains("RST") {
