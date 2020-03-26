@@ -408,6 +408,14 @@ impl<'a> TryFrom<&'a str> for Token {
     }
 }
 
+impl TryFrom<String> for Token {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+       Token::try_from(value.as_ref())
+    }
+}
+
 #[allow(missing_docs)]
 impl Token {
     pub fn is_opcode(&self) -> bool {
