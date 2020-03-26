@@ -414,14 +414,14 @@ pub fn disassemble(bytes: &[u8]) -> Result<Listing, String> {
             continue_disassembling(nop(), rest)           
         },
 
-        [0xFD, 0xCB, ref opcode, rest @ ..] => {
-            let (token, rest) = disassemble_with_potential_argument(*opcode, &TABINSTRFDCB, rest);
+        [0xFD, 0xCB, param, opcode, rest @ ..] => {
+            let token = disassemble_with_one_argument(*opcode, *param, &TABINSTRFDCB);
             continue_disassembling(token, rest)           
         },
 
         // TODO this case is buggy and needs  to be redone to tkae into acocunt the position of the argument
-        [0xDD, 0xCB, ref opcode, rest @ ..] => {
-            let (token, rest) = disassemble_with_potential_argument(*opcode, &TABINSTRDDCB, rest);
+        [0xDD, 0xCB, param, opcode, rest @ ..] => {
+            let token = disassemble_with_one_argument(*opcode, *param, &TABINSTRDDCB);
             continue_disassembling(token, rest)           
         },
 
@@ -487,6 +487,14 @@ fn disassemble_with_potential_argument<'stream>(opcode: u8, lut: &[&'static str;
     (string_to_token(&representation), bytes)
 }
 
+/// The 8bits argument has already been read
+fn disassemble_with_one_argument(opcode: u8, argument: u8, lut: &[&'static str; 256]) -> Token {
+    let representation:&'static str = lut[opcode as usize];
+    let representation = representation.replacen("nn", &format!("{:#01x}", argument), 1);
+    string_to_token(&representation)
+}
+
+/// No argument is expected
 fn disassemble_without_argument(opcode: u8, lut: &[&'static str; 256]) -> Token {
     let representation:&'static str = lut[opcode as usize];
     string_to_token(&representation)
@@ -513,6 +521,6 @@ mod test {
         assert_eq!("CALL NZ, 0x123", disassemble(&[0xc4, 0x23, 0x01]).unwrap().to_string().trim());
         assert_eq!("LD IX, (0x4321)", disassemble(&[0xdd, 0x2a, 0x21, 0x43]).unwrap().to_string().trim());
         assert_eq!("LD (IX + 0x21), 0x43", disassemble(&[0xdd, 0x36, 0x21, 0x43]).unwrap().to_string().trim());
-        assert_eq!("BIT 6, (IX+0x1)", disassemble(&[0xdd, 0xcb, 0x01, 0x76]).unwrap().to_string().trim());
+        assert_eq!("BIT 0x6, (IX + 0x1)", disassemble(&[0xdd, 0xcb, 0x01, 0x76]).unwrap().to_string().trim());
     }
 }
