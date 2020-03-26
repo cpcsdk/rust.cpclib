@@ -1102,6 +1102,7 @@ pub fn assemble_opcode(
         Mnemonic::Djnz => assemble_djnz(arg1.as_ref().unwrap(), env),
         Mnemonic::In => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         Mnemonic::Ld => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
+        Mnemonic::ExMemSp => unimplemented!(),
         Mnemonic::Ldi
         | Mnemonic::Ldd
         | Mnemonic::Ldir
@@ -1137,6 +1138,7 @@ pub fn assemble_opcode(
         Mnemonic::Ret => assemble_ret(arg1),
 
         Mnemonic::Sub => env.assemble_sub(arg1.as_ref().unwrap()),
+        Mnemonic::Sbc => env.assemble_sbc(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
         Mnemonic::Sla | Mnemonic::Sra | Mnemonic::Srl => {
             env.assemble_shift(mnemonic, arg1.as_ref().unwrap())
         }
@@ -1455,6 +1457,11 @@ impl Env {
         }
 
         Ok(bytes)
+    }
+
+
+    pub fn assemble_sbc(&mut self, _arg1: &DataAccess, _arg2: &DataAccess) -> Result<Bytes, AssemblerError> {
+        unimplemented!()
     }
 
     pub fn assemble_shift(

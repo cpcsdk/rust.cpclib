@@ -5,6 +5,8 @@ use std::convert::TryFrom;
 
 // Tables stolen from https://github.com/jeromelesaux/dsk/blob/master/desassembly.go
 // Note that these table do not all contain 256 values; I have added missing ones without checking if they are at the right place
+// replace eeee by nnnn
+
 const TABINSTRFDCB:[&'static str;256]  = [
 	"", "", "", "", "", "", "RLC (IY+nn)", "",
 	"", "", "", "", "", "", "RRC (IY+nn)", "",
@@ -321,19 +323,19 @@ const TABINSTRFD:[&'static str;256]  = [
 const TABINSTR:[&'static str;256]  = [
 	"NOP", "LD BC,nnnn", "LD (BC),A", "INC BC",
 	"INC B", "DEC B", "LD B,nn", "RLCA",
-	"EX AF,AF", "ADD HL,BC", "LD A,(BC)", "DEC BC",
+	"EX AF,AF'", "ADD HL,BC", "LD A,(BC)", "DEC BC",
 	"INC C", "DEC C", "LD C,nn", "RRCA",
-	"DJNZ eeee", "LD DE,nnnn", "LD (DE),A", "INC DE",
+	"DJNZ nnnn", "LD DE,nnnn", "LD (DE),A", "INC DE",
 	"INC D", "DEC D", "LD D,nn", "RLA",
-	"JR eeee", "ADD HL,DE", "LD A,(DE)", "DEC DE",
+	"JR nnnn", "ADD HL,DE", "LD A,(DE)", "DEC DE",
 	"INC E", "DEC E", "LD E,nn", "RRA",
-	"JR NZ,eeee", "LD HL,nnnn", "LD (nnnn),HL", "INC HL",
+	"JR NZ,nnnn", "LD HL,nnnn", "LD (nnnn),HL", "INC HL",
 	"INC H", "DEC H", "LD H,nn", "DAA",
-	"JR Z,eeee", "ADD HL,HL", "LD HL,(nnnn)", "DEC HL",
+	"JR Z,nnnn", "ADD HL,HL", "LD HL,(nnnn)", "DEC HL",
 	"INC L", "DEC L", "LD L,nn", "CPL",
-	"JR NC,eeee", "LD SP,nnnn", "LD (nnnn),A", "INC SP",
+	"JR NC,nnnn", "LD SP,nnnn", "LD (nnnn),A", "INC SP",
 	"INC (HL)", "DEC (HL)", "LD (HL),nn", "SCF",
-	"JR C,eeee", "ADD HL,SP", "LD A,(nnnn)", "DEC SP",
+	"JR C,nnnn", "ADD HL,SP", "LD A,(nnnn)", "DEC SP",
 	"INC A", "DEC A", "LD A,nn", "CCF",
 	"LD B,B", "LD B,C", "LD B,D", "LD B,E",
 	"LD B,H", "LD B,L", "LD B,(HL)", "LD B,A",
@@ -527,5 +529,32 @@ mod test {
     #[test]
     fn disass_unknwon_opcode(){
         assert!(disassemble(&[0xfd, 0x00]).is_err());
+    }
+
+    #[test]
+    fn disass_check_representation_equality() {
+        for code in 0..=255 {
+            let repr = TABINSTR[code as usize];
+            
+            if repr.len() == 0 {
+                continue;
+            }
+
+            // TODO add test for opcodes with operandes
+            if repr.contains("nnnn") {
+
+            }
+            else if repr.contains("nn") {
+
+            }
+            else {
+                println!("{} : {}", code, repr);
+                let disass = disassemble(&[code]);
+
+                if !repr.contains("RST") {
+                    assert_eq!(repr.replace(" ", ""), disass.unwrap().to_string().trim().replace(" ", ""))
+                }
+            }
+        }
     }
 }
