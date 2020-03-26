@@ -3,32 +3,60 @@ use crate::assembler::tokens::*;
 use crate::z80emu::z80::*;
 
 impl Z80 {
+
+  
+
+
     /// Execute the given token.
     /// XXX Currently only OpCode are managed whereas some other
     /// tokens also have a sense there
     /// BUGGY flags are not properly updated
-    pub fn execute(&mut self, opcode: &Token) {
+    /// Returns the number of noprs
+    pub fn execute(&mut self, opcode: &Token) -> usize {
         self.context
             .symbols
             .set_symbol_to_value("$", self.pc().value() as _);
-        self.pc_mut().add(opcode.number_of_bytes().unwrap() as _);
 
         match opcode {
             Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
-                self.execute_opcode(*mnemonic, arg1.as_ref(), arg2.as_ref());
-            }
+                self.execute_opcode(*mnemonic, arg1.as_ref(), arg2.as_ref())
+            },
+
+            // Transform the raw data as real opcodes
+            // and indiivudally execute them
+            // crash when it is not possible to disassemble
+            Token::Defs(_, _) | Token::Defb(_) | Token::Defw(_) => {
+                let lst = opcode.disassemble_data().unwrap();
+                lst.listing().iter()
+                    .map(|token|{self.execute(token)})
+                    .sum()
+            },
+
             _ => panic!("{:?} is not yet handled", opcode),
         }
     }
 
     /// Execute the given opcode. Parameters are assumed to be valid.
-    /// PC has already been incremented
+    /// PC has already been incremented.
+    /// Returns the duration (that can depend on the value of flags/registers)
     fn execute_opcode(
         &mut self,
         mnemonic: Mnemonic,
         arg1: Option<&DataAccess>,
         arg2: Option<&DataAccess>,
-    ) {
+    ) -> usize {
+
+        let opcode = Token::OpCode(mnemonic, arg1.cloned(), arg2.cloned());
+        self.pc_mut().add(opcode.number_of_bytes().unwrap() as _);
+
+
+        // this is the minimal duration; it can be updated depending on the instruction
+        let mut duration = opcode.estimated_duration()
+                                .unwrap();
+        let mut inc_duration = ||{
+            duration += 1;
+        };
+
         match mnemonic {
             Mnemonic::Add => match (arg1, arg2) {
                 (Some(&DataAccess::Register8(crate::assembler::tokens::Register8::A)), Some(_)) => {
@@ -111,6 +139,38 @@ impl Z80 {
                 _ => unreachable!(),
             },
 
+            Mnemonic::Djnz => {
+                // dec b
+                self.b_mut().dec();
+
+                // jump as soon as b != 0
+                if self.b().value() != 0 {
+                    inc_duration();
+
+                    let delta = match arg1 {
+                        Some(&DataAccess::Expression(Expr::Label(_))) => {
+                            self.get_value(arg1.unwrap()).unwrap() as i32
+                                - self
+                                    .get_value(&DataAccess::Expression(Expr::Label("$".to_owned())))
+                                    .unwrap() as i32
+                                - 2
+                        }
+                        _ => self.get_value(arg2.unwrap()).unwrap() as i32,
+                    };
+
+                    if delta > 0 {
+                        self.pc_mut().add(delta as _);
+                    } else if delta < 0 {
+                        self.pc_mut().sub(-delta as _);
+                    }
+                    else {
+                        // go back at the beginning of the instruction
+                        self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
+                    }
+                }
+                
+            }
+
             Mnemonic::Jr => {
                 dbg!(arg2);
                 let delta = match arg2 {
@@ -128,10 +188,15 @@ impl Z80 {
                     Some(DataAccess::FlagTest(ref flag)) => self.is_flag_active(flag),
                     _ => unreachable!(),
                 } {
+                    inc_duration();
+
                     if delta > 0 {
                         self.pc_mut().add(delta as _);
                     } else if delta < 0 {
                         self.pc_mut().sub(-delta as _);
+                    }
+                    else if delta == 0 {
+                        self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
                     }
                 }
             }
@@ -148,6 +213,11 @@ impl Z80 {
                         // it would be better to ensure there are never labels in the stream of opcodes
                         let value = self.get_value(arg2.unwrap()).unwrap();
                         self.pc_mut().set(value);
+                        inc_duration();
+                    }
+                    else {
+                        self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
+
                     }
                 }
 
@@ -179,16 +249,26 @@ impl Z80 {
                 _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2),
             },
 
+            Mnemonic::Nop => {
+                // nothing to do
+            }
+
+
             _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2),
         }
+
+        duration
     }
 
     /// TODO need to manage memory
-    fn write_memory_byte(&self, _addr: u16, _val: u8) {}
+    fn write_memory_byte(&self, _addr: u16, _val: u8) {
+        eprintln!("[ERROR] Memory byte not written");
+    }
 
     /// TODO need to manage memory
     fn read_memory_byte(&self, _addr: u16) -> u8 {
-        0
+        eprintln!("[ERROR] Memory byte not read");
+        u8::default()
     }
 
     fn read_memory_word(&self, addr: u16) -> u16 {
