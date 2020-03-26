@@ -397,13 +397,14 @@ impl<'a> TryFrom<&'a str> for Token {
                 }
             }
         };
-        if tokens.len() > 1 {
-            Err(format!(
+
+        match tokens.len() {
+            0 => Err("No ASM found.".to_owned()),
+            1 => Ok(tokens[0].clone()),
+            _ => Err(format!(
                 "{} tokens are present instead of one",
                 tokens.len()
             ))
-        } else {
-            Ok(tokens[0].clone())
         }
     }
 }
