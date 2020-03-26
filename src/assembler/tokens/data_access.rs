@@ -80,8 +80,13 @@ impl fmt::Display for DataAccess {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DataAccess::IndexRegister16WithIndex(ref reg, ref delta) => {
-                write!(f, "({} {})", reg, delta)
-            }
+                if delta.is_negated() {
+                    write!(f, "({} - {})", reg, delta)
+                }
+                else {
+                    write!(f, "({} + {})", reg, delta)
+                }
+            },
             DataAccess::IndexRegister16(ref reg) => write!(f, "{}", reg),
             DataAccess::Register16(ref reg) => write!(f, "{}", reg),
             DataAccess::IndexRegister8(ref reg) => write!(f, "{}", reg),
