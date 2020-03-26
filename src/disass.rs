@@ -415,39 +415,39 @@ pub fn disassemble(bytes: &[u8]) -> Result<Listing, String> {
         },
 
         [0xFD, 0xCB, param, opcode, rest @ ..] => {
-            let token = disassemble_with_one_argument(*opcode, *param, &TABINSTRFDCB);
+            let token = disassemble_with_one_argument(*opcode, *param, &TABINSTRFDCB)?;
             continue_disassembling(token, rest)           
         },
 
         // TODO this case is buggy and needs  to be redone to tkae into acocunt the position of the argument
         [0xDD, 0xCB, param, opcode, rest @ ..] => {
-            let token = disassemble_with_one_argument(*opcode, *param, &TABINSTRDDCB);
+            let token = disassemble_with_one_argument(*opcode, *param, &TABINSTRDDCB)?;
             continue_disassembling(token, rest)           
         },
 
         [0xCB, ref opcode, rest @ ..] => {
-            let token = disassemble_without_argument(*opcode, &TABINSTRCB);
+            let token = disassemble_without_argument(*opcode, &TABINSTRCB)?;
             continue_disassembling(token, rest)
         },
 
         [0xED, ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRED, rest);
+            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRED, rest)?;
             continue_disassembling(token, rest)
         },
 
         
         [0xDD, ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRDD, rest);
+            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRDD, rest)?;
             continue_disassembling(token, rest)
         },
 
         [0xFD, ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRFD, rest);
+            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRFD, rest)?;
             continue_disassembling(token, rest)
         },
 
         [ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTR, rest);
+            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTR, rest)?;
             continue_disassembling(token, rest)
         }
     }
@@ -456,7 +456,7 @@ pub fn disassemble(bytes: &[u8]) -> Result<Listing, String> {
 
 /// Manage the disassembling of the current instraction. However this instruction may need an argument.
 /// For this reason the byte stream is provided to collect this argument if needed
-fn disassemble_with_potential_argument<'stream>(opcode: u8, lut: &[&'static str;256], bytes: &'stream [u8]) -> (Token, &'stream [u8]) {
+fn disassemble_with_potential_argument<'stream>(opcode: u8, lut: &[&'static str;256], bytes: &'stream [u8]) -> Result<(Token, &'stream [u8]), String> {
     let representation:&'static str = lut[opcode as usize];
 
     // get the first argument if any
@@ -484,24 +484,24 @@ fn disassemble_with_potential_argument<'stream>(opcode: u8, lut: &[&'static str;
         (representation, bytes)
     };
 
-    (string_to_token(&representation), bytes)
+    Ok((string_to_token(&representation)?, bytes))
 }
 
 /// The 8bits argument has already been read
-fn disassemble_with_one_argument(opcode: u8, argument: u8, lut: &[&'static str; 256]) -> Token {
+fn disassemble_with_one_argument(opcode: u8, argument: u8, lut: &[&'static str; 256]) -> Result<Token, String> {
     let representation:&'static str = lut[opcode as usize];
     let representation = representation.replacen("nn", &format!("{:#01x}", argument), 1);
     string_to_token(&representation)
 }
 
 /// No argument is expected
-fn disassemble_without_argument(opcode: u8, lut: &[&'static str; 256]) -> Token {
+fn disassemble_without_argument(opcode: u8, lut: &[&'static str; 256]) -> Result<Token, String> {
     let representation:&'static str = lut[opcode as usize];
     string_to_token(&representation)
 }
 
-fn string_to_token(representation: &str) -> Token {
-    Token::try_from(["\t", &representation].join("")).unwrap()
+fn string_to_token(representation: &str) -> Result<Token, String> {
+    Token::try_from(["\t", &representation].join(""))
 }
 
 
@@ -522,5 +522,10 @@ mod test {
         assert_eq!("LD IX, (0x4321)", disassemble(&[0xdd, 0x2a, 0x21, 0x43]).unwrap().to_string().trim());
         assert_eq!("LD (IX + 0x21), 0x43", disassemble(&[0xdd, 0x36, 0x21, 0x43]).unwrap().to_string().trim());
         assert_eq!("BIT 0x6, (IX + 0x1)", disassemble(&[0xdd, 0xcb, 0x01, 0x76]).unwrap().to_string().trim());
+    }
+
+    #[test]
+    fn disass_unknwon_opcode(){
+        assert!(disassemble(&[0xfd, 0x00]).is_err());
     }
 }
