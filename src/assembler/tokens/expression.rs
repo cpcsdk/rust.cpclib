@@ -89,6 +89,14 @@ impl<S:AsRef<str>> From<S> for Expr {
 
 #[allow(missing_docs)]
 impl Expr {
+
+    pub fn is_negated(&self) -> bool {
+        match self {
+            Expr::Neg(_) => true,
+            _ => false
+        }
+    }
+
     pub fn neg(&self) -> Self {
         Expr::Neg(Box::new(self.clone()))
     }
