@@ -549,6 +549,8 @@ mod test {
 
             }
             else if repr.contains("nn") {
+                let disass = disassemble(&[code, 0x12]);
+                assert_eq!(repr.replace("nn", "0x12").replace(" ", ""), disass.unwrap().to_string().trim().replace(" ", ""))
 
             }
             else {

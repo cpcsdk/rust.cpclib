@@ -743,6 +743,7 @@ pub fn parse_ld_normal(input: &str) -> IResult<&str, Token> {
         parse_indexregister16,
         parse_indexregister8,
         parse_register_i,
+        parse_hl_address,
         parse_address,
     ))(input)?;
 
@@ -762,6 +763,13 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
                 parse_register_hl,
                 parse_indexregister16,
                 parse_address, parse_expr
+            ))(input)
+        }
+        else if dst.is_address_in_register16() {
+            // by construction is IS HL
+            alt((
+                parse_register8,
+                parse_expr
             ))(input)
         }
         else if dst.is_register16() | dst.is_indexregister16() {
