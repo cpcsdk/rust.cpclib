@@ -147,6 +147,13 @@ impl DataAccess {
         }
     }
 
+    pub fn is_indexregister_with_index(&self) -> bool {
+        match self {
+            DataAccess::IndexRegister16WithIndex(_, _) => true,
+            _ => false
+        }
+    }
+
     pub fn is_memory(&self) -> bool {
         match self {
             DataAccess::Memory(_) => true,

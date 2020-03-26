@@ -703,6 +703,7 @@ pub fn parse_ld_normal(input: &str) -> IResult<&str, Token> {
 
     let (input, dst) = alt((
         parse_reg_address,
+        parse_indexregister_with_index,
         parse_register_sp,
         parse_register16,
         parse_register8,
@@ -737,6 +738,11 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
             alt((parse_register16, parse_register8, parse_register_sp))(input)
         } else if dst.is_address_in_register16() {
             parse_register8(input)
+        } else if dst.is_indexregister_with_index(){
+            alt((
+                parse_expr,
+                parse_register8
+            ))(input)
         } else if dst.is_register_i() {
             parse_register_a(input)
         } else {
