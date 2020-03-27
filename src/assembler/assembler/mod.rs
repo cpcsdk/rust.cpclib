@@ -1139,7 +1139,8 @@ pub fn assemble_opcode(
 
         Mnemonic::Sub => env.assemble_sub(arg1.as_ref().unwrap()),
         Mnemonic::Sbc => env.assemble_sbc(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
-        Mnemonic::Sla | Mnemonic::Sra | Mnemonic::Srl => {
+        Mnemonic::Sla | Mnemonic::Sra | Mnemonic::Srl | Mnemonic::Sll |
+        Mnemonic::Rl| Mnemonic::Rr | Mnemonic::Rlc | Mnemonic::Rrc => {
             env.assemble_shift(mnemonic, arg1.as_ref().unwrap())
         }
     }

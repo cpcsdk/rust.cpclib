@@ -513,7 +513,7 @@ pub fn parse_token(input: &str) -> IResult<&str, Token> {
         parse_opcode_no_arg,
         parse_push_n_pop,
         parse_res_set_bit,
-        parse_shifts,
+        parse_shifts_and_rotations,
         parse_sub,
         parse_sbc,
         parse_ret,
@@ -971,23 +971,6 @@ pub fn parse_logical_operator(input: &str) -> IResult<&str, Token> {
     Ok((input, Token::OpCode(operator, Some(operand), None)))
 }
 
-///...
-pub fn parse_shifts(input: &str) -> IResult<&str, Token> {
-    let (input, operator) = alt((
-        value(Mnemonic::Sla, parse_instr("SLA")),
-        value(Mnemonic::Sra, parse_instr("SRA")),
-        value(Mnemonic::Srl, parse_instr("SRL")),
-    ))(input)?;
-
-    let (input, operand) = alt((
-        parse_register8,
-        parse_hl_address,
-        parse_indexregister_with_index,
-    ))(input)?;
-
-    Ok((input, Token::OpCode(operator, Some(operand), None)))
-}
-
 /// ...
 pub fn parse_add_or_adc(input: &str) -> IResult<&str, Token> {
     alt((parse_add_or_adc_complete, parse_add_or_adc_shorten))(input)
@@ -1198,7 +1181,7 @@ pub fn parse_out(input: &str) -> IResult<&str, Token> {
     ))
 }
 
-/// TODO manage other in formats
+/// Parse all the in flavors
 pub fn parse_in(input: &str) -> IResult<&str, Token> {
     let (input, _) = parse_instr("IN")(input)?;
 
@@ -1234,6 +1217,41 @@ pub fn parse_in(input: &str) -> IResult<&str, Token> {
     Ok((
         input,
         Token::OpCode(Mnemonic::In, Some(port), Some(destination))
+    ))
+}
+
+/// Parse all RLC, RL, RR, SLA, SRA flavors
+/// RLC A
+/// RLC B
+/// RLC C
+/// RLC D
+/// RLC E
+/// RLC H
+/// RLC L
+/// RLC (HL)
+/// RLC (IX+n)
+/// RLC (IY+n)
+pub fn parse_shifts_and_rotations(input: &str) -> IResult<&str, Token> {
+    let (input, oper) = alt((
+        value(Mnemonic::Rlc, parse_instr("RLC")),
+        value(Mnemonic::Rrc, parse_instr("RRC")),
+        value(Mnemonic::Rl, parse_instr("RL")),
+        value(Mnemonic::Rr, parse_instr("RR")),
+        value(Mnemonic::Sla, parse_instr("SLA")),
+        value(Mnemonic::Sra, parse_instr("SRA")),
+        value(Mnemonic::Srl, parse_instr("SRL")),
+        value(Mnemonic::Sll, parse_instr("SLL")),
+    ))(input)?;
+
+    let (input, arg) = alt((
+        parse_register8,
+        parse_hl_address,
+        parse_indexregister_with_index
+    ))(input)?;
+
+    Ok((
+        input,
+        Token::OpCode(oper, Some(arg), None)
     ))
 }
 
