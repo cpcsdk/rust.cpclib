@@ -1159,56 +1159,82 @@ pub fn parse_inc_dec(input: &str) -> IResult<&str, Token> {
 
 /// TODO manage other out formats
 pub fn parse_out(input: &str) -> IResult<&str, Token> {
-    map(
-        preceded(
+
+    let (input, _) = parse_instr("OUT")(input)?;
+
+    // get the port proposal
+    let (input, port) = alt((
+        value(
+            DataAccess::Register8(Register8::C),
             tuple((
-                parse_instr("OUT"),
-                tag("("),
-                space0,
-                tag_no_case("C"),
-                space0,
-                tag(")"),
-                space0,
-                tag(","),
-                space0,
-            )),
-            parse_register8,
+                tag("("), space0,
+                parse_register_c,
+                space0, tag(")")
+
+            ))
         ),
-        |reg| {
-            Token::OpCode(
-                Mnemonic::Out,
-                Some(DataAccess::Register8(Register8::C)),
-                Some(reg),
+        parse_address
+    ))(input)?;
+
+    let (input, _ ) = parse_comma(input)?;
+
+    // the vlaue depends on the port
+    let (input, value) = if port.is_register8() { // reg c
+        alt((
+            parse_register8,
+            value(
+                DataAccess::from(Expr::from(0)),
+                tag("0")
             )
-        },
-    )(input)
+        ))(input)?
+    }
+    else {
+        parse_register_a(input)?
+    };
+
+    Ok((
+        input,
+        Token::OpCode(Mnemonic::Out, Some(port), Some(value))
+    ))
 }
 
 /// TODO manage other in formats
 pub fn parse_in(input: &str) -> IResult<&str, Token> {
-    map(
-        delimited(
-            parse_instr("IN"),
-            parse_register8,
-            tuple((
-                space0,
-                tag(","),
-                space0,
-                tag("("),
-                space0,
-                tag_no_case("C"),
-                space0,
-                tag(")"),
-            )),
-        ),
-        |reg| {
-            Token::OpCode(
-                Mnemonic::In,
-                Some(DataAccess::Register8(Register8::C)),
-                Some(reg),
+    let (input, _) = parse_instr("IN")(input)?;
+
+    // get the port proposal
+    let (input, port) = parse_register8(input)?;
+    let (input, _ ) = parse_comma(input)?;
+
+    // the value depends on the port
+    let (input, destination) = if port.get_register8().unwrap().is_a() {
+        alt((
+            parse_address,
+            value(
+                DataAccess::Register8(Register8::C),
+                tuple((
+                    tag("("), space0,
+                    parse_register_c,
+                    space0, tag(")")
+                ))
             )
-        },
-    )(input)
+        ))(input)?
+    }
+    else {
+        value(
+            DataAccess::Register8(Register8::C),
+            tuple((
+                tag("("), space0,
+                parse_register_c,
+                space0, tag(")")
+            ))
+        )(input)?
+    };
+
+    Ok((
+        input,
+        Token::OpCode(Mnemonic::In, Some(port), Some(destination))
+    ))
 }
 
 /// TODO reduce the flag space for jr"],
