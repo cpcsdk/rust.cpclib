@@ -562,24 +562,34 @@ mod test {
             println!("{} : {}", code, repr);
 
             // TODO add test for opcodes with operandes
-            if repr.contains("nnnn") {
+            let (expected, obtained) = if repr.contains("nnnn") {
                 let disass = disassemble(& merge(&[prefix, &[code], &[0x12, 0x34]]));
-                assert_eq!(repr.replace("nnnn", "0x3412").replace(" ", ""), disass.unwrap().to_string().trim().replace(" ", ""))
+                (repr.replace("nnnn", "0x3412"), disass)
 
             }
             else if repr.contains("nn") {
                 let disass = disassemble(& merge(&[prefix, &[code], &[0x12]]));
-                assert_eq!(repr.replace("nn", "0x12").replace(" ", ""), disass.unwrap().to_string().trim().replace(" ", ""))
+                (repr.replace("nn", "0x12"), disass)
 
             }
             else {
-
                 let disass = disassemble(& merge(&[prefix, &[code]]));
+                (repr.to_owned(), disass)
+			};
+			
+			// alter strings in order to be able to compare them
+			if !expected.contains("RST") {
+				assert_eq!(
+				expected.replace(" ", "")
+						.replace("0x","")
+						.replace("00", "0")
+						.replace("08", "8"),
+				obtained.unwrap().to_string().trim()
+						.replace(" ", "")
+						.replace("0x","")
+			);
+			}
 
-                if !repr.contains("RST") {
-                    assert_eq!(repr.replace(" ", ""), disass.unwrap().to_string().trim().replace(" ", ""))
-                }
-            }
         }
     }
 }
