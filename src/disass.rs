@@ -534,6 +534,10 @@ mod test {
     #[test]
     fn disass_check_representation_equality() {
 		disass_for_table_and_prefix(&TABINSTR, &[]);
+		disass_for_table_and_prefix(&TABINSTRCB, &[0xcb]);
+		disass_for_table_and_prefix(&TABINSTRDD, &[0xdd]);
+		disass_for_table_and_prefix(&TABINSTRED, &[0xed]);
+		disass_for_table_and_prefix(&TABINSTRFD, &[0xfd]);
 	}
 
 
