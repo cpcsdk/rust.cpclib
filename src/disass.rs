@@ -533,8 +533,23 @@ mod test {
 
     #[test]
     fn disass_check_representation_equality() {
+		disass_for_table_and_prefix(&TABINSTR, &[]);
+	}
+
+
+	fn disass_for_table_and_prefix(tab: &[&'static str; 256], prefix: &[u8]) {
+
+		// Concatenate list of list of bytes
+		let merge = |list: &[&[u8]]| -> Vec<u8> {
+			list.into_iter()
+				.map(|&bytes| bytes.iter())
+				.flatten()
+				.copied()
+				.collect()
+		};
+
         for code in 0..=255 {
-            let repr = TABINSTR[code as usize];
+            let repr = tab[code as usize];
             
             if repr.len() == 0 {
                 continue;
@@ -544,18 +559,18 @@ mod test {
 
             // TODO add test for opcodes with operandes
             if repr.contains("nnnn") {
-                let disass = disassemble(&[code, 0x12, 0x34]);
+                let disass = disassemble(& merge(&[prefix, &[code], &[0x12, 0x34]]));
                 assert_eq!(repr.replace("nnnn", "0x3412").replace(" ", ""), disass.unwrap().to_string().trim().replace(" ", ""))
 
             }
             else if repr.contains("nn") {
-                let disass = disassemble(&[code, 0x12]);
+                let disass = disassemble(& merge(&[prefix, &[code], &[0x12]]));
                 assert_eq!(repr.replace("nn", "0x12").replace(" ", ""), disass.unwrap().to_string().trim().replace(" ", ""))
 
             }
             else {
 
-                let disass = disassemble(&[code]);
+                let disass = disassemble(& merge(&[prefix, &[code]]));
 
                 if !repr.contains("RST") {
                     assert_eq!(repr.replace(" ", ""), disass.unwrap().to_string().trim().replace(" ", ""))
