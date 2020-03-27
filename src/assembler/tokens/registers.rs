@@ -50,6 +50,26 @@ impl Register16 {
     }
 }
 
+macro_rules! is_reg16 {
+    ($($reg:ident)*) => {$(
+        paste::item_with_macros! {
+            impl Register16 {
+                /// Check if register is $reg
+                pub fn [<is_ $reg:lower>] (&self) -> bool {
+                    match self {
+                        Register16::$reg => true,
+                        _ => false
+                    }
+                }
+            }
+        }
+
+    )*
+    }
+}
+is_reg16!{Af Bc De Hl}
+
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[allow(missing_docs)]
 pub enum IndexRegister16 {
@@ -114,7 +134,29 @@ impl Register8 {
             Register8::H | Register8::L => Register16::Hl,
         }
     }
+
 }
+
+
+macro_rules! is_reg8 {
+    ($($reg:ident)*) => {$(
+        paste::item_with_macros! {
+            impl Register8 {
+                /// Check if register is $reg
+                pub fn [<is_ $reg:lower>] (&self) -> bool {
+                    match self {
+                        Register8::$reg => true,
+                        _ => false
+                    }
+                }
+            }
+        }
+
+    )*
+    }
+}
+is_reg8!{A B C D E H L}
+
 
 impl fmt::Display for Register8 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -11,6 +11,13 @@ readme = "Readme.mkd"
 keywords = ["amstrad", "demo", "z80", "dsk" ,"sna"]
 categories = ["command-line-utilities", "development-tools", "emulators"]
 
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3
+
+
 [dependencies]
 arrayref= "0.3.5"
 anyhow = "1.0"
