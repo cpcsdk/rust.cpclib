@@ -58,6 +58,8 @@ pub enum Mnemonic {
     Rra,
     Res,
     Ret,
+    Reti,
+    Retn,
     Rl,
     Rlc,
     Rr,
@@ -115,6 +117,8 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Rra => write!(f, "RRA"),
             Mnemonic::Res => write!(f, "RES"),
             Mnemonic::Ret => write!(f, "RET"),
+            Mnemonic::Reti => write!(f, "RETI"),
+            Mnemonic::Retn => write!(f, "RETN"),
             Mnemonic::Rl => write!(f, "RL"),
             Mnemonic::Rlc => write!(f, "RLC"),
             Mnemonic::Rr => write!(f, "RR"),
@@ -132,29 +136,78 @@ impl fmt::Display for Mnemonic {
     }
 }
 
-#[allow(missing_docs)]
-impl Mnemonic {
-    pub fn is_sla(self) -> bool {
-        match self {
-            Mnemonic::Sla => true,
-            _ => false,
-        }
-    }
 
-    pub fn is_sra(self) -> bool {
-        match self {
-            Mnemonic::Sra => true,
-            _ => false,
+macro_rules! is_mnemonic {
+    ($($mnemonic:ident)*) => {$(
+        paste::item_with_macros! {
+            impl Mnemonic {
+                /// Check if this DataAccess corresonds to $mnemonic
+                pub fn [<is_ $mnemonic:lower>] (&self) -> bool {
+                    match self {
+                        Mnemonic::$mnemonic => true,
+                        _ => false,
+                    }
+                }
+            }
         }
-    }
-
-    pub fn is_srl(self) -> bool {
-        match self {
-            Mnemonic::Srl => true,
-            _ => false,
-        }
-    }
+    )*}
 }
+is_mnemonic!(    
+    Adc
+    Add
+    And
+    Bit
+    Call
+    Cp
+    Dec
+    Di
+    Djnz
+    Ei
+    ExAf
+    ExHlDe
+    ExMemSp
+    Exx
+    Halt
+    In
+    Inc
+    Jp
+    Jr
+    Ld
+    Ldd
+    Ldi
+    Lddr
+    Ldir
+    Nop
+    Nops2
+    Ind
+    Indr
+    Ini
+    Inir
+    Or
+    Out
+    Outi
+    Outd
+    Push
+    Pop
+    Rra
+    Res
+    Ret
+    Reti
+    Retn
+    Rl
+    Rlc
+    Rr
+    Rrc
+    Sbc
+    Sub
+    Scf
+    Set
+    Sla
+    Sll
+    Sra
+    Srl
+    Xor);
+
 
 /// Stable ticker serves to count nops with the assembler !
 #[derive(Debug, Clone, PartialEq, Eq)]
