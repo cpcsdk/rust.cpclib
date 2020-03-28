@@ -568,14 +568,22 @@ mod test {
 
             }
             else if repr.contains("nn") {
-                let disass = disassemble(& merge(&[prefix, &[code], &[0x12]]));
-                (repr.replace("nn", "0x12"), disass)
+				let repr = repr.replacen("nn", "0x12", 1);
+				let (repr, bytes) = if repr.contains("nn") {
+					(repr.replace("nn", "0x34"), [0x12, 0x34].to_vec())
+				}
+				else {
+					(repr, [0x12].to_vec())
+				};
+                let disass = disassemble(& merge(&[prefix, &[code], &bytes]));
+                (repr, disass)
 
             }
             else {
                 let disass = disassemble(& merge(&[prefix, &[code]]));
                 (repr.to_owned(), disass)
 			};
+
 			
 			// alter strings in order to be able to compare them
 			if !expected.contains("RST") {
@@ -583,10 +591,12 @@ mod test {
 				expected.replace(" ", "")
 						.replace("0x","")
 						.replace("00", "0")
-						.replace("08", "8"),
+						.replace("08", "8")
+						.to_uppercase(),
 				obtained.unwrap().to_string().trim()
 						.replace(" ", "")
 						.replace("0x","")
+						.to_uppercase()
 			);
 			}
 

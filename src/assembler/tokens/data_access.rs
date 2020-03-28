@@ -1,6 +1,7 @@
 use crate::assembler::tokens::expression::*;
 use crate::assembler::tokens::registers::*;
 use std::fmt;
+use paste;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// Encode the way mnemonics access to data
@@ -16,6 +17,7 @@ pub enum DataAccess {
     Register8(Register8),
     /// Represents a memory access indexed by a register
     MemoryRegister16(Register16),
+    MemoryIndexRegister16(IndexRegister16),
     /// Represents any expression
     Expression(Expr),
     /// Represents an address
@@ -26,6 +28,8 @@ pub enum DataAccess {
     SpecialRegisterI,
     /// Special register R
     SpecialRegisterR,
+    /// Used for in/out instructions
+    PortC,
 }
 
 impl From<u8> for DataAccess {
@@ -92,11 +96,13 @@ impl fmt::Display for DataAccess {
             DataAccess::IndexRegister8(ref reg) => write!(f, "{}", reg),
             DataAccess::Register8(ref reg) => write!(f, "{}", reg),
             DataAccess::MemoryRegister16(ref reg) => write!(f, "({})", reg),
+            DataAccess::MemoryIndexRegister16(ref reg) => write!(f, "({})", reg),
             DataAccess::Expression(ref exp) => write!(f, "{}", exp),
             DataAccess::Memory(ref exp) => write!(f, "({})", exp),
             DataAccess::FlagTest(ref test) => write!(f, "{}", test),
             DataAccess::SpecialRegisterI => write!(f, "I"),
             DataAccess::SpecialRegisterR => write!(f, "R"),
+            DataAccess::PortC => write!(f, "(C)")
         }
     }
 }
@@ -110,6 +116,13 @@ impl DataAccess {
         }
     }
 
+    pub fn is_portc(&self) -> bool {
+        match self {
+            DataAccess::PortC => true,
+            _ => false
+        }
+    }
+
     pub fn is_register_a(&self) -> bool {
         match self {
             DataAccess::Register8(Register8::A) => true,
@@ -120,6 +133,20 @@ impl DataAccess {
     pub fn is_register_sp(&self) -> bool {
         match self {
             DataAccess::Register16(Register16::Sp) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_register_ix(&self) -> bool {
+        match self {
+            DataAccess::IndexRegister16(IndexRegister16::Ix) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_register_iy(&self) -> bool {
+        match self {
+            DataAccess::IndexRegister16(IndexRegister16::Iy) => true,
             _ => false
         }
     }
@@ -148,6 +175,13 @@ impl DataAccess {
     pub fn is_register16(&self) -> bool {
         match self {
             DataAccess::Register16(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_indexregister8(&self) -> bool {
+        match self {
+            DataAccess::IndexRegister8(_) => true,
             _ => false,
         }
     }
@@ -191,6 +225,7 @@ impl DataAccess {
     pub fn get_indexregister16(&self) -> Option<IndexRegister16> {
         match self {
             DataAccess::IndexRegister16(ref reg) => Some(*reg),
+            DataAccess::MemoryIndexRegister16(ref reg) => Some(*reg),
             _ => None,
         }
     }
@@ -200,5 +235,36 @@ impl DataAccess {
             DataAccess::Register8(ref reg) => Some(*reg),
             _ => None,
         }
+    }
+}
+
+
+macro_rules! is_any_indexregister8 {
+    ($($reg:ident)*) => {$(
+        paste::item_with_macros! {
+            impl DataAccess {
+                /// Check if this DataAccess corresonds to $reg
+                pub fn [<is_register_ $reg:lower>] (&self) -> bool {
+                    match self {
+                        DataAccess::IndexRegister8(IndexRegister8::$reg) => true,
+                        _ => false,
+                    }
+                }
+            }
+        }
+    )*}
+}
+is_any_indexregister8!(Ixh Ixl Iyh Iyl);
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn is_indexregister8() {
+        assert!(DataAccess::IndexRegister8(IndexRegister8::Ixl).is_indexregister8());
+        assert!(DataAccess::IndexRegister8(IndexRegister8::Ixl).is_register_ixl());
+        assert!(!DataAccess::IndexRegister8(IndexRegister8::Ixl).is_register_iyl());
+        assert!(!DataAccess::Register8(Register8::A).is_register_iyl());
     }
 }

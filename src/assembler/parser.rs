@@ -743,6 +743,7 @@ pub fn parse_ld_normal(input: &str) -> IResult<&str, Token> {
         parse_indexregister16,
         parse_indexregister8,
         parse_register_i,
+        parse_register_r,
         parse_hl_address,
         parse_address,
     ))(input)?;
@@ -783,6 +784,9 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
                     parse_address,
                     parse_expr,
                     parse_register8,
+                    parse_indexregister8,
+                    parse_register_i,
+                    parse_register_r
                 ))(input)
             }
             else {
@@ -792,19 +796,34 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
                     parse_address,
                     parse_expr,
                     parse_register8,
+                    parse_indexregister8
                 ))(input)
             }
-
+        } 
+        else if dst.is_indexregister8() {
+            alt((
+                parse_indexregister_with_index,
+                parse_hl_address,
+                parse_address,
+                parse_expr,
+                parse_register8,
+                verify( alt((parse_register_ixh, parse_register_ixl)), |_| dst.is_register_ixl() || dst.is_register_ixh()),
+                verify( alt((parse_register_iyh, parse_register_iyl)), |_| dst.is_register_iyl() || dst.is_register_iyh()),
+            ))(input)
         } else if dst.is_memory() {
-            alt((parse_register16, parse_register8, parse_register_sp))(input)
+            alt((parse_register16, 
+                parse_register8, 
+                parse_register_sp,
+                parse_indexregister16
+            ))(input)
         } else if dst.is_address_in_register16() {
             parse_register8(input)
         } else if dst.is_indexregister_with_index(){
             alt((
                 parse_expr,
-                parse_register8
+                parse_register8,
             ))(input)
-        } else if dst.is_register_i() {
+        } else if dst.is_register_i()  || dst.is_register_r(){
             parse_register_a(input)
         } else {
             Err(Err::Error((input, ErrorKind::Alt)))
@@ -840,6 +859,7 @@ pub fn parse_cp(input: &str) -> IResult<&str, Token> {
             parse_instr("CP"),
             alt((
                 parse_register8,
+                parse_indexregister8,
                 parse_hl_address,
                 parse_indexregister_with_index,
                 parse_expr,
@@ -892,7 +912,7 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token> {
 }
 
 fn parse_instr(name: &str) -> impl Fn(&str) -> IResult<&str, ()> + '_ {
-    move |input: &str| map(tuple((tag_no_case(name), space1)), |_| ())(input)
+    move |input: &str| map(tuple((tag_no_case(name), not(alpha1), space0)), |_| ())(input)
 }
 
 /// ...
@@ -963,6 +983,7 @@ pub fn parse_logical_operator(input: &str) -> IResult<&str, Token> {
 
     let (input, operand) = alt((
         parse_register8,
+        parse_indexregister8,
         parse_hl_address,
         parse_indexregister_with_index,
         parse_expr,
@@ -1055,17 +1076,12 @@ pub fn parse_add_or_adc_complete(input: &str) -> IResult<&str, Token> {
         alt((parse_register16, parse_register_sp))(input) // Case for HL XXX AF is accepted whereas it is not the case in real life
     } else if first.is_indexregister16() {
         alt((
-            value(DataAccess::Register16(Register16::De), tag_no_case("DE")),
-            value(DataAccess::Register16(Register16::Bc), tag_no_case("BC")),
-            value(DataAccess::Register16(Register16::Sp), tag_no_case("SP")),
-            value(
-                DataAccess::IndexRegister16(IndexRegister16::Ix),
-                tag_no_case("IX"),
-            ),
-            value(
-                DataAccess::IndexRegister16(IndexRegister16::Iy),
-                tag_no_case("IY"),
-            ),
+            parse_register_bc,
+            parse_register_de,
+            parse_register_hl,
+            parse_register_sp,
+            verify(parse_register_ix, |_| first.is_register_ix()),
+            verify(parse_register_iy, |_| first.is_register_iy()),
         ))(input)
     } else {
         Err(Err::Error((input, ErrorKind::Alt)))
@@ -1135,7 +1151,15 @@ pub fn parse_inc_dec(input: &str) -> IResult<&str, Token> {
         value(Mnemonic::Dec, parse_instr("DEC")),
     ))(input)?;
 
-    let (input, register) = alt((parse_register16, parse_register8, parse_register_sp, parse_hl_address))(input)?;
+    let (input, register) = alt((
+        parse_register16,
+        parse_indexregister16, 
+        parse_register8, 
+        parse_indexregister8,
+        parse_register_sp, 
+        parse_hl_address,
+        parse_indexregister_with_index
+    ))(input)?;
 
     Ok((input, Token::OpCode(inc_or_dec, Some(register), None)))
 }
@@ -1147,22 +1171,14 @@ pub fn parse_out(input: &str) -> IResult<&str, Token> {
 
     // get the port proposal
     let (input, port) = alt((
-        value(
-            DataAccess::Register8(Register8::C),
-            tuple((
-                tag("("), space0,
-                parse_register_c,
-                space0, tag(")")
-
-            ))
-        ),
+        parse_portc,
         parse_address
     ))(input)?;
 
     let (input, _ ) = parse_comma(input)?;
 
     // the vlaue depends on the port
-    let (input, value) = if port.is_register8() { // reg c
+    let (input, value) = if port.is_portc() { // reg c
         alt((
             parse_register8,
             value(
@@ -1186,37 +1202,17 @@ pub fn parse_in(input: &str) -> IResult<&str, Token> {
     let (input, _) = parse_instr("IN")(input)?;
 
     // get the port proposal
-    let (input, port) = parse_register8(input)?;
+    let (input, destination) = parse_register8(input)?;
     let (input, _ ) = parse_comma(input)?;
+    let (input, port) = alt((
+        verify(parse_address, |_| destination.get_register8().unwrap().is_a()),
+        parse_portc
 
-    // the value depends on the port
-    let (input, destination) = if port.get_register8().unwrap().is_a() {
-        alt((
-            parse_address,
-            value(
-                DataAccess::Register8(Register8::C),
-                tuple((
-                    tag("("), space0,
-                    parse_register_c,
-                    space0, tag(")")
-                ))
-            )
-        ))(input)?
-    }
-    else {
-        value(
-            DataAccess::Register8(Register8::C),
-            tuple((
-                tag("("), space0,
-                parse_register_c,
-                space0, tag(")")
-            ))
-        )(input)?
-    };
+    ))(input)?;
 
     Ok((
         input,
-        Token::OpCode(Mnemonic::In, Some(port), Some(destination))
+        Token::OpCode(Mnemonic::In,  Some(destination), Some(port))
     ))
 }
 
@@ -1269,7 +1265,10 @@ pub fn parse_call_jp_or_jr(input: &str) -> IResult<&str, Token> {
     ))(input)?;
 
     let (input, dst) = alt((
-        parse_hl_address,
+        verify( alt((
+            parse_hl_address,
+            parse_indexregister_address
+        )), |_| call_jp_or_jr.is_jp() && flag_test.is_none()), // not possible for call and for jp/jr when there is flag
         parse_expr
     ))(input)?;
 
@@ -1398,21 +1397,48 @@ parse_any_register16!(parse_register_bc, "BC", Register16::Bc);
 parse_any_register16!(parse_register_de, "DE", Register16::De);
 parse_any_register16!(parse_register_hl, "HL", Register16::Hl);
 
-/// Parse and indexed register in 8bits
-pub fn parse_indexregister8(input: &str) -> IResult<&str, DataAccess> {
-    terminated(
-        map(
-            alt((
-                map(tag_no_case("IXH"), { |_| IndexRegister8::Ixh }),
-                map(tag_no_case("IXL"), { |_| IndexRegister8::Ixl }),
-                map(tag_no_case("IYH"), { |_| IndexRegister8::Iyh }),
-                map(tag_no_case("IYL"), { |_| IndexRegister8::Iyl }),
-            )),
-            |reg| DataAccess::IndexRegister8(reg),
-        ),
-        not(alphanumeric1),
+/// Parse the IX register
+pub fn parse_register_ix(input: &str) -> IResult<&str, DataAccess> {
+    value(
+        DataAccess::IndexRegister16(IndexRegister16::Ix),
+        tuple((tag_no_case("IX"), not(alphanumeric1)))
     )(input)
 }
+
+/// Parse the IY register
+pub fn parse_register_iy(input: &str) -> IResult<&str, DataAccess> {
+    value(
+        DataAccess::IndexRegister16(IndexRegister16::Ix),
+        tuple((tag_no_case("IY"), not(alphanumeric1)))
+    )(input)
+}
+
+// TODO find a way to not use that
+macro_rules! parse_any_indexregister8 {
+    ($($reg:ident)*) => {$(
+        paste::item_with_macros! {
+            /// Parse register $reg
+            pub fn [<parse_register_ $reg:lower>] (input: &str) -> IResult<&str, DataAccess> {
+                value(
+                    DataAccess::IndexRegister8(IndexRegister8::$reg),
+                    tuple((tag_no_case( stringify!($reg)), not(alphanumeric1)))
+                )(input)
+            }
+        }
+    )*}
+}
+parse_any_indexregister8!(Ixh Ixl Iyh Iyl);
+
+/// Parse and indexed register in 8bits
+pub fn parse_indexregister8(input: &str) -> IResult<&str, DataAccess> {
+    alt((
+        parse_register_ixh,
+        parse_register_iyh,
+        parse_register_ixl,
+        parse_register_iyl,
+    ))(input)
+}
+
 
 /// Parse a 16 bits indexed register
 pub fn parse_indexregister16(input: &str) -> IResult<&str, DataAccess> {
@@ -1452,6 +1478,18 @@ pub fn parse_indexregister_with_index(input: &str) -> IResult<&str, DataAccess> 
     ))
 }
 
+/// Parse (C) used in in/out
+pub fn parse_portc(input: &str) -> IResult<&str, DataAccess> {
+    value(
+        DataAccess::PortC,
+        tuple((
+            tag("("), space0,
+            parse_register_c,
+            space0, tag(")")
+        ))
+    )(input)
+}
+
 /// Parse an address access `(expression)`
 pub fn parse_address(input: &str) -> IResult<&str, DataAccess> {
     map(
@@ -1484,6 +1522,19 @@ pub fn parse_hl_address(input: &str) -> IResult<&str, DataAccess> {
     )(input)
 }
 
+/// Parse (ix) and (iy)
+pub fn parse_indexregister_address(input: &str) -> IResult<&str, DataAccess> {
+    map(
+        delimited(
+            terminated(tag("("), space0),
+            parse_indexregister16,
+            preceded(space0, tag(")"))
+        ),
+
+        |reg| DataAccess::MemoryIndexRegister16(reg.get_indexregister16().unwrap())
+    )(input)
+}
+
 /// Parse an expression and returns it inside a DataAccession::Expression
 pub fn parse_expr(input: &str) -> IResult<&str, DataAccess> {
     let (input, expr) = expr(input)?;
@@ -1511,24 +1562,26 @@ pub fn parse_defs(input: &str) -> IResult<&str, Token> {
 /// Parse any opcode having no argument
 pub fn parse_opcode_no_arg(input: &str) -> IResult<&str, Token> {
     let (input, mnemonic) = alt((
-        map(tag_no_case("DI"), { |_| Mnemonic::Di }),
-        map(tag_no_case("EI"), { |_| Mnemonic::Ei }),
-        map(tag_no_case("EXX"), { |_| Mnemonic::Exx }),
-        map(tag_no_case("HALT"), { |_| Mnemonic::Halt }),
-        map(tag_no_case("LDIR"), { |_| Mnemonic::Ldir }),
-        map(tag_no_case("LDDR"), { |_| Mnemonic::Lddr }),
-        map(tag_no_case("LDI"), { |_| Mnemonic::Ldi }),
-        map(tag_no_case("LDD"), { |_| Mnemonic::Ldd }),
-        map(tag_no_case("NOPS2"), { |_| Mnemonic::Nops2 }),
-        map(tag_no_case("NOP"), { |_| Mnemonic::Nop }),
-        map(tag_no_case("OUTD"), { |_| Mnemonic::Outd }),
-        map(tag_no_case("OUTI"), { |_| Mnemonic::Outi }),
-        map(tag_no_case("RRA"), { |_| Mnemonic::Rra }),
-        value(Mnemonic::Scf, tag_no_case("SCF")),
-        value(Mnemonic::Ind, tag_no_case("IND")),
-        value(Mnemonic::Indr, tag_no_case("INDR")),
-        value(Mnemonic::Ini, tag_no_case("INI")),
-        value(Mnemonic::Inir, tag_no_case("INIR")),
+        map(parse_instr("DI"), { |_| Mnemonic::Di }),
+        map(parse_instr("EI"), { |_| Mnemonic::Ei }),
+        map(parse_instr("EXX"), { |_| Mnemonic::Exx }),
+        map(parse_instr("HALT"), { |_| Mnemonic::Halt }),
+        map(parse_instr("LDIR"), { |_| Mnemonic::Ldir }),
+        map(parse_instr("LDDR"), { |_| Mnemonic::Lddr }),
+        map(parse_instr("LDI"), { |_| Mnemonic::Ldi }),
+        map(parse_instr("LDD"), { |_| Mnemonic::Ldd }),
+        map(parse_instr("NOPS2"), { |_| Mnemonic::Nops2 }),
+        map(parse_instr("NOP"), { |_| Mnemonic::Nop }),
+        map(parse_instr("OUTD"), { |_| Mnemonic::Outd }),
+        map(parse_instr("OUTI"), { |_| Mnemonic::Outi }),
+        map(parse_instr("RRA"), { |_| Mnemonic::Rra }),
+        value(Mnemonic::Scf, parse_instr("SCF")),
+        value(Mnemonic::Ind, parse_instr("IND")),
+        value(Mnemonic::Indr, parse_instr("INDR")),
+        value(Mnemonic::Ini, parse_instr("INI")),
+        value(Mnemonic::Inir, parse_instr("INIR")),
+        value(Mnemonic::Reti, parse_instr("RETI")),
+        value(Mnemonic::Retn, parse_instr("RETN")),
     ))(input)?;
 
     Ok((input, Token::OpCode(mnemonic, None, None)))
@@ -1888,5 +1941,22 @@ impl FromStr for Listing {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_str(s)
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::assembler::tokens::DataAccess;
+
+    #[test]
+    fn parse_indexregister8() {
+        assert_eq!(
+            parse_register_ixl("ixl"),
+            Ok(("", DataAccess::IndexRegister8(IndexRegister8::Ixl)))
+        );
+
+        assert!(parse_register_iyl("ixl").is_err());
     }
 }

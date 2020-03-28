@@ -1120,6 +1120,8 @@ pub fn assemble_opcode(
         | Mnemonic::Ini
         | Mnemonic::Inir
         | Mnemonic::Rra
+        | Mnemonic::Reti
+        | Mnemonic::Retn
         | Mnemonic::Scf => assemble_no_arg(mnemonic),
         Mnemonic::Nop => assemble_nop(),
         Mnemonic::Nops2 => assemble_nops2(),
