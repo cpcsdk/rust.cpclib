@@ -584,8 +584,9 @@ mod test {
                 (repr.to_owned(), disass)
 			};
 
-			
+			// check if disassembling provides the right value
 			// alter strings in order to be able to compare them
+			let obtained = obtained.unwrap();
 			if !expected.contains("RST") {
 				assert_eq!(
 				expected.replace(" ", "")
@@ -593,11 +594,20 @@ mod test {
 						.replace("00", "0")
 						.replace("08", "8")
 						.to_uppercase(),
-				obtained.unwrap().to_string().trim()
+				obtained.to_string().trim()
 						.replace(" ", "")
 						.replace("0x","")
 						.to_uppercase()
 			);
+			}
+
+
+			// check if it is possible to assemble it
+			use crate::assembler::assembler::visit_opcode;
+			use crate::assembler::assembler::Env;
+			let mut env = Env::default();
+			if let Token::OpCode(ref mnemonic, ref arg1, ref arg2) = obtained.listing()[0] {
+				visit_opcode(*mnemonic, &arg1, &arg2, &mut env).unwrap();
 			}
 
         }

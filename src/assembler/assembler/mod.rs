@@ -1056,7 +1056,7 @@ pub fn assemble_align(
 }
 
 /// Assemble the opcode and inject in the environement
-fn visit_opcode(
+pub(crate) fn visit_opcode(
     mnemonic: Mnemonic,
     arg1: &Option<DataAccess>,
     arg2: &Option<DataAccess>,
