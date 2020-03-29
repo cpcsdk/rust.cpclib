@@ -616,6 +616,10 @@ mod test {
 					);
 				}
 			}
+			else {
+				println!("ERROR, this is not a Token {:?}", obtained);
+				assert!(false);
+			}
 
         }
     }
