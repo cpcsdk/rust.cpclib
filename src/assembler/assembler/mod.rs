@@ -1118,10 +1118,26 @@ pub fn assemble_opcode(
         | Mnemonic::Indr
         | Mnemonic::Ini
         | Mnemonic::Inir
+        | Mnemonic::Rla
+        | Mnemonic::Rlca
+        | Mnemonic::Rrca
         | Mnemonic::Rra
         | Mnemonic::Reti
         | Mnemonic::Retn
-        | Mnemonic::Scf => assemble_no_arg(mnemonic),
+        | Mnemonic::Scf 
+        | Mnemonic::Ccf 
+        | Mnemonic::Cpd
+        | Mnemonic::Cpdr
+        | Mnemonic::Cpi
+        | Mnemonic::Cpir
+        | Mnemonic::Cpl
+        | Mnemonic::Daa
+        | Mnemonic::Neg
+        | Mnemonic::Otdr
+        | Mnemonic::Otir
+        | Mnemonic::Rld
+        | Mnemonic::Rrd
+        => assemble_no_arg(mnemonic),
         Mnemonic::Nop => assemble_nop(),
         Mnemonic::Nops2 => assemble_nops2(),
         Mnemonic::Out => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
@@ -1185,10 +1201,26 @@ fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, AssemblerError> {
         Mnemonic::Inir => &[0xED, 0xB2],
         Mnemonic::Outd => &[0xED, 0xAB],
         Mnemonic::Outi => &[0xED, 0xA3],
+        Mnemonic::Rla => &[0x17],
+        Mnemonic::Rlca => &[0x07],
+        Mnemonic::Rrca => &[0x0f],
         Mnemonic::Rra => &[0x1f],
         Mnemonic::Reti => &[0xED, 0x4d],
         Mnemonic::Retn => &[0xed, 0x45],
         Mnemonic::Scf => &[0x37],
+        Mnemonic::Ccf => &[0x3f],
+        // added
+        Mnemonic::Cpd => &[0xed, 0xa9],
+        Mnemonic::Cpdr => &[0xed, 0xb9],
+        Mnemonic::Cpi => &[0xed, 0xa1],
+        Mnemonic::Cpir => &[0xed, 0xb1],
+        Mnemonic::Cpl => &[0x2f],
+        Mnemonic::Daa => &[0x27],
+        Mnemonic::Neg => &[0xed, 0x44],
+        Mnemonic::Otdr => &[0xed, 0xbb],
+        Mnemonic::Otir => &[0xed, 0xb3],
+        Mnemonic::Rld => &[0xed, 0x6f],
+        Mnemonic::Rrd => &[0xed, 0x67],
         _ => {
             return Err(format!("{} not treated", mnemonic).into());
         }
