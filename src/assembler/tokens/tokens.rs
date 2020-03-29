@@ -231,6 +231,8 @@ impl ListingElement for Token {
         }
     }
 
+
+
     /// Return the number of bytes of the token given the provided context
     fn number_of_bytes_with_context(
         &self,
@@ -600,5 +602,16 @@ mod tests {
 
         assert_eq!(out_c_d().estimated_duration().unwrap(), 4);
 
+    }
+
+
+    #[test]
+    fn is_valid_ok() {
+        assert!(out_c_d().is_valid());
+    }
+
+    #[test]
+    fn is_valid_nok() {
+        assert!(!Token::OpCode(Mnemonic::Out, Some(DataAccess::Register8(Register8::C)), Some(DataAccess::Register8(Register8::A))).is_valid());
     }
 }
