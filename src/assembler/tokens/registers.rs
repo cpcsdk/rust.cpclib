@@ -67,7 +67,7 @@ macro_rules! is_reg16 {
     )*
     }
 }
-is_reg16!{Af Bc De Hl}
+is_reg16!{Af Bc De Hl Sp}
 
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -196,6 +196,16 @@ impl fmt::Display for IndexRegister8 {
     }
 }
 
+
+impl IndexRegister8 {
+    /// Return the 16 bit register composed by this 8 bits register
+    pub fn complete(&self) -> IndexRegister16 {
+        match self {
+            IndexRegister8::Ixh | IndexRegister8::Ixl => IndexRegister16::Ix,
+            IndexRegister8::Iyh | IndexRegister8::Iyl => IndexRegister16::Iy,
+        }
+    }
+}
 /*
 #[derive(Debug, PartialEq, Eq)]
 pub struct Label;

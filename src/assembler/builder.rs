@@ -49,6 +49,18 @@ pub fn defb<E:Into<Expr>>(val: E) -> Token {
     Token::Defb(vec![val.into()])
 }
 
+/// Generate defb directive from a slice of expression
+pub fn defb_elements<E: Into<Expr>>(elements: &[E]) -> Token 
+where E: Copy {
+    let mut data = Vec::new();
+    for val in elements {
+        let val = *val;
+        let expr = val.into();
+        data.push(expr);
+    }
+    Token::Defb(data)
+}
+
 /// Generate defw directive with one argument
 pub fn defw<E:Into<Expr>>(val: E) -> Token {
     Token::Defw(vec![val.into()])
