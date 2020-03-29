@@ -325,7 +325,7 @@ const TABINSTR:[&'static str;256]  = [
 	"INC B", "DEC B", "LD B,nn", "RLCA",
 	"EX AF,AF'", "ADD HL,BC", "LD A,(BC)", "DEC BC",
 	"INC C", "DEC C", "LD C,nn", "RRCA",
-	"DJNZ nnnn", "LD DE,nnnn", "LD (DE),A", "INC DE",
+	"DJNZ nn", "LD DE,nnnn", "LD (DE),A", "INC DE",
 	"INC D", "DEC D", "LD D,nn", "RLA",
 	"JR nnnn", "ADD HL,DE", "LD A,(DE)", "DEC DE",
 	"INC E", "DEC E", "LD E,nn", "RRA",
@@ -377,10 +377,10 @@ const TABINSTR:[&'static str;256]  = [
 	"CALL NC,nnnn", "PUSH DE", "SUB nn", "RST 10",
 	"RET C", "EXX", "JP C,nnnn", "IN A,(nn)",
 	"CALL C,nnnn", "", "SBC A,nn", "RST 18",
-	"RET PE", "POP HL", "JP PE,nnnn", "EX (SP),HL",
-	"CALL PE,nnnn", "PUSH HL", "AND nn", "RST 20",
-	"RET PO", "JP (HL)", "JP PO,nnnn", "EX DE,HL",
-	"CALL PO,nnnn", "", "XOR nn", "RST 28",
+	"RET PO", "POP HL", "JP PO,nnnn", "EX (SP),HL", //PO and PE have been exchanged acoarding to Zack book and this page
+	"CALL PO,nnnn", "PUSH HL", "AND nn", "RST 20",
+	"RET PE", "JP (HL)", "JP PE,nnnn", "EX DE,HL",
+	"CALL PE,nnnn", "", "XOR nn", "RST 28",
 	"RET P", "POP AF", "JP P,nnnn", "DI",
 	"CALL P,nnnn", "PUSH AF", "OR nn", "RST 30",
 	"RET M", "LD SP,HL", "JP M,nnnn", "EI",
@@ -559,12 +559,11 @@ mod test {
                 continue;
             }
 
-            println!("{} : {}", code, repr);
+            println!("0x{:x} : {}", code, repr);
 
             // TODO add test for opcodes with operandes
-            let (expected, obtained) = if repr.contains("nnnn") {
-                let disass = disassemble(& merge(&[prefix, &[code], &[0x12, 0x34]]));
-                (repr.replace("nnnn", "0x3412"), disass)
+            let (expected, bytes) = if repr.contains("nnnn") {
+                (repr.replace("nnnn", "0x3412"), merge(&[prefix, &[code], &[0x12, 0x34]]))
 
             }
             else if repr.contains("nn") {
@@ -575,18 +574,18 @@ mod test {
 				else {
 					(repr, [0x12].to_vec())
 				};
-                let disass = disassemble(& merge(&[prefix, &[code], &bytes]));
-                (repr, disass)
+                (repr, merge(&[prefix, &[code], &bytes]))
 
             }
             else {
-                let disass = disassemble(& merge(&[prefix, &[code]]));
-                (repr.to_owned(), disass)
+                (repr.to_owned(), merge(&[prefix, &[code]]))
 			};
+
+			let disass = disassemble(&bytes);
 
 			// check if disassembling provides the right value
 			// alter strings in order to be able to compare them
-			let obtained = obtained.unwrap();
+			let obtained = disass.unwrap();
 			if !expected.contains("RST") {
 				assert_eq!(
 				expected.replace(" ", "")
@@ -603,11 +602,19 @@ mod test {
 
 
 			// check if it is possible to assemble it
-			use crate::assembler::assembler::visit_opcode;
+			use crate::assembler::assembler::assemble_opcode;
 			use crate::assembler::assembler::Env;
 			let mut env = Env::default();
 			if let Token::OpCode(ref mnemonic, ref arg1, ref arg2) = obtained.listing()[0] {
-				visit_opcode(*mnemonic, &arg1, &arg2, &mut env).unwrap();
+
+				// relative addresses are not properly managed
+				if ! (mnemonic.is_djnz() || mnemonic.is_jr()) {
+					let obtained_bytes = assemble_opcode(*mnemonic, &arg1, &arg2, &mut env).unwrap();
+					assert_eq!(
+						&bytes[..],
+						&obtained_bytes[..]
+					);
+				}
 			}
 
         }
