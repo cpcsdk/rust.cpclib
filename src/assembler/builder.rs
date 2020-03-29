@@ -119,7 +119,7 @@ pub fn out_c_a() -> Token {
 
 #[allow(missing_docs)]
 pub fn out_c_register8(reg: Register8) -> Token {
-    token_for_opcode_two_args(Mnemonic::Out, Register8::C.into(), reg.into())
+    token_for_opcode_two_args(Mnemonic::Out, DataAccess::PortC, reg.into())
 }
 
 #[allow(missing_docs)]

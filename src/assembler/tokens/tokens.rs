@@ -166,7 +166,7 @@ impl ListingElement for Token {
 
                     &Mnemonic::Out => {
                         match arg1 {
-                            Some(DataAccess::Register8(Register8::C)) => 4, // XXX Not sure for out (c), 0
+                            Some(DataAccess::PortC) => 4, // XXX Not sure for out (c), 0
                             Some(DataAccess::Expression(_)) => 3,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2),
                         }
