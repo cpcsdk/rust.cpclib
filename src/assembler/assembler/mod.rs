@@ -1098,7 +1098,7 @@ pub fn assemble_opcode(
         ),
         Mnemonic::Cp => env.assemble_cp(arg1.as_ref().unwrap()),
         Mnemonic::ExMemSp => assemble_ex_memsp(arg1.as_ref().unwrap()),
-        Mnemonic::Dec | Mnemonic::Inc => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap()),
+        Mnemonic::Dec | Mnemonic::Inc => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap(), env),
         Mnemonic::Djnz => assemble_djnz(arg1.as_ref().unwrap(), env),
         Mnemonic::In => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
         Mnemonic::Ld => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
@@ -1195,7 +1195,7 @@ fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, AssemblerError> {
     Ok(Bytes::from_slice(bytes))
 }
 
-fn assemble_inc_dec(mne: Mnemonic, arg1: &DataAccess) -> Result<Bytes, AssemblerError> {
+fn assemble_inc_dec(mne: Mnemonic, arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
     let is_inc = match mne {
@@ -1232,6 +1232,15 @@ fn assemble_inc_dec(mne: Mnemonic, arg1: &DataAccess) -> Result<Bytes, Assembler
         DataAccess::MemoryRegister16(Register16::Hl) => {
             bytes.push(if is_inc {0x34} else {0x35});
             
+        }
+
+        DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
+            let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
+
+            bytes.push(indexed_register16_to_code(*reg));
+            bytes.push(if is_inc {0x34} else {0x35});
+            bytes.push(val);
+
         }
         _ => {
             return Err(format!("Inc/dec not implemented for {:?}", arg1).into());
@@ -1615,6 +1624,13 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 bytes.push(code);
             }
 
+            DataAccess::IndexRegister8(ref src) => {
+                bytes.push(indexed_register16_to_code(src.complete()));
+                let src = indexregister8_to_code(*src);
+                let code = 0b0100_0000 + (dst << 3) + src;
+                bytes.push(code);
+            }
+
             DataAccess::Expression(ref exp) => {
                 let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
 
@@ -1729,6 +1745,34 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 bytes.push(val);
             },
 
+            DataAccess::Register8(ref src) => {
+                let code = register8_to_code(*src);
+
+                let code = if dst.is_high() {
+                    0b0110_0000 + code
+                }
+                else {
+                    0x68 + code
+
+                };
+                bytes.push(code);
+            },
+
+            DataAccess::IndexRegister8(ref src) => {
+                assert_eq!(
+                    dst.complete(),
+                    src.complete()
+                );
+
+                let byte = match (dst.is_low(), src.is_low())  {
+                    (false, false) => 0x64, 
+                    (false, true) => 0x65, 
+                    (true, false) => 0x6c, 
+                    (true, true) => 0x6d, 
+                };
+                bytes.push(byte)
+            }
+
             _ => unreachable!()
         }
         
@@ -1784,6 +1828,27 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
             _ => {}
         }
+    }
+    // Destination is memory form ix/iy + n
+    else if let DataAccess::IndexRegister16WithIndex(ref reg, ref exp) = arg1 {
+        add_byte(&mut bytes, indexed_register16_to_code(*reg));
+        let delta = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
+
+        match arg2 {
+            DataAccess::Expression(ref exp) => {
+                let value = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
+                add_byte(&mut bytes, 0x36);
+                add_byte(&mut bytes, delta);
+                add_byte(&mut bytes, value);
+            },
+
+            DataAccess::Register8(ref src) => {
+                add_byte(&mut bytes, 0x70 + register8_to_code(*src));
+                add_byte(&mut bytes, delta);
+            }
+            _ => unreachable!()
+        }
+
     }
     // Destination is memory
     else if let DataAccess::Memory(ref exp) = arg1 {
@@ -2072,6 +2137,8 @@ fn assemble_add_or_adc(
             }
         }
 
+        
+
         DataAccess::IndexRegister16(ref reg1) => {
             match arg2 {
                 DataAccess::Register16(ref reg2) => {
@@ -2313,11 +2380,12 @@ mod test {
 
     #[test]
     pub fn test_inc_dec() {
-        let res = assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::De)).unwrap();
+        let env = Env::default();
+        let res = assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::De), &env).unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0], 0x13);
 
-        let res = assemble_inc_dec(Mnemonic::Dec, &DataAccess::Register8(Register8::B)).unwrap();
+        let res = assemble_inc_dec(Mnemonic::Dec, &DataAccess::Register8(Register8::B), &env).unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0], 0x05);
     }
@@ -2531,7 +2599,7 @@ mod test {
         let bytes = env.memory(0, 2);
         assert_eq!(
             bytes[1],
-            assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::Hl)).unwrap()[0]
+            assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::Hl), & env).unwrap()[0]
         );
     }
 

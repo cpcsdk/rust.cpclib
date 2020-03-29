@@ -205,6 +205,18 @@ impl IndexRegister8 {
             IndexRegister8::Iyh | IndexRegister8::Iyl => IndexRegister16::Iy,
         }
     }
+
+    /// Return true if it is the high register for the complete one
+    pub fn is_high(self) -> bool {
+        match self {
+            IndexRegister8::Ixh | IndexRegister8::Iyh  => true,
+            _ => false,
+        }
+    }
+    /// Return true if it is the low register for the complete one
+    pub fn is_low(self) -> bool {
+        !self.is_high()
+    }
 }
 /*
 #[derive(Debug, PartialEq, Eq)]
