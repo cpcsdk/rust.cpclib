@@ -225,7 +225,7 @@ const TABINSTRDD:[&'static str;256]  = [
 	"", "", "", "",
 	"", "LD IX,nnnn", "LD (nnnn),IX", "INC IX",
 	"INC IXh", "DEC IXh", "LD IXh,nn", "",
-	"", "ADD IX,HL", "LD IX,(nnnn)", "DEC IX",
+	"", "", "LD IX,(nnnn)", "DEC IX", // ATTENTION ADD IX, HL does not exist and has been removed
 	"INC IXl", "DEC IXl", "LD IXl,nn", "",
 	"", "", "", "",
 	"INC (IX+nn)", "DEC (IX+nn)", "LD (IX+nn),nn", "",
@@ -289,7 +289,7 @@ const TABINSTRFD:[&'static str;256]  = [
 	"", "", "", "", "", "", "", "",
 	"", "ADD IY,DE", "", "", "", "", "", "",
 	"", "LD IY,nnnn", "LD (nnnn),IY", "INC IY", "INC IYh", "DEC IYh", "LD IYh,nn", "",
-	"", "ADD IY,HL", "LD IY,(nnnn)", "DEC IY", "INC IYl", "DEC IYl", "LD IYl,nn", "",
+	"", "", "LD IY,(nnnn)", "DEC IY", "INC IYl", "DEC IYl", "LD IYl,nn", "", // Attention ADD IY, HL has been removed
 	"", "", "", "", "INC (IY+nn)", "DEC (IY+nn)", "LD (IY+nn),nn", "",
 	"", "ADD IY,SP", "", "", "", "", "", "",
 	"", "", "", "", "LD B,IYh", "LD B,IYl", "LD B,(IY+nn)", "",
