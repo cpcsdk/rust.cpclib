@@ -15,6 +15,13 @@ pub trait ListingElement {
         &self,
         table: &mut SymbolsTableCaseDependent,
     ) -> Result<usize, String>;
+
+    /// Check if the token is valid. The token is valid if it is possible to assemble it...
+    fn is_valid(&self) -> bool {
+        // we get the bytes indirectly throug there amount
+        self.number_of_bytes().is_ok()
+    }
+    
 }
 
 /// A listing is simply a list of things similar to token
