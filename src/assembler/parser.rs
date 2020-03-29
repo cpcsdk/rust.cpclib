@@ -763,7 +763,8 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
             alt((
                 parse_register_hl,
                 parse_indexregister16,
-                parse_address, parse_expr
+                parse_address, 
+                parse_expr
             ))(input)
         }
         else if dst.is_address_in_register16() {
@@ -782,11 +783,11 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
                     parse_indexregister_with_index,
                     parse_reg_address,
                     parse_address,
-                    parse_expr,
                     parse_register8,
                     parse_indexregister8,
                     parse_register_i,
-                    parse_register_r
+                    parse_register_r,
+                    parse_expr
                 ))(input)
             }
             else {
@@ -794,9 +795,9 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
                     parse_indexregister_with_index,
                     parse_hl_address,
                     parse_address,
-                    parse_expr,
                     parse_register8,
-                    parse_indexregister8
+                    parse_indexregister8,
+                    parse_expr
                 ))(input)
             }
         } 
@@ -805,10 +806,10 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
                 parse_indexregister_with_index,
                 parse_hl_address,
                 parse_address,
-                parse_expr,
                 parse_register8,
                 verify( alt((parse_register_ixh, parse_register_ixl)), |_| dst.is_register_ixl() || dst.is_register_ixh()),
                 verify( alt((parse_register_iyh, parse_register_iyl)), |_| dst.is_register_iyl() || dst.is_register_iyh()),
+                parse_expr
             ))(input)
         } else if dst.is_memory() {
             alt((parse_register16, 
@@ -820,8 +821,8 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
             parse_register8(input)
         } else if dst.is_indexregister_with_index(){
             alt((
-                parse_expr,
                 parse_register8,
+                parse_expr
             ))(input)
         } else if dst.is_register_i()  || dst.is_register_r(){
             parse_register_a(input)

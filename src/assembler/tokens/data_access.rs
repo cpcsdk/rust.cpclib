@@ -123,33 +123,7 @@ impl DataAccess {
         }
     }
 
-    pub fn is_register_a(&self) -> bool {
-        match self {
-            DataAccess::Register8(Register8::A) => true,
-            _ => false,
-        }
-    }
 
-    pub fn is_register_sp(&self) -> bool {
-        match self {
-            DataAccess::Register16(Register16::Sp) => true,
-            _ => false
-        }
-    }
-
-    pub fn is_register_ix(&self) -> bool {
-        match self {
-            DataAccess::IndexRegister16(IndexRegister16::Ix) => true,
-            _ => false
-        }
-    }
-
-    pub fn is_register_iy(&self) -> bool {
-        match self {
-            DataAccess::IndexRegister16(IndexRegister16::Iy) => true,
-            _ => false
-        }
-    }
 
     pub fn is_register_i(&self) -> bool {
         match self {
@@ -255,6 +229,57 @@ macro_rules! is_any_indexregister8 {
     )*}
 }
 is_any_indexregister8!(Ixh Ixl Iyh Iyl);
+
+macro_rules! is_any_register8 {
+    ($($reg:ident)*) => {$(
+        paste::item_with_macros! {
+            impl DataAccess {
+                /// Check if this DataAccess corresonds to $reg
+                pub fn [<is_register_ $reg:lower>] (&self) -> bool {
+                    match self {
+                        DataAccess::Register8(Register8::$reg) => true,
+                        _ => false,
+                    }
+                }
+            }
+        }
+    )*}
+}
+is_any_register8!(A B C D E H L);
+
+macro_rules! is_any_register16 {
+    ($($reg:ident)*) => {$(
+        paste::item_with_macros! {
+            impl DataAccess {
+                /// Check if this DataAccess corresonds to $reg
+                pub fn [<is_register_ $reg:lower>] (&self) -> bool {
+                    match self {
+                        DataAccess::Register16(Register16::$reg) => true,
+                        _ => false,
+                    }
+                }
+            }
+        }
+    )*}
+}
+is_any_register16!(Af Bc De Hl Sp);
+
+macro_rules! is_any_indexregister16 {
+    ($($reg:ident)*) => {$(
+        paste::item_with_macros! {
+            impl DataAccess {
+                /// Check if this DataAccess corresonds to $reg
+                pub fn [<is_register_ $reg:lower>] (&self) -> bool {
+                    match self {
+                        DataAccess::IndexRegister16(IndexRegister16::$reg) => true,
+                        _ => false,
+                    }
+                }
+            }
+        }
+    )*}
+}
+is_any_indexregister16!(Ix Iy);
 
 #[cfg(test)]
 mod test {
