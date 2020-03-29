@@ -25,6 +25,7 @@ pub enum Mnemonic {
     Bit,
     Call,
     Cp,
+    Ccf,
     Dec,
     Di,
     Djnz,
@@ -61,9 +62,12 @@ pub enum Mnemonic {
     Reti,
     Retn,
     Rl,
+    Rla,
+    Rlca,
     Rlc,
     Rr,
     Rrc,
+    Rrca,
     Sbc,
     Sub,
     Scf,
@@ -73,6 +77,17 @@ pub enum Mnemonic {
     Sra,
     Srl,
     Xor,
+    Cpd,
+Cpdr,
+Cpi,
+Cpir,
+Cpl,
+Daa,
+Neg,
+Otdr,
+Otir,
+Rld,
+Rrd
 }
 
 impl fmt::Display for Mnemonic {
@@ -121,8 +136,11 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Retn => write!(f, "RETN"),
             Mnemonic::Rl => write!(f, "RL"),
             Mnemonic::Rlc => write!(f, "RLC"),
+            Mnemonic::Rla => write!(f, "RLA"),
+            Mnemonic::Rlca => write!(f, "RLCA"),
             Mnemonic::Rr => write!(f, "RR"),
             Mnemonic::Rrc => write!(f, "RRC"),
+            Mnemonic::Rrca => write!(f, "RRCA"),
             Mnemonic::Sbc => write!(f, "SBC"),
             Mnemonic::Set => write!(f, "SET"),
             Mnemonic::Scf => write!(f, "SCF"),
@@ -132,6 +150,18 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Srl => write!(f, "SRL"),
             Mnemonic::Sub => write!(f, "SUB"),
             Mnemonic::Xor => write!(f, "XOR"),
+            Mnemonic::Cpd => write!(f, "CPD"),
+            Mnemonic::Cpdr => write!(f, "CPDR"),
+            Mnemonic::Cpi => write!(f, "CPI"),
+            Mnemonic::Cpir => write!(f, "CPIR"),
+            Mnemonic::Cpl => write!(f, "CPL"),
+            Mnemonic::Daa => write!(f, "DAA"),
+            Mnemonic::Neg => write!(f, "NEG"),
+            Mnemonic::Otdr => write!(f, "OTDR"),
+            Mnemonic::Otir => write!(f, "OTIR"),
+            Mnemonic::Rld => write!(f, "RLD"),
+            Mnemonic::Rrd => write!(f, "RRD"),
+            Mnemonic::Ccf => write!(f, "CCF"),
         }
     }
 }
@@ -158,6 +188,7 @@ is_mnemonic!(
     And
     Bit
     Call
+    Ccf
     Cp
     Dec
     Di
@@ -196,8 +227,11 @@ is_mnemonic!(
     Retn
     Rl
     Rlc
+    Rla
+    Rlca
     Rr
     Rrc
+    Rrca
     Sbc
     Sub
     Scf
@@ -206,7 +240,19 @@ is_mnemonic!(
     Sll
     Sra
     Srl
-    Xor);
+    Xor
+Cpd
+Cpdr
+Cpi
+Cpir
+Cpl
+Daa
+Neg
+Otdr
+Otir
+Rld
+Rrd
+);
 
 
 /// Stable ticker serves to count nops with the assembler !

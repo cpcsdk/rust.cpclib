@@ -1562,8 +1562,17 @@ pub fn parse_defs(input: &str) -> IResult<&str, Token> {
 
 /// Parse any opcode having no argument
 pub fn parse_opcode_no_arg(input: &str) -> IResult<&str, Token> {
+alt((
+    parse_opcode_no_arg1,
+    parse_opcode_no_arg2,
+    parse_opcode_no_arg3,
+))(input)
+}
+
+fn parse_opcode_no_arg1(input: &str) -> IResult<&str, Token> {
     let (input, mnemonic) = alt((
         map(parse_instr("DI"), { |_| Mnemonic::Di }),
+        map(parse_instr("CCF"), { |_| Mnemonic::Ccf }),
         map(parse_instr("EI"), { |_| Mnemonic::Ei }),
         map(parse_instr("EXX"), { |_| Mnemonic::Exx }),
         map(parse_instr("HALT"), { |_| Mnemonic::Halt }),
@@ -1575,7 +1584,17 @@ pub fn parse_opcode_no_arg(input: &str) -> IResult<&str, Token> {
         map(parse_instr("NOP"), { |_| Mnemonic::Nop }),
         map(parse_instr("OUTD"), { |_| Mnemonic::Outd }),
         map(parse_instr("OUTI"), { |_| Mnemonic::Outi }),
-        map(parse_instr("RRA"), { |_| Mnemonic::Rra }),
+
+    ))(input)?;
+
+    Ok((input, Token::OpCode(mnemonic, None, None)))
+}
+
+fn parse_opcode_no_arg2(input: &str) -> IResult<&str, Token> {
+    let (input, mnemonic) = alt((
+        value(Mnemonic::Rla, parse_instr("RLA")),
+        value(Mnemonic::Rra, parse_instr("RRA")),
+        value(Mnemonic::Rlca, parse_instr("RLCA")),
         value(Mnemonic::Scf, parse_instr("SCF")),
         value(Mnemonic::Ind, parse_instr("IND")),
         value(Mnemonic::Indr, parse_instr("INDR")),
@@ -1583,6 +1602,25 @@ pub fn parse_opcode_no_arg(input: &str) -> IResult<&str, Token> {
         value(Mnemonic::Inir, parse_instr("INIR")),
         value(Mnemonic::Reti, parse_instr("RETI")),
         value(Mnemonic::Retn, parse_instr("RETN")),
+        value(Mnemonic::Rrca, parse_instr("RRCA")),
+        value(Mnemonic::Cpd, parse_instr("CPD")),
+        value(Mnemonic::Cpdr, parse_instr("CPDR")),
+        value(Mnemonic::Cpi, parse_instr("CPI")),
+        value(Mnemonic::Cpir , parse_instr("CPIR")),
+        value(Mnemonic::Cpl, parse_instr("CPL"))
+    ))(input)?;
+
+    Ok((input, Token::OpCode(mnemonic, None, None)))
+}
+
+fn parse_opcode_no_arg3(input: &str) -> IResult<&str, Token> {
+    let (input, mnemonic) = alt((
+        value(Mnemonic::Daa, parse_instr("DAA")),
+        value(Mnemonic::Neg, parse_instr("NEG")),
+        value(Mnemonic::Otdr , parse_instr("OTDR")),
+        value(Mnemonic::Otir, parse_instr("OTIR")),
+        value(Mnemonic::Rld , parse_instr("RLD")),
+        value(Mnemonic::Rrd , parse_instr("RRD")),
     ))(input)?;
 
     Ok((input, Token::OpCode(mnemonic, None, None)))
