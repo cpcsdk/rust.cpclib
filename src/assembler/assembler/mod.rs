@@ -1186,6 +1186,8 @@ fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, AssemblerError> {
         Mnemonic::Outd => &[0xED, 0xAB],
         Mnemonic::Outi => &[0xED, 0xA3],
         Mnemonic::Rra => &[0x1f],
+        Mnemonic::Reti => &[0xED, 0x4d],
+        Mnemonic::Retn => &[0xed, 0x45],
         Mnemonic::Scf => &[0x37],
         _ => {
             return Err(format!("{} not treated", mnemonic).into());
@@ -1360,7 +1362,7 @@ fn assemble_call_jr_or_jp(
         assert!(is_jp);
         add_byte(&mut bytes, 0xe9);
     }
-    else if let DataAccess::IndexRegister16(ref reg) = arg2 {
+    else if let DataAccess::MemoryIndexRegister16(ref reg) = arg2 {
         assert!(is_jp);
         add_byte(&mut bytes, indexed_register16_to_code(*reg));
         add_byte(&mut bytes, 0xe9);
@@ -1397,6 +1399,10 @@ impl Env {
                 add_byte(&mut bytes, 0b1011_1000 + register8_to_code(*reg));
             }
 
+            DataAccess::IndexRegister8(ref reg) => {
+                add_byte(&mut bytes, indexed_register16_to_code(reg.complete()));
+                add_byte(&mut bytes, 0b1011_1000 + indexregister8_to_code(*reg));
+            }
             DataAccess::Expression(ref exp) => {
                 add_byte(&mut bytes, 0xfe);
                 add_byte(
@@ -1412,7 +1418,7 @@ impl Env {
             DataAccess::IndexRegister16WithIndex(ref reg, ref idx) => {
                 add_byte(&mut bytes, indexed_register16_to_code(*reg));
                 add_byte(&mut bytes, 0xbe);
-                add_word(
+                add_byte(
                     &mut bytes,
                     self.resolve_expr_may_fail_in_first_pass(idx)? as _,
                 );
@@ -1472,8 +1478,9 @@ impl Env {
                 bytes.push(0b10010000 + (register8_to_code(*reg)));
             }
 
-            DataAccess::IndexRegister8(ref _reg) => {
-                unimplemented!()
+            DataAccess::IndexRegister8(ref reg) => {
+                bytes.push(indexed_register16_to_code(reg.complete()));
+                bytes.push(0b10010000 + (indexregister8_to_code(*reg)));
             }
 
             DataAccess::MemoryRegister16(Register16::Hl) => {
@@ -1484,6 +1491,7 @@ impl Env {
                 let val = (self.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
 
                 bytes.push(indexed_register16_to_code(*reg));
+                bytes.push(0x96);
                 bytes.push(val);
             }
             _ => {
@@ -1504,6 +1512,12 @@ impl Env {
                     bytes.push(0b10011000 + register8_to_code(*reg));
                 },
 
+                DataAccess::IndexRegister8(ref reg) => {
+                    bytes.push(indexed_register16_to_code(reg.complete()));
+                    bytes.push(0b10011000 + indexregister8_to_code(*reg));
+
+                }
+
                 DataAccess::Expression(ref exp) => {
                     let val = self.resolve_expr_may_fail_in_first_pass(exp)? as u8;
                     bytes.push(0xde);
@@ -1522,6 +1536,18 @@ impl Env {
                 },
 
                 _ => unreachable!()
+            }
+        }
+        else {
+            assert!(arg1.is_register_hl());
+
+            match arg2 {
+                DataAccess::Register16(ref reg) => {
+                    bytes.push(0xed);
+                    bytes.push(0b0100_0010 | register16_to_code_with_sp(*reg) << 4);
+                },
+                _ => unreachable!()
+
             }
         }
 
@@ -1665,7 +1691,19 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 let val = env.resolve_expr_may_fail_in_first_pass(expr)?;
                 add_byte(&mut bytes, 0x3a);
                 add_word(&mut bytes, val as _);
-            }
+            },
+
+            DataAccess::SpecialRegisterI => {
+                assert!(arg1.is_register_a());
+                bytes.push(0xed);
+                bytes.push(0x57);
+            },
+
+            DataAccess::SpecialRegisterR => {
+                assert!(arg1.is_register_a());
+                bytes.push(0xed);
+                bytes.push(0x5f);
+            },
 
 
 
@@ -1871,7 +1909,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             }
             DataAccess::Register16(ref reg) => {
                 bytes.push(0xED);
-                bytes.push(0b0100_0011 | (register16_to_code_with_sp(*reg)));
+                bytes.push(0b0100_0011 | (register16_to_code_with_sp(*reg) << 4));
                 add_word(&mut bytes, address as _);
             }
             DataAccess::Register8(Register8::A) => {
@@ -1880,6 +1918,26 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             }
 
             _ => {}
+        }
+    }
+
+    else if let DataAccess::SpecialRegisterI = arg1 {
+        if let DataAccess::Register8(Register8::A) = arg2 {
+            bytes.push(0xed);
+            bytes.push(0x47)
+        }
+        else {
+            unreachable!();
+        }
+    }
+
+    else if let DataAccess::SpecialRegisterR = arg1 {
+        if let DataAccess::Register8(Register8::A) = arg2 {
+            bytes.push(0xed);
+            bytes.push(0x4f)
+        }
+        else {
+            unreachable!();
         }
     }
 
@@ -1949,6 +2007,11 @@ fn assemble_out(
             if let DataAccess::Register8(ref reg) = arg2 {
                 bytes.push(0xED);
                 bytes.push(0b0100_0001 | (register8_to_code(*reg) << 3))
+            }
+
+            if let DataAccess::Expression(Expr::Value(0)) = arg2 {
+                bytes.push(0xED);
+                bytes.push(0x71);
             }
         }
 
@@ -2034,6 +2097,17 @@ fn assemble_logical_operator(
             bytes.push(base + register8_to_code(*reg));
         }
 
+        DataAccess::IndexRegister8(ref reg) => {
+            bytes.push(indexed_register16_to_code(reg.complete()));
+            let base = match mnemonic {
+                Mnemonic::And => 0b1010_0000,
+                Mnemonic::Or => 0b1011_0000,
+                Mnemonic::Xor => 0b1010_1000,
+                _ => unreachable!(),
+            };
+            bytes.push(base + indexregister8_to_code(*reg));
+        }
+
         DataAccess::Expression(ref exp) => {
             let base = match mnemonic {
                 Mnemonic::And => 0xE6,
@@ -2102,7 +2176,12 @@ fn assemble_add_or_adc(
 
                     // TODO check if the code is ok
                     bytes.push(indexed_register16_to_code(*reg));
-                    bytes.push(0b1000_0110);
+                    if is_add {
+                        bytes.push(0b1000_0110); 
+                    }
+                    else {
+                        bytes.push(0x8e);
+                    }
                     add_index(&mut bytes, val)?;
                 }
 
@@ -2111,7 +2190,7 @@ fn assemble_add_or_adc(
                     if is_add {
                         bytes.push(0b1100_0110);
                     } else {
-                        bytes.push(0b1100_1110);
+                        bytes.push(0xce);
                     }
                     bytes.push(val);
                 }
@@ -2119,6 +2198,12 @@ fn assemble_add_or_adc(
                 DataAccess::Register8(ref reg) => {
                     let base = if is_add { 0b1000_0000 } else { 0b1000_1000 };
                     bytes.push(base | register8_to_code(*reg));
+                }
+
+                DataAccess::IndexRegister8(ref reg) => {
+                    bytes.push(indexed_register16_to_code(reg.complete()));
+                    let base = if is_add { 0b1000_0000 } else { 0b1000_1000 };
+                    bytes.push(base | indexregister8_to_code(*reg));
                 }
                 _ => {}
             }
@@ -2158,7 +2243,7 @@ fn assemble_add_or_adc(
                 DataAccess::IndexRegister16(ref reg2) => {
                     if reg1 != reg2 {
                         return Err(
-                            String::from("Unable to add differetn indexed registers").into()
+                            String::from("Unable to add different indexed registers").into()
                         );
                     }
 
