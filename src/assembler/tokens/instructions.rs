@@ -41,6 +41,7 @@ pub enum Mnemonic {
     ExMemSp,
     Exx,
     Halt,
+    Im,
     In,
     Inc,
     Ind,
@@ -116,6 +117,7 @@ impl fmt::Display for Mnemonic {
             Mnemonic::ExMemSp => write!(f, "EX (SP), "),
             Mnemonic::Exx => write!(f, "EXX"),
             Mnemonic::Halt => write!(f, "HALT"),
+            Mnemonic::Im => write!(f, "IM"),
             Mnemonic::In => write!(f, "IN"),
             Mnemonic::Inc => write!(f, "INC"),
             Mnemonic::Ind => write!(f, "IND"),
@@ -207,6 +209,7 @@ is_mnemonic!(
     ExMemSp
     Exx
     Halt
+    Im
     In
     Inc
     Ind
