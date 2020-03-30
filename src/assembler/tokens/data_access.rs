@@ -210,6 +210,13 @@ impl DataAccess {
             _ => None,
         }
     }
+
+    pub fn get_expression(&self) -> Option<&Expr> {
+        match self {
+            DataAccess::Expression(ref exp) => Some(&exp),
+            _ => None
+        }
+    }
 }
 
 

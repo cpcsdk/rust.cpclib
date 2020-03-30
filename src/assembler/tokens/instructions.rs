@@ -24,8 +24,14 @@ pub enum Mnemonic {
     And,
     Bit,
     Call,
-    Cp,
     Ccf,
+    Cp,
+    Cpd,
+    Cpdr,
+    Cpi,
+    Cpir,
+    Cpl,
+    Daa,
     Dec,
     Di,
     Djnz,
@@ -37,57 +43,52 @@ pub enum Mnemonic {
     Halt,
     In,
     Inc,
-    Jp,
-    Jr,
-    Ld,
-    Ldd,
-    Ldi,
-    Lddr,
-    Ldir,
-    Nop,
-    Nops2, // Fake instruction that generate a breakpoint on winape
     Ind,
     Indr,
     Ini,
     Inir,
+    Jp,
+    Jr,
+    Ld,
+    Ldd,
+    Lddr,
+    Ldi,
+    Ldir,
+    Neg,
+    Nop,
+    Nops2, // Fake instruction that generate a breakpoint on winape
     Or,
+    Otdr,
+    Otir,
     Out,
-    Outi,
     Outd,
-    Push,
+    Outi,
     Pop,
-    Rra,
+    Push,
     Res,
     Ret,
     Reti,
     Retn,
     Rl,
     Rla,
-    Rlca,
     Rlc,
+    Rlca,
+    Rld,
     Rr,
+    Rra,
     Rrc,
     Rrca,
+    Rrd,
+    Rst,
     Sbc,
-    Sub,
     Scf,
     Set,
     Sla,
     Sll,
     Sra,
     Srl,
+    Sub,
     Xor,
-    Cpd,
-Cpdr,
-Cpi,
-Cpir,
-Cpl,
-Daa,
-Neg,
-Otdr,
-Otir,
-Rld,
-Rrd
 }
 
 impl fmt::Display for Mnemonic {
@@ -98,15 +99,22 @@ impl fmt::Display for Mnemonic {
             Mnemonic::And => write!(f, "AND"),
             Mnemonic::Bit => write!(f, "BIT"),
             Mnemonic::Call => write!(f, "CALL"),
+            Mnemonic::Ccf => write!(f, "CCF"),
             Mnemonic::Cp => write!(f, "CP"),
+            Mnemonic::Cpd => write!(f, "CPD"),
+            Mnemonic::Cpdr => write!(f, "CPDR"),
+            Mnemonic::Cpi => write!(f, "CPI"),
+            Mnemonic::Cpir => write!(f, "CPIR"),
+            Mnemonic::Cpl => write!(f, "CPL"),
+            Mnemonic::Daa => write!(f, "DAA"),
             Mnemonic::Dec => write!(f, "DEC"),
             Mnemonic::Di => write!(f, "DI"),
             Mnemonic::Djnz => write!(f, "DJNZ"),
             Mnemonic::Ei => write!(f, "EI"),
-            Mnemonic::Exx => write!(f, "EXX"),
             Mnemonic::ExAf => write!(f, "EX AF, AF'"),
             Mnemonic::ExHlDe => write!(f, "EX DE, HL"),
             Mnemonic::ExMemSp => write!(f, "EX (SP), "),
+            Mnemonic::Exx => write!(f, "EXX"),
             Mnemonic::Halt => write!(f, "HALT"),
             Mnemonic::In => write!(f, "IN"),
             Mnemonic::Inc => write!(f, "INC"),
@@ -117,51 +125,45 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Jp => write!(f, "JP"),
             Mnemonic::Jr => write!(f, "JR"),
             Mnemonic::Ld => write!(f, "LD"),
-            Mnemonic::Ldi => write!(f, "LDI"),
             Mnemonic::Ldd => write!(f, "LDD"),
-            Mnemonic::Ldir => write!(f, "LDIR"),
             Mnemonic::Lddr => write!(f, "LDDR"),
+            Mnemonic::Ldi => write!(f, "LDI"),
+            Mnemonic::Ldir => write!(f, "LDIR"),
+            Mnemonic::Neg => write!(f, "NEG"),
             Mnemonic::Nop => write!(f, "NOP"),
             Mnemonic::Nops2 => write!(f, "DB 0xed, 0xff ; Winape Breakpoint"),
-            Mnemonic::Out => write!(f, "OUT"),
-            Mnemonic::Outi => write!(f, "OUTI"),
-            Mnemonic::Outd => write!(f, "OUTD"),
             Mnemonic::Or => write!(f, "OR"),
-            Mnemonic::Push => write!(f, "PUSH"),
+            Mnemonic::Otdr => write!(f, "OTDR"),
+            Mnemonic::Otir => write!(f, "OTIR"),
+            Mnemonic::Out => write!(f, "OUT"),
+            Mnemonic::Outd => write!(f, "OUTD"),
+            Mnemonic::Outi => write!(f, "OUTI"),
             Mnemonic::Pop => write!(f, "POP"),
-            Mnemonic::Rra => write!(f, "RRA"),
+            Mnemonic::Push => write!(f, "PUSH"),
             Mnemonic::Res => write!(f, "RES"),
             Mnemonic::Ret => write!(f, "RET"),
             Mnemonic::Reti => write!(f, "RETI"),
             Mnemonic::Retn => write!(f, "RETN"),
             Mnemonic::Rl => write!(f, "RL"),
-            Mnemonic::Rlc => write!(f, "RLC"),
             Mnemonic::Rla => write!(f, "RLA"),
+            Mnemonic::Rlc => write!(f, "RLC"),
             Mnemonic::Rlca => write!(f, "RLCA"),
+            Mnemonic::Rld => write!(f, "RLD"),
             Mnemonic::Rr => write!(f, "RR"),
+            Mnemonic::Rra => write!(f, "RRA"),
             Mnemonic::Rrc => write!(f, "RRC"),
             Mnemonic::Rrca => write!(f, "RRCA"),
+            Mnemonic::Rrd => write!(f, "RRD"),
+            Mnemonic::Rst => write!(f,"RST"),
             Mnemonic::Sbc => write!(f, "SBC"),
-            Mnemonic::Set => write!(f, "SET"),
             Mnemonic::Scf => write!(f, "SCF"),
+            Mnemonic::Set => write!(f, "SET"),
             Mnemonic::Sla => write!(f, "SLA"),
             Mnemonic::Sll => write!(f, "SLL"),
             Mnemonic::Sra => write!(f, "SRA"),
             Mnemonic::Srl => write!(f, "SRL"),
             Mnemonic::Sub => write!(f, "SUB"),
             Mnemonic::Xor => write!(f, "XOR"),
-            Mnemonic::Cpd => write!(f, "CPD"),
-            Mnemonic::Cpdr => write!(f, "CPDR"),
-            Mnemonic::Cpi => write!(f, "CPI"),
-            Mnemonic::Cpir => write!(f, "CPIR"),
-            Mnemonic::Cpl => write!(f, "CPL"),
-            Mnemonic::Daa => write!(f, "DAA"),
-            Mnemonic::Neg => write!(f, "NEG"),
-            Mnemonic::Otdr => write!(f, "OTDR"),
-            Mnemonic::Otir => write!(f, "OTIR"),
-            Mnemonic::Rld => write!(f, "RLD"),
-            Mnemonic::Rrd => write!(f, "RRD"),
-            Mnemonic::Ccf => write!(f, "CCF"),
         }
     }
 }
@@ -190,6 +192,12 @@ is_mnemonic!(
     Call
     Ccf
     Cp
+    Cpd
+    Cpdr
+    Cpi
+    Cpir
+    Cpl
+    Daa
     Dec
     Di
     Djnz
@@ -201,57 +209,52 @@ is_mnemonic!(
     Halt
     In
     Inc
-    Jp
-    Jr
-    Ld
-    Ldd
-    Ldi
-    Lddr
-    Ldir
-    Nop
-    Nops2
     Ind
     Indr
     Ini
     Inir
+    Jp
+    Jr
+    Ld
+    Ldd
+    Lddr
+    Ldi
+    Ldir
+    Neg
+    Nop
+    Nops2
     Or
+    Otdr
+    Otir
     Out
-    Outi
     Outd
-    Push
+    Outi
     Pop
-    Rra
+    Push
     Res
     Ret
     Reti
     Retn
     Rl
-    Rlc
     Rla
+    Rlc
     Rlca
+    Rld
     Rr
+    Rra
     Rrc
     Rrca
+    Rrd
+    Rst
     Sbc
-    Sub
     Scf
     Set
     Sla
     Sll
     Sra
     Srl
+    Sub
     Xor
-Cpd
-Cpdr
-Cpi
-Cpir
-Cpl
-Daa
-Neg
-Otdr
-Otir
-Rld
-Rrd
 );
 
 

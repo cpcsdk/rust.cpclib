@@ -517,6 +517,7 @@ pub fn parse_token(input: &str) -> IResult<&str, Token> {
         parse_sub,
         parse_sbc,
         parse_ret,
+        parse_rst
     ))(input)
 }
 
@@ -1214,6 +1215,18 @@ pub fn parse_in(input: &str) -> IResult<&str, Token> {
     Ok((
         input,
         Token::OpCode(Mnemonic::In,  Some(destination), Some(port))
+    ))
+}
+
+/// Parse the rst instruction
+pub fn parse_rst(input: &str) -> IResult<&str, Token> {
+
+    let (input, _) = parse_instr("RST")(input)?;
+    let (input, val) = parse_expr(input)?;
+
+    Ok((
+        input,
+        Token::OpCode(Mnemonic::Rst, Some(val), None)
     ))
 }
 
