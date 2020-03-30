@@ -1,15 +1,12 @@
-[package]
-name = "cpclib"
-version = "0.3.1-alpha"
-authors = ["Romain Giot <giot.romain@gmail.com>"]
-edition = "2018"
-license = "MIT"
-description = "Set of tools and libraries to ease demomaking on the Amstrad CPC platform. WIP"
+[workspace]
 
-repository = "https://github.com/cpcsdk/rust.cpclib"
-readme = "Readme.mkd"
-keywords = ["amstrad", "demo", "z80", "dsk" ,"sna"]
-categories = ["command-line-utilities", "development-tools", "emulators"]
+members = [
+    "cpclib"
+]
+
+[patch.crates-io]
+cpclib = {path = "./cpclib"}
+
 
 [profile.dev]
 opt-level = 0
@@ -17,119 +14,3 @@ opt-level = 0
 [profile.release]
 opt-level = 3
 
-
-[dependencies]
-arrayref= "0.3.5"
-anyhow = "1.0"
-bitsets = "0.1.1"
-bitfield = "0.13.2"
-bitflags = "1.2.1"
-cfg-if = "0.1.10"
-#colored = "1.7.0"
-delegate = "0.3.0"
-either = "1.5.3"
-failure = "0.1.6"
-getset = "0.0.9"
-gif = "0.10.0"
-gif-dispose = "2.2.0"
-itertools= "0.8.2"
-image = "0.22.3"
-lazy_static= "1.4.0"
-matches = "0.1.8"
-memchr = "2.2.1"
-num= "0.2.0"
-serde = { version = "1.0.103", features = ["derive"] }
-smallvec = "1.0.0"
-strsim = "0.9.2"
-tempfile= "3.1.0"
-dbg = "1.0.4"
-num_enum = "0.4.2"
-custom_error = "1.7.1"
-paste = "0.1.9"
-
-built = { version = "0.3.2", optional = true }
-semver = { version = "0.9.0", optional = true }
-
-path-absolutize = { version = "1.1.7", optional = true }
-curl = { version = "0.4.25", optional = true }
-reqwest = { version = "0.9.22", optional = true }
-
-clap = { version = "2.33.0", optional = true }
-time = { version = "0.1.42", optional = true }
-exitcode = { version = "1.1.2", optional = true }
-
-
-
-rustyline = { version = "6.0.0", optional = true }
-rustyline-derive = {version="0.3.0", optional= true}
-subprocess = {version="0.2.4", optional=true}
-
-term_grid = {version="0.1.7", optional= true}
-termize = {version="0.1.1", optional= true}
-
-notify = { version = "5.0.0-pre.2", optional = true }
-crossbeam-channel = { version = "0.4.0", optional = true }
-hotwatch = { version = "0.4.3", optional = true }
-
-log = { version = "0.4.8", optional = true }
-simplelog = { version = "0.7.4", optional = true }
-nom = "5.0.1"
-
-[dev-dependencies] 
-pretty_assertions= "0.6.1"
-
-[build-dependencies]
-built = "0.3.2"
-
-
-[features]
-xferlib = [	"curl", "reqwest", "path-absolutize"]
-xfer = ["clap", "rustyline", "rustyline-derive", 'notify', 'crossbeam-channel', 'term_grid', 'termize', 'subprocess']
-snapshot = ["clap", "built", "time", "semver"]
-imgconverter = ["clap", 'notify', "exitcode"]
-dskmanager = ["clap"]
-catalog = ["clap", "log", "simplelog"]
-hideur = ["clap"]
-basic = ["clap"]
-asm = ["clap",  "semver", "time"]
-
-[[bin]]
-name = "snapshot"
-path = "src/bin/snapshot.rs"
-required-features = ["built","snapshot"]
-
-[[bin]]
-name = "xfer"
-path = "src/bin/xfer/main.rs"
-required-features = ["built","xfer"]
-
-[[bin]]
-name = "imgconverter"
-path = "src/bin/imgconverter.rs"
-#required-features = ["xferlib", "imgconverter"]
-required-features = ["built","imgconverter"]
-
-[[bin]]
-name = "dskmanager"
-path = "src/bin/dsk_manager.rs"
-required-features = ["built","dskmanager"]
-
-[[bin]]
-name = "hideur"
-path = "src/bin/hideur.rs"
-required-features = ["built","hideur"]
-
-[[bin]]
-name = "locomotive"
-path = "src/bin/locomotive.rs"
-required-features = ["built","basic"]
-
-[[bin]]
-name = "basm"
-path = "src/bin/basm.rs"
-required-features = ["built","asm"]
-
-[[bin]]
-name = "catalog"
-path = "src/bin/catalog.rs"
-required-features = ["built","catalog"]
