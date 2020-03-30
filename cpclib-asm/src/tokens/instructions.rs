@@ -1,0 +1,755 @@
+use std::convert::TryFrom;
+use std::fmt;
+
+use crate::assembler::{
+    assemble_align, assemble_db_or_dw, assemble_defs, assemble_opcode, Bytes,
+    SymbolsTableCaseDependent,
+};
+use crate::parser::*;
+use crate::tokens::data_access::*;
+use crate::tokens::expression::*;
+use crate::tokens::Listing;
+use crate::AssemblerError;
+
+use cpclib_sna::SnapshotVersion;
+
+use either::*;
+
+use std::fs::File;
+use std::io::Read;
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[allow(missing_docs)]
+pub enum Mnemonic {
+    Adc,
+    Add,
+    And,
+    Bit,
+    Call,
+    Ccf,
+    Cp,
+    Cpd,
+    Cpdr,
+    Cpi,
+    Cpir,
+    Cpl,
+    Daa,
+    Dec,
+    Di,
+    Djnz,
+    Ei,
+    ExAf,
+    ExHlDe,
+    ExMemSp,
+    Exx,
+    Halt,
+    Im,
+    In,
+    Inc,
+    Ind,
+    Indr,
+    Ini,
+    Inir,
+    Jp,
+    Jr,
+    Ld,
+    Ldd,
+    Lddr,
+    Ldi,
+    Ldir,
+    Neg,
+    Nop,
+    Nops2, // Fake instruction that generate a breakpoint on winape
+    Or,
+    Otdr,
+    Otir,
+    Out,
+    Outd,
+    Outi,
+    Pop,
+    Push,
+    Res,
+    Ret,
+    Reti,
+    Retn,
+    Rl,
+    Rla,
+    Rlc,
+    Rlca,
+    Rld,
+    Rr,
+    Rra,
+    Rrc,
+    Rrca,
+    Rrd,
+    Rst,
+    Sbc,
+    Scf,
+    Set,
+    Sla,
+    Sll,
+    Sra,
+    Srl,
+    Sub,
+    Xor,
+}
+
+impl fmt::Display for Mnemonic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Mnemonic::Adc => write!(f, "ADC"),
+            Mnemonic::Add => write!(f, "ADD"),
+            Mnemonic::And => write!(f, "AND"),
+            Mnemonic::Bit => write!(f, "BIT"),
+            Mnemonic::Call => write!(f, "CALL"),
+            Mnemonic::Ccf => write!(f, "CCF"),
+            Mnemonic::Cp => write!(f, "CP"),
+            Mnemonic::Cpd => write!(f, "CPD"),
+            Mnemonic::Cpdr => write!(f, "CPDR"),
+            Mnemonic::Cpi => write!(f, "CPI"),
+            Mnemonic::Cpir => write!(f, "CPIR"),
+            Mnemonic::Cpl => write!(f, "CPL"),
+            Mnemonic::Daa => write!(f, "DAA"),
+            Mnemonic::Dec => write!(f, "DEC"),
+            Mnemonic::Di => write!(f, "DI"),
+            Mnemonic::Djnz => write!(f, "DJNZ"),
+            Mnemonic::Ei => write!(f, "EI"),
+            Mnemonic::ExAf => write!(f, "EX AF, AF'"),
+            Mnemonic::ExHlDe => write!(f, "EX DE, HL"),
+            Mnemonic::ExMemSp => write!(f, "EX (SP), "),
+            Mnemonic::Exx => write!(f, "EXX"),
+            Mnemonic::Halt => write!(f, "HALT"),
+            Mnemonic::Im => write!(f, "IM"),
+            Mnemonic::In => write!(f, "IN"),
+            Mnemonic::Inc => write!(f, "INC"),
+            Mnemonic::Ind => write!(f, "IND"),
+            Mnemonic::Indr => write!(f, "INDR"),
+            Mnemonic::Ini => write!(f, "INI"),
+            Mnemonic::Inir => write!(f, "INIR"),
+            Mnemonic::Jp => write!(f, "JP"),
+            Mnemonic::Jr => write!(f, "JR"),
+            Mnemonic::Ld => write!(f, "LD"),
+            Mnemonic::Ldd => write!(f, "LDD"),
+            Mnemonic::Lddr => write!(f, "LDDR"),
+            Mnemonic::Ldi => write!(f, "LDI"),
+            Mnemonic::Ldir => write!(f, "LDIR"),
+            Mnemonic::Neg => write!(f, "NEG"),
+            Mnemonic::Nop => write!(f, "NOP"),
+            Mnemonic::Nops2 => write!(f, "DB 0xed, 0xff ; Winape Breakpoint"),
+            Mnemonic::Or => write!(f, "OR"),
+            Mnemonic::Otdr => write!(f, "OTDR"),
+            Mnemonic::Otir => write!(f, "OTIR"),
+            Mnemonic::Out => write!(f, "OUT"),
+            Mnemonic::Outd => write!(f, "OUTD"),
+            Mnemonic::Outi => write!(f, "OUTI"),
+            Mnemonic::Pop => write!(f, "POP"),
+            Mnemonic::Push => write!(f, "PUSH"),
+            Mnemonic::Res => write!(f, "RES"),
+            Mnemonic::Ret => write!(f, "RET"),
+            Mnemonic::Reti => write!(f, "RETI"),
+            Mnemonic::Retn => write!(f, "RETN"),
+            Mnemonic::Rl => write!(f, "RL"),
+            Mnemonic::Rla => write!(f, "RLA"),
+            Mnemonic::Rlc => write!(f, "RLC"),
+            Mnemonic::Rlca => write!(f, "RLCA"),
+            Mnemonic::Rld => write!(f, "RLD"),
+            Mnemonic::Rr => write!(f, "RR"),
+            Mnemonic::Rra => write!(f, "RRA"),
+            Mnemonic::Rrc => write!(f, "RRC"),
+            Mnemonic::Rrca => write!(f, "RRCA"),
+            Mnemonic::Rrd => write!(f, "RRD"),
+            Mnemonic::Rst => write!(f,"RST"),
+            Mnemonic::Sbc => write!(f, "SBC"),
+            Mnemonic::Scf => write!(f, "SCF"),
+            Mnemonic::Set => write!(f, "SET"),
+            Mnemonic::Sla => write!(f, "SLA"),
+            Mnemonic::Sll => write!(f, "SLL"),
+            Mnemonic::Sra => write!(f, "SRA"),
+            Mnemonic::Srl => write!(f, "SRL"),
+            Mnemonic::Sub => write!(f, "SUB"),
+            Mnemonic::Xor => write!(f, "XOR"),
+        }
+    }
+}
+
+
+macro_rules! is_mnemonic {
+    ($($mnemonic:ident)*) => {$(
+        paste::item_with_macros! {
+            impl Mnemonic {
+                /// Check if this DataAccess corresonds to $mnemonic
+                pub fn [<is_ $mnemonic:lower>] (&self) -> bool {
+                    match self {
+                        Mnemonic::$mnemonic => true,
+                        _ => false,
+                    }
+                }
+            }
+        }
+    )*}
+}
+is_mnemonic!(    
+    Adc
+    Add
+    And
+    Bit
+    Call
+    Ccf
+    Cp
+    Cpd
+    Cpdr
+    Cpi
+    Cpir
+    Cpl
+    Daa
+    Dec
+    Di
+    Djnz
+    Ei
+    ExAf
+    ExHlDe
+    ExMemSp
+    Exx
+    Halt
+    Im
+    In
+    Inc
+    Ind
+    Indr
+    Ini
+    Inir
+    Jp
+    Jr
+    Ld
+    Ldd
+    Lddr
+    Ldi
+    Ldir
+    Neg
+    Nop
+    Nops2
+    Or
+    Otdr
+    Otir
+    Out
+    Outd
+    Outi
+    Pop
+    Push
+    Res
+    Ret
+    Reti
+    Retn
+    Rl
+    Rla
+    Rlc
+    Rlca
+    Rld
+    Rr
+    Rra
+    Rrc
+    Rrca
+    Rrd
+    Rst
+    Sbc
+    Scf
+    Set
+    Sla
+    Sll
+    Sra
+    Srl
+    Sub
+    Xor
+);
+
+
+/// Stable ticker serves to count nops with the assembler !
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum StableTickerAction {
+    /// Start of the ticker with its name that will contains its duration
+    Start(String),
+    Stop,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[allow(missing_docs)]
+pub enum CrunchType {
+    LZ48,
+    LZ49,
+    LZ4,
+    LZX7,
+    LZEXO,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[allow(missing_docs)]
+pub enum SaveType {
+    Amsdos,
+    Dsk,
+}
+
+/// Encode the kind of test done in if/elif/else cases
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum TestKind {
+    // Test succeed if it is an expression that returns True
+    True(Expr),
+    // Test succeed if it is an expression that returns False
+    False(Expr),
+    // Test succeed if it is an existing label
+    LabelExists(String),
+    // Test succeed if it is a missing label
+    LabelDoesNotExist(String),
+}
+
+/// List of transformations that can be applied to an imported binary file
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[allow(missing_docs)]
+pub enum BinaryTransformation {
+    None,
+    Exomizer,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum Token {
+    Label(String),
+    Comment(String),
+
+    OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>),
+
+    Align(Expr, Option<Expr>),
+    Assert(Expr, Option<String>),
+    Bank(Expr),
+    Bankset(Expr),
+    /// Basic code which tokens will be included in the code (imported variables, lines to hide,  code)
+    Basic(Option<Vec<String>>, Option<Vec<u16>>, String),
+    Breakpoint(Option<Expr>),
+    BuildCpr,
+    BuildSna(SnapshotVersion),
+    Break,
+    CrunchedSection(CrunchType, Listing),
+    CrunchedBinary(CrunchType, String),
+    Defs(Expr, Option<Expr>),
+    Defb(Vec<Expr>),
+    Defw(Vec<Expr>),
+    Equ(String, Expr),
+    /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
+    If(Vec<(TestKind, Listing)>, Option<Listing>),
+    /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
+    Include(String, Option<Listing>),
+    Incbin(
+        // TODO name arguments to ease manipulation
+        String,
+        Option<Expr>,
+        Option<Expr>,
+        Option<Expr>,
+        Option<Expr>,
+        Option<Vec<u8>>,
+        BinaryTransformation,
+    ),
+    Let(String, Expr),
+    List,
+    Limit(Expr),
+    Macro(String, Vec<String>, String), // Content of the macro is parsed on use
+    NoList,
+    Org(Expr, Option<Expr>),
+    Print(Either<Expr, String>),
+    Protect(Expr, Expr),
+
+    /// Duplicate the token stream
+    Repeat(Expr, Listing, Option<String>),
+    RepeatUntil(Expr, Listing),
+    /// Set the value of $ to Expr
+    Rorg(Expr, Listing),
+    Run(Expr, Option<Expr>),
+
+    Save {
+        filename: String,
+        address: Expr,
+        size: Expr,
+        save_type: Option<SaveType>,
+        dsk_filename: Option<String>,
+        side: Option<Expr>,
+    },
+    SetCrtc(Expr),
+    SetCPC(Expr),
+    Str(Vec<u8>),
+    StableTicker(StableTickerAction),
+    Struct(String, Vec<(String, Token)>),
+    Switch(Vec<(Expr, Listing)>),
+    Undef(String),
+    While(Expr, Listing),
+
+    MacroCall(String, Vec<Expr>), // String are used in order to not be limited to expression and allow opcode/registers use
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let expr_list_to_string = |exprs: &Vec<Expr>| {
+            exprs
+                .iter()
+                .map(|expr| format!("{}", expr))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+
+        match *self {
+            Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2)) if &Mnemonic::Out == mne
+                => write!(f, "{} (C), {}", mne, arg2),
+
+            Token::Align(ref expr, None)
+                => write!(f, "ALIGN {}", expr),
+            Token::Align(ref expr, Some(ref fill))
+
+                => write!(f, "ALIGN {}, {}", expr, fill),
+            Token::Assert(ref expr, None)
+                => write!(f, "ASSERT {}", expr),
+            Token::Assert(ref expr, Some(ref text))
+                => write!(f, "ASSERT {}, {}", expr, text),
+
+            Token::Breakpoint(None)
+                => write!(f, "BREAKPOINT"),
+            Token::Breakpoint(Some(ref expr))
+                 => write!(f, "BREAKPOINT {}", expr),
+
+            Token::Label(ref string)
+                => write!(f, "{}", string),
+
+            Token::Comment(ref string)
+                => write!(f, " ; {}", string.replace("\n","\n;")),
+
+            Token::OpCode(ref mne, None, None)
+                => write!(f, "{}", mne),
+            Token::OpCode(ref mne, Some(ref arg1), None)
+                => write!(f, "{} {}", mne, arg1),
+            Token::OpCode(ref mne, None, Some(ref arg2)) // JP/JR without flags
+               => write!(f, "{} {}", mne, arg2),
+            Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2))
+                => write!(f, "{} {}, {}", mne, arg1, arg2),
+
+            Token::Org(ref expr, None)
+                => write!(f, "ORG {}", expr),
+            Token::Org(ref expr, Some(ref expr2))
+                => write!(f, "ORG {}, {}", expr, expr2),
+
+            Token::Defs(ref expr, None)
+                => write!(f, "DEFS {}", expr),
+            Token::Defs(ref expr, Some(ref expr2))
+                => write!(f, "DEFS {}, {}", expr, expr2),
+
+            Token::Defb(ref exprs)
+                => write!(f, "DB {}", expr_list_to_string(exprs)),
+
+            Token::Defw(ref exprs)
+                => write!(f, "DW {}", expr_list_to_string(exprs)),
+
+            Token::Equ(ref name, ref expr)
+                => write!(f, "{} EQU {}", name, expr),
+
+            Token::Include(ref fname, _)
+                => write!(f, "INCLUDE \"{}\"", fname),
+
+            Token::Incbin(ref fname, None, None, None, None, None, BinaryTransformation::None) 
+                => write!(f, "INCBIN \"{}\"", fname),
+
+            Token::Print(ref exp)
+                => write!(f, "PRINT {}", exp),
+
+            Token::Protect(ref exp1, ref exp2)
+                => write!(f, "PROTECT {}, {}", exp1, exp2),
+
+            Token::Repeat(ref exp, ref code, ref label) => {
+                if label.is_some() {
+                    writeln!(f, "REPEAT {}, {}", exp, label.as_ref().unwrap())?;
+                }
+                else {
+                    writeln!(f, "REPEAT {}", exp)?;
+                }
+                for token in code.iter() {
+                    writeln!(f, "\t{}", token)?;
+                }
+                write!(f, "\tENDREPEAT")
+            },
+
+            Token::StableTicker(ref ticker)
+                => {
+                    match ticker {
+                        StableTickerAction::Start(ref label) => {
+                            write!(f, "STABLETICKER START {}", label)
+                        },
+                        StableTickerAction::Stop => {
+                            write!(f, "STABLETICKER STOP")
+                        }
+                    }
+            },
+
+            Token::MacroCall(ref name, ref args)
+                => {use itertools::Itertools;
+                    write!(f, "{} {}", name, args.clone()
+                                                .iter()
+                                                .map(|a|{a.to_string()})
+                                                .join(", "))?;
+                    Ok(())
+            },
+            _ => unimplemented!()
+
+        }
+    }
+}
+
+impl From<u8> for Token {
+    fn from(byte: u8) -> Self {
+        Self::Defb(vec![byte.into()])
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Token {
+    type Error = String;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        let tokens = {
+            let res = parse_z80_str(value);
+            match res {
+                Ok(tokens) => tokens.1,
+                Err(_e) => {
+                    return Err("ERROR -- need to code why ...".to_owned());
+                }
+            }
+        };
+
+        match tokens.len() {
+            0 => Err("No ASM found.".to_owned()),
+            1 => Ok(tokens[0].clone()),
+            _ => Err(format!(
+                "{} tokens are present instead of one",
+                tokens.len()
+            ))
+        }
+    }
+}
+
+impl TryFrom<String> for Token {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+       Token::try_from(value.as_ref())
+    }
+}
+
+#[allow(missing_docs)]
+impl Token {
+    pub fn is_opcode(&self) -> bool {
+        self.mnemonic().is_some()
+    }
+
+    pub fn label(&self) -> Option<&String> {
+        match self {
+            Token::Label(ref value) | Token::Equ(ref value, _) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub fn mnemonic(&self) -> Option<&Mnemonic> {
+        match self {
+            Token::OpCode(ref mnemonic, _, _) => Some(mnemonic),
+            _ => None,
+        }
+    }
+
+    pub fn mnemonic_arg1(&self) -> Option<&DataAccess> {
+        match self {
+            Token::OpCode(_, ref arg1, _) => arg1.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn mnemonic_arg2(&self) -> Option<&DataAccess> {
+        match self {
+            Token::OpCode(_, _, ref arg2) => arg2.as_ref(),
+            _ => None,
+        }
+    }
+
+    #[deprecated(
+        since = "0.1.1",
+        note = "please use `expr` instead as other token need it"
+    )]
+    pub fn org_expr(&self) -> Option<&Expr> {
+        self.expr()
+    }
+
+    pub fn expr(&self) -> Option<&Expr> {
+        match self {
+            Token::Org(ref expr, _) | Token::Equ(_, ref expr) => Some(expr),
+            _ => None,
+        }
+    }
+
+    /// Unroll the tokens when in a repetition loop
+    /// TODO return an iterator in order to not produce the vector each time
+    pub fn unroll(
+        &self,
+        sym: &SymbolsTableCaseDependent,
+    ) -> Option<Result<Vec<&Self>, AssemblerError>> {
+        if let Token::Repeat(ref expr, ref tokens, ref _counter_label) = self {
+            let count: Result<i32, AssemblerError> = expr.resolve(sym);
+            if count.is_err() {
+                Some(Err(count.err().unwrap()))
+            } else {
+                let count = count.unwrap();
+                let mut res = Vec::with_capacity(count as usize * tokens.len());
+                for _i in 0..count {
+                    // TODO add a specific token to control the loop counter (and change the return type)
+                    for t in tokens.iter() {
+                        res.push(t);
+                    }
+                }
+                Some(Ok(res))
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Generate the listing of opcodes for directives that contain data Defb/defw/Defs in order to have
+    /// mnemonics. Fails when some values are not opcodes
+    pub fn disassemble_data(&self) -> Result<Listing, String> {
+        match self {
+            Token::Defs(ref expr, ref value) => {
+                use crate::assembler::Env;
+                use crate::disass::disassemble;
+
+                assemble_defs(expr, value.as_ref(), &Env::default())
+                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
+                            .and_then(|bytes| disassemble(&bytes) )
+            },
+
+            Token::Defb(_) | Token::Defw(_) => {
+                use crate::assembler::Env;
+                use crate::disass::disassemble;
+
+                assemble_db_or_dw(self, &Env::default())
+                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
+                            .and_then(|bytes| disassemble(&bytes))
+
+            },
+
+            _ => {
+                let mut lst = Listing::new();
+                lst.push(self.clone());
+                Ok(lst)
+            }
+        }
+
+    }
+
+    /// Modify the few tokens that need to read files
+    /// TODO refactor file reading of filename search
+    pub fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
+        match self {
+            Token::Include(ref fname, ref mut listing) if listing.is_none() => {
+                match ctx.get_path_for(fname) {
+                    None => {
+                        return Err(AssemblerError::IOError {
+                            msg: format!("{:?} not found", fname),
+                        });
+                    }
+                    Some(ref fname) => {
+                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
+                            msg: format!("Unable to open {:?}", fname),
+                        })?;
+                        let mut content = String::new();
+                        f.read_to_string(&mut content)
+                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+
+                        let mut new_ctx = ctx.clone();
+                        new_ctx.set_current_filename(fname);
+                        listing.replace(parse_str_with_context(&content, &new_ctx)?);
+                    }
+                }
+            }
+
+            Token::Incbin(ref fname, _, _, _, _, ref mut data, ref transformation)
+                if data.is_none() =>
+            {
+                //TODO manage the optional arguments
+                match ctx.get_path_for(fname) {
+                    None => {
+                        return Err(AssemblerError::IOError {
+                            msg: format!("{:?} not found", fname),
+                        });
+                    }
+                    Some(ref fname) => {
+                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
+                            msg: format!("Unable to open {:?}", fname),
+                        })?;
+                        let mut content = Vec::new();
+                        f.read_to_end(&mut content)
+                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+
+                        match transformation {
+                            BinaryTransformation::None => {
+                                data.replace(content);
+                            }
+                            BinaryTransformation::Exomizer => {
+                                unimplemented!("Need to implement exomizer crunching")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Rorg may embed some instructions that read files
+            Token::Rorg(_, ref mut listing) => {
+                for token in listing.iter_mut() {
+                    token.read_referenced_file(ctx)?;
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Dummy version that assemble without taking into account the context
+    /// TODO find a way to not build a symbol table each time
+    pub fn to_bytes(&self) -> Result<Bytes, AssemblerError> {
+        let mut table = SymbolsTableCaseDependent::laxist();
+        let table = &mut table;
+        self.to_bytes_with_context(table)
+    }
+
+
+    /// Assemble the symbol taking into account some context, but never modify this context
+    #[allow(clippy::match_same_arms)]
+    pub fn to_bytes_with_context(
+        &self,
+        table: &mut SymbolsTableCaseDependent,
+    ) -> Result<Bytes, AssemblerError> {
+        let env = &mut crate::assembler::Env::with_table_case_dependent(table);
+        match self {
+            Token::OpCode(ref mnemonic, ref arg1, ref arg2) => assemble_opcode(
+                *mnemonic, arg1, arg2, env, // Modification to the environment are lost
+            ),
+
+            Token::Equ(_, _) => Ok(Bytes::new()),
+
+            Token::Defw(_) | Token::Defb(_) => assemble_db_or_dw(self, env),
+
+            Token::Label(_) | Token::Comment(_) | Token::Org(_, _) | Token::Assert(_, _) => {
+                Ok(Bytes::new())
+            }
+
+            Token::Defs(ref expr, ref fill) => assemble_defs(expr, fill.as_ref(), env),
+
+            Token::Align(ref expr, ref fill) => assemble_align(expr, fill.as_ref(), env),
+
+            // Protect and breakpoint directives do not produce any bytes
+            Token::Protect(_, _) | Token::Breakpoint(_) | Token::Print(_) => Ok(Bytes::new()),
+
+            _ => Err(format!("Currently unable to generate bytes for {}", self).into()),
+        }
+    }
+}

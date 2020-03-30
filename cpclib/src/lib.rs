@@ -52,6 +52,15 @@
 #[macro_use]
 extern crate dbg;
 
+pub use cpclib_basic as basic;
+pub use cpclib_asm as assembler;
+pub use cpclib_sna as sna;
+pub use cpclib_z80emu as z80emu;
+/// CPC Wifi extension related stuff. Useable
+#[cfg(any(feature = "xferlib", feature = "xfer"))]
+pub use cpclib_xfer as xfer;
+pub use cpclib_disc as disc;
+
 /// Screen emulation. Unknown state ;)
 pub mod screen;
 
@@ -70,27 +79,12 @@ pub mod ga;
 /// ???
 pub mod asm;
 
-/// Z80 tokens manipulations. Useable
-pub mod assembler;
 
-/// Disassembling stuff
-pub mod disass;
-
-/// Basic program manipulation. WIP
-pub mod basic;
-
-/// Z80 emulation. WIP
-pub mod z80emu;
-
-/// Snapshot manipulation. Useable
-pub mod sna;
 
 /// Disk (edsk) manipulation. WIP
-pub mod disc;
 
-/// CPC Wifi extension related stuff. Useable
-#[cfg(any(feature = "xferlib", feature = "xfer"))]
-pub mod xfer;
+
+
 
 // Some reexports
 pub use crate::disc::edsk::ExtendedDsk;
