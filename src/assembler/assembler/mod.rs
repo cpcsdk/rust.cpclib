@@ -1528,7 +1528,13 @@ impl Env {
                 add_byte(&mut bytes, 0b0100_0110 + (bit << 3));
             }
 
-            DataAccess::IndexRegister16WithIndex(_, _) => unimplemented!(),
+            DataAccess::IndexRegister16WithIndex(ref reg, ref delta) => {
+                let delta = (self.resolve_expr_may_fail_in_first_pass(delta)? & 0xff) as u8;
+                add_byte(&mut bytes, indexed_register16_to_code(*reg));
+                add_byte(&mut bytes, 0xcb);
+                add_byte(&mut bytes, delta);
+                add_byte(&mut bytes, 0b0100_0110 + (bit << 3));
+            },
 
             DataAccess::Register8(ref reg) => {
                 add_byte(&mut bytes, 0xcb);
