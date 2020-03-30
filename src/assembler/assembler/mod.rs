@@ -1678,14 +1678,22 @@ impl Env {
             });
 
             // add prefix for ix/iy
-            if let DataAccess::IndexRegister16WithIndex(ref reg, ref exp) = target {
-                let val = self.resolve_expr_may_fail_in_first_pass(exp)? as u8;
-                bytes.push(indexed_register16_to_code(*reg));
-                bytes.push(val);
-            }
+            match target {
+                DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
+                    let val = self.resolve_expr_may_fail_in_first_pass(exp)? as u8;
+                    bytes.push(indexed_register16_to_code(*reg));
+                    add_byte(&mut bytes, 0xcb);
+                    bytes.push(val);
+                },
+
+                DataAccess::MemoryRegister16(Register16::Hl) => {
+                    add_byte(&mut bytes, 0xcb);
+                },
+
+                _=> return Err(AssemblerError::InvalidArgument{ msg: format!("{} cannot take {} as argument", mne, target)})
+            };
 
             
-            add_byte(&mut bytes, 0xcb);
 
             let byte = if mne.is_sla() { 
                 0x26

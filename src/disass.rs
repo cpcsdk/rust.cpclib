@@ -538,9 +538,57 @@ mod test {
 		disass_for_table_and_prefix(&TABINSTRDD, &[0xdd]);
 		disass_for_table_and_prefix(&TABINSTRED, &[0xed]);
 		disass_for_table_and_prefix(&TABINSTRFD, &[0xfd]);
+
+		disass_for_double_prefix(&TABINSTRFDCB, 0xfd, 0xcb);
+		disass_for_double_prefix(&TABINSTRDDCB, 0xdd, 0xcb);
 	}
 
+	fn disass_for_double_prefix(tab: &[&'static str;256], first: u8, second: u8) {
 
+		for code in 0..=255 {
+            let repr = tab[code as usize];
+            
+            if repr.len() == 0 {
+                continue;
+			}
+
+			let repr = repr.replacen("nn", "0x12", 1);
+			let expected_bytes = [first, second, 0x12, code];
+
+			let obtained = disassemble(&expected_bytes).unwrap();
+
+			println!("{:?},{:?}, {:?}", repr, expected_bytes, obtained);
+			assert_eq!(
+				repr.replace(" ", "")
+						.replace("0x","")
+						.replace("00", "0")
+						.replace("08", "8")
+						.to_uppercase(),
+				obtained.to_string().trim()
+						.replace(" ", "")
+						.replace("0x","")
+						.to_uppercase()
+			);
+
+			use crate::assembler::assembler::assemble_opcode;
+			use crate::assembler::assembler::Env;
+			let mut env = Env::default();
+			if let Token::OpCode(ref mnemonic, ref arg1, ref arg2) = obtained.listing()[0] {
+				let obtained_bytes = assemble_opcode(*mnemonic, &arg1, &arg2, &mut env).unwrap();
+				assert_eq!(
+					&expected_bytes[..],
+					&obtained_bytes[..]
+				);
+			}
+			
+			else {
+				println!("ERROR, this is not a Token {:?}", obtained);
+				assert!(false);
+			}
+		}
+			
+
+	}
 	fn disass_for_table_and_prefix(tab: &[&'static str; 256], prefix: &[u8]) {
 
 		// Concatenate list of list of bytes
