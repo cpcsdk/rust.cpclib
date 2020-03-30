@@ -2361,16 +2361,7 @@ fn assemble_bit_res_or_set(
         bytes.push(code | (bit << 3) | register8_to_code(*reg))
     } 
     else if let DataAccess::IndexRegister16WithIndex(ref reg, ref delta) = arg2 {
-/*
-        let code = if mnemonic.is_bit() {
-            70
-        }
-        else {
-            code
-        };
-*/
         let code = code + 0b0110;
-
 
         let delta = (env.resolve_expr_may_fail_in_first_pass(delta)? & 0xff) as u8;
         add_byte(&mut bytes, indexed_register16_to_code(*reg));
