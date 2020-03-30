@@ -1153,6 +1153,7 @@ pub fn assemble_opcode(
             sym,
         ),
         Mnemonic::Ret => assemble_ret(arg1),
+        Mnemonic::Rst => assemble_rst(arg1.as_ref().unwrap(), env),
 
         Mnemonic::Sub => env.assemble_sub(arg1.as_ref().unwrap()),
         Mnemonic::Sbc => env.assemble_sbc(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
@@ -1322,6 +1323,34 @@ fn assemble_ret(arg1: &Option<DataAccess>) -> Result<Bytes, AssemblerError> {
         bytes.push(0xc9);
     };
 
+    Ok(bytes)
+}
+
+fn assemble_rst(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> {
+    let mut bytes = Bytes::new();
+    let val = env.resolve_expr_may_fail_in_first_pass(arg1.get_expression().unwrap())?;
+
+    let p = match val {
+        0x00 => 0b000,
+        0x08 => 0b001,
+        0x10 => 0b010,
+        0x18 => 0b011,
+        0x20 => 0b100,
+        0x28 => 0b101,
+        0x30 => 0b110,
+        0x38 => 0b111,
+
+        // just for convenience
+        10 => 0b010,
+        18 => 0b011,
+        20 => 0b100,
+        28 => 0b101,
+        30 => 0b110,
+        38 => 0b111,
+        _ => return Err(AssemblerError::InvalidArgument{msg: format!("RST cannot take {} as argument.", val)})
+    };
+
+    bytes.push(0b11000111 | p<<3);
     Ok(bytes)
 }
 

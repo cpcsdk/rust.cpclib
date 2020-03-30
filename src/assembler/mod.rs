@@ -35,6 +35,9 @@ pub enum AssemblerError {
     // TODO add more information
     #[fail(display = "Assembling error: {}", msg)]
     AssemblingError { msg: String },
+    
+    #[fail(display = "Invalid argument: {}", msg)]
+    InvalidArgument {msg: String},
 
     // TODO remove this case and dispatch it everywhere else
     #[fail(display = "To be sorted error: {}", msg)]
