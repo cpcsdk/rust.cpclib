@@ -1092,10 +1092,6 @@ pub fn assemble_opcode(
             arg2.as_ref().unwrap(),
             sym,
         ),
-        Mnemonic::Bit => env.assemble_bit(
-            arg1.as_ref().unwrap().expr().unwrap(),
-            arg2.as_ref().unwrap(),
-        ),
         Mnemonic::Cp => env.assemble_cp(arg1.as_ref().unwrap()),
         Mnemonic::ExMemSp => assemble_ex_memsp(arg1.as_ref().unwrap()),
         Mnemonic::Dec | Mnemonic::Inc => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap(), env),
@@ -1146,11 +1142,11 @@ pub fn assemble_opcode(
         }
         Mnemonic::Pop => assemble_pop(arg1.as_ref().unwrap()),
         Mnemonic::Push => assemble_push(arg1.as_ref().unwrap()),
-        Mnemonic::Res | Mnemonic::Set => assemble_res_or_set(
+        Mnemonic::Bit | Mnemonic::Res | Mnemonic::Set => assemble_bit_res_or_set(
             mnemonic,
             arg1.as_ref().unwrap(),
             arg2.as_ref().unwrap(),
-            sym,
+            env,
         ),
         Mnemonic::Ret => assemble_ret(arg1),
         Mnemonic::Rst => assemble_rst(arg1.as_ref().unwrap(), env),
@@ -1510,45 +1506,7 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_bit(
-        &mut self,
-        arg1: &Expr,
-        arg2: &DataAccess,
-    ) -> Result<Bytes, AssemblerError> {
-        let mut bytes = Bytes::new();
 
-        let bit = (self.resolve_expr_may_fail_in_first_pass(arg1)? & 0xff) as u8;
-        if bit > 7 {
-            return Err(format!("BIT {}, {} is not possible", bit, arg2).into());
-        }
-
-        match arg2 {
-            DataAccess::MemoryRegister16(Register16::Hl) => {
-                add_byte(&mut bytes, 0xcb);
-                add_byte(&mut bytes, 0b0100_0110 + (bit << 3));
-            }
-
-            DataAccess::IndexRegister16WithIndex(ref reg, ref delta) => {
-                let delta = (self.resolve_expr_may_fail_in_first_pass(delta)? & 0xff) as u8;
-                add_byte(&mut bytes, indexed_register16_to_code(*reg));
-                add_byte(&mut bytes, 0xcb);
-                add_byte(&mut bytes, delta);
-                add_byte(&mut bytes, 0b0100_0110 + (bit << 3));
-            },
-
-            DataAccess::Register8(ref reg) => {
-                add_byte(&mut bytes, 0xcb);
-                add_byte(
-                    &mut bytes,
-                    0b0100_0000 + (bit << 3) + register8_to_code(*reg),
-                )
-            }
-
-            _ => unimplemented!("assemble_bit {:?} {:?}", arg1, arg2),
-        }
-
-        Ok(bytes)
-    }
 
     pub fn assemble_sub(&mut self, arg: &DataAccess) -> Result<Bytes, AssemblerError> {
         let mut bytes = Bytes::new();
@@ -2367,47 +2325,75 @@ fn assemble_add_or_adc(
     }
 }
 
-fn assemble_res_or_set(
+fn assemble_bit_res_or_set(
     mnemonic: Mnemonic,
     arg1: &DataAccess,
     arg2: &DataAccess,
-    sym: &SymbolsTableCaseDependent,
+    env: &Env,
 ) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
-    let is_res = match mnemonic {
-        Mnemonic::Res => true,
-        Mnemonic::Set => false,
-        _ => panic!("Impossible case"),
-    };
+
+
 
     // Get the bit of interest
     let bit = match arg1 {
-        DataAccess::Expression(ref e) => e.resolve(sym)? as u8,
+        DataAccess::Expression(ref e) => {
+            let bit =  (env.resolve_expr_may_fail_in_first_pass(e)? & 0xff) as u8;
+            if bit > 7 {
+                return Err(format!("[{}] {}, {} is not possible", mnemonic, bit, arg2).into());
+            }
+            bit
+        },
         _ => return Err("unable to get the number of bits".to_string().into()),
+    };
+
+    // Get the code to differentiate the instructions
+    let code = match mnemonic {
+        Mnemonic::Res => 0b1000_0000,
+        Mnemonic::Set => 0b1100_0000,
+        Mnemonic::Bit => 0b0100_0000,
+        _=> return Err("Impossible".to_owned().into())
     };
 
     // Apply it to the right thing
     if let DataAccess::Register8(ref reg) = arg2 {
         bytes.push(0xcb);
-        bytes.push(
-            if is_res { 0b1000_0000 } else { 0b1100_0000 } | (bit << 3) | register8_to_code(*reg),
-        );
+        bytes.push(code | (bit << 3) | register8_to_code(*reg))
     } 
+    else if let DataAccess::IndexRegister16WithIndex(ref reg, ref delta) = arg2 {
+/*
+        let code = if mnemonic.is_bit() {
+            70
+        }
+        else {
+            code
+        };
+*/
+        let code = code + 0b0110;
+
+
+        let delta = (env.resolve_expr_may_fail_in_first_pass(delta)? & 0xff) as u8;
+        add_byte(&mut bytes, indexed_register16_to_code(*reg));
+        add_byte(&mut bytes, 0xcb);
+        add_byte(&mut bytes, delta);
+        add_byte(&mut bytes, code + (bit << 3));
+    }
     else {
         assert!( match arg2 {
             DataAccess::MemoryRegister16(Register16::Hl) => true,
             DataAccess::IndexRegister16(_) => true,
             _ => false
         });
+
+        let code = code + 0b0110;
+
         bytes.push(0xcb);
 
         if let DataAccess::IndexRegister16(ref reg) = arg2 {
             bytes.push(indexed_register16_to_code(*reg));
         }
 
-        bytes.push(
-            if is_res { 0b1000_0110 } else { 0b1100_0110 } | (bit << 3)
-        );
+        bytes.push(code | (bit << 3));
     }
 
 
