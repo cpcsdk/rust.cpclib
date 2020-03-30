@@ -33,6 +33,7 @@ use failure::Fail;
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
+
 #[derive(Debug, Fail)]
 enum BasmError {
     #[fail(display = "IO error: {}", io)]
