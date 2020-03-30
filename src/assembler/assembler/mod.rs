@@ -1154,6 +1154,7 @@ pub fn assemble_opcode(
         ),
         Mnemonic::Ret => assemble_ret(arg1),
         Mnemonic::Rst => assemble_rst(arg1.as_ref().unwrap(), env),
+        Mnemonic::Im => assemble_im(arg1.as_ref().unwrap(), env),
 
         Mnemonic::Sub => env.assemble_sub(arg1.as_ref().unwrap()),
         Mnemonic::Sbc => env.assemble_sbc(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
@@ -1353,6 +1354,24 @@ fn assemble_rst(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> {
     bytes.push(0b11000111 | p<<3);
     Ok(bytes)
 }
+
+
+fn assemble_im(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> {
+    let mut bytes = Bytes::new();
+    let val = env.resolve_expr_may_fail_in_first_pass(arg1.get_expression().unwrap())?;
+
+    let code = match val {
+        0x00 => 0x46,
+        0x01 => 0x56,
+        0x02 => 0x5e,
+        _ => return Err(AssemblerError::InvalidArgument{msg: format!("IM cannot take {} as argument.", val)})
+    };
+
+    bytes.push(0xed);
+    bytes.push(code);
+    Ok(bytes)
+}
+    
 
 /// arg1 contains the tests
 /// arg2 contains the information
