@@ -1,9 +1,7 @@
-use cpclib::xfer::CpcXfer;
 use rustyline;
 
 use rustyline::error::ReadlineError;
 
-use crate::parser::{parse_command, XferCommand};
 use term_grid::{Grid, GridOptions, Direction, Filling};
 use termize;
 
@@ -14,6 +12,11 @@ use rustyline_derive::{Helper, Validator, Highlighter, Hinter};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
 
 use subprocess::Exec;
+
+use crate::parser::{parse_command, XferCommand};
+use cpclib_xfer::CpcXfer;
+
+
 
 /// Help to add autocompletion.
 /// Done currently with filname, will be done later with M4 file names

@@ -1,5 +1,4 @@
 #![deny(
-    missing_debug_implementations,
     missing_copy_implementations,
     trivial_casts,
     trivial_numeric_casts,
@@ -13,29 +12,38 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
+
+pub mod interact;
+pub mod parser;
+
+
 use std::env;
 use clap;
 use std::path::Path;
 use anyhow;
 
-mod interact;
-mod parser;
-use cpclib as cpc;
+
+
 use hotwatch::{Event, Hotwatch};
 
 use crossbeam_channel::unbounded;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::time::Duration;
 
+use cpclib_sna as sna;
+use cpclib_disc as disc;
+use cpclib_xfer as xfer;
+
+
 /// Send and run the file on the CPC.
 /// Snapshot V3 are downgraded to the V2 version
-fn send_and_run_file(xfer: &cpc::xfer::CpcXfer, fname: &str) {
+fn send_and_run_file(xfer: &xfer::CpcXfer, fname: &str) {
     let mut done = false;
     // Snapshot needs to be converted in V2 format and handled differently
     if let Some(extension) = std::path::Path::new(fname).extension() {
         let extension = extension.to_str().unwrap().to_ascii_lowercase();
         if extension == "sna" {
-            let sna = crate::cpc::sna::Snapshot::load(fname);
+            let sna = sna::Snapshot::load(fname);
             if sna.version_header() == 3 {
                 eprintln!("Need to downgrade SNA version. TODO check if it is sill necessary (I thinl not)");
                 let sna_fname = std::path::Path::new(fname)
@@ -43,7 +51,7 @@ fn send_and_run_file(xfer: &cpc::xfer::CpcXfer, fname: &str) {
                     .unwrap()
                     .to_str()
                     .unwrap();
-                sna.save(sna_fname, crate::cpc::sna::SnapshotVersion::V2)
+                sna.save(sna_fname, sna::SnapshotVersion::V2)
                     .unwrap();
                 xfer.upload_and_run(sna_fname, None)
                     .expect("Unable to launch SNA");
@@ -144,7 +152,7 @@ fn main() -> anyhow::Result<()> {
         }
     };
     
-    let xfer = cpc::xfer::CpcXfer::new(hostname);
+    let xfer = xfer::CpcXfer::new(hostname);
 
     if matches.is_present("-r") {
         xfer.reset_m4()?;

@@ -14,10 +14,9 @@ use nom::*;
 use either::*;
 use std::path::PathBuf;
 
-use crate::tokens::*;
-use crate::AssemblerError;
-
 use std::str::FromStr;
+
+use crate::preamble::*;
 
 /// ...
 pub mod error_code {
@@ -2000,13 +1999,14 @@ pub fn decode_parsing_error(_orig: &str, _e: ::nom::Err<&str>) -> String {
     */
 }
 
-impl FromStr for Listing {
-    type Err = AssemblerError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+/// Generate a listing from a string
+pub trait ListingFromStr {
+    fn from_str(s: &str) -> Result<Listing, AssemblerError> {
         parse_str(s)
     }
 }
+
 
 
 #[cfg(test)]

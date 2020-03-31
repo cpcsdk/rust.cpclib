@@ -1,5 +1,4 @@
-use crate::assembler::assembler::SymbolsTableCaseDependent;
-use crate::assembler::tokens::*;
+use cpclib_asm::preamble::*;
 use crate::z80::*;
 
 impl Z80 {
@@ -59,13 +58,13 @@ impl Z80 {
 
         match mnemonic {
             Mnemonic::Add => match (arg1, arg2) {
-                (Some(&DataAccess::Register8(crate::assembler::tokens::Register8::A)), Some(_)) => {
+                (Some(&DataAccess::Register8(tokens::Register8::A)), Some(_)) => {
                     let val = self.get_value(arg1.unwrap()).unwrap();
                     self.get_register_8_mut(arg1.unwrap()).add(val as _);
                 }
 
                 (
-                    Some(&DataAccess::Register16(crate::assembler::tokens::Register16::Hl)),
+                    Some(&DataAccess::Register16(tokens::Register16::Hl)),
                     Some(_),
                 ) => {
                     let val = self.get_value(arg2.unwrap()).unwrap();
@@ -314,11 +313,11 @@ impl Z80 {
                 IndexRegister16::Iy => self.iy(),
             },
             DataAccess::Register16(ref reg) => match reg {
-                crate::assembler::tokens::Register16::Af => self.af(),
-                crate::assembler::tokens::Register16::Bc => self.bc(),
-                crate::assembler::tokens::Register16::De => self.de(),
-                crate::assembler::tokens::Register16::Hl => self.hl(),
-                crate::assembler::tokens::Register16::Sp => self.sp(),
+                tokens::Register16::Af => self.af(),
+                tokens::Register16::Bc => self.bc(),
+                tokens::Register16::De => self.de(),
+                tokens::Register16::Hl => self.hl(),
+                tokens::Register16::Sp => self.sp(),
             },
             _ => unreachable!(),
         }
@@ -331,11 +330,11 @@ impl Z80 {
                 IndexRegister16::Iy => self.iy_mut(),
             },
             DataAccess::Register16(ref reg) => match reg {
-                crate::assembler::tokens::Register16::Af => self.af_mut(),
-                crate::assembler::tokens::Register16::Bc => self.bc_mut(),
-                crate::assembler::tokens::Register16::De => self.de_mut(),
-                crate::assembler::tokens::Register16::Hl => self.hl_mut(),
-                crate::assembler::tokens::Register16::Sp => self.sp_mut(),
+                tokens::Register16::Af => self.af_mut(),
+                tokens::Register16::Bc => self.bc_mut(),
+                tokens::Register16::De => self.de_mut(),
+                tokens::Register16::Hl => self.hl_mut(),
+                tokens::Register16::Sp => self.sp_mut(),
             },
             _ => unreachable!(),
         }
@@ -344,13 +343,13 @@ impl Z80 {
     fn get_register_8(&self, reg: &DataAccess) -> &crate::z80::Register8 {
         match reg {
             DataAccess::Register8(ref reg) => match reg {
-                crate::assembler::tokens::Register8::A => self.a(),
-                crate::assembler::tokens::Register8::B => self.b(),
-                crate::assembler::tokens::Register8::D => self.d(),
-                crate::assembler::tokens::Register8::H => self.h(),
-                crate::assembler::tokens::Register8::C => self.c(),
-                crate::assembler::tokens::Register8::E => self.e(),
-                crate::assembler::tokens::Register8::L => self.l(),
+                tokens::Register8::A => self.a(),
+                tokens::Register8::B => self.b(),
+                tokens::Register8::D => self.d(),
+                tokens::Register8::H => self.h(),
+                tokens::Register8::C => self.c(),
+                tokens::Register8::E => self.e(),
+                tokens::Register8::L => self.l(),
             },
 
             DataAccess::IndexRegister8(ref reg) => match reg {
@@ -367,13 +366,13 @@ impl Z80 {
     fn get_register_8_mut(&mut self, reg: &DataAccess) -> &mut crate::z80::Register8 {
         match reg {
             DataAccess::Register8(ref reg) => match reg {
-                crate::assembler::tokens::Register8::A => self.a_mut(),
-                crate::assembler::tokens::Register8::B => self.b_mut(),
-                crate::assembler::tokens::Register8::D => self.d_mut(),
-                crate::assembler::tokens::Register8::H => self.h_mut(),
-                crate::assembler::tokens::Register8::C => self.c_mut(),
-                crate::assembler::tokens::Register8::E => self.e_mut(),
-                crate::assembler::tokens::Register8::L => self.l_mut(),
+                tokens::Register8::A => self.a_mut(),
+                tokens::Register8::B => self.b_mut(),
+                tokens::Register8::D => self.d_mut(),
+                tokens::Register8::H => self.h_mut(),
+                tokens::Register8::C => self.c_mut(),
+                tokens::Register8::E => self.e_mut(),
+                tokens::Register8::L => self.l_mut(),
             },
 
             DataAccess::IndexRegister8(ref reg) => match reg {
@@ -428,7 +427,7 @@ pub fn flag_is_active(flag: &FlagTest, f_value: u8) -> bool {
 #[cfg(test)]
 mod test {
     use crate::assembler::assembler::SymbolsTableCaseDependent;
-    use crate::assembler::tokens::registers::FlagTest;
+    use tokens::registers::FlagTest;
     use crate::*;
 
     #[test]
@@ -439,7 +438,7 @@ mod test {
 
     #[test]
     fn jp_value() {
-        use crate::assembler::tokens::*;
+        use tokens::*;
 
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);
@@ -457,7 +456,7 @@ mod test {
 
     #[test]
     fn jp_symbol() {
-        use crate::assembler::tokens::*;
+        use tokens::*;
 
         let mut z80 = Z80::default();
         let mut symbols = SymbolsTableCaseDependent::default();
@@ -479,7 +478,7 @@ mod test {
 
     #[test]
     fn jp_dollar() {
-        use crate::assembler::tokens::*;
+        use tokens::*;
 
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);
@@ -497,7 +496,7 @@ mod test {
 
     #[test]
     fn jr_dollar() {
-        use crate::assembler::tokens::*;
+        use tokens::*;
 
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);

@@ -18,8 +18,21 @@ use std::fs::File;
 use std::io::Read;
 use std::io::Write;
 
-use cpclib::disc::amsdos::*;
-use cpclib::util::string_to_nb;
+use cpclib_disc::amsdos::*;
+
+
+    /**
+     * Convert a string to its unsigned 32 bits representation (to access to extra memory)
+     * TODO share implementation
+     */
+    pub fn string_to_nb(source: &str) -> u32 {
+        let error = format!("Unable to read the value: {}", source);
+        if source.starts_with("0x") {
+            u32::from_str_radix(&source[2..], 16).expect(&error)
+        } else {
+            source.parse::<u32>().expect(&error)
+        }
+    }
 
 fn main() -> std::io::Result<()> {
     let matches = clap::App::new("hideur")

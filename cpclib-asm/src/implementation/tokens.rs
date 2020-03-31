@@ -1,16 +1,224 @@
-use crate::assembler::SymbolsTableCaseDependent;
-use crate::parser;
-use crate::tokens::listing::*;
-use crate::AssemblerError;
-use crate::tokens::instructions::*;
-use crate::tokens::data_access::*;
-use crate::tokens::registers::*;
-use crate::tokens::expression::*;
+use cpclib_tokens::tokens::*;
+use cpclib_tokens::symbols::*;
 
-use std::fmt;
-use std::iter::FromIterator;
+use core::iter::FromIterator;
 
-impl ListingElement for Token {
+use crate::assembler::{assemble_align, assemble_db_or_dw, assemble_defs, assemble_opcode, Bytes};
+use crate::parser::*;
+use crate::error::*;
+
+use cpclib_tokens::tokens::*;
+use cpclib_tokens::symbols::*;
+use crate::implementation::expression::ExprEvaluationExt;
+use crate::implementation::listing::ListingExt;
+
+use std::fs::File;
+use std::io::Read;
+
+/// Needed methods for the Token defined in cpclib_tokens
+pub trait TokenExt : ListingElement {
+
+    
+    fn estimated_duration(&self) -> Result<usize, String>;
+    fn number_of_bytes(&self) -> Result<usize, String>;
+    fn number_of_bytes_with_context(
+        &self,
+        table: &mut SymbolsTableCaseDependent,
+    )-> Result<usize, String>;
+
+
+
+    /// Unroll the tokens when it represents a loop
+    fn unroll(
+        &self,
+        sym: &SymbolsTableCaseDependent,
+    ) -> Option<Result<Vec<&Self>, AssemblerError>>;
+
+    /// Generate the listing of opcodes for directives that embed bytes
+    fn disassemble_data(&self) -> Result<Listing, String>;
+
+    /// Modify the few tokens that need to read files. We consider they are empty at this point
+    fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError>;
+
+    /// Assemble the token to a stream of bytes
+    fn to_bytes(&self) -> Result<Bytes, AssemblerError>;
+
+    /// Assemble the token to a streal of bytes .Can use the symbols context
+    fn to_bytes_with_context(
+        &self,
+        table: &mut SymbolsTableCaseDependent,
+    ) -> Result<Bytes, AssemblerError>;
+}
+
+
+impl TokenExt for Token {
+     /// Unroll the tokens when in a repetition loop
+    /// TODO return an iterator in order to not produce the vector each time
+    fn unroll(
+        &self,
+        sym: &SymbolsTableCaseDependent,
+    ) -> Option<Result<Vec<&Self>, AssemblerError>> {
+        if let Token::Repeat(ref expr, ref tokens, ref _counter_label) = self {
+            let count: Result<i32, AssemblerError> = expr.resolve(sym);
+            if count.is_err() {
+                Some(Err(count.err().unwrap()))
+            } else {
+                let count = count.unwrap();
+                let mut res = Vec::with_capacity(count as usize * tokens.len());
+                for _i in 0..count {
+                    // TODO add a specific token to control the loop counter (and change the return type)
+                    for t in tokens.iter() {
+                        res.push(t);
+                    }
+                }
+                Some(Ok(res))
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Generate the listing of opcodes for directives that contain data Defb/defw/Defs in order to have
+    /// mnemonics. Fails when some values are not opcodes
+    fn disassemble_data(&self) -> Result<Listing, String> {
+        match self {
+            Token::Defs(ref expr, ref value) => {
+                use crate::assembler::Env;
+                use crate::disass::disassemble;
+
+                assemble_defs(expr, value.as_ref(), &Env::default())
+                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
+                            .and_then(|bytes| disassemble(&bytes) )
+            },
+
+            Token::Defb(_) | Token::Defw(_) => {
+                use crate::assembler::Env;
+                use crate::disass::disassemble;
+
+                assemble_db_or_dw(self, &Env::default())
+                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
+                            .and_then(|bytes| disassemble(&bytes))
+
+            },
+
+            _ => {
+                let mut lst = Listing::new();
+                lst.push(self.clone());
+                Ok(lst)
+            }
+        }
+
+    }
+
+    /// Modify the few tokens that need to read files
+    /// TODO refactor file reading of filename search
+    fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
+        match self {
+            Token::Include(ref fname, ref mut listing) if listing.is_none() => {
+                match ctx.get_path_for(fname) {
+                    None => {
+                        return Err(AssemblerError::IOError {
+                            msg: format!("{:?} not found", fname),
+                        });
+                    }
+                    Some(ref fname) => {
+                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
+                            msg: format!("Unable to open {:?}", fname),
+                        })?;
+                        let mut content = String::new();
+                        f.read_to_string(&mut content)
+                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+
+                        let mut new_ctx = ctx.clone();
+                        new_ctx.set_current_filename(fname);
+                        listing.replace(parse_str_with_context(&content, &new_ctx)?);
+                    }
+                }
+            }
+
+            Token::Incbin(ref fname, _, _, _, _, ref mut data, ref transformation)
+                if data.is_none() =>
+            {
+                //TODO manage the optional arguments
+                match ctx.get_path_for(fname) {
+                    None => {
+                        return Err(AssemblerError::IOError {
+                            msg: format!("{:?} not found", fname),
+                        });
+                    }
+                    Some(ref fname) => {
+                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
+                            msg: format!("Unable to open {:?}", fname),
+                        })?;
+                        let mut content = Vec::new();
+                        f.read_to_end(&mut content)
+                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+
+                        match transformation {
+                            BinaryTransformation::None => {
+                                data.replace(content);
+                            }
+                            BinaryTransformation::Exomizer => {
+                                unimplemented!("Need to implement exomizer crunching")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Rorg may embed some instructions that read files
+            Token::Rorg(_, ref mut listing) => {
+                for token in listing.iter_mut() {
+                    token.read_referenced_file(ctx)?;
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Dummy version that assemble without taking into account the context
+    /// TODO find a way to not build a symbol table each time
+    fn to_bytes(&self) -> Result<Bytes, AssemblerError> {
+        let mut table = SymbolsTableCaseDependent::laxist();
+        let table = &mut table;
+        self.to_bytes_with_context(table)
+    }
+
+
+    /// Assemble the symbol taking into account some context, but never modify this context
+    #[allow(clippy::match_same_arms)]
+    fn to_bytes_with_context(
+        &self,
+        table: &mut SymbolsTableCaseDependent,
+    ) -> Result<Bytes, AssemblerError> {
+        let env = &mut crate::assembler::Env::with_table_case_dependent(table);
+        match self {
+            Token::OpCode(ref mnemonic, ref arg1, ref arg2) => assemble_opcode(
+                *mnemonic, arg1, arg2, env, // Modification to the environment are lost
+            ),
+
+            Token::Equ(_, _) => Ok(Bytes::new()),
+
+            Token::Defw(_) | Token::Defb(_) => assemble_db_or_dw(self, env),
+
+            Token::Label(_) | Token::Comment(_) | Token::Org(_, _) | Token::Assert(_, _) => {
+                Ok(Bytes::new())
+            }
+
+            Token::Defs(ref expr, ref fill) => assemble_defs(expr, fill.as_ref(), env),
+
+            Token::Align(ref expr, ref fill) => assemble_align(expr, fill.as_ref(), env),
+
+            // Protect and breakpoint directives do not produce any bytes
+            Token::Protect(_, _) | Token::Breakpoint(_) | Token::Print(_) => Ok(Bytes::new()),
+
+            _ => Err(format!("Currently unable to generate bytes for {}", self).into()),
+        }
+    }
+
+
     /// Returns an estimation of the duration.
     /// This estimation may be wrong for instruction having several states.
     #[allow(clippy::match_same_arms)]
@@ -251,128 +459,43 @@ impl ListingElement for Token {
     }
 }
 
-/// Standard listing is a specific implementation
-pub type Listing = BaseListing<Token>;
 
-impl FromIterator<Token> for Listing {
-    fn from_iter<I: IntoIterator<Item=Token>>(src: I) -> Self {
-        let mut new = Self::default();
-        new.listing = src.into_iter().collect::<Vec<Token>>();
-        new
-    }
+pub trait TokenTryFrom<T> {
+    fn try_from(value: T) -> Result<Token, String>;
 }
 
-impl From<&[u8]> for Listing {
-    fn from(src: &[u8]) -> Listing {
-        src.iter().map(|&b|{
-            Token::from(b)
-        }).collect::<Listing>()
-    }
-}
+impl TokenTryFrom<&str> for Token {
 
-impl fmt::Display for Listing {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for token in self.listing().iter() {
-            match token {
-                Token::Label(_) | Token::Equ(_, _) | Token::Comment(_) => (),
-                _ => {
-                    write!(f, "\t")?;
+    fn try_from(value: &str) -> Result<Self, String> {
+        let tokens = {
+            let res = parse_z80_str(value);
+            match res {
+                Ok(tokens) => tokens.1,
+                Err(_e) => {
+                    return Err("ERROR -- need to code why ...".to_owned());
                 }
             }
-            //write!(f, "{} ; {:?} {:?} nops {:?} bytes\n", token, token, token.estimated_duration(), token.number_of_bytes())?;
-            writeln!(f, "{}", token)?;
-        }
+        };
 
-        Ok(())
+        match tokens.len() {
+            0 => Err("No ASM found.".to_owned()),
+            1 => Ok(tokens[0].clone()),
+            _ => Err(format!(
+                "{} tokens are present instead of one",
+                tokens.len()
+            ))
+        }
     }
 }
 
-/// Main usage of listing is related to Tokens.. Here are the methods strongly liked to Token
-impl Listing {
-    /// Save the listing on disc
-    pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> ::std::io::Result<()> {
-        use std::fs::File;
-        use std::io::prelude::*;
 
-        // Open a file in write-only mode, returns `io::Result<File>`
-        let mut file = File::create(path.as_ref())?;
-        file.write_all(self.to_string().as_bytes())?;
+impl TokenTryFrom<String> for Token {
 
-        Ok(())
-    }
-
-    /// Add a new label to the listing
-    pub fn add_label(&mut self, label: &str) {
-        self.listing_mut().push(Token::Label(String::from(label)));
-    }
-
-    /// Add a new comment to the listing
-    pub fn add_comment(&mut self, comment: &str) {
-        self.listing_mut()
-            .push(Token::Comment(String::from(comment)));
-    }
-
-    /// Add a list of bytes to the listing
-    pub fn add_bytes(&mut self, bytes: &[u8]) {
-        let exp = bytes
-            .iter()
-            .map(|pu8| Expr::Value(i32::from(*pu8)))
-            .collect::<Vec<_>>();
-        let tok = Token::Defb(exp);
-        self.push(tok);
-    }
-
-    /// Add additional tokens, that need to be parsed from a string, to the listing
-    pub fn add_code<S: AsRef<str> + core::fmt::Display>(
-        &mut self,
-        code: S,
-    ) -> Result<(), AssemblerError> {
-        parser::parse_z80_str(code.as_ref())
-            .map_err(|e| AssemblerError::SyntaxError {
-                error: format!("{:?}", e),
-            })
-            .map(|(_res, local_tokens)| {
-                self.listing_mut().extend_from_slice(&local_tokens);
-            })
-    }
-
-    /// Compute the size of the listing.
-    /// The listing has a size only if its tokens has a size
-    pub fn number_of_bytes(&self) -> Result<usize, AssemblerError> {
-        let mut count = 0;
-        let mut current_address: Option<usize> = None;
-        let mut sym = SymbolsTableCaseDependent::default();
-
-        for token in self.listing().iter() {
-            if current_address.is_some() {
-                sym.set_current_address(current_address.unwrap() as u16);
-            }
-
-            let mut current_size = 0;
-            if let Token::Org(ref expr, _) = token {
-                current_address = Some(expr.resolve(&sym)? as usize);
-                println!("Set address to {:?}", current_address);
-            } else if let Token::Align(ref _expr, _) = token {
-                if current_address.is_none() {
-                    return Err("Unable to guess align size if current address is unknown"
-                        .to_owned()
-                        .into());
-                }
-
-                current_size = token.number_of_bytes_with_context(&mut sym)?;
-            } else {
-                current_size = token.number_of_bytes()?;
-            }
-
-            if current_address.is_some() {
-                current_address = Some(current_address.unwrap() + current_size);
-            }
-            count += current_size;
-        }
-
-        Ok(count)
+    fn try_from(value: String) -> Result<Self, String> {
+        Token::try_from(&value[..])
     }
 }
+
 
 #[cfg(test)]
 #[allow(clippy::pedantic)]

@@ -12,8 +12,6 @@
 )]
 #![deny(clippy::pedantic)]
 
-use clap;
-use cpclib;
 
 use clap::{App, Arg, ArgGroup, SubCommand};
 use std::fs::File;
@@ -21,14 +19,14 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 
-use cpclib::disc::amsdos::*;
-use cpclib::disc::edsk::ExtendedDsk;
+use cpclib_disc::amsdos::*;
+use cpclib_disc::edsk::ExtendedDsk;
 
 use custom_error::custom_error;
 
 custom_error! {pub DskManagerError
     IOError{source: std::io::Error} = "IO error: {source}.",
-    DiscConfigError{source: cpclib::disc::cfg::DiscConfigError} = "Disc configuration: {source}"
+    DiscConfigError{source: cpclib_disc::cfg::DiscConfigError} = "Disc configuration: {source}"
 }
 
 // Still everything to do
@@ -247,8 +245,7 @@ fn main() -> Result<(), DskManagerError> {
             panic!("Error - missing argument");
         }
     } else if let Some(sub) = matches.subcommand_matches("put") {
-        use cpclib::assembler::builder;
-        use cpclib::assembler::tokens::*;
+        use cpclib_tokens::*;
 
         // Add files in a sectorial way
         let mut track = u8::from_str(sub.value_of("TRACK").unwrap()).expect("Wrong track format");
@@ -320,11 +317,11 @@ fn main() -> Result<(), DskManagerError> {
         manager.dsk().save(dsk_fname)?;
     } else if let Some(sub) = matches.subcommand_matches("format") {
         // Manage the formating of a disc
-        use cpclib::disc::cfg::DiscConfig;
+        use cpclib_disc::cfg::DiscConfig;
 
         // Retrieve the format description
         let cfg = if let Some(desc_fname) = sub.value_of("FORMAT_FILE") {
-            cpclib::disc::cfg::DiscConfig::new(desc_fname)?
+            cpclib_disc::cfg::DiscConfig::new(desc_fname)?
         } else if let Some(desc) = sub.value_of("FORMAT_NAME") {
             match desc {
                 "data42" => DiscConfig::single_head_data42_format(),
@@ -336,7 +333,7 @@ fn main() -> Result<(), DskManagerError> {
         };
 
         // Make the dsk based on the format
-        let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
+        let dsk = cpclib_disc::builder::build_disc_from_cfg(&cfg);
         dsk.save(dsk_fname)?;
     } else {
         eprintln!("Missing command\n{}", matches.usage());

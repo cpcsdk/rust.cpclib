@@ -1,96 +1,26 @@
+
+
+/// Implementation of various behvior for the tokens of cpclib_tokens
+pub mod implementation;
+
 /// All the stuff to parse z80 code.
 pub mod parser;
 
-/// Definition of the tokens.
-pub mod tokens;
 
 /// Production of the bytecodes from the tokens.
 pub mod assembler;
 
-/// Utility functions to manually create tokens.
-pub mod builder;
-
 pub mod disass;
+
+pub mod preamble;
+
+pub mod error;
 
 use crate::parser::ParserContext;
 
-use cpclib_basic::BasicError;
-use failure::Fail;
 
-#[derive(Debug, Fail)]
-#[allow(missing_docs)]
-pub enum AssemblerError {
-    #[fail(display = "Assembling bug: {}", msg)]
-    BugInAssembler { msg: String },
-    #[fail(display = "Parser bug: {}. Context: {:?}", error, context)]
-    BugInParser {
-        error: String,
-        context: ParserContext,
-    },
+use error::*;
 
-    // TODO add more information
-    #[fail(display = "Syntax error: {}", error)]
-    SyntaxError { error: String },
-
-    #[fail(display = "Basic error: {}", error)]
-    BasicError { error: String },
-
-    // TODO add more information
-    #[fail(display = "Assembling error: {}", msg)]
-    AssemblingError { msg: String },
-    
-    #[fail(display = "Invalid argument: {}", msg)]
-    InvalidArgument {msg: String},
-
-    // TODO remove this case and dispatch it everywhere else
-    #[fail(display = "To be sorted error: {}", msg)]
-    GenericError { msg: String },
-
-    #[fail(display = "Assertion failed -- {}: {}", test, msg)]
-    AssertionFailed { test: String, msg: String },
-
-    #[fail(display = "Symbol `{}`already present on the symbol table", symbol)]
-    SymbolAlreadyExists { symbol: String },
-
-    #[fail(display = "Unknown symbol: {}. Closest one is: {:?}", symbol, closest)]
-    UnknownSymbol {
-        symbol: String,
-        closest: Option<String>,
-    },
-
-    #[fail(display = "IO error: {}", msg)]
-    IOError { msg: String },
-
-    #[fail(display = "Current assembling address is unknown.")]
-    UnknownAssemblingAddress,
-
-    #[fail(display = "Unable to resolve expression {}.", expression)]
-    ExpressionUnresolvable {
-        expression: tokens::Expr,
-    },
-}
-
-impl From<String> for AssemblerError {
-    fn from(msg: String) -> Self {
-        AssemblerError::GenericError { msg }
-    }
-}
-
-impl From<&String> for AssemblerError {
-    fn from(msg: &String) -> Self {
-        AssemblerError::GenericError {
-            msg: msg.to_string(),
-        }
-    }
-}
-
-impl From<BasicError> for AssemblerError {
-    fn from(msg: BasicError) -> Self {
-        AssemblerError::BasicError {
-            error: msg.to_string(),
-        }
-    }
-}
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
 #[derive(Clone, Debug)]
@@ -98,14 +28,14 @@ pub struct AssemblingOptions {
     /// Set to true to consider that the assembler pay attention to the case of the labels
     case_sensitive: bool,
     /// Contains some symbols that could be used during assembling
-    symbols: assembler::SymbolsTable,
+    symbols: cpclib_tokens::symbols::SymbolsTable,
 }
 
 impl Default for AssemblingOptions {
     fn default() -> Self {
         Self {
             case_sensitive: true,
-            symbols: assembler::SymbolsTable::default(),
+            symbols: cpclib_tokens::symbols::SymbolsTable::default(),
         }
     }
 }
@@ -123,7 +53,7 @@ impl AssemblingOptions {
     }
 
     /// Creation an option object with the given symbol table
-    pub fn new_with_table(symbols: &assembler::SymbolsTable) -> Self {
+    pub fn new_with_table(symbols: &cpclib_tokens::symbols::SymbolsTable) -> Self {
         let mut options = Self::default();
         options.set_symbols(symbols);
         options
@@ -136,12 +66,12 @@ impl AssemblingOptions {
     }
 
     /// Specify a symbol table to copy
-    pub fn set_symbols(&mut self, val: &assembler::SymbolsTable) -> &mut Self {
+    pub fn set_symbols(&mut self, val: &cpclib_tokens::symbols::SymbolsTable) -> &mut Self {
         self.symbols = val.clone();
         self
     }
 
-    pub fn symbols(&self) -> &assembler::SymbolsTable {
+    pub fn symbols(&self) -> &cpclib_tokens::symbols::SymbolsTable {
         &self.symbols
     }
 
@@ -161,7 +91,7 @@ pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
 pub fn assemble_with_options(
     code: &str,
     options: &AssemblingOptions,
-) -> Result<(Vec<u8>, assembler::SymbolsTable), AssemblerError> {
+) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let tokens = parser::parse_str(code)?;
     let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
 
@@ -211,5 +141,123 @@ Truc
         let options = AssemblingOptions::new_case_insensitive();
         println!("{:?}", assemble_with_options(code, &options));
         assert!(assemble_with_options(code, &options).is_ok());
+    }
+
+
+    use crate::tokens::{
+        DataAccess, Expr, FlagTest, Listing, ListingElement, Mnemonic, Register16, Register8, Token,
+    };
+    use std::str::FromStr;
+    #[test]
+    fn test_size() {
+        assert_eq!(
+            Token::OpCode(
+                Mnemonic::Jp,
+                None,
+                Some(DataAccess::Expression(Expr::Value(0)))
+            )
+            .number_of_bytes(),
+            Ok(3)
+        );
+
+        assert_eq!(
+            Token::OpCode(
+                Mnemonic::Jr,
+                None,
+                Some(DataAccess::Expression(Expr::Value(0)))
+            )
+            .number_of_bytes(),
+            Ok(2)
+        );
+
+        assert_eq!(
+            Token::OpCode(
+                Mnemonic::Jr,
+                Some(DataAccess::FlagTest(FlagTest::NC)),
+                Some(DataAccess::Expression(Expr::Value(0)))
+            )
+            .number_of_bytes(),
+            Ok(2)
+        );
+
+        assert_eq!(
+            Token::OpCode(
+                Mnemonic::Push,
+                Some(DataAccess::Register16(Register16::De)),
+                None
+            )
+            .number_of_bytes(),
+            Ok(1)
+        );
+
+        assert_eq!(
+            Token::OpCode(
+                Mnemonic::Dec,
+                Some(DataAccess::Register8(Register8::A)),
+                None
+            )
+            .number_of_bytes(),
+            Ok(1)
+        );
+    }
+
+    #[test]
+    fn test_listing() {
+        let mut listing = Listing::from_str("   nop").expect("unable to assemble");
+        assert_eq!(listing.estimated_duration().unwrap(), 1);
+        listing.set_duration(100);
+        assert_eq!(listing.estimated_duration().unwrap(), 100);
+    }
+
+    #[test]
+    fn test_duration() {
+        let listing = Listing::from_str(
+            "
+            pop de      ; 3
+        ",
+        )
+        .expect("Unable to assemble this code");
+        println!("{}", listing);
+        assert_eq!(listing.estimated_duration().unwrap(), 3);
+
+        let listing = Listing::from_str(
+            "
+            inc l       ; 1
+        ",
+        )
+        .expect("Unable to assemble this code");
+        println!("{}", listing);
+        assert_eq!(listing.estimated_duration().unwrap(), 1);
+
+        let listing = Listing::from_str(
+            "
+            ld (hl), e  ; 2
+        ",
+        )
+        .expect("Unable to assemble this code");
+        println!("{}", listing);
+        assert_eq!(listing.estimated_duration().unwrap(), 2);
+
+        let listing = Listing::from_str(
+            "
+            ld (hl), d  ; 2
+        ",
+        )
+        .expect("Unable to assemble this code");
+        println!("{}", listing);
+        assert_eq!(listing.estimated_duration().unwrap(), 2);
+
+        let listing = Listing::from_str(
+            "
+            pop de      ; 3
+            inc l       ; 1
+            ld (hl), e  ; 2
+            inc l       ; 1
+            ld (hl), d  ; 2
+        ",
+        )
+        .expect("Unable to assemble this code");
+        println!("{}", listing);
+        assert_eq!(listing.estimated_duration().unwrap(), (3 + 1 + 2 + 1 + 2));
     }
 }

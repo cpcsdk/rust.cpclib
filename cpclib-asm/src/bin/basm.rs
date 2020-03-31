@@ -19,12 +19,8 @@ use std::io;
 use std::io::{Read, Write};
 use std::path::Path;
 
-use cpclib::assembler::assembler::Env;
-use cpclib::assembler::parser::*;
-use cpclib::assembler::tokens::Listing;
-use cpclib::assembler::AssemblerError;
-use cpclib::assembler::*;
-use cpclib::disc::amsdos::{AmsdosFileName, AmsdosManager};
+use cpclib_asm::preamble::*;
+use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 use clap;
 use clap::{App, Arg, ArgGroup, ArgMatches};
@@ -120,7 +116,7 @@ fn assemble(matches: &ArgMatches<'_>, listing: &Listing) -> Result<Env, BasmErro
         }
     }
 
-    crate::assembler::visit_tokens_all_passes_with_options(&listing.listing(), &options)
+    visit_tokens_all_passes_with_options(&listing.listing(), &options)
         .map_err(|e| e.into())
 }
 
@@ -131,7 +127,7 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
     let binary = env.produced_bytes();
 
     if matches.is_present("DB_LIST") {
-        println!("{}", Listing::from(env.produced_bytes().as_ref()));
+        println!("{}", PrintableListing::from(&Listing::from(env.produced_bytes().as_ref())));
     }
     else {
         let pc_filename = matches.value_of("OUTPUT").unwrap();

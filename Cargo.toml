@@ -7,7 +7,9 @@ members = [
     "cpclib-sna",
     "cpclib-z80emu",
     "cpclib-xfer",
-    "cpclib-disc"
+    "cpclib-xfertool",
+    "cpclib-disc",
+    "cpclib-tokens"
 ]
 
 [patch.crates-io]
@@ -16,8 +18,10 @@ cpclib-asm = {path = "./cpclib-asm"}
 cpclib-basic = {path = "./cpclib-basic"}
 cpclib-sna = {path = "./cpclib-sna"}
 cpclib-xfer = {path = "./cpclib-xfer"}
+cpclib-xfertool = {path = "./cpclib-xfertool"}
 cpclib-z80emu = {path = "./cpclib-z80emu"}
 cpclib-disc = {path = "./cpclib-disc"}
+cpclib-tokens = {path = "./cpclib-tokens"}
 
 
 [profile.dev]

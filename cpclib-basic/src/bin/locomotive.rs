@@ -14,10 +14,9 @@
 
 ///! Locomotive BASIC manipulation tool.
 use clap;
-use cpclib;
 
-use cpclib::basic::BasicProgram;
-use cpclib::disc::amsdos::AmsdosManager;
+use cpclib_basic::BasicProgram;
+use cpclib_disc::amsdos::AmsdosManager;
 
 use clap::*;
 

@@ -14,18 +14,12 @@
 
 /// Catalog tool manipulator.
 ///
-use clap;
-use cpclib;
-use log;
-use num;
-use simplelog;
-
 use clap::{App, Arg};
 use std::fs::File;
 use std::io::{Read, Write};
 
-use cpclib::disc::amsdos::*;
-use cpclib::disc::edsk::{ExtendedDsk, Head};
+use cpclib_disc::amsdos::*;
+use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
 use simplelog::*;
 

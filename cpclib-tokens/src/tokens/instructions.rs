@@ -1,15 +1,10 @@
 use std::convert::TryFrom;
 use std::fmt;
 
-use crate::assembler::{
-    assemble_align, assemble_db_or_dw, assemble_defs, assemble_opcode, Bytes,
-    SymbolsTableCaseDependent,
-};
-use crate::parser::*;
+
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::tokens::Listing;
-use crate::AssemblerError;
 
 use cpclib_sna::SnapshotVersion;
 
@@ -505,38 +500,7 @@ impl From<u8> for Token {
     }
 }
 
-impl<'a> TryFrom<&'a str> for Token {
-    type Error = String;
 
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let tokens = {
-            let res = parse_z80_str(value);
-            match res {
-                Ok(tokens) => tokens.1,
-                Err(_e) => {
-                    return Err("ERROR -- need to code why ...".to_owned());
-                }
-            }
-        };
-
-        match tokens.len() {
-            0 => Err("No ASM found.".to_owned()),
-            1 => Ok(tokens[0].clone()),
-            _ => Err(format!(
-                "{} tokens are present instead of one",
-                tokens.len()
-            ))
-        }
-    }
-}
-
-impl TryFrom<String> for Token {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-       Token::try_from(value.as_ref())
-    }
-}
 
 #[allow(missing_docs)]
 impl Token {
@@ -587,169 +551,5 @@ impl Token {
         }
     }
 
-    /// Unroll the tokens when in a repetition loop
-    /// TODO return an iterator in order to not produce the vector each time
-    pub fn unroll(
-        &self,
-        sym: &SymbolsTableCaseDependent,
-    ) -> Option<Result<Vec<&Self>, AssemblerError>> {
-        if let Token::Repeat(ref expr, ref tokens, ref _counter_label) = self {
-            let count: Result<i32, AssemblerError> = expr.resolve(sym);
-            if count.is_err() {
-                Some(Err(count.err().unwrap()))
-            } else {
-                let count = count.unwrap();
-                let mut res = Vec::with_capacity(count as usize * tokens.len());
-                for _i in 0..count {
-                    // TODO add a specific token to control the loop counter (and change the return type)
-                    for t in tokens.iter() {
-                        res.push(t);
-                    }
-                }
-                Some(Ok(res))
-            }
-        } else {
-            None
-        }
-    }
-
-    /// Generate the listing of opcodes for directives that contain data Defb/defw/Defs in order to have
-    /// mnemonics. Fails when some values are not opcodes
-    pub fn disassemble_data(&self) -> Result<Listing, String> {
-        match self {
-            Token::Defs(ref expr, ref value) => {
-                use crate::assembler::Env;
-                use crate::disass::disassemble;
-
-                assemble_defs(expr, value.as_ref(), &Env::default())
-                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
-                            .and_then(|bytes| disassemble(&bytes) )
-            },
-
-            Token::Defb(_) | Token::Defw(_) => {
-                use crate::assembler::Env;
-                use crate::disass::disassemble;
-
-                assemble_db_or_dw(self, &Env::default())
-                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
-                            .and_then(|bytes| disassemble(&bytes))
-
-            },
-
-            _ => {
-                let mut lst = Listing::new();
-                lst.push(self.clone());
-                Ok(lst)
-            }
-        }
-
-    }
-
-    /// Modify the few tokens that need to read files
-    /// TODO refactor file reading of filename search
-    pub fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
-        match self {
-            Token::Include(ref fname, ref mut listing) if listing.is_none() => {
-                match ctx.get_path_for(fname) {
-                    None => {
-                        return Err(AssemblerError::IOError {
-                            msg: format!("{:?} not found", fname),
-                        });
-                    }
-                    Some(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
-                            msg: format!("Unable to open {:?}", fname),
-                        })?;
-                        let mut content = String::new();
-                        f.read_to_string(&mut content)
-                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
-
-                        let mut new_ctx = ctx.clone();
-                        new_ctx.set_current_filename(fname);
-                        listing.replace(parse_str_with_context(&content, &new_ctx)?);
-                    }
-                }
-            }
-
-            Token::Incbin(ref fname, _, _, _, _, ref mut data, ref transformation)
-                if data.is_none() =>
-            {
-                //TODO manage the optional arguments
-                match ctx.get_path_for(fname) {
-                    None => {
-                        return Err(AssemblerError::IOError {
-                            msg: format!("{:?} not found", fname),
-                        });
-                    }
-                    Some(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
-                            msg: format!("Unable to open {:?}", fname),
-                        })?;
-                        let mut content = Vec::new();
-                        f.read_to_end(&mut content)
-                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
-
-                        match transformation {
-                            BinaryTransformation::None => {
-                                data.replace(content);
-                            }
-                            BinaryTransformation::Exomizer => {
-                                unimplemented!("Need to implement exomizer crunching")
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Rorg may embed some instructions that read files
-            Token::Rorg(_, ref mut listing) => {
-                for token in listing.iter_mut() {
-                    token.read_referenced_file(ctx)?;
-                }
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
-
-    /// Dummy version that assemble without taking into account the context
-    /// TODO find a way to not build a symbol table each time
-    pub fn to_bytes(&self) -> Result<Bytes, AssemblerError> {
-        let mut table = SymbolsTableCaseDependent::laxist();
-        let table = &mut table;
-        self.to_bytes_with_context(table)
-    }
-
-
-    /// Assemble the symbol taking into account some context, but never modify this context
-    #[allow(clippy::match_same_arms)]
-    pub fn to_bytes_with_context(
-        &self,
-        table: &mut SymbolsTableCaseDependent,
-    ) -> Result<Bytes, AssemblerError> {
-        let env = &mut crate::assembler::Env::with_table_case_dependent(table);
-        match self {
-            Token::OpCode(ref mnemonic, ref arg1, ref arg2) => assemble_opcode(
-                *mnemonic, arg1, arg2, env, // Modification to the environment are lost
-            ),
-
-            Token::Equ(_, _) => Ok(Bytes::new()),
-
-            Token::Defw(_) | Token::Defb(_) => assemble_db_or_dw(self, env),
-
-            Token::Label(_) | Token::Comment(_) | Token::Org(_, _) | Token::Assert(_, _) => {
-                Ok(Bytes::new())
-            }
-
-            Token::Defs(ref expr, ref fill) => assemble_defs(expr, fill.as_ref(), env),
-
-            Token::Align(ref expr, ref fill) => assemble_align(expr, fill.as_ref(), env),
-
-            // Protect and breakpoint directives do not produce any bytes
-            Token::Protect(_, _) | Token::Breakpoint(_) | Token::Print(_) => Ok(Bytes::new()),
-
-            _ => Err(format!("Currently unable to generate bytes for {}", self).into()),
-        }
-    }
+   
 }
