@@ -3,6 +3,7 @@ pub mod parser;
 /// Basic token encoding.
 pub mod tokens;
 
+
 use parser::parse_basic_program;
 
 use failure::Fail;
@@ -300,7 +301,7 @@ impl BasicProgram {
 #[allow(clippy::shadow_unrelated)]
 #[cfg(test)]
 mod test {
-    use crate::basic::*;
+    use super::*;
 
     #[test]
     fn parse_complete() {

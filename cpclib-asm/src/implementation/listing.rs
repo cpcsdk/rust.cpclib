@@ -147,3 +147,14 @@ impl<'a> fmt::Display for PrintableListing<'a> {
 
 
 
+
+/// Generate a listing from a string
+pub trait ListingFromStr {
+    fn from_str(s: &str) -> Result<Listing, AssemblerError> ;
+}
+
+impl ListingFromStr for Listing {
+    fn from_str(s: &str) -> Result<Listing, AssemblerError> {
+        crate::parser::parse_str(s)
+    } 
+}

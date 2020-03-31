@@ -3,12 +3,7 @@ extern crate matches;
 
 #[cfg(test)]
 mod tests {
-    use cpclib::assembler::assembler::*;
-
-    use cpclib::assembler::tokens::Listing;
-    use cpclib::assembler::tokens::*;
-
-    use std::str::FromStr;
+    use cpclib_asm::preamble::*;
 
     #[test]
     pub fn test_visit() {

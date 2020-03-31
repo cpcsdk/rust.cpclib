@@ -2000,19 +2000,12 @@ pub fn decode_parsing_error(_orig: &str, _e: ::nom::Err<&str>) -> String {
 }
 
 
-/// Generate a listing from a string
-pub trait ListingFromStr {
-    fn from_str(s: &str) -> Result<Listing, AssemblerError> {
-        parse_str(s)
-    }
-}
-
 
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::assembler::tokens::DataAccess;
+    use crate::preamble::*;
 
     #[test]
     fn parse_indexregister8() {

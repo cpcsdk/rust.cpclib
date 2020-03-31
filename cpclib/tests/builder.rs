@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod test {
-    use cpclib::assembler::builder::*;
-    use cpclib::assembler::tokens::*;
+    use cpclib_asm::preamble::*;
 
     #[test]
     pub fn test_push() {

@@ -508,7 +508,9 @@ fn string_to_token(representation: &str) -> Result<Token, String> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+	use super::*;
+	use crate::preamble::*;
+	
 
     #[test]
     fn disass_simple_instruction() {
@@ -568,8 +570,6 @@ mod test {
 						.to_uppercase()
 			);
 
-			use crate::assembler::assembler::assemble_opcode;
-			use crate::assembler::assembler::Env;
 			let mut env = Env::default();
 			if let Token::OpCode(ref mnemonic, ref arg1, ref arg2) = obtained.listing()[0] {
 				let obtained_bytes = assemble_opcode(*mnemonic, &arg1, &arg2, &mut env).unwrap();
@@ -648,8 +648,6 @@ mod test {
 
 
 			// check if it is possible to assemble it
-			use crate::assembler::assembler::assemble_opcode;
-			use crate::assembler::assembler::Env;
 			let mut env = Env::default();
 			if let Token::OpCode(ref mnemonic, ref arg1, ref arg2) = obtained.listing()[0] {
 

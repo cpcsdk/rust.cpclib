@@ -48,6 +48,11 @@ pub trait TokenExt : ListingElement {
         &self,
         table: &mut SymbolsTableCaseDependent,
     ) -> Result<Bytes, AssemblerError>;
+
+    /// Check if the token is valid. We consider a token vlaid if it is possible to assemble it
+    fn is_valid(&self) -> bool {
+        self.to_bytes().is_ok()
+    }
 }
 
 
@@ -501,10 +506,7 @@ impl TokenTryFrom<String> for Token {
 #[allow(clippy::pedantic)]
 #[allow(warnings)]
 mod tests {
-    use crate::assembler::builder::*;
-    use crate::assembler::tokens::*;
-    use std::convert::TryFrom;
-
+    use crate::preamble::*;
     #[test]
     fn fixup_duration() {
         assert_eq!(

@@ -101,6 +101,7 @@ pub fn assemble_with_options(
 #[cfg(test)]
 mod test_super {
     use super::*;
+    use crate::preamble::*;
 
     #[test]
     fn simple_test_assemble() {
@@ -144,10 +145,7 @@ Truc
     }
 
 
-    use crate::tokens::{
-        DataAccess, Expr, FlagTest, Listing, ListingElement, Mnemonic, Register16, Register8, Token,
-    };
-    use std::str::FromStr;
+
     #[test]
     fn test_size() {
         assert_eq!(
@@ -217,7 +215,7 @@ Truc
         ",
         )
         .expect("Unable to assemble this code");
-        println!("{}", listing);
+        println!("{}", listing.to_string());
         assert_eq!(listing.estimated_duration().unwrap(), 3);
 
         let listing = Listing::from_str(
@@ -226,7 +224,7 @@ Truc
         ",
         )
         .expect("Unable to assemble this code");
-        println!("{}", listing);
+        println!("{}", listing.to_string());
         assert_eq!(listing.estimated_duration().unwrap(), 1);
 
         let listing = Listing::from_str(
@@ -235,7 +233,7 @@ Truc
         ",
         )
         .expect("Unable to assemble this code");
-        println!("{}", listing);
+        println!("{}", listing.to_string());
         assert_eq!(listing.estimated_duration().unwrap(), 2);
 
         let listing = Listing::from_str(
@@ -244,7 +242,7 @@ Truc
         ",
         )
         .expect("Unable to assemble this code");
-        println!("{}", listing);
+        println!("{}", listing.to_string());
         assert_eq!(listing.estimated_duration().unwrap(), 2);
 
         let listing = Listing::from_str(
@@ -257,7 +255,7 @@ Truc
         ",
         )
         .expect("Unable to assemble this code");
-        println!("{}", listing);
+        println!("{}", listing.to_string());
         assert_eq!(listing.estimated_duration().unwrap(), (3 + 1 + 2 + 1 + 2));
     }
 }
