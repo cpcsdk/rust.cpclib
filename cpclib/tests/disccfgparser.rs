@@ -326,6 +326,10 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 
     #[test]
     fn test_build() {
+        use tempfile::NamedTempFile;
+        let file = NamedTempFile::new().unwrap();
+        let path = file.into_temp_path();
+
         let cfg = cpclib::disc::cfg::DiscConfig::from_str(SINGLE_SIDED).unwrap();
         println!("{:?}", cfg);
         let track_info = cfg.track_information_for_track(3, 0).unwrap();
@@ -415,7 +419,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
             );
         }
 
-        dsk.save("/tmp/test.dsk").unwrap();
+        dsk.save(&path).unwrap();
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);
 
