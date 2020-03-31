@@ -498,18 +498,7 @@ pub mod routines {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-fn test_wait() {
-    use super::*;
-    use crate::z80emu::execute_dummy_listing;
 
-    // This test cannot run. The time must be obtained by emulating the code
-    // TODO add emulation
-   assert_eq!(
-       20, 
-       execute_dummy_listing(&routines::wait(20)).unwrap().duration()
-   );
-}
 
 #[test]
 fn test_ld_r16() {

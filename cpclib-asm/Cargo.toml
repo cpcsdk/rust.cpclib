@@ -8,6 +8,13 @@ license = "MIT"
 description = "cpclib libraries related to assembling"
 
 [dependencies]
+
+
+cpclib-basic = "0.3.2-alpha"
+cpclib-sna = "0.3.2-alpha"
+cpclib-tokens = "0.3.2-alpha"
+
+
 anyhow = "1.0"
 arrayref= "0.3.5"
 bitfield = "0.13.2"
@@ -37,5 +44,20 @@ strsim = "0.9.2"
 tempfile= "3.1.0"
 
 
-cpclib-basic = "0.3.2-alpha"
-cpclib-sna = "0.3.2-alpha"
+time = { version = "0.1.42", optional = true }
+semver = { version = "0.9.0", optional = true }
+clap = { version = "2.33.0", optional = true }
+cpclib-disc = { version ="0.3.2-alpha", optional = true}
+
+
+[build-dependencies]
+built = {version = "0.4", features = ["chrono"]}
+
+
+[features]
+basm = ["clap",  "semver", "time", "cpclib-disc"]
+
+[[bin]]
+name = "basm"
+path = "src/bin/basm.rs"
+required-features = ["basm"]

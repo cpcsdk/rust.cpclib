@@ -1,26 +1,14 @@
-use crate::assembler::SymbolsTableCaseDependent;
+use crate::symbols::SymbolsTableCaseDependent;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+use std::iter::FromIterator;
+use core::fmt::Debug;
+
 /// The ListingElement trati contains the public method any memeber of a listing should contain
+/// ATM there is nothing really usefull
 pub trait ListingElement {
-    /// Estimate the duration of the token
-    fn estimated_duration(&self) -> Result<usize, String>;
 
-    /// Return the number of bytes of the token
-    fn number_of_bytes(&self) -> Result<usize, String>;
-
-    /// Return the number of bytes given the context (needed for Align)
-    fn number_of_bytes_with_context(
-        &self,
-        table: &mut SymbolsTableCaseDependent,
-    ) -> Result<usize, String>;
-
-    /// Check if the token is valid. The token is valid if it is possible to assemble it...
-    fn is_valid(&self) -> bool {
-        // we get the bytes indirectly throug there amount
-        self.number_of_bytes().is_ok()
-    }
     
 }
 
@@ -65,11 +53,27 @@ impl<T: Clone + ListingElement> Default for BaseListing<T> {
     }
 }
 
+
+
+impl<T: Clone + ListingElement + Debug> FromIterator<T> for BaseListing<T> {
+    fn from_iter<I: IntoIterator<Item=T>>(src: I) -> Self {
+        Self::new_with(&src.into_iter().collect::<Vec<T>>())
+    }
+}
+
+
 #[allow(missing_docs)]
 impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
     /// Create an empty listing without duration
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a new  listing based on the provided Ts
+    pub fn new_with(arg: &[T]) -> Self {
+        let mut new = Self::default();
+        new.listing = arg.to_vec();
+        new
     }
 
     /// Write access to listing. Should not exist but I do not know how to access to private firlds
@@ -97,23 +101,14 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
         self.listing.extend_from_slice(&other.listing);
     }
 
-    /// Get the execution duration.
-    /// If field `duration` is set, returns it. Otherwise, compute it
-    pub fn estimated_duration(&self) -> Result<usize, String> {
-        if let Some(duration) = self.duration {
-            Ok(duration)
-        } else {
-            let mut duration = 0;
-            for token in &self.listing {
-                duration += token.estimated_duration()?;
-            }
-            Ok(duration)
-        }
-    }
 
     pub fn set_duration(&mut self, duration: usize) {
         let duration = Some(duration);
         self.duration = duration;
+    }
+
+    pub fn duration(&self) -> Option<usize> {
+        self.duration
     }
 
     /// Get the token at the required position

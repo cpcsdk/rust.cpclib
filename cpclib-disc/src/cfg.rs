@@ -495,8 +495,7 @@ pub fn parse_config(input: &str) -> IResult<&str, DiscConfig> {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::disc::cfg::*;
+    use crate::cfg::*;
 
     #[test]
     fn parse_decimal() {

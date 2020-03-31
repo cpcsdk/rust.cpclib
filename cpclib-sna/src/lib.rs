@@ -1182,7 +1182,7 @@ impl Snapshot {
     /// Add the memory content at the required posiiton
     ///
     /// ```
-    /// use cpclib::sna::Snapshot;
+    /// use cpclib_sna::Snapshot;
     ///
     /// let mut sna = Snapshot::default();
     /// let data = vec![0,2,3,5];

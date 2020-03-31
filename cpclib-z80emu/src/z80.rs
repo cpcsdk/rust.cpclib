@@ -1,5 +1,5 @@
-use crate::assembler::assembler::SymbolsTableCaseDependent;
-use crate::assembler::tokens::*;
+use cpclib_asm::preamble::*;
+
 
 use num::integer::Integer;
 use num::traits::{WrappingAdd, WrappingSub};
@@ -361,8 +361,8 @@ impl Z80 {
     // To reduce copy paste/implementation errors, all manipulation are translated as token usage
     pub fn copy_to_from(
         &mut self,
-        to: crate::assembler::tokens::Register8,
-        from: crate::assembler::tokens::Register8,
+        to: tokens::Register8,
+        from: tokens::Register8,
     ) {
         self.execute(&Token::OpCode(
             Mnemonic::Ld,
@@ -491,7 +491,7 @@ mod tests {
 
     #[test]
     fn eval() {
-        use crate::assembler::tokens::*;
+        use tokens::*;
 
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);

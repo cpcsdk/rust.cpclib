@@ -19,16 +19,24 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::str::FromStr;
 
-use cpclib::sna::*;
-
-use clap;
+use cpclib_sna::*;
 use clap::{App, Arg};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-use cpclib::util::string_to_nb;
+    /**
+     * Convert a string to its unsigned 32 bits representation (to access to extra memory)
+     */
+    pub fn string_to_nb(source: &str) -> u32 {
+        let error = format!("Unable to read the value: {}", source);
+        if source.starts_with("0x") {
+            u32::from_str_radix(&source[2..], 16).expect(&error)
+        } else {
+            source.parse::<u32>().expect(&error)
+        }
+    }
 
 fn main() {
     eprintln!("[WARNING] This is still a draft version that implement still few functionnalities");

@@ -1,15 +1,16 @@
 [package]
 
-name = "cpclib-xfer"
+name = "cpclib-xfertool"
 version = "0.3.2-alpha"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
-description = "cpclib libraries related to snapshots"
+description = "cpclib tool related to xfer"
 
 [dependencies]
 cpclib-disc = "0.3.2-alpha"
 cpclib-sna = "0.3.2-alpha"
+cpclib-xfer = "0.3.2-alpha"
 
 
 anyhow = "1.0"
@@ -45,6 +46,22 @@ curl = { version = "0.4.25", optional = false }
 reqwest = { version = "0.9.22", optional = false }
 
 
+clap = { version = "2.33.0", optional = false }
+time = { version = "0.1.42", optional = false }
+exitcode = { version = "1.1.2", optional = false }
+
+rustyline = { version = "6.0.0", optional = false }
+rustyline-derive = {version="0.3.0", optional= false}
+subprocess = {version="0.2.4", optional=false}
+notify = { version = "5.0.0-pre.2", optional = false }
+crossbeam-channel = { version = "0.4.0", optional = false }
+hotwatch = { version = "0.4.3", optional = false }
+
+
+term_grid = {version="0.1.7", optional= false}
+termize = {version="0.1.1", optional= false}
+
 [build-dependencies]
 built = {version = "0.4", features = ["chrono"]}
+
 

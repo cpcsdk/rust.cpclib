@@ -88,23 +88,10 @@ built = {version = "0.4", features = ["chrono"]}
 [features]
 xferlib = [	"curl", "reqwest", "path-absolutize"]
 xfer = ["clap", "rustyline", "rustyline-derive", 'notify', 'crossbeam-channel', 'term_grid', 'termize', 'subprocess']
-snapshot = ["clap", "time", "semver"]
 imgconverter = ["clap", 'notify', "exitcode"]
-dskmanager = ["clap"]
-catalog = ["clap", "log", "simplelog"]
-hideur = ["clap"]
-basic = ["clap"]
-asm = ["clap",  "semver", "time"]
 
-[[bin]]
-name = "snapshot"
-path = "src/bin/snapshot.rs"
-required-features = ["snapshot"]
 
-[[bin]]
-name = "xfer"
-path = "src/bin/xfer/main.rs"
-required-features = ["xfer"]
+
 
 [[bin]]
 name = "imgconverter"
@@ -112,27 +99,3 @@ path = "src/bin/imgconverter.rs"
 #required-features = ["xferlib", "imgconverter"]
 required-features = ["imgconverter"]
 
-[[bin]]
-name = "dskmanager"
-path = "src/bin/dsk_manager.rs"
-required-features = ["dskmanager"]
-
-[[bin]]
-name = "hideur"
-path = "src/bin/hideur.rs"
-required-features = ["hideur"]
-
-[[bin]]
-name = "locomotive"
-path = "src/bin/locomotive.rs"
-required-features = ["basic"]
-
-[[bin]]
-name = "basm"
-path = "src/bin/basm.rs"
-required-features = ["asm"]
-
-[[bin]]
-name = "catalog"
-path = "src/bin/catalog.rs"
-required-features = ["catalog"]

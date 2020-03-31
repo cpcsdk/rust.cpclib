@@ -5,8 +5,7 @@ use cpclib_asm as assembler;
 pub mod emul;
 mod z80;
 
-use crate::assembler::tokens::Listing;
-use crate::assembler::tokens::ListingElement;
+use cpclib_asm::preamble::*;
 
 pub use self::z80::{HasValue, Z80};
 
