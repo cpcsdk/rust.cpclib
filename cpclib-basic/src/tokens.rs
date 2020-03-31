@@ -514,7 +514,7 @@ impl BasicToken {
 
 #[cfg(test)]
 mod test {
-    use crate::basic::tokens::*;
+    use crate::tokens::*;
     use std::convert::TryInto;
 
     #[test]

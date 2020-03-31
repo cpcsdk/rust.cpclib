@@ -1,4 +1,4 @@
-use cpclib_asm::preamble::*;
+use crate::preamble::*;
 use crate::z80::*;
 
 impl Z80 {
@@ -87,7 +87,7 @@ impl Z80 {
 
             Mnemonic::And => {
                 let val = self.get_value(arg1.unwrap()).unwrap() as _;
-                self.get_register_8_mut(&Register8::A.into()).and(val);
+                self.get_register_8_mut(&tokens::Register8::A.into()).and(val);
             }
 
             Mnemonic::Res => {
@@ -302,7 +302,7 @@ impl Z80 {
 
     /// Return true if the flag is active
     fn is_flag_active(&self, flag: &FlagTest) -> bool {
-        flag_is_active(flag, self.f().value())
+        flag.flag_is_active(self.f().value())
     }
 
     /// Returns the register encoded by the DataAccess
@@ -406,39 +406,41 @@ impl Z80 {
     }
 }
 
-/// Add extra functionality to flag test
-pub fn flag_is_active(flag: &FlagTest, f_value: u8) -> bool {
-    (match flag {
-        FlagTest::C => f_value & (1 << FlagPos::Carry as u8),
-        FlagTest::NC => !(f_value & (1 << FlagPos::Carry as u8)),
-
-        FlagTest::Z => f_value & (1 << FlagPos::Zero as u8),
-        FlagTest::NZ => !(f_value & (1 << FlagPos::Zero as u8)),
-
-        FlagTest::PO => f_value & (1 << FlagPos::Parity as u8),
-        FlagTest::PE => !(f_value & (1 << FlagPos::Parity as u8)),
-
-        FlagTest::P => f_value & (1 << FlagPos::Sign as u8),
-        FlagTest::M => !(f_value & (1 << FlagPos::Sign as u8)),
-    }) != 0
+pub trait FlagIsActive{
+    fn flag_is_active(self, f_value: u8) -> bool;
 }
 
+impl FlagIsActive for &FlagTest {
+    /// Add extra functionality to flag test
+    fn flag_is_active(self, f_value: u8) -> bool {
+        (match self {
+            FlagTest::C => f_value & (1 << FlagPos::Carry as u8),
+            FlagTest::NC => !(f_value & (1 << FlagPos::Carry as u8)),
+
+            FlagTest::Z => f_value & (1 << FlagPos::Zero as u8),
+            FlagTest::NZ => !(f_value & (1 << FlagPos::Zero as u8)),
+
+            FlagTest::PO => f_value & (1 << FlagPos::Parity as u8),
+            FlagTest::PE => !(f_value & (1 << FlagPos::Parity as u8)),
+
+            FlagTest::P => f_value & (1 << FlagPos::Sign as u8),
+            FlagTest::M => !(f_value & (1 << FlagPos::Sign as u8)),
+        }) != 0
+    }
+}
 
 #[cfg(test)]
 mod test {
-    use crate::assembler::assembler::SymbolsTableCaseDependent;
-    use tokens::registers::FlagTest;
-    use crate::*;
+    use super::*;
 
     #[test]
     fn test_flags() {
-        assert!(flag_is_active(FlagTest::Z, 0b01000000));
-        assert!(flag_is_active(FlagTest::NZ, 0b00000000));
+        assert!(FlagTest::Z.flag_is_active(0b01000000));
+        assert!(FlagTest::NZ.flag_is_active(0b00000000));
     }
 
     #[test]
     fn jp_value() {
-        use tokens::*;
 
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);
@@ -456,7 +458,6 @@ mod test {
 
     #[test]
     fn jp_symbol() {
-        use tokens::*;
 
         let mut z80 = Z80::default();
         let mut symbols = SymbolsTableCaseDependent::default();
@@ -478,7 +479,6 @@ mod test {
 
     #[test]
     fn jp_dollar() {
-        use tokens::*;
 
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);
@@ -496,7 +496,6 @@ mod test {
 
     #[test]
     fn jr_dollar() {
-        use tokens::*;
 
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);

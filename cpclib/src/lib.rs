@@ -104,3 +104,21 @@ pub mod util {
         }
     }
 }
+
+
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_wait() {
+        use cpclib_z80emu::execute_dummy_listing;
+        use cpclib_asm::preamble::*;
+    
+        // This test cannot run. The time must be obtained by emulating the code
+        // TODO add emulation
+       assert_eq!(
+           20, 
+           execute_dummy_listing(&routines::wait(20)).unwrap().duration()
+       );
+    }
+}

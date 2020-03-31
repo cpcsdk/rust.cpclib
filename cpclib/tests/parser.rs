@@ -3,8 +3,7 @@ extern crate matches;
 
 #[cfg(test)]
 mod tests {
-    use cpclib::assembler::parser::*;
-    use cpclib::assembler::tokens::*;
+    use cpclib_asm::preamble::*;
     use nom::IResult;
 
     fn check_mnemonic(code: &str, mnemonic: Mnemonic) -> bool {

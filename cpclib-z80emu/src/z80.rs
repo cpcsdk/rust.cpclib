@@ -1,4 +1,5 @@
-use cpclib_asm::preamble::*;
+// trick to not be distirb by Register8/16
+use crate::preamble::*;
 
 
 use num::integer::Integer;
@@ -146,7 +147,7 @@ impl Register16 {
 #[derive(Default, Debug, Clone)]
 pub struct EmulationContext {
     /// The symbol table that can be used when ev
-    pub(crate) symbols: SymbolsTableCaseDependent,
+    pub(crate) symbols: tokens::SymbolsTableCaseDependent,
 }
 
 /// Highly simplify z80 model.
@@ -408,8 +409,7 @@ struct ExtraFlags {
 
 #[cfg(test)]
 mod tests {
-    use crate::z80emu::z80::HasValue;
-    use crate::z80emu::z80::{Register16, Register8, Z80};
+    use super::*;
 
     #[test]
     fn build_z80() {
@@ -491,7 +491,6 @@ mod tests {
 
     #[test]
     fn eval() {
-        use tokens::*;
 
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);
@@ -501,18 +500,18 @@ mod tests {
 
         let pop_bc = Token::OpCode(
             Mnemonic::Pop,
-            Some(DataAccess::Register16(Register16::Bc)),
+            Some(DataAccess::Register16(tokens::Register16::Bc)),
             None,
         );
         let ld_l_a = Token::OpCode(
             Mnemonic::Ld,
-            Some(DataAccess::Register8(Register8::L)),
-            Some(DataAccess::Register8(Register8::A)),
+            Some(DataAccess::Register8(tokens::Register8::L)),
+            Some(DataAccess::Register8(tokens::Register8::A)),
         );
         let add_a_b = Token::OpCode(
             Mnemonic::Add,
-            Some(DataAccess::Register8(Register8::A)),
-            Some(DataAccess::Register8(Register8::B)),
+            Some(DataAccess::Register8(tokens::Register8::A)),
+            Some(DataAccess::Register8(tokens::Register8::B)),
         );
         let ldi = Token::OpCode(Mnemonic::Ldi, None, None);
 

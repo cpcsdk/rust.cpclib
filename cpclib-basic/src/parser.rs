@@ -252,7 +252,7 @@ pub fn dec_u16_inner(input: &str) -> IResult<&str, u16> {
 
 #[cfg(test)]
 mod test {
-    use crate::basic::parser::*;
+    use crate::parser::*;
 
     #[test]
     fn check_number() {

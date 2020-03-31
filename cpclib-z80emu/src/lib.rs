@@ -4,6 +4,8 @@ use cpclib_asm as assembler;
 /// Z80 emulator
 pub mod emul;
 mod z80;
+mod preamble;
+
 
 use cpclib_asm::preamble::*;
 
