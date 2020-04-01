@@ -6,6 +6,8 @@ authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
 description = "cpclib libraries related to assembling"
+repository = "https://github.com/cpcsdk/rust.cpclib"
+
 
 [dependencies]
 
