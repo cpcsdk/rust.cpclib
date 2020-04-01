@@ -22,7 +22,6 @@ use cpclib_disc::amsdos::*;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
 use simplelog::*;
-
 use num::Num;
 
 pub fn to_number<T>(repr: &str) -> T
