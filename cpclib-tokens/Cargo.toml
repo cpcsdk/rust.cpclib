@@ -6,6 +6,7 @@ authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
 description = "cpclib libraries related to assembly tokens. Only structures are provided there. Intelligence is within cpclib-asm"
+repository = "https://github.com/cpcsdk/rust.cpclib"
 
 [dependencies]
 cpclib-sna = "0.3.2-alpha"
