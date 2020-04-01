@@ -1,7 +1,7 @@
 [package]
 
 name = "cpclib"
-version = "0.3.1-alpha"
+version = "0.4.0-alpha"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -15,12 +15,12 @@ categories = ["command-line-utilities", "development-tools", "emulators"]
 
 [dependencies]
 
-cpclib-basic = "0.3.2-alpha"
-cpclib-sna = "0.3.2-alpha"
-cpclib-asm = "0.3.2-alpha"
-cpclib-z80emu = "0.3.2-alpha"
-cpclib-xfer = "0.3.2-alpha"
-cpclib-disc = "0.3.2-alpha"
+cpclib-basic = "0.4.0-alpha"
+cpclib-sna = "0.4.0-alpha"
+cpclib-asm = "0.4.0-alpha"
+cpclib-z80emu = "0.4.0-alpha"
+cpclib-xfer = "0.4.0-alpha"
+cpclib-disc = "0.4.0-alpha"
 
 anyhow = "1.0"
 arrayref= "0.3.5"
