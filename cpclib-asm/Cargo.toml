@@ -15,6 +15,7 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 cpclib-basic = "0.4.0-alpha"
 cpclib-sna = "0.4.0-alpha"
 cpclib-tokens = "0.4.0-alpha"
+cpclib-disc = { version ="0.4.0-alpha", optional = true}
 
 
 arrayref= "0.3.5"
@@ -41,7 +42,6 @@ strsim = "0.9.2"
 time = { version = "0.1.42", optional = true }
 semver = { version = "0.9.0", optional = true }
 clap = { version = "2.33.0", optional = true }
-cpclib-disc = { version ="0.3.2-alpha", optional = true}
 
 
 [build-dependencies]
