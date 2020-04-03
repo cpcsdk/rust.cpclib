@@ -3,6 +3,7 @@ members = [
     "cpclib-asm",
     "cpclib-basic",
     "cpclib-disc",
+    "cpclib-macros",
     "cpclib-sna",
     "cpclib-tokens",
     "cpclib-xfer",
@@ -16,6 +17,7 @@ cpclib = {path = "./cpclib/"}
 cpclib-asm = {path = "./cpclib-asm/"}
 cpclib-basic = {path = "./cpclib-basic/"}
 cpclib-disc = {path = "./cpclib-disc/"}
+cpclib-macros = {path = "./cpclib-macros/"}
 cpclib-sna = {path = "./cpclib-sna/"}#
 cpclib-tokens = {path = "./cpclib-tokens/"}
 cpclib-xfer = {path = "./cpclib-xfer/"}
@@ -28,4 +30,3 @@ opt-level = 0
 
 [profile.release]
 opt-level = 3
-
