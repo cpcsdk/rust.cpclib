@@ -21,6 +21,7 @@ cpclib-asm = "0.4.1-alpha"
 cpclib-z80emu = "0.4.1-alpha"
 cpclib-xfer = "0.4.1-alpha"
 cpclib-disc = "0.4.1-alpha"
+cpclib-macros = "0.4.1-alpha"
 
 anyhow = "1.0"
 arrayref= "0.3.5"
