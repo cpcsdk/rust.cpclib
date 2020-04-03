@@ -10,6 +10,7 @@ edition = "2018"
 cpclib-asm = "0.4.1-alpha"
 syn = "0.14.4"
 quote = "0.6.3"
+proc-macro2 = "*"
 
 [lib]
 proc-macro = true

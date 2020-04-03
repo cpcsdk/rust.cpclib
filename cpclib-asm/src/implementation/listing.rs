@@ -19,6 +19,9 @@ pub trait ListingExt {
         code: S,
     ) -> Result<(), AssemblerError> ;
 
+    /// Assemble the listing (without context) and returns the bytes 
+    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError>;
+
           /// Compute the size of the listing.
     /// The listing has a size only if its tokens has a size
     fn number_of_bytes(&self) -> Result<usize, AssemblerError>;
@@ -50,41 +53,16 @@ impl ListingExt for Listing {
 
 
 
-            /// Compute the size of the listing.
-    /// The listing has a size only if its tokens has a size
+    /// Compute the size of the listing when assembling it.
+    /// 
     fn number_of_bytes(&self) -> Result<usize, AssemblerError> {
-        let mut count = 0;
-        let mut current_address: Option<usize> = None;
-        let mut sym = SymbolsTableCaseDependent::default();
+        Ok(self.to_bytes()?.len())
+    }
 
-        for token in self.listing().iter() {
-            if current_address.is_some() {
-                sym.set_current_address(current_address.unwrap() as u16);
-            }
-
-            let mut current_size = 0;
-            if let Token::Org(ref expr, _) = token {
-                current_address = Some(expr.resolve(&sym)? as usize);
-                println!("Set address to {:?}", current_address);
-            } else if let Token::Align(ref _expr, _) = token {
-                if current_address.is_none() {
-                    return Err("Unable to guess align size if current address is unknown"
-                        .to_owned()
-                        .into());
-                }
-
-                current_size = token.number_of_bytes_with_context(&mut sym)?;
-            } else {
-                current_size = token.number_of_bytes()?;
-            }
-
-            if current_address.is_some() {
-                current_address = Some(current_address.unwrap() + current_size);
-            }
-            count += current_size;
-        }
-
-        Ok(count)
+    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
+        let options = crate::AssemblingOptions::default();
+        let env = crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), &options)?;
+        Ok(env.produced_bytes())
     }
 
     
