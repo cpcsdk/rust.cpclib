@@ -13,6 +13,7 @@ use either::*;
 use std::fs::File;
 use std::io::Read;
 
+#[remain::sorted]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[allow(missing_docs)]
 pub enum Mnemonic {
@@ -91,6 +92,7 @@ pub enum Mnemonic {
 
 impl fmt::Display for Mnemonic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[remain::sorted]
         match self {
             Mnemonic::Adc => write!(f, "ADC"),
             Mnemonic::Add => write!(f, "ADD"),
@@ -306,34 +308,34 @@ pub enum BinaryTransformation {
     Exomizer,
 }
 
+#[remain::sorted]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum Token {
-    Label(String),
-    Comment(String),
-
-    OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>),
-
     Align(Expr, Option<Expr>),
     Assert(Expr, Option<String>),
+
     Bank(Expr),
     Bankset(Expr),
     /// Basic code which tokens will be included in the code (imported variables, lines to hide,  code)
     Basic(Option<Vec<String>>, Option<Vec<u16>>, String),
+    Break,
     Breakpoint(Option<Expr>),
     BuildCpr,
     BuildSna(SnapshotVersion),
-    Break,
-    CrunchedSection(CrunchType, Listing),
+    Comment(String),
     CrunchedBinary(CrunchType, String),
-    Defs(Expr, Option<Expr>),
+    CrunchedSection(CrunchType, Listing),
     Defb(Vec<Expr>),
+    Defs(Expr, Option<Expr>),
     Defw(Vec<Expr>),
+
     Equ(String, Expr),
+
     /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
     If(Vec<(TestKind, Listing)>, Option<Listing>),
+
     /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
-    Include(String, Option<Listing>),
     Incbin(
         // TODO name arguments to ease manipulation
         String,
@@ -344,12 +346,21 @@ pub enum Token {
         Option<Vec<u8>>,
         BinaryTransformation,
     ),
+    Include(String, Option<Listing>),
+
+    Label(String),
     Let(String, Expr),
-    List,
     Limit(Expr),
+    List,
+
     Macro(String, Vec<String>, String), // Content of the macro is parsed on use
+    MacroCall(String, Vec<Expr>), // String are used in order to not be limited to expression and allow opcode/registers use
+
     NoList,
+
+    OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>),
     Org(Expr, Option<Expr>),
+
     Print(Either<Expr, String>),
     Protect(Expr, Expr),
 
@@ -368,16 +379,17 @@ pub enum Token {
         dsk_filename: Option<String>,
         side: Option<Expr>,
     },
-    SetCrtc(Expr),
     SetCPC(Expr),
-    Str(Vec<u8>),
+    SetCrtc(Expr),
     StableTicker(StableTickerAction),
+    Str(Vec<u8>),
     Struct(String, Vec<(String, Token)>),
     Switch(Vec<(Expr, Listing)>),
+
     Undef(String),
+
     While(Expr, Listing),
 
-    MacroCall(String, Vec<Expr>), // String are used in order to not be limited to expression and allow opcode/registers use
 }
 
 impl fmt::Display for Token {
@@ -390,14 +402,12 @@ impl fmt::Display for Token {
                 .join(",")
         };
 
+        #[remain::sorted]
         match *self {
-            Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2)) if &Mnemonic::Out == mne
-                => write!(f, "{} (C), {}", mne, arg2),
 
             Token::Align(ref expr, None)
                 => write!(f, "ALIGN {}", expr),
             Token::Align(ref expr, Some(ref fill))
-
                 => write!(f, "ALIGN {}, {}", expr, fill),
             Token::Assert(ref expr, None)
                 => write!(f, "ASSERT {}", expr),
@@ -409,12 +419,48 @@ impl fmt::Display for Token {
             Token::Breakpoint(Some(ref expr))
                  => write!(f, "BREAKPOINT {}", expr),
 
+            Token::Comment(ref string)
+                 => write!(f, " ; {}", string.replace("\n","\n;")),
+ 
+                 Token::Defb(ref exprs)
+                 => write!(f, "DB {}", expr_list_to_string(exprs)),
+            Token::Defs(ref expr, None)
+                 => write!(f, "DEFS {}", expr),
+            Token::Defs(ref expr, Some(ref expr2))
+                 => write!(f, "DEFS {}, {}", expr, expr2),
+
+ 
+            Token::Defw(ref exprs)
+                 => write!(f, "DW {}", expr_list_to_string(exprs)),
+ 
+            Token::Equ(ref name, ref expr)
+                 => write!(f, "{} EQU {}", name, expr),
+
+            
+
+             Token::Incbin(ref fname, None, None, None, None, None, BinaryTransformation::None) 
+                 => write!(f, "INCBIN \"{}\"", fname),
+ 
+
+                 Token::Include(ref fname, _)
+                 => write!(f, "INCLUDE \"{}\"", fname),
+ 
             Token::Label(ref string)
                 => write!(f, "{}", string),
 
-            Token::Comment(ref string)
-                => write!(f, " ; {}", string.replace("\n","\n;")),
 
+                Token::MacroCall(ref name, ref args)
+                => {use itertools::Itertools;
+                    write!(f, "{} {}", name, args.clone()
+                                                .iter()
+                                                .map(|a|{a.to_string()})
+                                                .join(", "))?;
+                    Ok(())
+            },
+
+                // TODO remove this one / it is not coherent as we have the PortC
+            Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2)) if &Mnemonic::Out == mne
+                => write!(f, "{} (C), {}", mne, arg2),
             Token::OpCode(ref mne, None, None)
                 => write!(f, "{}", mne),
             Token::OpCode(ref mne, Some(ref arg1), None)
@@ -429,25 +475,6 @@ impl fmt::Display for Token {
             Token::Org(ref expr, Some(ref expr2))
                 => write!(f, "ORG {}, {}", expr, expr2),
 
-            Token::Defs(ref expr, None)
-                => write!(f, "DEFS {}", expr),
-            Token::Defs(ref expr, Some(ref expr2))
-                => write!(f, "DEFS {}, {}", expr, expr2),
-
-            Token::Defb(ref exprs)
-                => write!(f, "DB {}", expr_list_to_string(exprs)),
-
-            Token::Defw(ref exprs)
-                => write!(f, "DW {}", expr_list_to_string(exprs)),
-
-            Token::Equ(ref name, ref expr)
-                => write!(f, "{} EQU {}", name, expr),
-
-            Token::Include(ref fname, _)
-                => write!(f, "INCLUDE \"{}\"", fname),
-
-            Token::Incbin(ref fname, None, None, None, None, None, BinaryTransformation::None) 
-                => write!(f, "INCBIN \"{}\"", fname),
 
             Token::Print(ref exp)
                 => write!(f, "PRINT {}", exp),
@@ -480,14 +507,6 @@ impl fmt::Display for Token {
                     }
             },
 
-            Token::MacroCall(ref name, ref args)
-                => {use itertools::Itertools;
-                    write!(f, "{} {}", name, args.clone()
-                                                .iter()
-                                                .map(|a|{a.to_string()})
-                                                .join(", "))?;
-                    Ok(())
-            },
             _ => unimplemented!()
 
         }

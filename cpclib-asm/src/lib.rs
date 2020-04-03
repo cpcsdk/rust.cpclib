@@ -87,7 +87,7 @@ pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
     assemble_with_options(code, &options).map(|(bytes, _symbols)| bytes)
 }
 
-#[allow(missing_docs)]
+/// Assemble a piece of code and returns the associates liste of bytes as well as the generated reference table.
 pub fn assemble_with_options(
     code: &str,
     options: &AssemblingOptions,
