@@ -52,26 +52,37 @@ impl Parse for AssemblyMacroInput {
 /// Once during execution to really do it. 
 /// TODO find a way to generate the stream of tokens during the compilation
 pub fn parse_assembly(item: TokenStream) -> TokenStream {
-    match get_listing(item) {
-        Ok(AssemblyMacroInput {
-            code,
-            tokens
-        }) => {
-            let tokens = quote::quote!{
+    let input: syn::LitStr = parse_macro_input!(item);
+
+    let str_listing = input.value();
+
+    // A string is provided.
+    // We need to remove the " ... "
+    let code = if str_listing.starts_with('"') {
+        (&str_listing[1..str_listing.len()-1]).to_owned()
+    }
+    // tokens are provided as is, there it is necessary to add a space
+    // TODO check if it is a valid instruction first
+    else {
+        format!(" {}", str_listing)
+    };
+
+    // Check if the tokens are valid and raise an error if not
+    let tokens = Listing::from_str(&code);
+    if tokens.is_err() {
+        eprintln!("{}", tokens.err().unwrap());
+        return TokenStream::new();
+    }
+    let tokens = tokens.ok().unwrap();
+
+
+    (quote::quote!{
                 {
                     Listing::from_str(#code).unwrap()
                 }
-            };
-        
-            return tokens.into();
-        },
 
-        Err(e) => {
-            eprintln!("Error while parsing ASM code. {}", e);
-            return TokenStream::new();
-        }
-    }
-    }
+    }).into()
+}
 
 
 /// Generte the bytes of asssembled data
@@ -106,6 +117,11 @@ pub fn assemble(item: TokenStream) -> TokenStream
 
 /// Generate the listing needed for the various macros
 fn get_listing(item: TokenStream) -> std::result::Result<AssemblyMacroInput, AssemblerError> {
+
+
+
+
+
     let str_listing = item.to_string();
 
     // A string is provided.
