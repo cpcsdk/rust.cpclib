@@ -10,6 +10,8 @@ fn test_macro_parse_assembly_single_instruction() {
     assert_eq!(listing.len(), 1);
     assert_eq!(listing[0], Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::A)), Some(DataAccess::Expression(0.into()))));
 
+    let bytes = parse_assembly!(" push hl");
+
 }
 
 /*

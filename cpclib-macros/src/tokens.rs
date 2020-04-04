@@ -117,6 +117,13 @@ impl MyToTokens for DataAccess {
                 tokens.append(Group::new(Delimiter::Parenthesis, inside));
             },
 
+            DataAccess::Register16(reg) => {
+                tokens.append(Ident::new("Register16", Span::call_site()));
+                let mut inside = TokenStream::new();
+                reg.to_tokens(&mut inside);
+                tokens.append(Group::new(Delimiter::Parenthesis, inside));
+            },
+            
             _=> unimplemented!("{:?}", self)
         }
     }
@@ -129,6 +136,21 @@ impl MyToTokens for Register8 {
         tokens.append(Punct::new(':', Spacing::Joint));
         tokens.append(Punct::new(':', Spacing::Joint));
         tokens.append(Ident::new(&self.to_string(), Span::call_site()));
+    }
+}
+
+impl MyToTokens for Register16 {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.append(Ident::new("Register16", Span::call_site()));
+        tokens.append(Punct::new(':', Spacing::Joint));
+        tokens.append(Punct::new(':', Spacing::Joint));
+
+        let repr = {
+            let repr = self.to_string();
+            format!("{}{}", repr.as_str()[0..=0].to_uppercase(),  repr[1..].to_lowercase())
+        };
+
+        tokens.append(Ident::new(&repr, Span::call_site()));
     }
 }
 
