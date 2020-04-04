@@ -9,8 +9,8 @@ edition = "2018"
 [dependencies]
 cpclib-asm = "0.4.1-alpha"
 syn = "1.0.17"
-quote = "0.6.3"
-proc-macro2 = "*"
+quote = "1.0.3"
+proc-macro2 = "1.0.10"
 
 [lib]
 proc-macro = true

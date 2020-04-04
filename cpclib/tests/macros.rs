@@ -4,20 +4,20 @@ use cpclib_macros::*;
 use cpclib_asm::preamble::*;
 
 #[test]
-fn test_macro_parse_assembly_single_instruction() {
-    let listing = parse_assembly!(" ld a, 0");
+fn test_macro_parse_z80_single_instruction() {
+    let listing = parse_z80!(" ld a, 0");
 
     assert_eq!(listing.len(), 1);
     assert_eq!(listing[0], Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::A)), Some(DataAccess::Expression(0.into()))));
 
-    let bytes = parse_assembly!(" push hl");
+    let bytes = parse_z80!(" push hl");
 
 }
 
 /*
 #[test]
-fn test_macro_parse_assembly_single_instruction2() {
-    let listing = parse_assembly!(ld a, 0);
+fn test_macro_parse_z80_single_instruction2() {
+    let listing = parse_z80!(ld a, 0);
 
     assert_eq!(listing.len(), 1);
     assert_eq!(listing[0], Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::A)), Some(DataAccess::Expression(0.into()))));
@@ -27,8 +27,8 @@ fn test_macro_parse_assembly_single_instruction2() {
 
 
 #[test]
-fn test_macro_parse_assembly_several_instructions_a() {
-    let listing = parse_assembly!(" ld a, 0 : ld a, 0");
+fn test_macro_parse_z80_several_instructions_a() {
+    let listing = parse_z80!(" ld a, 0 : ld a, 0");
 
     assert_eq!(listing.len(), 2);
     assert_eq!(listing[0], Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::A)), Some(DataAccess::Expression(0.into()))));
@@ -37,8 +37,8 @@ fn test_macro_parse_assembly_several_instructions_a() {
 }
 
 #[test]
-fn test_macro_parse_assembly_several_instructions_b() {
-    let listing = parse_assembly!(" ld a, 0 
+fn test_macro_parse_z80_several_instructions_b() {
+    let listing = parse_z80!(" ld a, 0 
      ld a, 0");
 
     assert_eq!(listing.len(), 2);
@@ -49,8 +49,8 @@ fn test_macro_parse_assembly_several_instructions_b() {
 
 /*
 #[test]
-fn test_macro_parse_assembly_several_instructions_d() {
-    let listing = parse_assembly!( ld a, 0 : ld a, 0);
+fn test_macro_parse_z80_several_instructions_d() {
+    let listing = parse_z80!( ld a, 0 : ld a, 0);
 
     assert_eq!(listing.len(), 2);
     assert_eq!(listing[0], Token::OpCode(Mnemonic::Ld, Some(DataAccess::Register8(Register8::A)), Some(DataAccess::Expression(0.into()))));
@@ -62,8 +62,8 @@ fn test_macro_parse_assembly_several_instructions_d() {
 /*
 #[test]
 /// does not pass yet :(
-fn test_macro_parse_assembly_several_instructions_e() {
-    let listing = parse_assembly!( ld a, 0 
+fn test_macro_parse_z80_several_instructions_e() {
+    let listing = parse_z80!( ld a, 0 
      ld a, 0    );
 
     assert_eq!(listing.len(), 2);

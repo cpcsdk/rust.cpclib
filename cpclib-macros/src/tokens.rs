@@ -1,5 +1,5 @@
 use proc_macro2::*;
-use quote::{TokenStreamExt, ToTokens};
+use quote::{TokenStreamExt};
 use cpclib_asm::preamble::*;
 
 /// Create another trait as we cannot implement ToToken directly :(
@@ -24,6 +24,27 @@ where T: MyToTokens
     }
 }
 
+
+impl MyToTokens for str {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.append(Literal::string(self));
+    }
+}
+
+impl MyToTokens for String {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.as_str().to_tokens(tokens);
+    }
+}
+
+/*
+impl<T> MyToTokens for T where T: ToTokens {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.to_tokens()
+    }
+}
+*/
+
 impl MyToTokens for Listing {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append(Ident::new("Listing", Span::call_site()));
@@ -47,6 +68,28 @@ impl MyToTokens for Listing {
     }
 }
 
+
+fn one_param<T> (name:&str, t: &T, tokens: &mut TokenStream) 
+where T: MyToTokens {
+    tokens.append(Ident::new(name, Span::call_site()));
+    let mut inside = TokenStream::new();
+    t.to_tokens(&mut inside);
+    tokens.append(Group::new(Delimiter::Parenthesis, inside));
+}
+
+fn two_params<T1, T2> (name:&str, t1: &T1, t2: &T2, tokens: &mut TokenStream) 
+where T1: MyToTokens , T2: MyToTokens {
+    tokens.append(Ident::new(name, Span::call_site()));
+
+    let mut inside = TokenStream::new();
+    t1.to_tokens(&mut inside);
+    inside.append(Punct::new(',', Spacing::Joint));
+    t2.to_tokens(&mut inside);
+
+    tokens.append(Group::new(Delimiter::Parenthesis, inside));
+
+}
+
 impl MyToTokens for Token {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append(Ident::new("Token", Span::call_site()));
@@ -54,6 +97,19 @@ impl MyToTokens for Token {
         tokens.append(Punct::new(':', Spacing::Joint));
 
         match self {
+
+            Self::Equ(arg1, arg2) => {
+                two_params("Equ", arg1, arg2, tokens);
+            },
+
+            Self::Comment(arg) => {
+                one_param("Comment", arg, tokens);
+            },
+
+            Self::Label(arg) => {
+                one_param("Label", arg, tokens);
+            },
+
             Self::OpCode(mnemo, arg1, arg2) => {
 
                 tokens.append(Ident::new("OpCode", Span::call_site()));
@@ -68,8 +124,16 @@ impl MyToTokens for Token {
                 arg2.to_tokens(&mut inner_content);
 
                 tokens.append(Group::new(Delimiter::Parenthesis, inner_content));
-            }
-            _ => unimplemented!()
+            },
+
+
+            Self::Org(arg1, arg2) => {
+                two_params("Org", arg1, arg2, tokens);
+            },
+
+
+
+            _ => unimplemented!("{:?}", self)
         }
     }
 }
@@ -110,6 +174,11 @@ impl MyToTokens for DataAccess {
                 tokens.append(Group::new(Delimiter::Parenthesis, inside));
             },
 
+
+            DataAccess::Memory(arg) => {
+                one_param("Memory", arg, tokens);
+            },
+
             DataAccess::Register8(reg) => {
                 tokens.append(Ident::new("Register8", Span::call_site()));
                 let mut inside = TokenStream::new();
@@ -123,8 +192,8 @@ impl MyToTokens for DataAccess {
                 reg.to_tokens(&mut inside);
                 tokens.append(Group::new(Delimiter::Parenthesis, inside));
             },
-            
-            _=> unimplemented!("{:?}", self)
+
+            _=> unimplemented!("DataAccess::{:?}", self)
         }
     }
 }
@@ -171,7 +240,7 @@ impl MyToTokens for Expr {
                 inside.append(Literal::u32_unsuffixed(val.abs() as u32));
                 tokens.append(Group::new(Delimiter::Parenthesis, inside));
             }
-            _=> unimplemented!("{:?}", self)
+            _=> unimplemented!("Expr::{:?}", self)
         }
     }
 

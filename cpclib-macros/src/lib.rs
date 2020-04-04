@@ -53,7 +53,7 @@ impl Parse for AssemblyMacroInput {
 /// In fact parsing is done 2 times: once during compilation to check the validity.
 /// Once during execution to really do it. 
 /// TODO find a way to generate the stream of tokens during the compilation
-pub fn parse_assembly(item: TokenStream) -> TokenStream {
+pub fn parse_z80(item: TokenStream) -> TokenStream {
     let input: syn::LitStr = parse_macro_input!(item);
 
     let str_listing = input.value();
