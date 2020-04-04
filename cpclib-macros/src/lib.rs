@@ -5,6 +5,8 @@ use syn::{parse_macro_input, Result, token, Error};
 use syn::parse::Parse;
 use syn::parse::ParseStream;
 
+mod tokens;
+
 /// Structure that contains the input f the macro.
 /// Will be updated once we'll have additional parameters
 struct AssemblyMacroInput {
@@ -68,20 +70,36 @@ pub fn parse_assembly(item: TokenStream) -> TokenStream {
     };
 
     // Check if the tokens are valid and raise an error if not
-    let tokens = Listing::from_str(&code);
-    if tokens.is_err() {
-        eprintln!("{}", tokens.err().unwrap());
+    let listing = Listing::from_str(&code);
+    if listing.is_err() {
+        eprintln!("{}", listing.err().unwrap());
         return TokenStream::new();
     }
-    let tokens = tokens.ok().unwrap();
+    let listing = listing.ok().unwrap();
 
 
-    (quote::quote!{
-                {
-                    Listing::from_str(#code).unwrap()
-                }
+    /// Set to true to generate tokens at execution / set to false to generate tokens at compiliation
+    if false {
+        (quote::quote!{
+                    {
+                        Listing::from_str(#code).unwrap()
+                    }
 
-    }).into()
+        }).into()
+    } else {
+        use tokens::*;
+        let mut stream = proc_macro2::TokenStream::new();
+        listing.to_tokens(&mut stream);
+        eprintln!("Tokens: {:?}", stream);
+        //stream.into()
+        (quote::quote!{
+            {
+                use cpclib_asm::preamble::*;
+               #stream
+            }
+
+        }).into()
+    }
 }
 
 
