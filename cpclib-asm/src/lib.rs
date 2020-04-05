@@ -20,7 +20,7 @@ use crate::parser::ParserContext;
 
 
 use error::*;
-
+use preamble::*;
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
 #[derive(Clone, Debug)]
@@ -93,8 +93,15 @@ pub fn assemble_with_options(
     options: &AssemblingOptions,
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let tokens = parser::parse_str(code)?;
-    let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
+    assemble_tokens_with_options(&tokens, options)
+}
 
+/// Assemble the predifined list of tokens
+pub fn assemble_tokens_with_options(
+    tokens: &[Token],
+    options: &AssemblingOptions
+) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
+    let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
 }
 
