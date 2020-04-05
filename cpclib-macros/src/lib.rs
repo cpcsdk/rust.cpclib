@@ -4,7 +4,7 @@ use quote::ToTokens;
 use syn::{parse_macro_input, Result, token, Error};
 use syn::parse::Parse;
 use syn::parse::ParseStream;
-
+use syn::parse::Parser;
 mod tokens;
 
 
@@ -49,25 +49,26 @@ impl Parse for AssemblyMacroInput {
     }
 }
 
+
+
 #[proc_macro]
-/// Parse an assembly code and produce the appropriate Listing.
-/// In fact parsing is done 2 times: once during compilation to check the validity.
-/// Once during execution to really do it. 
-/// TODO find a way to generate the stream of tokens during the compilation
-pub fn parse_z80(item: TokenStream) -> TokenStream {
-    let input: syn::LitStr = parse_macro_input!(item);
+/// Parse an assembly code and produce the appropriate Listing while compiling the rust code.
+/// No more parsing is done at execution.
+/// input can be:
+/// - a string literal
+/// - a path
+pub fn parse_z80(input: TokenStream) -> TokenStream {
+    eprintln!("{:?}", input);
 
-    let str_listing = input.value();
-
-    // A string is provided.
-    // We need to remove the " ... "
-    let code = if str_listing.starts_with('"') {
-        (&str_listing[1..str_listing.len()-1]).to_owned()
-    }
-    // tokens are provided as is, there it is necessary to add a space
-    // TODO check if it is a valid instruction first
-    else {
-        format!(" {}", str_listing)
+    let code = {
+        let tokens = input.clone();
+        let code: Result<syn::LitStr> = syn::parse(tokens);
+        match code {
+            Ok(code) => code.value(),
+            Err(_) => {
+                unimplemented!();
+            }
+        }
     };
 
     // Check if the tokens are valid and raise an error if not
