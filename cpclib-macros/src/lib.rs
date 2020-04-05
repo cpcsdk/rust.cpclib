@@ -12,41 +12,44 @@ mod tokens;
 /// Will be updated once we'll have additional parameters
 struct AssemblyMacroInput {
     /// Code provided by the user of the macro
-    code: String,
-    /// Generated tokens
-    tokens: Listing
+    code: String
 }
 
-/// XXX We cannot use this code because it remove the whitespaces :(
-/// Whitespaces are of uttermost importance
+mod kw {
+    syn::custom_keyword!(fname);
+}
+
+/// Obtain the z80 code from:
+/// - the direct string if any
+/// - a file if "fname:" is provided
 impl Parse for AssemblyMacroInput {
     fn parse(input: ParseStream) -> Result<Self> {
-        let str_listing = input.to_string();
 
-        // A string is provided.
-        // We need to remove the " ... "
-        let str_listing = if str_listing.starts_with('"') {
-            &str_listing[1..str_listing.len()-1]
+
+        let lookahead = input.lookahead1();
+        if lookahead.peek(kw::fname) {
+            input.parse::<kw::fname>()?;
+            input.parse::<syn::Token![:]>()?;
+            let fname = (input.parse::<syn::LitStr>()?).value();
+            let content = std::fs::read_to_string(fname)
+                .or_else(|e|{
+                    Err(syn::Error::new(proc_macro2::Span::call_site(), e.to_string()))
+                })?;
+
+            Ok(
+                AssemblyMacroInput{
+                    code: content
+                }
+            )
+        } else if lookahead.peek(syn::LitStr) {
+            Ok(AssemblyMacroInput{
+                code: (input.parse::<syn::LitStr>()?).value()
+            })
+        } else {
+            Err(lookahead.error())
         }
-        // tokens are provided as is, there is nothing to do
-        else {
-            &str_listing
-        }.to_owned();
-
-        // Check if the tokens are valid
-        let tokens = Listing::from_str(&str_listing)
-                        .or_else(|e| return Err( 
-                            input.error(format!("Unable to parse the provided code. {}", e)
-                            )
-                        )
-                    )?;
-
-        Ok(AssemblyMacroInput {
-            code: str_listing,
-            tokens
-        })
-    
     }
+
 }
 
 
@@ -57,48 +60,38 @@ impl Parse for AssemblyMacroInput {
 /// input can be:
 /// - a string literal
 /// - a path
-pub fn parse_z80(input: TokenStream) -> TokenStream {
-    eprintln!("{:?}", input);
+pub fn parse_z80(tokens: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(tokens as AssemblyMacroInput);
+    let listing = get_listing(input);
 
-    let code = {
-        let tokens = input.clone();
-        let code: Result<syn::LitStr> = syn::parse(tokens);
-        match code {
-            Ok(code) => code.value(),
-            Err(_) => {
-                unimplemented!();
-            }
+    match listing {
+        Ok(listing) => {
+            use tokens::*;
+            let mut stream = proc_macro2::TokenStream::new();
+            listing.to_tokens(&mut stream);
+            stream.into()
+        },
+        Err(e) => {
+            panic!("[ERROR] {:?}", e);
         }
-    };
-
-    // Check if the tokens are valid and raise an error if not
-    let listing = Listing::from_str(&code);
-    if listing.is_err() {
-        eprintln!("{}", listing.err().unwrap());
-        return TokenStream::new();
     }
-    let listing = listing.ok().unwrap();
-
-
-    use tokens::*;
-    let mut stream = proc_macro2::TokenStream::new();
-    listing.to_tokens(&mut stream);
-    stream.into()
-
 }
 
+fn get_listing(input: AssemblyMacroInput) -> std::result::Result<Listing, cpclib_asm::error::AssemblerError> {
+    Listing::from_str(&input.code)
+}
 
 /// Generte the bytes of asssembled data
 #[proc_macro]
-pub fn assemble(item: TokenStream) -> TokenStream
+pub fn assemble(tokens: TokenStream) -> TokenStream
 {
-    match get_listing(item) {
-        Ok(AssemblyMacroInput {
-            code,
-            tokens
-        }) => {
 
-            match tokens.to_bytes() {
+    let input = parse_macro_input!(tokens as AssemblyMacroInput);
+    let listing = get_listing(input);
+
+    match listing {
+        Ok(listing) => {
+            match listing.to_bytes() {
                 Ok(ref bytes) => {
                     let mut tokens = proc_macro2::TokenStream::default();
                     proc_macro2::Literal::byte_string(&bytes).to_tokens(&mut tokens);
@@ -106,43 +99,13 @@ pub fn assemble(item: TokenStream) -> TokenStream
                 },
 
                 Err(e) => {
-                    eprintln!("Unable to assemble the provided code. {}", e);
-                    return TokenStream::new();
+                    panic!("Unable to assemble the provided code. {}", e);
                 }
             }
         },
         Err(e) => {
-            eprintln!("Error while parsing ASM code. {}", e);
-            return TokenStream::new();
+            panic!("[ERROR] {:?}", e);
         }
     }
 }
 
-/// Generate the listing needed for the various macros
-fn get_listing(item: TokenStream) -> std::result::Result<AssemblyMacroInput, AssemblerError> {
-
-
-
-
-
-    let str_listing = item.to_string();
-
-    // A string is provided.
-    // We need to remove the " ... "
-    let str_listing = if str_listing.starts_with('"') {
-        (&str_listing[1..str_listing.len()-1]).to_owned()
-    }
-    // tokens are provided as is, there it is necessary to add a space
-    // TODO check if it is a valid instruction first
-    else {
-        format!(" {}", str_listing)
-    };
-
-    // Check if the tokens are valid
-    let tokens = Listing::from_str(&str_listing)?;
-
-    Ok(AssemblyMacroInput {
-        code: str_listing,
-        tokens
-    })
-}
