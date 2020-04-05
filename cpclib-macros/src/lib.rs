@@ -7,6 +7,7 @@ use syn::parse::ParseStream;
 
 mod tokens;
 
+
 /// Structure that contains the input f the macro.
 /// Will be updated once we'll have additional parameters
 struct AssemblyMacroInput {
@@ -78,28 +79,11 @@ pub fn parse_z80(item: TokenStream) -> TokenStream {
     let listing = listing.ok().unwrap();
 
 
-    /// Set to true to generate tokens at execution / set to false to generate tokens at compiliation
-    if false {
-        (quote::quote!{
-                    {
-                        Listing::from_str(#code).unwrap()
-                    }
+    use tokens::*;
+    let mut stream = proc_macro2::TokenStream::new();
+    listing.to_tokens(&mut stream);
+    stream.into()
 
-        }).into()
-    } else {
-        use tokens::*;
-        let mut stream = proc_macro2::TokenStream::new();
-        listing.to_tokens(&mut stream);
-        eprintln!("Tokens: {:?}", stream);
-        //stream.into()
-        (quote::quote!{
-            {
-                use cpclib_asm::preamble::*;
-               #stream
-            }
-
-        }).into()
-    }
 }
 
 
