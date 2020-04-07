@@ -10,7 +10,7 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 
 [dependencies]
 cpclib-disc = "0.4.1-alpha"
-cpclib-sna = "0.4.0-alpha"
+cpclib-sna = "0.4.1-alpha"
 cpclib-xfer = "0.4.1-alpha"
 
 

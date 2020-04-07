@@ -1101,12 +1101,12 @@ impl Snapshot {
 
     /// Save the snapshot V3 on disc
     #[deprecated]
-    pub fn save_sna(&self, fname: &str) -> Result<(), std::io::Error> {
+    pub fn save_sna<P: AsRef<Path>>(&self, fname: P) -> Result<(), std::io::Error> {
         self.save(fname, SnapshotVersion::V2)
     }
 
-    pub fn save(&self, fname: &str, version: SnapshotVersion) -> Result<(), std::io::Error> {
-        let mut buffer = File::create(fname)?;
+    pub fn save<P: AsRef<Path>>(&self, fname: P, version: SnapshotVersion) -> Result<(), std::io::Error> {
+        let mut buffer = File::create(fname.as_ref())?;
         self.write(&mut buffer, version)
     }
 

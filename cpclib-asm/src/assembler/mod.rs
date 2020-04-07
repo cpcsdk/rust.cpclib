@@ -585,12 +585,15 @@ pub fn visit_tokens_all_passes_with_options(
     tokens: &[Token],
     options: &AssemblingOptions,
 ) -> Result<Env, AssemblerError> {
+
+
     let mut env = Env::default();
     env.symbols =
         SymbolsTableCaseDependent::new(options.symbols().clone(), options.case_sensitive());
 
     loop {
         env.start_new_pass();
+        //println!("[pass] {:?}", env.pass);
 
         if env.pass.is_finished() {
             break;

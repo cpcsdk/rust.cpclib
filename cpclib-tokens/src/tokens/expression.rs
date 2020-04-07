@@ -5,7 +5,7 @@ use crate::tokens::listing::ListingElement;
 use crate::tokens::Token;
 
 /// Expression nodes.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[allow(missing_docs)]
 pub enum Expr {
     /// 32 bits integer value (should be able to include any integer value manipulated by the assember.
@@ -14,10 +14,10 @@ pub enum Expr {
     String(String),
     /// Label
     Label(String),
-    /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
-    Duration(Box<Token>),
-    /// This expression node represents an opcode that needs to be assembled in order to produce its binary representation
-    OpCode(Box<Token>),
+
+        /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
+        Duration(Box<Token>), // TODO move in a token function stuff
+        OpCode(Box<Token>), // TODO move in a token general function stuff
 
     // Arithmetic operations
     Add(Box<Expr>, Box<Expr>),
@@ -42,10 +42,46 @@ pub enum Expr {
     StrictlyGreater(Box<Expr>, Box<Expr>),
     StrictlyLower(Box<Expr>, Box<Expr>),
 
-    // Functions
-    High(Box<Expr>),
-    Low(Box<Expr>),
+    // Function with one argument
+    UnaryFunction(UnaryFunction, Box<Expr>),
+    // Function with two arguments
+    BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>)
 }
+
+/// Represent a function with one argument
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum UnaryFunction {
+    High,
+    Low,
+}
+
+impl Display for UnaryFunction {
+    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
+        let repr = match self {
+            Self::High => "HI",
+            Self::Low => "LO"
+        };
+        write!(format, "{}", repr)
+    }
+}
+
+/// Function with two arguments
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum BinaryFunction {
+    Min,
+    Max,
+}
+
+impl Display for BinaryFunction {
+    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
+        let repr = match self {
+            Self::Min => "MIN",
+            Self::Max => "MAX"
+        };
+        write!(format, "{}", repr)
+    }
+}
+
 
 impl From<&str> for Expr {
     fn from(src: &str) -> Self {
@@ -116,15 +152,6 @@ pub enum Oper {
     StrictlyLower,
 }
 
-#[derive(Copy, Clone, Debug)]
-/// Function that can be applied in expressions
-pub enum Function {
-    /// Computes the high byte of a 16bits number
-    Hi,
-    /// Computes the low byte of a 16bits number
-    Lo,
-}
-
 impl Display for Oper {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         use self::Oper::*;
@@ -156,6 +183,16 @@ impl Display for Expr {
             &Value(val) => write!(format, "0x{:x}", val),
             &String(ref string) => write!(format, "\"{}\"", string),
             &Label(ref label) => write!(format, "{}", label),
+
+            UnaryFunction(func, arg) => {
+                write!(format, "{}({})", func, arg)
+            },
+
+
+            BinaryFunction(func, arg1, arg2) => {
+                write!(format, "{}({}, {})", func, arg1, arg2)
+            },
+
             &Duration(ref token) => write!(format, "DURATION({})", token),
             &OpCode(ref token) => write!(format, "OPCODE({})", token),
 
@@ -185,12 +222,11 @@ impl Display for Expr {
             &StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
             &LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
 
-            &High(ref inner) => write!(format, "hi({})", inner),
-            &Low(ref inner) => write!(format, "lo({})", inner),
         }
     }
 }
 
+/*
 impl Debug for Expr {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         use self::Expr::*;
@@ -226,3 +262,4 @@ impl Debug for Expr {
         }
     }
 }
+*/

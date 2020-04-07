@@ -13,7 +13,7 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 
 
 cpclib-basic = "0.4.1-alpha"
-cpclib-sna = "0.4.0-alpha"
+cpclib-sna = "0.4.1-alpha"
 cpclib-tokens = "0.4.1-alpha"
 cpclib-disc = { version ="0.4.1-alpha", optional = true}
 

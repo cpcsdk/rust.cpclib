@@ -1796,7 +1796,8 @@ pub fn parens(input: &str) -> IResult<&str, Expr> {
 pub fn factor(input: &str) -> IResult<&str, Expr> {
     alt((
         // Manage functions
-        delimited(space0, parse_hi_or_lo, space0),
+        delimited(space0, parse_unary_functions, space0),
+        delimited(space0, parse_binary_functions, space0),
         delimited(space0, parse_duration, space0),
         delimited(space0, parse_assemble, space0),
         // manage values
@@ -1885,11 +1886,11 @@ pub fn expr(input: &str) -> IResult<&str, Expr> {
     Ok((input, fold_exprs(initial, remainder)))
 }
 
-/// TODO generalize to other functions
-pub fn parse_hi_or_lo(input: &str) -> IResult<&str, Expr> {
-    let (input, hi_or_lo) = alt((
-        value(Function::Hi, tag_no_case("HI")),
-        value(Function::Lo, tag_no_case("LO")),
+/// parse functions with one argument
+pub fn parse_unary_functions(input: &str) -> IResult<&str, Expr> {
+    let (input, func) = alt((
+        value(UnaryFunction::High, tag_no_case("HI")),
+        value(UnaryFunction::Low, tag_no_case("LO")),
     ))(input)?;
 
     let (input, _) = tuple((space0, tag("("), space0))(input)?;
@@ -1900,10 +1901,29 @@ pub fn parse_hi_or_lo(input: &str) -> IResult<&str, Expr> {
 
     Ok((
         input,
-        match hi_or_lo {
-            Function::Hi => Expr::High(Box::new(exp)),
-            Function::Lo => Expr::Low(Box::new(exp)),
-        },
+        Expr::UnaryFunction(func, Box::new(exp))
+    ))
+}
+
+/// parse functions with two arguments
+pub fn parse_binary_functions(input: &str) -> IResult<&str, Expr> {
+    let (input, func) = alt((
+        value(BinaryFunction::Min, tag_no_case("MIN")),
+        value(BinaryFunction::Max, tag_no_case("MAX")),
+    ))(input)?;
+
+    let (input, _) = tuple((space0, tag("("), space0))(input)?;
+
+    let (input, arg1) = expr(input)?;
+    let (input, _) = tuple((space0, tag(","), space0))(input)?;
+    let (input, arg2) = expr(input)?;
+
+
+    let (input, _) = tuple((space0, tag(")")))(input)?;
+
+    Ok((
+        input,
+        Expr::BinaryFunction(func, Box::new(arg1), Box::new(arg2))
     ))
 }
 
