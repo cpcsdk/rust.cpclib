@@ -10,7 +10,7 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 
 [dependencies]
 cpclib-asm = "0.4.1-alpha"
-cpclib-sna = "0.4.0-alpha"
+cpclib-sna = "0.4.1-alpha"
 
 
 bitsets = "0.1.1"

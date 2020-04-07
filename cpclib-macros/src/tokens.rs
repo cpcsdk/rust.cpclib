@@ -308,6 +308,28 @@ impl MyToTokens for FlagTest {
     }
 }
 
+impl MyToTokens for UnaryFunction {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.append(Ident::new("UnaryFunction", Span::call_site()));
+        tokens.append(Punct::new(':', Spacing::Joint));
+        tokens.append(Punct::new(':', Spacing::Joint));
+
+        no_param(&upper_first(&self.to_string()), tokens);
+    }
+}
+
+
+impl MyToTokens for BinaryFunction {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.append(Ident::new("BinaryFunction", Span::call_site()));
+        tokens.append(Punct::new(':', Spacing::Joint));
+        tokens.append(Punct::new(':', Spacing::Joint));
+
+        no_param(&upper_first(&self.to_string()), tokens);
+    }
+}
+
+
 impl MyToTokens for Expr {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append(Ident::new("Expr", Span::call_site()));
@@ -353,6 +375,15 @@ impl MyToTokens for Expr {
 
             Expr::Paren(val) => {
                 one_param("Paren", val, tokens);
+            },
+
+            Expr::UnaryFunction(func, arg) => {
+                two_params("UnaryFunction", func, arg, tokens);
+            },
+
+            
+            Expr::BinaryFunction(func, arg1, arg2) => {
+                three_params("BinaryFunction", func, arg1, arg2, tokens);
             },
 
 

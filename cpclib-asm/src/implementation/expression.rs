@@ -8,18 +8,20 @@ use crate::implementation::tokens::*;
 
 /// Evaluate an aexpression
 pub trait ExprEvaluationExt {
-    fn eval(&self) -> Result<i32, AssemblerError>;
+    /// Simple evaluation without context => can only evaluate number based operations.
+    fn eval(&self) -> Result<i32, AssemblerError> {
+        let sym = SymbolsTableCaseDependent::default();
+        self.resolve(&sym)
+    }
+
+
     fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError>;
 
 
 }
 
 impl ExprEvaluationExt for Expr {
-    /// Simple evaluation without context => can only evaluate number based operations.
-    fn eval(&self) -> Result<i32, AssemblerError> {
-        let sym = SymbolsTableCaseDependent::default();
-        self.resolve(&sym)
-    }
+    
 
     fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError> {
         use self::Expr::*;
@@ -61,8 +63,8 @@ impl ExprEvaluationExt for Expr {
             }
         };
 
-        match *self {
-            Value(val) => Ok(val),
+        match self {
+            Value(val) => Ok(*val),
 
             String(ref string) => panic!("String values cannot be converted to i32 {}", string),
 
@@ -110,9 +112,63 @@ impl ExprEvaluationExt for Expr {
 
             Paren(ref e) => e.resolve(sym),
 
-            High(ref inner) => inner.resolve(sym).and_then(|val| Ok((val >> 8) & 0xff)),
+            UnaryFunction(func, exp) => UnaryFunctionWrapper::new(func, &exp).resolve(sym),
+            BinaryFunction(func, exp1, exp2) => BinaryFunctionWrapper::new(func, &exp1, &exp2).resolve(sym),
 
-            Low(ref inner) => inner.resolve(sym).and_then(|val| Ok(val & 0xff)),
+
+        }
+    }
+}
+
+/// utility class for unary function evaluation
+struct UnaryFunctionWrapper<'a> {
+    func: &'a UnaryFunction,
+    arg: &'a Expr
+}
+
+impl<'a> UnaryFunctionWrapper<'a> {
+    fn  new(func: &'a UnaryFunction, arg: &'a Expr) -> UnaryFunctionWrapper<'a> {
+        UnaryFunctionWrapper {
+            func, arg
+        }
+    }
+}
+
+impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
+    fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError> {
+        let arg = self.arg.resolve(sym)?;
+
+        match self.func {
+            UnaryFunction::Low => Ok((arg >> 8) & 0xff),
+            UnaryFunction::High => Ok(arg & 0xff),
+        }
+    }
+}
+
+
+/// utility class for binary function evaluation
+struct BinaryFunctionWrapper<'a> {
+    func: &'a BinaryFunction,
+    arg1: &'a Expr,
+    arg2: &'a Expr,
+}
+
+impl<'a> BinaryFunctionWrapper<'a> {
+    fn  new(func: &'a BinaryFunction, arg1: &'a Expr, arg2: &'a Expr) -> BinaryFunctionWrapper<'a> {
+        BinaryFunctionWrapper {
+            func, arg1, arg2
+        }
+    }
+}
+
+impl<'a> ExprEvaluationExt for BinaryFunctionWrapper<'a> {
+    fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError> {
+        let arg1 = self.arg1.resolve(sym)?;
+        let arg2 = self.arg2.resolve(sym)?;
+
+        match self.func {
+            BinaryFunction::Min => Ok(arg1.min(arg2)),
+            BinaryFunction::Max => Ok(arg2.max(arg2)),
         }
     }
 }

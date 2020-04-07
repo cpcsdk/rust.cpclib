@@ -16,7 +16,7 @@ categories = ["command-line-utilities", "development-tools", "emulators"]
 [dependencies]
 
 cpclib-basic = "0.4.1-alpha"
-cpclib-sna = "0.4.0-alpha"
+cpclib-sna = "0.4.1-alpha"
 cpclib-asm = "0.4.1-alpha"
 cpclib-z80emu = "0.4.1-alpha"
 cpclib-xfer = "0.4.1-alpha"
@@ -37,7 +37,7 @@ failure = "0.1.6"
 getset = "0.0.9"
 gif = "0.10.0"
 gif-dispose = "2.2.0"
-image = "0.22.3"
+image = "0.23"
 itertools= "0.8.2"
 lazy_static= "1.4.0"
 matches = "0.1.8"

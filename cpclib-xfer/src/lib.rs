@@ -235,15 +235,30 @@ impl CpcXfer {
 
     /// Directly sends the SNA to the M4. SNA is first saved as a V2 version as M4 is unable to read other ones
     pub fn upload_and_run_sna(&self, sna: &Snapshot) -> Result<(), XferError> {
-        let file = tempfile::NamedTempFile::new().expect("Unable to build a temporary file");
-        let path = file.into_temp_path();
-        let path = path.to_str().unwrap();
-        sna.save(/*path*/ "/tmp/m4.sna", SnapshotVersion::V2)
-            .expect("Unable to save the snapshot");
-        self.upload_and_run(path, None)?;
+        use tempfile::Builder;
+        let file = Builder::new()
+            .prefix("xfer")
+            .suffix(".sna")
+            .rand_bytes(4)
+            .tempfile()
+            .or_else(|e|{
+                Err(XferError::InternalError{reason: e.to_string()})
+            })?;
+        let temp_path = file.into_temp_path();
 
-        // sleep a bit to be sure the file is not deleted
+        sna.save(
+            &temp_path, 
+            SnapshotVersion::V2)
+            .or_else(|e|{
+                Err(XferError::InternalError{reason: format!("Unable to save the snapshot. {}", e)})
+            })?;
+        self.upload_and_run(
+            &temp_path, 
+            None)?;
+
+        // sleep a bit to be sure the file is not deleted BEFORE sending it to CPC
         std::thread::sleep(std::time::Duration::from_secs(5));
+        temp_path.close();
         Ok(())
     }
 
