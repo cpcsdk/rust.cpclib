@@ -513,6 +513,49 @@ impl ColorMatrix {
             data: encoded_pixels,
         }
     }
+
+    /// Generate an iterator on the pixels
+    pub fn inks<'a>(&'a self) -> Inks<'a> {
+        Inks {
+            image: self,
+            x: 0,
+            y: 0,
+            width: self.width(),
+            height: self.height()
+        }
+    }
+}
+
+/// Immutable ink iterator for generate (x, y, ink)
+#[derive(Debug)]
+pub struct Inks<'a> {
+    image: &'a ColorMatrix,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+impl<'a> Iterator for Inks<'a> {
+    type Item = (u32, u32, Ink);
+
+    fn next(&mut self) -> Option<(u32, u32, Ink)> {
+        if self.x >= self.width {
+            self.x = 0;
+            self.y += 1;
+        }
+
+        if self.y >= self.height {
+            None
+        } else {
+            let ink = self.image.get_ink(self.x as _, self.y as _);
+            let i = (self.x, self.y, *ink);
+
+            self.x += 1;
+
+            Some(i)
+        }
+    }
 }
 
 
