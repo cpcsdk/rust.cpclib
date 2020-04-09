@@ -952,13 +952,41 @@ pub fn parse_print(input: &str) -> IResult<&str, Token> {
     map(
         preceded(
             parse_instr("PRINT"),
-            alt((
-                map(expr, { |e| Left(e) }),
-                map(string_between_quotes, { |s: &str| Right(s.to_string()) }),
-            )),
+            cut(alt((
+                formatted_expr,
+                map(expr, FormattedExpr::from),
+                map(string_between_quotes, { |s: &str| FormattedExpr::from(Expr::String(s.to_string()))}),
+            ))),
         ),
-        |exp| Token::Print(exp),
+        |exp| Token::Print(vec![exp]),
     )(input)
+}
+
+/// Parse formatted expression for print like directives
+/// WARNING: only formated case is taken into account
+fn formatted_expr(input: &str) -> IResult<&str, FormattedExpr> {
+    let (input, _) = char('{')(input)?;
+    let (input, format) = alt((
+        value(ExprFormat::Int, tag_no_case("INT")),
+
+        value(ExprFormat::Hex(Some(2)), tag_no_case("HEX4")),
+        value(ExprFormat::Hex(Some(4)), tag_no_case("HEX8")),
+        value(ExprFormat::Hex(Some(8)), tag_no_case("HEX2")),
+        value(ExprFormat::Hex(None), tag_no_case("HEX")),
+
+        value(ExprFormat::Bin(Some(8)), tag_no_case("BIN8")),
+        value(ExprFormat::Bin(Some(16)), tag_no_case("BIN16")),
+        value(ExprFormat::Bin(Some(32)), tag_no_case("BIN32")),
+        value(ExprFormat::Bin(None), tag_no_case("BIN")),
+    ))(input)?;
+    let (input, _) = char('}')(input)?;
+
+
+    let (input, _) = space0(input)?;
+
+    let (input, exp) = expr(input)?;
+
+    Ok((input, FormattedExpr::Formatted(format, exp)))
 }
 
 fn parse_comma(input: &str) -> IResult<&str, ()> {
@@ -2035,5 +2063,41 @@ mod test {
         );
 
         assert!(parse_register_iyl("ixl").is_err());
+    }
+
+    #[test]
+    fn test_parse_expr_format() {
+        assert_eq!(
+            formatted_expr("{hex} VAL"),
+            Ok((
+                "", 
+                FormattedExpr::Formatted(
+                    ExprFormat::Hex(None), 
+                    Expr::Label("VAL".to_string())
+                )
+            ))
+        );
+    }
+
+    #[test]
+    fn test_parse_print() {
+        assert_eq!(
+            Ok((
+                "",
+                Token::Print(vec![FormattedExpr::Raw(Expr::Label("VAR".to_string()))])
+            )
+            ),
+            parse_print("PRINT VAR")
+        );
+
+
+        assert_eq!(
+            Ok((
+                "",
+                Token::Print(vec![FormattedExpr::Formatted(ExprFormat::Hex(None), Expr::Label("VAR".to_string()))])
+            )
+            ),
+            parse_print("PRINT {hex}VAR")
+        );
     }
 }
