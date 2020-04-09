@@ -35,7 +35,7 @@ pub enum DataAccess {
 
 impl From<u8> for DataAccess {
     fn from(val: u8) -> Self {
-        DataAccess::Expression(val.into())
+        DataAccess::Expression(Expr::from(val))
     }
 }
 
@@ -47,7 +47,7 @@ impl From<Expr> for DataAccess {
 
 impl From<&str> for DataAccess {
     fn from(txt: &str) -> Self {
-        DataAccess::Expression(txt.into())
+        DataAccess::Expression(Expr::from(txt))
     }
 }
 

@@ -550,13 +550,28 @@ impl Env {
     }
 
     /// Print the evaluation of the expression in the 2nd pass
-    pub fn visit_print(&self, info: Either<&Expr, &String>) -> Result<(), AssemblerError> {
+    pub fn visit_print(&self, info: &[FormattedExpr]) -> Result<(), AssemblerError> {
         if self.pass.is_second_pass() {
-            let text = match info {
-                Left(ref exp) => format!("{} = {}", exp, self.resolve_expr_must_never_fail(exp)?),
-                Right(string) => string.clone(),
-            };
-            println!("{}", text);
+            let mut repr = String::default();
+            for (idx, current) in info.iter().enumerate() {
+                if idx != 0 {
+                    repr += " ";
+                }
+                match current {
+                    FormattedExpr::Raw(Expr::String(string)) => {
+                        repr += string;
+                    },
+                    FormattedExpr::Raw(expr) => {
+                        let value = self.resolve_expr_may_fail_in_first_pass(expr)? as f32;
+                        repr += &value.to_string();
+                    },
+                    FormattedExpr::Formatted(format, expr) => {
+                        let value = self.resolve_expr_may_fail_in_first_pass(expr)? as i32;
+                        repr+= &    format.string_representation(value);
+                    }
+                }
+            }
+            println!("{}", repr);
         }
         Ok(())
     }

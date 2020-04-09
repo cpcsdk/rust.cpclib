@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use std::fmt;
 
-
+use itertools::Itertools;
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::tokens::Listing;
@@ -361,7 +361,7 @@ pub enum Token {
     OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>),
     Org(Expr, Option<Expr>),
 
-    Print(Either<Expr, String>),
+    Print(Vec<FormattedExpr>),
     Protect(Expr, Expr),
 
     /// Duplicate the token stream
@@ -477,7 +477,7 @@ impl fmt::Display for Token {
 
 
             Token::Print(ref exp)
-                => write!(f, "PRINT {}", exp),
+                => write!(f, "PRINT {}", exp.iter().map(|e|e.to_string()).join(",")),
 
             Token::Protect(ref exp1, ref exp2)
                 => write!(f, "PROTECT {}, {}", exp1, exp2),
