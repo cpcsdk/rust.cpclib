@@ -952,13 +952,19 @@ pub fn parse_print(input: &str) -> IResult<&str, Token> {
     map(
         preceded(
             parse_instr("PRINT"),
-            cut(alt((
-                formatted_expr,
-                map(expr, FormattedExpr::from),
-                map(string_between_quotes, { |s: &str| FormattedExpr::from(Expr::String(s.to_string()))}),
-            ))),
+            cut(
+                
+                separated_list(
+                    parse_comma,
+                    alt((
+                        formatted_expr,
+                        map(expr, FormattedExpr::from),
+                        map(string_between_quotes, { |s: &str| FormattedExpr::from(Expr::String(s.to_string()))}),
+                    ))
+                )
+            )
         ),
-        |exp| Token::Print(vec![exp]),
+        |exp| Token::Print(exp),
     )(input)
 }
 
@@ -2090,6 +2096,18 @@ mod test {
             parse_print("PRINT VAR")
         );
 
+
+        assert_eq!(
+            Ok((
+                "",
+                Token::Print(vec![
+                    FormattedExpr::Raw(Expr::Label("VAR".to_string())),
+                    FormattedExpr::Raw(Expr::Label("VAR".to_string()))
+                    ])
+            )
+            ),
+            parse_print("PRINT VAR, VAR")
+        );
 
         assert_eq!(
             Ok((
