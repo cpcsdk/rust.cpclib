@@ -634,6 +634,7 @@ pub fn parse_ex_mem_sp(input: &str) -> IResult<&str, Token> {
 pub fn parse_directive(input: &str) -> IResult<&str, Token> {
     alt((
         parse_assert,
+        parse_bankset,
         parse_align,
         parse_breakpoint,
         parse_org,
@@ -757,6 +758,14 @@ pub fn parse_stable_ticker_stop(input: &str) -> IResult<&str, Token> {
             tag_no_case("stop"),
         )),
     )(input)
+}
+
+pub fn parse_bankset(input: &str) -> IResult<&str, Token> {
+    let (input, _) = parse_instr("bankset")(input)?;   
+    let (input, count) = expr(input)?;
+
+    Ok((input, Token::Bankset(count)))
+
 }
 
 /// Parse fake and real LD instructions
@@ -1876,6 +1885,8 @@ pub fn parens(input: &str) -> IResult<&str, Expr> {
 /// Get a factor
 pub fn factor(input: &str) -> IResult<&str, Expr> {
     alt((
+        map(delimited(space0, tuple((parse_labelprefix, parse_label)), space0), |(p,l)| Expr::PrefixedLabel(p,l)), // TODO rework this aspect
+
         // Manage functions
         delimited(space0, parse_unary_functions, space0),
         delimited(space0, parse_binary_functions, space0),
@@ -1891,8 +1902,17 @@ pub fn factor(input: &str) -> IResult<&str, Expr> {
             Expr::Label(String::from("$"))
         }),
         // manage labels
-        map(delimited(space0, parse_label, space0), Expr::Label),
+        map(delimited(space0, parse_label, space0), Expr::Label), // TODO rework this aspect
+
         parens,
+    ))(input)
+}
+
+pub fn parse_labelprefix(input: &str) -> IResult<&str, LabelPrefix>{
+    alt((
+        value(LabelPrefix::Pageset, tag_no_case("{pageset}")),
+        value(LabelPrefix::Bank, tag_no_case("{bank}")),
+        value(LabelPrefix::Page, tag_no_case("{page}")),
     ))(input)
 }
 
@@ -2116,6 +2136,25 @@ mod test {
         );
 
         assert!(parse_register_iyl("ixl").is_err());
+    }
+
+    #[test]
+    fn test_parse_prefix_label() {
+        assert_eq!(
+            parse_labelprefix("{bank}"),
+            Ok((
+                "",
+                LabelPrefix::Bank
+            ))
+        );
+
+        assert_eq!(
+            expr("{bank}label"),
+            Ok((
+                "",
+                Expr::PrefixedLabel(LabelPrefix::Bank, "label".to_string())
+            ))
+        );
     }
 
     #[test]

@@ -6,6 +6,8 @@ use delegate::delegate;
 use either::*;
 use std::fmt::Display;
 
+use crate::tokens::expression::LabelPrefix;
+
 #[derive(Debug, Clone, Copy)]
 pub enum SymbolError {
     UnknownAssemblingAddress
@@ -94,6 +96,12 @@ impl SymbolsTable {
             None
         }
     }
+
+    /// Instead of returning the value, return the bank information
+    pub fn prefixed_value<S: AsRef<str>>(&self, prefix:& LabelPrefix, key: S) -> Option<u16> {
+        unimplemented!()
+    }
+
 
     /// Remove the given symbol name from the table. (used by undef)
     pub fn remove_symbol<S: AsRef<str>>(&mut self, key: S) -> Option<Symbol> {
@@ -194,6 +202,9 @@ impl SymbolsTableCaseDependent {
 
     pub fn value<S: AsRef<str>>(&self, symbol: S) -> Option<i32> {
         self.table.value(self.normalize_symbol(symbol))
+    }
+    pub fn prefixed_value<S: AsRef<str>>(&self, prefix:& LabelPrefix, symbol: S) -> Option<u16> {
+        self.table.prefixed_value(prefix, self.normalize_symbol(symbol))
     }
 
     pub fn remove_symbol<S: AsRef<str>>(&mut self, symbol: S) -> Option<Symbol> {

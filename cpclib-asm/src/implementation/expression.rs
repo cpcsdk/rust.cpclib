@@ -116,6 +116,13 @@ impl ExprEvaluationExt for Expr {
             BinaryFunction(func, exp1, exp2) => BinaryFunctionWrapper::new(func, &exp1, &exp2).resolve(sym),
 
 
+            PrefixedLabel(prefix, label) => {
+                match sym.prefixed_value(prefix, label) {
+                    Some(value) => Ok(value as _),
+                    None => Err(format!("Unable to obtain {} of {}", prefix, label).into())
+                }
+            }
+
         }
     }
 }
