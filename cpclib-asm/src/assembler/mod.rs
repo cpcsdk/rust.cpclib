@@ -2668,5 +2668,6 @@ mod test {
         let bytes = env.memory(0x100, 4);
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
+					
 
 }

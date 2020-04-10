@@ -46,7 +46,33 @@ pub enum Expr {
     // Function with one argument
     UnaryFunction(UnaryFunction, Box<Expr>),
     // Function with two arguments
-    BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>)
+    BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
+
+    /// A prefix (related to bank managment has been added to the label)
+    PrefixedLabel(LabelPrefix, String)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq,Debug)]
+/// Represents a prefix that provides information related to banks for a label
+pub enum LabelPrefix {
+    /// We want the bank of the label
+    Bank,
+    /// We want the page of the label
+    Page,
+    /// We want the Gate array configuration for the label
+    Pageset
+}
+
+impl Display for LabelPrefix {
+    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
+        let repr :&'static str  = match self {
+            Self::Bank => "{bank}",
+            Self::Page => "{page}",
+            Self::Pageset => "{pageset}",
+
+        };
+        write!(format, "{}", repr)
+    }
 }
 
 /// Format to represent an expression
@@ -315,6 +341,7 @@ impl Display for Expr {
             &StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
             &LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
 
+            PrefixedLabel(prefix, label) =>write!(format, "{}{}", prefix, label)
         }
     }
 }

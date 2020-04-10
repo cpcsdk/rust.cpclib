@@ -214,6 +214,48 @@ Truc
         assert_eq!(listing.estimated_duration().unwrap(), 100);
     }
 
+
+    
+
+    /// Test stolen to rasm
+    #[test]
+    fn test_pagetag1() {
+        Listing::from_str(" bankset 0").expect("unable to assemble");
+        Listing::from_str(" org #5000").expect("unable to assemble");
+        Listing::from_str(" assert label1==0x7FC0").expect("unable to assemble");
+        Listing::from_str(" ld a, label").expect("unable to assemble");
+        Listing::from_str(" ld a, {page}label").expect("unable to assemble");
+
+        Listing::from_str(" assert {page}label1==0x7FC0").expect("unable to assemble");
+
+        let code = "  bankset 0
+                      org #5000
+label1
+                    bankset 1
+                    org #9000
+label2
+                    bankset 2
+                    assert {page}label1==0x7FC0
+                    assert {page}label2==0x7FC6
+                    assert {pageset}label1==#7FC0
+                    assert {pageset}label2==#7FC2
+                    nop";
+        
+        let mut listing = Listing::from_str(code).expect("unable to assemble");
+    }
+    
+    /*
+#define AUTOTEST_PAGETAG2	"bankset 0:call maroutine:bank 4:org #C000:autreroutine:nop:" \
+							"ret:bank 5:org #8000:maroutine:ldir:ret:bankset 2:org #9000:troize:nop:" \
+							"assert {page}maroutine==#7FC5:assert {pageset}maroutine==#7FC2:assert {page}autreroutine==#7FC4:" \
+							"assert {pageset}autreroutine==#7FC2:assert {page}troize==#7FCE:assert {pageset}troize==#7FCA"							
+							
+#define AUTOTEST_PAGETAG3	"buildsna:bank 2:assert {bank}$==2:assert {page}$==0x7FC0:assert {pageset}$==#7FC0:" \
+							"bankset 1:org #4000:assert {bank}$==5:assert {page}$==0x7FC5:assert {pageset}$==#7FC2"
+    */	
+    
+
+
     #[test]
     fn test_duration() {
         let listing = Listing::from_str(
