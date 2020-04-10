@@ -219,29 +219,26 @@ Truc
 
     /// Test stolen to rasm
     #[test]
-    fn test_pagetag1() {
-        Listing::from_str(" bankset 0").expect("unable to assemble");
-        Listing::from_str(" org #5000").expect("unable to assemble");
-        Listing::from_str(" assert label1==0x7FC0").expect("unable to assemble");
-        Listing::from_str(" ld a, label").expect("unable to assemble");
-        Listing::from_str(" ld a, {page}label").expect("unable to assemble");
+    fn rasm_pagetag1() {
 
-        Listing::from_str(" assert {page}label1==0x7FC0").expect("unable to assemble");
-
-        let code = "  bankset 0
-                      org #5000
+        let code = "  
+        bankset 0
+        org #5000
 label1
-                    bankset 1
-                    org #9000
+        bankset 1
+        org #9000
 label2
-                    bankset 2
-                    assert {page}label1==0x7FC0
-                    assert {page}label2==0x7FC6
-                    assert {pageset}label1==#7FC0
-                    assert {pageset}label2==#7FC2
-                    nop";
+        bankset 2
+        assert {page}label1==0x7fC0
+        assert {page}label2==0x7fC6
+        assert {pageset}label1==#7fC0
+        assert {pageset}label2==#7fC2
+        nop";
         
-        let mut listing = Listing::from_str(code).expect("unable to assemble");
+        let options = AssemblingOptions::new_case_insensitive();
+        eprintln!("{:?}", assemble_with_options(code, &options));
+        assert!(assemble_with_options(code, &options).is_ok());
+
     }
     
     /*
