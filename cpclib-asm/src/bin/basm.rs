@@ -83,7 +83,7 @@ fn parse(matches: &ArgMatches<'_>) -> Result<Listing, BasmError> {
 
     let mut context = ParserContext::default();
     context.set_current_filename(&filename);
-    context.add_search_path_from_file(&filename);
+    context.add_search_path_from_file(&filename)?;
     if let Some(directories) = matches.values_of("INCLUDE_DIRECTORIES") {
         for directory in directories {
             if !Path::new(directory).is_dir() {
@@ -91,7 +91,7 @@ fn parse(matches: &ArgMatches<'_>) -> Result<Listing, BasmError> {
                     path: directory.to_owned(),
                 });
             }
-            context.add_search_path(directory);
+            context.add_search_path(directory)?;
         }
     }
 
@@ -266,5 +266,9 @@ fn main() {
 					)
 					.get_matches();
 
-    process(&matches).expect("Error while assembling file.");
+    let result =  process(&matches);
+    if result.is_err() {
+        let error = result.err().unwrap();
+        println!("Error while assembling.\n{}", error);
+    }
 }

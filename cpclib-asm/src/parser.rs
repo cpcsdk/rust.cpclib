@@ -29,6 +29,7 @@ pub mod error_code {
 }
 
 /// Context information that can guide the parser
+/// TODO modify to have a context related to macros
 #[derive(Default, Clone, Debug)]
 pub struct ParserContext {
     /// Filename that is currently parsed
@@ -39,6 +40,8 @@ pub struct ParserContext {
 
 #[allow(missing_docs)]
 impl ParserContext {
+
+    /// Specify the path that contains the code
     pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
         let file = file.into();
         self.current_filename = Some(
@@ -48,48 +51,92 @@ impl ParserContext {
     }
 
     /// Add a search path and ensure it is ABSOLUTE
-    pub fn add_search_path<P: Into<PathBuf>>(&mut self, path: P) {
-        self.search_path.push(path.into().canonicalize().unwrap())
+    /// Method crashes if the search path does not exist
+    pub fn add_search_path<P: Into<PathBuf>>(&mut self, path: P)  -> Result<(), AssemblerError>  {
+        let path = path.into();
+
+        if std::path::Path::new(&path).is_dir() {
+            let path = path.canonicalize().unwrap();
+
+            // manual fix for for windows. No idea why
+            let path = path.to_str().unwrap();
+            const prefix: &'static str = "\\\\?\\";
+            let path = if path.starts_with(prefix) {
+                path[prefix.len()..].to_string()
+            }
+            else {
+                path.to_string()
+            };
+
+            // Really add
+            self.search_path.push(path.into());
+            Ok(())
+        }
+        else {
+            Err(AssemblerError::IOError {
+                msg: format!("{} is not a path and cannot be added in the search path", path.to_str().unwrap().to_string())
+            })
+        }
     }
 
     /// Add the folder that contains the given file. Ignore if there are issues with the filename
-    pub fn add_search_path_from_file<P: Into<PathBuf>>(&mut self, file: P) {
+    pub fn add_search_path_from_file<P: Into<PathBuf>>(&mut self, file: P) -> Result<(), AssemblerError> {
+        let file = file.into();
         let path = file
-            .into()
             .canonicalize();
-        if let Ok(path) = path {
-            let path = path
-                .parent()
-                .unwrap()
-                .to_owned();
-            self.add_search_path(path);
+
+        match path {
+            Ok(path) => {
+                let path = path
+                    .parent()
+                    .unwrap()
+                    .to_owned();
+                self.add_search_path(path)
+            },
+
+            Err(err) => {
+                Err( AssemblerError::IOError{
+                        msg: format!(
+                        "Unable to add search path for {}. {}", 
+                        file.to_str().unwrap().to_string(),  
+                        err.to_string())
+                    }
+                )
+            }
+
         }
     }
 
     /// Return the real path name that correspond to the requested file
-    pub fn get_path_for<P: Into<PathBuf>>(&self, fname: P) -> Option<PathBuf> {
+    pub fn get_path_for<P: Into<PathBuf>>(&self, fname: P) -> Result<PathBuf, Vec<String>> {
+        let mut does_not_exists = Vec::new();
         let fname = fname.into();
 
         // We expect the file to exists if no search_path is provided
         if self.search_path.is_empty() {
             if fname.is_file() {
-                return Some(fname);
+                return Ok(fname);
             } else {
-                return None;
+                does_not_exists.push(fname.to_str().unwrap().to_owned());
             }
         } else {
             // loop over all possibilities
             for search in &self.search_path {
+
+                assert!(std::path::Path::new(&search).is_dir());
                 let current_path = search.join(fname.clone());
 
                 if current_path.is_file() {
-                    return Some(current_path);
+                    return Ok(current_path);
+                }
+                else {
+                    does_not_exists.push(current_path.to_str().unwrap().to_owned())
                 }
             }
         }
 
         // No file found
-        None
+        return Err(does_not_exists)
     }
 }
 
@@ -952,7 +999,7 @@ pub fn parse_print(input: &str) -> IResult<&str, Token> {
     map(
         preceded(
             parse_instr("PRINT"),
-            cut(
+            complete(
                 
                 separated_list(
                     parse_comma,
@@ -972,7 +1019,7 @@ pub fn parse_print(input: &str) -> IResult<&str, Token> {
 /// WARNING: only formated case is taken into account
 fn formatted_expr(input: &str) -> IResult<&str, FormattedExpr> {
     let (input, _) = char('{')(input)?;
-    let (input, format) = alt((
+    let (input, format) = cut(alt((
         value(ExprFormat::Int, tag_no_case("INT")),
 
         value(ExprFormat::Hex(Some(2)), tag_no_case("HEX4")),
@@ -984,7 +1031,7 @@ fn formatted_expr(input: &str) -> IResult<&str, FormattedExpr> {
         value(ExprFormat::Bin(Some(16)), tag_no_case("BIN16")),
         value(ExprFormat::Bin(Some(32)), tag_no_case("BIN32")),
         value(ExprFormat::Bin(None), tag_no_case("BIN")),
-    ))(input)?;
+    )))(input)?;
     let (input, _) = char('}')(input)?;
 
 

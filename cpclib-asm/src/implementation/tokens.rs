@@ -118,57 +118,65 @@ impl TokenExt for Token {
     /// Modify the few tokens that need to read files
     /// TODO refactor file reading of filename search
     fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
+
+        /// Generate a specific error message if file is not found
+        let get_real_path = |fname| {
+            match ctx.get_path_for(fname) {
+                Err(list) => {
+                    let mut msg =  format!("{:?} not found\nThese paths have been tried:", fname);
+                    for fname in list {
+                        msg += & format!("\n{}", fname);
+                    }
+                    return Err(AssemblerError::IOError {
+                        msg
+                    });
+                }
+                Ok(ref fname) => {
+                    return Ok(fname.to_str().unwrap().to_owned());
+                }
+            }
+        };
+
+
         match self {
             Token::Include(ref fname, ref mut listing) if listing.is_none() => {
-                match ctx.get_path_for(fname) {
-                    None => {
-                        return Err(AssemblerError::IOError {
-                            msg: format!("{:?} not found", fname),
-                        });
-                    }
-                    Some(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
-                            msg: format!("Unable to open {:?}", fname),
-                        })?;
-                        let mut content = String::new();
-                        f.read_to_string(&mut content)
-                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+                let fname = get_real_path(fname)?;
 
-                        let mut new_ctx = ctx.clone();
-                        new_ctx.set_current_filename(fname);
-                        listing.replace(parse_str_with_context(&content, &new_ctx)?);
-                    }
-                }
+                let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
+                    msg: format!("Unable to open {:?}", fname),
+                })?;
+                let mut content = String::new();
+                f.read_to_string(&mut content)
+                    .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+
+                let mut new_ctx = ctx.clone();
+                new_ctx.set_current_filename(fname);
+                listing.replace(parse_str_with_context(&content, &new_ctx)?);
+            
+                
             }
 
             Token::Incbin(ref fname, _, _, _, _, ref mut data, ref transformation)
                 if data.is_none() =>
             {
-                //TODO manage the optional arguments
-                match ctx.get_path_for(fname) {
-                    None => {
-                        return Err(AssemblerError::IOError {
-                            msg: format!("{:?} not found", fname),
-                        });
-                    }
-                    Some(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
-                            msg: format!("Unable to open {:?}", fname),
-                        })?;
-                        let mut content = Vec::new();
-                        f.read_to_end(&mut content)
-                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+                let fname = get_real_path(fname)?;
 
-                        match transformation {
-                            BinaryTransformation::None => {
-                                data.replace(content);
-                            }
-                            BinaryTransformation::Exomizer => {
-                                unimplemented!("Need to implement exomizer crunching")
-                            }
-                        }
+                let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
+                    msg: format!("Unable to open {:?}", fname),
+                })?;
+                let mut content = Vec::new();
+                f.read_to_end(&mut content)
+                    .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+
+                match transformation {
+                    BinaryTransformation::None => {
+                        data.replace(content);
+                    }
+                    BinaryTransformation::Exomizer => {
+                        unimplemented!("Need to implement exomizer crunching")
                     }
                 }
+ 
             }
 
             // Rorg may embed some instructions that read files
