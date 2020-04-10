@@ -24,7 +24,12 @@ pub enum Symbol {
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct SymbolsTable {
+    /// The value of each symbol
     map: HashMap<String, Symbol>,
+    /// The page of each symbol
+    page: HashMap<String, u8>,
+    /// The current page. it is automatically set to a symbol when the symbol is added
+    current_page: u8,
     dummy: bool,
 }
 
@@ -32,7 +37,9 @@ impl Default for SymbolsTable {
     fn default() -> Self {
         Self {
             map: HashMap::new(),
+            page: HashMap::new(),
             dummy: false,
+            current_page: 0
         }
     }
 }
@@ -40,9 +47,10 @@ impl Default for SymbolsTable {
 #[allow(missing_docs)]
 impl SymbolsTable {
     pub fn laxist() -> Self {
-        let mut map = HashMap::new();
-        map.insert(String::from("$"), Symbol::Integer(0));
-        Self { map, dummy: true }
+        let mut new = Self::default();
+        new.map.insert(String::from("$"), Symbol::Integer(0));
+        new.dummy = true;
+        new
     }
 
     /// Return the current addres if it is known or return an error
@@ -59,23 +67,34 @@ impl SymbolsTable {
             .insert(String::from("$"), Symbol::Integer(i32::from(address)));
     }
 
+    pub fn set_current_page(&mut self, page: u8) {
+        self.current_page = page;
+    }
+
     /// Set the given symbol to $ value
     pub fn set_symbol_to_current_address<S: AsRef<str>>(
         &mut self,
         label: S,
     ) -> Result<(), SymbolError> {
         self.current_address().map(|val| {
+            let label = label.as_ref().to_owned();
             self.map
-                .insert(label.as_ref().to_owned(), Symbol::Integer(i32::from(val)));
+                .insert(label.clone(), Symbol::Integer(i32::from(val)));
+            self.page.insert(label, self.current_page);
         })
     }
 
     /// Set the given symbol to the given value
     pub fn set_symbol_to_value<S: AsRef<str>>(&mut self, label: S, value: i32) {
+        let label = label.as_ref().to_owned();
         self.map
-            .insert(label.as_ref().into(), Symbol::Integer(value));
+            .insert(label.clone(), Symbol::Integer(value));
+        self.page.insert(label, self.current_page);
+
     }
 
+    /// Update the value of the symbol.
+    /// Does not update its page. No idea if it is necessary
     pub fn update_symbol_to_value<S: AsRef<str>>(&mut self, label: S, value: i32) {
         *(self.map.get_mut(label.as_ref()).unwrap()) = Symbol::Integer(value);
     }
@@ -98,8 +117,52 @@ impl SymbolsTable {
     }
 
     /// Instead of returning the value, return the bank information
+    /// logic stolen to rasm
     pub fn prefixed_value<S: AsRef<str>>(&self, prefix:& LabelPrefix, key: S) -> Option<u16> {
-        unimplemented!()
+
+        /* rasm code
+        for (i=0;i<4;i++) {
+            ae->bankgate[i]=0x7FC0; /* video memory has no paging */
+            ae->setgate[i]=0x7FC0; /* video memory has no paging */
+        }
+        for (i=0;i<256;i++) {
+            /* 4M expansion support on lower gate array port */
+            ae->bankgate[i+4]=0x7FC4+(i&3)+((i&31)>>2)*8-0x100*(i>>5);
+            ae->setgate[i+4] =0x7FC2      +((i&31)>>2)*8-0x100*(i>>5);
+            //printf("%04X %04X\n",ae->bankgate[i+4],ae->setgate[i+4]);
+        }
+ */
+        
+
+        let key = key.as_ref();
+        let page = *self.page.get(key).unwrap() as u16;
+        let value = self.value(key).unwrap() as u16;
+        let bank = value/0x4000;
+
+        eprintln!("{} {} {} {}", key, value, page, bank);
+        match prefix {
+            LabelPrefix::Bank => {
+                Some(bank as _)
+            },
+
+            LabelPrefix::Page => {
+                if page == 0 {
+                    Some(0x7fc0)
+                }
+                else {
+                    Some(0x7FC4+(bank&3)+((bank&31)>>2)*8-0x100*(bank>>5))
+                }
+            },
+
+            LabelPrefix::Pageset => {
+                if page == 0 {
+                    Some(0x7fc0)
+                }
+                else {
+                    Some(0x7FC2+((bank&31)>>2)*8-0x100*(bank>>5))
+                }          
+            }
+        }
     }
 
 
@@ -219,6 +282,7 @@ impl SymbolsTableCaseDependent {
         target self.table {
             pub fn current_address(&self) -> Result<u16, SymbolError>;
             pub fn set_current_address(&mut self, address: u16);
+            pub fn set_current_page(&mut self, page: u8);
             pub fn closest_symbol<S: AsRef<str>>(&self, symbol: S) -> Option<String>;
         }
     }

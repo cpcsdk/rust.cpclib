@@ -44,8 +44,31 @@ fn add_index_register_code(m: &mut Bytes, r: IndexRegister16) {
 const DD: u8 = 0xdd;
 const FD: u8 = 0xfd;
 
+trait MyDefault  {
+    fn default() -> Self;
+}
+
 ///! Lots of things will probably be inspired from RASM
 type Bank = [u8; 0x1_0000];
+impl MyDefault for Bank {
+    fn default() -> Bank {
+        [0; 0x1_0000]
+    }
+}
+
+/// Number of banks allowed in a snapshot
+const NB_BANKS: usize = 9;
+
+/// The Banks of interest
+/// only one is added at first. Others are created on demand
+type Banks = Vec<Bank>;
+impl MyDefault for Banks {
+    fn default() -> Self {
+        vec! [
+            Bank::default(),
+        ]
+    }
+}
 
 /// Several passes are needed to properly assemble a source file.
 /// This structure allows to code which pass is going to be analysed.
@@ -191,11 +214,10 @@ pub struct Env {
     maxptr: usize,
 
     /// Currently selected bank
-    activebank: usize,
+    activepage: usize,
 
     /// Memory configuration
-    /// XXX Currently we only have one bank
-    mem: [Bank; 1],
+    mem: Banks,
 
     iorg: usize,
     org_zones: Vec<OrgZone>,
@@ -222,8 +244,8 @@ impl Default for Env {
             outputadr: 0,
             codeadr: 0,
             maxptr: 0xffff,
-            activebank: 0,
-            mem: [[0; 0x1_0000]; 1],
+            activepage: 0,
+            mem: MyDefault::default(),
 
             iorg: 0,
             org_zones: Vec::new(),
@@ -262,8 +284,8 @@ impl Env {
             self.outputadr = 0;
             self.codeadr = 0;
             self.maxptr = 0xffff;
-            self.activebank = 0;
-            self.mem = [[0; 0x10000]; 1];
+            self.activepage = 0;
+            self.mem = MyDefault::default();
             self.iorg = 0;
             self.org_zones = Vec::new();
             self.stable_counters = StableTickerCounters::default();
@@ -316,9 +338,9 @@ impl Env {
     /// (RASM ___internal_output)
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
         if self.outputadr <= self.maxptr {
-            eprintln!("==> 0x{:X} = 0x{:X}", self.outputadr, v);
+            eprintln!("==> [{}] 0x{:X} = 0x{:X}", self.activepage, self.outputadr, v);
 
-            self.mem[self.activebank][self.outputadr] = v;
+            self.mem[self.activepage][self.outputadr] = v;
             self.outputadr += 1; // XXX will fail at 0xffff
             self.codeadr += 1;
             Ok(())
@@ -336,7 +358,7 @@ impl Env {
     }
 
     pub fn byte(&self, address: usize) -> u8 {
-        self.mem[self.activebank][address]
+        self.mem[self.activepage][address]
     }
 
     /// Get the size of the generated binary.
@@ -647,6 +669,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Basic(ref variables, ref hidden_lines, ref code) => {
             env.visit_basic(variables.as_ref(), hidden_lines.as_ref(), code)
         }
+        Token::Bankset(ref exp) => env.visit_bankset(exp),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | &Token::Defw(_) => visit_db_or_dw(token, env),
         Token::Defs(_, _) => visit_defs(token, env),
@@ -674,17 +697,67 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     }
 }
 
-fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> Result<(), AssemblerError> {
+fn visit_assert(exp: &Expr, txt: Option<&String>, env: &Env) -> Result<(), AssemblerError> {
     if env.pass.is_second_pass() {
         let value = env.resolve_expr_must_never_fail(exp)?;
         if value == 0 {
             return Err(AssemblerError::AssertionFailed {
                 msg: (if txt.is_some() { &txt.unwrap() } else { "" }).to_owned(),
                 test: exp.to_string(),
+                guidance: env.to_assert_string(exp)
             });
         }
     }
     Ok(())
+}
+
+
+
+impl Env {
+
+
+    /// Generate a string that is helpfull for assertion understanding (i.e. show the operation and evaluate the rest)
+    /// Crash if expression cannot be computed
+    fn to_assert_string(&self, exp: &Expr) -> String {
+
+        let format = |oper, left, right| {
+            format!(
+                "0x{:x} {} 0x{:x}",
+                self.resolve_expr_must_never_fail(left).unwrap(),
+                oper,
+                self.resolve_expr_must_never_fail(right).unwrap(),
+            )
+        };
+
+        match exp {
+            Expr::Equal( left,  right) => format("==", left, right),
+            Expr::GreaterOrEqual( left,  right) => format(">=", left, right),
+            Expr::StrictlyGreater( left,  right) => format(">", left, right),
+            Expr::StrictlyLower( left,  right) => format( "<", left, right),
+            Expr::LowerOrEqual( left,  right) => format("<=", left, right),
+
+            _ => format!("0x{:x}", self.resolve_expr_must_never_fail(exp).unwrap())
+        }
+    }
+
+
+
+    fn visit_bankset(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+        let value = self.resolve_expr_must_never_fail(exp)?; // This value MUST be interpretable once executed
+        if value <0 || value > 8 {
+            return Err(AssemblerError::InvalidArgument{msg: format!("{} is invalid. BANKSET only accept values from 0 to 8", value).into()});
+        }
+        self.activepage = value as _;
+        while self.activepage >= self.mem.len() {
+            self.mem.push(Bank::default());
+        }
+        assert!(self.mem.len() <= NB_BANKS);
+
+        let page = self.activepage as _;
+        self.symbols_mut().set_current_page(page);
+        Ok(())
+
+    }
 }
 
 fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {

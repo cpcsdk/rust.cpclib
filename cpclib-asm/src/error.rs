@@ -35,8 +35,8 @@ pub enum AssemblerError {
     #[fail(display = "To be sorted error: {}", msg)]
     GenericError { msg: String },
 
-    #[fail(display = "Assertion failed -- {}: {}", test, msg)]
-    AssertionFailed { test: String, msg: String },
+    #[fail(display = "Assertion failed -- {} [{}]: {}", test, guidance, msg)]
+    AssertionFailed { test: String, msg: String, guidance: String },
 
     #[fail(display = "Symbol `{}`already present on the symbol table", symbol)]
     SymbolAlreadyExists { symbol: String },
