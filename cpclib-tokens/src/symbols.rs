@@ -132,10 +132,13 @@ impl SymbolsTable {
             //printf("%04X %04X\n",ae->bankgate[i+4],ae->setgate[i+4]);
         }
  */
-        
 
         let key = key.as_ref();
-        let page = *self.page.get(key).unwrap() as u16;
+        eprintln!("key {}", key);
+
+        let page = *self.page.get(key).or_else(||{
+            Some(&self.current_page)
+        }).unwrap() as u16;
         let value = self.value(key).unwrap() as u16;
         let bank = value/0x4000;
 

@@ -216,6 +216,11 @@ Truc
 
 
     
+    fn code_test(code: &'static str){      
+        let options = AssemblingOptions::new_case_insensitive();
+        let res = assemble_with_options(code, &options);
+        res.unwrap();
+    }
 
     /// Test stolen to rasm
     #[test]
@@ -234,19 +239,45 @@ label2
         assert {pageset}label1==#7fC0
         assert {pageset}label2==#7fC2
         nop";
+        code_test(code);
         
-        let options = AssemblingOptions::new_case_insensitive();
-        eprintln!("{:?}", assemble_with_options(code, &options));
-        assert!(assemble_with_options(code, &options).is_ok());
+
 
     }
-    
-    /*
-#define AUTOTEST_PAGETAG2	"bankset 0:call maroutine:bank 4:org #C000:autreroutine:nop:" \
-							"ret:bank 5:org #8000:maroutine:ldir:ret:bankset 2:org #9000:troize:nop:" \
-							"assert {page}maroutine==#7FC5:assert {pageset}maroutine==#7FC2:assert {page}autreroutine==#7FC4:" \
-							"assert {pageset}autreroutine==#7FC2:assert {page}troize==#7FCE:assert {pageset}troize==#7FCA"							
-							
+    /* /// This test currently does not pass
+    #[test]
+    fn rasm_pagetag2() {
+        let code = "
+        bankset 0
+        call maroutine
+        
+        bank 4
+        org #C000
+autreroutine
+        nop
+        ret
+        
+        bank 5
+        org #8000
+maroutine
+        ldir
+        ret
+        
+        bankset 2
+        org #9000
+troize
+        nop
+        assert {page}maroutine==#7FC5
+        assert {pageset}maroutine==#7FC2
+        assert {page}autreroutine==#7FC4
+        assert {pageset}autreroutine==#7FC2
+        assert {page}troize==#7FCE
+        assert {pageset}troize==#7FCA";
+        rasm_test(code);
+
+    }
+    */
+	/*						
 #define AUTOTEST_PAGETAG3	"buildsna:bank 2:assert {bank}$==2:assert {page}$==0x7FC0:assert {pageset}$==#7FC0:" \
 							"bankset 1:org #4000:assert {bank}$==5:assert {page}$==0x7FC5:assert {pageset}$==#7FC2"
     */	
@@ -303,5 +334,20 @@ label2
         .expect("Unable to assemble this code");
         println!("{}", listing.to_string());
         assert_eq!(listing.estimated_duration().unwrap(), (3 + 1 + 2 + 1 + 2));
+    }
+
+
+
+    #[test]
+    fn test_real1() {
+        let code = "    RUN 0x50, 0xc0";
+        code_test(code);
+
+        let code = "    if {bank}$ == 0
+            RUN 0x50, 0xc0
+        endif
+        ";
+        code_test(code);
+
     }
 }

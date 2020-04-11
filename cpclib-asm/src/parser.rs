@@ -635,6 +635,8 @@ pub fn parse_directive(input: &str) -> IResult<&str, Token> {
     alt((
         parse_assert,
         parse_bankset,
+        parse_bank,
+        parse_run,
         parse_align,
         parse_breakpoint,
         parse_org,
@@ -765,6 +767,28 @@ pub fn parse_bankset(input: &str) -> IResult<&str, Token> {
     let (input, count) = expr(input)?;
 
     Ok((input, Token::Bankset(count)))
+
+}
+
+pub fn parse_bank(input: &str) -> IResult<&str, Token> {
+    let (input, _) = parse_instr("bank")(input)?;   
+    let (input, count) = expr(input)?;
+
+    Ok((input, Token::Bankset(count)))
+
+}
+
+pub fn parse_run(input: &str) -> IResult<&str, Token> {
+    let (input, _) = parse_instr("run")(input)?;   
+    let (input, address1) = expr(input)?;
+    let(input, address2) = opt(
+        preceded(
+            parse_comma,
+            expr
+        )
+    )(input)?;
+
+    Ok((input, Token::Run(address1, address2)))
 
 }
 
@@ -1886,6 +1910,9 @@ pub fn parens(input: &str) -> IResult<&str, Expr> {
 pub fn factor(input: &str) -> IResult<&str, Expr> {
     alt((
         map(delimited(space0, tuple((parse_labelprefix, parse_label)), space0), |(p,l)| Expr::PrefixedLabel(p,l)), // TODO rework this aspect
+        map(delimited(space0, tuple((parse_labelprefix, tag("$"))), space0), |(p,_)| {
+            Expr::PrefixedLabel(p, String::from("$"))
+        }),
 
         // Manage functions
         delimited(space0, parse_unary_functions, space0),
