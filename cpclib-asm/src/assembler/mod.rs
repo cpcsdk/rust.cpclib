@@ -214,7 +214,7 @@ pub struct Env {
     maxptr: usize,
 
     /// Currently selected bank
-    activepage: usize,
+    active_bankset: usize,
 
     /// Memory configuration
     mem: Banks,
@@ -222,6 +222,9 @@ pub struct Env {
     iorg: usize,
     org_zones: Vec<OrgZone>,
     symbols: SymbolsTableCaseDependent,
+
+    /// Set only if the run instruction has been used
+    run_options: Option<(u16, Option<u16>)>
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -244,13 +247,14 @@ impl Default for Env {
             outputadr: 0,
             codeadr: 0,
             maxptr: 0xffff,
-            activepage: 0,
+            active_bankset: 0,
             mem: MyDefault::default(),
 
             iorg: 0,
             org_zones: Vec::new(),
 
             symbols: SymbolsTableCaseDependent::default(),
+            run_options: None
         }
     }
 }
@@ -284,11 +288,12 @@ impl Env {
             self.outputadr = 0;
             self.codeadr = 0;
             self.maxptr = 0xffff;
-            self.activepage = 0;
+            self.active_bankset = 0;
             self.mem = MyDefault::default();
             self.iorg = 0;
             self.org_zones = Vec::new();
             self.stable_counters = StableTickerCounters::default();
+            self.run_options = None
         }
     }
 
@@ -338,9 +343,9 @@ impl Env {
     /// (RASM ___internal_output)
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
         if self.outputadr <= self.maxptr {
-            eprintln!("==> [{}] 0x{:X} = 0x{:X}", self.activepage, self.outputadr, v);
+            eprintln!("==> [{}] 0x{:X} = 0x{:X}", self.active_bankset, self.outputadr, v);
 
-            self.mem[self.activepage][self.outputadr] = v;
+            self.mem[self.active_bankset][self.outputadr] = v;
             self.outputadr += 1; // XXX will fail at 0xffff
             self.codeadr += 1;
             Ok(())
@@ -358,7 +363,7 @@ impl Env {
     }
 
     pub fn byte(&self, address: usize) -> u8 {
-        self.mem[self.activepage][address]
+        self.mem[self.active_bankset][address]
     }
 
     /// Get the size of the generated binary.
@@ -690,6 +695,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
         Token::Repeat(_, _, _) => visit_repeat(token, env),
+        Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
@@ -747,16 +753,33 @@ impl Env {
         if value <0 || value > 8 {
             return Err(AssemblerError::InvalidArgument{msg: format!("{} is invalid. BANKSET only accept values from 0 to 8", value).into()});
         }
-        self.activepage = value as _;
-        while self.activepage >= self.mem.len() {
+        self.active_bankset = value as _;
+        while self.active_bankset >= self.mem.len() {
             self.mem.push(Bank::default());
         }
         assert!(self.mem.len() <= NB_BANKS);
 
-        let page = self.activepage as _;
+        let page = self.active_bankset as _;
         self.symbols_mut().set_current_page(page);
         Ok(())
 
+    }
+
+    fn visit_run(&mut self, address: &Expr, ga: Option<&Expr>) -> Result<(), AssemblerError> {
+        let address = self.resolve_expr_may_fail_in_first_pass(address)?;
+        if self.run_options.is_some() {
+            return Err("RUN has already been specified".to_owned().into());
+        }
+        match ga {
+            None => {
+                self.run_options = Some((address as _, None));
+            },
+            Some(ga_expr) => {
+                let ga_expr = self.resolve_expr_may_fail_in_first_pass(ga_expr)?;
+                self.run_options = Some((address as _, Some(ga_expr as _)));
+            }
+        }
+        Ok(())
     }
 }
 
