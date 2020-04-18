@@ -1,0 +1,28 @@
+[package]
+
+name = "cpclib-z80emu"
+version = "0.4.1-alpha"
+authors = ["Romain Giot <giot.romain@gmail.com>"]
+edition = "2018"
+license = "MIT"
+description = "cpclib libraries related to snapshots"
+repository = "https://github.com/cpcsdk/rust.cpclib"
+
+[dependencies]
+cpclib-asm = "0.4.1-alpha"
+cpclib-sna = "0.4.1-alpha"
+
+
+bitsets = "0.1.1"
+cfg-if = "0.1.10"
+delegate = "0.3.0"
+either = "1.5.3"
+failure = "0.1.6"
+itertools= "0.8.2"
+memchr = "2.2.1"
+nom = "5.0.1"
+num_enum = "0.4.2"
+num= "0.2.0"
+paste = "0.1.9"
+smallvec = "1.0.0"
+strsim = "0.9.2"

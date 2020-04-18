@@ -1,0 +1,47 @@
+[package]
+
+name = "cpclib-basic"
+version = "0.4.1-alpha"
+authors = ["Romain Giot <giot.romain@gmail.com>"]
+edition = "2018"
+license = "MIT"
+description = "cpclib libraries related to locomotive basic"
+repository = "https://github.com/cpcsdk/rust.cpclib"
+
+[dependencies]
+cpclib-disc = "0.4.1-alpha"
+
+
+arrayref= "0.3.5"
+bitfield = "0.13.2"
+bitflags = "1.2.1"
+cfg-if = "0.1.10"
+custom_error = "1.7.1"
+delegate = "0.3.0"
+either = "1.5.3"
+failure = "0.1.6"
+getset = "0.0.9"
+itertools= "0.8.2"
+matches = "0.1.8"
+memchr = "2.2.1"
+nom = "5.0.1"
+num_enum = "0.4.2"
+serde = { version = "1.0.103", features = ["derive"] }
+smallvec = "1.0.0"
+strsim = "0.9.2"
+
+clap = { version = "2.33.0", optional = true }
+
+[build-dependencies]
+built = {version = "0.4", features = ["chrono"]}
+
+
+[features]
+basic = ["clap"]
+
+
+
+[[bin]]
+name = "locomotive"
+path = "src/bin/locomotive.rs"
+required-features = ["basic"]
