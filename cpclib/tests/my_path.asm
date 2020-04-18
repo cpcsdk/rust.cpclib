@@ -1,0 +1,3 @@
+    org 0x10
+    ld hl, 0xc9fb
+    ld (0x38), hl
