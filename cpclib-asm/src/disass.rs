@@ -389,69 +389,70 @@ const TABINSTR:[&'static str;256]  = [
 
 /// Generate a listing from the list of bytes. An error is generated if it is impossible to disassemble the flux
 /// TODO really implement it
-pub fn disassemble(bytes: &[u8]) -> Listing {
+pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
+
+	let mut reverse_tokens = Vec::new();
 
     // Generate a listing that contains the current token followed by tokens obtaines from remaining bytes
-    let continue_disassembling = |token: Token, bytes: &[u8]| {
-		let rest = disassemble(bytes);
-		let mut lst = Listing::new();
-		lst.push(token);
-		lst.extend_from_slice(&rest);
-		lst
+    let mut continue_disassembling = |token: Token, bytes: &'a [u8]| {
+		reverse_tokens.push(token);
+		bytes
     };
 
+	while ! bytes.is_empty() {
 
-    match bytes {
-        // Nothing to disassemble
-        [] => {
-            Listing::new()
-        },
+		bytes = match bytes {
+			[] => unreachable!(),
+			
+			// Current mnemonic is nop
+			[0, rest @ ..] => {
+				continue_disassembling(nop(), rest)           
+			},
 
-        // Current mnemonic is nop
-        [0, rest @ ..] => {
-            continue_disassembling(nop(), rest)           
-        },
-
-        [ref prefix, 0xCB, param, opcode, rest @ ..] if *prefix == 0xfd || *prefix == 0xdd => {
-            let token = disassemble_with_one_argument(
-				*opcode, 
-				*param, 
-				if *prefix == 0xfd {&TABINSTRFDCB} else {&TABINSTRDDCB}
-			).unwrap_or_else(|_|{
-					defb_elements(&[*prefix, 0xcb, *param, *opcode])
-				}
-			);
-            continue_disassembling(token, rest)           
-        },
+			[ref prefix, 0xCB, param, opcode, rest @ ..] if *prefix == 0xfd || *prefix == 0xdd => {
+				let token = disassemble_with_one_argument(
+					*opcode, 
+					*param, 
+					if *prefix == 0xfd {&TABINSTRFDCB} else {&TABINSTRDDCB}
+				).unwrap_or_else(|_|{
+						defb_elements(&[*prefix, 0xcb, *param, *opcode])
+					}
+				);
+				continue_disassembling(token, rest)           
+			},
 
 
-		[prefix, ref opcode, rest @ ..] 
-			if 	*prefix == 0xcb || *prefix == 0xed || 
-				*prefix == 0xdd || *prefix == 0xfd => {
-            let token = disassemble_without_argument(
-				*opcode, 
-				match prefix {
-					0xcb => &TABINSTRCB,
-					0xed => &TABINSTRED,
-					0xdd => &TABINSTRDD,
-					0xfd => &TABINSTRFD,
-					_ => unreachable!()
-				}
-				
-			).unwrap_or_else(|_|{
-				defb_elements(&[*prefix, *opcode])
-			});
-            continue_disassembling(token, rest)
-		},
-		
-        [ref opcode, rest @ ..] => {
-			let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTR, rest)
-			.unwrap_or_else(|_|{
-				(defb(*opcode), rest)
-			});
-            continue_disassembling(token, rest)
-        }
-    }
+			[prefix, ref opcode, rest @ ..] 
+				if 	*prefix == 0xcb || *prefix == 0xed || 
+					*prefix == 0xdd || *prefix == 0xfd => {
+				let token = disassemble_without_argument(
+					*opcode, 
+					match prefix {
+						0xcb => &TABINSTRCB,
+						0xed => &TABINSTRED,
+						0xdd => &TABINSTRDD,
+						0xfd => &TABINSTRFD,
+						_ => unreachable!()
+					}
+					
+				).unwrap_or_else(|_|{
+					defb_elements(&[*prefix, *opcode])
+				});
+				continue_disassembling(token, rest)
+			},
+			
+			[ref opcode, rest @ ..] => {
+				let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTR, rest)
+				.unwrap_or_else(|_|{
+					(defb(*opcode), rest)
+				});
+				continue_disassembling(token, rest)
+			}
+		}
+	};
+
+	reverse_tokens.reverse();
+	reverse_tokens.into()
 
 }
 
