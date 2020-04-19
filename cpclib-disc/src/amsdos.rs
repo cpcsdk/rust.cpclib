@@ -14,6 +14,8 @@ use std::iter::Iterator;
 use delegate::delegate;
 
 use arrayref::array_ref;
+use std::convert::TryFrom;
+use std::convert::TryInto;
 
 #[derive(Debug)]
 #[allow(missing_docs)]
@@ -23,11 +25,18 @@ pub enum AmsdosError {
     FileLargerThan64Kb,
     InvalidHeader,
     IO(std::io::Error),
+    Various(String)
 }
 
 impl From<std::io::Error> for AmsdosError {
     fn from(err: std::io::Error) -> Self {
         AmsdosError::IO(err)
+    }
+}
+
+impl From<String> for AmsdosError {
+    fn from(err: String) -> Self {
+        AmsdosError::Various(err)
     }
 }
 
@@ -302,13 +311,15 @@ pub enum AmsdosFileType {
     Binary = 2,
 }
 
-impl From<u8> for AmsdosFileType {
-    fn from(val: u8) -> Self {
+impl TryFrom<u8> for AmsdosFileType {
+    type Error = AmsdosError;
+
+    fn try_from(val: u8) -> Result<Self, Self::Error>  {
         match val {
-            0 => AmsdosFileType::Basic,
-            1 => AmsdosFileType::Protected,
-            2 => AmsdosFileType::Binary,
-            _ => unreachable!(),
+            0 => Ok(AmsdosFileType::Basic),
+            1 => Ok(AmsdosFileType::Protected),
+            2 => Ok(AmsdosFileType::Binary),
+            _ => Err(AmsdosError::Various(format!("{} is not a valid file type", val))),
         }
     }
 }
@@ -1127,7 +1138,7 @@ impl AmsdosManager {
             // Update the entry on disc
             let new_entry = AmsdosEntry {
                 idx: entry_idx,
-                file_name: file.amsdos_filename(),
+                file_name: file.amsdos_filename()?,
                 read_only: is_read_only,
                 system: is_system,
                 num_page: entry_num_page,
@@ -1358,9 +1369,12 @@ impl AmsdosHeader {
         self
     }
 
-    pub fn amsdos_filename(&self) -> AmsdosFileName {
-        AmsdosFileName::new_incorrect_case(self.user(), &self.filename(), &self.extension())
-            .unwrap()
+    /// Return the filename if possible
+    pub fn amsdos_filename(&self) -> Result<AmsdosFileName, String> {
+        AmsdosFileName::new_incorrect_case(
+            self.user(), 
+            &self.filename(), 
+            &self.extension())
     }
 
     pub fn set_filename(&mut self, filename: &[u8; 8]) -> &mut Self {
@@ -1396,8 +1410,8 @@ impl AmsdosHeader {
         self
     }
 
-    pub fn file_type(&self) -> AmsdosFileType {
-        self.content[18].into()
+    pub fn file_type(&self) -> Result<AmsdosFileType, AmsdosError> {
+        self.content[18].try_into()
     }
 
     pub fn set_loading_address(&mut self, address: u16) -> &mut Self {
@@ -1551,7 +1565,7 @@ impl AmsdosFile {
         }
     }
 
-    pub fn amsdos_filename(&self) -> AmsdosFileName {
+    pub fn amsdos_filename(&self) -> Result<AmsdosFileName, String> {
         self.header.amsdos_filename()
     }
 

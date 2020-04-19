@@ -12,5 +12,5 @@ export CC=o64-clang
 export CXX=o64-clang++
 export LIBZ_SYS_STATIC=1
 
-which $CC
+#cd cpclib
 cargo build --target=x86_64-apple-darwin --release --all-features

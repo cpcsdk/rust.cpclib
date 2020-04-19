@@ -86,6 +86,24 @@ impl TokenExt for Token {
     /// Generate the listing of opcodes for directives that contain data Defb/defw/Defs in order to have
     /// mnemonics. Fails when some values are not opcodes
     fn disassemble_data(&self) -> Result<Listing, String> {
+
+        // Disassemble the bytes and return the listing ONLY if it has no more defb/w/s directives
+        let wrap = |bytes: &[u8]| {
+            use crate::disass::disassemble;
+
+            let lst = disassemble(&bytes);
+            for token in lst.listing() {
+                match token {
+                    Token::Defb(_)| Token::Defw(_) | Token::Defs(_, _) => {
+                        return Err(format!("{} as not been disassembled", token))
+                    },
+                    _ => {}
+                }
+            }
+
+            return Ok(lst);
+        };
+
         match self {
             Token::Defs(ref expr, ref value) => {
                 use crate::assembler::Env;
@@ -93,7 +111,7 @@ impl TokenExt for Token {
 
                 assemble_defs(expr, value.as_ref(), &Env::default())
                             .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
-                            .and_then(|bytes| disassemble(&bytes) )
+                            .and_then(|b| wrap(&b))
             },
 
             Token::Defb(_) | Token::Defw(_) => {
@@ -102,7 +120,7 @@ impl TokenExt for Token {
 
                 assemble_db_or_dw(self, &Env::default())
                             .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
-                            .and_then(|bytes| disassemble(&bytes))
+                            .and_then(|b| wrap(&b))
 
             },
 
