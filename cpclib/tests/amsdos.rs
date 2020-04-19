@@ -198,8 +198,8 @@ mod tests {
             .add_file(&file, false, false)
             .expect("Unable to add file");
 
-        assert_eq!(&file.header().amsdos_filename().filename(), "TEST.BIN");
-        assert_eq!(&file.header().amsdos_filename(), &filename);
+        assert_eq!(&file.header().amsdos_filename().unwrap().filename(), "TEST.BIN");
+        assert_eq!(&file.header().amsdos_filename().unwrap(), &filename);
         assert_eq!(file.header().execution_address(), 0x1234);
         assert_eq!(file.header().loading_address(), 0x3210);
 
