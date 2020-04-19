@@ -50,8 +50,15 @@ built = {version = "0.4", features = ["chrono"]}
 
 [features]
 basm = ["clap",  "semver", "time", "cpclib-disc"]
+bdasm = ["clap",  "semver", "time"]
 
 [[bin]]
 name = "basm"
 path = "src/bin/basm.rs"
 required-features = ["basm"]
+
+[[bin]]
+name = "bdasm"
+path = "src/bin/bdasm.rs"
+required-features = ["bdasm"]
+

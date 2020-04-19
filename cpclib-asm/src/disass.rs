@@ -389,24 +389,22 @@ const TABINSTR:[&'static str;256]  = [
 
 /// Generate a listing from the list of bytes. An error is generated if it is impossible to disassemble the flux
 /// TODO really implement it
-pub fn disassemble(bytes: &[u8]) -> Result<Listing, String> {
+pub fn disassemble(bytes: &[u8]) -> Listing {
 
     // Generate a listing that contains the current token followed by tokens obtaines from remaining bytes
     let continue_disassembling = |token: Token, bytes: &[u8]| {
-        disassemble(bytes).and_then(|rest|{
-            // TODO -- check if it is possible to improve this aspect
-            let mut lst = Listing::new();
-            lst.push(token);
-            lst.extend_from_slice(&rest);
-            Ok(lst)
-        })
+		let rest = disassemble(bytes);
+		let mut lst = Listing::new();
+		lst.push(token);
+		lst.extend_from_slice(&rest);
+		lst
     };
 
 
     match bytes {
         // Nothing to disassemble
         [] => {
-            Ok(Listing::new())
+            Listing::new()
         },
 
         // Current mnemonic is nop
@@ -414,40 +412,43 @@ pub fn disassemble(bytes: &[u8]) -> Result<Listing, String> {
             continue_disassembling(nop(), rest)           
         },
 
-        [0xFD, 0xCB, param, opcode, rest @ ..] => {
-            let token = disassemble_with_one_argument(*opcode, *param, &TABINSTRFDCB)?;
+        [ref prefix, 0xCB, param, opcode, rest @ ..] if *prefix == 0xfd || *prefix == 0xdd => {
+            let token = disassemble_with_one_argument(
+				*opcode, 
+				*param, 
+				if *prefix == 0xfd {&TABINSTRFDCB} else {&TABINSTRDDCB}
+			).unwrap_or_else(|_|{
+					defb_elements(&[*prefix, 0xcb, *param, *opcode])
+				}
+			);
             continue_disassembling(token, rest)           
         },
 
-        // TODO this case is buggy and needs  to be redone to tkae into acocunt the position of the argument
-        [0xDD, 0xCB, param, opcode, rest @ ..] => {
-            let token = disassemble_with_one_argument(*opcode, *param, &TABINSTRDDCB)?;
-            continue_disassembling(token, rest)           
-        },
 
-        [0xCB, ref opcode, rest @ ..] => {
-            let token = disassemble_without_argument(*opcode, &TABINSTRCB)?;
+		[prefix, ref opcode, rest @ ..] 
+			if 	*prefix == 0xcb || *prefix == 0xed || 
+				*prefix == 0xdd || *prefix == 0xfd => {
+            let token = disassemble_without_argument(
+				*opcode, 
+				match prefix {
+					0xcb => &TABINSTRCB,
+					0xed => &TABINSTRED,
+					0xdd => &TABINSTRDD,
+					0xfd => &TABINSTRFD,
+					_ => unreachable!()
+				}
+				
+			).unwrap_or_else(|_|{
+				defb_elements(&[*prefix, *opcode])
+			});
             continue_disassembling(token, rest)
-        },
-
-        [0xED, ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRED, rest)?;
-            continue_disassembling(token, rest)
-        },
-
-        
-        [0xDD, ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRDD, rest)?;
-            continue_disassembling(token, rest)
-        },
-
-        [0xFD, ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRFD, rest)?;
-            continue_disassembling(token, rest)
-        },
-
+		},
+		
         [ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTR, rest)?;
+			let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTR, rest)
+			.unwrap_or_else(|_|{
+				(defb(*opcode), rest)
+			});
             continue_disassembling(token, rest)
         }
     }
@@ -500,8 +501,14 @@ fn disassemble_without_argument(opcode: u8, lut: &[&'static str; 256]) -> Result
     string_to_token(&representation)
 }
 
+/// Thje method never fails now => it generate a db opcode
 fn string_to_token(representation: &str) -> Result<Token, String> {
-    Token::try_from(["\t", &representation].join(""))
+	if representation.len() == 0 {
+		Err("Empty opcode".to_string())
+	}
+	else {
+		Token::try_from(["\t", &representation].join(""))
+	}
 }
 
 
