@@ -403,7 +403,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
 
 		bytes = match bytes {
 			[] => unreachable!(),
-			
+
 			// Current mnemonic is nop
 			[0, rest @ ..] => {
 				continue_disassembling(nop(), rest)           
@@ -425,7 +425,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
 			[prefix, ref opcode, rest @ ..] 
 				if 	*prefix == 0xcb || *prefix == 0xed || 
 					*prefix == 0xdd || *prefix == 0xfd => {
-				let token = disassemble_without_argument(
+				let (token, rest) = disassemble_with_potential_argument(
 					*opcode, 
 					match prefix {
 						0xcb => &TABINSTRCB,
@@ -433,10 +433,11 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
 						0xdd => &TABINSTRDD,
 						0xfd => &TABINSTRFD,
 						_ => unreachable!()
-					}
+					},
+					rest
 					
 				).unwrap_or_else(|_|{
-					defb_elements(&[*prefix, *opcode])
+					(defb_elements(&[*prefix, *opcode]), rest)
 				});
 				continue_disassembling(token, rest)
 			},
