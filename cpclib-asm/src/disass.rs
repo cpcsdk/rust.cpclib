@@ -521,23 +521,23 @@ mod test {
 
     #[test]
     fn disass_simple_instruction() {
-        assert_eq!("PUSH HL", disassemble(&[0xe5]).unwrap().to_string().trim());
-        assert_eq!("RES 0x3, E", disassemble(&[0xcb, 0x9b]).unwrap().to_string().trim());
+        assert_eq!("PUSH HL", disassemble(&[0xe5]).to_string().trim());
+        assert_eq!("RES 0x3, E", disassemble(&[0xcb, 0x9b]).to_string().trim());
     }
 
     #[test]
     fn disass_instruction_with_arg() {
-        assert_eq!("CALL NZ, 0x123", disassemble(&[0xc4, 0x23, 0x01]).unwrap().to_string().trim());
-        assert_eq!("LD IX, (0x4321)", disassemble(&[0xdd, 0x2a, 0x21, 0x43]).unwrap().to_string().trim());
-        assert_eq!("LD (IX + 0x21), 0x43", disassemble(&[0xdd, 0x36, 0x21, 0x43]).unwrap().to_string().trim());
-        assert_eq!("BIT 0x6, (IX + 0x1)", disassemble(&[0xdd, 0xcb, 0x01, 0x76]).unwrap().to_string().trim());
+        assert_eq!("CALL NZ, 0x123", disassemble(&[0xc4, 0x23, 0x01]).to_string().trim());
+        assert_eq!("LD IX, (0x4321)", disassemble(&[0xdd, 0x2a, 0x21, 0x43]).to_string().trim());
+        assert_eq!("LD (IX + 0x21), 0x43", disassemble(&[0xdd, 0x36, 0x21, 0x43]).to_string().trim());
+        assert_eq!("BIT 0x6, (IX + 0x1)", disassemble(&[0xdd, 0xcb, 0x01, 0x76]).to_string().trim());
     }
-
+/*
     #[test]
     fn disass_unknwon_opcode(){
         assert!(disassemble(&[0xfd, 0x00]).is_err());
     }
-
+*/
     #[test]
     fn disass_check_representation_equality() {
 		disass_for_table_and_prefix(&TABINSTR, &[]);
@@ -562,7 +562,7 @@ mod test {
 			let repr = repr.replacen("nn", "0x12", 1);
 			let expected_bytes = [first, second, 0x12, code];
 
-			let obtained = disassemble(&expected_bytes).unwrap();
+			let obtained = disassemble(&expected_bytes);
 
 			println!("{:?},{:?}, {:?}", repr, expected_bytes, obtained);
 			assert_eq!(
@@ -638,7 +638,7 @@ mod test {
 
 			// check if disassembling provides the right value
 			// alter strings in order to be able to compare them
-			let obtained = disass.unwrap();
+			let obtained = disass;
 			if !expected.contains("RST") {
 				assert_eq!(
 				expected.replace(" ", "")
