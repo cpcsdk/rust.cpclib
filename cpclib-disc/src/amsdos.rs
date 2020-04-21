@@ -17,14 +17,27 @@ use arrayref::array_ref;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 
-#[derive(Debug)]
+use failure::Fail;
+
+#[derive(Debug, Fail)]
 #[allow(missing_docs)]
 pub enum AmsdosError {
+    #[fail(display = "No more entries available.")]
     NoEntriesAvailable,
+
+    #[fail(display = "No more blocs available.")]
     NoBlocAvailable,
+
+    #[fail(display = "File larger than 64kb")]
     FileLargerThan64Kb,
+
+    #[fail(display = "Invalid header")]
     InvalidHeader,
+
+    #[fail(display = "IO error")]
     IO(std::io::Error),
+
+    #[fail(display = "Various error")]
     Various(String)
 }
 

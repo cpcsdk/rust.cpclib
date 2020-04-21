@@ -268,3 +268,4 @@ fn main() {
 
     process(&matches).expect("Error while assembling file.");
 }
+

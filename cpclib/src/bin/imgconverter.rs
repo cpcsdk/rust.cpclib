@@ -23,13 +23,14 @@ use clap::{App, Arg, ArgMatches, SubCommand};
 use std::path::Path;
 use tempfile::Builder;
 
-use cpclib::assembler::assembler::visit_tokens_all_passes;
-use cpclib::assembler::parser::parse_z80_str;
+use cpclib_asm::preamble::*;
 use cpclib::ga::Palette;
 
 use cpclib::imageconverter::*;
 use cpclib::sna;
 use cpclib::sna::*;
+use cpclib_disc::edsk::ExtendedDsk;
+use cpclib_disc::amsdos::*;
 
 use std::fs::File;
 use std::io::Write;
@@ -39,42 +40,73 @@ use anyhow;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
 
-
+/// Compress data using lz4 algorithm.
+/// Should be decompressed on client side.
 fn lz4_compress(bytes: &[u8]) -> Vec<u8> {
     let mut res = Vec::new();
     let mut encoder = lz4::EncoderBuilder::new().build(&mut res).unwrap();
-    std::io::copy(bytes, &mut encoder).unwrap();
-    encoder.finsh().unwrap()
+    let mut bytes = bytes.clone();
+
+    std::io::copy(&mut bytes, &mut encoder).unwrap();
+    encoder.finish();
+    res
 }
 
-fn standard_linker_code(mode:u8, screen: &[u8]) -> String {
+fn palette_code(pal: &Palette) -> String {
+    let mut asm = " ld bc, 0x7f00\n".to_string();
+            // TODO create the linker
+
+    for idx in 0..(16/2) {
+        asm += &format!("\tld hl, 256*{} + {} : out (c), c : out (c), h : inc c : out (c), c: out (c), l : inc c\n", 
+            pal[2*idx + 0].gate_array(), 
+            pal[2*idx + 1].gate_array()
+        )
+    }
+
+    return asm;
+}
+
+fn standard_linked_code(mode:u8, pal: &Palette, screen: &[u8]) -> String {
     let base_code = standard_display_code(mode);
-    let complete_code = format!(
+    format!(
     "   org 0x1000
         di
         ld sp, $
+
+        ; Select palette
+        {palette}
+
+        ; Copy image on screen
         ld hl, image
         ld de, 0xc000
+        ld bc, image_end - image
         call lz4_uncrunch
+
+        ; Copy visualization code
         ld hl, code
         ld de, 0x4000
         ld bc, code_end - code
         ldir
+
         ei
         jp 0x4000
-
+lz4_uncrunch
+    {decompressor}
 code
     {code}
 code_end
         assert $ < 0x4000
 image
     {screen}
+image_end
 
         assert $<0xc000
     ",
-
-    code = defb_elements(&base_code.bytes()),
-    screen = screen)
+    palette = palette_code(pal),
+    decompressor = include_str!("lz4_docent.asm"),
+    code = defb_elements(&assemble(&base_code).unwrap()),
+    screen = defb_elements(screen)
+    )
 }
 
 // Produce the code that display a standard screen
@@ -180,16 +212,6 @@ fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) -> String {
     fullscreen_display_code(mode, crtc_width, pal)
 }
 
-fn assemble(z80: &str) -> Vec<u8> {
-    let tokens = parse_z80_str(&z80).expect("Unable to tokenize the code").1;
-    let env = visit_tokens_all_passes(&tokens).unwrap();
-    let start_code = 0x4000;
-    let end_code = env.output_address();
-    let code_size = end_code - start_code;
-
-    env.memory(start_code, code_size)
-}
-
 #[allow(clippy::if_same_then_else)] // false positive
 fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
     if let Some(_sprite_matches) = matches.subcommand_matches("sprite") {
@@ -279,23 +301,50 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         }
     } else {
         // Make the conversion before feeding sna or dsk
-        let (palette, code) = match &conversion {
-            Output::CPCMemoryStandard(_memory, pal) => {
-                (pal, assemble(&standard_display_code(output_mode)))
-            }
 
-            Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
-                let code = assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal));
-                (pal, code)
-            }
 
-            _ => unreachable!(),
-        };
-
+        /// TODO manage the presence/absence of file in the dsk, the choice of filename and so on
         if sub_dsk.is_some() {
-            // TODO create the linker
+            let code = match &conversion {
+                Output::CPCMemoryStandard(memory, pal) => {
+                    standard_linked_code(output_mode, pal, memory)
+                }
+    
+                Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
+                    unimplemented!()
+                }
+    
+                _ => unreachable!(),
+            };
+
+            println!("user test.bin as file name");
+            let file = assemble_to_amsdos_file(&code, "test.bin").unwrap();
+            println!("{:?}", file.header());
+            
+            
+            use cpclib_disc::cfg::DiscConfig;
+            let cfg = cpclib_disc::cfg::DiscConfig::single_head_data_format();
+            let dsk = cpclib_disc::builder::build_disc_from_cfg(&cfg);
+            let mut manager = AmsdosManager::new_from_disc(dsk, 0);
+            manager.add_file(&file, false, false).unwrap();
+            manager.dsk().save(sub_dsk.unwrap().value_of("DSK").unwrap()).unwrap();
+
         }
         if sub_sna.is_some() || sub_m4.is_some() {
+
+            let (palette, code) = match &conversion {
+                Output::CPCMemoryStandard(_memory, pal) => {
+                    (pal, assemble(&standard_display_code(output_mode)).unwrap())
+                }
+    
+                Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
+                    let code = assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal)).unwrap();
+                    (pal, code)
+                }
+    
+                _ => unreachable!(),
+            };
+            
             // Create a snapshot with a standard screen
             let mut sna = Snapshot::default();
 
@@ -320,7 +369,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 sna.set_value(
                     SnapshotFlag::GA_PAL(Some(i)),
                     u16::from(palette.get((i as i32).into()).gate_array()),
-                )
+                )   
                 .unwrap();
             }
 

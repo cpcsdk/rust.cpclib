@@ -4,13 +4,21 @@ use cpclib_tokens::tokens;
 use crate::parser::ParserContext;
 use cpclib_tokens::symbols::SymbolError;
 
+use cpclib_disc::amsdos::AmsdosError;
+use cpclib_disc::amsdos::AmsdosFile;
+
 use failure::Fail;
 
 #[derive(Debug, Fail)]
 #[allow(missing_docs)]
 pub enum AssemblerError {
+
+    #[fail(display = "Amsdos error: {}", error)]
+    AmsdosError {error: AmsdosError},
+
     #[fail(display = "Assembling bug: {}", msg)]
     BugInAssembler { msg: String },
+
     #[fail(display = "Parser bug: {}. Context: {:?}", error, context)]
     BugInParser {
         error: String,
@@ -86,6 +94,15 @@ impl From<SymbolError> for AssemblerError {
     fn from(err: SymbolError) -> Self {
         AssemblerError::GenericError {
             msg: "Unknown assembling address".to_string(),
+        }
+    }
+}
+
+
+impl From<AmsdosError> for AssemblerError {
+    fn from(err: AmsdosError) -> Self {
+        AssemblerError::AmsdosError {
+            error: err,
         }
     }
 }

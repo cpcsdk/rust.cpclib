@@ -593,6 +593,16 @@ impl<'de> Deserialize<'de> for Palette {
     }
 }
 
+
+impl<P> std::ops::Index<P> for Palette where P:Into<Pen>{
+    type Output = Ink;
+
+    fn index(&self, p: P) -> &Self::Output {
+        self.get(&p.into())
+    }
+}
+
+
 #[allow(missing_docs)]
 impl Palette {
     /// Create a new palette.

@@ -252,7 +252,7 @@ pub fn parse_rorg(input: &str) -> IResult<&str, Token> {
 pub fn parse_macro(input: &str) -> IResult<&str, Token> {
     let (input, _) = delimited(space0, tag_no_case("MACRO"), space1)(input)?;
 
-    let (input, name) = parse_label(input)?; // TODO use a specific function for that
+    let (input, name) = parse_label(false)(input)?; // TODO use a specific function for that
                                              // TODO treat args
 
     let (input, content) = preceded(space0, many_till(take(1usize), tag_no_case("ENDM")))(input)?;
@@ -307,7 +307,7 @@ pub fn parse_basic(input: &str) -> IResult<&str, Token> {
 
     let (input, args) = opt(separated_nonempty_list(
         preceded(space0, char(',')),
-        preceded(space0, map(parse_label, |s| s.to_string())),
+        preceded(space0, map(parse_label(false), |s| s.to_string())),
     ))(input)?;
 
     let (input, _) = tuple((space0, opt(tag("\r")), tag("\n")))(input)?;
@@ -374,7 +374,7 @@ pub fn parse_z80_line_complete(input: &str) -> IResult<&str, Vec<Token>> {
     let (input, _) = opt(line_ending)(input)?;
 
     // Eat optional label
-    let (input, label) = opt(parse_label)(input)?;
+    let (input, label) = opt(parse_label(true))(input)?;
     let (input, _) = space1(input)?;
 
     // Eat first token or directive
@@ -417,7 +417,7 @@ pub fn parse_z80_line_complete(input: &str) -> IResult<&str, Vec<Token>> {
 /// Initially it was supposed to manage lines with only labels, however it has been extended
 /// to labels fallowed by specific commands.
 pub fn parse_z80_line_label_only(input: &str) -> IResult<&str, Vec<Token>> {
-    let (input, label) = preceded(opt(line_ending), parse_label)(input)?;
+    let (input, label) = preceded(opt(line_ending), parse_label(true))(input)?;
 
     // TODO make these stuff alternatives ...
     // Manage Equ
@@ -488,7 +488,7 @@ pub fn parse_incbin(input: &str) -> IResult<&str, Token> {
 
 /// Parse  UNDEF directive.
 pub fn parse_undef(input: &str) -> IResult<&str, Token> {
-    let (input, label) = preceded(tuple((tag_no_case("UNDEF"), space1)), parse_label)(input)?;
+    let (input, label) = preceded(tuple((tag_no_case("UNDEF"), space1)), parse_label(false))(input)?;
 
     Ok((input, Token::Undef(label)))
 }
@@ -661,9 +661,9 @@ fn parse_conditional_condition(code: u8) -> impl Fn(&str) -> IResult<&str, TestK
 
             IFNOT_CODE => map(expr, |e| TestKind::False(e))(input),
 
-            IFDEF_CODE => map(parse_label, |l| TestKind::LabelExists(l))(input),
+            IFDEF_CODE => map(parse_label(false), |l| TestKind::LabelExists(l))(input),
 
-            IFNDEF_CODE => map(parse_label, |l| TestKind::LabelDoesNotExist(l))(input),
+            IFNDEF_CODE => map(parse_label(false), |l| TestKind::LabelDoesNotExist(l))(input),
 
             _ => unreachable!(),
         }
@@ -693,7 +693,7 @@ pub fn parse_stable_ticker_start(input: &str) -> IResult<&str, Token> {
                 tag_no_case("start"),
                 space1,
             )),
-            parse_label,
+            parse_label(false),
         ),
         |name| Token::StableTicker(StableTickerAction::Start(name)),
     )(input)
@@ -890,7 +890,7 @@ pub fn parse_db_or_dw(input: &str) -> IResult<&str, Token> {
 
 /// Manage the call of a macro.
 pub fn parse_macro_call(input: &str) -> IResult<&str, Token> {
-    let (input, name) = parse_label(input)?;
+    let (input, name) = parse_label(false)(input)?;
 
     // Check if the macro name is allowed
     if FORBIDDEN_MACRO_NAMES
@@ -1709,24 +1709,35 @@ pub fn string_expr(input: &str) -> IResult<&str, Expr> {
     })(input)
 }
 
-/// Parse a label
-pub fn parse_label(input: &str) -> IResult<&str, String> {
-    // Get the label
+/// Parse a label(label: S)
+pub fn parse_label(doubledots: bool) -> impl Fn(&str) -> IResult<&str, String> {
+    
+    move |input: &str| {
+        // Get the label
 
-    let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.")(input)?;
-    let (input, middle) =
-        is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")(input)?;
+        let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.")(input)?;
+        let (input, middle) =
+            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")(input)?;
 
-    let label = format!("{}{}", first, middle.iter_elements().collect::<String>());
+        let input = if doubledots {
+            let (input, _) = opt(tag_no_case(":"))(input)?;
+            input
+        }
+        else {
+            input
+        };
 
-    let impossible = ["af", "hl", "de", "bc", "ix", "iy", "ixl", "ixh"];
-    if impossible.iter().any(|val| val == &label.to_lowercase()) {
-        Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
-    } else {
-        Ok((input, label))
+        let label = format!("{}{}", first, middle.iter_elements().collect::<String>());
+
+        let impossible = ["af", "hl", "de", "bc", "ix", "iy", "ixl", "ixh"];
+        if impossible.iter().any(|val| val == &label.to_lowercase()) {
+            Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+        } else {
+            Ok((input, label))
+        }
     }
-}
 
+}
 #[inline]
 /// Parse an usigned 16 bit number
 pub fn dec_number(input: &str) -> IResult<&str, u16> {
@@ -1822,25 +1833,36 @@ pub fn parens(input: &str) -> IResult<&str, Expr> {
 
 /// Get a factor
 pub fn factor(input: &str) -> IResult<&str, Expr> {
-    alt((
-        // Manage functions
-        delimited(space0, parse_unary_functions, space0),
-        delimited(space0, parse_binary_functions, space0),
-        delimited(space0, parse_duration, space0),
-        delimited(space0, parse_assemble, space0),
-        // manage values
-        map(
-            delimited(space0, alt((hex_number, bin_u16, dec_number)), space0),
-            |d: u16| Expr::Value(d as i32),
-        ),
-        // manage $
-        map(delimited(space0, tag("$"), space0), |_x| {
-            Expr::Label(String::from("$"))
-        }),
-        // manage labels
-        map(delimited(space0, parse_label, space0), Expr::Label),
-        parens,
-    ))(input)
+    delimited(space0,
+        alt((
+            // Manage functions
+            parse_unary_functions,
+            parse_binary_functions,
+            parse_duration,
+            parse_assemble,
+
+            // manage values
+            map(
+                alt((hex_number, bin_u16, dec_number)),
+                |d: u16| Expr::Value(d as i32),
+            ),
+
+            // manage $
+            map(
+                tag("$"), 
+                |_x| Expr::Label(String::from("$"))
+            ),
+            
+            // manage labels
+            map(
+                parse_label(false),
+                Expr::Label
+            ),
+
+            parens,
+        )), 
+        space0)
+        (input)
 }
 
 fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
