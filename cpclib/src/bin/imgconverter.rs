@@ -39,7 +39,17 @@ use anyhow;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
 
-fn standard_linker_code() -> &'static str {
+
+fn lz4_compress(bytes: &[u8]) -> Vec<u8> {
+    let mut res = Vec::new();
+    let mut encoder = lz4::EncoderBuilder::new().build(&mut res).unwrap();
+    std::io::copy(bytes, &mut encoder).unwrap();
+    encoder.finsh().unwrap()
+}
+
+fn standard_linker_code(mode:u8, screen: &[u8]) -> String {
+    let base_code = standard_display_code(mode);
+    let complete_code = format!(
     "   org 0x1000
         di
         ld sp, $
@@ -50,13 +60,21 @@ fn standard_linker_code() -> &'static str {
         ld de, 0x4000
         ld bc, code_end - code
         ldir
+        ei
+        jp 0x4000
 
 code
-    ; TODO add the code
+    {code}
 code_end
+        assert $ < 0x4000
 image
-    ; todo add crunched image
-    "
+    {screen}
+
+        assert $<0xc000
+    ",
+
+    code = defb_elements(&base_code.bytes()),
+    screen = screen)
 }
 
 // Produce the code that display a standard screen
@@ -219,9 +237,6 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         transformations,
         &output_format,
     )?;
-
-    println!("Expected {:?}", &output_format);
-    println!("Conversion  {:?}", &conversion);
 
     let sub_sna = matches.subcommand_matches("sna");
     let sub_m4 = matches.subcommand_matches("m4");
