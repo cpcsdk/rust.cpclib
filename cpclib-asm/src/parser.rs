@@ -1461,7 +1461,7 @@ pub fn parse_register_ix(input: &str) -> IResult<&str, DataAccess> {
 /// Parse the IY register
 pub fn parse_register_iy(input: &str) -> IResult<&str, DataAccess> {
     value(
-        DataAccess::IndexRegister16(IndexRegister16::Ix),
+        DataAccess::IndexRegister16(IndexRegister16::Iy),
         tuple((tag_no_case("IY"), not(alphanumeric1)))
     )(input)
 }
