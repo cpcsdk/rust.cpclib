@@ -289,11 +289,11 @@ impl Display for Expr {
             &Duration(ref token) => write!(format, "DURATION({})", token),
             &OpCode(ref token) => write!(format, "OPCODE({})", token),
 
-            &Add(ref left, ref right) => write!(format, "{} + {}", left, right),
-            &Sub(ref left, ref right) => write!(format, "{} - {}", left, right),
-            &Mul(ref left, ref right) => write!(format, "{} * {}", left, right),
-            &Mod(ref left, ref right) => write!(format, "{} % {}", left, right),
-            &Div(ref left, ref right) => write!(format, "{} / {}", left, right),
+            &Add(ref left, ref right) => write!(format, "({} + {})", left, right),
+            &Sub(ref left, ref right) => write!(format, "({} - {})", left, right),
+            &Mul(ref left, ref right) => write!(format, "({} * {})", left, right),
+            &Mod(ref left, ref right) => write!(format, "({} % {})", left, right),
+            &Div(ref left, ref right) => write!(format, "({} / {})", left, right),
 
             BinaryAnd(ref left, ref right) => {
                 write!(format, "{} {} {}", left, Oper::BinaryAnd, right)

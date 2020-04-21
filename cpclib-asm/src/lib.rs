@@ -18,6 +18,7 @@ pub mod error;
 
 use crate::parser::ParserContext;
 
+use cpclib_disc::amsdos::*;
 
 use error::*;
 use preamble::*;
@@ -103,6 +104,31 @@ pub fn assemble_tokens_with_options(
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
+}
+
+/// Build the code and store it inside a file supposed to be injected in a dsk
+/// XXX probably crash if filename is not coherent
+pub fn assemble_to_amsdos_file(
+    code: &str,
+    amsdos_filename: &str
+) ->  Result<AmsdosFile, AssemblerError> {
+
+    let tokens = parser::parse_str(code)?;
+    let options = AssemblingOptions::default();
+
+    let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
+
+
+    Ok(AmsdosFile::binary_file_from_buffer(
+        &AmsdosFileName::from(amsdos_filename), 
+        env.loading_address().unwrap() as  u16, 
+        env.execution_address().unwrap() as u16, 
+        &env.produced_bytes()
+    )?)
+    
+
+
+
 }
 
 #[cfg(test)]
