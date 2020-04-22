@@ -202,23 +202,15 @@ fn main() {
         let loads = matches.values_of("setToken").unwrap().collect::<Vec<_>>();
         for i in 0..(loads.len() / 2) {
             // Read the parameters from the command line
-            let token = loads[i * 2 + 0];
-            let (token, _index) = if token.contains(':') {
-                let elems = token.split(':').collect::<Vec<_>>();
-                (
-                    elems[0],
-                    Some(elems[1].parse::<usize>().expect("Unable to read indice")),
-                )
-            } else {
-                (token, None)
-            };
+            let token = dbg!(loads[i * 2 + 0]);
+            let token = SnapshotFlag::from_str(token).unwrap();
+
             let value = {
                 let source = loads[i * 2 + 1];
                 string_to_nb(source)
             };
 
             // Get the token
-            let token = SnapshotFlag::from_str(token).unwrap();
             sna.set_value(token, value as u16).unwrap();
 
             sna.log(format!(

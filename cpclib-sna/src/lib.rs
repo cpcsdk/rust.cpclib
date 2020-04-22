@@ -427,6 +427,8 @@ impl FromStr for SnapshotFlag {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = &s.to_uppercase();
 
+        dbg!(s);
+
         if s.contains(':') {
             let elems = s.split(':').collect::<Vec<_>>();
             let idx = match elems[1].parse::<usize>() {
@@ -450,11 +452,13 @@ impl FromStr for SnapshotFlag {
                 Err(format!("Wrong index size {:?}", indexed_flag))
             }
         } else {
+
+
             match s.as_str() {
-                "GA_PAL" => Ok(SnapshotFlag::GA_PAL(None)),
+     /*           "GA_PAL" => Ok(SnapshotFlag::GA_PAL(None)),
                 "CRTC_REG" => Ok(SnapshotFlag::CRTC_REG(None)),
                 "PSG_REG" => Ok(SnapshotFlag::PSG_REG(None)),
-                "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(None)),
+                "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(None)),*/
 
                 "Z80_AF" => Ok(SnapshotFlag::Z80_AF),
                 "Z80_F" => Ok(SnapshotFlag::Z80_F),
@@ -519,6 +523,10 @@ impl FromStr for SnapshotFlag {
                 "GA_VSC" => Ok(SnapshotFlag::GA_VSC),
                 "GA_ISC" => Ok(SnapshotFlag::GA_ISC),
                 "INT_REQ" => Ok(SnapshotFlag::INT_REQ),
+
+                "GA_PAL" | "CRTC_REG" | "PSG_REG" | "GA_MULTIMODE" => {
+                    Err(format!("{} requires an indice", s))
+                }
                 _ => Err(String::from("Unable to convert string to a flag")),
             }
         }
@@ -1222,6 +1230,9 @@ impl Snapshot {
     /// Change the value of a flag
     pub fn set_value(&mut self, flag: SnapshotFlag, value: u16) -> Result<(), SnapshotError> {
         let offset = flag.offset();
+
+
+        dbg!(flag, value, offset);
 
         match flag.elem_size() {
             1 => {
