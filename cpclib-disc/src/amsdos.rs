@@ -1607,4 +1607,16 @@ impl AmsdosFile {
         assert!(size <= self.content.len());
         self.content.resize(size, 0);
     }
+
+    /// Save the file at the given path
+    pub fn save_in_folder<P:AsRef<Path>>(&self, folder: P) -> std::io::Result<()> {
+        use std::io::Write;
+
+        let folder = folder.as_ref();
+        let fname = self.amsdos_filename().unwrap().filename();
+        println!("Will write in {}", fname);
+        let mut file = File::create(folder.join(fname))?;
+        file.write_all(&self.as_bytes())?;
+        Ok(())
+    }
 }
