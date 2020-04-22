@@ -264,6 +264,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let sub_m4 = matches.subcommand_matches("m4");
     let sub_dsk = matches.subcommand_matches("dsk");
     let sub_sprite = matches.subcommand_matches("sprite");
+    let sub_exec = matches.subcommand_matches("exec");
 
     if sub_sprite.is_some() {
         let sub_sprite = sub_sprite.unwrap();
@@ -304,7 +305,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
 
 
         /// TODO manage the presence/absence of file in the dsk, the choice of filename and so on
-        if sub_dsk.is_some() {
+        if sub_dsk.is_some() || sub_exec.is_some() {
             let code = match &conversion {
                 Output::CPCMemoryStandard(memory, pal) => {
                     standard_linked_code(output_mode, pal, memory)
@@ -317,17 +318,37 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 _ => unreachable!(),
             };
 
-            println!("user test.bin as file name");
-            let file = assemble_to_amsdos_file(&code, "test.bin").unwrap();
-            println!("{:?}", file.header());
-            
-            
-            use cpclib_disc::cfg::DiscConfig;
-            let cfg = cpclib_disc::cfg::DiscConfig::single_head_data_format();
-            let dsk = cpclib_disc::builder::build_disc_from_cfg(&cfg);
-            let mut manager = AmsdosManager::new_from_disc(dsk, 0);
-            manager.add_file(&file, false, false).unwrap();
-            manager.dsk().save(sub_dsk.unwrap().value_of("DSK").unwrap()).unwrap();
+            let filename = {
+                if sub_dsk.is_some() {
+                    "test.bin"
+                }
+                else {
+                    sub_exec.as_ref().unwrap().value_of("FILENAME").unwrap()
+                }
+            };
+
+            let file = assemble_to_amsdos_file(&code, filename).unwrap();
+
+            if sub_exec.is_some() {
+                let filename = Path::new(filename);
+                let folder = filename.parent().unwrap();
+                let folder = if folder == Path::new("") {
+                    std::env::current_dir().unwrap()
+                } 
+                else {
+                    folder.canonicalize().unwrap()
+                };
+                file.save_in_folder(folder)?;
+            }
+            else {
+                
+                use cpclib_disc::cfg::DiscConfig;
+                let cfg = cpclib_disc::cfg::DiscConfig::single_head_data_format();
+                let dsk = cpclib_disc::builder::build_disc_from_cfg(&cfg);
+                let mut manager = AmsdosManager::new_from_disc(dsk, 0);
+                manager.add_file(&file, false, false).unwrap();
+                manager.dsk().save(sub_dsk.unwrap().value_of("DSK").unwrap()).unwrap();
+            }
 
         }
         if sub_sna.is_some() || sub_m4.is_some() {
@@ -446,6 +467,35 @@ fn main() -> anyhow::Result<()> {
                     )
 
                     .subcommand(
+                        SubCommand::with_name("exec")
+                        .about("Generate a binary file to manually copy in a DSK or M4 folder.")
+                        .arg(
+                            Arg::with_name("FILENAME")
+                            .takes_value(true)
+                            .help("executable to generate")
+                            .required(true)
+                            .validator(|fname|{
+                                let fname = std::path::Path::new(&fname);
+                                if let Some(ext) = fname.extension() {
+                                    let ext = ext.to_os_string().into_string().unwrap();
+                                    if ext.len() > 3 {
+                                        return Err(format!("{} is not a valid amsdos extension.", ext));
+                                    }
+                                }
+
+                                if let Some(stem) = fname.file_stem() {
+                                    let stem = stem.to_os_string().into_string().unwrap();
+                                    if stem.len() > 8 {
+                                        return Err(format!("{} is not a valid amsdos file stem.", stem))
+                                    }
+                                }
+
+                                Ok(())
+                            })
+                        )
+                    )
+
+                    .subcommand(
                         SubCommand::with_name("sprite")
                         .about("Generate a sprite file to be included inside an application")
                         .arg(
@@ -557,6 +607,7 @@ fn main() -> anyhow::Result<()> {
         && matches.subcommand_matches("dsk").is_none()
         && matches.subcommand_matches("sna").is_none()
         && matches.subcommand_matches("sprite").is_none()
+        && matches.subcommand_matches("exec").is_none()
     {
         eprintln!("[ERROR] you have not specified any action to do.");
         std::process::exit(exitcode::USAGE);
