@@ -33,7 +33,10 @@ pub mod built_info {
         let error = format!("Unable to read the value: {}", source);
         if source.starts_with("0x") {
             u32::from_str_radix(&source[2..], 16).expect(&error)
-        } else {
+        } 
+        else if source.starts_with("%") {
+            u32::from_str_radix(&source[1..], 2).expect(&error)
+        }else {
             source.parse::<u32>().expect(&error)
         }
     }
