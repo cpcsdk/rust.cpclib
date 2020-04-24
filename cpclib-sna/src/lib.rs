@@ -427,8 +427,6 @@ impl FromStr for SnapshotFlag {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = &s.to_uppercase();
 
-        dbg!(s);
-
         if s.contains(':') {
             let elems = s.split(':').collect::<Vec<_>>();
             let idx = match elems[1].parse::<usize>() {
@@ -612,7 +610,7 @@ impl SnapshotChunkData {
 /// Memory chunk that superseeds the snapshot memory if any.
 pub struct MemoryChunk {
     /// Raw content of the memory chunk (i.e. compressed version)
-    data: SnapshotChunkData,
+    pub(crate) data: SnapshotChunkData,
 }
 
 #[allow(missing_docs)]
@@ -621,13 +619,100 @@ impl MemoryChunk {
     /// `code` identify with memory block is concerned
     /// `data` contains the crunched version of the code
     pub fn from(code: [u8; 4], data: Vec<u8>) -> Self {
+        assert!(code[0] == b'M');
+        assert!(code[1] == b'E');
+        assert!(code[2] == b'M');
+        assert!(code[3] == b'0' || 
+                code[3] == b'1' || 
+                code[3] == b'2' ||
+                code[3] == b'3' ||
+                code[3] == b'4' ||
+                code[3] == b'5' ||
+                code[3] == b'6' ||
+                code[3] == b'7' ||
+                code[3] == b'8' 
+            );
+        dbg!(code);
         Self {
             data: SnapshotChunkData { code, data },
         }
     }
 
-    /// Uncrunch the 64kbio of RLE crunched data
+    /// Build the memory chunk from the memory content. Chunk can be built in a compressed or uncompressed version
+    pub fn build(code: [u8; 4], data: &[u8], compressed: bool) -> Self {
+        assert_eq!(data.len(), 64*1024);
+        let mut res = Vec::new();
+     
+        if !compressed {
+            assert_eq!(data.len(), 64*1024);
+            res.extend(data);
+            assert_eq!(res.len(), data.len());
+            res.resize(0x100000, 0);
+        }
+        else {
+
+            let mut previous = None;
+            let mut count = 0;
+
+            for current in data.iter() {
+                match previous {
+                    None => {
+                        previous = Some(*current);
+                        count = 1;
+                    },
+                    Some(previous_value) => {
+                        if *current == 0xe5 || previous_value != *current || count == 255 {
+                            if previous.is_some() {
+                                // previous value has been repeated several times
+                                if count > 1 {
+                                    res.push(0xe5);
+                                    res.push(count);
+                                }
+                                res.push(previous_value); // store the value to be replaced
+                            }
+
+                            if *current == 0xe5 {
+                                previous = None;
+                                count = 0;
+                                res.push(0xe5);
+                                res.push(0);
+                            }
+                            else {
+                                previous = Some(*current);
+                                count = 1;
+                            }
+                        }
+                        else{
+                            assert_eq!(previous_value,*current);
+                            count += 1;
+                            previous = Some(*current);
+
+                        }
+                    }
+                } // end match
+
+            } // end for
+
+            if previous.is_some() {
+                // previous value has been repeated several times
+                if count > 1 {
+                    res.push(0xe5);
+                    res.push(count);
+                }
+                res.push(previous.unwrap()); // store the value to be replaced
+            }
+
+        }
+
+        Self::from(code, res)
+    }
+
+    /// Uncrunch the 64kbio of RLE crunched data if crunched. Otherwise, return the whole memory
     pub fn uncrunched_memory(&self) -> Vec<u8> {
+        if self.is_crunched() {
+            return self.data.data.clone()
+        }
+
         let mut content = Vec::new();
 
         let idx = std::rc::Rc::new(std::cell::RefCell::new(0));
@@ -640,9 +725,12 @@ impl MemoryChunk {
             match read_byte() {
                 0xe5 => {
                     let amount = read_byte();
-                    if amount != 0 {
+                    if amount == 0 {
+                        content.push(0xe5)
+                    }
+                    else {
                         let val = read_byte();
-                        for _idx in 0..amount {
+                        for _idx in 0..amount { // TODO use resize
                             content.push(val);
                         }
                     }
@@ -657,10 +745,15 @@ impl MemoryChunk {
         content
     }
 
-    /// Returns the address in the memory array
+     /// Returns the address in the memory array
     pub fn abstract_address(&self) -> usize {
         let nb = (self.data.code[3] - b'0') as usize;
         nb * 0x10000
+    }
+
+    /// A uncrunched memory taaks 64*1024 bytes
+    pub fn is_crunched(&self) -> bool {
+        self.data.data.len() == 64*1024
     }
 }
 
@@ -871,6 +964,27 @@ impl SnapshotMemory {
         }
     }
 
+    /// Build the chunk representation for the memory sapcz
+    pub fn to_chunks(&self) -> Vec<SnapshotChunk> {
+        let memory = self.memory();
+        let mut chunks = Vec::new();
+        let mut current_idx = [b'M', b'E', b'M', b'0'];
+        let mut cursor = 0;        
+
+        while cursor < memory.len() {
+            let next_cursor = cursor + 64 * 1024;
+            let current_memory = &memory[cursor..next_cursor.min(memory.len())];
+            
+            let current_chunk = MemoryChunk::build(current_idx, current_memory, true);
+            chunks.push(SnapshotChunk::Memory(current_chunk));
+            cursor = next_cursor;
+            current_idx[3] += 1;
+
+        }
+
+        chunks
+    }
+
     fn new_64(source: &[u8]) -> Self {
         assert_eq!(source.len(), 64 * 1024);
         let mut mem = [0; PAGE_SIZE * 4];
@@ -898,9 +1012,12 @@ impl SnapshotMemory {
 #[derive(Clone)]
 #[allow(missing_docs)]
 pub struct Snapshot {
+    /// Header of the snaphsot
     header: [u8; HEADER_SIZE],
+    /// Memory for V2 snapshot or V3 before saving
     memory: SnapshotMemory,
     memory_already_written: bitsets::DenseBitSet,
+    /// list of chuncks; memory chuncks are removed once memory is written
     chunks: Vec<SnapshotChunk>,
 
     // nothing to do with the snapshot. Should be moved elsewhere
@@ -975,21 +1092,17 @@ impl Snapshot {
         let memory_dump_size = sna.memory_size_header() as usize;
         let version = sna.version_header();
 
-        dbg!(memory_dump_size * 1024);
-        dbg!(file_content.len());
-
         assert!(memory_dump_size * 1024 <= file_content.len());
         sna.memory = SnapshotMemory::new(file_content.drain(0..memory_dump_size * 1024).as_slice());
 
         if version == 3 {
-            while let Some(chunk) = Self::read_chunk(&mut file_content, &mut sna) {
+            while let Some(chunk) = Self::read_chunk(
+                                            &mut file_content, 
+                                            &mut sna) {
                 sna.chunks.push(chunk);
             }
         }
 
-        eprintln!("{} chunks", sna.nb_chunks());
-
-        // TODO manage chuncks
         sna
     }
 
@@ -1059,8 +1172,16 @@ impl Snapshot {
             assert_eq!(cloned.chunks.len(), 0);
         }
 
-        // TODO add a case to remove main memory in V3 snapshots in order
-        // to crunch it and reduce sna size
+        // Compress memory chunks for V3
+        if version == SnapshotVersion::V3 && !self.has_memory_chunk() {
+            println!("Generate chunks from standard memory");
+            let chunks = cloned.memory.to_chunks();
+            for idx in 0..chunks.len() {
+                cloned.chunks.insert(idx, chunks[idx].clone());
+            }
+            cloned.memory = SnapshotMemory::default();
+            cloned.set_memory_size_header(0);
+        }
 
         cloned
     }
@@ -1070,11 +1191,13 @@ impl Snapshot {
         if file_content.len() < 4 {
             return None;
         }
+
         let code = file_content.drain(0..4).as_slice().to_vec();
         let data_length = file_content.drain(0..4).as_slice().to_vec();
 
-        eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
+       // eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
 
+       // compute the data length based on the 4 bytes that represent it
         let data_length = {
             let mut count = 0;
             for i in 0..4 {
@@ -1083,16 +1206,18 @@ impl Snapshot {
             count
         };
 
+        // read the appropriate number of bytes
         let content = file_content.drain(0..data_length).as_slice().to_vec();
 
         // Generate the 4 size array
         let code = {
             let mut new_code = [0; 4];
+            assert_eq!(code.len(), 4);
             new_code.copy_from_slice(&code);
             new_code
         };
         let chunk = match code {
-            [0x4d, 0x45, 0x4d, _] => MemoryChunk::from(code, content).into(), /*
+            [b'M', b'E', b'M', _] => MemoryChunk::from(code, content).into(), /*
             ['B', 'R', 'K', 'S'] => BreakpointChunk::from(content),
             ['D', 'S', 'C', _] => InsertedDiscChunk::from(code, content)
             ['C', 'P', 'C', '+'] => CPCPlusChunk::from(content)
@@ -1133,12 +1258,14 @@ impl Snapshot {
             );
             buffer.write_all(&sna.memory.memory())?;
         }
+        println!("Memory header: {}", sna.memory_size_header() );
 
         // Write chunks if any
-        for chunck in &self.chunks {
-            buffer.write_all(chunck.code())?;
-            buffer.write_all(&chunck.size_as_array())?;
-            buffer.write_all(chunck.data())?;
+        for chunk in &sna.chunks {
+            println!("Add chunk: {:?}", chunk.code());
+            buffer.write_all(chunk.code())?;
+            buffer.write_all(&chunk.size_as_array())?;
+            buffer.write_all(chunk.data())?;
         }
 
         Ok(())
@@ -1154,7 +1281,6 @@ impl Snapshot {
         // but it can be patched by chunks
         for chunk in &self.chunks {
             if let Some(memory_chunk) = chunk.memory_chunk() {
-                let memory_chunk = dbg!(memory_chunk);
                 let address = memory_chunk.abstract_address();
                 let content = memory_chunk.uncrunched_memory();
                 max_memory = address + 64 * 1024;
@@ -1167,6 +1293,13 @@ impl Snapshot {
             }
         }
         memory.memory()[..max_memory].to_vec()
+    }
+
+    /// Check if the snapshot has some memory chunk
+    pub fn has_memory_chunk(&self) -> bool {
+        self.chunks.iter().any(|c|{
+            c.is_memory_chunk()
+        })
     }
 
     /// Returns the memory that is hardcoded in the snapshot
@@ -1219,21 +1352,33 @@ impl Snapshot {
     }
 
     /// Change a memory value. Panic if memory size is not appropriate
-    /// TODO should enlarge memory if needed or write un Chunks
+    /// If memory is saved insided chuncks, the chuncks are unwrapped
     pub fn set_memory(&mut self, address: u32, value: u8) {
-        assert!(address < 0x20000);
         let address = address as usize;
 
+        // unroll chuncks if any
+        if self.memory.is_empty() {
+            self.memory = SnapshotMemory::new(&self.memory_dump());
+            let mut idx = 0;
+            while idx < self.chunks.len() {
+                if self.chunks[0].is_memory_chunk() {
+                    self.chunks.remove(idx);
+                }
+                else {
+                    idx +=1;
+                }
+            } 
+            self.set_memory_size_header( (self.memory.len() / 1024) as u16);
+
+        }
+ 
+        // finally write in memory
         self.memory.memory_mut()[address] = value;
     }
 
     /// Change the value of a flag
     pub fn set_value(&mut self, flag: SnapshotFlag, value: u16) -> Result<(), SnapshotError> {
         let offset = flag.offset();
-
-
-        dbg!(flag, value, offset);
-
         match flag.elem_size() {
             1 => {
                 if value > 255 {
