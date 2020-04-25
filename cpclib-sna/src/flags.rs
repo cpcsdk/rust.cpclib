@@ -46,7 +46,9 @@ pub enum SnapshotFlag {
     Z80_LX,
     Z80_HX,
     GA_PAL(Option<usize>),
-    GA_PEN,
+	GA_PEN,
+	/// Naming of this one is inapproriate as documentatoin state: This byte in the snapshot represents the multi-configuration register of the Gate-Array. This byte is the last byte written to this register. For CPCEMU compatibility, bit 7 should be set to "1" and bit 6 and bit 5 set to "0".
+	/// Use it to select screen mode
     GA_ROMCFG,
     GA_RAMCFG,
     CRTC_REG(Option<usize>),
