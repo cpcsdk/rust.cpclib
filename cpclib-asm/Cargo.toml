@@ -15,7 +15,7 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 cpclib-basic = "0.4.1-alpha"
 cpclib-sna = "0.4.1-alpha"
 cpclib-tokens = "0.4.1-alpha"
-cpclib-disc = { version ="0.4.1-alpha", optional = true}
+cpclib-disc ="0.4.1-alpha"
 
 
 arrayref= "0.3.5"
@@ -49,7 +49,7 @@ built = {version = "0.4", features = ["chrono"]}
 
 
 [features]
-basm = ["clap",  "semver", "time", "cpclib-disc"]
+basm = ["clap",  "semver", "time"]
 bdasm = ["clap",  "semver", "time"]
 
 [[bin]]
