@@ -452,7 +452,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
 		}
 	};
 
-	reverse_tokens.reverse();
+	//reverse_tokens.reverse();
 	reverse_tokens.into()
 
 }
