@@ -5,6 +5,9 @@ use crate::preamble::*;
 // Note that these table do not all contain 256 values; I have added missing ones without checking if they are at the right place
 // replace eeee by nnnn
 
+
+/// TODO replace JR nn by JR $+nn in order to assemble even with current address is unknown
+
 const TABINSTRFDCB:[&'static str;256]  = [
 	"", "", "", "", "", "", "RLC (IY+nn)", "",
 	"", "", "", "", "", "", "RRC (IY+nn)", "",
