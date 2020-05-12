@@ -8,6 +8,12 @@ pub fn nop() -> Token {
     token_for_opcode_no_arg(Mnemonic::Nop)
 }
 
+/// Generate org directive
+pub fn org<E:Into<Expr>>(val: E) -> Token {
+    Token::Org(val.into(), None)
+}
+
+
 #[allow(missing_docs)]
 pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {
     Token::Equ(label.as_ref().to_owned(), expr.into())

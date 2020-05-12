@@ -35,6 +35,7 @@ pub trait ListingExt {
     fn to_string(&self) -> String;
 
         /// Generate a string that contains also the bytes
+        /// panic even for simple corner cases
         fn to_enhanced_string(&self) -> String;
 
 }
@@ -103,13 +104,19 @@ impl ListingExt for Listing {
         }
 
         fn to_enhanced_string(&self) -> String {
+            // TODO - allow assembling module to generate this listing by itself. This way no need to implement it properly a second time
+
             let mut res = String::new();
-            let mut current_address: Option<u32> = None;
+            let mut current_address: Option<u16> = None;
     
             for instruction in self.listing() {
 
+                if let Token::Org(address, _) = instruction {
+                    current_address = Some(address.eval().unwrap() as u16);
+                }
+
                 match current_address.as_ref() {
-                    Some(address) => {res+= &format!("{:4x}", address);},
+                    Some(address) => {res+= &format!("{:4x} ", address);},
                     None => {res+= "???? ";}
                 }
 
@@ -123,10 +130,14 @@ impl ListingExt for Listing {
                                 res += "   ";
                             }
                         }
+                        if current_address.is_some() {
+                            current_address = Some(bytes.len() as u16 + current_address.unwrap());
+                        }
                     },
                     _ => {
                         // BUG need to better manage interpretation to never achieve such error
                         res += "?? ?? ?? ?? ";
+                        current_address = None;
                     }
                 }
 
