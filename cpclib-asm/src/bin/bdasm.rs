@@ -37,9 +37,9 @@ fn main() {
 	file.read_to_end(&mut input_bytes).expect("Unable to read file");
 
 	// Disassemble
-	eprintln!("{} bytes to disassemble", input_bytes.len());
+	eprintln!("0x{:x} bytes to disassemble", input_bytes.len());
 	let listing = cpclib_asm::disass::disassemble(&input_bytes);
 
-	println!("{}", listing.to_string());
+	println!("{}", listing.to_enhanced_string());
 
 }

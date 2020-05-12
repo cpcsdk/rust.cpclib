@@ -34,6 +34,9 @@ pub trait ListingExt {
 
     fn to_string(&self) -> String;
 
+        /// Generate a string that contains also the bytes
+        fn to_enhanced_string(&self) -> String;
+
 }
 
 impl ListingExt for Listing {
@@ -65,6 +68,8 @@ impl ListingExt for Listing {
         Ok(env.produced_bytes())
     }
 
+
+
     
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
@@ -95,6 +100,42 @@ impl ListingExt for Listing {
 
         fn to_string(&self) -> String {
             PrintableListing::from(self).to_string()
+        }
+
+        fn to_enhanced_string(&self) -> String {
+            let mut res = String::new();
+            let mut current_address: Option<u32> = None;
+    
+            for instruction in self.listing() {
+
+                match current_address.as_ref() {
+                    Some(address) => {res+= &format!("{:4x}", address);},
+                    None => {res+= "???? ";}
+                }
+
+                match instruction.to_bytes() {
+                    Ok(bytes) => {
+                        for i in 0..4 {
+                            if bytes.len() > i {
+                                res += &format!("{:2X} ", bytes[i]);
+                            }
+                            else {
+                                res += "   ";
+                            }
+                        }
+                    },
+                    _ => {
+                        // BUG need to better manage interpretation to never achieve such error
+                        res += "?? ?? ?? ?? ";
+                    }
+                }
+
+                res += &instruction.to_string();
+                res += "\n";
+            }
+    
+            res
+    
         }
     
 }
