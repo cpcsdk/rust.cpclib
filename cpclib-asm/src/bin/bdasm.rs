@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use cpclib_asm::preamble::*;
+use cpclib_disc::amsdos::AmsdosHeader;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -45,14 +46,35 @@ fn main() {
 	let mut file = File::open(input_filename).expect("Unable to open file");
 	file.read_to_end(&mut input_bytes).expect("Unable to read file");
 
+	// check if there is an amsdos header and remove it if any
+	let (input_bytes, amsdos_load) = if input_bytes.len() > 128 {
+		let header = AmsdosHeader::from_buffer(&input_bytes) ;
+		if header.is_checksum_valid() {
+			println!("Amsdos header detected and removed");
+			(&input_bytes[128..], Some(header.loading_address()))
+		}
+		else {
+			(input_bytes.as_ref(), None)
+		}
+	}
+	else {
+		(input_bytes.as_ref(), None)
+	};
+	
 	// Disassemble
 	eprintln!("0x{:x} bytes to disassemble", input_bytes.len());
 	let listing = {
 		let mut listing = cpclib_asm::disass::disassemble(&input_bytes);
+
+		// add origin if any
 		if let Some(address) = matches.value_of("ORIGIN") {
 			let origin = u16::from_str_radix(address, 16).unwrap();
 			listing.insert(0, org(origin));
-		};
+		}
+		else {if let Some(origin) = amsdos_load {
+			listing.insert(0, org(origin));
+		}
+		}
 		listing
 	};
 
