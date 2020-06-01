@@ -318,7 +318,7 @@ impl Env {
     /// (RASM ___internal_output)
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
         if self.outputadr <= self.maxptr {
-            eprintln!("==> 0x{:X} = 0x{:X}", self.outputadr, v);
+//            eprintln!("==> 0x{:X} = 0x{:X}", self.outputadr, v);
 
             self.mem[self.activebank][self.outputadr] = v;
             self.outputadr += 1; // XXX will fail at 0xffff
