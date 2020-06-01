@@ -91,9 +91,14 @@ fn main() {
 							.unwrap()
 							.map(|bloc|{
 								let split = bloc.split("-").collect::<Vec<_>>();
+								let start = usize::from_str_radix(split[0], 16).unwrap();
+								let length = match usize::from_str_radix(split[1], 10) {
+									Ok(l) => Some(l),
+									Err(_) => None
+								};
 								(
-									usize::from_str_radix(split[0], 16).unwrap(), // start in hexa
-									usize::from_str_radix(split[1], 10).unwrap(), // lenght in decimal
+									start,
+									length
 								)
 							})
 							.collect::<Vec<_>>();
@@ -115,11 +120,19 @@ fn main() {
 			else {
 				assert_eq!(current_idx, bloc_idx);
 				listings.push(
+
+
 					defb_elements(
-						&input_bytes[current_idx..(current_idx+bloc_length)]).into()
+						match bloc_length {
+							Some(l) => &input_bytes[current_idx..(current_idx+l)],
+							None => &input_bytes[current_idx..]
+						}).into()
 				);
 				blocs.remove(0);
-				current_idx += bloc_length;
+				current_idx += match bloc_length {
+					Some(l) => l,
+					None => input_bytes.len() - current_idx
+				};
 			}
 		}
 		if current_idx < input_bytes.len() {
