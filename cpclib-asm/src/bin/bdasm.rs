@@ -40,9 +40,18 @@ fn main() {
 					)
 					.arg(
 						Arg::with_name("DATA_BLOC")
-						.help("Relative position that contains data RELATIVE_START-SIZE")
+						.help("Relative position that contains data for a given size. Format: RELATIVE_START(in hexadecimal)-SIZE(in decimal)")
 						.short("d")
 						.long("data")
+						.takes_value(true)
+						.number_of_values(1)
+						.multiple(true)
+					)
+					.arg(
+						Arg::with_name("LABEL")
+						.help("Set a label at the given address. Format LABEL:ADDRESS(in hexadecimal")
+						.short("l")
+						.long("label")
 						.takes_value(true)
 						.number_of_values(1)
 						.multiple(true)
@@ -145,7 +154,22 @@ fn main() {
 			listing.insert(0, org(origin));
 		}
 	}
+
 	
+	// add labels
+	if let Some(labels) = matches.values_of("LABEL") {
+		let mut labels = labels.map(|label|{
+			let split = label.split(':').collect::<Vec<_>>();
+			assert_eq!(2, split.len());
+			let label = split[0];
+			let address = u16::from_str_radix(split[1], 16).unwrap();
+			(address, label)
+			}
+		).collect::<Vec<_>>();
+		labels.sort();
+
+		listing.inject_labels(&labels);
+	}
 
 	println!("{}", listing.to_enhanced_string());
 

@@ -534,6 +534,14 @@ impl Token {
         }
     }
 
+
+    pub fn is_label(&self) -> bool {
+        match self {
+            Self::Label(_) => true,
+            _ => false
+        }
+    }
+
     pub fn mnemonic(&self) -> Option<&Mnemonic> {
         match self {
             Token::OpCode(ref mnemonic, _, _) => Some(mnemonic),
