@@ -140,7 +140,7 @@ impl ListingExt for Listing {
                 }
 
                 
-                match instruction.to_bytes_with_options(&options) {
+                let remaining = match instruction.to_bytes_with_options(&options) {
                     Ok(bytes) => {
                         for i in 0..4 {
                             if bytes.len() > i {
@@ -153,20 +153,46 @@ impl ListingExt for Listing {
                         if current_address.is_some() {
                             current_address = Some(bytes.len() as u16 + current_address.unwrap());
                         }
+
+                        if bytes.len() > 4 {
+                            bytes[4..].to_vec()
+                        }
+                        else {
+                            Vec::new()
+                        }
                     },
                     Err(err) => {
                         panic!("{:?} {:?} {:?}", instruction, err, options);
                         // BUG need to better manage interpretation to never achieve such error
                         res += "?? ?? ?? ?? ";
                         current_address = None;
+                        Vec::new()
                     }
-                }
+                };
 
                 if !instruction.is_label() {
                     res += "\t";
                 }
                 res += &instruction.to_string();
                 res += "\n";
+
+
+                if !remaining.is_empty() {
+                    let mut idx = 0;
+                    while idx < remaining.len() {
+                        res += "     ";
+                        for i in 0..4 {
+                            if remaining.len() > (i+idx) {
+                                res += &format!("{:2X} ", remaining[i+idx]);
+                            }
+                            else {
+                                res += "   ";
+                            }
+                        }             
+                        res += "\n";
+                        idx += 4;
+                    }
+                }
             }
     
             res
