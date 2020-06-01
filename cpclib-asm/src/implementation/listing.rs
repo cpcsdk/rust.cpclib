@@ -230,6 +230,18 @@ impl ListingExt for Listing {
                 }
             }
         }
+
+
+        while nb_labels_added < sorted_labels.len() {
+            self.listing_mut().insert(
+                0,
+                equ(
+                    sorted_labels[nb_labels_added].1,
+                    sorted_labels[nb_labels_added].0
+                )
+            );
+            nb_labels_added += 1;
+        }
     }
 }
 
