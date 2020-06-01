@@ -150,6 +150,23 @@ impl ListingExt for Listing {
                                 res += "   ";
                             }
                         }
+
+                        res += "  ";
+                        for i in 0..4 {
+                            if bytes.len() > i {
+                                let mut c: char = bytes[i] as char; 
+                                if !c.is_ascii_graphic() {
+                                    c = '.';
+                                }
+                                res += &format!("{} ", 
+                                c);
+                            }
+                            else {
+                                res += " ";
+                            }
+                        }
+
+
                         if current_address.is_some() {
                             current_address = Some(bytes.len() as u16 + current_address.unwrap());
                         }
@@ -188,7 +205,25 @@ impl ListingExt for Listing {
                             else {
                                 res += "   ";
                             }
-                        }             
+                        }
+                        
+                        res += "  ";
+                        for i in 0..4 {
+                            if remaining.len() > (i+idx) {
+                                let mut c: char = remaining[i+idx] as char; 
+                                if !c.is_ascii_graphic() {
+                                    c = '.';
+                                }
+                                res += &format!("{} ", 
+                                c);
+                            }
+                            else {
+                                res += " ";
+                            }
+                        }
+
+
+
                         res += "\n";
                         idx += 4;
                     }
