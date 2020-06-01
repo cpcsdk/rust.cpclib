@@ -147,6 +147,14 @@ impl SymbolsTableCaseDependent {
         }
     }
 
+    pub fn is_case_sensitive(&self) -> bool {
+        self.case_sensitive
+    }
+
+    pub fn table(&self) -> &SymbolsTable {
+        &self.table
+    }
+
     /// Build a laxists vesion of the table : do not care of case and absences of symboles
     pub fn laxist() -> Self {
         Self::new(SymbolsTable::laxist(), false)

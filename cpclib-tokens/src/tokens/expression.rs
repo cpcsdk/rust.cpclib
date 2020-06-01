@@ -223,6 +223,18 @@ impl Expr {
             _ => true,
         }
     }
+
+
+    /// When disassembling an instruction with relative expressions, the contained value needs to be transformed as an absolute value
+    pub fn fix_relative_value(&mut self) {
+        if let Expr::Value(val) = self {
+            let mut new_expr = Expr::Add(
+                Box::new(Expr::Label("$".to_string())),
+                Box::new((*val).into())
+            );
+            std::mem::swap(self, &mut new_expr);
+        }
+    }  
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

@@ -10,6 +10,8 @@ use crate::implementation::expression::*;
 
 use std::iter::FromIterator;
 
+use crate::AssemblingOptions;
+
 
 
 /// Additional methods for the listings
@@ -21,6 +23,7 @@ pub trait ListingExt {
 
     /// Assemble the listing (without context) and returns the bytes 
     fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError>;
+    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError>;
 
           /// Compute the size of the listing.
     /// The listing has a size only if its tokens has a size
@@ -69,7 +72,13 @@ impl ListingExt for Listing {
 
     fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
         let options = crate::AssemblingOptions::default();
-        let env = crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), &options)?;
+        self.to_bytes_with_options(&options)
+    }
+
+    fn to_bytes_with_options(&self, options: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
+        let env = crate::assembler::visit_tokens_all_passes_with_options(
+            &self.listing(), 
+            options)?;
         Ok(env.produced_bytes())
     }
 
@@ -113,6 +122,8 @@ impl ListingExt for Listing {
             let mut res = String::new();
             let mut current_address: Option<u16> = None;
     
+            let mut options = AssemblingOptions::default();
+
             for instruction in self.listing() {
 
                 if let Token::Org(address, _) = instruction {
@@ -120,11 +131,16 @@ impl ListingExt for Listing {
                 }
 
                 match current_address.as_ref() {
-                    Some(address) => {res+= &format!("{:4x} ", address);},
+                    Some(address) => {
+                        res+= &format!("{:4x} ", address);
+                        options.symbols_mut().set_current_address(*address);
+
+                    },
                     None => {res+= "???? ";}
                 }
 
-                match instruction.to_bytes() {
+                
+                match instruction.to_bytes_with_options(&options) {
                     Ok(bytes) => {
                         for i in 0..4 {
                             if bytes.len() > i {
@@ -138,7 +154,8 @@ impl ListingExt for Listing {
                             current_address = Some(bytes.len() as u16 + current_address.unwrap());
                         }
                     },
-                    _ => {
+                    Err(err) => {
+                      //  panic!("{:?} {:?}", err, options);
                         // BUG need to better manage interpretation to never achieve such error
                         res += "?? ?? ?? ?? ";
                         current_address = None;

@@ -76,6 +76,10 @@ impl AssemblingOptions {
         &self.symbols
     }
 
+    pub fn symbols_mut(&mut self) -> &mut cpclib_tokens::symbols::SymbolsTable {
+        &mut self.symbols
+    }
+
     pub fn case_sensitive(&self) -> bool {
         self.case_sensitive
     }
