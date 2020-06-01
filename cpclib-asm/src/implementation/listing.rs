@@ -38,6 +38,10 @@ pub trait ListingExt {
         /// panic even for simple corner cases
         fn to_enhanced_string(&self) -> String;
 
+
+
+    /// Modify the listing to inject labels at the given addresses
+    fn inject_labels(&mut self, labels: &[(u16, &str)]);
 }
 
 impl ListingExt for Listing {
@@ -141,6 +145,9 @@ impl ListingExt for Listing {
                     }
                 }
 
+                if !instruction.is_label() {
+                    res += "\t";
+                }
                 res += &instruction.to_string();
                 res += "\n";
             }
@@ -148,7 +155,65 @@ impl ListingExt for Listing {
             res
     
         }
-    
+
+
+        /// Panic if Org is not one of the first instructions
+        fn inject_labels(&mut self, sorted_labels: &[(u16, &str)]) {
+            use cpclib_tokens::builder::label;
+            use cpclib_tokens::builder::equ;
+
+            let mut current_address: Option<u16> = None;
+            let mut current_idx = 0;
+            let mut nb_labels_added = 0;
+
+            while current_idx < self.len() && nb_labels_added < sorted_labels.len(){
+                let current_instruction = &self.listing()[current_idx];;
+
+                current_idx += 1;
+
+                let next_address = if let Token::Org(address, _) = current_instruction {
+                    current_address = Some(address.eval().unwrap() as u16);
+                    current_address.clone()
+                }
+                else {
+                    let nb_bytes = current_instruction.number_of_bytes().unwrap();
+                    match current_address {
+                        Some(address) => Some(address + nb_bytes as u16),
+                        None => {
+                            if nb_bytes != 0 {
+                                panic!("Unable to run if assembling address is unknown")
+                            }
+                            else {
+                                None
+                            }
+                        }
+                    }
+                };
+            
+
+            let (expected, new_label) = sorted_labels[nb_labels_added];
+            match (current_address, next_address) {
+
+                (Some(current), Some(next)) if current == expected => {
+                    self.listing_mut().insert(
+                        current_idx, 
+                        label(new_label)
+                    );
+                    nb_labels_added += 1;
+                }
+                (Some(current), Some(next)) if next < expected  => {
+                    self.listing_mut().insert(
+                        current_idx,
+                        equ(new_label, expected) // TODO check if realtive address is better or not
+                    );
+                    nb_labels_added += 1;   
+                }
+                (_, _) => {
+                    current_idx += 1;
+                }
+            }
+        }
+    }
 }
 
 /// Workaround to display a Lisitng as we cannot implement display there....
