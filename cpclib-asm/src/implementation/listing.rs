@@ -183,10 +183,11 @@ impl ListingExt for Listing {
             let mut current_idx = 0;
             let mut nb_labels_added = 0;
 
-            while current_idx < self.len() && nb_labels_added < sorted_labels.len(){
-                let current_instruction = &self.listing()[current_idx];;
 
-                current_idx += 1;
+            while current_idx < self.len() && nb_labels_added < sorted_labels.len(){
+
+
+                let current_instruction = &self.listing()[current_idx];;
 
                 let next_address = if let Token::Org(address, _) = current_instruction {
                     current_address = Some(address.eval().unwrap() as u16);
@@ -208,31 +209,43 @@ impl ListingExt for Listing {
                 };
             
 
+
             let (expected, new_label) = sorted_labels[nb_labels_added];
+
+
             match (current_address, next_address) {
 
-                (Some(current), Some(next)) if current == expected => {
-                    self.listing_mut().insert(
-                        current_idx, 
-                        label(new_label)
-                    );
-                    nb_labels_added += 1;
-                }
-                (Some(current), Some(next)) if next < expected  => {
-                    self.listing_mut().insert(
-                        current_idx,
-                        equ(new_label, expected) // TODO check if realtive address is better or not
-                    );
-                    nb_labels_added += 1;   
+                (Some(current), Some(next)) => {
+
+                    if current == expected {
+                        self.listing_mut().insert(
+                            current_idx, 
+                            label(new_label)
+                        );
+                        nb_labels_added += 1;
+                    }
+                    else if current < expected && next > expected {
+                        self.listing_mut().insert(
+                            current_idx,
+                            equ(new_label, expected) // TODO check if realtive address is better or not
+                        );
+                        nb_labels_added += 1;  
+                    }
+                    else {
+                        current_idx += 1;
+                    }
                 }
                 (_, _) => {
                     current_idx += 1;
                 }
             }
+
+            current_address = next_address;
         }
 
 
         while nb_labels_added < sorted_labels.len() {
+            panic!("{} remaining", sorted_labels.len() - nb_labels_added);
             self.listing_mut().insert(
                 0,
                 equ(
