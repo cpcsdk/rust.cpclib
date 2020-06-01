@@ -218,6 +218,15 @@ impl DataAccess {
             _ => None
         }
     }
+
+    pub fn expression_mut(&mut self) -> Option<&mut Expr> {
+        match self {
+            DataAccess::Expression(ref mut exp) => Some(exp),
+            _ => None
+        }
+    }
+
+
 }
 
 

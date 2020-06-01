@@ -328,15 +328,15 @@ const TABINSTR:[&'static str;256]  = [
 	"INC C", "DEC C", "LD C,nn", "RRCA",
 	"DJNZ nn", "LD DE,nnnn", "LD (DE),A", "INC DE",
 	"INC D", "DEC D", "LD D,nn", "RLA",
-	"JR nnnn", "ADD HL,DE", "LD A,(DE)", "DEC DE",
+	"JR nn", "ADD HL,DE", "LD A,(DE)", "DEC DE",
 	"INC E", "DEC E", "LD E,nn", "RRA",
-	"JR NZ,nnnn", "LD HL,nnnn", "LD (nnnn),HL", "INC HL",
+	"JR NZ,nn", "LD HL,nnnn", "LD (nnnn),HL", "INC HL",
 	"INC H", "DEC H", "LD H,nn", "DAA",
-	"JR Z,nnnn", "ADD HL,HL", "LD HL,(nnnn)", "DEC HL",
+	"JR Z,nn", "ADD HL,HL", "LD HL,(nnnn)", "DEC HL",
 	"INC L", "DEC L", "LD L,nn", "CPL",
-	"JR NC,nnnn", "LD SP,nnnn", "LD (nnnn),A", "INC SP",
+	"JR NC,nn", "LD SP,nnnn", "LD (nnnn),A", "INC SP",
 	"INC (HL)", "DEC (HL)", "LD (HL),nn", "SCF",
-	"JR C,nnnn", "ADD HL,SP", "LD A,(nnnn)", "DEC SP",
+	"JR C,nn", "ADD HL,SP", "LD A,(nnnn)", "DEC SP",
 	"INC A", "DEC A", "LD A,nn", "CCF",
 	"LD B,B", "LD B,C", "LD B,D", "LD B,E",
 	"LD B,H", "LD B,L", "LD B,(HL)", "LD B,A",
@@ -462,7 +462,10 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
 
 /// Manage the disassembling of the current instraction. However this instruction may need an argument.
 /// For this reason the byte stream is provided to collect this argument if needed
-fn disassemble_with_potential_argument<'stream>(opcode: u8, lut: &[&'static str;256], bytes: &'stream [u8]) -> Result<(Token, &'stream [u8]), String> {
+fn disassemble_with_potential_argument<'stream>(
+	opcode: u8, 
+	lut: &[&'static str;256], 
+	bytes: &'stream [u8]) -> Result<(Token, &'stream [u8]), String> {
     let representation:&'static str = lut[opcode as usize];
 
     // get the first argument if any

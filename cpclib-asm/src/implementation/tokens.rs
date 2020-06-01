@@ -12,6 +12,9 @@ use cpclib_tokens::symbols::*;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
 
+use crate::AssemblingOptions;
+use crate::implementation::listing::*;
+
 use std::fs::File;
 use std::io::Read;
 
@@ -41,13 +44,16 @@ pub trait TokenExt : ListingElement {
     fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError>;
 
     /// Assemble the token to a stream of bytes
-    fn to_bytes(&self) -> Result<Bytes, AssemblerError>;
+    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError>;
 
     /// Assemble the token to a streal of bytes .Can use the symbols context
+    #[deprecated]
     fn to_bytes_with_context(
         &self,
         table: &mut SymbolsTableCaseDependent,
-    ) -> Result<Bytes, AssemblerError>;
+    ) -> Result<Vec<u8>, AssemblerError>;
+
+    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError>;
 
     /// Check if the token is valid. We consider a token vlaid if it is possible to assemble it
     fn is_valid(&self) -> bool {
@@ -203,11 +209,12 @@ impl TokenExt for Token {
 
     /// Dummy version that assemble without taking into account the context
     /// TODO find a way to not build a symbol table each time
-    fn to_bytes(&self) -> Result<Bytes, AssemblerError> {
+    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
         let mut table = SymbolsTableCaseDependent::laxist();
         let table = &mut table;
         self.to_bytes_with_context(table)
     }
+
 
 
     /// Assemble the symbol taking into account some context, but never modify this context
@@ -215,30 +222,21 @@ impl TokenExt for Token {
     fn to_bytes_with_context(
         &self,
         table: &mut SymbolsTableCaseDependent,
-    ) -> Result<Bytes, AssemblerError> {
-        let env = &mut crate::assembler::Env::with_table_case_dependent(table);
-        match self {
-            Token::OpCode(ref mnemonic, ref arg1, ref arg2) => assemble_opcode(
-                *mnemonic, arg1, arg2, env, // Modification to the environment are lost
-            ),
+    ) -> Result<Vec<u8>, AssemblerError> {
 
-            Token::Equ(_, _) => Ok(Bytes::new()),
+        let mut options = if table.is_case_sensitive() {
+            AssemblingOptions::new_case_sensitive()
+        } 
+        else {
+            AssemblingOptions::new_case_insensitive()
+        };
+        options.set_symbols(table.table());
+        self.to_bytes_with_options(&options)
+    }
 
-            Token::Defw(_) | Token::Defb(_) => assemble_db_or_dw(self, env),
-
-            Token::Label(_) | Token::Comment(_) | Token::Org(_, _) | Token::Assert(_, _) => {
-                Ok(Bytes::new())
-            }
-
-            Token::Defs(ref expr, ref fill) => assemble_defs(expr, fill.as_ref(), env),
-
-            Token::Align(ref expr, ref fill) => assemble_align(expr, fill.as_ref(), env),
-
-            // Protect and breakpoint directives do not produce any bytes
-            Token::Protect(_, _) | Token::Breakpoint(_) | Token::Print(_) => Ok(Bytes::new()),
-
-            _ => Err(format!("Currently unable to generate bytes for {}", self).into()),
-        }
+    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
+        let listing: Listing = self.clone().into();
+        listing.to_bytes_with_options(option)
     }
 
 
@@ -502,7 +500,24 @@ impl TokenTryFrom<&str> for Token {
 
         match tokens.len() {
             0 => Err("No ASM found.".to_owned()),
-            1 => Ok(tokens[0].clone()),
+            1 => {
+                
+                let mut token = tokens[0].clone();
+                if token.is_opcode() {
+                    
+                    if let Mnemonic::Jr = token.mnemonic().unwrap() {
+                    println!("Avant {} {}", value, token);
+
+                        let mut expr = token.mnemonic_arg2_mut().unwrap().expression_mut().unwrap();
+                        assert!(expr.eval().unwrap() < 256);
+                        expr.fix_relative_value();
+                    println!("Apres {}", token);
+
+                    }
+
+                }
+                Ok(token)
+            },
             _ => Err(format!(
                 "{} tokens are present instead of one",
                 tokens.len()

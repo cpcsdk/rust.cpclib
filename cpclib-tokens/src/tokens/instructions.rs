@@ -563,6 +563,13 @@ impl Token {
         }
     }
 
+    pub fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess> {
+        match self {
+            Token::OpCode(_, _, ref mut arg2) => arg2.as_mut(),
+            _ => None,
+        }
+    }
+
     #[deprecated(
         since = "0.1.1",
         note = "please use `expr` instead as other token need it"
