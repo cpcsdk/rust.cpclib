@@ -64,6 +64,11 @@ impl ExprEvaluationExt for Expr {
         };
 
         match self {
+
+            RelativeDelta(delta) => {
+                Ok(Expr::Label("$".into()).resolve(sym)? + *delta as i32)
+            },
+
             Value(val) => Ok(*val),
 
             String(ref string) => panic!("String values cannot be converted to i32 {}", string),

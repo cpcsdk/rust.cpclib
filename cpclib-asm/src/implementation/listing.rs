@@ -155,7 +155,7 @@ impl ListingExt for Listing {
                         }
                     },
                     Err(err) => {
-                      //  panic!("{:?} {:?}", err, options);
+                        panic!("{:?} {:?} {:?}", instruction, err, options);
                         // BUG need to better manage interpretation to never achieve such error
                         res += "?? ?? ?? ?? ";
                         current_address = None;

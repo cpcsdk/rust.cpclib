@@ -20,12 +20,14 @@ pub type Bytes = SmallVec<[u8; MAX_SIZE]>;
 /// Add the encoding of an indexed structure
 fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
     if idx < -127 || idx > 128 {
-        Err(format!("Index error {}", idx).into())
-    } else {
+        //Err(format!("Index error {}", idx).into())
+        eprintln!("Index error {}", idx);
+    } 
+    //else {
         let val = (idx & 0xff) as u8;
         add_byte(m, val);
         Ok(())
-    }
+   // }
 }
 
 fn add_byte(m: &mut Bytes, b: u8) {
@@ -1228,7 +1230,12 @@ fn assemble_call_jr_or_jp(
     if let DataAccess::Expression(ref e) = arg2 {
         let address = env.resolve_expr_may_fail_in_first_pass(e)?;
         if is_jr {
-            let relative = env.absolute_to_relative_may_fail_in_first_pass(address, 2)?;
+            let relative = if e.is_relative(){
+                address as u8
+            }
+            else {
+                 env.absolute_to_relative_may_fail_in_first_pass(address, 2)? as u8
+            };
             if flag_code.is_some() {
                 // jr - flag
                 add_byte(&mut bytes, 0b0010_0000 | (flag_code.unwrap() << 3));
@@ -1274,8 +1281,12 @@ fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> 
     if let DataAccess::Expression(ref expr) = arg1 {
         let mut bytes = Bytes::new();
         let address = env.resolve_expr_may_fail_in_first_pass(expr)?;
-        let relative = env.absolute_to_relative_may_fail_in_first_pass(address, 1)?;
-
+        let relative = if expr.is_relative(){
+            address as u8
+         }
+         else {
+              env.absolute_to_relative_may_fail_in_first_pass(address, 1)? as u8
+         };
         bytes.push(0x10);
         bytes.push(relative);
 

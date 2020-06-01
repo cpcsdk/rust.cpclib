@@ -516,6 +516,10 @@ fn string_to_token(representation: &str) -> Result<Token, String> {
 	}
 	else {
 		Token::try_from(["\t", &representation].join(""))
+		.and_then(|mut token|{
+			token.fix_relative_jumps_after_disassembling();
+			Ok(token)
+		})
 	}
 }
 

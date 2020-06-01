@@ -9,6 +9,9 @@ use crate::tokens::Token;
 #[allow(missing_docs)]
 pub enum Expr {
 
+    /// Only used for disassembled code
+    RelativeDelta(i8),
+
     /// 32 bits integer value (should be able to include any integer value manipulated by the assember.
     Value(i32),
     /// String (for db directive)
@@ -209,6 +212,13 @@ impl Expr {
         }
     }
 
+    pub fn is_relative(&self) -> bool {
+        match self {
+            Expr::RelativeDelta(_) => true,
+            _ => false
+        }
+    }
+
     pub fn neg(&self) -> Self {
         Expr::Neg(Box::new(self.clone()))
     }
@@ -228,10 +238,7 @@ impl Expr {
     /// When disassembling an instruction with relative expressions, the contained value needs to be transformed as an absolute value
     pub fn fix_relative_value(&mut self) {
         if let Expr::Value(val) = self {
-            let mut new_expr = Expr::Add(
-                Box::new(Expr::Label("$".to_string())),
-                Box::new((*val).into())
-            );
+            let mut new_expr = Expr::RelativeDelta(*val as i8);
             std::mem::swap(self, &mut new_expr);
         }
     }  
@@ -285,6 +292,9 @@ impl Display for Expr {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         use self::Expr::*;
         match self {
+            // Should not be displayed often
+            &RelativeDelta(delta) => write!(format, "$ + {}", delta),
+
             &Value(val) => write!(format, "0x{:x}", val),
             &String(ref string) => write!(format, "\"{}\"", string),
             &Label(ref label) => write!(format, "{}", label),

@@ -502,20 +502,7 @@ impl TokenTryFrom<&str> for Token {
             0 => Err("No ASM found.".to_owned()),
             1 => {
                 
-                let mut token = tokens[0].clone();
-                if token.is_opcode() {
-                    
-                    if let Mnemonic::Jr = token.mnemonic().unwrap() {
-                    println!("Avant {} {}", value, token);
-
-                        let mut expr = token.mnemonic_arg2_mut().unwrap().expression_mut().unwrap();
-                        assert!(expr.eval().unwrap() < 256);
-                        expr.fix_relative_value();
-                    println!("Apres {}", token);
-
-                    }
-
-                }
+                let token = tokens[0].clone();
                 Ok(token)
             },
             _ => Err(format!(
