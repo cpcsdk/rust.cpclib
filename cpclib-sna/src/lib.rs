@@ -14,7 +14,8 @@ use num_enum::TryFromPrimitive;
 use std::ops::AddAssign;
 use std::ops::DerefMut;
 
-mod flags;
+pub mod flags;
+pub mod parse;
 mod chunks;
 mod error;
 
@@ -543,8 +544,9 @@ impl Snapshot {
     /// let data = vec![0,2,3,5];
     /// sna.add_data(&data, 0x4000);
     /// 
-    /// TODO: re-implement with set_byte
     /// ```
+    /// TODO: re-implement with set_byte
+    /// 
     pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError> {
         if address + data.len() > 0x10000 * 2 {
             Err(SnapshotError::NotEnougSpaceAvailable)

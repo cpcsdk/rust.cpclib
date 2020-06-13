@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use crate::preamble::*;
+use cpclib_sna::parse::*;
 
 /// ...
 pub mod error_code {
@@ -597,6 +598,7 @@ pub fn parse_directive(input: &str) -> IResult<&str, Token> {
         parse_print,
         parse_protect,
         parse_run,
+        parse_snaset,
         parse_stable_ticker,
         parse_undef,
         parse_noarg_directive,
@@ -1685,16 +1687,19 @@ fn parse_opcode_no_arg3(input: &str) -> IResult<&str, Token> {
     Ok((input, Token::OpCode(mnemonic, None, None)))
 }
 
-/// Read a value
-pub fn parse_value(input: &str) -> IResult<&str, Expr> {
-    let (input, val) = alt((hex_number, dec_number, bin_u16))(input)?;
-    Ok((input, Expr::Value(val as i32)))
+
+
+fn parse_snaset(input: &str) -> IResult<&str, Token> {
+    let (input, _) = parse_instr("SNASET")(input)?;
+    let (input, flag) = parse_flag(input)?;
+    let (input, _) = space1(input)?;
+    let (input, value) = parse_flag_value(input)?;
+    let (input, _) = space0(input)?;
+
+
+    Ok((input, Token::SnaSet(flag, value)))
 }
 
-/// Read an hexadecimal value
-pub fn hex_number(input: &str) -> IResult<&str, u16> {
-    preceded(alt((tag_no_case("0x"), tag("#"), tag("&"))), inner_hex)(input)
-}
 
 /// Parse a comment that start by `;` and ends at the end of the line.
 pub fn comment(input: &str) -> IResult<&str, Token> {
@@ -1745,75 +1750,7 @@ pub fn parse_label(doubledots: bool) -> impl Fn(&str) -> IResult<&str, String> {
     }
 
 }
-#[inline]
-/// Parse an usigned 16 bit number
-pub fn dec_number(input: &str) -> IResult<&str, u16> {
-    match is_a("0123456789")(input) {
-        Err(e) => Err(e),
-        Ok((remaining, parsed)) => {
-            // Do not parse more than 5 characters for a u16
-            if parsed.input_len() > 5 {
-                Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
-            } else {
-                let mut res = 0_u32;
-                for e in parsed.iter_elements() {
-                    let digit = e;
-                    let value = digit.to_digit(10).unwrap_or(0);
-                    res = value + (res * 10);
-                }
-                if res > u16::max_value() as u32 {
-                    Err(::nom::Err::Error(error_position!(
-                        input,
-                        ErrorKind::Digit /*Custom(0)*/
-                    )))
-                } else {
-                    Ok((remaining, res as u16))
-                }
-            }
-        }
-    }
-}
 
-/// Read an hexidecimal value
-pub fn inner_hex(input: &str) -> IResult<&str, u16> {
-    match is_a("0123456789abcdefABCDEF")(input) {
-        Err(e) => Err(e),
-        Ok((remaining, parsed)) => {
-            // Do not parse more than  characters for a u16
-            if parsed.input_len() > 4 {
-                Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
-            } else {
-                let mut res = 0_u32;
-                for e in parsed.iter_elements() {
-                    let digit = e;
-                    let value = digit.to_digit(16).unwrap_or(0);
-                    res = value + (res * 16);
-                }
-                if res > u16::max_value() as u32 {
-                    Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
-                } else {
-                    Ok((remaining, res as u16))
-                }
-            }
-        }
-    }
-}
-
-/// Parse a binary number
-pub fn bin_u16(input: &str) -> IResult<&str, u16> {
-    preceded(
-        alt((tag_no_case("0b"), tag_no_case("%"))),
-        fold_many1(
-            alt((value(0, tag("0")), value(1, tag("1")))),
-            0,
-            |mut acc: u16, item: u16| {
-                acc *= 2;
-                acc += item;
-                acc
-            },
-        ),
-    )(input)
-}
 /*
 /// Parse an ASM file an returns the stream of tokens.
 pub fn parse_file(fname: String) -> Vec<Token> {
@@ -1828,6 +1765,14 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 */
 
 // XXX Code greatly inspired from https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs
+
+
+/// Read a value
+pub fn parse_value(input: &str) -> IResult<&str, Expr> {
+    let (input, val) = alt((hex_number, dec_number, bin_u16))(input)?;
+    Ok((input, Expr::Value(val as i32)))
+}
+
 
 /// Read a parenthesed expression
 pub fn parens(input: &str) -> IResult<&str, Expr> {
