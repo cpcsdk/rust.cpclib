@@ -22,7 +22,7 @@ pub use flags::*;
 pub use chunks::*;
 pub use error::*;
 
-///! Reimplementation of createsnapshot by Ramlaid/Arkos
+///! Re-implementation of createsnapshot by Ramlaid/Arkos
 ///! in rust by Krusty/Benediction
 
 /**
@@ -58,6 +58,7 @@ pub enum SnapshotVersion {
     /// Version 3 of Snapshsots (use of chunks)
     V3,
 }
+
 
 impl SnapshotVersion {
     /// Check if snapshot ius V3 version
@@ -541,6 +542,8 @@ impl Snapshot {
     /// let mut sna = Snapshot::default();
     /// let data = vec![0,2,3,5];
     /// sna.add_data(&data, 0x4000);
+    /// 
+    /// TODO: re-implement with set_byte
     /// ```
     pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError> {
         if address + data.len() > 0x10000 * 2 {
@@ -564,9 +567,14 @@ impl Snapshot {
         }
     }
 
+    #[deprecated]
+    pub fn set_memory(&mut self, address: u32, value: u8) {
+        self.set_byte(address, value);
+    }
+
     /// Change a memory value. Panic if memory size is not appropriate
     /// If memory is saved insided chuncks, the chuncks are unwrapped
-    pub fn set_memory(&mut self, address: u32, value: u8) {
+    pub fn set_byte(&mut self, address: u32, value: u8) {
         let address = address as usize;
 
         // unroll chuncks if any
@@ -587,6 +595,10 @@ impl Snapshot {
  
         // finally write in memory
         self.memory.memory_mut()[address] = value;
+    }
+
+    pub fn get_byte(&self, address: u32) -> u8 {
+        self.memory.memory()[address as usize]
     }
 
     /// Change the value of a flag
