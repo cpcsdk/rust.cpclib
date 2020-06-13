@@ -198,6 +198,7 @@ pub struct Env {
     /// Memory configuration is controlled by the underlying snapshot.
     /// It will ease the generation of snapshots but may complexify the generation of files
     sna: cpclib_sna::Snapshot,
+    sna_version: cpclib_sna::SnapshotVersion,
 
     iorg: usize,
     org_zones: Vec<OrgZone>,
@@ -225,7 +226,9 @@ impl Default for Env {
             codeadr: 0,
             maxptr: 0xffff,
             activebank: 0,
+
             sna: Default::default(),
+            sna_version: cpclib_sna::SnapshotVersion::V3,
 
             iorg: 0,
             org_zones: Vec::new(),
@@ -266,6 +269,7 @@ impl Env {
             self.maxptr = 0xffff;
             self.activebank = 0;
             self.sna = Default::default();
+            self.sna_version = cpclib_sna::SnapshotVersion::V3;
             self.iorg = 0;
             self.org_zones = Vec::new();
             self.stable_counters = StableTickerCounters::default();
@@ -372,6 +376,18 @@ impl Env {
 
     pub fn symbols_mut(&mut self) -> &mut SymbolsTableCaseDependent {
         &mut self.symbols
+    }
+
+    pub fn sna(&self) -> &cpclib_sna::Snapshot {
+        &self.sna
+    }
+
+    pub fn sna_version(&self) -> cpclib_sna::SnapshotVersion {
+        self.sna_version
+    }
+
+    pub fn save_sna<P: AsRef<std::path::Path>>(&self, fname: P)  -> Result<(), std::io::Error> {
+        self.sna().save(fname, self.sna_version())
     }
 
     /// Compute the expression thanks to the symbol table of the environment.
@@ -589,6 +605,15 @@ impl Env {
         Ok(())
     }
 
+    pub fn visit_run(&mut self, addr: &Expr, arg2: Option<&Expr>) -> Result<(), AssemblerError> {
+        assert!(arg2.is_none(), "need to implement the management of this second arg");
+
+        let value = self.resolve_expr_may_fail_in_first_pass(addr)?;
+        self.sna.set_value(cpclib_sna::SnapshotFlag::Z80_PC, value as _);
+
+        Ok(())
+    }
+
     pub fn visit_incbin(&mut self, data: &[u8]) -> Result<(), AssemblerError> {
         self.output_bytes(data)
     }
@@ -673,6 +698,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
         Token::Repeat(_, _, _) => visit_repeat(token, env),
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
+        Token::Run(ref arg1, ref arg2) => env.visit_run(arg1, arg2.as_ref()),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
         _ => panic!("Not treated {:?}", token),

@@ -596,6 +596,7 @@ pub fn parse_directive(input: &str) -> IResult<&str, Token> {
         parse_db_or_dw,
         parse_print,
         parse_protect,
+        parse_run,
         parse_stable_ticker,
         parse_undef,
         parse_noarg_directive,
@@ -674,6 +675,12 @@ fn parse_conditional_condition(code: u8) -> impl Fn(&str) -> IResult<&str, TestK
 pub fn parse_breakpoint(input: &str) -> IResult<&str, Token> {
     map(preceded(tag_no_case("BREAKPOINT"), opt(expr)), |exp| {
         Token::Breakpoint(exp)
+    })(input)
+}
+
+pub fn parse_run(input: &str) -> IResult<&str, Token> {
+    map(preceded(tag_no_case("RUN"), expr), |exp| {
+        Token::Run(exp, None)
     })(input)
 }
 
