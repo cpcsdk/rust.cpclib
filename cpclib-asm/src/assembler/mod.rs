@@ -614,6 +614,13 @@ impl Env {
         Ok(())
     }
 
+    pub fn visit_snaset(&mut self, flag: &cpclib_sna::SnapshotFlag, value: &cpclib_sna::FlagValue) -> Result<(), AssemblerError> {
+
+        self.sna.set_value(*flag, value.as_u16().unwrap());
+
+        Ok(())
+    }
+
     pub fn visit_incbin(&mut self, data: &[u8]) -> Result<(), AssemblerError> {
         self.output_bytes(data)
     }
@@ -699,6 +706,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Repeat(_, _, _) => visit_repeat(token, env),
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
         Token::Run(ref arg1, ref arg2) => env.visit_run(arg1, arg2.as_ref()),
+        Token::SnaSet(flag, value) => env.visit_snaset(flag, value),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
         _ => panic!("Not treated {:?}", token),

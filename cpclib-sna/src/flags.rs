@@ -4,7 +4,7 @@ use std::fmt;
 use crate::error::*;
 
 /// Encode a flag of the snaphot
-#[derive(PartialEq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 #[allow(non_camel_case_types)]
 #[allow(missing_docs)]
 pub enum SnapshotFlag {
@@ -475,7 +475,7 @@ impl FromStr for SnapshotFlag {
 }
 
 /// Encode the type of the flag values
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum FlagValue {
     /// The flag is a byte
     Byte(u8),
@@ -499,6 +499,16 @@ impl fmt::Display for FlagValue {
                     )
                 })
                 .and_then(|_x| write!(f, "]")),
+        }
+    }
+}
+
+impl FlagValue {
+    pub fn as_u16(&self) -> Option<u16> {
+        match self {
+            Self::Byte(b) => Some(*b as u16),
+            Self::Word(w) => Some(*w),
+            _ => None
         }
     }
 }

@@ -381,6 +381,8 @@ pub enum Token {
     },
     SetCPC(Expr),
     SetCrtc(Expr),
+    /// This directive setup a value for a given flag of the snapshot
+    SnaSet(cpclib_sna::flags::SnapshotFlag, cpclib_sna::flags::FlagValue),
     StableTicker(StableTickerAction),
     Str(Vec<u8>),
     Struct(String, Vec<(String, Token)>),
