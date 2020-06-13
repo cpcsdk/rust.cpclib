@@ -195,9 +195,9 @@ pub struct Env {
     /// Currently selected bank
     activebank: usize,
 
-    /// Memory configuration
-    /// XXX Currently we only have one bank
-    mem: [Bank; 1],
+    /// Memory configuration is controlled by the underlying snapshot.
+    /// It will ease the generation of snapshots but may complexify the generation of files
+    sna: cpclib_sna::Snapshot,
 
     iorg: usize,
     org_zones: Vec<OrgZone>,
@@ -225,7 +225,7 @@ impl Default for Env {
             codeadr: 0,
             maxptr: 0xffff,
             activebank: 0,
-            mem: [[0; 0x1_0000]; 1],
+            sna: Default::default(),
 
             iorg: 0,
             org_zones: Vec::new(),
@@ -265,7 +265,7 @@ impl Env {
             self.codeadr = 0;
             self.maxptr = 0xffff;
             self.activebank = 0;
-            self.mem = [[0; 0x10000]; 1];
+            self.sna = Default::default();
             self.iorg = 0;
             self.org_zones = Vec::new();
             self.stable_counters = StableTickerCounters::default();
@@ -288,10 +288,12 @@ impl Env {
     }
 
     /// Produce the memory for the required limits
+    /// TODO check that the implementation is still correct with snapshot inclusion
+    /// BUG  does not take into account extra bank configuration
     pub fn memory(&self, start: usize, size: usize) -> Vec<u8> {
         let mut mem = Vec::new();
         for pos in start..(start + size) {
-            mem.push(self.mem[0][pos]); // XXX probably buggy later
+            mem.push(self.byte(pos)); // XXX probably buggy later
         }
         mem
     }
@@ -316,11 +318,12 @@ impl Env {
 
     /// Output one byte
     /// (RASM ___internal_output)
+    /// BUG does not take into account the active bank
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
         if self.outputadr <= self.maxptr {
 //            eprintln!("==> 0x{:X} = 0x{:X}", self.outputadr, v);
 
-            self.mem[self.activebank][self.outputadr] = v;
+            self.sna.set_byte(self.outputadr as _, v);
             self.outputadr += 1; // XXX will fail at 0xffff
             self.codeadr += 1;
             Ok(())
@@ -338,7 +341,7 @@ impl Env {
     }
 
     pub fn byte(&self, address: usize) -> u8 {
-        self.mem[self.activebank][address]
+        self.sna.get_byte(address as _)
     }
 
     /// Get the size of the generated binary.
