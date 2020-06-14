@@ -103,6 +103,7 @@ const FORBIDDEN_MACRO_NAMES: &[&str] = &[
     "DEPHASE",
     "REND",  // rorg directive
     "ENDIF", // if directive
+    "ELSE"
 ];
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
@@ -647,11 +648,15 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
     ))(input)?;
 
     // Get the corresponding test
-    let (input, cond) = terminated(parse_conditional_condition(test_kind), space0)(input)?;
+    let (input, cond) = delimited(
+        space0, 
+        parse_conditional_condition(test_kind), 
+        space0)
+    (input)?;
 
     let (input, _) = alt((line_ending, tag(":")))(input)?;
 
-    let (input, code) = inner_code(input)?;
+    let (input, code) = cut(inner_code)(input)?;
 
     let (input, r#else) = opt(preceded(
         delimited(
@@ -659,7 +664,7 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
             tag_no_case("ELSE"),
             alt((terminated(space0, line_ending), tag(":"))),
         ),
-        inner_code,
+        cut(inner_code),
     ))(input)?;
 
     let (input, _) = tuple((
@@ -2058,6 +2063,29 @@ pub fn decode_parsing_error(_orig: &str, _e: ::nom::Err<&str>) -> String {
 mod test {
     use super::*;
     use crate::preamble::*;
+
+    #[test]
+    fn parse_test_cond() {
+        let res = inner_code(" nop
+        endif");
+        assert!(res.is_ok());
+
+        let res = inner_code(" nop
+        else");
+        assert!(res.is_ok());
+
+        let res = parse_conditional_condition(IF_CODE)("THING");
+        assert!(res.is_ok());
+
+
+        let res = parse_conditional("if THING
+        nop
+        endif");
+
+        println!("{:?}", res);
+        assert!(res.is_ok());
+
+    }
 
     #[test]
     fn parse_indexregister8() {
