@@ -603,6 +603,10 @@ mod tests {
     fn test_call_macro() {
         let z80 = "MACRONAME";
         assert!(dbg!(parse_macro_call(z80.into())).is_ok());
+        
+        let z80 = "BREAKPOINT_WINAPE";
+        assert!(dbg!(parse_macro_call(z80.into())).is_ok());
+
         let z80 = "MACRONAME 1, 2, 3, TRUC";
         assert!(parse_macro_call(z80.into()).is_ok());
         let z80 = "MACRONAME (void)";

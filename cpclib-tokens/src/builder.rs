@@ -240,7 +240,15 @@ pub fn exx() -> Token {
 
 #[allow(missing_docs)]
 pub fn incbin<S: AsRef<str>>(fname: S) -> Token {
-    Token::Incbin(fname.as_ref().to_string(), None, None, None, None, None, BinaryTransformation::None)
+    Token::Incbin{
+        fname: fname.as_ref().to_string(), 
+        transformation: BinaryTransformation::None,
+        offset: None,
+        length: None,
+        extended_offset: None,
+        off: false,
+        content: None
+    }
 }
 
 

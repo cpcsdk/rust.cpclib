@@ -165,11 +165,19 @@ impl TokenExt for Token {
                 }
             }
 
-            Token::Incbin(ref fname, _, _, _, _, ref mut data, ref transformation)
-                if data.is_none() =>
+            Token::Incbin{
+                fname, 
+                 offset, 
+                 length, 
+                 extended_offset, 
+                 off, 
+                 ref mut content, 
+                 transformation
+            }
+                if content.is_none() =>
             {
                 //TODO manage the optional arguments
-                match ctx.get_path_for(fname) {
+                match ctx.get_path_for(&fname) {
                     None => {
                         return Err(AssemblerError::IOError {
                             msg: format!("{:?} not found", fname),
@@ -179,16 +187,20 @@ impl TokenExt for Token {
                         let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
                             msg: format!("Unable to open {:?}", fname),
                         })?;
-                        let mut content = Vec::new();
-                        f.read_to_end(&mut content)
+                        let mut data = Vec::new();
+                        f.read_to_end(&mut data)
                             .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
 
                         match transformation {
                             BinaryTransformation::None => {
-                                data.replace(content);
+                                content.replace(data);
                             }
                             BinaryTransformation::Exomizer => {
                                 unimplemented!("Need to implement exomizer crunching")
+                            }
+                            BinaryTransformation::Lz49 => {
+                                let crunched = crate::crunchers::lz49::lz49_encode_legacy(&data);
+                                content.replace(crunched);
                             }
                         }
                     }

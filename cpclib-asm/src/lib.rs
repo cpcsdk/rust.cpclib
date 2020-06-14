@@ -16,6 +16,8 @@ pub mod preamble;
 
 pub mod error;
 
+mod crunchers;
+
 use crate::parser::ParserContext;
 
 use cpclib_disc::amsdos::*;
