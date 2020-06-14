@@ -698,7 +698,15 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         }
         Token::Comment(_) | Token::List | Token::NoList => Ok(()), // Nothing to do for a comment
         Token::Include(_, Some(ref listing)) => env.visit_listing(listing),
-        Token::Incbin(_, _, _, _, _, ref data, _) => env.visit_incbin(data.as_ref().unwrap()),
+        Token::Incbin{
+            fname: _, 
+            offset: _, 
+            length: _, 
+            extended_offset: _, 
+            off: _, 
+            content, 
+            transformation: _
+        }  => env.visit_incbin(content.as_ref().unwrap()),
         Token::If(ref cases, ref other) => env.visit_if(cases, other.as_ref()),
         Token::Label(ref label) => env.visit_label(label),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),

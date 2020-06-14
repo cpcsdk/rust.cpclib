@@ -304,8 +304,12 @@ pub enum TestKind {
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[allow(missing_docs)]
 pub enum BinaryTransformation {
+    // Raw include of the data
     None,
+    // Compression with exomizer
     Exomizer,
+    // Compression with lz49
+    Lz49
 }
 
 #[remain::sorted]
@@ -336,16 +340,15 @@ pub enum Token {
     If(Vec<(TestKind, Listing)>, Option<Listing>),
 
     /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
-    Incbin(
-        // TODO name arguments to ease manipulation
-        String,
-        Option<Expr>,
-        Option<Expr>,
-        Option<Expr>,
-        Option<Expr>,
-        Option<Vec<u8>>,
-        BinaryTransformation,
-    ),
+    Incbin {
+        fname: String,
+        offset: Option<Expr>,
+        length: Option<Expr>,
+        extended_offset: Option<Expr>,
+        off: bool,
+        content: Option<Vec<u8>>,
+        transformation: BinaryTransformation,
+    },
     Include(String, Option<Listing>),
 
     Label(String),
@@ -374,6 +377,7 @@ pub enum Token {
     Save {
         filename: String,
         address: Expr,
+
         size: Expr,
         save_type: Option<SaveType>,
         dsk_filename: Option<String>,
@@ -405,7 +409,7 @@ impl fmt::Display for Token {
         };
 
         #[remain::sorted]
-        match *self {
+        match self {
 
             Token::Align(ref expr, None)
                 => write!(f, "ALIGN {}", expr),
@@ -440,8 +444,43 @@ impl fmt::Display for Token {
 
             
 
-             Token::Incbin(ref fname, None, None, None, None, None, BinaryTransformation::None) 
-                 => write!(f, "INCBIN \"{}\"", fname),
+             Token::Incbin{
+                 fname, 
+                 offset, 
+                 length, 
+                 extended_offset, 
+                 off, 
+                 content: _, 
+                 transformation
+             } 
+                 => {
+
+                    let directive = match transformation {
+                        BinaryTransformation::None => "INCBIN",
+                        BinaryTransformation::Exomizer => "INCEXO",
+                        BinaryTransformation::Lz49 => "INCL49",
+                    };
+
+                     write!(f, "{} \"{}\"", directive, fname)?;
+                     if offset.is_some() {
+                         write!(f, ", {}", offset.as_ref().unwrap())?;
+
+                         if length.is_some() {
+                            write!(f, ", {}", length.as_ref().unwrap())?;
+
+                            if extended_offset.is_some() {
+                                write!(f, ", {}", extended_offset.as_ref().unwrap())?;
+
+                                if *off {
+                                    write!(f, ", OFF")?;
+    
+                                 }
+                             }
+                         }
+                     }
+                     Ok(())
+
+                 }
  
 
                  Token::Include(ref fname, _)

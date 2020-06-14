@@ -9,6 +9,8 @@ use nom::combinator::*;
 use nom::error::*;
 use nom::multi::*;
 use nom::sequence::*;
+use nom::multi::separated_nonempty_list;
+
 #[allow(missing_docs)]
 use nom::*;
 use either::*;
@@ -422,8 +424,9 @@ pub fn parse_z80_line_label_only(input: &str) -> IResult<&str, Vec<Token>> {
 
     // TODO make these stuff alternatives ...
     // Manage Equ
+    // BUG Equ and = are supposed to be different
     let (input, equ) = opt(preceded(
-        preceded(space1, tag_no_case("EQU")),
+        preceded(space1, alt((tag_no_case("EQU"), tag_no_case("=")))),
         preceded(space1, expr),
     ))(input)?;
 
@@ -465,25 +468,39 @@ pub fn parse_include(input: &str) -> IResult<&str, Token> {
 /// Parse for the various binary include directives
 pub fn parse_incbin(input: &str) -> IResult<&str, Token> {
     let (input, transformation) = alt((
-        map(tag_no_case("INCBIN"), { |_| BinaryTransformation::None }),
-        map(tag_no_case("INCEXO"), {
+        map(
+            tag_no_case("INCBIN"), 
+            |_| BinaryTransformation::None 
+        ),
+        map(
+            tag_no_case("INCEXO"), 
             |_| BinaryTransformation::Exomizer
-        }),
+        ),
+        map(
+            tag_no_case("INCL49"), 
+            |_| BinaryTransformation::Lz49
+        ),
     ))(input)?;
 
     let (input, fname) = preceded(space1, parse_fname)(input)?;
 
+    let(input, offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
+    let(input, length) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
+    let(input, extended_offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
+    let(input, off) = opt(preceded(tuple((space0, char(','), space0)), tag_no_case("OFF")))(input)?;
+
+
     Ok((
         input,
-        Token::Incbin(
-            fname.to_string(),
-            None,
-            None,
-            None,
-            None,
-            None,
+        Token::Incbin{
+            fname: fname.to_string(),
+            offset,
+            length,
+            extended_offset: None,
+            off: off.is_some(),
+            content: None,
             transformation,
-        ),
+        },
     ))
 }
 
@@ -602,7 +619,7 @@ pub fn parse_directive(input: &str) -> IResult<&str, Token> {
         parse_stable_ticker,
         parse_undef,
         parse_noarg_directive,
-        parse_macro_call,
+        parse_macro_call, // need to be the very last one as it eats everything else
     ))(input)
 }
 
@@ -899,6 +916,9 @@ pub fn parse_db_or_dw(input: &str) -> IResult<&str, Token> {
 
 /// Manage the call of a macro.
 pub fn parse_macro_call(input: &str) -> IResult<&str, Token> {
+
+    // BUG: added because of parsing issues. Need to find why and remove ot
+    let (input, _) = space0(input)?;
     let (input, name) = parse_label(false)(input)?;
 
     // Check if the macro name is allowed
@@ -961,13 +981,23 @@ pub fn parse_print(input: &str) -> IResult<&str, Token> {
     map(
         preceded(
             parse_instr("PRINT"),
-            cut(alt((
-                formatted_expr,
-                map(expr, FormattedExpr::from),
-                map(string_between_quotes, { |s: &str| FormattedExpr::from(Expr::String(s.to_string()))}),
-            ))),
+            cut(
+                separated_nonempty_list(
+                
+                delimited(space0, char(','), space0),
+                alt((
+                    formatted_expr,
+                    map(expr, FormattedExpr::from),
+                    map(string_between_quotes, { 
+                        |s: &str| 
+                        FormattedExpr::from(Expr::String(s.to_string()))
+                    }
+                    ),
+                ))  
+                )
+            ),
         ),
-        |exp| Token::Print(vec![exp]),
+        |exps| Token::Print(exps),
     )(input)
 }
 
@@ -2072,6 +2102,15 @@ mod test {
             )
             ),
             parse_print("PRINT {hex}VAR")
+        );
+
+        assert_eq!(
+            Ok((
+                "",
+                Token::Print(vec![FormattedExpr::Raw(Expr::String("hello".to_string()))])
+            
+            )),
+            parse_print("PRINT \"hello\"")
         );
     }
 }
