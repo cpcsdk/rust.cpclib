@@ -187,7 +187,7 @@ fn main() {
             let value = string_to_nb(data[i * 2 + 1]);
             assert!(value < 0x100);
 
-            sna.set_memory(address, value as u8);
+            sna.set_byte(address, value as u8);
         }
     }
 

@@ -4,6 +4,8 @@ extern crate matches;
 #[cfg(test)]
 mod tests {
     use cpclib_asm::preamble::*;
+    use cpclib_sna::parse::*; // todo : move its tests at the right place
+
     use nom::IResult;
 
     fn check_mnemonic(code: &str, mnemonic: Mnemonic) -> bool {
