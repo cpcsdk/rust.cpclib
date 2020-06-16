@@ -565,7 +565,21 @@ impl Env {
     }
 
     pub fn visit_macro(&mut self, name: &str, arguments: &[String], code: &str) -> Result<(), AssemblerError> {
-        unimplemented!()
+        if self.symbols().contains_symbol(name) {
+            return Err(
+                AssemblerError::SymbolAlreadyExists{symbol: name.to_owned()}
+            );
+        }
+
+        self.symbols_mut().set_symbol_to_value(
+            name, 
+            Macro::new(
+                name.to_owned(),
+                arguments.to_vec(),
+                code.to_owned()
+            )
+        );
+        Ok(())
     } 
 
     /// Remove the given variable from the table of symbols

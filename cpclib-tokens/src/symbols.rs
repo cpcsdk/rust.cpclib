@@ -21,7 +21,16 @@ pub struct Macro {
     code: String
 }
 
-
+impl Macro {
+    pub fn new(name: String, args: Vec<String>, code: String) -> Self {
+        Macro {
+            name,
+            args,
+            code
+        }
+    }
+}
+// TODO rename as Value !! The symbol is the key
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum Symbol {
