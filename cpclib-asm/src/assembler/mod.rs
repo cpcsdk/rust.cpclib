@@ -170,6 +170,8 @@ struct OrgZone {
 
 
 
+
+
 /// Environment of the assembly
 #[allow(missing_docs)]
 pub struct Env {
@@ -562,6 +564,10 @@ impl Env {
         }
     }
 
+    pub fn visit_macro(&mut self, name: &str, arguments: &[String], code: &str) -> Result<(), AssemblerError> {
+        unimplemented!()
+    } 
+
     /// Remove the given variable from the table of symbols
     pub fn visit_undef(&mut self, label: &str) -> Result<(), AssemblerError> {
         match self.symbols_mut().remove_symbol(label) {
@@ -717,6 +723,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::SnaSet(flag, value) => env.visit_snaset(flag, value),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
+        Token::Macro(name, arguments, code) => env.visit_macro(name, arguments, code),
         _ => panic!("Not treated {:?}", token),
     }
 }
@@ -2548,7 +2555,7 @@ mod test {
         assert!(env.is_ok());
         let env = env.unwrap();
 
-        let val = env.symbols().value("myticker");
+        let val = env.symbols().int_value("myticker");
         assert!(val.is_some());
         assert_eq!(val.unwrap(), 2);
     }
@@ -2659,7 +2666,7 @@ mod test {
         let res = visit_token(&Token::Label("hello".into()), &mut env);
         assert!(res.is_ok());
         assert!(env.symbols().contains_symbol("hello"));
-        assert_eq!(env.symbols().value("hello"), 0x4000.into());
+        assert_eq!(env.symbols().int_value("hello"), 0x4000.into());
     }
 
     /// Check if  label already exists
@@ -2706,7 +2713,7 @@ mod test {
         let count = env.size();
         assert_eq!(count, 3);
 
-        assert_eq!(env.symbols().value(&"test".to_owned()).unwrap(), 0x123 + 3);
+        assert_eq!(env.symbols().int_value(&"test".to_owned()).unwrap(), 0x123 + 3);
         let buffer = env.memory(0x123, 3);
         assert_eq!(buffer[1], 0x23 + 3);
         assert_eq!(buffer[2], 0x1);
