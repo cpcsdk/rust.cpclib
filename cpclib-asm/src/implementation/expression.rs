@@ -74,7 +74,13 @@ impl ExprEvaluationExt for Expr {
             String(ref string) => panic!("String values cannot be converted to i32 {}", string),
 
             Label(ref label) => match sym.value(label) {
-                Some(val) => Ok(val),
+                Some(Symbol::Integer(val)) => Ok(*val),
+                Some(_) => Err(
+                    AssemblerError::WrongSymbolType {
+                        symbol: label.to_owned(),
+                        isnot: "a value".to_owned()
+                    }
+                ),
                 None => Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
                     closest: sym.closest_symbol(label),

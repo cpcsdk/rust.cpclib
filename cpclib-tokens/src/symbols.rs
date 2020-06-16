@@ -12,11 +12,52 @@ pub enum SymbolError {
 }
 
 
-#[derive(Debug, Clone, Copy)]
+
+
+#[derive(Debug, Clone)]
+pub struct Macro {
+    name: String,
+    args: Vec<String>,
+    code: String
+}
+
+
+#[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum Symbol {
     Integer(i32),
+    Macro(Macro)
 }
+
+impl Symbol {
+    pub fn integer(&self) -> Option<i32> {
+        match self {
+            Symbol::Integer(i) => Some(*i),
+            _ => None
+        }
+    }
+
+    pub fn r#macro(&self) -> Option<&Macro> {
+        match self {
+            Symbol::Macro(m) => Some(m),
+            _ => None
+        }
+    }
+}
+
+impl From<Macro> for Symbol  {
+    fn from(m: Macro) -> Self {
+        Self::Macro(m)
+    }
+}
+
+
+impl From<i32> for Symbol  {
+    fn from(i: i32) -> Self {
+        Self::Integer(i)
+    }
+}
+
 
 
 #[derive(Debug, Clone)]
@@ -46,7 +87,7 @@ impl SymbolsTable {
     /// Return the current addres if it is known or return an error
     pub fn current_address(&self) -> Result<u16, SymbolError> {
         match self.value(&"$".to_owned()) {
-            Some(address) => Ok(address as u16),
+            Some(address) => Ok(address.integer().unwrap() as u16),
             None => Err(SymbolError::UnknownAssemblingAddress),
         }
     }
@@ -69,31 +110,39 @@ impl SymbolsTable {
     }
 
     /// Set the given symbol to the given value
-    pub fn set_symbol_to_value<S: AsRef<str>>(&mut self, label: S, value: i32) {
+    /// Return the previous value if any
+    pub fn set_symbol_to_value<S: AsRef<str>, V: Into<Symbol>>(&mut self, label: S, value: V) -> Option<Symbol> {
         self.map
-            .insert(label.as_ref().into(), Symbol::Integer(value));
+            .insert(
+                label.as_ref().into(), 
+                value.into()
+        )
     }
 
-    pub fn update_symbol_to_value<S: AsRef<str>>(&mut self, label: S, value: i32) {
-        *(self.map.get_mut(label.as_ref()).unwrap()) = Symbol::Integer(value);
+    pub fn update_symbol_to_value<S: AsRef<str>, V: Into<Symbol>>(&mut self, label: S, value: V) {
+        *(self.map.get_mut(label.as_ref()).unwrap()) = value.into();
     }
 
-    /// TODO return the symbol instead of the int
-    pub fn value<S: AsRef<str>>(&self, key: S) -> Option<i32> {
+    /// Returns the symbol at the given key
+    pub fn value<S: AsRef<str>>(&self, key: S) -> Option<&Symbol> {
         let key: String = key.as_ref().to_owned();
 
         let key = key.trim();
-        let res = self.map.get(key);
-        if let Some(&Symbol::Integer(val)) = res {
-            Some(val)
-        } else if self.dummy {
-            //eprintln!("{} not found in symbol table. I have replaced it by 1", key);
-            Some(1)
-        } else {
-            //               eprintln!("Symbol table content {:?}", &self.map);
-            None
-        }
+        self.map.get(key)
     }
+
+    pub fn int_value<S: AsRef<str>>(&self, key: S) -> Option<i32> {
+        self.value(key)
+            .map(|v| v.integer())
+            .map(|v| v.unwrap())
+            .or_else(|| {if self.dummy {Some(1i32)}else{None}})
+    }
+    pub fn macro_value<S: AsRef<str>>(&self, key: S) -> Option<&Macro> {
+        self.value(key)
+            .map(|v| v.r#macro())
+            .map(|v| v.unwrap())
+    }
+
 
     /// Remove the given symbol name from the table. (used by undef)
     pub fn remove_symbol<S: AsRef<str>>(&mut self, key: S) -> Option<Symbol> {
@@ -190,7 +239,7 @@ impl SymbolsTableCaseDependent {
             .set_symbol_to_current_address(self.normalize_symbol(symbol))
     }
 
-    pub fn set_symbol_to_value<S: AsRef<str>>(&mut self, symbol: S, value: i32) {
+    pub fn set_symbol_to_value<S: AsRef<str>, V: Into<Symbol>>(&mut self, symbol: S, value: V) -> Option<Symbol> {
         self.table
             .set_symbol_to_value(self.normalize_symbol(symbol), value)
     }
@@ -200,9 +249,18 @@ impl SymbolsTableCaseDependent {
             .update_symbol_to_value(self.normalize_symbol(symbol), value)
     }
 
-    pub fn value<S: AsRef<str>>(&self, symbol: S) -> Option<i32> {
+    pub fn value<S: AsRef<str>>(&self, symbol: S) -> Option<&Symbol> {
         self.table.value(self.normalize_symbol(symbol))
     }
+
+    pub fn int_value<S: AsRef<str>>(&self, symbol: S) -> Option<i32> {
+        self.table.int_value(self.normalize_symbol(symbol))
+    }
+
+    pub fn macro_value<S: AsRef<str>>(&self, symbol: S) -> Option<&Macro> {
+        self.table.macro_value(self.normalize_symbol(symbol))
+    }
+
 
     pub fn remove_symbol<S: AsRef<str>>(&mut self, symbol: S) -> Option<Symbol> {
         self.table.remove_symbol(self.normalize_symbol(symbol))

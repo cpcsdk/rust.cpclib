@@ -13,6 +13,14 @@ use failure::Fail;
 #[allow(missing_docs)]
 pub enum AssemblerError {
 
+    #[fail(display = "Several errors arised: {:?}", errors)]
+    MultipleErrors{
+        errors: Vec<AssemblerError>
+    },
+
+    #[fail(display = "{} cannot be empty.", 0)]
+    EmptyBinaryFile(String),
+
     #[fail(display = "Amsdos error: {}", error)]
     AmsdosError {error: AmsdosError},
 
@@ -53,6 +61,12 @@ pub enum AssemblerError {
     UnknownSymbol {
         symbol: String,
         closest: Option<String>,
+    },
+
+    #[fail(display = "Symbol {} is not a {}", symbol, isnot)]
+    WrongSymbolType {
+        symbol: String,
+        isnot: String
     },
 
     #[fail(display = "IO error: {}", msg)]

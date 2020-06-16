@@ -142,6 +142,7 @@ impl TokenExt for Token {
     /// Modify the few tokens that need to read files
     /// TODO refactor file reading of filename search
     fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
+
         match self {
             Token::Include(ref fname, ref mut listing) if listing.is_none() => {
                 match ctx.get_path_for(fname) {
@@ -199,6 +200,11 @@ impl TokenExt for Token {
                                 unimplemented!("Need to implement exomizer crunching")
                             }
                             BinaryTransformation::Lz49 => {
+
+                                if data.len() == 0 {
+                                    return Err(AssemblerError::EmptyBinaryFile(fname.to_string_lossy().to_string()))
+                                }
+
                                 let crunched = crate::crunchers::lz49::lz49_encode_legacy(&data);
                                 content.replace(crunched);
                             }

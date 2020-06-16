@@ -21,6 +21,8 @@ use std::str::FromStr;
 use crate::preamble::*;
 use cpclib_sna::parse::*;
 
+use rayon::prelude::*;
+ 
 /// ...
 pub mod error_code {
     /// ...
@@ -32,6 +34,7 @@ pub mod error_code {
 }
 
 /// Context information that can guide the parser
+/// TODO add assembling flags
 #[derive(Default, Clone, Debug)]
 pub struct ParserContext {
     /// Filename that is currently parsed
@@ -111,11 +114,10 @@ const FORBIDDEN_MACRO_NAMES: &[&str] = &[
 pub fn parse_str_with_context(code: &str, ctx: &ParserContext) -> Result<Listing, AssemblerError> {
     match parse_z80_code(code.into()) {
         Err(e) => Err(AssemblerError::SyntaxError {
-            error: format!("Error while parsing: {:?}", e),
+            error: format!("Error while parsing: {:?}", e), //TODO add context
         }),
         Ok((remaining, mut parsed)) => {
             if remaining.len() > 0 {
-                eprintln!("{:?}", parsed);
                 Err(AssemblerError::BugInParser {
                     error: format!(
                         "Bug in the parser. The remaining source has not been assembled:\n{}",
@@ -124,9 +126,26 @@ pub fn parse_str_with_context(code: &str, ctx: &ParserContext) -> Result<Listing
                     context: ctx.clone(),
                 })
             } else {
-                for token in parsed.listing_mut().iter_mut() {
-                    token.read_referenced_file(ctx)?;
+                let errors = parsed.listing_mut()./*par_*/iter_mut()
+                .map(|token|
+                    token.read_referenced_file(ctx)
+                ).filter(
+                    Result::is_err
+                )
+                .map(
+                    Result::err
+                )
+                .map(
+                    Option::unwrap
+                )
+                .collect::<Vec<_>>();
+                
+                if errors.len() > 0 {
+                    return Err(AssemblerError::MultipleErrors{
+                        errors
+                    })
                 }
+
                 Ok(parsed)
             }
         }
