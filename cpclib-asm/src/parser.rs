@@ -632,26 +632,35 @@ pub fn parse_noarg_directive(input: &str) -> IResult<&str, Token> {
     ))(input)
 }
 
-const IF_CODE: u8 = 0;
-const IFNOT_CODE: u8 = 1;
-const IFDEF_CODE: u8 = 2;
-const IFNDEF_CODE: u8 = 4;
+#[derive(Clone, Copy, Debug)]
+enum KindOfConditional {
+    If,
+    IfNot,
+    IfDef,
+    IfNdef
+}
+
 
 /// Parse if expression.TODO finish the implementation in order to have ELSEIF and ELSE branches"
 pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
     // Gest the kind of test to do
     let (input, test_kind) = alt((
-        value(IF_CODE, parse_instr("IF")),
-        value(IFNOT_CODE, parse_instr("IFNOT")),
-        value(IFDEF_CODE, parse_instr("IFDEF")),
-        value(IFNDEF_CODE, parse_instr("IFNDEF")),
+        value(KindOfConditional::If, parse_instr("IF")),
+        value(KindOfConditional::IfNot, parse_instr("IFNOT")),
+        value(KindOfConditional::IfDef, parse_instr("IFDEF")),
+        value(KindOfConditional::IfNdef, parse_instr("IFNDEF")),
     ))(input)?;
 
+
     // Get the corresponding test
-    let (input, cond) = delimited(
-        space0, 
-        parse_conditional_condition(test_kind), 
-        space0)
+    let (input, cond) = cut(context(
+            "Condition error",
+
+            delimited(
+            space0, 
+            parse_conditional_condition(test_kind), 
+            space0))
+        )
     (input)?;
 
     let (input, _) = alt((line_ending, tag(":")))(input)?;
@@ -679,16 +688,16 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
 }
 
 /// Read the condition part in the parse_conditional macro
-fn parse_conditional_condition(code: u8) -> impl Fn(&str) -> IResult<&str, TestKind> {
+fn parse_conditional_condition(code: KindOfConditional) -> impl Fn(&str) -> IResult<&str, TestKind> {
     move |input: &str| -> IResult<&str, TestKind> {
-        match code {
-            IF_CODE => map(expr, |e| TestKind::True(e))(input),
+        match &code {
+            KindOfConditional::If => map(expr, |e| TestKind::True(e))(input),
 
-            IFNOT_CODE => map(expr, |e| TestKind::False(e))(input),
+            KindOfConditional::IfNot => map(expr, |e| TestKind::False(e))(input),
 
-            IFDEF_CODE => map(parse_label(false), |l| TestKind::LabelExists(l))(input),
+            KindOfConditional::IfDef => map(parse_label(false), |l| TestKind::LabelExists(l))(input),
 
-            IFNDEF_CODE => map(parse_label(false), |l| TestKind::LabelDoesNotExist(l))(input),
+            KindOfConditional::IfNdef => map(parse_label(false), |l| TestKind::LabelDoesNotExist(l))(input),
 
             _ => unreachable!(),
         }
@@ -1512,19 +1521,25 @@ pub fn parse_register_iy(input: &str) -> IResult<&str, DataAccess> {
 
 // TODO find a way to not use that
 macro_rules! parse_any_indexregister8 {
-    ($($reg:ident)*) => {$(
+    ($($reg:ident, $alias:ident)*) => {$(
         paste::item_with_macros! {
             /// Parse register $reg
             pub fn [<parse_register_ $reg:lower>] (input: &str) -> IResult<&str, DataAccess> {
                 value(
                     DataAccess::IndexRegister8(IndexRegister8::$reg),
-                    tuple((tag_no_case( stringify!($reg)), not(alphanumeric1)))
+                    tuple((
+                        alt((
+                            tag_no_case( stringify!($reg)),
+                            tag_no_case( stringify!($alias))
+                        ))
+                    
+                    , not(alphanumeric1)))
                 )(input)
             }
         }
     )*}
 }
-parse_any_indexregister8!(Ixh Ixl Iyh Iyl);
+parse_any_indexregister8!(Ixh,hx Ixl,lx Iyh,hy Iyl,ly);
 
 /// Parse and indexed register in 8bits
 pub fn parse_indexregister8(input: &str) -> IResult<&str, DataAccess> {
@@ -1762,7 +1777,7 @@ pub fn parse_label(doubledots: bool) -> impl Fn(&str) -> IResult<&str, String> {
     move |input: &str| {
         // Get the label
 
-        let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.")(input)?;
+        let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._")(input)?;
         let (input, middle) =
             is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")(input)?;
 
@@ -2074,16 +2089,31 @@ mod test {
         else");
         assert!(res.is_ok());
 
-        let res = parse_conditional_condition(IF_CODE)("THING");
+        let res = parse_conditional_condition(KindOfConditional::If)("THING");
         assert!(res.is_ok());
 
 
         let res = parse_conditional("if THING
         nop
         endif");
-
-        println!("{:?}", res);
         assert!(res.is_ok());
+        assert_eq!("", res.unwrap().0);
+
+        let res = parse_conditional("if THING
+        nop
+        else
+        nop
+        endif");
+        assert!(res.is_ok());
+        assert_eq!("", res.unwrap().0);
+
+        let res = parse_conditional("ifndef THING
+        nop
+        else
+        nop
+        endif");
+        assert!(res.is_ok());
+        assert_eq!("", res.unwrap().0);
 
     }
 
@@ -2091,6 +2121,11 @@ mod test {
     fn parse_indexregister8() {
         assert_eq!(
             parse_register_ixl("ixl"),
+            Ok(("", DataAccess::IndexRegister8(IndexRegister8::Ixl)))
+        );
+
+        assert_eq!(
+            parse_register_ixl("lx"),
             Ok(("", DataAccess::IndexRegister8(IndexRegister8::Ixl)))
         );
 
