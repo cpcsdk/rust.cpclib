@@ -291,10 +291,10 @@ impl AmsdosFileName {
 }
 
 // TODO use tryfrom asap
-impl<S: AsRef<str>> From<S> for AmsdosFileName {
+impl TryFrom<&str> for AmsdosFileName {
+    type Error = String;
     /// Make a filename conversion by considering the following format is used: user:name.extension
-    fn from(content: S) -> Self {
-        let content = content.as_ref();
+    fn try_from(content: &str) -> Result<Self, Self::Error> {
         let (user, rest) = match content.find(':') {
             None => (0, content),
             Some(1) => (
@@ -309,7 +309,7 @@ impl<S: AsRef<str>> From<S> for AmsdosFileName {
             Some(idx) => (&rest[..idx], &rest[(idx + 1)..]),
         };
 
-        Self::new_correct_case(user, filename, extension).unwrap()
+        Self::new_correct_case(user, filename, extension)
     }
 }
 
