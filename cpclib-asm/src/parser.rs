@@ -748,9 +748,19 @@ pub fn parse_breakpoint(input: &str) -> IResult<&str, Token> {
 }
 
 pub fn parse_run(input: &str) -> IResult<&str, Token> {
-    map(preceded(tag_no_case("RUN"), expr), |exp| {
-        Token::Run(exp, None)
-    })(input)
+    let (input, exp) = preceded(tag_no_case("RUN"), expr)(input)?;
+    let (input, ga) = opt(
+        preceded(
+            tuple((
+                space0,
+                char(','),
+                space0
+            )),
+            expr
+        )
+    )(input)?;
+
+    Ok((input, Token::Run(exp, ga)))
 }
 
 /// Parse tickin directives
@@ -1843,8 +1853,24 @@ pub fn parse_label(doubledots: bool) -> impl Fn(&str) -> IResult<&str, String> {
             Ok((input, label))
         }
     }
-
 }
+
+pub fn prefixed_label_expr(input: &str) -> IResult<&str, Expr> {
+    let (input, prefix) = alt((
+        value(LabelPrefix::Bank, tag_no_case("{bank}")),
+        value(LabelPrefix::Page, tag_no_case("{page}")),
+        value(LabelPrefix::Pageset, tag_no_case("{pageset}")),
+    ))(input)?;
+    let (input, label) = preceded(
+        space0, 
+        alt((
+            parse_label(false),
+            map( tag_no_case("$"), |s:&str| s.to_string())
+        ))
+    )(input)?;
+
+    Ok((input, Expr::PrefixedLabel(prefix, label)))
+} 
 
 /*
 /// Parse an ASM file an returns the stream of tokens.
@@ -1900,6 +1926,8 @@ pub fn factor(input: &str) -> IResult<&str, Expr> {
                 |_x| Expr::Label(String::from("$"))
             ),
             
+            prefixed_label_expr,
+
             // manage labels
             map(
                 parse_label(false),
