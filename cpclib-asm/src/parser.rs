@@ -275,8 +275,20 @@ pub fn parse_rorg(input: &str) -> IResult<&str, Token> {
 pub fn parse_macro(input: &str) -> IResult<&str, Token> {
     let (input, _) = delimited(space0, tag_no_case("MACRO"), space1)(input)?;
 
+    // macro name
     let (input, name) = parse_label(false)(input)?; // TODO use a specific function for that
-                                             // TODO treat args
+
+    // macro arguments
+    let (input, arguments) = opt(
+        preceded(
+            tuple((space0, char(','),space0)),
+            separated_nonempty_list(
+                tuple((space0, char(','), space0)),
+                /*parse_label(false)*/
+                take_till(|c| c == '\n' || c == ':')
+            )
+        )
+    )(input)?;
 
     let (input, content) = preceded(space0, many_till(take(1usize), tag_no_case("ENDM")))(input)?;
 
@@ -284,7 +296,12 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token> {
         input,
         Token::Macro(
             name,
-            Vec::new(),
+            if arguments.is_some() {
+                arguments.unwrap().iter().map(|s|s.to_string()).collect::<Vec<String>>()
+            }
+            else {
+                Vec::new()
+            },
             content
                 .0
                 .iter()
@@ -966,11 +983,20 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token> {
         )))
     } else {
         let (input, args) = opt(alt((
-            expr_list,
+            /*expr_list,  */ // initially a list of expression was used; now it is just plain strings
+            separated_nonempty_list(
+                tuple((tag(","), space0)), 
+                take_till(|c| c==',' || c=='\n')
+            ), 
             map(tag_no_case("(void)"), { |_| Vec::new() }),
         )))(input)?;
 
-        Ok((input, Token::MacroCall(name, args.unwrap_or_default())))
+        Ok((input, Token::MacroCall(
+            name, 
+            args.unwrap_or_default().iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
+        )))
     }
 }
 

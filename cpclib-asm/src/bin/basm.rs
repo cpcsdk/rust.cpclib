@@ -135,11 +135,14 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
             println!("{}", PrintableListing::from(&Listing::from(env.produced_bytes().as_ref())));
         }
         else {
+            use std::convert::TryFrom;
+
+
             let pc_filename = matches.value_of("OUTPUT").unwrap();
-            let amsdos_filename = AmsdosFileName::from(pc_filename);
+            let amsdos_filename = AmsdosFileName::try_from(pc_filename);
 
             // Raise an error if the filename is not compatible with the header
-            if matches.is_present("HEADER") && !amsdos_filename.is_valid() {
+            if matches.is_present("HEADER") && amsdos_filename.is_err() {
                 return Err(BasmError::InvalidAmsdosFilename {
                     filename: pc_filename.to_string(),
                 });
@@ -149,7 +152,7 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
             // Compute the headers if needed
             let header = if matches.is_present("BINARY_HEADER") {
                 AmsdosManager::compute_binary_header(
-                    &amsdos_filename,
+                    &amsdos_filename.unwrap(),
                     env.loading_address().unwrap() as u16,
                     env.execution_address().unwrap() as u16,
                     &binary,
@@ -157,7 +160,7 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
                 .as_bytes()
                 .to_vec()
             } else if matches.is_present("BASIC_HEADER") {
-                AmsdosManager::compute_basic_header(&amsdos_filename, &binary)
+                AmsdosManager::compute_basic_header(&amsdos_filename.unwrap(), &binary)
                     .as_bytes()
                     .to_vec()
             } else {

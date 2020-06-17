@@ -188,10 +188,25 @@ impl TokenExt for Token {
                         let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
                             msg: format!("Unable to open {:?}", fname),
                         })?;
-                        let mut data = Vec::new();
-                        f.read_to_end(&mut data)
-                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
 
+
+                        use std::io::{Seek, SeekFrom};
+                        if offset.is_some() {
+                            f.seek(SeekFrom::Start(offset.as_ref().unwrap().eval()? as _)); // TODO use the symbol table for that
+                        }
+
+                        let mut data = Vec::new();
+
+                        if length.is_some() {
+                            let mut f = f.take(length.as_ref().unwrap().eval()? as _);
+                            f.read_to_end(&mut data)
+                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+                        }
+                        else {
+                            f.read_to_end(&mut data)
+                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+                        };
+                        
                         match transformation {
                             BinaryTransformation::None => {
                                 content.replace(data);

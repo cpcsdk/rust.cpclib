@@ -118,6 +118,9 @@ pub fn assemble_to_amsdos_file(
     code: &str,
     amsdos_filename: &str
 ) ->  Result<AmsdosFile, AssemblerError> {
+    use std::convert::TryFrom;
+
+    let amsdos_filename = AmsdosFileName::try_from(amsdos_filename)?;
 
     let tokens = parser::parse_str(code)?;
     let options = AssemblingOptions::default();
@@ -126,7 +129,7 @@ pub fn assemble_to_amsdos_file(
 
 
     Ok(AmsdosFile::binary_file_from_buffer(
-        &AmsdosFileName::from(amsdos_filename), 
+        &amsdos_filename, 
         env.loading_address().unwrap() as  u16, 
         env.execution_address().unwrap() as u16, 
         &env.produced_bytes()

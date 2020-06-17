@@ -357,7 +357,7 @@ pub enum Token {
     List,
 
     Macro(String, Vec<String>, String), // Content of the macro is parsed on use
-    MacroCall(String, Vec<Expr>), // String are used in order to not be limited to expression and allow opcode/registers use
+    MacroCall(String, Vec<String>), // String are used in order to not be limited to expression and allow opcode/registers use
 
     NoList,
 

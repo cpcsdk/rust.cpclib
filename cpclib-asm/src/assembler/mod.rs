@@ -565,7 +565,7 @@ impl Env {
     }
 
     pub fn visit_macro(&mut self, name: &str, arguments: &[String], code: &str) -> Result<(), AssemblerError> {
-        if self.symbols().contains_symbol(name) {
+        if self.pass.is_first_pass() && self.symbols().contains_symbol(name) {
             return Err(
                 AssemblerError::SymbolAlreadyExists{symbol: name.to_owned()}
             );
@@ -581,6 +581,40 @@ impl Env {
         );
         Ok(())
     } 
+
+    pub fn visit_call_macro(&mut self, name: &str, parameters: &[String]) -> Result<(), AssemblerError> {
+
+
+        let r#macro = self.symbols().macro_value(name);
+        if r#macro.is_none() {                                           
+            return Err(AssemblerError::UnknownMacro{symbol: name.to_owned()});
+        }
+        let r#macro = r#macro.unwrap();
+
+
+
+        if r#macro.nb_args() != parameters.len() {
+            return Err(AssemblerError::WrongNumberOfParameters{
+                symbol: name.to_owned(),
+                nb_paramers: parameters.len(),
+                nb_arguments: r#macro.nb_args()
+            });
+        }
+
+        let mut code = r#macro.code().to_string();
+        for (parameter, value) in r#macro.args().iter().zip(parameters.iter()) {
+            let parameter = format!("{{{}}}", parameter); // {parameter}
+            code = code.replace(&parameter, value); // todo find a way to optimize this slow part that does tons of copies
+        }
+
+        // Tokenize with the same assembling parameters and context
+        let listing = Listing::from_str(&code)?;
+        self.visit_listing(&listing)?;
+
+        Ok(())
+
+
+    }
 
     /// Remove the given variable from the table of symbols
     pub fn visit_undef(&mut self, label: &str) -> Result<(), AssemblerError> {
@@ -738,6 +772,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
         Token::Macro(name, arguments, code) => env.visit_macro(name, arguments, code),
+        Token::MacroCall(name, parameters) => env.visit_call_macro(name, parameters),
         _ => panic!("Not treated {:?}", token),
     }
 }
@@ -746,8 +781,28 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> Result<(), A
     if env.pass.is_second_pass() {
         let value = env.resolve_expr_must_never_fail(exp)?;
         if value == 0 {
+
+            let symbols = env.symbols();
+            let oper = |left: &Expr, right: &Expr, oper: &str| -> String {
+                let res_left = left.resolve(symbols).unwrap();
+                let res_right = right.resolve(symbols).unwrap();
+    
+                format!("[{} {} {}] ", res_left, oper, res_right) +
+                &format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right) 
+            };
+
+
+            let prefix = match exp {
+                Expr::Equal(ref left, ref right) => oper(left, right, "=="),
+                Expr::LowerOrEqual(ref left, ref right) => oper(left, right, "<="),
+                Expr::GreaterOrEqual(ref left, ref right) => oper(left, right, ">="),
+                Expr::StrictlyGreater(ref left, ref right) => oper(left, right, ">"),
+                Expr::StrictlyLower(ref left, ref right) => oper(left, right, "<"),
+                _ => "".to_string()
+            };
+
             return Err(AssemblerError::AssertionFailed {
-                msg: (if txt.is_some() { &txt.unwrap() } else { "" }).to_owned(),
+                msg: prefix + if txt.is_some() { &txt.unwrap() } else { ""},
                 test: exp.to_string(),
             });
         }

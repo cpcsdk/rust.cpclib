@@ -29,6 +29,18 @@ impl Macro {
             code
         }
     }
+
+    pub fn code(&self) -> &str  {
+        self.code.as_ref()
+    }
+
+    pub fn args(&self) -> &[String] {
+        &self.args
+    }
+
+    pub fn nb_args(&self) -> usize {
+        self.args.len()
+    }
 }
 // TODO rename as Value !! The symbol is the key
 #[derive(Debug, Clone)]
@@ -225,13 +237,6 @@ impl SymbolsTableCaseDependent {
         } else {
             symbol.as_ref().to_uppercase()
         };
-
-        eprintln!(
-            "[{}] {:?} => {:?} ",
-            self.case_sensitive,
-            symbol.as_ref(),
-            new
-        );
 
         new
     }
