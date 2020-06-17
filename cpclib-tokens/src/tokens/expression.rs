@@ -4,10 +4,31 @@ use std::fmt::{Debug, Display, Formatter};
 use crate::tokens::listing::ListingElement;
 use crate::tokens::Token;
 
+#[derive(Clone, Copy, PartialEq, Eq,Debug)]
+pub enum LabelPrefix {
+        Bank,
+        Page,
+        Pageset
+}
+
+impl Display for LabelPrefix {
+    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
+        let repr :&'static str  = match self {
+            Self::Bank => "{bank}",
+            Self::Page => "{page}",
+            Self::Pageset => "{pageset}",
+
+        };
+        write!(format, "{}", repr)
+    }
+}
+
+
 /// Expression nodes.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[allow(missing_docs)]
 pub enum Expr {
+
 
     /// Only used for disassembled code
     RelativeDelta(i8),
@@ -18,6 +39,8 @@ pub enum Expr {
     String(String),
     /// Label
     Label(String),
+    /// Label with a prefix
+    PrefixedLabel(LabelPrefix, String),
 
         /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
         Duration(Box<Token>), // TODO move in a token function stuff
@@ -142,6 +165,9 @@ impl From<Expr> for FormattedExpr {
         Self::Raw(e)
     }
 }
+
+
+
 
 
 /// Represent a function with one argument
@@ -298,6 +324,7 @@ impl Display for Expr {
             &Value(val) => write!(format, "0x{:x}", val),
             &String(ref string) => write!(format, "\"{}\"", string),
             &Label(ref label) => write!(format, "{}", label),
+            PrefixedLabel(prefix, label) => write!(format, "{}{}", prefix, label),
 
             UnaryFunction(func, arg) => {
                 write!(format, "{}({})", func, arg)

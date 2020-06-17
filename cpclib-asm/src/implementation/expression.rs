@@ -87,6 +87,9 @@ impl ExprEvaluationExt for Expr {
                 }),
             },
 
+
+            PrefixedLabel(ref prefix, ref label) => unimplemented!("Need to add management of the prefix. Not sur the symbol table fits this purpose"),
+
             Duration(ref token) => {
                 let duration = token.estimated_duration()?;
                 let duration = duration as i32;
