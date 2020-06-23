@@ -285,6 +285,11 @@ fn main() {
                     )
 					.get_matches();
 
-    process(&matches).expect("Error while assembling file.");
+    match process(&matches) {
+        Ok(_) => {},
+        Err(e) => {
+            eprintln!("Error while assembling.\n{}", e);
+        }
+    }
 }
 

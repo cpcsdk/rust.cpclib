@@ -6,7 +6,7 @@ fn lz49_encode_extended_length(odata: &mut Vec<u8>,  mut length: usize)
 
 	while length>=255 {
 		odata.push(0xFF);
-		length-=255;
+		length -= 255;
 	}
 	/* if the last value is 255 we must encode 0 to end extended length */
 	/*if (length==0) rasm_printf(ae,"bugfixed!\n");*/
@@ -21,26 +21,23 @@ fn lz49_encode_block(
 	mut offset: usize, 
 	maxlength: usize)
 {
-	let first_idx = odata.len()-1; // by construction is >0
 	odata.push(0x00); // Will be overriden at the very last instruction
-
-
-	let mut token=0;
+	let first_idx = odata.len()-1; // by construction is >0
 
 	if/*offset<0 ||*/ offset>511 {
 		panic!("internal offset error!\n");
 	}
 	
-	if literalcpt<7 {
-		token=literalcpt<<4; 
+	let mut token = if literalcpt<7 {
+		literalcpt<<4 
 	} else {
-		token=0x70;
-		lz49_encode_extended_length(odata, literalcpt-7);
-	}
+		lz49_encode_extended_length(odata, literalcpt-7);	
+		0x70
+	};
 
 	for i in 0..literalcpt {
 		odata.push(data[literaloffset]);
-		literaloffset +=1;
+		literaloffset += 1;
 	}
 
 	if maxlength<18 {
@@ -50,13 +47,13 @@ fn lz49_encode_block(
 			/* endoffset has no length */
 		}
 	} else {
-		token|=0xF;
-		lz49_encode_extended_length(odata,maxlength-18);
+		token |= 0xF;
+		lz49_encode_extended_length(odata, maxlength-18);
 	}
 
 	if offset>255 {
-		token|=0x80;
-		offset-=256;
+		token |= 0x80;
+		offset -= 256;
 	}	
 	if offset != 0 {
 		odata.push((offset-1) as u8);
@@ -77,7 +74,6 @@ pub fn lz49_encode_legacy(data: &[u8]) -> Vec<u8>
 
 	let length = data.len();
 
-	let mut current=1;
 	let mut token;
 
 
@@ -88,10 +84,12 @@ pub fn lz49_encode_legacy(data: &[u8]) -> Vec<u8>
 	odata.reserve(data.len() + data.len()/2 +10);
 	
 	/* first byte always literal */
-	odata.push(data[0]);
+	let mut current=0;
+	odata.push(data[current]);
+	current += 1;
 
 	/* force short data encoding */
-	if (length<5) {
+	if length<5 {
 		token=(length-1)<<4;
 		odata.push(token as u8);
 		for _i in 1..length {
@@ -112,27 +110,21 @@ pub fn lz49_encode_legacy(data: &[u8]) -> Vec<u8>
 			startscan as usize
 		};
 
-		let mut matchlength;
-		let mut curscan;
 		let mut maxoffset=0;
 
 
 		while startscan<current {
-			matchlength = 0;
-			curscan = current;
-			{
+			let matchlength = {
+				let mut matchlength = 0;
 				let mut i = startscan;
-				while curscan<length {
-					if data[i] == data[curscan] {
+				let mut curscan = current; 
+				while curscan<length && data[i] == data[curscan] {
 						curscan += 1;
 						matchlength += 1;
-					} else {
-						curscan += 1;
-						break;
-					}
-					i += 1;
+						i += 1;
 				}
-			}
+				matchlength
+			};
 
 			{
 				if matchlength>=3 && matchlength>maxlength {
@@ -142,22 +134,25 @@ pub fn lz49_encode_legacy(data: &[u8]) -> Vec<u8>
 			}
 			startscan += 1;
 		}
+
 		if maxlength != 0 {
 			lz49_encode_block(
-				&mut odata, data, 
+				&mut odata, 
+				data, 
 				literaloffset,
 				literal,
 				current-maxoffset,
 				maxlength
 			);
-			current+=maxlength;
-			literaloffset=current;
-			literal=0;
+			current += maxlength;
+			literaloffset = current;
+			literal = 0;
 		} else {
 			literal+=1;
 			current+=1;
 		}
 	}
+
 	lz49_encode_block(
 		&mut odata,
 		data,
