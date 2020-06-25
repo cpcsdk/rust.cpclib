@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 use crate::flags::{SnapshotFlag, FlagValue};
 
-pub fn parse_flag(input:&str) -> IResult<&str, SnapshotFlag> {
+pub fn parse_flag(input:&str) -> IResult<&str, SnapshotFlag, VerboseError<&str>> {
 
 	let (input, word) = is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:")(input)?;
 
@@ -28,7 +28,7 @@ pub fn parse_flag(input:&str) -> IResult<&str, SnapshotFlag> {
 }
 
 
-pub fn parse_flag_value(input: &str) -> IResult<&str, FlagValue> {
+pub fn parse_flag_value(input: &str) -> IResult<&str, FlagValue, VerboseError<&str>> {
 	alt((
 	map(
 		parse_value,
@@ -65,20 +65,20 @@ pub fn parse_flag_value(input: &str) -> IResult<&str, FlagValue> {
 
 
 /// Read a value
-fn parse_value(input: &str) -> IResult<&str, u16> {
+fn parse_value(input: &str) -> IResult<&str, u16, VerboseError<&str>> {
     alt((hex_number, dec_number, bin_u16))(input)
 }
 
 /// TODO : move in a cpclib_parsecommon crate
 /// Read an hexadecimal value
-pub fn hex_number(input: &str) -> IResult<&str, u16> {
+pub fn hex_number(input: &str) -> IResult<&str, u16,VerboseError<&str>> {
     preceded(alt((tag_no_case("0x"), tag("#"), tag("&"))), inner_hex)(input)
 }
 
 
 #[inline]
 /// Parse an usigned 16 bit number
-pub fn dec_number(input: &str) -> IResult<&str, u16> {
+pub fn dec_number(input: &str) -> IResult<&str, u16, VerboseError<&str>> {
     match is_a("0123456789")(input) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
@@ -106,7 +106,7 @@ pub fn dec_number(input: &str) -> IResult<&str, u16> {
 }
 
 /// Read an hexidecimal value
-pub fn inner_hex(input: &str) -> IResult<&str, u16> {
+pub fn inner_hex(input: &str) -> IResult<&str, u16, VerboseError<&str>> {
     match is_a("0123456789abcdefABCDEF")(input) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
@@ -131,7 +131,7 @@ pub fn inner_hex(input: &str) -> IResult<&str, u16> {
 }
 
 /// Parse a binary number
-pub fn bin_u16(input: &str) -> IResult<&str, u16> {
+pub fn bin_u16(input: &str) -> IResult<&str, u16, VerboseError<&str>> {
     preceded(
         alt((tag_no_case("0b"), tag_no_case("%"))),
         fold_many1(

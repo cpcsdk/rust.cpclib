@@ -152,12 +152,34 @@ impl TokenExt for Token {
                         });
                     }
                     Some(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
-                            msg: format!("Unable to open {:?}", fname),
+                        let mut f = File::open(&fname).map_err(|e| AssemblerError::IOError {
+                            msg: format!("Unable to open {:?}. {}", fname, e),
                         })?;
-                        let mut content = String::new();
-                        f.read_to_string(&mut content)
-                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+
+
+                        let mut content = Vec::new();
+                        f.read_to_end(&mut content)
+                            .map_err(|e| 
+                                AssemblerError::IOError { 
+                                    msg: format!("Unable to read {:?}. {}", fname, e.to_string())
+                        })?;
+
+                        let result = chardet::detect(&content);
+                        let coder = encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
+
+                        let content = match coder {
+                            Some(coder) => {
+                                let utf8reader = coder.decode(
+                                    &content, 
+                                    encoding::DecoderTrap::Ignore)
+                                    .expect("Error");
+                                utf8reader.to_string()
+                            },
+                            None => {
+                            return Err(AssemblerError::IOError { 
+                                msg: format!("Encoding error for {:?}.", fname)});
+                            }
+                        };
 
                         let mut new_ctx = ctx.clone();
                         new_ctx.set_current_filename(fname);
@@ -200,12 +222,20 @@ impl TokenExt for Token {
                         if length.is_some() {
                             let mut f = f.take(length.as_ref().unwrap().eval()? as _);
                             f.read_to_end(&mut data)
-                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
+                                .map_err(|e| 
+                                    AssemblerError::IOError {
+                                        msg: format!("Unable to read {:?}. {}", fname, e)
+                                    }
+                                )?;
                         }
                         else {
                             f.read_to_end(&mut data)
-                            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?;
-                        };
+                            .map_err(|e| 
+                                AssemblerError::IOError { 
+                                    msg: format!("Unable to read {:?}. {}", fname, e.to_string())
+                        })?;
+                    };
+                        
                         
                         match transformation {
                             BinaryTransformation::None => {

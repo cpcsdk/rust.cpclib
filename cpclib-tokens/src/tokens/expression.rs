@@ -64,6 +64,7 @@ pub enum Expr {
 
     // Boolean operations
     Equal(Box<Expr>, Box<Expr>),
+    Different(Box<Expr>, Box<Expr>),
     LowerOrEqual(Box<Expr>, Box<Expr>),
     GreaterOrEqual(Box<Expr>, Box<Expr>),
     StrictlyGreater(Box<Expr>, Box<Expr>),
@@ -288,6 +289,7 @@ pub enum Oper {
     GreaterOrEqual,
     StrictlyGreater,
     StrictlyLower,
+    Different
 }
 
 impl Display for Oper {
@@ -306,6 +308,7 @@ impl Display for Oper {
             BinaryXor => write!(format, "^"),
 
             &Equal => write!(format, "=="),
+            &Different => write!(format, "!="),
             &LowerOrEqual => write!(format, "<="),
             &GreaterOrEqual => write!(format, ">="),
             &StrictlyGreater => write!(format, ">"),
@@ -358,6 +361,7 @@ impl Display for Expr {
 
             &Paren(ref expr) => write!(format, "({})", expr),
 
+            &Different(ref left, ref right) => write!(format, "{} != {}", left, right),
             &Equal(ref left, ref right) => write!(format, "{} == {}", left, right),
             &GreaterOrEqual(ref left, ref right) => write!(format, "{} >= {}", left, right),
             &StrictlyGreater(ref left, ref right) => write!(format, "{} > {}", left, right),

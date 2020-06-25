@@ -7,13 +7,13 @@ use nom::bytes::complete::*;
 use nom::character::complete::*;
 use nom::combinator::*;
 use nom::error::*;
+use nom::multi::separated_nonempty_list;
 use nom::multi::*;
 use nom::sequence::*;
-use nom::multi::separated_nonempty_list;
 
+use either::*;
 #[allow(missing_docs)]
 use nom::*;
-use either::*;
 use std::path::PathBuf;
 
 use std::str::FromStr;
@@ -22,7 +22,6 @@ use crate::preamble::*;
 use cpclib_sna::parse::*;
 
 use rayon::prelude::*;
- 
 /// ...
 pub mod error_code {
     /// ...
@@ -47,10 +46,7 @@ pub struct ParserContext {
 impl ParserContext {
     pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
         let file = file.into();
-        self.current_filename = Some(
-            file.canonicalize()
-                .unwrap_or(file)
-        )
+        self.current_filename = Some(file.canonicalize().unwrap_or(file))
     }
 
     /// Add a search path and ensure it is ABSOLUTE
@@ -60,14 +56,9 @@ impl ParserContext {
 
     /// Add the folder that contains the given file. Ignore if there are issues with the filename
     pub fn add_search_path_from_file<P: Into<PathBuf>>(&mut self, file: P) {
-        let path = file
-            .into()
-            .canonicalize();
+        let path = file.into().canonicalize();
         if let Ok(path) = path {
-            let path = path
-                .parent()
-                .unwrap()
-                .to_owned();
+            let path = path.parent().unwrap().to_owned();
             self.add_search_path(path);
         }
     }
@@ -99,14 +90,22 @@ impl ParserContext {
     }
 }
 
-const FORBIDDEN_MACRO_NAMES: &[&str] = &[
+const FIRST_DIRECTIVE: &[&str] = &[
+    "IF", "IFDEF", "IFNDEF",
+    "REPEAT", "REPT", "REP",
+    "PHASE"
+];
+
+// This table is supposed to contain the keywords that finish a section
+const FINAL_DIRECTIVE: &[&str] = &[
+    "REND",
     "ENDR",
     "ENDREPEAT",
     "ENDREP", // repeat directive
     "DEPHASE",
     "REND",  // rorg directive
     "ENDIF", // if directive
-    "ELSE"
+    "ELSE",
 ];
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
@@ -139,11 +138,8 @@ pub fn parse_str_with_context(code: &str, ctx: &ParserContext) -> Result<Listing
                     Option::unwrap
                 )
                 .collect::<Vec<_>>();
-                
                 if errors.len() > 0 {
-                    return Err(AssemblerError::MultipleErrors{
-                        errors
-                    })
+                    return Err(AssemblerError::MultipleErrors { errors });
                 }
 
                 Ok(parsed)
@@ -184,7 +180,7 @@ where
 }
 
 /// Parse a complete code
-pub fn parse_z80_code(input: &str) -> IResult<&str, Listing> {
+pub fn parse_z80_code(input: &str) -> IResult<&str, Listing, VerboseError<&str>> {
     let (input, tokens) = my_many0(parse_z80_line)(input)?;
     if input.is_empty() {
         let mut res: Vec<Token> = Vec::new();
@@ -206,7 +202,7 @@ pub fn parse_z80_code(input: &str) -> IResult<&str, Listing> {
 /// // Mainly used for test
 /// This one is a workaround as still as the other is not fixed
 // RODO ASAP #[deprecated]
-pub fn parse_z80_str(code: &str) -> IResult<&str, Listing> {
+pub fn parse_z80_str(code: &str) -> IResult<&str, Listing, VerboseError<&str>> {
     let mut tokens = Vec::new();
     let mut rest = None;
     let src = "<str>";
@@ -229,24 +225,33 @@ pub fn parse_z80_str(code: &str) -> IResult<&str, Listing> {
 }
 
 /// Parse a single line of Z80. Code useing directive on several lines cannot work
-pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>> {
-    let (input2, tokens) = alt((
-        parse_empty_line,
-        map(parse_repeat, { |repeat| vec![repeat] }),
-        map(parse_macro, { |m| vec![m] }),
-        map(parse_basic, { |basic| vec![basic] }),
-        map(parse_rorg, { |rorg| vec![rorg] }),
-        map(preceded(space1, parse_conditional), { |cond| vec![cond] }),
-        parse_z80_line_label_only,
-        parse_z80_line_complete,
-    ))(input)?;
+pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
+    let (input2, tokens) = 
+    //tuple((
+       // not(parse_forbidden_keyword),
+        alt((
+            context("empty line", parse_empty_line),
+            context("repeat", map(parse_repeat, { |repeat| vec![repeat] })),
+            context("macro", map(parse_macro, { |m| vec![m] })),
+            context("basic", map(parse_basic, { |basic| vec![basic] })),
+            context("rorg", map(parse_rorg, { |rorg| vec![rorg] })),
+            context("condition", map(preceded(space1, parse_conditional), { |cond| vec![cond] })),
+            context("line with label only", parse_z80_line_label_only),
+            context("standard line", parse_z80_line_complete),
+        ))
+    //))
+    (input)?;
 
-    Ok((input2, tokens))
+    Ok((input2, std::dbg!(tokens)))
 }
 
 /// Workaround because many0 is not used in the main root function
-fn inner_code(input: &str) -> IResult<&str, Vec<Token>> {
-    map(many0(parse_z80_line), |tokens| {
+fn inner_code(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
+    map(
+        many0(
+            parse_z80_line
+        ), 
+        |tokens| {
         let mut inner: Vec<Token> = Vec::new();
         for group in &tokens {
             inner.extend_from_slice(&group);
@@ -256,7 +261,7 @@ fn inner_code(input: &str) -> IResult<&str, Vec<Token>> {
 }
 
 /// TODO
-pub fn parse_rorg(input: &str) -> IResult<&str, Token> {
+pub fn parse_rorg(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = space0(input)?;
     let (input, _) = alt((tag_no_case("PHASE"), tag_no_case("RORG")))(input)?;
 
@@ -272,23 +277,21 @@ pub fn parse_rorg(input: &str) -> IResult<&str, Token> {
 }
 
 /// TODO
-pub fn parse_macro(input: &str) -> IResult<&str, Token> {
+pub fn parse_macro(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = delimited(space0, tag_no_case("MACRO"), space1)(input)?;
 
     // macro name
     let (input, name) = parse_label(false)(input)?; // TODO use a specific function for that
 
     // macro arguments
-    let (input, arguments) = opt(
-        preceded(
-            tuple((space0, char(','),space0)),
-            separated_nonempty_list(
-                tuple((space0, char(','), space0)),
-                /*parse_label(false)*/
-                take_till(|c| c == '\n' || c == ':')
-            )
-        )
-    )(input)?;
+    let (input, arguments) = opt(preceded(
+        tuple((space0, char(','), space0)),
+        separated_nonempty_list(
+            tuple((space0, char(','), space0)),
+            /*parse_label(false)*/
+            take_till(|c| c == '\n' || c == ':'),
+        ),
+    ))(input)?;
 
     let (input, content) = preceded(space0, many_till(take(1usize), tag_no_case("ENDM")))(input)?;
 
@@ -297,9 +300,12 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token> {
         Token::Macro(
             name,
             if arguments.is_some() {
-                arguments.unwrap().iter().map(|s|s.to_string()).collect::<Vec<String>>()
-            }
-            else {
+                arguments
+                    .unwrap()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>()
+            } else {
                 Vec::new()
             },
             content
@@ -312,37 +318,40 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token> {
 }
 
 /// TODO
-pub fn parse_repeat(input: &str) -> IResult<&str, Token> {
-    let (input, _) = delimited(
+pub fn parse_repeat(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
+    let (input, _) = preceded(
         space0,
         alt((
-            tag_no_case("REPEAT"),
-            tag_no_case("REPT"),
-            tag_no_case("REP"),
-        )),
-        space1,
+            parse_instr("REPEAT"),
+            parse_instr("REPT"),
+            parse_instr("REP"),
+        ))
     )(input)?;
 
-    let (input, count) = expr(input)?;
+    eprintln!("rep");
 
-    let (input, inner) = inner_code(input)?;
+    let (input, count) = cut(context("repeat count", expr))(input)?;
 
-    let (input, _) = tuple((
+    let (input, inner) = cut(context("repeat content", inner_code))(input)?;
+
+    let (input, _) = cut(context("repeat closure", tuple((
         space0,
         alt((
-            tag_no_case("ENDREPEAT"),
-            tag_no_case("ENDREPT"),
-            tag_no_case("ENDREP"),
-            tag_no_case("ENDR"),
+            parse_instr("ENDREPEAT"),
+            parse_instr("ENDREPT"),
+            parse_instr("ENDREP"),
+            parse_instr("ENDR"),
+            parse_instr("REND"),
         )),
         space0,
-    ))(input)?;
+    ))))
+    (input)?;
 
     Ok((input, Token::Repeat(count, BaseListing::from(inner), None)))
 }
 
 /// TODO
-pub fn parse_basic(input: &str) -> IResult<&str, Token> {
+pub fn parse_basic(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tuple((space0, tag_no_case("LOCOMOTIVE"), space0))(input)?;
 
     let (input, args) = opt(separated_nonempty_list(
@@ -363,13 +372,16 @@ pub fn parse_basic(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse the instruction to hide basic lines
-pub fn parse_basic_hide_lines(input: &str) -> IResult<&str, Vec<u16>> {
+pub fn parse_basic_hide_lines(input: &str) -> IResult<&str, Vec<u16>, VerboseError<&str>> {
     let (input, _) = tuple((tag_no_case("HIDE_LINES"), space1))(input)?;
-    separated_nonempty_list(preceded(space0, char(',')), preceded(space0, dec_number))(input)
+    separated_nonempty_list(
+        preceded(space0, char(',')), 
+        preceded(space0, dec_number)
+    )(input)
 }
 
 /// TODO - currently consume several lines. Should do it only one time
-pub fn parse_empty_line(input: &str) -> IResult<&str, Vec<Token>> {
+pub fn parse_empty_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
     // let (input, _) = opt(line_ending)(input)?;
     let (input, comment) = delimited(space0, opt(comment), space0)(input)?;
     let (input, _) = alt((line_ending, eof))(input)?;
@@ -382,7 +394,7 @@ pub fn parse_empty_line(input: &str) -> IResult<&str, Vec<Token>> {
     Ok((input, res))
 }
 
-fn parse_single_token(first: bool) -> impl Fn(&str) -> IResult<&str, Token> {
+fn parse_single_token(first: bool) -> impl Fn(&str) -> IResult<&str, Token, VerboseError<&str>> {
     move |input: &str| {
         // Do not match ':' for the first case
         let input = if first {
@@ -399,7 +411,7 @@ fn parse_single_token(first: bool) -> impl Fn(&str) -> IResult<&str, Token> {
     }
 }
 
-fn eof(input: &str) -> IResult<&str, &str> {
+fn eof(input: &str) -> IResult<&str, &str, VerboseError<&str>> {
     if input.len() == 0 {
         Ok((input, input))
     } else {
@@ -409,13 +421,16 @@ fn eof(input: &str) -> IResult<&str, &str> {
 
 /// Parse a line
 /// TODO add an argument o manage cases like '... : ENDIF'
-pub fn parse_z80_line_complete(input: &str) -> IResult<&str, Vec<Token>> {
+pub fn parse_z80_line_complete(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
     // Eat previous line ending
     let (input, _) = opt(line_ending)(input)?;
 
     // Eat optional label
     let (input, label) = opt(parse_label(true))(input)?;
     let (input, _) = space1(input)?;
+
+    // First directive MUST not be the ned of a keyword
+    let (input, _) = not(parse_forbidden_keyword)(input)?;
 
     // Eat first token or directive
     let (input, opcode) = parse_single_token(true)(input)?;
@@ -456,7 +471,7 @@ pub fn parse_z80_line_complete(input: &str) -> IResult<&str, Vec<Token>> {
 /// No opcodes are expected there.
 /// Initially it was supposed to manage lines with only labels, however it has been extended
 /// to labels fallowed by specific commands.
-pub fn parse_z80_line_label_only(input: &str) -> IResult<&str, Vec<Token>> {
+pub fn parse_z80_line_label_only(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
     let (input, label) = preceded(opt(line_ending), parse_label(true))(input)?;
 
     // TODO make these stuff alternatives ...
@@ -488,7 +503,7 @@ pub fn parse_z80_line_label_only(input: &str) -> IResult<&str, Vec<Token>> {
 }
 
 /// Parser for file names in appropriate directives
-pub fn parse_fname(input: &str) -> IResult<&str, &str> {
+pub fn parse_fname(input: &str) -> IResult<&str, &str, VerboseError<&str>> {
     alt((
         preceded(tag("\""), terminated(take_until("\""), take(1usize))),
         preceded(tag("'"), terminated(take_until("'"), take(1usize))),
@@ -496,40 +511,33 @@ pub fn parse_fname(input: &str) -> IResult<&str, &str> {
 }
 
 /// Parser for the include directive
-pub fn parse_include(input: &str) -> IResult<&str, Token> {
+pub fn parse_include(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, fname) = preceded(tuple((tag_no_case("INCLUDE"), space1)), parse_fname)(input)?;
 
     Ok((input, Token::Include(fname.to_string(), None)))
 }
 
 /// Parse for the various binary include directives
-pub fn parse_incbin(input: &str) -> IResult<&str, Token> {
+pub fn parse_incbin(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, transformation) = alt((
-        map(
-            tag_no_case("INCBIN"), 
-            |_| BinaryTransformation::None 
-        ),
-        map(
-            tag_no_case("INCEXO"), 
-            |_| BinaryTransformation::Exomizer
-        ),
-        map(
-            tag_no_case("INCL49"), 
-            |_| BinaryTransformation::Lz49
-        ),
+        map(tag_no_case("INCBIN"), |_| BinaryTransformation::None),
+        map(tag_no_case("INCEXO"), |_| BinaryTransformation::Exomizer),
+        map(tag_no_case("INCL49"), |_| BinaryTransformation::Lz49),
     ))(input)?;
 
     let (input, fname) = preceded(space1, parse_fname)(input)?;
 
-    let(input, offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
-    let(input, length) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
-    let(input, extended_offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
-    let(input, off) = opt(preceded(tuple((space0, char(','), space0)), tag_no_case("OFF")))(input)?;
-
+    let (input, offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
+    let (input, length) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
+    let (input, extended_offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
+    let (input, off) = opt(preceded(
+        tuple((space0, char(','), space0)),
+        tag_no_case("OFF"),
+    ))(input)?;
 
     Ok((
         input,
-        Token::Incbin{
+        Token::Incbin {
             fname: fname.to_string(),
             offset,
             length,
@@ -542,14 +550,15 @@ pub fn parse_incbin(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse  UNDEF directive.
-pub fn parse_undef(input: &str) -> IResult<&str, Token> {
-    let (input, label) = preceded(tuple((tag_no_case("UNDEF"), space1)), parse_label(false))(input)?;
+pub fn parse_undef(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
+    let (input, label) =
+        preceded(tuple((tag_no_case("UNDEF"), space1)), parse_label(false))(input)?;
 
     Ok((input, Token::Undef(label)))
 }
 
 /// Parse the opcodes. TODO rename as parse_opcode ...
-pub fn parse_token(input: &str) -> IResult<&str, Token> {
+pub fn parse_token(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     alt((
         parse_ex_af,
         parse_ex_hl_de,
@@ -571,12 +580,12 @@ pub fn parse_token(input: &str) -> IResult<&str, Token> {
         parse_sbc,
         parse_ret,
         parse_rst,
-        parse_im
+        parse_im,
     ))(input)
 }
 
 /// Parse ex af, af' instruction
-pub fn parse_ex_af(input: &str) -> IResult<&str, Token> {
+pub fn parse_ex_af(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     value(
         Token::OpCode(Mnemonic::ExAf, None, None),
         tuple((
@@ -590,10 +599,9 @@ pub fn parse_ex_af(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse ex hl, de instruction
-pub fn parse_ex_hl_de(input: &str) -> IResult<&str, Token> {
+pub fn parse_ex_hl_de(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     value(
         Token::OpCode(Mnemonic::ExHlDe, None, None),
-
         alt((
             tuple((
                 tag_no_case("EX"),
@@ -602,44 +610,39 @@ pub fn parse_ex_hl_de(input: &str) -> IResult<&str, Token> {
                 parse_comma,
                 parse_register_de,
             )),
-
             tuple((
                 tag_no_case("EX"),
                 space1,
                 parse_register_de,
                 parse_comma,
                 parse_register_hl,
-            ))
-        ))
+            )),
+        )),
     )(input)
 }
 
 /// Parse ex (sp), hl
-pub fn parse_ex_mem_sp(input: &str) -> IResult<&str, Token> {
-   let (input, destination) =
-        tuple((
-            tag_no_case("EX"),
-            space1,
+pub fn parse_ex_mem_sp(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
+    let (input, destination) = tuple((
+        tag_no_case("EX"),
+        space1,
+        char('('),
+        space0,
+        parse_register_sp,
+        space0,
+        char(')'),
+        parse_comma,
+        alt((parse_register_hl, parse_indexregister16)),
+    ))(input)?;
 
-            char('('),
-            space0,
-            parse_register_sp,
-            space0,
-            char(')'),
-
-            parse_comma,
-
-            alt((
-                parse_register_hl,
-                parse_indexregister16
-            ))
-        ))(input)?;
-
-    Ok((input, Token::OpCode(Mnemonic::ExMemSp, Some(destination.8), None)))
+    Ok((
+        input,
+        Token::OpCode(Mnemonic::ExMemSp, Some(destination.8), None),
+    ))
 }
 
 /// Parse any directive
-pub fn parse_directive(input: &str) -> IResult<&str, Token> {
+pub fn parse_directive(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     alt((
         parse_assert,
         parse_align,
@@ -661,7 +664,7 @@ pub fn parse_directive(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse directives with no arguments
-pub fn parse_noarg_directive(input: &str) -> IResult<&str, Token> {
+pub fn parse_noarg_directive(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     alt((
         value(Token::List, tag_no_case("list")),
         value(Token::NoList, tag_no_case("nolist")),
@@ -673,12 +676,11 @@ enum KindOfConditional {
     If,
     IfNot,
     IfDef,
-    IfNdef
+    IfNdef,
 }
 
-
 /// Parse if expression.TODO finish the implementation in order to have ELSEIF and ELSE branches"
-pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
+pub fn parse_conditional(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     // Gest the kind of test to do
     let (input, test_kind) = alt((
         value(KindOfConditional::If, parse_instr("IF")),
@@ -687,34 +689,38 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
         value(KindOfConditional::IfNdef, parse_instr("IFNDEF")),
     ))(input)?;
 
-
     // Get the corresponding test
     let (input, cond) = cut(context(
-            "Condition error",
+        "Condition error",
+        delimited(space0, parse_conditional_condition(test_kind), space0),
+    ))(input)?;
 
-            delimited(
-            space0, 
-            parse_conditional_condition(test_kind), 
-            space0))
-        )
-    (input)?;
 
     let (input, _) = alt((line_ending, tag(":")))(input)?;
 
-    let (input, code) = cut(inner_code)(input)?;
+    let (input, code) = cut(context("main case", inner_code))(input)?;
 
     let (input, r#else) = opt(preceded(
         delimited(
             space0,
-            tag_no_case("ELSE"),
-            alt((terminated(space0, line_ending), tag(":"))),
+            parse_instr("ELSE"),
+            cut(opt(alt((terminated(space0, line_ending), tag(":"))))),
         ),
-        cut(inner_code),
+        context("else code", inner_code),
     ))(input)?;
 
+    if r#else.is_some() {
+        eprintln!("ELSE met");
+    }
+
+
     let (input, _) = tuple((
-        alt((space1, delimited(space0, tag(":"), space0))),
-        tag_no_case("ENDIF"),
+        cut(alt((space1, delimited(space0, tag(":"), space0)))),
+        cut(delimited(
+            space0,
+            map(parse_instr("ENDIF"), |_| println!("ENDIF met")),
+            cut(alt((terminated(space0, opt(line_ending)), tag(":")))),
+        )),
     ))(input)?;
 
     Ok((
@@ -724,16 +730,22 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token> {
 }
 
 /// Read the condition part in the parse_conditional macro
-fn parse_conditional_condition(code: KindOfConditional) -> impl Fn(&str) -> IResult<&str, TestKind> {
-    move |input: &str| -> IResult<&str, TestKind> {
+fn parse_conditional_condition(
+    code: KindOfConditional,
+) -> impl Fn(&str) -> IResult<&str, TestKind, VerboseError<&str>> {
+    move |input: &str| -> IResult<&str, TestKind, VerboseError<&str>> {
         match &code {
             KindOfConditional::If => map(expr, |e| TestKind::True(e))(input),
 
             KindOfConditional::IfNot => map(expr, |e| TestKind::False(e))(input),
 
-            KindOfConditional::IfDef => map(parse_label(false), |l| TestKind::LabelExists(l))(input),
+            KindOfConditional::IfDef => {
+                map(parse_label(false), |l| TestKind::LabelExists(l))(input)
+            }
 
-            KindOfConditional::IfNdef => map(parse_label(false), |l| TestKind::LabelDoesNotExist(l))(input),
+            KindOfConditional::IfNdef => {
+                map(parse_label(false), |l| TestKind::LabelDoesNotExist(l))(input)
+            }
 
             _ => unreachable!(),
         }
@@ -741,35 +753,26 @@ fn parse_conditional_condition(code: KindOfConditional) -> impl Fn(&str) -> IRes
 }
 
 /// Parse a breakpint instruction
-pub fn parse_breakpoint(input: &str) -> IResult<&str, Token> {
+pub fn parse_breakpoint(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(preceded(tag_no_case("BREAKPOINT"), opt(expr)), |exp| {
         Token::Breakpoint(exp)
     })(input)
 }
 
-pub fn parse_run(input: &str) -> IResult<&str, Token> {
+pub fn parse_run(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, exp) = preceded(tag_no_case("RUN"), expr)(input)?;
-    let (input, ga) = opt(
-        preceded(
-            tuple((
-                space0,
-                char(','),
-                space0
-            )),
-            expr
-        )
-    )(input)?;
+    let (input, ga) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
 
     Ok((input, Token::Run(exp, ga)))
 }
 
 /// Parse tickin directives
-pub fn parse_stable_ticker(input: &str) -> IResult<&str, Token> {
+pub fn parse_stable_ticker(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     alt((parse_stable_ticker_start, parse_stable_ticker_stop))(input)
 }
 
 /// Parse begining of ticker
-pub fn parse_stable_ticker_start(input: &str) -> IResult<&str, Token> {
+pub fn parse_stable_ticker_start(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(
         preceded(
             tuple((
@@ -786,7 +789,7 @@ pub fn parse_stable_ticker_start(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse end of ticker
-pub fn parse_stable_ticker_stop(input: &str) -> IResult<&str, Token> {
+pub fn parse_stable_ticker_stop(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     value(
         Token::StableTicker(StableTickerAction::Stop),
         tuple((
@@ -799,12 +802,12 @@ pub fn parse_stable_ticker_stop(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse fake and real LD instructions
-pub fn parse_ld(input: &str) -> IResult<&str, Token> {
+pub fn parse_ld(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     alt((parse_ld_fake, parse_ld_normal))(input)
 }
 
 /// Parse artifical LD instruction (would be replaced by several real instructions)
-pub fn parse_ld_fake(input: &str) -> IResult<&str, Token> {
+pub fn parse_ld_fake(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tuple((tag_no_case("LD"), space1))(input)?;
 
     let (input, dst) = parse_register16(input)?;
@@ -817,7 +820,7 @@ pub fn parse_ld_fake(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse the valids LD versions
-pub fn parse_ld_normal(input: &str) -> IResult<&str, Token> {
+pub fn parse_ld_normal(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tuple((space0, tag_no_case("LD"), space1))(input)?;
 
     let (input, dst) = alt((
@@ -843,24 +846,21 @@ pub fn parse_ld_normal(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse the source of LD depending on its destination
-fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataAccess> + '_ {
+fn parse_ld_normal_src(
+    dst: &DataAccess,
+) -> impl Fn(&str) -> IResult<&str, DataAccess, VerboseError<&str>> + '_ {
     move |input: &str| {
         if dst.is_register_sp() {
             alt((
                 parse_register_hl,
                 parse_indexregister16,
-                parse_address, 
-                parse_expr
+                parse_address,
+                parse_expr,
             ))(input)
-        }
-        else if dst.is_address_in_register16() {
+        } else if dst.is_address_in_register16() {
             // by construction is IS HL
-            alt((
-                parse_register8,
-                parse_expr
-            ))(input)
-        }
-        else if dst.is_register16() | dst.is_indexregister16() {
+            alt((parse_register8, parse_expr))(input)
+        } else if dst.is_register16() | dst.is_indexregister16() {
             alt((parse_address, parse_expr))(input)
         } else if dst.is_register8() {
             // todo find a way to merge them together
@@ -873,53 +873,53 @@ fn parse_ld_normal_src(dst: &DataAccess) -> impl Fn(&str) -> IResult<&str, DataA
                     parse_indexregister8,
                     parse_register_i,
                     parse_register_r,
-                    parse_expr
+                    parse_expr,
                 ))(input)
-            }
-            else {
+            } else {
                 alt((
                     parse_indexregister_with_index,
                     parse_hl_address,
                     parse_address,
                     parse_register8,
                     parse_indexregister8,
-                    parse_expr
+                    parse_expr,
                 ))(input)
             }
-        } 
-        else if dst.is_indexregister8() {
+        } else if dst.is_indexregister8() {
             alt((
                 parse_indexregister_with_index,
                 parse_hl_address,
                 parse_address,
                 parse_register8,
-                verify( alt((parse_register_ixh, parse_register_ixl)), |_| dst.is_register_ixl() || dst.is_register_ixh()),
-                verify( alt((parse_register_iyh, parse_register_iyl)), |_| dst.is_register_iyl() || dst.is_register_iyh()),
-                parse_expr
+                verify(alt((parse_register_ixh, parse_register_ixl)), |_| {
+                    dst.is_register_ixl() || dst.is_register_ixh()
+                }),
+                verify(alt((parse_register_iyh, parse_register_iyl)), |_| {
+                    dst.is_register_iyl() || dst.is_register_iyh()
+                }),
+                parse_expr,
             ))(input)
         } else if dst.is_memory() {
-            alt((parse_register16, 
-                parse_register8, 
+            alt((
+                parse_register16,
+                parse_register8,
                 parse_register_sp,
-                parse_indexregister16
+                parse_indexregister16,
             ))(input)
         } else if dst.is_address_in_register16() {
             parse_register8(input)
-        } else if dst.is_indexregister_with_index(){
-            alt((
-                parse_register8,
-                parse_expr
-            ))(input)
-        } else if dst.is_register_i()  || dst.is_register_r(){
+        } else if dst.is_indexregister_with_index() {
+            alt((parse_register8, parse_expr))(input)
+        } else if dst.is_register_i() || dst.is_register_r() {
             parse_register_a(input)
         } else {
-            Err(Err::Error((input, ErrorKind::Alt)))
+            Err(nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::Alt)))
         }
     }
 }
 
 /// Parse RES, SET and BIT instructions
-pub fn parse_res_set_bit(input: &str) -> IResult<&str, Token> {
+pub fn parse_res_set_bit(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, res_or_set) = alt((
         value(Mnemonic::Res, tag_no_case("RES")),
         value(Mnemonic::Bit, tag_no_case("BIT")),
@@ -940,7 +940,7 @@ pub fn parse_res_set_bit(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse CP tokens
-pub fn parse_cp(input: &str) -> IResult<&str, Token> {
+pub fn parse_cp(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(
         preceded(
             parse_instr("CP"),
@@ -957,7 +957,7 @@ pub fn parse_cp(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse DB DW directives
-pub fn parse_db_or_dw(input: &str) -> IResult<&str, Token> {
+pub fn parse_db_or_dw(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, is_db) = alt((
         map(alt((parse_instr("DB"), parse_instr("DEFB"))), { |_| true }),
         map(alt((parse_instr("DW"), parse_instr("DEFW"))), { |_| false }),
@@ -974,20 +974,38 @@ pub fn parse_db_or_dw(input: &str) -> IResult<&str, Token> {
     ))
 }
 
-/// Manage the call of a macro.
-pub fn parse_macro_call(input: &str) -> IResult<&str, Token> {
+// Fail if we do not read a forbidden keyword
+pub fn parse_forbidden_keyword(input: &str) -> IResult<&str, String, VerboseError<&str>>  {
+    let (input, _) = space0(input)?;
+    let (input, name) = parse_label(false)(input)?;
+    
+    if ! FINAL_DIRECTIVE.iter()
+        .find(|&&a| a.to_lowercase() == name.to_lowercase())
+        .is_some(){
+            return Err(Err::Error(VerboseError::from_error_kind(
+                input,
+                ErrorKind::AlphaNumeric,
+            )));
+    }
 
+    let (input, _) = space0(input)?;
+
+    Ok((input, name))
+}
+
+/// Manage the call of a macro.
+/// TODO use parse_forbidden_keyword
+pub fn parse_macro_call(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     // BUG: added because of parsing issues. Need to find why and remove ot
     let (input, _) = space0(input)?;
     let (input, name) = parse_label(false)(input)?;
 
     // Check if the macro name is allowed
-    if FORBIDDEN_MACRO_NAMES
-        .iter()
+    if FIRST_DIRECTIVE.iter().chain(FINAL_DIRECTIVE.iter())
         .find(|&&a| a.to_lowercase() == name.to_lowercase())
         .is_some()
     {
-        Err(Err::Error(nom::error::ParseError::<&str>::from_error_kind(
+        Err(Err::Failure(nom::error::ParseError::<&str>::from_error_kind(
             input,
             ErrorKind::AlphaNumeric,
         )))
@@ -995,39 +1013,43 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token> {
         let (input, args) = opt(alt((
             /*expr_list,  */ // initially a list of expression was used; now it is just plain strings
             separated_nonempty_list(
-                tuple((tag(","), space0)), 
-                take_till(|c| c==',' || c=='\n')
-            ), 
+                tuple((tag(","), space0)),
+                take_till(|c| c == ',' || c == '\n'),
+            ),
             map(tag_no_case("(void)"), { |_| Vec::new() }),
         )))(input)?;
 
-        Ok((input, Token::MacroCall(
-            name, 
-            args.unwrap_or_default().iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>()
-        )))
+        Ok((
+            input,
+            Token::MacroCall(
+                name,
+                args.unwrap_or_default()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>(),
+            ),
+        ))
     }
 }
 
-fn parse_instr(name: &str) -> impl Fn(&str) -> IResult<&str, ()> + '_ {
+fn parse_instr(name: &str) -> impl Fn(&str) -> IResult<&str, (), VerboseError<&str>> + '_ {
     move |input: &str| map(tuple((tag_no_case(name), not(alpha1), space0)), |_| ())(input)
 }
 
 /// ...
-pub fn parse_djnz(input: &str) -> IResult<&str, Token> {
+pub fn parse_djnz(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(preceded(parse_instr("DJNZ"), parse_expr), |expr| {
         Token::OpCode(Mnemonic::Djnz, Some(expr), None)
     })(input)
 }
 
 /// ...
-pub fn expr_list(input: &str) -> IResult<&str, Vec<Expr>> {
+pub fn expr_list(input: &str) -> IResult<&str, Vec<Expr>, VerboseError<&str>> {
     separated_nonempty_list(tuple((tag(","), space0)), alt((expr, string_expr)))(input)
 }
 
 /// ...
-pub fn parse_assert(input: &str) -> IResult<&str, Token> {
+pub fn parse_assert(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, expr) = preceded(parse_instr("ASSERT"), expr)(input)?;
 
     let (input, comment) = opt(preceded(
@@ -1039,32 +1061,27 @@ pub fn parse_assert(input: &str) -> IResult<&str, Token> {
 }
 
 /// ...
-pub fn parse_align(input: &str) -> IResult<&str, Token> {
+pub fn parse_align(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(preceded(parse_instr("ALIGN"), expr), |expr| {
         Token::Align(expr, None)
     })(input)
 }
 
 /// ...
-pub fn parse_print(input: &str) -> IResult<&str, Token> {
+pub fn parse_print(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(
         preceded(
             parse_instr("PRINT"),
-            cut(
-                separated_nonempty_list(
-                
+            cut(separated_nonempty_list(
                 delimited(space0, char(','), space0),
                 alt((
                     formatted_expr,
                     map(expr, FormattedExpr::from),
-                    map(string_between_quotes, { 
-                        |s: &str| 
-                        FormattedExpr::from(Expr::String(s.to_string()))
-                    }
-                    ),
-                ))  
-                )
-            ),
+                    map(string_between_quotes, {
+                        |s: &str| FormattedExpr::from(Expr::String(s.to_string()))
+                    }),
+                )),
+            )),
         ),
         |exps| Token::Print(exps),
     )(input)
@@ -1072,23 +1089,20 @@ pub fn parse_print(input: &str) -> IResult<&str, Token> {
 
 /// Parse formatted expression for print like directives
 /// WARNING: only formated case is taken into account
-fn formatted_expr(input: &str) -> IResult<&str, FormattedExpr> {
+fn formatted_expr(input: &str) -> IResult<&str, FormattedExpr, VerboseError<&str>> {
     let (input, _) = char('{')(input)?;
     let (input, format) = alt((
         value(ExprFormat::Int, tag_no_case("INT")),
-
         value(ExprFormat::Hex(Some(2)), tag_no_case("HEX4")),
         value(ExprFormat::Hex(Some(4)), tag_no_case("HEX8")),
         value(ExprFormat::Hex(Some(8)), tag_no_case("HEX2")),
         value(ExprFormat::Hex(None), tag_no_case("HEX")),
-
         value(ExprFormat::Bin(Some(8)), tag_no_case("BIN8")),
         value(ExprFormat::Bin(Some(16)), tag_no_case("BIN16")),
         value(ExprFormat::Bin(Some(32)), tag_no_case("BIN32")),
         value(ExprFormat::Bin(None), tag_no_case("BIN")),
     ))(input)?;
     let (input, _) = char('}')(input)?;
-
 
     let (input, _) = space0(input)?;
 
@@ -1097,12 +1111,12 @@ fn formatted_expr(input: &str) -> IResult<&str, FormattedExpr> {
     Ok((input, FormattedExpr::Formatted(format, exp)))
 }
 
-fn parse_comma(input: &str) -> IResult<&str, ()> {
+fn parse_comma(input: &str) -> IResult<&str, (), VerboseError<&str>> {
     map(tuple((space0, tag(","), space0)), |_| ())(input)
 }
 
 /// ...
-pub fn parse_protect(input: &str) -> IResult<&str, Token> {
+pub fn parse_protect(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, start) = preceded(parse_instr("PROTECT"), expr)(input)?;
 
     let (input, end) = preceded(parse_comma, expr)(input)?;
@@ -1111,7 +1125,7 @@ pub fn parse_protect(input: &str) -> IResult<&str, Token> {
 }
 
 /// ...
-pub fn parse_logical_operator(input: &str) -> IResult<&str, Token> {
+pub fn parse_logical_operator(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, operator) = alt((
         value(Mnemonic::And, parse_instr("AND")),
         value(Mnemonic::Or, parse_instr("Or")),
@@ -1130,12 +1144,12 @@ pub fn parse_logical_operator(input: &str) -> IResult<&str, Token> {
 }
 
 /// ...
-pub fn parse_add_or_adc(input: &str) -> IResult<&str, Token> {
+pub fn parse_add_or_adc(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     alt((parse_add_or_adc_complete, parse_add_or_adc_shorten))(input)
 }
 
 /// Substraction with A register
-pub fn parse_sub(input: &str) -> IResult<&str, Token> {
+pub fn parse_sub(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tag_no_case("SUB")(input)?;
     let (input, _) = space1(input)?;
     let (input, operand) = alt((
@@ -1143,23 +1157,17 @@ pub fn parse_sub(input: &str) -> IResult<&str, Token> {
         parse_indexregister8,
         parse_hl_address,
         parse_indexregister_with_index,
-        parse_expr
+        parse_expr,
     ))(input)?;
 
-    Ok((
-        input,
-        Token::OpCode(Mnemonic::Sub, Some(operand), None),
-    ))
+    Ok((input, Token::OpCode(Mnemonic::Sub, Some(operand), None)))
 }
 
 /// Par se the SBC instruction
-pub fn parse_sbc(input: &str) -> IResult<&str, Token> {
+pub fn parse_sbc(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tag_no_case("SBC")(input)?;
     let (input, _) = space1(input)?;
-    let (input, opera) = alt((
-        parse_register_a,
-        parse_register_hl
-    ))(input)?;
+    let (input, opera) = alt((parse_register_a, parse_register_hl))(input)?;
     let (input, _) = parse_comma(input)?;
 
     let (input, operb) = if opera.is_register_a() {
@@ -1168,24 +1176,20 @@ pub fn parse_sbc(input: &str) -> IResult<&str, Token> {
             parse_indexregister8,
             parse_hl_address,
             parse_indexregister_with_index,
-            parse_expr
+            parse_expr,
         ))(input)
-    }
-    else {
-        alt((
-            parse_register16,
-            parse_register_sp
-        ))(input)
+    } else {
+        alt((parse_register16, parse_register_sp))(input)
     }?;
 
     Ok((
         input,
-        Token::OpCode(Mnemonic::Sbc, Some(opera), Some(operb))
+        Token::OpCode(Mnemonic::Sbc, Some(opera), Some(operb)),
     ))
 }
 
 /// Parse ADC and ADD instructions
-pub fn parse_add_or_adc_complete(input: &str) -> IResult<&str, Token> {
+pub fn parse_add_or_adc_complete(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, add_or_adc) = alt((
         value(Mnemonic::Adc, tag_no_case("ADC")),
         value(Mnemonic::Add, tag_no_case("ADD")),
@@ -1221,14 +1225,14 @@ pub fn parse_add_or_adc_complete(input: &str) -> IResult<&str, Token> {
             verify(parse_register_iy, |_| first.is_register_iy()),
         ))(input)
     } else {
-        Err(Err::Error((input, ErrorKind::Alt)))
+        return Err(nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::Alt)));
     }?;
 
     Ok((input, Token::OpCode(add_or_adc, Some(first), Some(second))))
 }
 
 /// TODO Find a way to not duplicate code with complete version
-pub fn parse_add_or_adc_shorten(input: &str) -> IResult<&str, Token> {
+pub fn parse_add_or_adc_shorten(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, add_or_adc) = alt((
         value(Mnemonic::Adc, parse_instr("ADC")),
         value(Mnemonic::Add, parse_instr("ADD")),
@@ -1252,7 +1256,7 @@ pub fn parse_add_or_adc_shorten(input: &str) -> IResult<&str, Token> {
 }
 
 /// ...
-pub fn parse_push_n_pop(input: &str) -> IResult<&str, Token> {
+pub fn parse_push_n_pop(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, push_or_pop) = alt((
         value(Mnemonic::Push, parse_instr("PUSH")),
         value(Mnemonic::Pop, parse_instr("POP")),
@@ -1264,7 +1268,7 @@ pub fn parse_push_n_pop(input: &str) -> IResult<&str, Token> {
 }
 
 /// ...
-pub fn parse_ret(input: &str) -> IResult<&str, Token> {
+pub fn parse_ret(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(
         preceded(tag_no_case("RET"), opt(preceded(space1, parse_flag_test))),
         |cond| {
@@ -1282,7 +1286,7 @@ pub fn parse_ret(input: &str) -> IResult<&str, Token> {
 }
 
 /// ...
-pub fn parse_inc_dec(input: &str) -> IResult<&str, Token> {
+pub fn parse_inc_dec(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, inc_or_dec) = alt((
         value(Mnemonic::Inc, parse_instr("INC")),
         value(Mnemonic::Dec, parse_instr("DEC")),
@@ -1290,91 +1294,74 @@ pub fn parse_inc_dec(input: &str) -> IResult<&str, Token> {
 
     let (input, register) = alt((
         parse_register16,
-        parse_indexregister16, 
-        parse_register8, 
+        parse_indexregister16,
+        parse_register8,
         parse_indexregister8,
-        parse_register_sp, 
+        parse_register_sp,
         parse_hl_address,
-        parse_indexregister_with_index
+        parse_indexregister_with_index,
     ))(input)?;
 
     Ok((input, Token::OpCode(inc_or_dec, Some(register), None)))
 }
 
 /// TODO manage other out formats
-pub fn parse_out(input: &str) -> IResult<&str, Token> {
-
+pub fn parse_out(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = parse_instr("OUT")(input)?;
 
     // get the port proposal
-    let (input, port) = alt((
-        parse_portc,
-        parse_address
-    ))(input)?;
+    let (input, port) = alt((parse_portc, parse_address))(input)?;
 
-    let (input, _ ) = parse_comma(input)?;
+    let (input, _) = parse_comma(input)?;
 
     // the vlaue depends on the port
-    let (input, value) = if port.is_portc() { // reg c
+    let (input, value) = if port.is_portc() {
+        // reg c
         alt((
             parse_register8,
-            value(
-                DataAccess::from(Expr::from(0)),
-                tag("0")
-            )
+            value(DataAccess::from(Expr::from(0)), tag("0")),
         ))(input)?
-    }
-    else {
+    } else {
         parse_register_a(input)?
     };
 
-    Ok((
-        input,
-        Token::OpCode(Mnemonic::Out, Some(port), Some(value))
-    ))
+    Ok((input, Token::OpCode(Mnemonic::Out, Some(port), Some(value))))
 }
 
 /// Parse all the in flavors
-pub fn parse_in(input: &str) -> IResult<&str, Token> {
+pub fn parse_in(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = parse_instr("IN")(input)?;
 
     // get the port proposal
     let (input, destination) = parse_register8(input)?;
-    let (input, _ ) = parse_comma(input)?;
+    let (input, _) = parse_comma(input)?;
     let (input, port) = alt((
-        verify(parse_address, |_| destination.get_register8().unwrap().is_a()),
-        parse_portc
-
+        verify(parse_address, |_| {
+            destination.get_register8().unwrap().is_a()
+        }),
+        parse_portc,
     ))(input)?;
 
     Ok((
         input,
-        Token::OpCode(Mnemonic::In,  Some(destination), Some(port))
+        Token::OpCode(Mnemonic::In, Some(destination), Some(port)),
     ))
 }
 
 /// Parse the rst instruction
-pub fn parse_rst(input: &str) -> IResult<&str, Token> {
-
+pub fn parse_rst(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = parse_instr("RST")(input)?;
     let (input, val) = parse_expr(input)?;
 
-    Ok((
-        input,
-        Token::OpCode(Mnemonic::Rst, Some(val), None)
-    ))
+    Ok((input, Token::OpCode(Mnemonic::Rst, Some(val), None)))
 }
 
 /// Parse the IM instruction
-pub fn parse_im(input: &str) -> IResult<&str, Token> {
-
+pub fn parse_im(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = parse_instr("IM")(input)?;
     let (input, val) = parse_expr(input)?;
 
-    Ok((
-        input,
-        Token::OpCode(Mnemonic::Im, Some(val), None)
-    ))
+    Ok((input, Token::OpCode(Mnemonic::Im, Some(val), None)))
 }
 
 /// Parse all RLC, RL, RR, SLA, SRA flavors
@@ -1388,7 +1375,7 @@ pub fn parse_im(input: &str) -> IResult<&str, Token> {
 /// RLC (HL)
 /// RLC (IX+n)
 /// RLC (IY+n)
-pub fn parse_shifts_and_rotations(input: &str) -> IResult<&str, Token> {
+pub fn parse_shifts_and_rotations(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, oper) = alt((
         value(Mnemonic::Rlc, parse_instr("RLC")),
         value(Mnemonic::Rrc, parse_instr("RRC")),
@@ -1403,17 +1390,14 @@ pub fn parse_shifts_and_rotations(input: &str) -> IResult<&str, Token> {
     let (input, arg) = alt((
         parse_register8,
         parse_hl_address,
-        parse_indexregister_with_index
+        parse_indexregister_with_index,
     ))(input)?;
 
-    Ok((
-        input,
-        Token::OpCode(oper, Some(arg), None)
-    ))
+    Ok((input, Token::OpCode(oper, Some(arg), None)))
 }
 
 /// TODO reduce the flag space for jr"],
-pub fn parse_call_jp_or_jr(input: &str) -> IResult<&str, Token> {
+pub fn parse_call_jp_or_jr(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, call_jp_or_jr) = alt((
         value(Mnemonic::Jp, parse_instr("JP")),
         value(Mnemonic::Jr, parse_instr("JR")),
@@ -1426,11 +1410,10 @@ pub fn parse_call_jp_or_jr(input: &str) -> IResult<&str, Token> {
     ))(input)?;
 
     let (input, dst) = alt((
-        verify( alt((
-            parse_hl_address,
-            parse_indexregister_address
-        )), |_| call_jp_or_jr.is_jp() && flag_test.is_none()), // not possible for call and for jp/jr when there is flag
-        parse_expr
+        verify(alt((parse_hl_address, parse_indexregister_address)), |_| {
+            call_jp_or_jr.is_jp() && flag_test.is_none()
+        }), // not possible for call and for jp/jr when there is flag
+        parse_expr,
     ))(input)?;
 
     let flag_test = if flag_test.is_some() {
@@ -1439,14 +1422,11 @@ pub fn parse_call_jp_or_jr(input: &str) -> IResult<&str, Token> {
         None
     };
 
-    Ok((
-        input,
-        Token::OpCode(call_jp_or_jr, flag_test, Some(dst)),
-    ))
+    Ok((input, Token::OpCode(call_jp_or_jr, flag_test, Some(dst))))
 }
 
 /// ...
-pub fn parse_flag_test(input: &str) -> IResult<&str, FlagTest> {
+pub fn parse_flag_test(input: &str) -> IResult<&str, FlagTest, VerboseError<&str>> {
     alt((
         value(FlagTest::NZ, tag_no_case("NZ")),
         value(FlagTest::Z, tag_no_case("Z")),
@@ -1471,7 +1451,7 @@ named_attr!(#[doc="TODO"],
 
 /// Parse any standard 16bits register
 /// TODO rename to emphasize it is standard reigsters
-pub fn parse_register16(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_register16(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     alt((
         parse_register_hl,
         parse_register_bc,
@@ -1482,7 +1462,7 @@ pub fn parse_register16(input: &str) -> IResult<&str, DataAccess> {
 
 /// Parse any standard 16bits register
 /// TODO rename to emphasize it is standard reigsters
-pub fn parse_register8(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_register8(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     alt((
         parse_register_a,
         parse_register_b,
@@ -1495,7 +1475,7 @@ pub fn parse_register8(input: &str) -> IResult<&str, DataAccess> {
 }
 
 /// Parse register i
-pub fn parse_register_i(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_register_i(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     value(
         DataAccess::SpecialRegisterI,
         tuple((tag_no_case("I"), not(alphanumeric1))),
@@ -1503,7 +1483,7 @@ pub fn parse_register_i(input: &str) -> IResult<&str, DataAccess> {
 }
 
 /// Parse register r
-pub fn parse_register_r(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_register_r(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     value(
         DataAccess::SpecialRegisterR,
         tuple((tag_no_case("R"), not(alphanumeric1))),
@@ -1513,7 +1493,7 @@ pub fn parse_register_r(input: &str) -> IResult<&str, DataAccess> {
 macro_rules! parse_any_register8 {
     ($name: ident, $char:expr, $reg:expr) => {
         /// Parse register $char
-        pub fn $name(input: &str) -> IResult<&str, DataAccess> {
+        pub fn $name(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
             value(
                 DataAccess::Register8($reg),
                 tuple((tag_no_case($char), not(alphanumeric1))),
@@ -1534,7 +1514,7 @@ parse_any_register8!(parse_register_l, "l", Register8::L);
 fn register16_parser<'a>(
     representation: &'static str,
     register: Register16,
-) -> impl Fn(&'a str) -> IResult<&'a str, DataAccess> {
+) -> impl Fn(&'a str) -> IResult<&'a str, DataAccess, VerboseError<&str>> {
     move |input: &'a str| {
         value(
             DataAccess::Register16(register),
@@ -1546,7 +1526,7 @@ fn register16_parser<'a>(
 macro_rules! parse_any_register16 {
     ($name: ident, $char:expr, $reg:expr) => {
         /// Parse the $char register and return it as a DataAccess
-        pub fn $name(input: &str) -> IResult<&str, DataAccess> {
+        pub fn $name(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
             register16_parser($char, $reg)(input)
         }
     };
@@ -1559,18 +1539,18 @@ parse_any_register16!(parse_register_de, "DE", Register16::De);
 parse_any_register16!(parse_register_hl, "HL", Register16::Hl);
 
 /// Parse the IX register
-pub fn parse_register_ix(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_register_ix(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     value(
         DataAccess::IndexRegister16(IndexRegister16::Ix),
-        tuple((tag_no_case("IX"), not(alphanumeric1)))
+        tuple((tag_no_case("IX"), not(alphanumeric1))),
     )(input)
 }
 
 /// Parse the IY register
-pub fn parse_register_iy(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_register_iy(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     value(
         DataAccess::IndexRegister16(IndexRegister16::Iy),
-        tuple((tag_no_case("IY"), not(alphanumeric1)))
+        tuple((tag_no_case("IY"), not(alphanumeric1))),
     )(input)
 }
 
@@ -1579,7 +1559,7 @@ macro_rules! parse_any_indexregister8 {
     ($($reg:ident, $alias:ident)*) => {$(
         paste::item_with_macros! {
             /// Parse register $reg
-            pub fn [<parse_register_ $reg:lower>] (input: &str) -> IResult<&str, DataAccess> {
+            pub fn [<parse_register_ $reg:lower>] (input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
                 value(
                     DataAccess::IndexRegister8(IndexRegister8::$reg),
                     tuple((
@@ -1587,7 +1567,6 @@ macro_rules! parse_any_indexregister8 {
                             tag_no_case( stringify!($reg)),
                             tag_no_case( stringify!($alias))
                         ))
-                    
                     , not(alphanumeric1)))
                 )(input)
             }
@@ -1597,7 +1576,7 @@ macro_rules! parse_any_indexregister8 {
 parse_any_indexregister8!(Ixh,hx Ixl,lx Iyh,hy Iyl,ly);
 
 /// Parse and indexed register in 8bits
-pub fn parse_indexregister8(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_indexregister8(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     alt((
         parse_register_ixh,
         parse_register_iyh,
@@ -1606,9 +1585,8 @@ pub fn parse_indexregister8(input: &str) -> IResult<&str, DataAccess> {
     ))(input)
 }
 
-
 /// Parse a 16 bits indexed register
-pub fn parse_indexregister16(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_indexregister16(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     terminated(
         map(
             alt((
@@ -1622,7 +1600,9 @@ pub fn parse_indexregister16(input: &str) -> IResult<&str, DataAccess> {
 }
 
 /// Parse the use of an indexed register as (IX + 5)"
-pub fn parse_indexregister_with_index(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_indexregister_with_index(
+    input: &str,
+) -> IResult<&str, DataAccess, VerboseError<&str>> {
     let (input, reg) = preceded(tuple((tag("("), space0)), parse_indexregister16)(input)?;
 
     let (input, op) = preceded(
@@ -1646,19 +1626,15 @@ pub fn parse_indexregister_with_index(input: &str) -> IResult<&str, DataAccess> 
 }
 
 /// Parse (C) used in in/out
-pub fn parse_portc(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_portc(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     value(
         DataAccess::PortC,
-        tuple((
-            tag("("), space0,
-            parse_register_c,
-            space0, tag(")")
-        ))
+        tuple((tag("("), space0, parse_register_c, space0, tag(")"))),
     )(input)
 }
 
 /// Parse an address access `(expression)`
-pub fn parse_address(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_address(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     map(
         delimited(tag("("), expr, preceded(space0, tag(")"))),
         |address| DataAccess::Memory(address),
@@ -1666,7 +1642,7 @@ pub fn parse_address(input: &str) -> IResult<&str, DataAccess> {
 }
 
 /// Parse (R16)
-pub fn parse_reg_address(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_reg_address(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     map(
         delimited(
             terminated(tag("("), space0),
@@ -1678,7 +1654,7 @@ pub fn parse_reg_address(input: &str) -> IResult<&str, DataAccess> {
 }
 
 /// Parse (HL)
-pub fn parse_hl_address(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_hl_address(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     value(
         DataAccess::MemoryRegister16(Register16::Hl),
         delimited(
@@ -1690,26 +1666,25 @@ pub fn parse_hl_address(input: &str) -> IResult<&str, DataAccess> {
 }
 
 /// Parse (ix) and (iy)
-pub fn parse_indexregister_address(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_indexregister_address(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     map(
         delimited(
             terminated(tag("("), space0),
             parse_indexregister16,
-            preceded(space0, tag(")"))
+            preceded(space0, tag(")")),
         ),
-
-        |reg| DataAccess::MemoryIndexRegister16(reg.get_indexregister16().unwrap())
+        |reg| DataAccess::MemoryIndexRegister16(reg.get_indexregister16().unwrap()),
     )(input)
 }
 
 /// Parse an expression and returns it inside a DataAccession::Expression
-pub fn parse_expr(input: &str) -> IResult<&str, DataAccess> {
+pub fn parse_expr(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     let (input, expr) = expr(input)?;
     Ok((input, DataAccess::Expression(expr)))
 }
 
 /// Parse standard org directive
-pub fn parse_org(input: &str) -> IResult<&str, Token> {
+pub fn parse_org(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tuple((tag_no_case("ORG"), space1))(input)?;
 
     let (input, val) = expr(input)?;
@@ -1718,7 +1693,7 @@ pub fn parse_org(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse defs instruction. TODO add optional parameters
-pub fn parse_defs(input: &str) -> IResult<&str, Token> {
+pub fn parse_defs(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tuple((tag_no_case("DEFS"), space1))(input)?;
 
     let (input, val) = expr(input)?;
@@ -1727,15 +1702,15 @@ pub fn parse_defs(input: &str) -> IResult<&str, Token> {
 }
 
 /// Parse any opcode having no argument
-pub fn parse_opcode_no_arg(input: &str) -> IResult<&str, Token> {
-alt((
-    parse_opcode_no_arg1,
-    parse_opcode_no_arg2,
-    parse_opcode_no_arg3,
-))(input)
+pub fn parse_opcode_no_arg(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
+    alt((
+        parse_opcode_no_arg1,
+        parse_opcode_no_arg2,
+        parse_opcode_no_arg3,
+    ))(input)
 }
 
-fn parse_opcode_no_arg1(input: &str) -> IResult<&str, Token> {
+fn parse_opcode_no_arg1(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, mnemonic) = alt((
         map(parse_instr("DI"), { |_| Mnemonic::Di }),
         map(parse_instr("CCF"), { |_| Mnemonic::Ccf }),
@@ -1750,13 +1725,12 @@ fn parse_opcode_no_arg1(input: &str) -> IResult<&str, Token> {
         map(parse_instr("NOP"), { |_| Mnemonic::Nop }),
         map(parse_instr("OUTD"), { |_| Mnemonic::Outd }),
         map(parse_instr("OUTI"), { |_| Mnemonic::Outi }),
-
     ))(input)?;
 
     Ok((input, Token::OpCode(mnemonic, None, None)))
 }
 
-fn parse_opcode_no_arg2(input: &str) -> IResult<&str, Token> {
+fn parse_opcode_no_arg2(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, mnemonic) = alt((
         value(Mnemonic::Rla, parse_instr("RLA")),
         value(Mnemonic::Rra, parse_instr("RRA")),
@@ -1772,42 +1746,38 @@ fn parse_opcode_no_arg2(input: &str) -> IResult<&str, Token> {
         value(Mnemonic::Cpd, parse_instr("CPD")),
         value(Mnemonic::Cpdr, parse_instr("CPDR")),
         value(Mnemonic::Cpi, parse_instr("CPI")),
-        value(Mnemonic::Cpir , parse_instr("CPIR")),
-        value(Mnemonic::Cpl, parse_instr("CPL"))
+        value(Mnemonic::Cpir, parse_instr("CPIR")),
+        value(Mnemonic::Cpl, parse_instr("CPL")),
     ))(input)?;
 
     Ok((input, Token::OpCode(mnemonic, None, None)))
 }
 
-fn parse_opcode_no_arg3(input: &str) -> IResult<&str, Token> {
+fn parse_opcode_no_arg3(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, mnemonic) = alt((
         value(Mnemonic::Daa, parse_instr("DAA")),
         value(Mnemonic::Neg, parse_instr("NEG")),
-        value(Mnemonic::Otdr , parse_instr("OTDR")),
+        value(Mnemonic::Otdr, parse_instr("OTDR")),
         value(Mnemonic::Otir, parse_instr("OTIR")),
-        value(Mnemonic::Rld , parse_instr("RLD")),
-        value(Mnemonic::Rrd , parse_instr("RRD")),
+        value(Mnemonic::Rld, parse_instr("RLD")),
+        value(Mnemonic::Rrd, parse_instr("RRD")),
     ))(input)?;
 
     Ok((input, Token::OpCode(mnemonic, None, None)))
 }
 
-
-
-fn parse_snaset(input: &str) -> IResult<&str, Token> {
+fn parse_snaset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = parse_instr("SNASET")(input)?;
     let (input, flag) = parse_flag(input)?;
     let (input, _) = space1(input)?;
     let (input, value) = parse_flag_value(input)?;
     let (input, _) = space0(input)?;
 
-
     Ok((input, Token::SnaSet(flag, value)))
 }
 
-
 /// Parse a comment that start by `;` and ends at the end of the line.
-pub fn comment(input: &str) -> IResult<&str, Token> {
+pub fn comment(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(
         preceded(tag(";"), take_till(|ch| ch == '\n')),
         |string: &str| Token::Comment(string.iter_elements().collect::<String>()),
@@ -1815,32 +1785,31 @@ pub fn comment(input: &str) -> IResult<&str, Token> {
 }
 
 /// Usefull later for db
-pub fn string_between_quotes(input: &str) -> IResult<&str, &str> {
+pub fn string_between_quotes(input: &str) -> IResult<&str, &str, VerboseError<&str>> {
     delimited(char('\"'), is_not("\""), char('\"'))(input)
 }
 
 /// TODO
-pub fn string_expr(input: &str) -> IResult<&str, Expr> {
+pub fn string_expr(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     map(string_between_quotes, |string| {
         Expr::String(string.to_string())
     })(input)
 }
 
 /// Parse a label(label: S)
-pub fn parse_label(doubledots: bool) -> impl Fn(&str) -> IResult<&str, String> {
-    
+pub fn parse_label(doubledots: bool) -> impl Fn(&str) -> IResult<&str, String, VerboseError<&str>> {
     move |input: &str| {
         // Get the label
 
-        let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._")(input)?;
+        let (input, first) =
+            one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._")(input)?;
         let (input, middle) =
             is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")(input)?;
 
         let input = if doubledots {
             let (input, _) = opt(tag_no_case(":"))(input)?;
             input
-        }
-        else {
+        } else {
             input
         };
 
@@ -1855,22 +1824,22 @@ pub fn parse_label(doubledots: bool) -> impl Fn(&str) -> IResult<&str, String> {
     }
 }
 
-pub fn prefixed_label_expr(input: &str) -> IResult<&str, Expr> {
+pub fn prefixed_label_expr(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     let (input, prefix) = alt((
         value(LabelPrefix::Bank, tag_no_case("{bank}")),
         value(LabelPrefix::Page, tag_no_case("{page}")),
         value(LabelPrefix::Pageset, tag_no_case("{pageset}")),
     ))(input)?;
     let (input, label) = preceded(
-        space0, 
+        space0,
         alt((
             parse_label(false),
-            map( tag_no_case("$"), |s:&str| s.to_string())
-        ))
+            map(tag_no_case("$"), |s: &str| s.to_string()),
+        )),
     )(input)?;
 
     Ok((input, Expr::PrefixedLabel(prefix, label)))
-} 
+}
 
 /*
 /// Parse an ASM file an returns the stream of tokens.
@@ -1887,16 +1856,14 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 
 // XXX Code greatly inspired from https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs
 
-
 /// Read a value
-pub fn parse_value(input: &str) -> IResult<&str, Expr> {
+pub fn parse_value(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     let (input, val) = alt((hex_number, dec_number, bin_u16))(input)?;
     Ok((input, Expr::Value(val as i32)))
 }
 
-
 /// Read a parenthesed expression
-pub fn parens(input: &str) -> IResult<&str, Expr> {
+pub fn parens(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     delimited(
         delimited(space0, tag("("), space0),
         map(map(expr, Box::new), Expr::Paren),
@@ -1905,39 +1872,34 @@ pub fn parens(input: &str) -> IResult<&str, Expr> {
 }
 
 /// Get a factor
-pub fn factor(input: &str) -> IResult<&str, Expr> {
-    delimited(space0,
-        alt((
-            // Manage functions
-            parse_unary_functions,
-            parse_binary_functions,
-            parse_duration,
-            parse_assemble,
-
-            // manage values
-            map(
-                alt((hex_number, bin_u16, dec_number)),
-                |d: u16| Expr::Value(d as i32),
+pub fn factor(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
+    context(
+        "factor",
+        delimited(
+            space0,
+            context(
+                "alt",
+                alt((
+                    // Manage functions
+                    parse_unary_functions,
+                    parse_binary_functions,
+                    parse_duration,
+                    parse_assemble,
+                    // manage values
+                    map(alt((hex_number, bin_u16, dec_number)), |d: u16| {
+                        Expr::Value(d as i32)
+                    }),
+                    // manage $
+                    map(tag("$"), |_x| Expr::Label(String::from("$"))),
+                    prefixed_label_expr,
+                    // manage labels
+                    map(parse_label(false), Expr::Label),
+                    parens,
+                )),
             ),
-
-            // manage $
-            map(
-                tag("$"), 
-                |_x| Expr::Label(String::from("$"))
-            ),
-            
-            prefixed_label_expr,
-
-            // manage labels
-            map(
-                parse_label(false),
-                Expr::Label
-            ),
-
-            parens,
-        )), 
-        space0)
-        (input)
+            space0,
+        ),
+    )(input)
 }
 
 fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
@@ -1955,6 +1917,7 @@ fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
             Oper::BinaryXor => Expr::BinaryXor(Box::new(acc), Box::new(expr)),
 
             Oper::Equal => Expr::Equal(Box::new(acc), Box::new(expr)),
+            Oper::Different => Expr::Different(Box::new(acc), Box::new(expr)),
             Oper::StrictlyGreater => Expr::StrictlyGreater(Box::new(acc), Box::new(expr)),
             Oper::StrictlyLower => Expr::StrictlyLower(Box::new(acc), Box::new(expr)),
             Oper::LowerOrEqual => Expr::LowerOrEqual(Box::new(acc), Box::new(expr)),
@@ -1964,7 +1927,7 @@ fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
 }
 
 /// Compute operations related to * % /
-pub fn term<'a>(input: &'a str) -> IResult<&'a str, Expr> {
+pub fn term<'a>(input: &'a str) -> IResult<&'a str, Expr, VerboseError<&str>> {
     let (input, initial) = factor(input)?;
     let (input, remainder) = many0(alt((
         parse_oper(factor, "*", Oper::Mul),
@@ -1983,9 +1946,9 @@ fn parse_oper<'a, F>(
     inner: F,
     pattern: &'static str,
     symbol: Oper,
-) -> impl Fn(&'a str) -> IResult<&'a str, (Oper, Expr)>
+) -> impl Fn(&'a str) -> IResult<&'a str, (Oper, Expr), VerboseError<&str>>
 where
-    F: Fn(&'a str) -> IResult<&'a str, Expr>,
+    F: Fn(&'a str) -> IResult<&'a str, Expr, VerboseError<&str>>,
 {
     move |input: &'a str| {
         let (input, _) = space0(input)?;
@@ -1998,7 +1961,7 @@ where
 }
 
 /// Parse an expression
-pub fn expr(input: &str) -> IResult<&str, Expr> {
+pub fn expr(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     let (input, initial) = comp(input)?;
     let (input, remainder) = many0(alt((
         parse_oper(comp, "<=", Oper::LowerOrEqual),
@@ -2006,13 +1969,14 @@ pub fn expr(input: &str) -> IResult<&str, Expr> {
         parse_oper(comp, ">=", Oper::GreaterOrEqual),
         parse_oper(comp, ">", Oper::StrictlyGreater),
         parse_oper(comp, "==", Oper::Equal),
+        parse_oper(comp, "!=", Oper::Different),
     )))(input)?;
 
     Ok((input, fold_exprs(initial, remainder)))
 }
 
 /// parse functions with one argument
-pub fn parse_unary_functions(input: &str) -> IResult<&str, Expr> {
+pub fn parse_unary_functions(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     let (input, func) = alt((
         value(UnaryFunction::High, tag_no_case("HI")),
         value(UnaryFunction::Low, tag_no_case("LO")),
@@ -2024,14 +1988,11 @@ pub fn parse_unary_functions(input: &str) -> IResult<&str, Expr> {
 
     let (input, _) = tuple((space0, tag(")")))(input)?;
 
-    Ok((
-        input,
-        Expr::UnaryFunction(func, Box::new(exp))
-    ))
+    Ok((input, Expr::UnaryFunction(func, Box::new(exp))))
 }
 
 /// parse functions with two arguments
-pub fn parse_binary_functions(input: &str) -> IResult<&str, Expr> {
+pub fn parse_binary_functions(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     let (input, func) = alt((
         value(BinaryFunction::Min, tag_no_case("MIN")),
         value(BinaryFunction::Max, tag_no_case("MAX")),
@@ -2043,17 +2004,18 @@ pub fn parse_binary_functions(input: &str) -> IResult<&str, Expr> {
     let (input, _) = tuple((space0, tag(","), space0))(input)?;
     let (input, arg2) = expr(input)?;
 
-
     let (input, _) = tuple((space0, tag(")")))(input)?;
 
     Ok((
         input,
-        Expr::BinaryFunction(func, Box::new(arg1), Box::new(arg2))
+        Expr::BinaryFunction(func, Box::new(arg1), Box::new(arg2)),
     ))
 }
 
 /// Parser for functions taking into argument a token
-pub fn token_function<'a>(function_name: &'static str) -> impl Fn(&'a str) -> IResult<&str, Token> {
+pub fn token_function<'a>(
+    function_name: &'static str,
+) -> impl Fn(&'a str) -> IResult<&str, Token, VerboseError<&str>> {
     move |input: &'a str| {
         let (input, _) = tuple((tag_no_case(function_name), space0, char('('), space0))(input)?;
 
@@ -2066,19 +2028,19 @@ pub fn token_function<'a>(function_name: &'static str) -> impl Fn(&'a str) -> IR
 }
 
 /// Parse the duration function
-pub fn parse_duration(input: &str) -> IResult<&str, Expr> {
+pub fn parse_duration(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     let (input, token) = token_function("duration")(input)?;
     Ok((input, Expr::Duration(Box::new(token))))
 }
 
 /// Parse the single opcode assembling function
-pub fn parse_assemble(input: &str) -> IResult<&str, Expr> {
+pub fn parse_assemble(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     let (input, token) = token_function("opcode")(input)?;
     Ok((input, Expr::OpCode(Box::new(token))))
 }
 
 /// Parse operation related to + - & |
-pub fn comp(input: &str) -> IResult<&str, Expr> {
+pub fn comp(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     let (input, initial) = term(input)?;
     let (input, remainder) = many0(alt((
         parse_oper(term, "+", Oper::Add),
@@ -2144,9 +2106,6 @@ pub fn decode_parsing_error(_orig: &str, _e: ::nom::Err<&str>) -> String {
     */
 }
 
-
-
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -2154,39 +2113,76 @@ mod test {
 
     #[test]
     fn parse_test_cond() {
-        let res = inner_code(" nop
-        endif");
-        assert!(res.is_ok());
 
-        let res = inner_code(" nop
-        else");
+
+
+        let res = inner_code(
+            " nop
+        endif"
+        );
         assert!(res.is_ok());
+        assert_eq!(res.unwrap().1.len(), 1);
+
+        let res = inner_code(
+            " nop
+        else",
+        );
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().1.len(), 1);
+
 
         let res = parse_conditional_condition(KindOfConditional::If)("THING");
         assert!(res.is_ok());
 
-
-        let res = parse_conditional("if THING
+        let res = std::dbg!(parse_conditional(
+            "if THING
         nop
-        endif");
+        endif 
+        ",
+        ));
         assert!(res.is_ok());
-        assert_eq!("", res.unwrap().0);
+        assert_eq!("", res.unwrap().0.trim());
 
-        let res = parse_conditional("if THING
+        let res = std::dbg!(parse_conditional(
+            "if THING
+        nop
+        endif ",
+        ));
+        assert!(res.is_ok());
+        assert_eq!("", res.unwrap().0.trim());
+
+
+
+        let res = parse_conditional(
+            "if THING
         nop
         else
         nop
-        endif");
+        endif",
+        );
         assert!(res.is_ok());
         assert_eq!("", res.unwrap().0);
 
-        let res = parse_conditional("ifndef THING
+        let res = parse_conditional(
+            "ifndef THING
         nop
         else
         nop
-        endif");
+        endif",
+        );
         assert!(res.is_ok());
         assert_eq!("", res.unwrap().0);
+
+        let res = std::dbg!(parse_conditional("if demo_system_music_activated != 0
+        ; XXX Ensure memory is properly set
+        ld bc, 0x7fc2 : out (c), c
+        jp PLY_AKYst_Play
+    else
+        WAIT_CYCLES 64*16
+        ret
+    endif"));
+    assert!(res.is_ok());
+    assert_eq!("", res.unwrap().0);
 
     }
 
@@ -2210,11 +2206,8 @@ mod test {
         assert_eq!(
             formatted_expr("{hex} VAL"),
             Ok((
-                "", 
-                FormattedExpr::Formatted(
-                    ExprFormat::Hex(None), 
-                    Expr::Label("VAL".to_string())
-                )
+                "",
+                FormattedExpr::Formatted(ExprFormat::Hex(None), Expr::Label("VAL".to_string()))
             ))
         );
     }
@@ -2225,18 +2218,18 @@ mod test {
             Ok((
                 "",
                 Token::Print(vec![FormattedExpr::Raw(Expr::Label("VAR".to_string()))])
-            )
-            ),
+            )),
             parse_print("PRINT VAR")
         );
-
 
         assert_eq!(
             Ok((
                 "",
-                Token::Print(vec![FormattedExpr::Formatted(ExprFormat::Hex(None), Expr::Label("VAR".to_string()))])
-            )
-            ),
+                Token::Print(vec![FormattedExpr::Formatted(
+                    ExprFormat::Hex(None),
+                    Expr::Label("VAR".to_string())
+                )])
+            )),
             parse_print("PRINT {hex}VAR")
         );
 
@@ -2244,9 +2237,21 @@ mod test {
             Ok((
                 "",
                 Token::Print(vec![FormattedExpr::Raw(Expr::String("hello".to_string()))])
-            
             )),
             parse_print("PRINT \"hello\"")
         );
+    }
+
+
+    #[test]
+    fn test_standard_repeat() {
+        let z80 = std::dbg!("  repeat 5
+        nop
+            endrepeat
+            ");
+        let res = parse_repeat(z80);
+        assert!(res.is_ok(), "{:?}", res);
+        let res = res.unwrap();
+        assert_eq!(res.0.trim().len(), 0, "{:?}", res);
     }
 }
