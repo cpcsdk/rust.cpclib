@@ -231,7 +231,9 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&st
         not(eof) ,
         alt((
             context("empty line", parse_empty_line),
-            terminated(
+            
+            delimited(
+                space1,
                 alt((
                     context("repeat", map(parse_repeat, { |repeat| vec![repeat] })),
                     context("macro", map(parse_macro, { |m| vec![m] })),
@@ -239,7 +241,7 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&st
                     context("rorg", map(parse_rorg, { |rorg| vec![rorg] })),
                     context("condition", map(parse_conditional, { |cond| vec![cond] })),
                 )),
-                alt((line_ending, eof, tag(":")))
+                preceded(space0, alt((line_ending, eof, tag(":"))))
             ),
 
             context("line with label only", parse_z80_line_label_only),
@@ -462,7 +464,7 @@ pub fn parse_z80_line_complete(input: &str) -> IResult<&str, Vec<Token>, Verbose
     let (input, _) = space0(input)?;
 
     // Ensure it is the end of line of file
-    let (input, _) = std::dbg!(cut(alt((line_ending, eof)))(input))?;
+    let (input, _) = cut(alt((line_ending, eof)))(input)?;
 
 
     // Build the result
@@ -722,19 +724,13 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token, VerboseError<&str>
         context("else code", inner_code),
     )))(input)?;
 
-    if r#else.is_some() {
-        eprintln!("ELSE met");
-    }
 
 
     let (input, _) = context("end cond", tuple((
         cut(alt((space1, delimited(space0, tag(":"), space0)))),
-        cut(delimited(
+        cut(preceded(
             space0,
-            map(tag_no_case("ENDIF"), |_| println!("ENDIF met")),
-            cut(alt((
-                terminated(space0, opt(line_ending)), 
-                tag(":")))),
+            parse_instr("ENDIF"),
         )),
     )))(input)?;
 
@@ -2239,6 +2235,20 @@ mod test {
     assert!(res.is_ok());
     assert_eq!("", res.unwrap().0);
 
+
+    let res = std::dbg!(parse_conditional("ifndef __DEFINED_DEBUG__
+    __DEFINED_DEBUG__ equ 1
+    endif"));
+    assert!(res.is_ok());
+    assert_eq!("", res.unwrap().0);
+
+
+
+    let res = std::dbg!(parse_z80_line(" ifndef __DEFINED_DEBUG__
+    __DEFINED_DEBUG__ equ 1
+    endif"));
+    assert!(res.is_ok(), "{:?}", res);
+    assert_eq!("", res.unwrap().0);
     }
 
     #[test]

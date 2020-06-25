@@ -368,7 +368,7 @@ impl Env {
                 Err(err) => Err(err),
             }
         } else {
-            Err(String::from("Not yet implemented").into())
+            Err(format!("Context dependent evaluation not possible for {}", expr).into())
         }
     }
 
