@@ -43,6 +43,7 @@ impl ExprEvaluationExt for Expr {
                     Oper::BinaryXor => Ok(a ^ b),
 
                     Oper::Equal => Ok((a == b) as i32),
+                    Oper::Different => Ok((a != b) as i32),
 
                     Oper::LowerOrEqual => Ok((a <= b) as i32),
                     Oper::StrictlyLower => Ok((a < b) as i32),
@@ -119,6 +120,7 @@ impl ExprEvaluationExt for Expr {
             Neg(ref e) => e.resolve(sym).map(|result| -result),
 
             Equal(ref left, ref right) => oper(left, right, Oper::Equal),
+            Different(ref left, ref right) => oper(left, right, Oper::Different),
             LowerOrEqual(ref left, ref right) => oper(left, right, Oper::LowerOrEqual),
             GreaterOrEqual(ref left, ref right) => oper(left, right, Oper::GreaterOrEqual),
             StrictlyGreater(ref left, ref right) => oper(left, right, Oper::StrictlyGreater),
