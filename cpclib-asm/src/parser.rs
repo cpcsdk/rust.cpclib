@@ -1262,9 +1262,24 @@ pub fn parse_push_n_pop(input: &str) -> IResult<&str, Token, VerboseError<&str>>
         value(Mnemonic::Pop, parse_instr("POP")),
     ))(input)?;
 
-    let (input, register) = alt((parse_register16, parse_indexregister16))(input)?;
+    let (input, registers) = separated_nonempty_list(
+                                parse_comma,
+                                alt((
+                                    parse_register16,
+                                    parse_indexregister16
+                                ))
+                            )(input)?;
 
-    Ok((input, Token::OpCode(push_or_pop, Some(register), None)))
+    if registers.len() > 1 {
+        match push_or_pop {
+            Mnemonic::Push => Ok((input, Token::MultiPush(registers))),
+            Mnemonic::Pop => Ok((input, Token::MultiPop(registers))),
+            _ => unreachable!()
+        }
+    }
+    else {
+        Ok((input, Token::OpCode(push_or_pop, Some(registers[0].clone()), None)))
+    }
 }
 
 /// ...

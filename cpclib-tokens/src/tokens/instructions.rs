@@ -359,6 +359,11 @@ pub enum Token {
     Macro(String, Vec<String>, String), // Content of the macro is parsed on use
     MacroCall(String, Vec<String>), // String are used in order to not be limited to expression and allow opcode/registers use
 
+    // Fake pop directive with several arguments
+    MultiPop(Vec<DataAccess>),
+    // Fake push directive with several arguments
+    MultiPush(Vec<DataAccess>),
+
     NoList,
 
     OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>),
@@ -400,10 +405,20 @@ pub enum Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+
         let expr_list_to_string = |exprs: &Vec<Expr>| {
             exprs
                 .iter()
                 .map(|expr| format!("{}", expr))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+
+        let data_access_list_to_string = |data: &Vec<DataAccess>| {
+            data
+                .iter()
+                .map(|d| format!("{}", d))
                 .collect::<Vec<_>>()
                 .join(",")
         };
@@ -490,13 +505,20 @@ impl fmt::Display for Token {
                 => write!(f, "{}", string),
 
 
-                Token::MacroCall(ref name, ref args)
+            Token::MacroCall(ref name, ref args)
                 => {use itertools::Itertools;
                     write!(f, "{} {}", name, args.clone()
                                                 .iter()
                                                 .map(|a|{a.to_string()})
                                                 .join(", "))?;
                     Ok(())
+            },
+
+            Token::MultiPush(ref regs) => {
+                write!(f, "PUSH {}", data_access_list_to_string(regs))
+            },
+            Token::MultiPush(ref regs) => {
+                write!(f, "POP {}", data_access_list_to_string(regs))
             },
 
                 // TODO remove this one / it is not coherent as we have the PortC
