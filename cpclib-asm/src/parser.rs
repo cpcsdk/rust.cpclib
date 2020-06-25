@@ -227,37 +227,42 @@ pub fn parse_z80_str(code: &str) -> IResult<&str, Listing, VerboseError<&str>> {
 /// Parse a single line of Z80. Code useing directive on several lines cannot work
 pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
     let (input2, tokens) = 
-    //tuple((
-       // not(parse_forbidden_keyword),
+    tuple((
+        not(eof) ,
         alt((
             context("empty line", parse_empty_line),
-            context("repeat", map(parse_repeat, { |repeat| vec![repeat] })),
-            context("macro", map(parse_macro, { |m| vec![m] })),
-            context("basic", map(parse_basic, { |basic| vec![basic] })),
-            context("rorg", map(parse_rorg, { |rorg| vec![rorg] })),
-            context("condition", map(preceded(space1, parse_conditional), { |cond| vec![cond] })),
+            terminated(
+                alt((
+                    context("repeat", map(parse_repeat, { |repeat| vec![repeat] })),
+                    context("macro", map(parse_macro, { |m| vec![m] })),
+                    context("basic", map(parse_basic, { |basic| vec![basic] })),
+                    context("rorg", map(parse_rorg, { |rorg| vec![rorg] })),
+                    context("condition", map(parse_conditional, { |cond| vec![cond] })),
+                )),
+                alt((line_ending, eof, tag(":")))
+            ),
+
             context("line with label only", parse_z80_line_label_only),
             context("standard line", parse_z80_line_complete),
         ))
-    //))
+    ))
     (input)?;
 
-    Ok((input2, std::dbg!(tokens)))
+    Ok((input2, tokens.1))
 }
 
 /// Workaround because many0 is not used in the main root function
 fn inner_code(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
-    map(
-        many0(
-            parse_z80_line
-        ), 
-        |tokens| {
-        let mut inner: Vec<Token> = Vec::new();
-        for group in &tokens {
-            inner.extend_from_slice(&group);
+    context("inner code", 
+    fold_many0(
+        parse_z80_line,
+        Vec::new(), 
+        |mut inner, tokens| {
+            inner.extend_from_slice(&tokens);
+            inner
         }
-        inner
-    })(input)
+    )
+)(input)
 }
 
 /// TODO
@@ -278,10 +283,10 @@ pub fn parse_rorg(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
 /// TODO
 pub fn parse_macro(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    let (input, _) = delimited(space0, tag_no_case("MACRO"), space1)(input)?;
+    let (input, _) = preceded(space0, parse_instr("MACRO"))(input)?;
 
     // macro name
-    let (input, name) = parse_label(false)(input)?; // TODO use a specific function for that
+    let (input, name) = context("macro name", cut(parse_label(false)))(input)?; // TODO use a specific function for that
 
     // macro arguments
     let (input, arguments) = opt(preceded(
@@ -293,7 +298,10 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         ),
     ))(input)?;
 
-    let (input, content) = preceded(space0, many_till(take(1usize), tag_no_case("ENDM")))(input)?;
+    let (input, content) = context("macro content", cut(preceded(
+        space0, 
+        many_till(take(1usize), tag_no_case("ENDM"))
+    )))(input)?;
 
     Ok((
         input,
@@ -400,12 +408,15 @@ fn parse_single_token(first: bool) -> impl Fn(&str) -> IResult<&str, Token, Verb
         let input = if first {
             input
         } else {
-            let (input, _) = delimited(space0, char(':'), space0)(input)?;
+            let (input, _) = context("delimitation", delimited(space0, char(':'), space0))(input)?;
             input
         };
 
         // Get the token
-        let (input, opcode) = alt((parse_token, parse_directive))(input)?;
+        let (input, opcode) = context("single token", preceded(
+            space0,
+            alt((parse_token, parse_directive))
+        ))(input)?;
 
         Ok((input, opcode))
     }
@@ -429,28 +440,30 @@ pub fn parse_z80_line_complete(input: &str) -> IResult<&str, Vec<Token>, Verbose
     let (input, label) = opt(parse_label(true))(input)?;
     let (input, _) = space1(input)?;
 
-    // First directive MUST not be the ned of a keyword
+    // First directive MUST not be the  a keyword that ends a structure
     let (input, _) = not(parse_forbidden_keyword)(input)?;
 
     // Eat first token or directive
-    let (input, opcode) = parse_single_token(true)(input)?;
+    let (input, opcode) = context("first token", cut(parse_single_token(true)))(input)?;
 
     // Eat the additional opcodes
-    let (input, additional_opcodes) = fold_many0(
+    let (input, additional_opcodes) = context("other tokens", cut(fold_many0(
         parse_single_token(false),
         Vec::new(),
         |mut acc: Vec<_>, item| {
             acc.push(item);
             acc
         },
-    )(input)?;
+    )))(input)?;
 
     // Eat final comment
     let (input, _) = space0(input)?;
     let (input, comment) = opt(comment)(input)?;
+    let (input, _) = space0(input)?;
 
     // Ensure it is the end of line of file
-    let (input, _) = alt((line_ending, eof))(input)?;
+    let (input, _) = std::dbg!(cut(alt((line_ending, eof)))(input))?;
+
 
     // Build the result
     let mut tokens = Vec::new();
@@ -472,7 +485,7 @@ pub fn parse_z80_line_complete(input: &str) -> IResult<&str, Vec<Token>, Verbose
 /// Initially it was supposed to manage lines with only labels, however it has been extended
 /// to labels fallowed by specific commands.
 pub fn parse_z80_line_label_only(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
-    let (input, label) = preceded(opt(line_ending), parse_label(true))(input)?;
+    let (input, label) = parse_label(true)(input)?;
 
     // TODO make these stuff alternatives ...
     // Manage Equ
@@ -690,38 +703,40 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token, VerboseError<&str>
     ))(input)?;
 
     // Get the corresponding test
-    let (input, cond) = cut(context(
+    let (input, cond) = context(
         "Condition error",
-        delimited(space0, parse_conditional_condition(test_kind), space0),
+        cut(delimited(space0, parse_conditional_condition(test_kind), space0),
     ))(input)?;
 
 
     let (input, _) = alt((line_ending, tag(":")))(input)?;
 
-    let (input, code) = cut(context("main case", inner_code))(input)?;
+    let (input, code) = context("main case", cut(inner_code))(input)?;
 
-    let (input, r#else) = opt(preceded(
+    let (input, r#else) = context("else", opt(preceded(
         delimited(
             space0,
             parse_instr("ELSE"),
             cut(opt(alt((terminated(space0, line_ending), tag(":"))))),
         ),
         context("else code", inner_code),
-    ))(input)?;
+    )))(input)?;
 
     if r#else.is_some() {
         eprintln!("ELSE met");
     }
 
 
-    let (input, _) = tuple((
+    let (input, _) = context("end cond", tuple((
         cut(alt((space1, delimited(space0, tag(":"), space0)))),
         cut(delimited(
             space0,
-            map(parse_instr("ENDIF"), |_| println!("ENDIF met")),
-            cut(alt((terminated(space0, opt(line_ending)), tag(":")))),
+            map(tag_no_case("ENDIF"), |_| println!("ENDIF met")),
+            cut(alt((
+                terminated(space0, opt(line_ending)), 
+                tag(":")))),
         )),
-    ))(input)?;
+    )))(input)?;
 
     Ok((
         input,
@@ -754,13 +769,13 @@ fn parse_conditional_condition(
 
 /// Parse a breakpint instruction
 pub fn parse_breakpoint(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    map(preceded(tag_no_case("BREAKPOINT"), opt(expr)), |exp| {
+    map(preceded(parse_instr("BREAKPOINT"), opt(expr)), |exp| {
         Token::Breakpoint(exp)
     })(input)
 }
 
 pub fn parse_run(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    let (input, exp) = preceded(tag_no_case("RUN"), expr)(input)?;
+    let (input, exp) = preceded(parse_instr("RUN"), expr)(input)?;
     let (input, ga) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
 
     Ok((input, Token::Run(exp, ga)))
@@ -821,9 +836,9 @@ pub fn parse_ld_fake(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
 /// Parse the valids LD versions
 pub fn parse_ld_normal(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    let (input, _) = tuple((space0, tag_no_case("LD"), space1))(input)?;
+    let (input, _) = tuple((space0, parse_instr("LD")))(input)?;
 
-    let (input, dst) = alt((
+    let (input, dst) = cut(alt((
         parse_reg_address,
         parse_indexregister_with_index,
         parse_register_sp,
@@ -835,12 +850,12 @@ pub fn parse_ld_normal(input: &str) -> IResult<&str, Token, VerboseError<&str>> 
         parse_register_r,
         parse_hl_address,
         parse_address,
-    ))(input)?;
+    )))(input)?;
 
-    let (input, _) = tuple((space0, tag(","), space0))(input)?;
+    let (input, _) = parse_comma(input)?;
 
     // src possibilities depend on dst
-    let (input, src) = parse_ld_normal_src(&dst)(input)?;
+    let (input, src) = cut(parse_ld_normal_src(&dst))(input)?;
 
     Ok((input, Token::OpCode(Mnemonic::Ld, Some(dst), Some(src))))
 }
@@ -1132,13 +1147,13 @@ pub fn parse_logical_operator(input: &str) -> IResult<&str, Token, VerboseError<
         value(Mnemonic::Xor, parse_instr("Xor")),
     ))(input)?;
 
-    let (input, operand) = alt((
+    let (input, operand) = cut(context("logical operand", alt((
         parse_register8,
         parse_indexregister8,
         parse_hl_address,
         parse_indexregister_with_index,
         parse_expr,
-    ))(input)?;
+    ))))(input)?;
 
     Ok((input, Token::OpCode(operator, Some(operand), None)))
 }
@@ -1511,7 +1526,7 @@ macro_rules! parse_any_register8 {
         pub fn $name(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
             value(
                 DataAccess::Register8($reg),
-                tuple((tag_no_case($char), not(alphanumeric1))),
+                parse_instr($char),
             )(input)
         }
     };
@@ -1795,7 +1810,7 @@ fn parse_snaset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 pub fn comment(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(
         preceded(tag(";"), take_till(|ch| ch == '\n')),
-        |string: &str| Token::Comment(string.iter_elements().collect::<String>()),
+        |string: &str| Token::Comment(string.to_owned()),
     )(input)
 }
 
@@ -1931,6 +1946,10 @@ fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
             Oper::BinaryOr => Expr::BinaryOr(Box::new(acc), Box::new(expr)),
             Oper::BinaryXor => Expr::BinaryXor(Box::new(acc), Box::new(expr)),
 
+
+            Oper::BooleanAnd => Expr::BooleanAnd(Box::new(acc), Box::new(expr)),
+            Oper::BooleanOr => Expr::BooleanOr(Box::new(acc), Box::new(expr)),
+
             Oper::Equal => Expr::Equal(Box::new(acc), Box::new(expr)),
             Oper::Different => Expr::Different(Box::new(acc), Box::new(expr)),
             Oper::StrictlyGreater => Expr::StrictlyGreater(Box::new(acc), Box::new(expr)),
@@ -1975,6 +1994,25 @@ where
     }
 }
 
+
+fn parse_bool<'a, F>(
+    inner: F,
+    pattern: &'static str,
+    symbol: Oper,
+) -> impl Fn(&'a str) -> IResult<&'a str, (Oper, Expr), VerboseError<&str>>
+where
+    F: Fn(&'a str) -> IResult<&'a str, Expr, VerboseError<&str>>,
+{
+    move |input: &'a str| {
+        let (input, _) = space0(input)?;
+        let (input, _) = tag_no_case(pattern)(input)?;
+        let (input, _) = space0(input)?;
+        let (input, operation) = inner(input)?;
+
+        Ok((input, (symbol, operation)))
+    }
+}
+
 /// Parse an expression
 pub fn expr(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     let (input, initial) = comp(input)?;
@@ -1985,6 +2023,8 @@ pub fn expr(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
         parse_oper(comp, ">", Oper::StrictlyGreater),
         parse_oper(comp, "==", Oper::Equal),
         parse_oper(comp, "!=", Oper::Different),
+        parse_oper(comp, "&&", Oper::BooleanAnd),
+        parse_oper(comp, "||", Oper::BooleanOr),
     )))(input)?;
 
     Ok((input, fold_exprs(initial, remainder)))
@@ -2268,5 +2308,107 @@ mod test {
         assert!(res.is_ok(), "{:?}", res);
         let res = res.unwrap();
         assert_eq!(res.0.trim().len(), 0, "{:?}", res);
+    }
+
+
+    #[test]
+    fn parser_regression_1() {
+        let res = std::dbg!(
+            parse_ld_normal("ld a, chessboard_file")
+        );
+        assert!(res.is_ok(), "{:?}", res);
+
+        let code = " nop
+".replace("\u{C2}\u{A0}", " ");
+        let res = std::dbg!(
+            parse_z80_line_complete(&code)
+        );
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0, "", "{:?}", res);
+
+
+        let code = " nop
+".replace("\u{C2}\u{A0}", " ");
+        let res = std::dbg!(
+            parse_z80_line(&code)
+        );
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0, "", "{:?}", res);
+
+
+        let code = " nop
+                    nop
+".replace("\u{C2}\u{A0}", " ");
+        let res = std::dbg!(
+            many0(parse_z80_line)(&code)
+        );
+        assert!(res.is_ok(), "{:?}", &res); 
+        assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res); 
+
+
+        let code = " nop
+        nop
+".replace("\u{C2}\u{A0}", " ");
+let res = std::dbg!(
+inner_code(&code)
+);
+assert!(res.is_ok(), "{:?}", &res); 
+assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res); 
+
+        let res = std::dbg!(
+            inner_code("
+    ld a, chessboard_file
+    jp .common_part_loading_in_main_memory
+"
+            )
+        );
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+
+
+
+        let res = std::dbg!(
+            inner_code("
+.load_chessboard
+    ld de, .load_chessboard2
+    ld a, main_memory_chessboard_extra_file
+    jp .common_part_loading_in_main_memory
+.load_chessboard2
+    ld de, .load_chessboard2
+    ld a, main_memory_chessboard_extra_file
+    ld a, chessboard_file
+    jp .common_part_loading_in_main_memory
+"
+            )
+        );
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+
+
+        let res = std::dbg!(
+            parse_conditional("if 0
+.load_chessboard
+    ld de, .load_chessboard2
+    ld a, main_memory_chessboard_extra_file
+    jp .common_part_loading_in_main_memory
+.load_chessboard2
+    ld de, .load_chessboard2
+    ld a, chessboard_file
+    jp .common_part_loading_in_main_memory
+
+    endif"
+            )
+        );
+        assert!(res.is_ok(), "{:?}", res);
+
+    }
+
+
+    #[test]
+    fn parser_regression2() {
+        let res = std::dbg!(parse_assert("assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)"));
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+
     }
 }

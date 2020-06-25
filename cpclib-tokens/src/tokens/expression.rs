@@ -58,6 +58,9 @@ pub enum Expr {
     BinaryOr(Box<Expr>, Box<Expr>),
     BinaryXor(Box<Expr>, Box<Expr>),
 
+    // Boolean operations
+    BooleanAnd(Box<Expr>, Box<Expr>),
+    BooleanOr(Box<Expr>, Box<Expr>),
     Neg(Box<Expr>),
 
     Paren(Box<Expr>),
@@ -73,7 +76,8 @@ pub enum Expr {
     // Function with one argument
     UnaryFunction(UnaryFunction, Box<Expr>),
     // Function with two arguments
-    BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>)
+    BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
+
 }
 
 /// Format to represent an expression
@@ -206,6 +210,7 @@ impl Display for BinaryFunction {
 }
 
 
+
 impl From<&str> for Expr {
     fn from(src: &str) -> Self {
         Expr::Label(src.to_string())
@@ -284,6 +289,9 @@ pub enum Oper {
     BinaryOr,
     BinaryXor,
 
+    BooleanAnd,
+    BooleanOr,
+
     Equal,
     LowerOrEqual,
     GreaterOrEqual,
@@ -306,6 +314,13 @@ impl Display for Oper {
             BinaryAnd => write!(format, "&"),
             BinaryOr => write!(format, "|"),
             BinaryXor => write!(format, "^"),
+
+
+            BooleanAnd => write!(format, "&&"),
+            BooleanOr => write!(format, "||"),
+
+            BooleanAnd => write!(format, "&&"),
+            BooleanOr => write!(format, "||"),
 
             &Equal => write!(format, "=="),
             &Different => write!(format, "!="),
@@ -338,6 +353,8 @@ impl Display for Expr {
                 write!(format, "{}({}, {})", func, arg1, arg2)
             },
 
+
+
             &Duration(ref token) => write!(format, "DURATION({})", token),
             &OpCode(ref token) => write!(format, "OPCODE({})", token),
 
@@ -357,6 +374,13 @@ impl Display for Expr {
                 write!(format, "{} {} {}", left, Oper::BinaryXor, right)
             }
 
+
+            BooleanAnd(ref left, ref right) => {
+                write!(format, "{} {} {}", left, Oper::BooleanAnd, right)
+            }
+            BooleanOr(ref left, ref right) => {
+                write!(format, "{} {} {}", left, Oper::BooleanOr, right)
+            }
             &Neg(ref e) => write!(format, "-({})", e),
 
             &Paren(ref expr) => write!(format, "({})", expr),

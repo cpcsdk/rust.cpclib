@@ -74,7 +74,7 @@ fn parse_value(input: &str) -> IResult<&str, u16, VerboseError<&str>> {
 pub fn hex_number(input: &str) -> IResult<&str, u16,VerboseError<&str>> {
     alt((
         preceded(alt((tag_no_case("0x"), tag("#"), tag("$"), tag("&"))), inner_hex),
-        terminated(inner_hex, tag_no_case("h"))
+        terminated(inner_hex, tuple((tag_no_case("h"), not(alphanumeric1))))
     ))(input)
 }
 

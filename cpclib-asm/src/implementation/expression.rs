@@ -42,6 +42,9 @@ impl ExprEvaluationExt for Expr {
                     Oper::BinaryOr => Ok(a | b),
                     Oper::BinaryXor => Ok(a ^ b),
 
+                    Oper::BooleanAnd => Ok( ((a != 0) &&  (b!=0)) as _ ),
+                    Oper::BooleanOr => Ok( ((a != 0) || (b !=0)) as _),
+
                     Oper::Equal => Ok((a == b) as i32),
                     Oper::Different => Ok((a != b) as i32),
 
@@ -116,6 +119,9 @@ impl ExprEvaluationExt for Expr {
             BinaryAnd(ref left, ref right) => oper(left, right, Oper::BinaryAnd),
             BinaryOr(ref left, ref right) => oper(left, right, Oper::BinaryOr),
             BinaryXor(ref left, ref right) => oper(left, right, Oper::BinaryXor),
+
+            BooleanAnd(ref left, ref right) => oper(left, right, Oper::BooleanAnd),
+            BooleanOr(ref left, ref right) => oper(left, right, Oper::BooleanOr),
 
             Neg(ref e) => e.resolve(sym).map(|result| -result),
 
