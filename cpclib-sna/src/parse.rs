@@ -72,7 +72,10 @@ fn parse_value(input: &str) -> IResult<&str, u16, VerboseError<&str>> {
 /// TODO : move in a cpclib_parsecommon crate
 /// Read an hexadecimal value
 pub fn hex_number(input: &str) -> IResult<&str, u16,VerboseError<&str>> {
-    preceded(alt((tag_no_case("0x"), tag("#"), tag("&"))), inner_hex)(input)
+    alt((
+        preceded(alt((tag_no_case("0x"), tag("#"), tag("$"), tag("&"))), inner_hex),
+        terminated(inner_hex, tag_no_case("h"))
+    ))(input)
 }
 
 
