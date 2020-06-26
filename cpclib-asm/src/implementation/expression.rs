@@ -78,7 +78,7 @@ impl ExprEvaluationExt for Expr {
             String(ref string) => panic!("String values cannot be converted to i32 {}", string),
 
             Label(ref label) => match sym.value(label) {
-                Some(Symbol::Integer(val)) => Ok(*val),
+                Some(cpclib_tokens::symbols::Value::Integer(ref val)) => Ok(*val),
                 Some(_) => Err(
                     AssemblerError::WrongSymbolType {
                         symbol: label.to_owned(),

@@ -326,7 +326,7 @@ pub enum Token {
     Break,
     Breakpoint(Option<Expr>),
     BuildCpr,
-    BuildSna(SnapshotVersion),
+    BuildSna(Option<SnapshotVersion>),
     Comment(String),
     CrunchedBinary(CrunchType, String),
     CrunchedSection(CrunchType, Listing),
