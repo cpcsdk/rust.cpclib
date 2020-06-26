@@ -57,8 +57,9 @@ pub enum AssemblerError {
     #[fail(display = "Symbol `{}` already present on the symbol table", symbol)]
     SymbolAlreadyExists { symbol: String },
     
-    #[fail(display = "There is no macro named `{}`.", symbol)]
-    UnknownMacro { symbol: String },
+    #[fail(display = "There is no macro named `{}`. Closest one is: {:?}", symbol, closest)]
+        
+        UnknownMacro { symbol: String,  closest: Option<String>},
 
     #[fail(display = "Macro `{}` expect {} arguments; {} are provided.", symbol, nb_arguments, nb_paramers)]
     WrongNumberOfParameters{

@@ -20,6 +20,7 @@ use std::str::FromStr;
 
 use crate::preamble::*;
 use cpclib_sna::parse::*;
+use cpclib_sna::SnapshotVersion;
 
 use rayon::prelude::*;
 /// ...
@@ -90,11 +91,7 @@ impl ParserContext {
     }
 }
 
-const FIRST_DIRECTIVE: &[&str] = &[
-    "IF", "IFDEF", "IFNDEF",
-    "REPEAT", "REPT", "REP",
-    "PHASE"
-];
+const FIRST_DIRECTIVE: &[&str] = &["IF", "IFDEF", "IFNDEF", "REPEAT", "REPT", "REP", "PHASE"];
 
 // This table is supposed to contain the keywords that finish a section
 const FINAL_DIRECTIVE: &[&str] = &[
@@ -226,12 +223,10 @@ pub fn parse_z80_str(code: &str) -> IResult<&str, Listing, VerboseError<&str>> {
 
 /// Parse a single line of Z80. Code useing directive on several lines cannot work
 pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
-    let (input2, tokens) = 
-    tuple((
-        not(eof) ,
+    let (input2, tokens) = tuple((
+        not(eof),
         alt((
             context("empty line", parse_empty_line),
-            
             delimited(
                 space1,
                 alt((
@@ -241,30 +236,25 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&st
                     context("rorg", map(parse_rorg, { |rorg| vec![rorg] })),
                     context("condition", map(parse_conditional, { |cond| vec![cond] })),
                 )),
-                preceded(space0, alt((line_ending, eof, tag(":"))))
+                preceded(space0, alt((line_ending, eof, tag(":")))),
             ),
-
             context("line with label only", parse_z80_line_label_only),
             context("standard line", parse_z80_line_complete),
-        ))
-    ))
-    (input)?;
+        )),
+    ))(input)?;
 
     Ok((input2, tokens.1))
 }
 
 /// Workaround because many0 is not used in the main root function
 fn inner_code(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
-    context("inner code", 
-    fold_many0(
-        parse_z80_line,
-        Vec::new(), 
-        |mut inner, tokens| {
+    context(
+        "inner code",
+        fold_many0(parse_z80_line, Vec::new(), |mut inner, tokens| {
             inner.extend_from_slice(&tokens);
             inner
-        }
-    )
-)(input)
+        }),
+    )(input)
 }
 
 /// TODO
@@ -294,16 +284,19 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, arguments) = opt(preceded(
         tuple((space0, char(','), space0)),
         separated_nonempty_list(
-            tuple((space0, char(','), space0)),
+            parse_comma,
             /*parse_label(false)*/
             take_till(|c| c == '\n' || c == ':'),
         ),
     ))(input)?;
 
-    let (input, content) = context("macro content", cut(preceded(
-        space0, 
-        many_till(take(1usize), tag_no_case("ENDM"))
-    )))(input)?;
+    let (input, content) = context(
+        "macro content",
+        cut(preceded(
+            space0,
+            many_till(take(1usize), tag_no_case("ENDM")),
+        )),
+    )(input)?;
 
     Ok((
         input,
@@ -335,7 +328,7 @@ pub fn parse_repeat(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
             parse_instr("REPEAT"),
             parse_instr("REPT"),
             parse_instr("REP"),
-        ))
+        )),
     )(input)?;
 
     eprintln!("rep");
@@ -344,18 +337,20 @@ pub fn parse_repeat(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
     let (input, inner) = cut(context("repeat content", inner_code))(input)?;
 
-    let (input, _) = cut(context("repeat closure", tuple((
-        space0,
-        alt((
-            parse_instr("ENDREPEAT"),
-            parse_instr("ENDREPT"),
-            parse_instr("ENDREP"),
-            parse_instr("ENDR"),
-            parse_instr("REND"),
+    let (input, _) = cut(context(
+        "repeat closure",
+        tuple((
+            space0,
+            alt((
+                parse_instr("ENDREPEAT"),
+                parse_instr("ENDREPT"),
+                parse_instr("ENDREP"),
+                parse_instr("ENDR"),
+                parse_instr("REND"),
+            )),
+            space0,
         )),
-        space0,
-    ))))
-    (input)?;
+    ))(input)?;
 
     Ok((input, Token::Repeat(count, BaseListing::from(inner), None)))
 }
@@ -384,10 +379,7 @@ pub fn parse_basic(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 /// Parse the instruction to hide basic lines
 pub fn parse_basic_hide_lines(input: &str) -> IResult<&str, Vec<u16>, VerboseError<&str>> {
     let (input, _) = tuple((tag_no_case("HIDE_LINES"), space1))(input)?;
-    separated_nonempty_list(
-        preceded(space0, char(',')), 
-        preceded(space0, dec_number)
-    )(input)
+    separated_nonempty_list(preceded(space0, char(',')), preceded(space0, dec_number))(input)
 }
 
 /// TODO - currently consume several lines. Should do it only one time
@@ -415,10 +407,10 @@ fn parse_single_token(first: bool) -> impl Fn(&str) -> IResult<&str, Token, Verb
         };
 
         // Get the token
-        let (input, opcode) = context("single token", preceded(
-            space0,
-            alt((parse_token, parse_directive))
-        ))(input)?;
+        let (input, opcode) = context(
+            "single token",
+            preceded(space0, alt((parse_token, parse_directive))),
+        )(input)?;
 
         Ok((input, opcode))
     }
@@ -449,14 +441,17 @@ pub fn parse_z80_line_complete(input: &str) -> IResult<&str, Vec<Token>, Verbose
     let (input, opcode) = context("first token", cut(parse_single_token(true)))(input)?;
 
     // Eat the additional opcodes
-    let (input, additional_opcodes) = context("other tokens", cut(fold_many0(
-        parse_single_token(false),
-        Vec::new(),
-        |mut acc: Vec<_>, item| {
-            acc.push(item);
-            acc
-        },
-    )))(input)?;
+    let (input, additional_opcodes) = context(
+        "other tokens",
+        cut(fold_many0(
+            parse_single_token(false),
+            Vec::new(),
+            |mut acc: Vec<_>, item| {
+                acc.push(item);
+                acc
+            },
+        )),
+    )(input)?;
 
     // Eat final comment
     let (input, _) = space0(input)?;
@@ -465,7 +460,6 @@ pub fn parse_z80_line_complete(input: &str) -> IResult<&str, Vec<Token>, Verbose
 
     // Ensure it is the end of line of file
     let (input, _) = cut(alt((line_ending, eof)))(input)?;
-
 
     // Build the result
     let mut tokens = Vec::new();
@@ -662,6 +656,8 @@ pub fn parse_directive(input: &str) -> IResult<&str, Token, VerboseError<&str>> 
         parse_assert,
         parse_align,
         parse_breakpoint,
+        parse_bankset,
+        parse_buildsna,
         parse_org,
         parse_defs,
         parse_include,
@@ -707,32 +703,36 @@ pub fn parse_conditional(input: &str) -> IResult<&str, Token, VerboseError<&str>
     // Get the corresponding test
     let (input, cond) = context(
         "Condition error",
-        cut(delimited(space0, parse_conditional_condition(test_kind), space0),
-    ))(input)?;
-
+        cut(delimited(
+            space0,
+            parse_conditional_condition(test_kind),
+            space0,
+        )),
+    )(input)?;
 
     let (input, _) = alt((line_ending, tag(":")))(input)?;
 
     let (input, code) = context("main case", cut(inner_code))(input)?;
 
-    let (input, r#else) = context("else", opt(preceded(
-        delimited(
-            space0,
-            parse_instr("ELSE"),
-            cut(opt(alt((terminated(space0, line_ending), tag(":"))))),
-        ),
-        context("else code", inner_code),
-    )))(input)?;
-
-
-
-    let (input, _) = context("end cond", tuple((
-        cut(alt((space1, delimited(space0, tag(":"), space0)))),
-        cut(preceded(
-            space0,
-            parse_instr("ENDIF"),
+    let (input, r#else) = context(
+        "else",
+        opt(preceded(
+            delimited(
+                space0,
+                parse_instr("ELSE"),
+                cut(opt(alt((terminated(space0, line_ending), tag(":"))))),
+            ),
+            context("else code", inner_code),
         )),
-    )))(input)?;
+    )(input)?;
+
+    let (input, _) = context(
+        "end cond",
+        tuple((
+            cut(alt((space1, delimited(space0, tag(":"), space0)))),
+            cut(preceded(space0, parse_instr("ENDIF"))),
+        )),
+    )(input)?;
 
     Ok((
         input,
@@ -768,6 +768,36 @@ pub fn parse_breakpoint(input: &str) -> IResult<&str, Token, VerboseError<&str>>
     map(preceded(parse_instr("BREAKPOINT"), opt(expr)), |exp| {
         Token::Breakpoint(exp)
     })(input)
+}
+
+pub fn parse_bankset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
+    map(preceded(parse_instr("BANKSET"), expr), |exp| {
+        Token::Bankset(exp)
+    })(input)
+}
+
+pub fn parse_buildsna(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
+    terminated(
+        map(
+            preceded(
+                parse_instr("BUILDSNA"),
+                cut(opt(alt((tag_no_case("V2"), tag_no_case("V3"))))),
+            ),
+            |v| {
+                Token::BuildSna(match v {
+                    Some(txt) => {
+                        if txt.to_lowercase() == "v2" {
+                            Some(SnapshotVersion::V2)
+                        } else {
+                            Some(SnapshotVersion::V3)
+                        }
+                    }
+                    None => None,
+                })
+            },
+        ),
+        not(alphanumeric1),
+    )(input)
 }
 
 pub fn parse_run(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
@@ -924,7 +954,10 @@ fn parse_ld_normal_src(
         } else if dst.is_register_i() || dst.is_register_r() {
             parse_register_a(input)
         } else {
-            Err(nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::Alt)))
+            Err(nom::Err::Error(VerboseError::from_error_kind(
+                input,
+                ErrorKind::Alt,
+            )))
         }
     }
 }
@@ -986,17 +1019,19 @@ pub fn parse_db_or_dw(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 }
 
 // Fail if we do not read a forbidden keyword
-pub fn parse_forbidden_keyword(input: &str) -> IResult<&str, String, VerboseError<&str>>  {
+pub fn parse_forbidden_keyword(input: &str) -> IResult<&str, String, VerboseError<&str>> {
     let (input, _) = space0(input)?;
     let (input, name) = parse_label(false)(input)?;
-    
-    if ! FINAL_DIRECTIVE.iter()
+
+    if !FINAL_DIRECTIVE
+        .iter()
         .find(|&&a| a.to_lowercase() == name.to_lowercase())
-        .is_some(){
-            return Err(Err::Error(VerboseError::from_error_kind(
-                input,
-                ErrorKind::AlphaNumeric,
-            )));
+        .is_some()
+    {
+        return Err(Err::Error(VerboseError::from_error_kind(
+            input,
+            ErrorKind::AlphaNumeric,
+        )));
     }
 
     let (input, _) = space0(input)?;
@@ -1010,34 +1045,38 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token, VerboseError<&str>>
     // BUG: added because of parsing issues. Need to find why and remove ot
     let (input, _) = space0(input)?;
     let (input, name) = parse_label(false)(input)?;
-
+    
     // Check if the macro name is allowed
-    if FIRST_DIRECTIVE.iter().chain(FINAL_DIRECTIVE.iter())
-        .find(|&&a| a.to_lowercase() == name.to_lowercase())
-        .is_some()
+    if FIRST_DIRECTIVE
+    .iter()
+    .chain(FINAL_DIRECTIVE.iter())
+    .find(|&&a| a.to_lowercase() == name.to_lowercase())
+    .is_some()
     {
-        Err(Err::Failure(nom::error::ParseError::<&str>::from_error_kind(
-            input,
-            ErrorKind::AlphaNumeric,
-        )))
+        Err(Err::Failure(
+            nom::error::ParseError::<&str>::from_error_kind(input, ErrorKind::AlphaNumeric),
+        ))
     } else {
-        let (input, args) = opt(alt((
-            /*expr_list,  */ // initially a list of expression was used; now it is just plain strings
-            separated_nonempty_list(
-                tuple((tag(","), space0)),
-                take_till(|c| c == ',' || c == '\n'),
-            ),
-            map(tag_no_case("(void)"), { |_| Vec::new() }),
-        )))(input)?;
-
+        let (input, args) = alt((
+            value(Default::default(), delimited(space0, tag_no_case("(void)"), space0)),
+            opt(alt((
+                /*expr_list,  */ // initially a list of expression was used; now it is just plain strings
+                separated_nonempty_list(
+                    tuple((tag(","), space0)),
+                    take_till(|c| c == ',' || c == '\n'),
+                ),
+                map(tag_no_case("(void)"), { |_| Vec::new() }),
+            ))),
+        ))(input)?;
+        
         Ok((
             input,
             Token::MacroCall(
                 name,
                 args.unwrap_or_default()
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<String>>(),
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>(),
             ),
         ))
     }
@@ -1143,13 +1182,16 @@ pub fn parse_logical_operator(input: &str) -> IResult<&str, Token, VerboseError<
         value(Mnemonic::Xor, parse_instr("Xor")),
     ))(input)?;
 
-    let (input, operand) = cut(context("logical operand", alt((
-        parse_register8,
-        parse_indexregister8,
-        parse_hl_address,
-        parse_indexregister_with_index,
-        parse_expr,
-    ))))(input)?;
+    let (input, operand) = cut(context(
+        "logical operand",
+        alt((
+            parse_register8,
+            parse_indexregister8,
+            parse_hl_address,
+            parse_indexregister_with_index,
+            parse_expr,
+        )),
+    ))(input)?;
 
     Ok((input, Token::OpCode(operator, Some(operand), None)))
 }
@@ -1236,7 +1278,10 @@ pub fn parse_add_or_adc_complete(input: &str) -> IResult<&str, Token, VerboseErr
             verify(parse_register_iy, |_| first.is_register_iy()),
         ))(input)
     } else {
-        return Err(nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::Alt)));
+        return Err(nom::Err::Error(VerboseError::from_error_kind(
+            input,
+            ErrorKind::Alt,
+        )));
     }?;
 
     Ok((input, Token::OpCode(add_or_adc, Some(first), Some(second))))
@@ -1274,22 +1319,21 @@ pub fn parse_push_n_pop(input: &str) -> IResult<&str, Token, VerboseError<&str>>
     ))(input)?;
 
     let (input, registers) = separated_nonempty_list(
-                                parse_comma,
-                                alt((
-                                    parse_register16,
-                                    parse_indexregister16
-                                ))
-                            )(input)?;
+        parse_comma,
+        alt((parse_register16, parse_indexregister16)),
+    )(input)?;
 
     if registers.len() > 1 {
         match push_or_pop {
             Mnemonic::Push => Ok((input, Token::MultiPush(registers))),
             Mnemonic::Pop => Ok((input, Token::MultiPop(registers))),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
-    }
-    else {
-        Ok((input, Token::OpCode(push_or_pop, Some(registers[0].clone()), None)))
+    } else {
+        Ok((
+            input,
+            Token::OpCode(push_or_pop, Some(registers[0].clone()), None),
+        ))
     }
 }
 
@@ -1520,10 +1564,7 @@ macro_rules! parse_any_register8 {
     ($name: ident, $char:expr, $reg:expr) => {
         /// Parse register $char
         pub fn $name(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
-            value(
-                DataAccess::Register8($reg),
-                parse_instr($char),
-            )(input)
+            value(DataAccess::Register8($reg), parse_instr($char))(input)
         }
     };
 }
@@ -1793,12 +1834,32 @@ fn parse_opcode_no_arg3(input: &str) -> IResult<&str, Token, VerboseError<&str>>
 }
 
 fn parse_snaset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    let (input, _) = parse_instr("SNASET")(input)?;
-    let (input, flag) = parse_flag(input)?;
-    let (input, _) = space1(input)?;
-    let (input, value) = parse_flag_value(input)?;
-    let (input, _) = space0(input)?;
+    let line = input;
 
+    let (input, _) = parse_instr("SNASET")(input)?;
+
+    let (input, flagname) = cut(parse_label(false))(input)?;
+    let (input, _) = delimited(space0, parse_comma, space0)(input)?;
+
+    let (input, values) = cut(separated_nonempty_list(
+        delimited(space0, parse_comma, space0),
+        parse_flag_value,
+    ))(input)?;
+
+    let (flagname, value) = if values.len() == 1 {
+        (flagname, values[0].clone())
+    } else {
+        (
+            format!("{}:{}", flagname, values[0].as_u16().unwrap()),
+            values[1].clone(),
+        )
+    };
+
+    eprintln!("flagname => {}", &flagname);
+
+    let (_, flag) = std::dbg!(parse_flag(&flagname)).map_err(|e| {
+        nom::Err::Error(VerboseError::from_error_kind(line, ErrorKind::AlphaNumeric))
+    })?;
     Ok((input, Token::SnaSet(flag, value)))
 }
 
@@ -1942,7 +2003,6 @@ fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
             Oper::BinaryOr => Expr::BinaryOr(Box::new(acc), Box::new(expr)),
             Oper::BinaryXor => Expr::BinaryXor(Box::new(acc), Box::new(expr)),
 
-
             Oper::BooleanAnd => Expr::BooleanAnd(Box::new(acc), Box::new(expr)),
             Oper::BooleanOr => Expr::BooleanOr(Box::new(acc), Box::new(expr)),
 
@@ -1989,7 +2049,6 @@ where
         Ok((input, (symbol, operation)))
     }
 }
-
 
 fn parse_bool<'a, F>(
     inner: F,
@@ -2164,12 +2223,9 @@ mod test {
 
     #[test]
     fn parse_test_cond() {
-
-
-
         let res = inner_code(
             " nop
-        endif"
+        endif",
         );
         assert!(res.is_ok());
         assert_eq!(res.unwrap().1.len(), 1);
@@ -2180,7 +2236,6 @@ mod test {
         );
         assert!(res.is_ok());
         assert_eq!(res.unwrap().1.len(), 1);
-
 
         let res = parse_conditional_condition(KindOfConditional::If)("THING");
         assert!(res.is_ok());
@@ -2202,8 +2257,6 @@ mod test {
         assert!(res.is_ok());
         assert_eq!("", res.unwrap().0.trim());
 
-
-
         let res = parse_conditional(
             "if THING
         nop
@@ -2224,31 +2277,34 @@ mod test {
         assert!(res.is_ok());
         assert_eq!("", res.unwrap().0);
 
-        let res = std::dbg!(parse_conditional("if demo_system_music_activated != 0
+        let res = std::dbg!(parse_conditional(
+            "if demo_system_music_activated != 0
         ; XXX Ensure memory is properly set
         ld bc, 0x7fc2 : out (c), c
         jp PLY_AKYst_Play
     else
         WAIT_CYCLES 64*16
         ret
-    endif"));
-    assert!(res.is_ok());
-    assert_eq!("", res.unwrap().0);
+    endif"
+        ));
+        assert!(res.is_ok());
+        assert_eq!("", res.unwrap().0);
 
-
-    let res = std::dbg!(parse_conditional("ifndef __DEFINED_DEBUG__
+        let res = std::dbg!(parse_conditional(
+            "ifndef __DEFINED_DEBUG__
     __DEFINED_DEBUG__ equ 1
-    endif"));
-    assert!(res.is_ok());
-    assert_eq!("", res.unwrap().0);
+    endif"
+        ));
+        assert!(res.is_ok());
+        assert_eq!("", res.unwrap().0);
 
-
-
-    let res = std::dbg!(parse_z80_line(" ifndef __DEFINED_DEBUG__
+        let res = std::dbg!(parse_z80_line(
+            " ifndef __DEFINED_DEBUG__
     __DEFINED_DEBUG__ equ 1
-    endif"));
-    assert!(res.is_ok(), "{:?}", res);
-    assert_eq!("", res.unwrap().0);
+    endif"
+        ));
+        assert!(res.is_ok(), "{:?}", res);
+        assert_eq!("", res.unwrap().0);
     }
 
     #[test]
@@ -2307,78 +2363,66 @@ mod test {
         );
     }
 
-
     #[test]
     fn test_standard_repeat() {
-        let z80 = std::dbg!("  repeat 5
+        let z80 = std::dbg!(
+            "  repeat 5
         nop
             endrepeat
-            ");
+            "
+        );
         let res = parse_repeat(z80);
         assert!(res.is_ok(), "{:?}", res);
         let res = res.unwrap();
         assert_eq!(res.0.trim().len(), 0, "{:?}", res);
     }
 
-
     #[test]
     fn parser_regression_1() {
-        let res = std::dbg!(
-            parse_ld_normal("ld a, chessboard_file")
-        );
+        let res = std::dbg!(parse_ld_normal("ld a, chessboard_file"));
         assert!(res.is_ok(), "{:?}", res);
 
         let code = " nop
-".replace("\u{C2}\u{A0}", " ");
-        let res = std::dbg!(
-            parse_z80_line_complete(&code)
-        );
+"
+        .replace("\u{C2}\u{A0}", " ");
+        let res = std::dbg!(parse_z80_line_complete(&code));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0, "", "{:?}", res);
-
 
         let code = " nop
-".replace("\u{C2}\u{A0}", " ");
-        let res = std::dbg!(
-            parse_z80_line(&code)
-        );
+"
+        .replace("\u{C2}\u{A0}", " ");
+        let res = std::dbg!(parse_z80_line(&code));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0, "", "{:?}", res);
-
 
         let code = " nop
                     nop
-".replace("\u{C2}\u{A0}", " ");
-        let res = std::dbg!(
-            many0(parse_z80_line)(&code)
-        );
-        assert!(res.is_ok(), "{:?}", &res); 
-        assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res); 
-
+"
+        .replace("\u{C2}\u{A0}", " ");
+        let res = std::dbg!(many0(parse_z80_line)(&code));
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
 
         let code = " nop
         nop
-".replace("\u{C2}\u{A0}", " ");
-let res = std::dbg!(
-inner_code(&code)
-);
-assert!(res.is_ok(), "{:?}", &res); 
-assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res); 
+"
+        .replace("\u{C2}\u{A0}", " ");
+        let res = std::dbg!(inner_code(&code));
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
 
-        let res = std::dbg!(
-            inner_code("
+        let res = std::dbg!(inner_code(
+            "
     ld a, chessboard_file
     jp .common_part_loading_in_main_memory
 "
-            )
-        );
+        ));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
-
-
-        let res = std::dbg!(
-            inner_code("
+        let res = std::dbg!(inner_code(
+            "
 .load_chessboard
     ld de, .load_chessboard2
     ld a, main_memory_chessboard_extra_file
@@ -2389,14 +2433,12 @@ assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
     ld a, chessboard_file
     jp .common_part_loading_in_main_memory
 "
-            )
-        );
+        ));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
-
-        let res = std::dbg!(
-            parse_conditional("if 0
+        let res = std::dbg!(parse_conditional(
+            "if 0
 .load_chessboard
     ld de, .load_chessboard2
     ld a, main_memory_chessboard_extra_file
@@ -2407,18 +2449,47 @@ assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
     jp .common_part_loading_in_main_memory
 
     endif"
-            )
-        );
+        ));
         assert!(res.is_ok(), "{:?}", res);
-
     }
-
 
     #[test]
     fn parser_regression2() {
         let res = std::dbg!(parse_assert("assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)"));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+    }
 
+    #[test]
+    fn parser_sna() {
+        let res = std::dbg!(parse_buildsna("BUILDSNA"));
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+
+        let res = std::dbg!(parse_buildsna("BUILDSNA V2"));
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+
+        let res = std::dbg!(parse_buildsna("BUILDSNA V3"));
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+
+        let res = std::dbg!(parse_buildsna("BUILDSNA V4"));
+        assert!(res.is_err(), "{:?}", &res);
+    }
+
+    #[test]
+    fn test_parse_snaset() {
+        let res = std::dbg!(parse_snaset("SNASET Z80_SP, 0x500"));
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+
+        let res = std::dbg!(parse_snaset("SNASET GA_PAL, 0, 30"));
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+
+        let res = std::dbg!(parse_snaset("SNASET CRTC_REG, 1, 48"));
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
     }
 }

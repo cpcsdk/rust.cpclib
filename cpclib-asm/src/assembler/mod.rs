@@ -3,6 +3,7 @@ use crate::preamble::*;
 use crate::AssemblingOptions;
 
 use cpclib_basic::*;
+use cpclib_sna::*;
 
 use smallvec::SmallVec;
 use std::collections::HashMap;
@@ -195,7 +196,7 @@ pub struct Env {
     maxptr: usize,
 
     /// Currently selected bank
-    activebank: usize,
+    activepage: usize,
 
     /// Memory configuration is controlled by the underlying snapshot.
     /// It will ease the generation of snapshots but may complexify the generation of files
@@ -205,6 +206,7 @@ pub struct Env {
     iorg: usize,
     org_zones: Vec<OrgZone>,
     symbols: SymbolsTableCaseDependent,
+
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -227,7 +229,7 @@ impl Default for Env {
             outputadr: 0,
             codeadr: 0,
             maxptr: 0xffff,
-            activebank: 0,
+            activepage: 0,
 
             sna: Default::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
@@ -269,7 +271,7 @@ impl Env {
             self.outputadr = 0;
             self.codeadr = 0;
             self.maxptr = 0xffff;
-            self.activebank = 0;
+            self.activepage = 0;
             self.sna = Default::default();
             self.sna_version = cpclib_sna::SnapshotVersion::V3;
             self.iorg = 0;
@@ -361,15 +363,8 @@ impl Env {
     }
 
     /// Evaluate the expression according to the current state of the environment
-    pub fn eval(&self, expr: &Expr) -> Result<usize, AssemblerError> {
-        if expr.is_context_independant() {
-            match expr.eval() {
-                Ok(val) => Ok(val as usize),
-                Err(err) => Err(err),
-            }
-        } else {
-            Err(format!("Context dependent evaluation not possible for {}", expr).into())
-        }
+    pub fn eval(&self, expr: &Expr) -> Result<i32, AssemblerError> {
+        expr.resolve(self.symbols())
     }
 
     pub fn symbols(&self) -> &SymbolsTableCaseDependent {
@@ -506,8 +501,26 @@ impl Env {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(label) {
             Err(format!("Symbol \"{}\" already present in symbols table", label).into())
         } else {
+            if !label.starts_with('.') {
+                self.symbols_mut().set_current_label(label);
+            }
             self.add_symbol_to_symbol_table(label, i32::from(value))
         }
+    }
+
+    fn visit_multi_pushes(&mut self, regs: &[DataAccess]) -> Result<(), AssemblerError> {
+        for reg in regs.iter() {
+            assemble_push(reg)?;
+        }
+        Ok(())
+    }
+
+
+    fn visit_multi_pops(&mut self, regs: &[DataAccess]) -> Result<(), AssemblerError> {
+        for reg in regs.iter() {
+            assemble_pop(reg)?;
+        }
+        Ok(())
     }
 
     /// Manage a IF .. XXX ELSEIF YYY ELSE ZZZ structure
@@ -582,12 +595,30 @@ impl Env {
         Ok(())
     } 
 
+    pub fn visit_buildsna(&mut self, version: Option<&SnapshotVersion> ) -> Result<(), AssemblerError> {
+        self.sna_version = version.cloned().unwrap_or(SnapshotVersion::V3);
+        Ok(())
+    }
+
+    pub fn visit_bankset(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+        let page = self.resolve_expr_must_never_fail(exp)?;
+        // TODO add checks
+        self.activepage = page as _;
+        Ok(())
+
+    }
+
     pub fn visit_call_macro(&mut self, name: &str, parameters: &[String]) -> Result<(), AssemblerError> {
 
 
+        dbg!(self.symbols());
+
         let r#macro = self.symbols().macro_value(name);
         if r#macro.is_none() {                                           
-            return Err(AssemblerError::UnknownMacro{symbol: name.to_owned()});
+            return Err(AssemblerError::UnknownMacro{
+                symbol: name.to_owned(),
+                closest: self.symbols().closest_symbol(name)
+            });
         }
         let r#macro = r#macro.unwrap();
 
@@ -738,6 +769,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Basic(ref variables, ref hidden_lines, ref code) => {
             env.visit_basic(variables.as_ref(), hidden_lines.as_ref(), code)
         }
+        Token::BuildSna(ref v) => env.visit_buildsna(v.as_ref()),
+        Token::Bankset(ref v) => env.visit_bankset(v),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | &Token::Defw(_) => visit_db_or_dw(token, env),
         Token::Defs(_, _) => visit_defs(token, env),
@@ -763,6 +796,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         }  => env.visit_incbin(content.as_ref().unwrap()),
         Token::If(ref cases, ref other) => env.visit_if(cases, other.as_ref()),
         Token::Label(ref label) => env.visit_label(label),
+        Token::MultiPush(ref regs) => env.visit_multi_pushes(regs),
+        Token::MultiPop(ref regs) => env.visit_multi_pops(regs),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
         Token::Repeat(_, _, _) => visit_repeat(token, env),
@@ -1113,8 +1148,8 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
 
     // TODO Check overlapping region
     // TODO manage rorg like instruction
-    env.outputadr = adr;
-    env.codeadr = adr;
+    env.outputadr = adr as _;
+    env.codeadr = adr as _;
 
     // Specify start address at first use
     if env.startadr.is_none() {
