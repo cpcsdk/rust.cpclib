@@ -691,10 +691,18 @@ impl Env {
     }
 
     pub fn visit_run(&mut self, addr: &Expr, arg2: Option<&Expr>) -> Result<(), AssemblerError> {
-        assert!(arg2.is_none(), "need to implement the management of this second arg");
+
 
         let value = self.resolve_expr_may_fail_in_first_pass(addr)?;
         self.sna.set_value(cpclib_sna::SnapshotFlag::Z80_PC, value as _);
+
+        match arg2 {
+            Some(exp) => {
+                let val = self.resolve_expr_may_fail_in_first_pass(exp)?;
+                self.sna.set_value(SnapshotFlag::GA_RAMCFG, val as _);
+            }
+            None => {}
+        }
 
         Ok(())
     }
