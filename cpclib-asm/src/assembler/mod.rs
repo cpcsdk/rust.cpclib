@@ -613,9 +613,7 @@ impl Env {
 
     pub fn visit_call_macro(&mut self, name: &str, parameters: &[String]) -> Result<(), AssemblerError> {
 
-
-        dbg!(self.symbols());
-
+        // Retreive the macro
         let r#macro = self.symbols().macro_value(name);
         if r#macro.is_none() {                                           
             return Err(AssemblerError::UnknownMacro{
@@ -625,8 +623,7 @@ impl Env {
         }
         let r#macro = r#macro.unwrap();
 
-
-
+        // Check if there is the right number of arguments
         if r#macro.nb_args() != parameters.len() {
             return Err(AssemblerError::WrongNumberOfParameters{
                 symbol: name.to_owned(),
@@ -635,15 +632,18 @@ impl Env {
             });
         }
 
-        let mut code = r#macro.code().to_string();
-        for (parameter, value) in r#macro.args().iter().zip(parameters.iter()) {
-            let parameter = format!("{{{}}}", parameter); // {parameter}
-            code = code.replace(&parameter, value); // todo find a way to optimize this slow part that does tons of copies
-        }
+        let code = r#macro.develop(parameters);
 
         // Tokenize with the same assembling parameters and context
         let listing = Listing::from_str(&code)?;
-        self.visit_listing(&listing)?;
+        self.visit_listing(&listing)
+            .or_else(|e| {
+                Err(AssemblerError::MacroError{
+                    name: name.to_owned(),
+                    root: Box::new(e)
+                })
+            })
+        ?;
 
         Ok(())
 

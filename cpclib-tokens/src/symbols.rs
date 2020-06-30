@@ -41,7 +41,27 @@ impl Macro {
     pub fn nb_args(&self) -> usize {
         self.args.len()
     }
+
+    /// Develop the macro with the given arguments
+    pub fn develop(&self, args: &[String]) -> String {
+        assert_eq!(args.len(), self.nb_args());
+
+        let mut listing = self.code.to_string();
+        for (argname, argvalue) in self.args.iter().zip(args.iter()) {
+            listing = listing.replace(
+                &format!("{{{}}}", argname),
+                argvalue
+            );
+        }
+
+        listing
+    }
 }
+
+
+
+
+
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum Value {
