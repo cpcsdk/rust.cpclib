@@ -848,14 +848,24 @@ pub fn parse_stable_ticker_stop(input: &str) -> IResult<&str, Token, VerboseErro
 
 /// Parse fake and real LD instructions
 pub fn parse_ld(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    alt((parse_ld_fake, parse_ld_normal))(input)
+    context("ld", alt((
+        context("fake ld", parse_ld_fake), 
+        context("normal ld", parse_ld_normal))
+    ))(input)
 }
 
 /// Parse artifical LD instruction (would be replaced by several real instructions)
 pub fn parse_ld_fake(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tuple((tag_no_case("LD"), space1))(input)?;
 
-    let (input, dst) = parse_register16(input)?;
+    let (input, dst) = terminated(
+        parse_register16, 
+        not(alt((
+            tag_no_case(".low"), 
+            tag_no_case(".high")
+            ))
+        )
+    )(input)?;
 
     let (input, _) = tuple((space0, tag(","), space0))(input)?;
 
@@ -866,13 +876,20 @@ pub fn parse_ld_fake(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
 /// Parse the valids LD versions
 pub fn parse_ld_normal(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    let (input, _) = tuple((space0, parse_instr("LD")))(input)?;
+    let (input, _) = context("...", tuple((space0, parse_instr("LD"), space0)))(input)?;
 
-    let (input, dst) = cut(alt((
+    let (input, dst) = std::dbg!(context("output", cut(alt((
         parse_reg_address,
         parse_indexregister_with_index,
         parse_register_sp,
-        parse_register16,
+        terminated(
+            parse_register16, 
+            not(alt((
+                tag_no_case(".low"), 
+                tag_no_case(".high")
+                ))
+            )
+        ),
         parse_register8,
         parse_indexregister16,
         parse_indexregister8,
@@ -880,12 +897,12 @@ pub fn parse_ld_normal(input: &str) -> IResult<&str, Token, VerboseError<&str>> 
         parse_register_r,
         parse_hl_address,
         parse_address,
-    )))(input)?;
+    ))))(input))?;
 
-    let (input, _) = parse_comma(input)?;
+    let (input, _) = context("comma", cut(parse_comma))(input)?;
 
     // src possibilities depend on dst
-    let (input, src) = cut(parse_ld_normal_src(&dst))(input)?;
+    let (input, src) = context("input", cut(parse_ld_normal_src(&dst)))(input)?;
 
     Ok((input, Token::OpCode(Mnemonic::Ld, Some(dst), Some(src))))
 }
@@ -1543,9 +1560,10 @@ pub fn parse_register8(input: &str) -> IResult<&str, DataAccess, VerboseError<&s
                 preceded(tag("."), alt((
                     value('L', tag_no_case("low")),
                     value('H', tag_no_case("high"))
-                )))
+                ))),
+                space0
             )),
-            |(r16, code)| {
+            |(r16, code, _)| {
                 if code == 'L' {
                     r16.to_data_access_for_low_register().unwrap()
                 }
@@ -2518,6 +2536,31 @@ mod test {
     #[test]
     fn test_parse_r16_to_r8() {
         let res = parse_z80_line(" ld a, hl.low");
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+
+
+        let res = parse_ld_normal("ld bc.low, a");
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+        assert_eq!(res.unwrap(), ("", Token::OpCode(
+            Mnemonic::Ld, 
+            Some(Register8::C.into()),
+            Some(Register8::A.into()),
+        ))
+        );
+
+        let res = parse_z80_line(" ld bc.low, a");
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+        assert_eq!(res.unwrap(), ("", vec![Token::OpCode(
+            Mnemonic::Ld, 
+            Some(Register8::C.into()),
+            Some(Register8::A.into()),
+        )])
+        );
+
+        let res = parse_z80_line("\t\tld  bc.low, a\n\t");
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
     }
