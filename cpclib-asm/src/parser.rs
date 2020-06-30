@@ -1538,6 +1538,23 @@ pub fn parse_register16(input: &str) -> IResult<&str, DataAccess, VerboseError<&
 /// TODO rename to emphasize it is standard reigsters
 pub fn parse_register8(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     alt((
+        map(tuple((
+                parse_register16,
+                preceded(tag("."), alt((
+                    value('L', tag_no_case("low")),
+                    value('H', tag_no_case("high"))
+                )))
+            )),
+            |(r16, code)| {
+                if code == 'L' {
+                    r16.to_data_access_for_low_register().unwrap()
+                }
+                else {
+                    r16.to_data_access_for_high_register().unwrap()
+
+                }
+            }
+        ),
         parse_register_a,
         parse_register_b,
         parse_register_c,
@@ -2493,6 +2510,14 @@ mod test {
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
         let res = std::dbg!(parse_snaset("SNASET CRTC_REG, 1, 48"));
+        assert!(res.is_ok(), "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+    }
+
+
+    #[test]
+    fn test_parse_r16_to_r8() {
+        let res = parse_z80_line(" ld a, hl.low");
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
     }
