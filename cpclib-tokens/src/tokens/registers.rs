@@ -77,6 +77,25 @@ pub enum IndexRegister16 {
     Iy,
 }
 
+
+impl IndexRegister16 {
+    pub fn high(self) -> IndexRegister8 {
+        match self {
+            Self::Ix => IndexRegister8::Ixh,
+            Self::Iy => IndexRegister8::Iyh,
+        }
+    }
+
+    /// Return the low 8bit register if exists
+    pub fn low(self) -> IndexRegister8 {
+        match self {
+            Self::Ix => IndexRegister8::Ixl,
+            Self::Iy => IndexRegister8::Iyl,
+        }
+    }
+
+}
+
 impl fmt::Display for IndexRegister16 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::*;

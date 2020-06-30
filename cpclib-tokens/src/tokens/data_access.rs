@@ -205,6 +205,26 @@ impl DataAccess {
         }
     }
 
+    pub fn to_data_access_for_low_register(&self) -> Option<DataAccess> {
+        match self {
+            DataAccess::IndexRegister16(ref reg) 
+                => Some(reg.low().into()),
+            DataAccess::Register16(ref reg)
+                => Some(reg.low().unwrap().into()),
+            _ => None
+        }
+    }
+
+    pub fn to_data_access_for_high_register(&self) -> Option<DataAccess> {
+        match self {
+            DataAccess::IndexRegister16(ref reg) 
+                => Some(reg.high().into()),
+            DataAccess::Register16(ref reg)
+                => Some(reg.high().unwrap().into()),
+            _ => None
+        }
+    }
+
     pub fn get_register8(&self) -> Option<Register8> {
         match self {
             DataAccess::Register8(ref reg) => Some(*reg),
