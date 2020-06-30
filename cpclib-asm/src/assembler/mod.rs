@@ -433,8 +433,11 @@ impl Env {
                     Ok(0)
                 } else {
                     Err(format!(
-                        "Impossible to compute relative address {:?} at pass {:?}",
-                        address, e
+                        "Impossible to compute relative address {:?} at pass {:?}. {}",
+
+                        address, 
+                        self.pass,
+                        e
                     )
                     .into())
                 }
