@@ -878,7 +878,7 @@ pub fn parse_ld_fake(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 pub fn parse_ld_normal(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = context("...", tuple((space0, parse_instr("LD"), space0)))(input)?;
 
-    let (input, dst) = std::dbg!(context("output", cut(alt((
+    let (input, dst) = context("output", cut(alt((
         parse_reg_address,
         parse_indexregister_with_index,
         parse_register_sp,
@@ -897,7 +897,7 @@ pub fn parse_ld_normal(input: &str) -> IResult<&str, Token, VerboseError<&str>> 
         parse_register_r,
         parse_hl_address,
         parse_address,
-    ))))(input))?;
+    ))))(input)?;
 
     let (input, _) = context("comma", cut(parse_comma))(input)?;
 
