@@ -282,11 +282,11 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
     // macro arguments
     let (input, arguments) = opt(preceded(
-        tuple((space0, char(','), space0)),
+        tuple((space0, parse_comma, space0)),
         separated_nonempty_list(
-            parse_comma,
+            tuple((space0, parse_comma, space0)),
             /*parse_label(false)*/
-            take_till(|c| c == '\n' || c == ':'),
+            take_till(|c| c == '\n' || c == ':' ||  c== ',' ),
         ),
     ))(input)?;
 
@@ -294,7 +294,11 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         "macro content",
         cut(preceded(
             space0,
-            many_till(take(1usize), tag_no_case("ENDM")),
+            many_till(take(1usize), alt((
+                tag_no_case("ENDM"),
+                tag_no_case("MEND")
+            ))
+            ),
         )),
     )(input)?;
 
