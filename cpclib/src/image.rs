@@ -968,13 +968,13 @@ impl Sprite {
         matrix.as_sprite(mode, palette)
     }
 
-    pub fn convert_from_fname(
-        fname: &str,
+    pub fn convert_from_fname<P:Into<std::path::Path>>(
+        fname: P,
         mode: Mode,
         conversion: ConversionRule,
         palette: Option<Palette>,
     ) -> Result<Self, im::ImageError> {
-        let img = im::open(fname)?;
+        let img = im::open(fname.into())?;
         Ok(Self::convert(&img.to_rgb(), mode, conversion, palette))
     }
 

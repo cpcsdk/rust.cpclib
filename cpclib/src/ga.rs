@@ -702,8 +702,8 @@ impl Palette {
     }
 
     /// Change the ink of the specified pen
-    pub fn set(&mut self, pen: Pen, ink: Ink) {
-        self.values.insert(pen, ink);
+    pub fn set<P: Into<Pen>, I: Into<Ink>>(&mut self, pen: P, ink: I) {
+        self.values.insert(pen.into(), ink.into());
     }
 
     pub fn set_border(&mut self, ink: Ink) {
@@ -712,11 +712,11 @@ impl Palette {
 
     /// Get the pen that corresponds to the required ink.
     /// Ink 16 (border) is never tested
-    pub fn get_pen_for_ink(&self, expected: Ink) -> Option<Pen> {
+    pub fn get_pen_for_ink<I: Into<Ink>>(&self, expected: I) -> Option<Pen> {
         self.values
             .iter()
             .filter(|(&p, _)| p.number() != 16)
-            .find_map(|(p, &i)| if i == expected { Some(*p) } else { None })
+            .find_map(|(p, &i)| if i == expected.into() { Some(*p) } else { None })
     }
 
     /// Returns true if the palette contains the inks in one of its pens (except border)
