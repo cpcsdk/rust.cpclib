@@ -3,6 +3,9 @@ name = "cpclib-macros"
 version = "0.4.1-alpha"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
+license = "MIT"
+description = "cpclib macros related to z80 assembling"
+repository = "https://github.com/cpcsdk/rust.cpclib"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

@@ -593,6 +593,16 @@ impl<'de> Deserialize<'de> for Palette {
     }
 }
 
+
+impl<P> std::ops::Index<P> for Palette where P:Into<Pen>{
+    type Output = Ink;
+
+    fn index(&self, p: P) -> &Self::Output {
+        self.get(&p.into())
+    }
+}
+
+
 #[allow(missing_docs)]
 impl Palette {
     /// Create a new palette.
@@ -713,10 +723,11 @@ impl Palette {
     /// Get the pen that corresponds to the required ink.
     /// Ink 16 (border) is never tested
     pub fn get_pen_for_ink<I: Into<Ink>>(&self, expected: I) -> Option<Pen> {
+        let ink: Ink = expected.into();
         self.values
             .iter()
             .filter(|(&p, _)| p.number() != 16)
-            .find_map(|(p, &i)| if i == expected.into() { Some(*p) } else { None })
+            .find_map(move |(p, &i)| if i == ink { Some(*p) } else { None })
     }
 
     /// Returns true if the palette contains the inks in one of its pens (except border)

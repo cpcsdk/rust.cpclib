@@ -14,7 +14,7 @@ impl Z80 {
     pub fn execute(&mut self, opcode: &Token) -> usize {
         self.context
             .symbols
-            .set_symbol_to_value("$", self.pc().value() as _);
+            .set_symbol_to_value("$", self.pc().value() as i32);
 
         match opcode {
             Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {

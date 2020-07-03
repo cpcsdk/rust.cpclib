@@ -3,6 +3,7 @@ use crate::preamble::*;
 use crate::AssemblingOptions;
 
 use cpclib_basic::*;
+use cpclib_sna::*;
 
 use smallvec::SmallVec;
 use std::collections::HashMap;
@@ -20,12 +21,14 @@ pub type Bytes = SmallVec<[u8; MAX_SIZE]>;
 /// Add the encoding of an indexed structure
 fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
     if idx < -127 || idx > 128 {
-        Err(format!("Index error {}", idx).into())
-    } else {
+        //Err(format!("Index error {}", idx).into())
+        eprintln!("Index error {}", idx);
+    } 
+    //else {
         let val = (idx & 0xff) as u8;
         add_byte(m, val);
         Ok(())
-    }
+   // }
 }
 
 fn add_byte(m: &mut Bytes, b: u8) {
@@ -191,6 +194,8 @@ struct OrgZone {
 
 
 
+
+
 /// Environment of the assembly
 #[allow(missing_docs)]
 pub struct Env {
@@ -214,10 +219,12 @@ pub struct Env {
     maxptr: usize,
 
     /// Currently selected bank
-    active_bankset: usize,
+    activepage: usize,
 
-    /// Memory configuration
-    mem: Banks,
+    /// Memory configuration is controlled by the underlying snapshot.
+    /// It will ease the generation of snapshots but may complexify the generation of files
+    sna: cpclib_sna::Snapshot,
+    sna_version: cpclib_sna::SnapshotVersion,
 
     iorg: usize,
     org_zones: Vec<OrgZone>,
@@ -247,8 +254,10 @@ impl Default for Env {
             outputadr: 0,
             codeadr: 0,
             maxptr: 0xffff,
-            active_bankset: 0,
-            mem: MyDefault::default(),
+            activepage: 0,
+
+            sna: Default::default(),
+            sna_version: cpclib_sna::SnapshotVersion::V3,
 
             iorg: 0,
             org_zones: Vec::new(),
@@ -288,8 +297,9 @@ impl Env {
             self.outputadr = 0;
             self.codeadr = 0;
             self.maxptr = 0xffff;
-            self.active_bankset = 0;
-            self.mem = MyDefault::default();
+            self.activepage = 0;
+            self.sna = Default::default();
+            self.sna_version = cpclib_sna::SnapshotVersion::V3;
             self.iorg = 0;
             self.org_zones = Vec::new();
             self.stable_counters = StableTickerCounters::default();
@@ -313,10 +323,12 @@ impl Env {
     }
 
     /// Produce the memory for the required limits
+    /// TODO check that the implementation is still correct with snapshot inclusion
+    /// BUG  does not take into account extra bank configuration
     pub fn memory(&self, start: usize, size: usize) -> Vec<u8> {
         let mut mem = Vec::new();
         for pos in start..(start + size) {
-            mem.push(self.mem[0][pos]); // XXX probably buggy later
+            mem.push(self.byte(pos)); // XXX probably buggy later
         }
         mem
     }
@@ -341,11 +353,11 @@ impl Env {
 
     /// Output one byte
     /// (RASM ___internal_output)
+    /// BUG does not take into account the active bank
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
         if self.outputadr <= self.maxptr {
-            eprintln!("==> [{}] 0x{:X} = 0x{:X}", self.active_bankset, self.outputadr, v);
 
-            self.mem[self.active_bankset][self.outputadr] = v;
+            self.sna.set_byte(self.outputadr as u32 + (0x4000*self.activepage) as u32, v);
             self.outputadr += 1; // XXX will fail at 0xffff
             self.codeadr += 1;
             Ok(())
@@ -363,7 +375,7 @@ impl Env {
     }
 
     pub fn byte(&self, address: usize) -> u8 {
-        self.mem[self.active_bankset][address]
+        self.sna.get_byte(address as u32 + (0x4000*self.activepage) as u32)
     }
 
     /// Get the size of the generated binary.
@@ -377,15 +389,8 @@ impl Env {
     }
 
     /// Evaluate the expression according to the current state of the environment
-    pub fn eval(&self, expr: &Expr) -> Result<usize, AssemblerError> {
-        if expr.is_context_independant() {
-            match expr.eval() {
-                Ok(val) => Ok(val as usize),
-                Err(err) => Err(err),
-            }
-        } else {
-            Err(String::from("Not yet implemented").into())
-        }
+    pub fn eval(&self, expr: &Expr) -> Result<i32, AssemblerError> {
+        expr.resolve(self.symbols())
     }
 
     pub fn symbols(&self) -> &SymbolsTableCaseDependent {
@@ -394,6 +399,18 @@ impl Env {
 
     pub fn symbols_mut(&mut self) -> &mut SymbolsTableCaseDependent {
         &mut self.symbols
+    }
+
+    pub fn sna(&self) -> &cpclib_sna::Snapshot {
+        &self.sna
+    }
+
+    pub fn sna_version(&self) -> cpclib_sna::SnapshotVersion {
+        self.sna_version
+    }
+
+    pub fn save_sna<P: AsRef<std::path::Path>>(&self, fname: P)  -> Result<(), std::io::Error> {
+        self.sna().save(fname, self.sna_version())
     }
 
     /// Compute the expression thanks to the symbol table of the environment.
@@ -442,8 +459,11 @@ impl Env {
                     Ok(0)
                 } else {
                     Err(format!(
-                        "Impossible to compute relative address {:?} at pass {:?}",
-                        address, e
+                        "Impossible to compute relative address {:?} at pass {:?}. {}",
+
+                        address, 
+                        self.pass,
+                        e
                     )
                     .into())
                 }
@@ -510,8 +530,26 @@ impl Env {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(label) {
             Err(format!("Symbol \"{}\" already present in symbols table", label).into())
         } else {
+            if !label.starts_with('.') {
+                self.symbols_mut().set_current_label(label);
+            }
             self.add_symbol_to_symbol_table(label, i32::from(value))
         }
+    }
+
+    fn visit_multi_pushes(&mut self, regs: &[DataAccess]) -> Result<(), AssemblerError> {
+        for reg in regs.iter() {
+            assemble_push(reg)?;
+        }
+        Ok(())
+    }
+
+
+    fn visit_multi_pops(&mut self, regs: &[DataAccess]) -> Result<(), AssemblerError> {
+        for reg in regs.iter() {
+            assemble_pop(reg)?;
+        }
+        Ok(())
     }
 
     /// Manage a IF .. XXX ELSEIF YYY ELSE ZZZ structure
@@ -568,6 +606,82 @@ impl Env {
         }
     }
 
+    pub fn visit_macro(&mut self, name: &str, arguments: &[String], code: &str) -> Result<(), AssemblerError> {
+        if self.pass.is_first_pass() && self.symbols().contains_symbol(name) {
+            return Err(
+                AssemblerError::SymbolAlreadyExists{symbol: name.to_owned()}
+            );
+        }
+
+        self.symbols_mut().set_symbol_to_value(
+            name, 
+            Macro::new(
+                name.to_owned(),
+                arguments.to_vec(),
+                code.to_owned()
+            )
+        );
+        Ok(())
+    } 
+
+    pub fn visit_buildsna(&mut self, version: Option<&SnapshotVersion> ) -> Result<(), AssemblerError> {
+        self.sna_version = version.cloned().unwrap_or(SnapshotVersion::V3);
+        Ok(())
+    }
+
+
+    fn visit_bankset(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+        let value = self.resolve_expr_must_never_fail(exp)?; // This value MUST be interpretable once executed
+        if value <0 || value > 8 {
+            return Err(AssemblerError::InvalidArgument{msg: format!("{} is invalid. BANKSET only accept values from 0 to 8", value).into()});
+        }
+
+        self.activepage = value as _;
+        eprintln!("Warning need to code sna memory extension if needed");
+        self.symbols_mut().set_current_page(value as _);
+        Ok(())
+
+    }
+
+    pub fn visit_call_macro(&mut self, name: &str, parameters: &[String]) -> Result<(), AssemblerError> {
+
+        // Retreive the macro
+        let r#macro = self.symbols().macro_value(name);
+        if r#macro.is_none() {                                           
+            return Err(AssemblerError::UnknownMacro{
+                symbol: name.to_owned(),
+                closest: self.symbols().closest_symbol(name)
+            });
+        }
+        let r#macro = r#macro.unwrap();
+
+        // Check if there is the right number of arguments
+        if r#macro.nb_args() != parameters.len() {
+            return Err(AssemblerError::WrongNumberOfParameters{
+                symbol: name.to_owned(),
+                nb_paramers: parameters.len(),
+                nb_arguments: r#macro.nb_args()
+            });
+        }
+
+        let code = r#macro.develop(parameters);
+
+        // Tokenize with the same assembling parameters and context
+        let listing = Listing::from_str(&code)?;
+        self.visit_listing(&listing)
+            .or_else(|e| {
+                Err(AssemblerError::MacroError{
+                    name: name.to_owned(),
+                    root: Box::new(e)
+                })
+            })
+        ?;
+
+        Ok(())
+
+
+    }
+
     /// Remove the given variable from the table of symbols
     pub fn visit_undef(&mut self, label: &str) -> Result<(), AssemblerError> {
         match self.symbols_mut().remove_symbol(label) {
@@ -608,6 +722,15 @@ impl Env {
         let backup = self.codeadr;
         self.visit_listing(listing)?;
         self.codeadr = backup;
+        Ok(())
+    }
+
+
+
+    pub fn visit_snaset(&mut self, flag: &cpclib_sna::SnapshotFlag, value: &cpclib_sna::FlagValue) -> Result<(), AssemblerError> {
+
+        self.sna.set_value(*flag, value.as_u16().unwrap());
+
         Ok(())
     }
 
@@ -674,7 +797,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Basic(ref variables, ref hidden_lines, ref code) => {
             env.visit_basic(variables.as_ref(), hidden_lines.as_ref(), code)
         }
-        Token::Bankset(ref exp) => env.visit_bankset(exp),
+        Token::BuildSna(ref v) => env.visit_buildsna(v.as_ref()),
+        Token::Bankset(ref v) => env.visit_bankset(v),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | &Token::Defw(_) => visit_db_or_dw(token, env),
         Token::Defs(_, _) => visit_defs(token, env),
@@ -689,16 +813,29 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         }
         Token::Comment(_) | Token::List | Token::NoList => Ok(()), // Nothing to do for a comment
         Token::Include(_, Some(ref listing)) => env.visit_listing(listing),
-        Token::Incbin(_, _, _, _, _, ref data, _) => env.visit_incbin(data.as_ref().unwrap()),
+        Token::Incbin{
+            fname: _, 
+            offset: _, 
+            length: _, 
+            extended_offset: _, 
+            off: _, 
+            content, 
+            transformation: _
+        }  => env.visit_incbin(content.as_ref().unwrap()),
         Token::If(ref cases, ref other) => env.visit_if(cases, other.as_ref()),
         Token::Label(ref label) => env.visit_label(label),
+        Token::MultiPush(ref regs) => env.visit_multi_pushes(regs),
+        Token::MultiPop(ref regs) => env.visit_multi_pops(regs),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
         Token::Repeat(_, _, _) => visit_repeat(token, env),
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
+        Token::SnaSet(flag, value) => env.visit_snaset(flag, value),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
+        Token::Macro(name, arguments, code) => env.visit_macro(name, arguments, code),
+        Token::MacroCall(name, parameters) => env.visit_call_macro(name, parameters),
         _ => panic!("Not treated {:?}", token),
     }
 }
@@ -707,8 +844,28 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &Env) -> Result<(), Assem
     if env.pass.is_second_pass() {
         let value = env.resolve_expr_must_never_fail(exp)?;
         if value == 0 {
+
+            let symbols = env.symbols();
+            let oper = |left: &Expr, right: &Expr, oper: &str| -> String {
+                let res_left = left.resolve(symbols).unwrap();
+                let res_right = right.resolve(symbols).unwrap();
+    
+                format!("[{} {} {}] ", res_left, oper, res_right) +
+                &format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right) 
+            };
+
+
+            let prefix = match exp {
+                Expr::Equal(ref left, ref right) => oper(left, right, "=="),
+                Expr::LowerOrEqual(ref left, ref right) => oper(left, right, "<="),
+                Expr::GreaterOrEqual(ref left, ref right) => oper(left, right, ">="),
+                Expr::StrictlyGreater(ref left, ref right) => oper(left, right, ">"),
+                Expr::StrictlyLower(ref left, ref right) => oper(left, right, "<"),
+                _ => "".to_string()
+            };
+
             return Err(AssemblerError::AssertionFailed {
-                msg: (if txt.is_some() { &txt.unwrap() } else { "" }).to_owned(),
+                msg: prefix + if txt.is_some() { &txt.unwrap() } else { ""},
                 test: exp.to_string(),
                 guidance: env.to_assert_string(exp)
             });
@@ -748,39 +905,27 @@ impl Env {
 
 
 
-    fn visit_bankset(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
-        let value = self.resolve_expr_must_never_fail(exp)?; // This value MUST be interpretable once executed
-        if value <0 || value > 8 {
-            return Err(AssemblerError::InvalidArgument{msg: format!("{} is invalid. BANKSET only accept values from 0 to 8", value).into()});
-        }
-        self.active_bankset = value as _;
-        while self.active_bankset >= self.mem.len() {
-            self.mem.push(Bank::default());
-        }
-        assert!(self.mem.len() <= NB_BANKS);
-
-        let page = self.active_bankset as _;
-        self.symbols_mut().set_current_page(page);
-        Ok(())
-
-    }
-
     fn visit_run(&mut self, address: &Expr, ga: Option<&Expr>) -> Result<(), AssemblerError> {
         let address = self.resolve_expr_may_fail_in_first_pass(address)?;
+
         if self.run_options.is_some() {
             return Err("RUN has already been specified".to_owned().into());
         }
+        self.sna.set_value(cpclib_sna::SnapshotFlag::Z80_PC, address as _);
+
         match ga {
             None => {
                 self.run_options = Some((address as _, None));
             },
             Some(ga_expr) => {
                 let ga_expr = self.resolve_expr_may_fail_in_first_pass(ga_expr)?;
+                self.sna.set_value(SnapshotFlag::GA_RAMCFG, address as _);
                 self.run_options = Some((address as _, Some(ga_expr as _)));
             }
         }
         Ok(())
     }
+
 }
 
 fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
@@ -1086,8 +1231,8 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
 
     // TODO Check overlapping region
     // TODO manage rorg like instruction
-    env.outputadr = adr;
-    env.codeadr = adr;
+    env.outputadr = adr as _;
+    env.codeadr = adr as _;
 
     // Specify start address at first use
     if env.startadr.is_none() {
@@ -1324,7 +1469,12 @@ fn assemble_call_jr_or_jp(
     if let DataAccess::Expression(ref e) = arg2 {
         let address = env.resolve_expr_may_fail_in_first_pass(e)?;
         if is_jr {
-            let relative = env.absolute_to_relative_may_fail_in_first_pass(address, 2)?;
+            let relative = if e.is_relative(){
+                address as u8
+            }
+            else {
+                 env.absolute_to_relative_may_fail_in_first_pass(address, 2)? as u8
+            };
             if flag_code.is_some() {
                 // jr - flag
                 add_byte(&mut bytes, 0b0010_0000 | (flag_code.unwrap() << 3));
@@ -1370,8 +1520,12 @@ fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> 
     if let DataAccess::Expression(ref expr) = arg1 {
         let mut bytes = Bytes::new();
         let address = env.resolve_expr_may_fail_in_first_pass(expr)?;
-        let relative = env.absolute_to_relative_may_fail_in_first_pass(address, 1)?;
-
+        let relative = if expr.is_relative(){
+            address as u8
+         }
+         else {
+              env.absolute_to_relative_may_fail_in_first_pass(address, 1)? as u8
+         };
         bytes.push(0x10);
         bytes.push(relative);
 
@@ -2588,7 +2742,7 @@ mod test {
         assert!(env.is_ok());
         let env = env.unwrap();
 
-        let val = env.symbols().value("myticker");
+        let val = env.symbols().int_value("myticker");
         assert!(val.is_some());
         assert_eq!(val.unwrap(), 2);
     }
@@ -2699,7 +2853,7 @@ mod test {
         let res = visit_token(&Token::Label("hello".into()), &mut env);
         assert!(res.is_ok());
         assert!(env.symbols().contains_symbol("hello"));
-        assert_eq!(env.symbols().value("hello"), 0x4000.into());
+        assert_eq!(env.symbols().int_value("hello"), 0x4000.into());
     }
 
     /// Check if  label already exists
@@ -2746,7 +2900,7 @@ mod test {
         let count = env.size();
         assert_eq!(count, 3);
 
-        assert_eq!(env.symbols().value(&"test".to_owned()).unwrap(), 0x123 + 3);
+        assert_eq!(env.symbols().int_value(&"test".to_owned()).unwrap(), 0x123 + 3);
         let buffer = env.memory(0x123, 3);
         assert_eq!(buffer[1], 0x23 + 3);
         assert_eq!(buffer[2], 0x1);

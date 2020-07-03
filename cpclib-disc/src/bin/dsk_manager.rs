@@ -26,7 +26,7 @@ use custom_error::custom_error;
 
 custom_error! {pub DskManagerError
     IOError{source: std::io::Error} = "IO error: {source}.",
-    DiscConfigError{source: cpclib_disc::cfg::DiscConfigError} = "Disc configuration: {source}"
+    DiscConfigError{source: cpclib_disc::cfg::DiscConfigError} = "Disc configuration: {source}",
 }
 
 // Still everything to do
@@ -297,7 +297,7 @@ fn main() -> Result<(), DskManagerError> {
         for fname in sub.values_of("INPUT_FILES").unwrap() {
             let ams_file = match AmsdosFile::open_valid(fname) {
                 Ok(ams_file) => {
-                    if !ams_file.amsdos_filename().is_valid() {
+                    if !ams_file.amsdos_filename().unwrap().is_valid() {
                         panic!("Invalid amsdos filename ! {:?}", ams_file.amsdos_filename());
                     }
                     println!("{:?} added", ams_file.amsdos_filename());

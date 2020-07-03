@@ -14,20 +14,42 @@ use std::iter::Iterator;
 use delegate::delegate;
 
 use arrayref::array_ref;
+use std::convert::TryFrom;
+use std::convert::TryInto;
 
-#[derive(Debug)]
+use failure::Fail;
+
+#[derive(Debug, Fail)]
 #[allow(missing_docs)]
 pub enum AmsdosError {
+    #[fail(display = "No more entries available.")]
     NoEntriesAvailable,
+
+    #[fail(display = "No more blocs available.")]
     NoBlocAvailable,
+
+    #[fail(display = "File larger than 64kb")]
     FileLargerThan64Kb,
+
+    #[fail(display = "Invalid header")]
     InvalidHeader,
+
+    #[fail(display = "IO error")]
     IO(std::io::Error),
+
+    #[fail(display = "Various error")]
+    Various(String)
 }
 
 impl From<std::io::Error> for AmsdosError {
     fn from(err: std::io::Error) -> Self {
         AmsdosError::IO(err)
+    }
+}
+
+impl From<String> for AmsdosError {
+    fn from(err: String) -> Self {
+        AmsdosError::Various(err)
     }
 }
 
@@ -269,10 +291,10 @@ impl AmsdosFileName {
 }
 
 // TODO use tryfrom asap
-impl<S: AsRef<str>> From<S> for AmsdosFileName {
+impl TryFrom<&str> for AmsdosFileName {
+    type Error = String;
     /// Make a filename conversion by considering the following format is used: user:name.extension
-    fn from(content: S) -> Self {
-        let content = content.as_ref();
+    fn try_from(content: &str) -> Result<Self, Self::Error> {
         let (user, rest) = match content.find(':') {
             None => (0, content),
             Some(1) => (
@@ -287,9 +309,10 @@ impl<S: AsRef<str>> From<S> for AmsdosFileName {
             Some(idx) => (&rest[..idx], &rest[(idx + 1)..]),
         };
 
-        Self::new_correct_case(user, filename, extension).unwrap()
+        Self::new_correct_case(user, filename, extension)
     }
 }
+
 
 #[derive(Clone, Copy)]
 /// Encodes the amsdos file type
@@ -302,13 +325,15 @@ pub enum AmsdosFileType {
     Binary = 2,
 }
 
-impl From<u8> for AmsdosFileType {
-    fn from(val: u8) -> Self {
+impl TryFrom<u8> for AmsdosFileType {
+    type Error = AmsdosError;
+
+    fn try_from(val: u8) -> Result<Self, Self::Error>  {
         match val {
-            0 => AmsdosFileType::Basic,
-            1 => AmsdosFileType::Protected,
-            2 => AmsdosFileType::Binary,
-            _ => unreachable!(),
+            0 => Ok(AmsdosFileType::Basic),
+            1 => Ok(AmsdosFileType::Protected),
+            2 => Ok(AmsdosFileType::Binary),
+            _ => Err(AmsdosError::Various(format!("{} is not a valid file type", val))),
         }
     }
 }
@@ -1127,7 +1152,7 @@ impl AmsdosManager {
             // Update the entry on disc
             let new_entry = AmsdosEntry {
                 idx: entry_idx,
-                file_name: file.amsdos_filename(),
+                file_name: file.amsdos_filename()?,
                 read_only: is_read_only,
                 system: is_system,
                 num_page: entry_num_page,
@@ -1358,9 +1383,12 @@ impl AmsdosHeader {
         self
     }
 
-    pub fn amsdos_filename(&self) -> AmsdosFileName {
-        AmsdosFileName::new_incorrect_case(self.user(), &self.filename(), &self.extension())
-            .unwrap()
+    /// Return the filename if possible
+    pub fn amsdos_filename(&self) -> Result<AmsdosFileName, String> {
+        AmsdosFileName::new_incorrect_case(
+            self.user(), 
+            &self.filename(), 
+            &self.extension())
     }
 
     pub fn set_filename(&mut self, filename: &[u8; 8]) -> &mut Self {
@@ -1396,8 +1424,8 @@ impl AmsdosHeader {
         self
     }
 
-    pub fn file_type(&self) -> AmsdosFileType {
-        self.content[18].into()
+    pub fn file_type(&self) -> Result<AmsdosFileType, AmsdosError> {
+        self.content[18].try_into()
     }
 
     pub fn set_loading_address(&mut self, address: u16) -> &mut Self {
@@ -1551,7 +1579,7 @@ impl AmsdosFile {
         }
     }
 
-    pub fn amsdos_filename(&self) -> AmsdosFileName {
+    pub fn amsdos_filename(&self) -> Result<AmsdosFileName, String> {
         self.header.amsdos_filename()
     }
 
@@ -1579,5 +1607,17 @@ impl AmsdosFile {
         let size = self.header.file_length() as usize;
         assert!(size <= self.content.len());
         self.content.resize(size, 0);
+    }
+
+    /// Save the file at the given path
+    pub fn save_in_folder<P:AsRef<Path>>(&self, folder: P) -> std::io::Result<()> {
+        use std::io::Write;
+
+        let folder = folder.as_ref();
+        let fname = self.amsdos_filename().unwrap().filename();
+        println!("Will write in {}", fname);
+        let mut file = File::create(folder.join(fname))?;
+        file.write_all(&self.as_bytes())?;
+        Ok(())
     }
 }

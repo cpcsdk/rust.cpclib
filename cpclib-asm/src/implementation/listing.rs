@@ -10,6 +10,8 @@ use crate::implementation::expression::*;
 
 use std::iter::FromIterator;
 
+use crate::AssemblingOptions;
+
 
 
 /// Additional methods for the listings
@@ -21,6 +23,7 @@ pub trait ListingExt {
 
     /// Assemble the listing (without context) and returns the bytes 
     fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError>;
+    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError>;
 
           /// Compute the size of the listing.
     /// The listing has a size only if its tokens has a size
@@ -34,6 +37,14 @@ pub trait ListingExt {
 
     fn to_string(&self) -> String;
 
+        /// Generate a string that contains also the bytes
+        /// panic even for simple corner cases
+        fn to_enhanced_string(&self) -> String;
+
+
+
+    /// Modify the listing to inject labels at the given addresses
+    fn inject_labels(&mut self, labels: &[(u16, &str)]);
 }
 
 impl ListingExt for Listing {
@@ -61,9 +72,17 @@ impl ListingExt for Listing {
 
     fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
         let options = crate::AssemblingOptions::default();
-        let env = crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), &options)?;
+        self.to_bytes_with_options(&options)
+    }
+
+    fn to_bytes_with_options(&self, options: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
+        let env = crate::assembler::visit_tokens_all_passes_with_options(
+            &self.listing(), 
+            options)?;
         Ok(env.produced_bytes())
     }
+
+
 
     
     /// Get the execution duration.
@@ -96,7 +115,208 @@ impl ListingExt for Listing {
         fn to_string(&self) -> String {
             PrintableListing::from(self).to_string()
         }
+
+        fn to_enhanced_string(&self) -> String {
+            // TODO - allow assembling module to generate this listing by itself. This way no need to implement it properly a second time
+
+            let mut res = String::new();
+            let mut current_address: Option<u16> = None;
     
+            let mut options = AssemblingOptions::default();
+
+            for instruction in self.listing() {
+
+                if let Token::Org(address, _) = instruction {
+                    current_address = Some(address.eval().unwrap() as u16);
+                }
+
+                match current_address.as_ref() {
+                    Some(address) => {
+                        res+= &format!("{:4x} ", address);
+                        options.symbols_mut().set_current_address(*address);
+
+                    },
+                    None => {res+= "???? ";}
+                }
+
+                
+                let remaining = match instruction.to_bytes_with_options(&options) {
+                    Ok(bytes) => {
+                        for i in 0..4 {
+                            if bytes.len() > i {
+                                res += &format!("{:2X} ", bytes[i]);
+                            }
+                            else {
+                                res += "   ";
+                            }
+                        }
+
+                        res += "  ";
+                        for i in 0..4 {
+                            if bytes.len() > i {
+                                let mut c: char = bytes[i] as char; 
+                                if !c.is_ascii_graphic() {
+                                    c = '.';
+                                }
+                                res += &format!("{} ", 
+                                c);
+                            }
+                            else {
+                                res += " ";
+                            }
+                        }
+
+
+                        if current_address.is_some() {
+                            current_address = Some(bytes.len() as u16 + current_address.unwrap());
+                        }
+
+                        if bytes.len() > 4 {
+                            bytes[4..].to_vec()
+                        }
+                        else {
+                            Vec::new()
+                        }
+                    },
+                    Err(err) => {
+                        panic!("{:?} {:?} {:?}", instruction, err, options);
+                        // BUG need to better manage interpretation to never achieve such error
+                        res += "?? ?? ?? ?? ";
+                        current_address = None;
+                        Vec::new()
+                    }
+                };
+
+                if !instruction.is_label() {
+                    res += "\t";
+                }
+                res += &instruction.to_string();
+                res += "\n";
+
+
+                if !remaining.is_empty() {
+                    let mut idx = 0;
+                    while idx < remaining.len() {
+                        res += "     ";
+                        for i in 0..4 {
+                            if remaining.len() > (i+idx) {
+                                res += &format!("{:2X} ", remaining[i+idx]);
+                            }
+                            else {
+                                res += "   ";
+                            }
+                        }
+                        
+                        res += "  ";
+                        for i in 0..4 {
+                            if remaining.len() > (i+idx) {
+                                let mut c: char = remaining[i+idx] as char; 
+                                if !c.is_ascii_graphic() {
+                                    c = '.';
+                                }
+                                res += &format!("{} ", 
+                                c);
+                            }
+                            else {
+                                res += " ";
+                            }
+                        }
+
+
+
+                        res += "\n";
+                        idx += 4;
+                    }
+                }
+            }
+    
+            res
+    
+        }
+
+
+        /// Panic if Org is not one of the first instructions
+        fn inject_labels(&mut self, sorted_labels: &[(u16, &str)]) {
+            use cpclib_tokens::builder::label;
+            use cpclib_tokens::builder::equ;
+
+            let mut current_address: Option<u16> = None;
+            let mut current_idx = 0;
+            let mut nb_labels_added = 0;
+
+
+            while current_idx < self.len() && nb_labels_added < sorted_labels.len(){
+
+
+                let current_instruction = &self.listing()[current_idx];;
+
+                let next_address = if let Token::Org(address, _) = current_instruction {
+                    current_address = Some(address.eval().unwrap() as u16);
+                    current_address.clone()
+                }
+                else {
+                    let nb_bytes = current_instruction.number_of_bytes().unwrap();
+                    match current_address {
+                        Some(address) => Some(address + nb_bytes as u16),
+                        None => {
+                            if nb_bytes != 0 {
+                                panic!("Unable to run if assembling address is unknown")
+                            }
+                            else {
+                                None
+                            }
+                        }
+                    }
+                };
+            
+
+
+            let (expected, new_label) = sorted_labels[nb_labels_added];
+
+
+            match (current_address, next_address) {
+
+                (Some(current), Some(next)) => {
+
+                    if current == expected {
+                        self.listing_mut().insert(
+                            current_idx, 
+                            label(new_label)
+                        );
+                        nb_labels_added += 1;
+                    }
+                    else if current < expected && next > expected {
+                        self.listing_mut().insert(
+                            current_idx,
+                            equ(new_label, expected) // TODO check if realtive address is better or not
+                        );
+                        nb_labels_added += 1;  
+                    }
+                    else {
+                        current_idx += 1;
+                    }
+                }
+                (_, _) => {
+                    current_idx += 1;
+                }
+            }
+
+            current_address = next_address;
+        }
+
+
+        while nb_labels_added < sorted_labels.len() {
+            panic!("{} remaining", sorted_labels.len() - nb_labels_added);
+            self.listing_mut().insert(
+                0,
+                equ(
+                    sorted_labels[nb_labels_added].1,
+                    sorted_labels[nb_labels_added].0
+                )
+            );
+            nb_labels_added += 1;
+        }
+    }
 }
 
 /// Workaround to display a Lisitng as we cannot implement display there....

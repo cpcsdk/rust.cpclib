@@ -16,8 +16,11 @@ pub mod preamble;
 
 pub mod error;
 
+mod crunchers;
+
 use crate::parser::ParserContext;
 
+use cpclib_disc::amsdos::*;
 
 use error::*;
 use preamble::*;
@@ -75,6 +78,10 @@ impl AssemblingOptions {
         &self.symbols
     }
 
+    pub fn symbols_mut(&mut self) -> &mut cpclib_tokens::symbols::SymbolsTable {
+        &mut self.symbols
+    }
+
     pub fn case_sensitive(&self) -> bool {
         self.case_sensitive
     }
@@ -103,6 +110,34 @@ pub fn assemble_tokens_with_options(
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
+}
+
+/// Build the code and store it inside a file supposed to be injected in a dsk
+/// XXX probably crash if filename is not coherent
+pub fn assemble_to_amsdos_file(
+    code: &str,
+    amsdos_filename: &str
+) ->  Result<AmsdosFile, AssemblerError> {
+    use std::convert::TryFrom;
+
+    let amsdos_filename = AmsdosFileName::try_from(amsdos_filename)?;
+
+    let tokens = parser::parse_str(code)?;
+    let options = AssemblingOptions::default();
+
+    let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
+
+
+    Ok(AmsdosFile::binary_file_from_buffer(
+        &amsdos_filename, 
+        env.loading_address().unwrap() as  u16, 
+        env.execution_address().unwrap() as u16, 
+        &env.produced_bytes()
+    )?)
+    
+
+
+
 }
 
 #[cfg(test)]

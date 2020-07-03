@@ -14,23 +14,139 @@ pub enum SymbolError {
 }
 
 
-#[derive(Debug, Clone, Copy)]
-#[allow(missing_docs)]
-pub enum Symbol {
-    Integer(i32),
+
+
+#[derive(Debug, Clone)]
+pub struct Macro {
+    name: String,
+    args: Vec<String>,
+    code: String
 }
+
+impl Macro {
+    pub fn new(name: String, args: Vec<String>, code: String) -> Self {
+        Macro {
+            name,
+            args,
+            code
+        }
+    }
+
+    pub fn code(&self) -> &str  {
+        self.code.as_ref()
+    }
+
+    pub fn args(&self) -> &[String] {
+        &self.args
+    }
+
+    pub fn nb_args(&self) -> usize {
+        self.args.len()
+    }
+
+    /// Develop the macro with the given arguments
+    pub fn develop(&self, args: &[String]) -> String {
+        assert_eq!(args.len(), self.nb_args());
+
+        let mut listing = self.code.to_string();
+        for (argname, argvalue) in self.args.iter().zip(args.iter()) {
+            listing = listing.replace(
+                &format!("{{{}}}", argname),
+                argvalue
+            );
+        }
+
+        listing
+    }
+}
+
+
+
 
 
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
+pub enum Value {
+    Integer(i32),
+    Macro(Macro)
+}
+
+impl Value {
+    pub fn integer(&self) -> Option<i32> {
+        match self {
+            Value::Integer(i) => Some(*i),
+            _ => None
+        }
+    }
+
+    pub fn r#macro(&self) -> Option<&Macro> {
+        match self {
+            Value::Macro(m) => Some(m),
+            _ => None
+        }
+    }
+}
+
+impl From<Macro> for Value  {
+    fn from(m: Macro) -> Self {
+        Self::Macro(m)
+    }
+}
+
+
+impl From<i32> for Value  {
+    fn from(i: i32) -> Self {
+        Self::Integer(i)
+    }
+}
+
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Symbol(String);
+
+impl From<&str> for Symbol {
+    fn from(s: &str) -> Symbol {
+        s.to_owned().into()
+    }
+}
+
+impl From<String> for Symbol {
+    fn from(s: String) -> Symbol {
+        Symbol(s)
+    }
+}
+
+impl From<&String> for Symbol {
+    fn from(s: &String) -> Symbol {
+        Symbol(s.clone())
+    }
+}
+
+
+impl Symbol {
+    pub fn value(&self) -> &str {
+        &self.0
+    }
+
+    pub fn is_local(&self) -> bool {
+        self.0.contains('.')
+    }
+
+    pub fn to_uppercase(&self) -> Symbol {
+        self.0.to_uppercase().into()
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
 pub struct SymbolsTable {
-    /// The value of each symbol
-    map: HashMap<String, Symbol>,
     /// The page of each symbol
-    page: HashMap<String, u8>,
+    page: HashMap<Symbol, u8>,
     /// The current page. it is automatically set to a symbol when the symbol is added
     current_page: u8,
+    map: HashMap<Symbol, Value>,
     dummy: bool,
+    current_label: String, //  Value of the current label to allow local labels
 }
 
 impl Default for SymbolsTable {
@@ -39,7 +155,8 @@ impl Default for SymbolsTable {
             map: HashMap::new(),
             page: HashMap::new(),
             dummy: false,
-            current_page: 0
+            current_page: 0,
+            current_label: "".into()
         }
     }
 }
@@ -47,16 +164,32 @@ impl Default for SymbolsTable {
 #[allow(missing_docs)]
 impl SymbolsTable {
     pub fn laxist() -> Self {
-        let mut new = Self::default();
-        new.map.insert(String::from("$"), Symbol::Integer(0));
-        new.dummy = true;
-        new
+        let mut map = HashMap::new();
+        map.insert(Symbol::from("$"), Value::Integer(0));
+        Self { map, dummy: true, current_page: 0, page: Default::default(), current_label: "".into() }
+    }
+
+    // Setup the current label for local to global labels conversions
+    pub fn set_current_label<S: Into<Symbol>>(&mut self, symbol: S) {
+        self. current_label = symbol.into().value().to_owned();
+    }
+
+    /// Some symbols are local and need to be converted to their global value
+    pub fn extend_symbol<S: Into<Symbol>>(&self, symbol: S) -> Symbol {
+        let symbol = symbol.into();
+
+        if symbol.value().starts_with('.') {
+            (self.current_label.clone() + symbol.value()).into()
+        } 
+        else {
+            symbol
+        }
     }
 
     /// Return the current addres if it is known or return an error
     pub fn current_address(&self) -> Result<u16, SymbolError> {
-        match self.value(&"$".to_owned()) {
-            Some(address) => Ok(address as u16),
+        match self.value("$") {
+            Some(address) => Ok(address.integer().unwrap() as u16),
             None => Err(SymbolError::UnknownAssemblingAddress),
         }
     }
@@ -64,7 +197,10 @@ impl SymbolsTable {
     /// Update `$` value
     pub fn set_current_address(&mut self, address: u16) {
         self.map
-            .insert(String::from("$"), Symbol::Integer(i32::from(address)));
+            .insert(
+                "$".into(), 
+                Value::Integer(i32::from(address))
+            );
     }
 
     pub fn set_current_page(&mut self, page: u8) {
@@ -72,53 +208,62 @@ impl SymbolsTable {
     }
 
     /// Set the given symbol to $ value
-    pub fn set_symbol_to_current_address<S: AsRef<str>>(
+    pub fn set_symbol_to_current_address<S: Into<Symbol>>(
         &mut self,
-        label: S,
+        symbol: S,
     ) -> Result<(), SymbolError> {
+        let symbol = self.extend_symbol(symbol);
         self.current_address().map(|val| {
-            let label = label.as_ref().to_owned();
             self.map
-                .insert(label.clone(), Symbol::Integer(i32::from(val)));
-            self.page.insert(label, self.current_page);
+                .insert(
+                    symbol, 
+                    Value::Integer(i32::from(val))
+                );
         })
     }
 
-    /// Set the given symbol to the given value
-    pub fn set_symbol_to_value<S: AsRef<str>>(&mut self, label: S, value: i32) {
-        let label = label.as_ref().to_owned();
+    /// Set the given Value to the given value
+    /// Return the previous value if any
+    pub fn set_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(&mut self, symbol: S, value: V) -> Option<Value> {
+        let symbol = self.extend_symbol(symbol);
+
         self.map
-            .insert(label.clone(), Symbol::Integer(value));
-        self.page.insert(label, self.current_page);
-
+            .insert(
+                symbol, 
+                value.into()
+        )
     }
 
-    /// Update the value of the symbol.
-    /// Does not update its page. No idea if it is necessary
-    pub fn update_symbol_to_value<S: AsRef<str>>(&mut self, label: S, value: i32) {
-        *(self.map.get_mut(label.as_ref()).unwrap()) = Symbol::Integer(value);
+    pub fn update_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(&mut self, symbol: S, value: V) {
+
+        let symbol = self.extend_symbol(symbol);
+        *(self.map.get_mut(&symbol).unwrap()) = value.into();
     }
 
-    /// TODO return the symbol instead of the int
-    pub fn value<S: AsRef<str>>(&self, key: S) -> Option<i32> {
-        let key: String = key.as_ref().to_owned();
-
-        let key = key.trim();
-        let res = self.map.get(key);
-        if let Some(&Symbol::Integer(val)) = res {
-            Some(val)
-        } else if self.dummy {
-            //eprintln!("{} not found in symbol table. I have replaced it by 1", key);
-            Some(1)
-        } else {
-            //               eprintln!("Symbol table content {:?}", &self.map);
-            None
-        }
+    /// Returns the Value at the given key
+    pub fn value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Value> {
+        let symbol = self.extend_symbol(symbol);
+        self.map.get(&symbol)
     }
+
+    pub fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32> {
+        let symbol = self.extend_symbol(symbol);
+        self.value(symbol)
+            .map(|v| v.integer())
+            .map(|v| v.unwrap())
+            .or_else(|| {if self.dummy {Some(1i32)}else{None}})
+    }
+    pub fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Macro> {
+        let symbol = self.extend_symbol(symbol);
+        self.value(symbol)
+            .map(|v| v.r#macro())
+            .map(|v| v.unwrap())
+    }
+
 
     /// Instead of returning the value, return the bank information
     /// logic stolen to rasm
-    pub fn prefixed_value<S: AsRef<str>>(&self, prefix:& LabelPrefix, key: S) -> Option<u16> {
+    pub fn prefixed_value<S: Into<Symbol>>(&self, prefix:& LabelPrefix, key: S) -> Option<u16> {
 
         /* rasm code
         for (i=0;i<4;i++) {
@@ -133,16 +278,14 @@ impl SymbolsTable {
         }
  */
 
-        let key = key.as_ref();
-        eprintln!("key {}", key);
+        let key = key.into();
 
-        let page = *self.page.get(key).or_else(||{
+        let page = *self.page.get(&key).or_else(||{
             Some(&self.current_page)
         }).unwrap() as u16;
-        let value = self.value(key).unwrap() as u16;
+        let value = self.value(key).unwrap().integer().unwrap() as u16;
         let bank = value/0x4000;
 
-        eprintln!("{} {} {} {}", key, value, page, bank);
         match prefix {
             LabelPrefix::Bank => {
                 Some(bank as _)
@@ -170,25 +313,33 @@ impl SymbolsTable {
 
 
     /// Remove the given symbol name from the table. (used by undef)
-    pub fn remove_symbol<S: AsRef<str>>(&mut self, key: S) -> Option<Symbol> {
-        self.map.remove(key.as_ref())
+    pub fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Option<Value> {
+        let symbol = self.extend_symbol(symbol);
+        self.map.remove(&symbol)
     }
 
-    pub fn contains_symbol<S: AsRef<str>>(&self, key: S) -> bool {
-        self.map.contains_key(&key.as_ref().to_owned())
+    pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> bool {
+        let symbol = self.extend_symbol(symbol);
+        self.map.contains_key(&symbol)
     }
 
-    /// Returns the closest symbol
-    pub fn closest_symbol<S: AsRef<str>>(&self, symbol: S) -> Option<String> {
+    /// Returns the closest Value
+    pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S) -> Option<String> {
+        let symbol = self.extend_symbol(symbol);
         self.map
             .keys()
-            .map(move |symbol2| (strsim::levenshtein(symbol2, symbol.as_ref()), symbol2))
+            .map(move |symbol2| 
+                (
+                    strsim::levenshtein(&symbol2.0, &symbol.0), 
+                    symbol2.0.clone()
+                )
+            )
             .min()
-            .map(|(_distance, symbol2)| symbol2.to_owned())
+            .map(|(_distance, symbol2)| symbol2)
     }
 }
 
-/// Wrapper around the symbols table in order to easily manage the fact that the assembler is case dependent or independant
+/// Wrapper around the Values table in order to easily manage the fact that the assembler is case dependent or independant
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct SymbolsTableCaseDependent {
@@ -221,34 +372,40 @@ impl SymbolsTableCaseDependent {
         }
     }
 
-    /// Build a laxists vesion of the table : do not care of case and absences of symboles
+    pub fn is_case_sensitive(&self) -> bool {
+        self.case_sensitive
+    }
+
+    pub fn table(&self) -> &SymbolsTable {
+        &self.table
+    }
+
+    /// Build a laxists vesion of the table : do not care of case and absences of Valuees
     pub fn laxist() -> Self {
         Self::new(SymbolsTable::laxist(), false)
     }
 
-    /// Modify the symbol value depending on the case confurigration (do nothing, or set uppercase)
-    fn normalize_symbol<S: AsRef<str>>(&self, symbol: S) -> String {
-        let new = if self.case_sensitive {
-            symbol.as_ref().to_owned()
+    /// Modify the Value value depending on the case confurigration (do nothing, or set uppercase)
+    fn normalize_symbol<S: Into<Symbol>>(&self, symbol: S) -> Symbol {
+        if self.case_sensitive {
+            symbol.into()
         } else {
-            symbol.as_ref().to_uppercase()
-        };
+            symbol.into().to_uppercase()
+        }
 
-        eprintln!(
-            "[{}] {:?} => {:?} ",
-            self.case_sensitive,
-            symbol.as_ref(),
-            new
-        );
-
-        new
     }
 
     pub fn set_table(&mut self, table: SymbolsTable) {
         self.table = table
     }
 
-    pub fn set_symbol_to_current_address<S: AsRef<str>>(
+        // Setup the current label for local to global labels conversions
+    pub fn set_current_label<S: Into<Symbol>>(&mut self, symbol: S) {
+            self.table
+                .set_current_label(self.normalize_symbol(symbol))
+     }
+
+    pub fn set_symbol_to_current_address<S: Into<Symbol>>(
         &mut self,
         symbol: S,
     ) -> Result<(), SymbolError> {
@@ -256,28 +413,37 @@ impl SymbolsTableCaseDependent {
             .set_symbol_to_current_address(self.normalize_symbol(symbol))
     }
 
-    pub fn set_symbol_to_value<S: AsRef<str>>(&mut self, symbol: S, value: i32) {
+    pub fn set_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(&mut self, symbol: S, value: V) -> Option<Value> {
         self.table
             .set_symbol_to_value(self.normalize_symbol(symbol), value)
     }
 
-    pub fn update_symbol_to_value<S: AsRef<str>>(&mut self, symbol: S, value: i32) {
+    pub fn update_symbol_to_value<S: Into<Symbol>>(&mut self, symbol: S, value: i32) {
         self.table
             .update_symbol_to_value(self.normalize_symbol(symbol), value)
     }
 
-    pub fn value<S: AsRef<str>>(&self, symbol: S) -> Option<i32> {
+    pub fn value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Value> {
         self.table.value(self.normalize_symbol(symbol))
     }
-    pub fn prefixed_value<S: AsRef<str>>(&self, prefix:& LabelPrefix, symbol: S) -> Option<u16> {
+    pub fn prefixed_value<S: Into<Symbol>>(&self, prefix:& LabelPrefix, symbol: S) -> Option<u16> {
         self.table.prefixed_value(prefix, self.normalize_symbol(symbol))
     }
 
-    pub fn remove_symbol<S: AsRef<str>>(&mut self, symbol: S) -> Option<Symbol> {
+    pub fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32> {
+        self.table.int_value(self.normalize_symbol(symbol))
+    }
+
+    pub fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Macro> {
+        self.table.macro_value(self.normalize_symbol(symbol))
+    }
+
+
+    pub fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Option<Value> {
         self.table.remove_symbol(self.normalize_symbol(symbol))
     }
 
-    pub fn contains_symbol<S: AsRef<str>>(&self, symbol: S) -> bool {
+    pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> bool {
         self.table.contains_symbol(self.normalize_symbol(symbol))
     }
 
@@ -286,7 +452,7 @@ impl SymbolsTableCaseDependent {
             pub fn current_address(&self) -> Result<u16, SymbolError>;
             pub fn set_current_address(&mut self, address: u16);
             pub fn set_current_page(&mut self, page: u8);
-            pub fn closest_symbol<S: AsRef<str>>(&self, symbol: S) -> Option<String>;
+            pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S) -> Option<String>;
         }
     }
 }

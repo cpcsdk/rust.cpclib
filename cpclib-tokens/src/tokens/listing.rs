@@ -53,6 +53,14 @@ impl<T: Clone + ListingElement> Default for BaseListing<T> {
     }
 }
 
+impl<T: Clone + Debug + ListingElement> From<T> for BaseListing<T> {
+    fn from(token: T) -> Self {
+        let mut lst = Self::default();
+        lst.add(token);
+        lst
+    }
+}
+
 
 
 impl<T: Clone + ListingElement + Debug> FromIterator<T> for BaseListing<T> {

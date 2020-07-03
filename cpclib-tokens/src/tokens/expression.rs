@@ -4,10 +4,15 @@ use std::fmt::{Debug, Display, Formatter};
 use crate::tokens::listing::ListingElement;
 use crate::tokens::Token;
 
+
 /// Expression nodes.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[allow(missing_docs)]
 pub enum Expr {
+
+
+    /// Only used for disassembled code
+    RelativeDelta(i8),
 
     /// 32 bits integer value (should be able to include any integer value manipulated by the assember.
     Value(i32),
@@ -15,6 +20,8 @@ pub enum Expr {
     String(String),
     /// Label
     Label(String),
+    /// Label with a prefix
+    PrefixedLabel(LabelPrefix, String),
 
         /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
         Duration(Box<Token>), // TODO move in a token function stuff
@@ -32,12 +39,16 @@ pub enum Expr {
     BinaryOr(Box<Expr>, Box<Expr>),
     BinaryXor(Box<Expr>, Box<Expr>),
 
+    // Boolean operations
+    BooleanAnd(Box<Expr>, Box<Expr>),
+    BooleanOr(Box<Expr>, Box<Expr>),
     Neg(Box<Expr>),
 
     Paren(Box<Expr>),
 
     // Boolean operations
     Equal(Box<Expr>, Box<Expr>),
+    Different(Box<Expr>, Box<Expr>),
     LowerOrEqual(Box<Expr>, Box<Expr>),
     GreaterOrEqual(Box<Expr>, Box<Expr>),
     StrictlyGreater(Box<Expr>, Box<Expr>),
@@ -48,8 +59,6 @@ pub enum Expr {
     // Function with two arguments
     BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
 
-    /// A prefix (related to bank managment has been added to the label)
-    PrefixedLabel(LabelPrefix, String)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq,Debug)]
@@ -167,6 +176,9 @@ impl From<Expr> for FormattedExpr {
 }
 
 
+
+
+
 /// Represent a function with one argument
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum UnaryFunction {
@@ -202,6 +214,7 @@ impl Display for BinaryFunction {
 }
 
 
+
 impl From<&str> for Expr {
     fn from(src: &str) -> Self {
         Expr::Label(src.to_string())
@@ -235,6 +248,13 @@ impl Expr {
         }
     }
 
+    pub fn is_relative(&self) -> bool {
+        match self {
+            Expr::RelativeDelta(_) => true,
+            _ => false
+        }
+    }
+
     pub fn neg(&self) -> Self {
         Expr::Neg(Box::new(self.clone()))
     }
@@ -251,6 +271,13 @@ impl Expr {
     }
 
 
+    /// When disassembling an instruction with relative expressions, the contained value needs to be transformed as an absolute value
+    pub fn fix_relative_value(&mut self) {
+        if let Expr::Value(val) = self {
+            let mut new_expr = Expr::RelativeDelta(*val as i8);
+            std::mem::swap(self, &mut new_expr);
+        }
+    }  
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -266,11 +293,15 @@ pub enum Oper {
     BinaryOr,
     BinaryXor,
 
+    BooleanAnd,
+    BooleanOr,
+
     Equal,
     LowerOrEqual,
     GreaterOrEqual,
     StrictlyGreater,
     StrictlyLower,
+    Different
 }
 
 impl Display for Oper {
@@ -288,7 +319,15 @@ impl Display for Oper {
             BinaryOr => write!(format, "|"),
             BinaryXor => write!(format, "^"),
 
+
+            BooleanAnd => write!(format, "&&"),
+            BooleanOr => write!(format, "||"),
+
+            BooleanAnd => write!(format, "&&"),
+            BooleanOr => write!(format, "||"),
+
             &Equal => write!(format, "=="),
+            &Different => write!(format, "!="),
             &LowerOrEqual => write!(format, "<="),
             &GreaterOrEqual => write!(format, ">="),
             &StrictlyGreater => write!(format, ">"),
@@ -301,9 +340,13 @@ impl Display for Expr {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         use self::Expr::*;
         match self {
+            // Should not be displayed often
+            &RelativeDelta(delta) => write!(format, "$ + {}", delta),
+
             &Value(val) => write!(format, "0x{:x}", val),
             &String(ref string) => write!(format, "\"{}\"", string),
             &Label(ref label) => write!(format, "{}", label),
+            PrefixedLabel(prefix, label) => write!(format, "{}{}", prefix, label),
 
             UnaryFunction(func, arg) => {
                 write!(format, "{}({})", func, arg)
@@ -314,14 +357,16 @@ impl Display for Expr {
                 write!(format, "{}({}, {})", func, arg1, arg2)
             },
 
+
+
             &Duration(ref token) => write!(format, "DURATION({})", token),
             &OpCode(ref token) => write!(format, "OPCODE({})", token),
 
-            &Add(ref left, ref right) => write!(format, "{} + {}", left, right),
-            &Sub(ref left, ref right) => write!(format, "{} - {}", left, right),
-            &Mul(ref left, ref right) => write!(format, "{} * {}", left, right),
-            &Mod(ref left, ref right) => write!(format, "{} % {}", left, right),
-            &Div(ref left, ref right) => write!(format, "{} / {}", left, right),
+            &Add(ref left, ref right) => write!(format, "({} + {})", left, right),
+            &Sub(ref left, ref right) => write!(format, "({} - {})", left, right),
+            &Mul(ref left, ref right) => write!(format, "({} * {})", left, right),
+            &Mod(ref left, ref right) => write!(format, "({} % {})", left, right),
+            &Div(ref left, ref right) => write!(format, "({} / {})", left, right),
 
             BinaryAnd(ref left, ref right) => {
                 write!(format, "{} {} {}", left, Oper::BinaryAnd, right)
@@ -333,10 +378,18 @@ impl Display for Expr {
                 write!(format, "{} {} {}", left, Oper::BinaryXor, right)
             }
 
+
+            BooleanAnd(ref left, ref right) => {
+                write!(format, "{} {} {}", left, Oper::BooleanAnd, right)
+            }
+            BooleanOr(ref left, ref right) => {
+                write!(format, "{} {} {}", left, Oper::BooleanOr, right)
+            }
             &Neg(ref e) => write!(format, "-({})", e),
 
             &Paren(ref expr) => write!(format, "({})", expr),
 
+            &Different(ref left, ref right) => write!(format, "{} != {}", left, right),
             &Equal(ref left, ref right) => write!(format, "{} == {}", left, right),
             &GreaterOrEqual(ref left, ref right) => write!(format, "{} >= {}", left, right),
             &StrictlyGreater(ref left, ref right) => write!(format, "{} > {}", left, right),

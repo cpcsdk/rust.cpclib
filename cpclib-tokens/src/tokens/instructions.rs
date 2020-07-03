@@ -304,8 +304,12 @@ pub enum TestKind {
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[allow(missing_docs)]
 pub enum BinaryTransformation {
+    // Raw include of the data
     None,
+    // Compression with exomizer
     Exomizer,
+    // Compression with lz49
+    Lz49
 }
 
 #[remain::sorted]
@@ -322,7 +326,7 @@ pub enum Token {
     Break,
     Breakpoint(Option<Expr>),
     BuildCpr,
-    BuildSna(SnapshotVersion),
+    BuildSna(Option<SnapshotVersion>),
     Comment(String),
     CrunchedBinary(CrunchType, String),
     CrunchedSection(CrunchType, Listing),
@@ -336,16 +340,15 @@ pub enum Token {
     If(Vec<(TestKind, Listing)>, Option<Listing>),
 
     /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
-    Incbin(
-        // TODO name arguments to ease manipulation
-        String,
-        Option<Expr>,
-        Option<Expr>,
-        Option<Expr>,
-        Option<Expr>,
-        Option<Vec<u8>>,
-        BinaryTransformation,
-    ),
+    Incbin {
+        fname: String,
+        offset: Option<Expr>,
+        length: Option<Expr>,
+        extended_offset: Option<Expr>,
+        off: bool,
+        content: Option<Vec<u8>>,
+        transformation: BinaryTransformation,
+    },
     Include(String, Option<Listing>),
 
     Label(String),
@@ -354,7 +357,12 @@ pub enum Token {
     List,
 
     Macro(String, Vec<String>, String), // Content of the macro is parsed on use
-    MacroCall(String, Vec<Expr>), // String are used in order to not be limited to expression and allow opcode/registers use
+    MacroCall(String, Vec<String>), // String are used in order to not be limited to expression and allow opcode/registers use
+
+    // Fake pop directive with several arguments
+    MultiPop(Vec<DataAccess>),
+    // Fake push directive with several arguments
+    MultiPush(Vec<DataAccess>),
 
     NoList,
 
@@ -374,6 +382,7 @@ pub enum Token {
     Save {
         filename: String,
         address: Expr,
+
         size: Expr,
         save_type: Option<SaveType>,
         dsk_filename: Option<String>,
@@ -381,6 +390,8 @@ pub enum Token {
     },
     SetCPC(Expr),
     SetCrtc(Expr),
+    /// This directive setup a value for a given flag of the snapshot
+    SnaSet(cpclib_sna::flags::SnapshotFlag, cpclib_sna::flags::FlagValue),
     StableTicker(StableTickerAction),
     Str(Vec<u8>),
     Struct(String, Vec<(String, Token)>),
@@ -394,6 +405,8 @@ pub enum Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+
         let expr_list_to_string = |exprs: &Vec<Expr>| {
             exprs
                 .iter()
@@ -402,8 +415,16 @@ impl fmt::Display for Token {
                 .join(",")
         };
 
+        let data_access_list_to_string = |data: &Vec<DataAccess>| {
+            data
+                .iter()
+                .map(|d| format!("{}", d))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+
         #[remain::sorted]
-        match *self {
+        match self {
 
             Token::Align(ref expr, None)
                 => write!(f, "ALIGN {}", expr),
@@ -438,8 +459,43 @@ impl fmt::Display for Token {
 
             
 
-             Token::Incbin(ref fname, None, None, None, None, None, BinaryTransformation::None) 
-                 => write!(f, "INCBIN \"{}\"", fname),
+             Token::Incbin{
+                 fname, 
+                 offset, 
+                 length, 
+                 extended_offset, 
+                 off, 
+                 content: _, 
+                 transformation
+             } 
+                 => {
+
+                    let directive = match transformation {
+                        BinaryTransformation::None => "INCBIN",
+                        BinaryTransformation::Exomizer => "INCEXO",
+                        BinaryTransformation::Lz49 => "INCL49",
+                    };
+
+                     write!(f, "{} \"{}\"", directive, fname)?;
+                     if offset.is_some() {
+                         write!(f, ", {}", offset.as_ref().unwrap())?;
+
+                         if length.is_some() {
+                            write!(f, ", {}", length.as_ref().unwrap())?;
+
+                            if extended_offset.is_some() {
+                                write!(f, ", {}", extended_offset.as_ref().unwrap())?;
+
+                                if *off {
+                                    write!(f, ", OFF")?;
+    
+                                 }
+                             }
+                         }
+                     }
+                     Ok(())
+
+                 }
  
 
                  Token::Include(ref fname, _)
@@ -449,13 +505,20 @@ impl fmt::Display for Token {
                 => write!(f, "{}", string),
 
 
-                Token::MacroCall(ref name, ref args)
+            Token::MacroCall(ref name, ref args)
                 => {use itertools::Itertools;
                     write!(f, "{} {}", name, args.clone()
                                                 .iter()
                                                 .map(|a|{a.to_string()})
                                                 .join(", "))?;
                     Ok(())
+            },
+
+            Token::MultiPush(ref regs) => {
+                write!(f, "PUSH {}", data_access_list_to_string(regs))
+            },
+            Token::MultiPush(ref regs) => {
+                write!(f, "POP {}", data_access_list_to_string(regs))
             },
 
                 // TODO remove this one / it is not coherent as we have the PortC
@@ -523,6 +586,26 @@ impl From<u8> for Token {
 
 #[allow(missing_docs)]
 impl Token {
+
+    /// When diassembling code, the token with relative information are not appropriate
+    pub fn fix_relative_jumps_after_disassembling(&mut self) {
+        if self.is_opcode() {
+
+            let expression = match self {
+                Self::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(exp))) => Some(exp),
+                Self::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(exp)), _) => Some(exp),
+      //          Self::OpCode(_, Some(DataAccess::IndexRegister16WithIndex(_, exp)), _) => Some(exp),
+       //         Self::OpCode(_, _, Some(DataAccess::IndexRegister16WithIndex(_, exp))) => Some(exp),
+                
+                _ => None
+            };
+                    
+            if let Some(expr) = expression {
+                expr.fix_relative_value();
+            };
+        }
+    } 
+
     pub fn is_opcode(&self) -> bool {
         self.mnemonic().is_some()
     }
@@ -531,6 +614,14 @@ impl Token {
         match self {
             Token::Label(ref value) | Token::Equ(ref value, _) => Some(value),
             _ => None,
+        }
+    }
+
+
+    pub fn is_label(&self) -> bool {
+        match self {
+            Self::Label(_) => true,
+            _ => false
         }
     }
 
@@ -551,6 +642,20 @@ impl Token {
     pub fn mnemonic_arg2(&self) -> Option<&DataAccess> {
         match self {
             Token::OpCode(_, _, ref arg2) => arg2.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess> {
+        match self {
+            Token::OpCode(_,  ref mut arg1, _) => arg1.as_mut(),
+            _ => None,
+        }
+    }
+
+    pub fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess> {
+        match self {
+            Token::OpCode(_, _, ref mut arg2) => arg2.as_mut(),
             _ => None,
         }
     }
