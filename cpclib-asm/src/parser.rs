@@ -275,10 +275,10 @@ pub fn parse_z80_str(code: &str) -> IResult<&str, Listing, VerboseError<&str>> {
 /// Parse a single line of Z80. Code useing directive on several lines cannot work
 pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&str>> {
     let (input2, tokens) = tuple((
-        not(eof),
+        context("not eof", not(eof)),
         alt((
             context("empty line", parse_empty_line),
-            delimited(
+            context("macro only", delimited(
                 space1,
                 alt((
                     context("repeat", map(parse_repeat, { |repeat| vec![repeat] })),
@@ -288,7 +288,7 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&st
                     context("condition", map(parse_conditional, { |cond| vec![cond] })),
                 )),
                 preceded(space0, alt((line_ending, eof, tag(":")))),
-            ),
+            )),
             context("line with label only", parse_z80_line_label_only),
             context("standard line", parse_z80_line_complete),
         )),
@@ -1172,7 +1172,12 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token, VerboseError<&str>>
 }
 
 fn parse_instr(name: &str) -> impl Fn(&str) -> IResult<&str, (), VerboseError<&str>> + '_ {
-    move |input: &str| map(tuple((tag_no_case(name), not(alpha1), space0)), |_| ())(input)
+    move |input: &str| map(
+        tuple((
+            tag_no_case(name), 
+            not(alpha1), 
+            space0)
+        ), |_| ())(input)
 }
 
 /// ...
@@ -1189,12 +1194,24 @@ pub fn expr_list(input: &str) -> IResult<&str, Vec<Expr>, VerboseError<&str>> {
 
 /// ...
 pub fn parse_assert(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    let (input, expr) = preceded(parse_instr("ASSERT"), expr)(input)?;
+    let (input, _) = context(
+        "assert", 
+        preceded(
+            space0,
+            parse_instr("ASSERT")
+        )
+    )(input)?;
+    
+    
+    let (input, expr) = context(
+        "expr",
+        expr
+    )(input)?;
 
-    let (input, comment) = opt(preceded(
+    let (input, comment) = context("assert comment", opt(preceded(
         delimited(space0, tag(","), space0),
         delimited(tag("\""), take_until("\""), tag("\"")),
-    ))(input)?;
+    )))(input)?;
 
     Ok((input, Token::Assert(expr, comment.map(|s| s.to_string()))))
 }
