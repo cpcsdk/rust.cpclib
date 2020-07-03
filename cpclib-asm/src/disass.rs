@@ -5,6 +5,9 @@ use crate::preamble::*;
 // Note that these table do not all contain 256 values; I have added missing ones without checking if they are at the right place
 // replace eeee by nnnn
 
+
+/// TODO replace JR nn by JR $+nn in order to assemble even with current address is unknown
+
 const TABINSTRFDCB:[&'static str;256]  = [
 	"", "", "", "", "", "", "RLC (IY+nn)", "",
 	"", "", "", "", "", "", "RRC (IY+nn)", "",
@@ -223,7 +226,7 @@ const TABINSTRDD:[&'static str;256]  = [
 	"", "", "", "",
 	"", "LD IX,nnnn", "LD (nnnn),IX", "INC IX",
 	"INC IXh", "DEC IXh", "LD IXh,nn", "",
-	"", "", "LD IX,(nnnn)", "DEC IX", // ATTENTION ADD IX, HL does not exist and has been removed
+	"", "ADD IX,IX", "LD IX,(nnnn)", "DEC IX", // ATTENTION ADD IX, HL does not exist and has been removed
 	"INC IXl", "DEC IXl", "LD IXl,nn", "",
 	"", "", "", "",
 	"INC (IX+nn)", "DEC (IX+nn)", "LD (IX+nn),nn", "",
@@ -287,7 +290,7 @@ const TABINSTRFD:[&'static str;256]  = [
 	"", "", "", "", "", "", "", "",
 	"", "ADD IY,DE", "", "", "", "", "", "",
 	"", "LD IY,nnnn", "LD (nnnn),IY", "INC IY", "INC IYh", "DEC IYh", "LD IYh,nn", "",
-	"", "", "LD IY,(nnnn)", "DEC IY", "INC IYl", "DEC IYl", "LD IYl,nn", "", // Attention ADD IY, HL has been removed
+	"", "ADD IY,IY", "LD IY,(nnnn)", "DEC IY", "INC IYl", "DEC IYl", "LD IYl,nn", "", // Attention ADD IY, HL has been removed
 	"", "", "", "", "INC (IY+nn)", "DEC (IY+nn)", "LD (IY+nn),nn", "",
 	"", "ADD IY,SP", "", "", "", "", "", "",
 	"", "", "", "", "LD B,IYh", "LD B,IYl", "LD B,(IY+nn)", "",
@@ -325,15 +328,15 @@ const TABINSTR:[&'static str;256]  = [
 	"INC C", "DEC C", "LD C,nn", "RRCA",
 	"DJNZ nn", "LD DE,nnnn", "LD (DE),A", "INC DE",
 	"INC D", "DEC D", "LD D,nn", "RLA",
-	"JR nnnn", "ADD HL,DE", "LD A,(DE)", "DEC DE",
+	"JR nn", "ADD HL,DE", "LD A,(DE)", "DEC DE",
 	"INC E", "DEC E", "LD E,nn", "RRA",
-	"JR NZ,nnnn", "LD HL,nnnn", "LD (nnnn),HL", "INC HL",
+	"JR NZ,nn", "LD HL,nnnn", "LD (nnnn),HL", "INC HL",
 	"INC H", "DEC H", "LD H,nn", "DAA",
-	"JR Z,nnnn", "ADD HL,HL", "LD HL,(nnnn)", "DEC HL",
+	"JR Z,nn", "ADD HL,HL", "LD HL,(nnnn)", "DEC HL",
 	"INC L", "DEC L", "LD L,nn", "CPL",
-	"JR NC,nnnn", "LD SP,nnnn", "LD (nnnn),A", "INC SP",
+	"JR NC,nn", "LD SP,nnnn", "LD (nnnn),A", "INC SP",
 	"INC (HL)", "DEC (HL)", "LD (HL),nn", "SCF",
-	"JR C,nnnn", "ADD HL,SP", "LD A,(nnnn)", "DEC SP",
+	"JR C,nn", "ADD HL,SP", "LD A,(nnnn)", "DEC SP",
 	"INC A", "DEC A", "LD A,nn", "CCF",
 	"LD B,B", "LD B,C", "LD B,D", "LD B,E",
 	"LD B,H", "LD B,L", "LD B,(HL)", "LD B,A",
@@ -389,74 +392,80 @@ const TABINSTR:[&'static str;256]  = [
 
 /// Generate a listing from the list of bytes. An error is generated if it is impossible to disassemble the flux
 /// TODO really implement it
-pub fn disassemble(bytes: &[u8]) -> Result<Listing, String> {
+pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
+
+	let mut reverse_tokens = Vec::new();
 
     // Generate a listing that contains the current token followed by tokens obtaines from remaining bytes
-    let continue_disassembling = |token: Token, bytes: &[u8]| {
-        disassemble(bytes).and_then(|rest|{
-            // TODO -- check if it is possible to improve this aspect
-            let mut lst = Listing::new();
-            lst.push(token);
-            lst.extend_from_slice(&rest);
-            Ok(lst)
-        })
+    let mut continue_disassembling = |token: Token, bytes: &'a [u8]| {
+		reverse_tokens.push(token);
+		bytes
     };
 
+	while ! bytes.is_empty() {
 
-    match bytes {
-        // Nothing to disassemble
-        [] => {
-            Ok(Listing::new())
-        },
+		bytes = match bytes {
+			[] => unreachable!(),
 
-        // Current mnemonic is nop
-        [0, rest @ ..] => {
-            continue_disassembling(nop(), rest)           
-        },
+			// Current mnemonic is nop
+			[0, rest @ ..] => {
+				continue_disassembling(nop(), rest)           
+			},
 
-        [0xFD, 0xCB, param, opcode, rest @ ..] => {
-            let token = disassemble_with_one_argument(*opcode, *param, &TABINSTRFDCB)?;
-            continue_disassembling(token, rest)           
-        },
+			[ref prefix, 0xCB, param, opcode, rest @ ..] if *prefix == 0xfd || *prefix == 0xdd => {
+				let token = disassemble_with_one_argument(
+					*opcode, 
+					*param, 
+					if *prefix == 0xfd {&TABINSTRFDCB} else {&TABINSTRDDCB}
+				).unwrap_or_else(|_|{
+						defb_elements(&[*prefix, 0xcb, *param, *opcode])
+					}
+				);
+				continue_disassembling(token, rest)           
+			},
 
-        // TODO this case is buggy and needs  to be redone to tkae into acocunt the position of the argument
-        [0xDD, 0xCB, param, opcode, rest @ ..] => {
-            let token = disassemble_with_one_argument(*opcode, *param, &TABINSTRDDCB)?;
-            continue_disassembling(token, rest)           
-        },
 
-        [0xCB, ref opcode, rest @ ..] => {
-            let token = disassemble_without_argument(*opcode, &TABINSTRCB)?;
-            continue_disassembling(token, rest)
-        },
+			[prefix, ref opcode, rest @ ..] 
+				if 	*prefix == 0xcb || *prefix == 0xed || 
+					*prefix == 0xdd || *prefix == 0xfd => {
+				let (token, rest) = disassemble_with_potential_argument(
+					*opcode, 
+					match prefix {
+						0xcb => &TABINSTRCB,
+						0xed => &TABINSTRED,
+						0xdd => &TABINSTRDD,
+						0xfd => &TABINSTRFD,
+						_ => unreachable!()
+					},
+					rest
+					
+				).unwrap_or_else(|_|{
+					(defb_elements(&[*prefix, *opcode]), rest)
+				});
+				continue_disassembling(token, rest)
+			},
+			
+			[ref opcode, rest @ ..] => {
+				let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTR, rest)
+				.unwrap_or_else(|_|{
+					(defb(*opcode), rest)
+				});
+				continue_disassembling(token, rest)
+			}
+		}
+	};
 
-        [0xED, ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRED, rest)?;
-            continue_disassembling(token, rest)
-        },
-
-        
-        [0xDD, ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRDD, rest)?;
-            continue_disassembling(token, rest)
-        },
-
-        [0xFD, ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTRFD, rest)?;
-            continue_disassembling(token, rest)
-        },
-
-        [ref opcode, rest @ ..] => {
-            let (token, rest) =  disassemble_with_potential_argument(*opcode, &TABINSTR, rest)?;
-            continue_disassembling(token, rest)
-        }
-    }
+	//reverse_tokens.reverse();
+	reverse_tokens.into()
 
 }
 
 /// Manage the disassembling of the current instraction. However this instruction may need an argument.
 /// For this reason the byte stream is provided to collect this argument if needed
-fn disassemble_with_potential_argument<'stream>(opcode: u8, lut: &[&'static str;256], bytes: &'stream [u8]) -> Result<(Token, &'stream [u8]), String> {
+fn disassemble_with_potential_argument<'stream>(
+	opcode: u8, 
+	lut: &[&'static str;256], 
+	bytes: &'stream [u8]) -> Result<(Token, &'stream [u8]), String> {
     let representation:&'static str = lut[opcode as usize];
 
     // get the first argument if any
@@ -500,8 +509,18 @@ fn disassemble_without_argument(opcode: u8, lut: &[&'static str; 256]) -> Result
     string_to_token(&representation)
 }
 
+/// Thje method never fails now => it generate a db opcode
 fn string_to_token(representation: &str) -> Result<Token, String> {
-    Token::try_from(["\t", &representation].join(""))
+	if representation.len() == 0 {
+		Err("Empty opcode".to_string())
+	}
+	else {
+		Token::try_from(["\t", &representation].join(""))
+		.and_then(|mut token|{
+			token.fix_relative_jumps_after_disassembling();
+			Ok(token)
+		})
+	}
 }
 
 
@@ -514,23 +533,23 @@ mod test {
 
     #[test]
     fn disass_simple_instruction() {
-        assert_eq!("PUSH HL", disassemble(&[0xe5]).unwrap().to_string().trim());
-        assert_eq!("RES 0x3, E", disassemble(&[0xcb, 0x9b]).unwrap().to_string().trim());
+        assert_eq!("PUSH HL", disassemble(&[0xe5]).to_string().trim());
+        assert_eq!("RES 0x3, E", disassemble(&[0xcb, 0x9b]).to_string().trim());
     }
 
     #[test]
     fn disass_instruction_with_arg() {
-        assert_eq!("CALL NZ, 0x123", disassemble(&[0xc4, 0x23, 0x01]).unwrap().to_string().trim());
-        assert_eq!("LD IX, (0x4321)", disassemble(&[0xdd, 0x2a, 0x21, 0x43]).unwrap().to_string().trim());
-        assert_eq!("LD (IX + 0x21), 0x43", disassemble(&[0xdd, 0x36, 0x21, 0x43]).unwrap().to_string().trim());
-        assert_eq!("BIT 0x6, (IX + 0x1)", disassemble(&[0xdd, 0xcb, 0x01, 0x76]).unwrap().to_string().trim());
+        assert_eq!("CALL NZ, 0x123", disassemble(&[0xc4, 0x23, 0x01]).to_string().trim());
+        assert_eq!("LD IX, (0x4321)", disassemble(&[0xdd, 0x2a, 0x21, 0x43]).to_string().trim());
+        assert_eq!("LD (IX + 0x21), 0x43", disassemble(&[0xdd, 0x36, 0x21, 0x43]).to_string().trim());
+        assert_eq!("BIT 0x6, (IX + 0x1)", disassemble(&[0xdd, 0xcb, 0x01, 0x76]).to_string().trim());
     }
-
+/*
     #[test]
     fn disass_unknwon_opcode(){
         assert!(disassemble(&[0xfd, 0x00]).is_err());
     }
-
+*/
     #[test]
     fn disass_check_representation_equality() {
 		disass_for_table_and_prefix(&TABINSTR, &[]);
@@ -555,7 +574,7 @@ mod test {
 			let repr = repr.replacen("nn", "0x12", 1);
 			let expected_bytes = [first, second, 0x12, code];
 
-			let obtained = disassemble(&expected_bytes).unwrap();
+			let obtained = disassemble(&expected_bytes);
 
 			println!("{:?},{:?}, {:?}", repr, expected_bytes, obtained);
 			assert_eq!(
@@ -627,11 +646,10 @@ mod test {
                 (repr.to_owned(), merge(&[prefix, &[code]]))
 			};
 
-			let disass = disassemble(&bytes);
+			let obtained = disassemble(&bytes);
 
 			// check if disassembling provides the right value
 			// alter strings in order to be able to compare them
-			let obtained = disass.unwrap();
 			if !expected.contains("RST") {
 				assert_eq!(
 				expected.replace(" ", "")

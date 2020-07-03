@@ -4,6 +4,8 @@ extern crate matches;
 #[cfg(test)]
 mod tests {
     use cpclib_asm::preamble::*;
+    use cpclib_sna::parse::*; // todo : move its tests at the right place
+
     use nom::IResult;
 
     fn check_mnemonic(code: &str, mnemonic: Mnemonic) -> bool {
@@ -26,7 +28,7 @@ mod tests {
         }
     }
 
-    fn get_val<T: core::fmt::Debug>(res: IResult<&str, T>) -> T {
+    fn get_val<T: core::fmt::Debug>(res: IResult<&str, T, nom::error::VerboseError<&str>>) -> T {
         match res {
             Err(e) => panic!("{:?}", e),
             Ok((rest, val)) => {
@@ -134,11 +136,11 @@ mod tests {
 
     #[test]
     fn fn_test_label() {
-        assert_eq!(parse_label("label").ok().unwrap().1, "label");
-        assert_eq!(parse_label("label").ok().unwrap().1, "label");
-        assert_eq!(parse_label("module.label").ok().unwrap().1, "module.label");
-        assert_eq!(parse_label("label15").ok().unwrap().1, "label15");
-        assert_eq!(parse_label(".label").ok().unwrap().1, ".label");
+        assert_eq!(parse_label(false)("label").ok().unwrap().1, "label");
+        assert_eq!(parse_label(false)("label").ok().unwrap().1, "label");
+        assert_eq!(parse_label(false)("module.label").ok().unwrap().1, "module.label");
+        assert_eq!(parse_label(false)("label15").ok().unwrap().1, "label15");
+        assert_eq!(parse_label(false)(".label").ok().unwrap().1, ".label");
 
         let code = "label";
         let tokens = get_val(parse_z80_line_label_only(code));
@@ -597,10 +599,16 @@ mod tests {
         assert!(res.is_ok());
     }
 
+
+
     #[test]
     fn test_call_macro() {
         let z80 = "MACRONAME";
         assert!(dbg!(parse_macro_call(z80.into())).is_ok());
+        
+        let z80 = "BREAKPOINT_WINAPE";
+        assert!(dbg!(parse_macro_call(z80.into())).is_ok());
+
         let z80 = "MACRONAME 1, 2, 3, TRUC";
         assert!(parse_macro_call(z80.into()).is_ok());
         let z80 = "MACRONAME (void)";
@@ -939,7 +947,7 @@ INC_H equ opcode(inc h)
     ";
         let _tokens = get_val(parse_z80_code(code));
 
-        println!("{:?}", parse_label("crtc_display_catart_if_needed".into()));
+        println!("{:?}", parse_label(false)("crtc_display_catart_if_needed".into()));
         println!(
             "{:?}",
             parse_z80_code(" call crtc_display_catart_if_needed".into())
@@ -1023,63 +1031,69 @@ INC_H equ opcode(inc h)
     #[test]
     fn factor_test() {
         assert_eq!(
-            factor("  3  ").map(|(i, x)| (i, format!("{:?}", x))),
-            Ok(("", String::from("3")))
+            factor("  3  "),
+            Ok(("", Expr::Value(3)))
         );
     }
 
     fn comp_test() {
         assert_eq!(
-            comp("1 ").map(|(i, x)| (i, format!("{:?}", x))),
-            Ok(("", String::from("1")))
+            comp("1 "),
+            Ok(("", Expr::Value(1)))
         );
     }
 
     #[test]
     fn term_test() {
         assert_eq!(
-            term(" 3 *  5   ").map(|(i, x)| (i, format!("{:?}", x))),
-            Ok(("", String::from("(3 * 5)")))
+            term(" 3 *  5   "),
+            Ok(("", Expr::Mul(Box::new(Expr::Value(3)), Box::new(Expr::Value(5)))))
         );
     }
 
     #[test]
     fn expr_test() {
         assert_eq!(
-            expr(" 1 + 2 *  3 ").map(|(i, x)| (i, format!("{:?}", x))),
-            Ok(("", String::from("(1 + (2 * 3))")))
+            expr(" 1 + 2 *  3 "),
+            Ok(("", Expr::Add(
+                Box::new(Expr::Value(1)),
+                Box::new(Expr::Mul(
+                    Box::new(Expr::Value(2)),
+                    Box::new(Expr::Value(3))
+                ))
+            )))
         );
         assert_eq!(
-            expr(" 1 + 2 *  3 / 4 - 5 ").map(|(i, x)| (i, format!("{:?}", x))),
-            Ok(("", String::from("((1 + ((2 * 3) / 4)) - 5)")))
+            expr(" 1 + 2 *  3 / 4 - 5 ").map(|(i, x)| (i, format!("{}", x))),
+            Ok(("", String::from("((0x1 + ((0x2 * 0x3) / 0x4)) - 0x5)")))
         );
         assert_eq!(
-            expr(" 72 / 2 / 3 ").map(|(i, x)| (i, format!("{:?}", x))),
-            Ok(("", String::from("((72 / 2) / 3)")))
+            expr(" 72 / 2 / 3 ").map(|(i, x)| (i, format!("{}", x))),
+            Ok(("", String::from("((0x48 / 0x2) / 0x3)")))
         );
     }
 
     #[test]
     fn parens_test() {
         assert_eq!(
-            expr(" ( 1 + 2 ) *  3 ").map(|(i, x)| (i, format!("{:?}", x))),
-            Ok(("", String::from("([(1 + 2)] * 3)")))
+            expr(" ( 1 + 2 ) *  3 ").map(|(i, x)| (i, format!("{}", x))),
+            Ok(("", String::from("(((0x1 + 0x2)) * 0x3)")))
         );
     }
 
     #[test]
     fn functions_test() {
         assert_eq!(
-            expr("lo(5)").map(|(i, x)| (i, format!("{:?}", x))),
-            Ok(("", String::from("LO(5)")))
+            expr("lo(5)").map(|(i, x)| (i, format!("{}", x))),
+            Ok(("", String::from("LO(0x5)")))
         );
     }
 
     #[test]
     fn boolean_test() {
         assert_eq!(
-            expr(" 0 == 1 ").map(|(i, x)| (i, format!("{:?}", x))),
-            Ok(("", String::from("0 == 1")))
+            expr(" 0 == 1 ").map(|(i, x)| (i, format!("{}", x))),
+            Ok(("", String::from("0x0 == 0x1")))
         )
     }
 
@@ -1245,7 +1259,7 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn real_world_source_failures() {
-        get_val(parse_label("demosystem_binary_start".into()));
+        get_val(parse_label(false)("demosystem_binary_start".into()));
         get_val(parse_ld("ld hl, demosystem_binary_start".into()));
         get_val(parse_z80_code("\tprint \"TODO -- Set the real address (in c7 space)\"\n\tld hl, demosystem_binary_start\n\tld de, 0xDEAD\n\tld bc, demosystem_binary_stop - demosystem_binary_start\n".into()));
 

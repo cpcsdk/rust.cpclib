@@ -42,7 +42,11 @@ impl ExprEvaluationExt for Expr {
                     Oper::BinaryOr => Ok(a | b),
                     Oper::BinaryXor => Ok(a ^ b),
 
+                    Oper::BooleanAnd => Ok( ((a != 0) &&  (b!=0)) as _ ),
+                    Oper::BooleanOr => Ok( ((a != 0) || (b !=0)) as _),
+
                     Oper::Equal => Ok((a == b) as i32),
+                    Oper::Different => Ok((a != b) as i32),
 
                     Oper::LowerOrEqual => Ok((a <= b) as i32),
                     Oper::StrictlyLower => Ok((a < b) as i32),
@@ -64,17 +68,31 @@ impl ExprEvaluationExt for Expr {
         };
 
         match self {
+
+            RelativeDelta(delta) => {
+                Ok(Expr::Label("$".into()).resolve(sym)? + *delta as i32)
+            },
+
             Value(val) => Ok(*val),
 
             String(ref string) => panic!("String values cannot be converted to i32 {}", string),
 
             Label(ref label) => match sym.value(label) {
-                Some(val) => Ok(val),
+                Some(cpclib_tokens::symbols::Value::Integer(ref val)) => Ok(*val),
+                Some(_) => Err(
+                    AssemblerError::WrongSymbolType {
+                        symbol: label.to_owned(),
+                        isnot: "a value".to_owned()
+                    }
+                ),
                 None => Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
                     closest: sym.closest_symbol(label),
                 }),
             },
+
+
+            PrefixedLabel(ref prefix, ref label) => unimplemented!("Need to add management of the prefix. Not sur the symbol table fits this purpose"),
 
             Duration(ref token) => {
                 let duration = token.estimated_duration()?;
@@ -102,9 +120,13 @@ impl ExprEvaluationExt for Expr {
             BinaryOr(ref left, ref right) => oper(left, right, Oper::BinaryOr),
             BinaryXor(ref left, ref right) => oper(left, right, Oper::BinaryXor),
 
+            BooleanAnd(ref left, ref right) => oper(left, right, Oper::BooleanAnd),
+            BooleanOr(ref left, ref right) => oper(left, right, Oper::BooleanOr),
+
             Neg(ref e) => e.resolve(sym).map(|result| -result),
 
             Equal(ref left, ref right) => oper(left, right, Oper::Equal),
+            Different(ref left, ref right) => oper(left, right, Oper::Different),
             LowerOrEqual(ref left, ref right) => oper(left, right, Oper::LowerOrEqual),
             GreaterOrEqual(ref left, ref right) => oper(left, right, Oper::GreaterOrEqual),
             StrictlyGreater(ref left, ref right) => oper(left, right, Oper::StrictlyGreater),

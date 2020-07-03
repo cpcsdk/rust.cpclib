@@ -17,3 +17,6 @@ pub use crate::AssemblingOptions;
 pub use crate::parser::*;
 pub use crate::assembler::*;
 
+pub use crate::assemble;
+pub use crate::assemble_to_amsdos_file;
+

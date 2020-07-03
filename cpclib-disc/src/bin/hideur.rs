@@ -88,8 +88,10 @@ fn main() -> std::io::Result<()> {
         .get_matches();
 
     // Read the input file
+    let complete_filename = matches.value_of("INPUT").unwrap();
+
     let content = {
-        let input = matches.value_of("INPUT").unwrap();
+        let input = complete_filename;
         let mut f = File::open(input)?;
         let mut buf = Vec::new();
         f.read_to_end(&mut buf)?;
@@ -100,7 +102,6 @@ fn main() -> std::io::Result<()> {
     let filename = {
         let user = matches.value_of("USER").map_or(0, string_to_nb) as u8;
         let (filename, extension) = {
-            let complete_filename = matches.value_of("INPUT").unwrap();
 
             let parts = complete_filename.split('.').collect::<Vec<_>>();
             let (filename, extension) = match parts.len() {
@@ -142,7 +143,12 @@ fn main() -> std::io::Result<()> {
         // In this branch we display information about the header
         let amsfile = AmsdosFile::from_buffer(&content);
         let header = amsfile.header();
-        println!("{:?}", header);
+        if header.is_checksum_valid() {
+            println!("{:?}", header);
+        }
+        else {
+            eprintln!("This is not an Amsdos file");
+        }
     } else {
         // In this branch, we build the file with its header
 

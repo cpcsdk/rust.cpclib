@@ -14,7 +14,16 @@ use num_enum::TryFromPrimitive;
 use std::ops::AddAssign;
 use std::ops::DerefMut;
 
-///! Reimplementation of createsnapshot by Ramlaid/Arkos
+pub mod flags;
+pub mod parse;
+mod chunks;
+mod error;
+
+pub use flags::*;
+pub use chunks::*;
+pub use error::*;
+
+///! Re-implementation of createsnapshot by Ramlaid/Arkos
 ///! in rust by Krusty/Benediction
 
 /**
@@ -51,6 +60,7 @@ pub enum SnapshotVersion {
     V3,
 }
 
+
 impl SnapshotVersion {
     /// Check if snapshot ius V3 version
     pub fn is_v3(self) -> bool {
@@ -62,703 +72,9 @@ impl SnapshotVersion {
     }
 }
 
-/// Encode a flag of the snaphot
-#[derive(PartialEq, Debug, Copy, Clone)]
-#[allow(non_camel_case_types)]
-#[allow(missing_docs)]
-pub enum SnapshotFlag {
-    Z80_AF,
-    Z80_F,
-    Z80_A,
-    Z80_BC,
-    Z80_C,
-    Z80_B,
-    Z80_DE,
-    Z80_E,
-    Z80_D,
-    Z80_HL,
-    Z80_L,
-    Z80_H,
-    Z80_R,
-    Z80_I,
-    Z80_IFF0,
-    Z80_IFF1,
-    Z80_IX,
-    Z80_IXL,
-    Z80_IXH,
-    Z80_IY,
-    Z80_IYL,
-    Z80_IYH,
-    Z80_SP,
-    Z80_PC,
-    Z80_IM,
-    Z80_AFX,
-    Z80_FX,
-    Z80_AX,
-    Z80_BCX,
-    Z80_CX,
-    Z80_BX,
-    Z80_DEX,
-    Z80_EX,
-    Z80_DX,
-    Z80_HLX,
-    Z80_LX,
-    Z80_HX,
-    GA_PAL(Option<usize>),
-    GA_PEN,
-    GA_ROMCFG,
-    GA_RAMCFG,
-    CRTC_REG(Option<usize>),
-    CRTC_SEL,
-    ROM_UP,
-    PPI_A,
-    PPI_B,
-    PPI_C,
-    PPI_CTL,
-    PSG_REG(Option<usize>),
-    PSG_SEL,
-    CPC_TYPE,
-    INT_NUM,
-    GA_MULTIMODE(Option<usize>),
-    FDD_MOTOR,
-    FDD_TRACK,
-    PRNT_DATA,
-    CRTC_TYPE,
-    CRTC_HCC,
-    CRTC_CLC,
-    CRTC_RLC,
-    CRTC_VAC,
-    CRTC_VSWC,
-    CRTC_HSWC,
-    CRTC_STATE,
-    GA_VSC,
-    GA_ISC,
-    INT_REQ,
-}
 
-#[allow(missing_docs)]
-impl SnapshotFlag {
-    pub fn enumerate() -> [Self; 67] {
-        use self::SnapshotFlag::*;
 
-        [
-            Z80_AF,
-            Z80_F,
-            Z80_A,
-            Z80_BC,
-            Z80_C,
-            Z80_B,
-            Z80_DE,
-            Z80_E,
-            Z80_D,
-            Z80_HL,
-            Z80_L,
-            Z80_H,
-            Z80_R,
-            Z80_I,
-            Z80_IFF0,
-            Z80_IFF1,
-            Z80_IX,
-            Z80_IXL,
-            Z80_IXH,
-            Z80_IY,
-            Z80_IYL,
-            Z80_IYH,
-            Z80_SP,
-            Z80_PC,
-            Z80_IM,
-            Z80_AFX,
-            Z80_FX,
-            Z80_AX,
-            Z80_BCX,
-            Z80_CX,
-            Z80_BX,
-            Z80_DEX,
-            Z80_EX,
-            Z80_DX,
-            Z80_HLX,
-            Z80_LX,
-            Z80_HX,
-            GA_PAL(None),
-            GA_PEN,
-            GA_ROMCFG,
-            GA_RAMCFG,
-            CRTC_REG(None),
-            CRTC_SEL,
-            ROM_UP,
-            PPI_A,
-            PPI_B,
-            PPI_C,
-            PPI_CTL,
-            PSG_REG(None),
-            PSG_SEL,
-            CPC_TYPE,
-            INT_NUM,
-            GA_MULTIMODE(None),
-            FDD_MOTOR,
-            FDD_TRACK,
-            PRNT_DATA,
-            CRTC_TYPE,
-            CRTC_HCC,
-            CRTC_CLC,
-            CRTC_RLC,
-            CRTC_VAC,
-            CRTC_VSWC,
-            CRTC_HSWC,
-            CRTC_STATE,
-            GA_VSC,
-            GA_ISC,
-            INT_REQ,
-        ]
-    }
 
-    /// Return the location in the header for the flag (and its potential index)
-    pub fn offset(&self) -> usize {
-        use self::SnapshotFlag::*;
-        match self {
-            GA_PAL(ref idx) | CRTC_REG(ref idx) | PSG_REG(ref idx) | &GA_MULTIMODE(ref idx) => {
-                self.base() + idx.unwrap_or(0) * self.elem_size()
-            }
-            _ => self.base(),
-        }
-    }
-
-    pub fn indice(&self) -> Option<usize> {
-        match self {
-            Self::GA_PAL(ref idx)
-            | Self::CRTC_REG(ref idx)
-            | Self::PSG_REG(ref idx)
-            | &Self::GA_MULTIMODE(ref idx) => *idx,
-            _ => Some(0), // For standard stuff indice is considered to be 0
-        }
-    }
-
-    pub fn set_indice(&mut self, indice: usize) -> Result<(), SnapshotError> {
-        match self {
-            Self::GA_PAL(ref mut idx)
-            | Self::CRTC_REG(ref mut idx)
-            | Self::PSG_REG(ref mut idx)
-            | Self::GA_MULTIMODE(ref mut idx) => {
-                *idx = Some(indice);
-                Ok(())
-            }
-            _ => Err(SnapshotError::InvalidIndex),
-        }
-    }
-
-    /// Return the header base position that corresponds to the flag
-    #[allow(clippy::match_ref_pats)]
-    pub fn base(&self) -> usize {
-        use self::SnapshotFlag::*;
-        match self {
-            &Z80_AF | &Z80_F => 0x11,
-            &Z80_A => 0x12,
-            &Z80_BC | &Z80_C => 0x13,
-            &Z80_B => 0x14,
-            &Z80_DE | &Z80_E => 0x15,
-            &Z80_D => 0x16,
-            &Z80_HL | &Z80_L => 0x17,
-            &Z80_H => 0x18,
-            &Z80_R => 0x19,
-            &Z80_I => 0x1a,
-            &Z80_IFF0 => 0x1b,
-            &Z80_IFF1 => 0x1c,
-            &Z80_IX | &Z80_IXL => 0x1d,
-            &Z80_IXH => 0x1e,
-            &Z80_IY | &Z80_IYL => 0x1f,
-            &Z80_IYH => 0x20,
-            &Z80_SP => 0x21,
-            &Z80_PC => 0x23,
-            &Z80_IM => 0x25,
-            &Z80_AFX | &Z80_FX => 0x26,
-            &Z80_AX => 0x27,
-            &Z80_BCX | &Z80_CX => 0x28,
-            &Z80_BX => 0x29,
-            &Z80_DEX | &Z80_EX => 0x2a,
-            &Z80_DX => 0x2b,
-            &Z80_HLX | &Z80_LX => 0x2c,
-            &Z80_HX => 0x2d,
-            &GA_PEN => 0x2e,
-            &GA_PAL(_) => 0x2f,
-            &GA_ROMCFG => 0x40,
-            &GA_RAMCFG => 0x41,
-            &CRTC_SEL => 0x42,
-            &CRTC_REG(_) => 0x43,
-            &ROM_UP => 0x55,
-            &PPI_A => 0x56,
-            &PPI_B => 0x57,
-            &PPI_C => 0x58,
-            &PPI_CTL => 0x59,
-            &PSG_SEL => 0x5a,
-            &PSG_REG(_) => 0x5b,
-            &CPC_TYPE => 0x6d,
-            &INT_NUM => 0x6e,
-            &GA_MULTIMODE(_) => 0x6f,
-            &FDD_MOTOR => 0x9c,
-            &FDD_TRACK => 0x9d,
-            &PRNT_DATA => 0xa1,
-            &CRTC_TYPE => 0xa4,
-            &CRTC_HCC => 0xa9,
-            &CRTC_CLC => 0xab,
-            &CRTC_RLC => 0xac,
-            &CRTC_VAC => 0xad,
-            &CRTC_VSWC => 0xae,
-            &CRTC_HSWC => 0xaf,
-            &CRTC_STATE => 0xb0,
-            &GA_VSC => 0xb2,
-            &GA_ISC => 0xb3,
-            &INT_REQ => 0xb4,
-        }
-    }
-
-    /// Return the number of elements the flag can handle
-    pub fn nb_elems(&self) -> usize {
-        use self::SnapshotFlag::*;
-        match self {
-            GA_PAL(_) => 17,
-            CRTC_REG(_) => 18,
-            PSG_REG(_) => 16,
-            GA_MULTIMODE(_) => 6,
-            _ => 1,
-        }
-    }
-
-    /// Return the size of one unique element
-    #[allow(clippy::match_same_arms, clippy::match_ref_pats)]
-    pub fn elem_size(&self) -> usize {
-        use self::SnapshotFlag::*;
-        match self {
-            &Z80_AF | &Z80_BC | &Z80_DE | &Z80_HL | &Z80_IX | &Z80_IY | &Z80_SP | &Z80_PC
-            | &Z80_AFX | &Z80_BCX | &Z80_DEX | &Z80_HLX | &CRTC_STATE => 2,
-
-            &Z80_F | &Z80_A | &Z80_C | &Z80_B | &Z80_E | &Z80_D | &Z80_L | &Z80_H | &Z80_R
-            | &Z80_I | &Z80_IFF0 | &Z80_IFF1 | &Z80_IXL | &Z80_IXH | &Z80_IYL | &Z80_IYH
-            | &Z80_IM | &Z80_FX | &Z80_AX | &Z80_CX | &Z80_BX | &Z80_EX | &Z80_DX | &Z80_LX
-            | &Z80_HX | &GA_PEN | &GA_ROMCFG | &GA_RAMCFG | &CRTC_SEL | &ROM_UP | &PPI_A
-            | &PPI_B | &PPI_C | &PPI_CTL | &PSG_SEL | &CPC_TYPE | &GA_VSC | &GA_ISC | &INT_REQ
-            | &INT_NUM | &FDD_MOTOR | &FDD_TRACK | &PRNT_DATA | &CRTC_TYPE | &CRTC_HCC
-            | &CRTC_CLC | &CRTC_RLC | &CRTC_VAC | &CRTC_VSWC | &CRTC_HSWC => 1,
-
-            &GA_PAL(_) => 1,
-            &CRTC_REG(_) => 1,
-            &PSG_REG(_) => 1,
-            &GA_MULTIMODE(_) => 1,
-        }
-    }
-
-    pub fn comment(&self) -> &str {
-        use self::SnapshotFlag::*;
-
-        match self {
-            Z80_AF => "\t\tZ80 register AF",
-            Z80_F => "\t\tZ80 register F",
-            Z80_A => "\t\tZ80 register A",
-            Z80_BC => "\t\tZ80 register BC",
-            Z80_C => "\t\tZ80 register C",
-            Z80_B => "\t\tZ80 register B",
-            Z80_DE => "\t\tZ80 register DE",
-            Z80_E => "\t\tZ80 register E",
-            Z80_D => "\t\tZ80 register D",
-            Z80_HL => "\t\tZ80 register HL",
-            Z80_L => "\t\tZ80 register L",
-            Z80_H => "\t\tZ80 register H",
-            Z80_R => "\t\tZ80 register R",
-            Z80_I => "\t\tZ80 register I",
-            Z80_IFF0 => "\tZ80 interrupt flip-flop IFF0",
-            Z80_IFF1 => "\tZ80 interrupt flip-flop IFF1",
-            Z80_IX => "\t\tZ80 register IX",
-            Z80_IXL => "\t\tZ80 register IX (low)",
-            Z80_IXH => "\t\tZ80 register IX (high)",
-            Z80_IY => "\t\tZ80 register IY",
-            Z80_IYL => "\t\tZ80 register IY (low)",
-            Z80_IYH => "\t\tZ80 register IY (high)",
-            Z80_SP => "\t\tZ80 register SP",
-            Z80_PC => "\t\tZ80 register PC",
-            Z80_IM => "\t\tZ80 interrupt mode (0,1,2)",
-            Z80_AFX => "\t\tZ80 register AF'",
-            Z80_FX => "\t\tZ80 register F'",
-            Z80_AX => "\t\tZ80 register A'",
-            Z80_BCX => "\t\tZ80 register BC'",
-            Z80_CX => "\t\tZ80 register C'",
-            Z80_BX => "\t\tZ80 register B'",
-            Z80_DEX => "\t\tZ80 register DE'",
-            Z80_EX => "\t\tZ80 register E'",
-            Z80_DX => "\t\tZ80 register D'",
-            Z80_HLX => "\t\tZ80 register HL'",
-            Z80_LX => "\t\tZ80 register L'",
-            Z80_HX => "\t\tZ80 register H'",
-            GA_PEN => "\t\tGA: index of selected pen",
-            GA_PAL(_) => "\t\tGA: current palette (0..16)",
-            GA_ROMCFG => "\tGA: multi configuration",
-            GA_RAMCFG => "\tCurrent RAM configuration",
-            CRTC_SEL => "\tCRTC: index of selected register",
-            CRTC_REG(_) => "\tCRTC: register data (0..17)",
-            ROM_UP => "\t\tCurrent ROM selection",
-            PPI_A => "\t\tPPI: port A",
-            PPI_B => "\t\tPPI: port B",
-            PPI_C => "\t\tPPI: port C",
-            PPI_CTL => "\t\tPPI: control port",
-            PSG_SEL => "\t\tPSG: index of selected register",
-            PSG_REG(_) => "\t\tPSG: register data (0..15)",
-            CPC_TYPE => "\tCPC type: \n\t\t\t0 = CPC464\n\t\t\t1 = CPC664\n\t\t\t2 = CPC6128\n\t\t\t3 = unknown\n\t\t\t4 = 6128 Plus\n\t\t\t5 = 464 Plus\n\t\t\t6 = GX4000",
-            INT_NUM => "\tinterrupt number (0..5)",
-            GA_MULTIMODE(_) => "\t6 mode bytes (one for each halt)",
-            FDD_MOTOR => "\tFDD motor drive state (0=off, 1=on)",
-            FDD_TRACK => "\tFDD current physical track",
-            PRNT_DATA => "\tPrinter Data/Strobe Register",
-            CRTC_TYPE => "\tCRTC type:\n\t\t\t0 = HD6845S/UM6845\n\t\t\t1 = UM6845R\n\t\t\t2 = MC6845\n\t\t\t3 = 6845 in CPC+ ASIC\n\t\t\t4 = 6845 in Pre-ASIC",
-            CRTC_HCC => "\tCRTC horizontal character counter register",
-            CRTC_CLC => "\tCRTC character-line counter register",
-            CRTC_RLC => "\tCRTC raster-line counter register",
-            CRTC_VAC => "\tCRTC vertical total adjust counter register",
-            CRTC_VSWC => "\tCRTC horizontal sync width counter",
-            CRTC_HSWC => "\tCRTC vertical sync width counter",
-            CRTC_STATE => "\tCRTC state flags. \n\t\t\t0 if '1'/'0' VSYNC active/inactive\n\t\t\t1 if '1'/'0' HSYNC active/inactive\n\t\t\t2-7 reserved\n\t\t\t7 if '1'/'0' Vert Total Adjust active/inactive\n\t\t\t8-15 reserved (0)",
-            GA_VSC => "\t\tGA vsync delay counter",
-            GA_ISC => "\t\tGA interrupt scanline counter",
-            INT_REQ => "\t\tInterrupt request flag\n\t\t\t0=no interrupt requested\n\t\t\t1=interrupt requested",
-        }
-    }
-}
-
-impl FromStr for SnapshotFlag {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = &s.to_uppercase();
-
-        if s.contains(':') {
-            let elems = s.split(':').collect::<Vec<_>>();
-            let idx = match elems[1].parse::<usize>() {
-                Ok(idx) => idx,
-                Err(_) => return Err(String::from("Unable to parse index")),
-            };
-
-            let indexed_flag = match elems[0] {
-                "GA_PAL" => SnapshotFlag::GA_PAL(Some(idx)),
-                "CRTC_REG" => SnapshotFlag::CRTC_REG(Some(idx)),
-                "PSG_REG" => SnapshotFlag::PSG_REG(Some(idx)),
-                "GA_MULTIMODE" => SnapshotFlag::GA_MULTIMODE(Some(idx)),
-                _ => {
-                    return Err(String::from("Unable to convert string to a flag"));
-                }
-            };
-
-            if indexed_flag.indice().unwrap() < indexed_flag.nb_elems() {
-                Ok(indexed_flag)
-            } else {
-                Err(format!("Wrong index size {:?}", indexed_flag))
-            }
-        } else {
-            match s.as_str() {
-                "GA_PAL" => Ok(SnapshotFlag::GA_PAL(None)),
-                "CRTC_REG" => Ok(SnapshotFlag::CRTC_REG(None)),
-                "PSG_REG" => Ok(SnapshotFlag::PSG_REG(None)),
-                "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(None)),
-
-                "Z80_AF" => Ok(SnapshotFlag::Z80_AF),
-                "Z80_F" => Ok(SnapshotFlag::Z80_F),
-                "Z80_A" => Ok(SnapshotFlag::Z80_A),
-                "Z80_BC" => Ok(SnapshotFlag::Z80_BC),
-                "Z80_C" => Ok(SnapshotFlag::Z80_C),
-                "Z80_B" => Ok(SnapshotFlag::Z80_B),
-                "Z80_DE" => Ok(SnapshotFlag::Z80_DE),
-                "Z80_E" => Ok(SnapshotFlag::Z80_E),
-                "Z80_D" => Ok(SnapshotFlag::Z80_D),
-                "Z80_HL" => Ok(SnapshotFlag::Z80_HL),
-                "Z80_L" => Ok(SnapshotFlag::Z80_L),
-                "Z80_H" => Ok(SnapshotFlag::Z80_H),
-                "Z80_R" => Ok(SnapshotFlag::Z80_R),
-                "Z80_I" => Ok(SnapshotFlag::Z80_I),
-                "Z80_IFF0" => Ok(SnapshotFlag::Z80_IFF0),
-                "Z80_IFF1" => Ok(SnapshotFlag::Z80_IFF1),
-                "Z80_IX" => Ok(SnapshotFlag::Z80_IX),
-                "Z80_IXL" => Ok(SnapshotFlag::Z80_IXL),
-                "Z80_IXH" => Ok(SnapshotFlag::Z80_IXH),
-                "Z80_IY" => Ok(SnapshotFlag::Z80_IY),
-                "Z80_IYL" => Ok(SnapshotFlag::Z80_IYL),
-                "Z80_IYH" => Ok(SnapshotFlag::Z80_IYH),
-                "Z80_SP" => Ok(SnapshotFlag::Z80_SP),
-                "Z80_PC" => Ok(SnapshotFlag::Z80_PC),
-                "Z80_IM" => Ok(SnapshotFlag::Z80_IM),
-                "Z80_AFX" => Ok(SnapshotFlag::Z80_AFX),
-                "Z80_FX" => Ok(SnapshotFlag::Z80_FX),
-                "Z80_AX" => Ok(SnapshotFlag::Z80_AX),
-                "Z80_BCX" => Ok(SnapshotFlag::Z80_BCX),
-                "Z80_CX" => Ok(SnapshotFlag::Z80_CX),
-                "Z80_BX" => Ok(SnapshotFlag::Z80_BX),
-                "Z80_DEX" => Ok(SnapshotFlag::Z80_DEX),
-                "Z80_EX" => Ok(SnapshotFlag::Z80_EX),
-                "Z80_DX" => Ok(SnapshotFlag::Z80_DX),
-                "Z80_HLX" => Ok(SnapshotFlag::Z80_HLX),
-                "Z80_LX" => Ok(SnapshotFlag::Z80_LX),
-                "Z80_HX" => Ok(SnapshotFlag::Z80_HX),
-                "GA_PEN" => Ok(SnapshotFlag::GA_PEN),
-                "GA_ROMCFG" => Ok(SnapshotFlag::GA_ROMCFG),
-                "GA_RAMCFG" => Ok(SnapshotFlag::GA_RAMCFG),
-                "CRTC_SEL" => Ok(SnapshotFlag::CRTC_SEL),
-                "ROM_UP" => Ok(SnapshotFlag::ROM_UP),
-                "PPI_A" => Ok(SnapshotFlag::PPI_A),
-                "PPI_B" => Ok(SnapshotFlag::PPI_B),
-                "PPI_C" => Ok(SnapshotFlag::PPI_C),
-                "PPI_CTL" => Ok(SnapshotFlag::PPI_CTL),
-                "PSG_SEL" => Ok(SnapshotFlag::PSG_SEL),
-                "CPC_TYPE" => Ok(SnapshotFlag::CPC_TYPE),
-                "INT_NUM" => Ok(SnapshotFlag::INT_NUM),
-                "FDD_MOTOR" => Ok(SnapshotFlag::FDD_MOTOR),
-                "FDD_TRACK" => Ok(SnapshotFlag::FDD_TRACK),
-                "PRNT_DATA" => Ok(SnapshotFlag::PRNT_DATA),
-                "CRTC_TYPE" => Ok(SnapshotFlag::CRTC_TYPE),
-                "CRTC_HCC" => Ok(SnapshotFlag::CRTC_HCC),
-                "CRTC_CLC" => Ok(SnapshotFlag::CRTC_CLC),
-                "CRTC_RLC" => Ok(SnapshotFlag::CRTC_RLC),
-                "CRTC_VAC" => Ok(SnapshotFlag::CRTC_VAC),
-                "CRTC_VSWC" => Ok(SnapshotFlag::CRTC_VSWC),
-                "CRTC_HSWC" => Ok(SnapshotFlag::CRTC_HSWC),
-                "CRTC_STATE" => Ok(SnapshotFlag::CRTC_STATE),
-                "GA_VSC" => Ok(SnapshotFlag::GA_VSC),
-                "GA_ISC" => Ok(SnapshotFlag::GA_ISC),
-                "INT_REQ" => Ok(SnapshotFlag::INT_REQ),
-                _ => Err(String::from("Unable to convert string to a flag")),
-            }
-        }
-    }
-}
-
-/// Encode the type of the flag values
-#[derive(Debug, Clone)]
-pub enum FlagValue {
-    /// The flag is a byte
-    Byte(u8),
-    /// The flag is a word
-    Word(u16),
-    /// The flag is a list of bytes or words
-    Array(Vec<FlagValue>), // Restr$icted to Byte or Word
-}
-
-impl fmt::Display for FlagValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            FlagValue::Byte(ref val) => write!(f, "0x{:x}", val),
-            FlagValue::Word(ref val) => write!(f, "0x{:x}", val),
-            FlagValue::Array(ref array) => write!(f, "[")
-                .and_then(|_x| {
-                    write!(
-                        f,
-                        "{:?}",
-                        &array.iter().map(|b| format!("{}", b)).collect::<Vec<_>>()
-                    )
-                })
-                .and_then(|_x| write!(f, "]")),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-#[allow(missing_docs)]
-pub enum SnapshotError {
-    FileError,
-    NotEnougSpaceAvailable,
-    InvalidValue,
-    FlagDoesNotExists,
-    InvalidIndex,
-}
-
-#[derive(Clone, Debug)]
-/// Raw chunk data.
-pub struct SnapshotChunkData {
-    /// Identifier of the chunk
-    code: [u8; 4],
-    /// Content of the chunk
-    data: Vec<u8>,
-}
-
-#[allow(missing_docs)]
-impl SnapshotChunkData {
-    pub fn code(&self) -> &[u8; 4] {
-        &(self.code)
-    }
-
-    pub fn size(&self) -> usize {
-        self.data.len()
-    }
-
-    pub fn size_as_array(&self) -> [u8; 4] {
-        let mut size = self.size();
-        let mut array = [0, 0, 0, 0];
-
-        for item in &mut array {
-            *item = (size % 256) as u8;
-            size /= 256;
-        }
-
-        array
-    }
-
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-}
-
-#[derive(Clone, Debug)]
-/// Memory chunk that superseeds the snapshot memory if any.
-pub struct MemoryChunk {
-    /// Raw content of the memory chunk (i.e. compressed version)
-    data: SnapshotChunkData,
-}
-
-#[allow(missing_docs)]
-impl MemoryChunk {
-    /// Create a memory chunk.
-    /// `code` identify with memory block is concerned
-    /// `data` contains the crunched version of the code
-    pub fn from(code: [u8; 4], data: Vec<u8>) -> Self {
-        Self {
-            data: SnapshotChunkData { code, data },
-        }
-    }
-
-    /// Uncrunch the 64kbio of RLE crunched data
-    pub fn uncrunched_memory(&self) -> Vec<u8> {
-        let mut content = Vec::new();
-
-        let idx = std::rc::Rc::new(std::cell::RefCell::new(0));
-        let read_byte = || {
-            let byte = self.data.data[*idx.borrow()];
-            idx.borrow_mut().deref_mut().add_assign(1);
-            byte
-        };
-        while *idx.borrow() != self.data.data.len() {
-            match read_byte() {
-                0xe5 => {
-                    let amount = read_byte();
-                    if amount != 0 {
-                        let val = read_byte();
-                        for _idx in 0..amount {
-                            content.push(val);
-                        }
-                    }
-                }
-                val => {
-                    content.push(val);
-                }
-            }
-        }
-
-        assert_eq!(content.len(), 64 * 1024);
-        content
-    }
-
-    /// Returns the address in the memory array
-    pub fn abstract_address(&self) -> usize {
-        let nb = (self.data.code[3] - b'0') as usize;
-        nb * 0x10000
-    }
-}
-
-#[derive(Clone, Debug)]
-/// Unknwon kind of chunk
-pub struct UnknownChunk {
-    /// Raw data of the chunk
-    data: SnapshotChunkData,
-}
-
-impl UnknownChunk {
-    /// Generate the chunk from raw data
-    pub fn from(code: [u8; 4], data: Vec<u8>) -> Self {
-        Self {
-            data: SnapshotChunkData { code, data },
-        }
-    }
-}
-
-/*
-pub struct BreakpointChunk {
-    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
-        unimplemented!()
-    }
-}
-
-pub struct InsertedDiscChunk {
-    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
-        unimplemented!()
-    }
-}
-
-pub struct CPCPlusChunk {
-    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
-        unimplemented!()
-    }
-}
-*/
-
-#[derive(Clone, Debug)]
-/// Represents any kind of chunks in order to manipulate them easily based on their semantic
-pub enum SnapshotChunk {
-    /// The chunk is a memory chunk
-    Memory(MemoryChunk),
-    /// The type of the chunk is unknown
-    Unknown(UnknownChunk),
-}
-
-#[allow(missing_docs)]
-impl SnapshotChunk {
-    pub fn is_memory_chunk(&self) -> bool {
-        self.memory_chunk().is_some()
-    }
-
-    pub fn memory_chunk(&self) -> Option<&MemoryChunk> {
-        match self {
-            SnapshotChunk::Memory(ref mem) => Some(mem),
-            _ => None,
-        }
-    }
-
-    /// Provides the code of the chunk
-    pub fn code(&self) -> &[u8; 4] {
-        match self {
-            SnapshotChunk::Memory(ref chunk) => chunk.data.code(),
-
-            SnapshotChunk::Unknown(ref chunk) => chunk.data.code(),
-        }
-    }
-
-    pub fn size(&self) -> usize {
-        match self {
-            SnapshotChunk::Memory(ref chunk) => chunk.data.size(),
-
-            SnapshotChunk::Unknown(ref chunk) => chunk.data.size(),
-        }
-    }
-
-    pub fn size_as_array(&self) -> [u8; 4] {
-        match self {
-            SnapshotChunk::Memory(ref chunk) => chunk.data.size_as_array(),
-
-            SnapshotChunk::Unknown(ref chunk) => chunk.data.size_as_array(),
-        }
-    }
-
-    pub fn data(&self) -> &[u8] {
-        match self {
-            SnapshotChunk::Memory(ref chunk) => chunk.data.data(),
-
-            SnapshotChunk::Unknown(ref chunk) => chunk.data.data(),
-        }
-    }
-}
-
-impl From<MemoryChunk> for SnapshotChunk {
-    fn from(chunk: MemoryChunk) -> Self {
-        SnapshotChunk::Memory(chunk)
-    }
-}
-
-impl From<UnknownChunk> for SnapshotChunk {
-    fn from(chunk: UnknownChunk) -> Self {
-        SnapshotChunk::Unknown(chunk)
-    }
-}
 
 const PAGE_SIZE: usize = 0x4000;
 const HEADER_SIZE: usize = 256;
@@ -863,6 +179,27 @@ impl SnapshotMemory {
         }
     }
 
+    /// Build the chunk representation for the memory sapcz
+    pub fn to_chunks(&self) -> Vec<SnapshotChunk> {
+        let memory = self.memory();
+        let mut chunks = Vec::new();
+        let mut current_idx = [b'M', b'E', b'M', b'0'];
+        let mut cursor = 0;        
+
+        while cursor < memory.len() {
+            let next_cursor = cursor + 64 * 1024;
+            let current_memory = &memory[cursor..next_cursor.min(memory.len())];
+            
+            let current_chunk = MemoryChunk::build(current_idx, current_memory, true);
+            chunks.push(SnapshotChunk::Memory(current_chunk));
+            cursor = next_cursor;
+            current_idx[3] += 1;
+
+        }
+
+        chunks
+    }
+
     fn new_64(source: &[u8]) -> Self {
         assert_eq!(source.len(), 64 * 1024);
         let mut mem = [0; PAGE_SIZE * 4];
@@ -890,9 +227,12 @@ impl SnapshotMemory {
 #[derive(Clone)]
 #[allow(missing_docs)]
 pub struct Snapshot {
+    /// Header of the snaphsot
     header: [u8; HEADER_SIZE],
+    /// Memory for V2 snapshot or V3 before saving
     memory: SnapshotMemory,
     memory_already_written: bitsets::DenseBitSet,
+    /// list of chuncks; memory chuncks are removed once memory is written
     chunks: Vec<SnapshotChunk>,
 
     // nothing to do with the snapshot. Should be moved elsewhere
@@ -967,21 +307,17 @@ impl Snapshot {
         let memory_dump_size = sna.memory_size_header() as usize;
         let version = sna.version_header();
 
-        dbg!(memory_dump_size * 1024);
-        dbg!(file_content.len());
-
         assert!(memory_dump_size * 1024 <= file_content.len());
         sna.memory = SnapshotMemory::new(file_content.drain(0..memory_dump_size * 1024).as_slice());
 
         if version == 3 {
-            while let Some(chunk) = Self::read_chunk(&mut file_content, &mut sna) {
+            while let Some(chunk) = Self::read_chunk(
+                                            &mut file_content, 
+                                            &mut sna) {
                 sna.chunks.push(chunk);
             }
         }
 
-        eprintln!("{} chunks", sna.nb_chunks());
-
-        // TODO manage chuncks
         sna
     }
 
@@ -1051,8 +387,16 @@ impl Snapshot {
             assert_eq!(cloned.chunks.len(), 0);
         }
 
-        // TODO add a case to remove main memory in V3 snapshots in order
-        // to crunch it and reduce sna size
+        // Compress memory chunks for V3
+        if version == SnapshotVersion::V3 && !self.has_memory_chunk() {
+            println!("Generate chunks from standard memory");
+            let chunks = cloned.memory.to_chunks();
+            for idx in 0..chunks.len() {
+                cloned.chunks.insert(idx, chunks[idx].clone());
+            }
+            cloned.memory = SnapshotMemory::default();
+            cloned.set_memory_size_header(0);
+        }
 
         cloned
     }
@@ -1062,11 +406,13 @@ impl Snapshot {
         if file_content.len() < 4 {
             return None;
         }
+
         let code = file_content.drain(0..4).as_slice().to_vec();
         let data_length = file_content.drain(0..4).as_slice().to_vec();
 
-        eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
+       // eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
 
+       // compute the data length based on the 4 bytes that represent it
         let data_length = {
             let mut count = 0;
             for i in 0..4 {
@@ -1075,16 +421,18 @@ impl Snapshot {
             count
         };
 
+        // read the appropriate number of bytes
         let content = file_content.drain(0..data_length).as_slice().to_vec();
 
         // Generate the 4 size array
         let code = {
             let mut new_code = [0; 4];
+            assert_eq!(code.len(), 4);
             new_code.copy_from_slice(&code);
             new_code
         };
         let chunk = match code {
-            [0x4d, 0x45, 0x4d, _] => MemoryChunk::from(code, content).into(), /*
+            [b'M', b'E', b'M', _] => MemoryChunk::from(code, content).into(), /*
             ['B', 'R', 'K', 'S'] => BreakpointChunk::from(content),
             ['D', 'S', 'C', _] => InsertedDiscChunk::from(code, content)
             ['C', 'P', 'C', '+'] => CPCPlusChunk::from(content)
@@ -1125,12 +473,14 @@ impl Snapshot {
             );
             buffer.write_all(&sna.memory.memory())?;
         }
+        println!("Memory header: {}", sna.memory_size_header() );
 
         // Write chunks if any
-        for chunck in &self.chunks {
-            buffer.write_all(chunck.code())?;
-            buffer.write_all(&chunck.size_as_array())?;
-            buffer.write_all(chunck.data())?;
+        for chunk in &sna.chunks {
+            println!("Add chunk: {:?}", chunk.code());
+            buffer.write_all(chunk.code())?;
+            buffer.write_all(&chunk.size_as_array())?;
+            buffer.write_all(chunk.data())?;
         }
 
         Ok(())
@@ -1146,7 +496,6 @@ impl Snapshot {
         // but it can be patched by chunks
         for chunk in &self.chunks {
             if let Some(memory_chunk) = chunk.memory_chunk() {
-                let memory_chunk = dbg!(memory_chunk);
                 let address = memory_chunk.abstract_address();
                 let content = memory_chunk.uncrunched_memory();
                 max_memory = address + 64 * 1024;
@@ -1159,6 +508,13 @@ impl Snapshot {
             }
         }
         memory.memory()[..max_memory].to_vec()
+    }
+
+    /// Check if the snapshot has some memory chunk
+    pub fn has_memory_chunk(&self) -> bool {
+        self.chunks.iter().any(|c|{
+            c.is_memory_chunk()
+        })
     }
 
     /// Returns the memory that is hardcoded in the snapshot
@@ -1187,7 +543,10 @@ impl Snapshot {
     /// let mut sna = Snapshot::default();
     /// let data = vec![0,2,3,5];
     /// sna.add_data(&data, 0x4000);
+    /// 
     /// ```
+    /// TODO: re-implement with set_byte
+    /// 
     pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError> {
         if address + data.len() > 0x10000 * 2 {
             Err(SnapshotError::NotEnougSpaceAvailable)
@@ -1210,19 +569,43 @@ impl Snapshot {
         }
     }
 
-    /// Change a memory value. Panic if memory size is not appropriate
-    /// TODO should enlarge memory if needed or write un Chunks
+    #[deprecated]
     pub fn set_memory(&mut self, address: u32, value: u8) {
-        assert!(address < 0x20000);
+        self.set_byte(address, value);
+    }
+
+    /// Change a memory value. Panic if memory size is not appropriate
+    /// If memory is saved insided chuncks, the chuncks are unwrapped
+    pub fn set_byte(&mut self, address: u32, value: u8) {
         let address = address as usize;
 
+        // unroll chuncks if any
+        if self.memory.is_empty() {
+            self.memory = SnapshotMemory::new(&self.memory_dump());
+            let mut idx = 0;
+            while idx < self.chunks.len() {
+                if self.chunks[0].is_memory_chunk() {
+                    self.chunks.remove(idx);
+                }
+                else {
+                    idx +=1;
+                }
+            } 
+            self.set_memory_size_header( (self.memory.len() / 1024) as u16);
+
+        }
+ 
+        // finally write in memory
         self.memory.memory_mut()[address] = value;
+    }
+
+    pub fn get_byte(&self, address: u32) -> u8 {
+        self.memory.memory()[address as usize]
     }
 
     /// Change the value of a flag
     pub fn set_value(&mut self, flag: SnapshotFlag, value: u16) -> Result<(), SnapshotError> {
         let offset = flag.offset();
-
         match flag.elem_size() {
             1 => {
                 if value > 255 {

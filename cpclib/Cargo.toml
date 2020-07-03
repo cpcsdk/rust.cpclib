@@ -63,7 +63,7 @@ clap = { version = "2.33.0", optional = true }
 time = { version = "0.1.42", optional = true }
 exitcode = { version = "1.1.2", optional = true }
 
-
+lz4 = {version="1.23.1", optional=true}
 
 
 
@@ -81,7 +81,7 @@ built = {version = "0.4", features = ["chrono"]}
 
 [features]
 xferlib = [	"curl", "reqwest", "path-absolutize"]
-imgconverter = ["clap", 'notify', "exitcode"]
+imgconverter = ["clap", 'notify', "exitcode", "lz4"]
 
 
 

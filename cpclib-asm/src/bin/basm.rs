@@ -123,50 +123,59 @@ fn assemble(matches: &ArgMatches<'_>, listing: &Listing) -> Result<Env, BasmErro
 /// Save the provided result
 /// TODO manage the various save options
 fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
-    // Collect the produced bytes
-    let binary = env.produced_bytes();
-
-    if matches.is_present("DB_LIST") {
-        println!("{}", PrintableListing::from(&Listing::from(env.produced_bytes().as_ref())));
+    if matches.is_present("SNAPSHOT") {
+        let pc_filename = matches.value_of("OUTPUT").unwrap();
+        env.save_sna(pc_filename)?;
     }
     else {
-        let pc_filename = matches.value_of("OUTPUT").unwrap();
-        let amsdos_filename = AmsdosFileName::from(pc_filename);
+        // Collect the produced bytes
+        let binary = env.produced_bytes();
 
-        // Raise an error if the filename is not compatible with the header
-        if matches.is_present("HEADER") && !amsdos_filename.is_valid() {
-            return Err(BasmError::InvalidAmsdosFilename {
-                filename: pc_filename.to_string(),
-            });
+        if matches.is_present("DB_LIST") {
+            println!("{}", PrintableListing::from(&Listing::from(env.produced_bytes().as_ref())));
         }
+        else {
+            use std::convert::TryFrom;
 
 
-        // Compute the headers if needed
-        let header = if matches.is_present("BINARY_HEADER") {
-            AmsdosManager::compute_binary_header(
-                &amsdos_filename,
-                env.loading_address().unwrap() as u16,
-                env.execution_address().unwrap() as u16,
-                &binary,
-            )
-            .as_bytes()
-            .to_vec()
-        } else if matches.is_present("BASIC_HEADER") {
-            AmsdosManager::compute_basic_header(&amsdos_filename, &binary)
+            let pc_filename = matches.value_of("OUTPUT").unwrap();
+            let amsdos_filename = AmsdosFileName::try_from(pc_filename);
+
+            // Raise an error if the filename is not compatible with the header
+            if matches.is_present("HEADER") && amsdos_filename.is_err() {
+                return Err(BasmError::InvalidAmsdosFilename {
+                    filename: pc_filename.to_string(),
+                });
+            }
+
+
+            // Compute the headers if needed
+            let header = if matches.is_present("BINARY_HEADER") {
+                AmsdosManager::compute_binary_header(
+                    &amsdos_filename.unwrap(),
+                    env.loading_address().unwrap() as u16,
+                    env.execution_address().unwrap() as u16,
+                    &binary,
+                )
                 .as_bytes()
                 .to_vec()
-        } else {
-            Vec::new()
-        };
+            } else if matches.is_present("BASIC_HEADER") {
+                AmsdosManager::compute_basic_header(&amsdos_filename.unwrap(), &binary)
+                    .as_bytes()
+                    .to_vec()
+            } else {
+                Vec::new()
+            };
 
-        // Save file on disc
-        let mut f = File::create(pc_filename)?;
-        if !header.is_empty() {
-            f.write_all(&header)?;
+            // Save file on disc
+            let mut f = File::create(pc_filename)?;
+            if !header.is_empty() {
+                f.write_all(&header)?;
+            }
+            f.write_all(&binary)?;
         }
-        f.write_all(&binary)?;
-    }
 
+    }
     Ok(())
 }
 
@@ -236,7 +245,13 @@ fn main() {
 							.long("binary")
 							.alias("header")
 							.alias("binaryheader")
-					)
+                    )
+                    .arg(
+                        Arg::with_name("SNAPSHOT")
+                            .help("Generate a snapshot")
+                            .long("snapshot")
+                            .alias("sna")
+                    )
 					.arg(
 						Arg::with_name("CASE_INSENSITIVE")
 							.help("Configure the assembler to be case insensitive.")
@@ -260,15 +275,21 @@ fn main() {
                             .multiple(true)
                             .number_of_values(1)
                     )
-					.group(
+					.group( // only one type of header can be provided
 						ArgGroup::with_name("HEADER")
 							.args(&["BINARY_HEADER", "BASIC_HEADER"])
-					)
+                    )
+                    .group( // only one type of output can be provided
+                        ArgGroup::with_name("ARTEFACT_TYPE")
+                        .args(&["BINARY_HEADER", "BASIC_HEADER", "SNAPSHOT"])
+                    )
 					.get_matches();
 
-    let result =  process(&matches);
-    if result.is_err() {
-        let error = result.err().unwrap();
-        println!("Error while assembling.\n{}", error);
+    match process(&matches) {
+        Ok(_) => {},
+        Err(e) => {
+            eprintln!("Error while assembling.\n{}", e);
+        }
     }
 }
+

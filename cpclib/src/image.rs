@@ -968,13 +968,13 @@ impl Sprite {
         matrix.as_sprite(mode, palette)
     }
 
-    pub fn convert_from_fname<P:Into<std::path::Path>>(
+    pub fn convert_from_fname<P:AsRef<std::path::Path>>(
         fname: P,
         mode: Mode,
         conversion: ConversionRule,
         palette: Option<Palette>,
     ) -> Result<Self, im::ImageError> {
-        let img = im::open(fname.into())?;
+        let img = im::open(fname.as_ref())?;
         Ok(Self::convert(&img.to_rgb(), mode, conversion, palette))
     }
 
@@ -1061,7 +1061,7 @@ impl MultiModeSprite {
 
             // First 4 inks are strictly the same
             for i in 0..4 {
-                p.set(i.into(), p_orig.get(i.into()).clone());
+                p.set(i, p_orig.get(i.into()).clone());
             }
 
             // The others depends on the bits kept in mode 0 or mode 4
@@ -1075,7 +1075,7 @@ impl MultiModeSprite {
             // Fill inks depending on the lut
             for (src, dsts) in &lut {
                 dsts.iter().for_each(|dst| {
-                    p.set((*dst).into(), p_orig.get((*src).into()).clone());
+                    p.set(*dst, p_orig.get((*src).into()).clone());
                 });
             }
 
