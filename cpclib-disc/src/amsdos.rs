@@ -313,6 +313,7 @@ impl TryFrom<&str> for AmsdosFileName {
     }
 }
 
+
 #[derive(Clone, Copy)]
 /// Encodes the amsdos file type
 pub enum AmsdosFileType {

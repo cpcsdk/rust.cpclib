@@ -28,7 +28,7 @@ mod tests {
         }
     }
 
-    fn get_val<T: core::fmt::Debug>(res: IResult<&str, T>) -> T {
+    fn get_val<T: core::fmt::Debug>(res: IResult<&str, T, nom::error::VerboseError<&str>>) -> T {
         match res {
             Err(e) => panic!("{:?}", e),
             Ok((rest, val)) => {

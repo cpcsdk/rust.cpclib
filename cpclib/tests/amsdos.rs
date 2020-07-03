@@ -6,6 +6,8 @@ mod tests {
     use cpclib::disc::amsdos::*;
     use cpclib::disc::cfg::*;
     use cpclib::disc::edsk::ExtendedDsk;
+    use std::convert::TryFrom;
+    use std::convert::TryInto;
 
     #[test]
     fn new_data() {
@@ -18,7 +20,7 @@ mod tests {
     fn get_onebasic_file() {
         let onefile = ExtendedDsk::open("./tests/dsk/onefile.dsk").unwrap();
         let manager = AmsdosManager::new_from_disc(onefile, 0);
-        let file = manager.get_file("test.bas").unwrap();
+        let file = manager.get_file("test.bas".try_into().unwrap()).unwrap();
         assert!(file.header().is_checksum_valid());
 
         let file2 = AmsdosFile::basic_file_from_buffer(&"test.bas".into(), file.content()).unwrap();
@@ -185,7 +187,7 @@ mod tests {
         assert_eq!(catalog.free_entries().count(), 64);
 
         let filename = AmsdosFileName::new_correct_case(0, "test", "bin").unwrap();
-        assert_eq!(&filename, &AmsdosFileName::from("test.bin"));
+        assert_eq!(&filename, &AmsdosFileName::try_from("test.bin").unwrap());
 
         let file = AmsdosFile::binary_file_from_buffer(
             &filename,
@@ -216,7 +218,7 @@ mod tests {
         println!("{:?}", catalog);
         assert_eq!(catalog.used_entries().count(), 1);
         let entry = catalog.used_entries().next().unwrap();
-        assert_eq!(entry.amsdos_filename(), &AmsdosFileName::from("test.bin"));
+        assert_eq!(entry.amsdos_filename(), &AmsdosFileName::try_from("test.bin").unwrap());
 
         // TODO find a way to pass filename by reference
         let file2 = manager.get_file(filename);
