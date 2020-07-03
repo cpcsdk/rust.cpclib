@@ -1,7 +1,7 @@
 [package]
 
 name = "cpclib-xfertool"
-version = "0.4.1-alpha"
+version = "0.4.2-alpha"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -9,9 +9,9 @@ description = "cpclib tool related to xfer"
 repository = "https://github.com/cpcsdk/rust.cpclib"
 
 [dependencies]
-cpclib-disc = "0.4.1-alpha"
-cpclib-sna = "0.4.1-alpha"
-cpclib-xfer = "0.4.1-alpha"
+cpclib-disc = "0.4.2-alpha"
+cpclib-sna = "0.4.2-alpha"
+cpclib-xfer = "0.4.2-alpha"
 
 
 anyhow = "1.0"

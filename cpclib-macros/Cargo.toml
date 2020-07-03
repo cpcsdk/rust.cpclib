@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-macros"
-version = "0.4.1-alpha"
+version = "0.4.2-alpha"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -10,7 +10,7 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cpclib-asm = "0.4.1-alpha"
+cpclib-asm = "0.4.2-alpha"
 syn = "1.0.17"
 quote = "1.0.3"
 proc-macro2 = "1.0.10"
