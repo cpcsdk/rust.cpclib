@@ -1147,22 +1147,27 @@ INC_H equ opcode(inc h)
     #[test]
     fn assert_test() {
         let code = " ASSERT 1\n";
-        let tokens = get_val(parse_z80_str(code));
+        let token = parse_assert(code);
+        assert!(token.is_ok());
+
+        let code = " ASSERT 1\n";
+        let tokens = get_val(dbg!(parse_z80_line_complete(code)));
         assert_eq!(tokens.len(), 1);
+
 
         let code = " ASSERT 1 == 2";
         eprintln!("RES: {:?}", parse_z80_str(code));
-        let tokens = get_val(parse_z80_str(code));
+        let tokens = get_val(parse_z80_line_complete(code));
         assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1 < 0x1000";
         eprintln!("RES: {:?}", parse_z80_str(code));
-        let tokens = get_val(parse_z80_str(code));
+        let tokens = get_val(parse_z80_line_complete(code));
         assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1 < 0x1000, \"blabla\"";
-        eprintln!("RES: {:?}", parse_z80_str(code));
-        let tokens = get_val(parse_z80_str(code));
+        eprintln!("RES: {:?}", parse_z80_line_complete(code));
+        let tokens = get_val(parse_z80_line_complete(code));
         assert_eq!(tokens.len(), 1);
     }
 
