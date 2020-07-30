@@ -882,7 +882,7 @@ impl Sprite {
 
     /// Produce a linearized version of the sprite.
     pub fn to_linear_vec(&self) -> Vec<u8> {
-        let size = self.height() * self.byte_width();
+        let size = self.height() * self.bytes_width();
         let mut bytes: Vec<u8> = Vec::with_capacity(size as usize);
 
         for y in 0..self.height() {
@@ -919,7 +919,7 @@ impl Sprite {
 
     /// Get the width (in bytes) of the image
     /// TODO Use a trait for that
-    pub fn byte_width(&self) -> u32 {
+    pub fn bytes_width(&self) -> u32 {
         match self.height() {
             0 => 0,
             _ => self.data[0].len() as u32,
@@ -931,7 +931,7 @@ impl Sprite {
     pub fn pixel_width(&self) -> u32 {
         match self.mode {
             None => panic!("Unable to get the pixel width when mode is not specified"),
-            Some(mode) => mode.nb_pixels_per_byte() as u32 * self.byte_width(),
+            Some(mode) => mode.nb_pixels_per_byte() as u32 * self.bytes_width(),
         }
     }
 

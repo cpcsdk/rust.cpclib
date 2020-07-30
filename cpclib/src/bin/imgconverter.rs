@@ -214,10 +214,19 @@ fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) -> String {
 
 #[allow(clippy::if_same_then_else)] // false positive
 fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
-    if let Some(_sprite_matches) = matches.subcommand_matches("sprite") {
-        // Sprite case. Only Linear encoding is currently managed
+    if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
+        match sprite_matches.value_of("FORMAT").unwrap() {
+            "linear" => OutputFormat::LinearEncodedSprite,
+            "graycoded" => OutputFormat::GrayCodedSprite,
+            _ => unimplemented!()
+        }
+        
+    } 
+    else if let Some(_tile_mathces) = matches.subcommand_matches("tile") {
+        // will be postprocessed
         OutputFormat::LinearEncodedSprite
-    } else {
+    }
+    else {
         // Standard case
         if matches.is_present("OVERSCAN") {
             OutputFormat::CPCMemory {
@@ -264,17 +273,27 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let sub_m4 = matches.subcommand_matches("m4");
     let sub_dsk = matches.subcommand_matches("dsk");
     let sub_sprite = matches.subcommand_matches("sprite");
+    let sub_tile = matches.subcommand_matches("tile");
     let sub_exec = matches.subcommand_matches("exec");
 
     if sub_sprite.is_some() {
+        // TODO share code with the tile branch
+
         let sub_sprite = sub_sprite.unwrap();
         match &conversion {
             Output::LinearEncodedSprite {
                 data,
-                byte_width,
+                bytes_width,
                 height,
                 ..
-            } => {
+            } |
+            Output::GrayCodedSprite {
+                data,
+                bytes_width,
+                height,
+                ..
+            }
+            => {
                 // Save the binary data of the sprite
                 let sprite_fname = sub_sprite.value_of("SPRITE_FNAME").unwrap();
                 let mut file =
@@ -293,12 +312,44 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                             .to_str()
                             .unwrap()
                             .replace(".", "_");
-                        writeln!(&mut file, "{}_WIDTH equ {}", fname, byte_width).unwrap();
+                        writeln!(&mut file, "{}_WIDTH equ {}", fname, bytes_width).unwrap();
                         writeln!(&mut file, "{}_HEIGHT equ {}", fname, height).unwrap();
                         Some(())
                     });
             }
             _ => unreachable!(),
+        }
+    } 
+    else if let Some(sub_tile) = sub_tile {
+        // TODO share code with the sprite branch
+        match &conversion {
+            Output::LinearEncodedSprite {
+                data,
+                bytes_width,
+                height,
+                ..
+            } => {
+                let tile_width = sub_tile.value_of("WIDTH").unwrap().parse::<usize>().unwrap();
+                let tile_height = sub_tile.value_of("HEIGHT").unwrap().parse::<usize>().unwrap();
+
+                let nb_tiles_width = bytes_width / tile_width;
+                let nb_tiles_height = height / tile_height;
+                let mut idx = 0;
+
+                // individually extract each tile
+                for j in 0..nb_tiles_height {
+                    for i in 0..nb_tiles_width {
+
+                        // Collect only the bytes
+                        let tile_data = {
+                            unimplemented!("Need to finish this implementation")
+                        };
+                    }
+                }
+            },
+            _ => unreachable! {
+
+            }
         }
     } else {
         // Make the conversion before feeding sna or dsk
@@ -529,6 +580,64 @@ fn main() -> anyhow::Result<()> {
                         )
                     )
 
+                    .subcommand(
+                        SubCommand::with_name("tile")
+                            .about("Generate a list of sprites")
+                            .arg(
+                                Arg::with_name("EXPORT_PALETTE")
+                                .long("palette")
+                                .short("p")
+                                .takes_value(true)
+                                .required(false)
+                                .help("Name of the binary file that contains the palette")
+                            )
+                            .arg(
+                                Arg::with_name("WIDTH")
+                                .long("width")
+                                .short("w")
+                                .takes_value(true)
+                                .required(true)
+                                .help("Width (in bytes) of a tile")
+                            )
+                            .arg(
+                                Arg::with_name("HEIGHT")
+                                .long("height")
+                                .short("h")
+                                .takes_value(true)
+                                .required(true)
+                                .help("Height (in lines) of a tile")
+                            )
+                            .arg(
+                                Arg::with_name("COUNT")
+                                .long("count")
+                                .takes_value(true)
+                                .required(false)
+                                .help("Number of tiles to extract. Extra tiles are ignored")
+                            )
+                            .arg(
+                                Arg::with_name("CONFIGURATION")
+                                .long("configuration")
+                                .short("c")
+                                .takes_value(true)
+                                .required(false)
+                                .help("Name of the assembly file that contains the size of the sprite")
+                            )
+                            .arg(
+                                Arg::with_name("FORMAT")
+                                .long("format")
+                                .short("f")
+                                .required(true)
+                                .default_value("linear")
+                            )
+                            .arg(
+                                Arg::with_name("SPRITE_FNAME")
+                                .takes_value(true)
+                                .help("Filename to generate. Will be postfixed by the number")
+                                .required(true)
+                            )
+
+                    )
+
                     .arg(
                         Arg::with_name("MODE")
                             .short("m")
@@ -607,6 +716,7 @@ fn main() -> anyhow::Result<()> {
         && matches.subcommand_matches("dsk").is_none()
         && matches.subcommand_matches("sna").is_none()
         && matches.subcommand_matches("sprite").is_none()
+        && matches.subcommand_matches("tile").is_none()
         && matches.subcommand_matches("exec").is_none()
     {
         eprintln!("[ERROR] you have not specified any action to do.");

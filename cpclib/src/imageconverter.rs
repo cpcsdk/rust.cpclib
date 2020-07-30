@@ -471,6 +471,9 @@ pub enum OutputFormat {
     /// To be converted on the fly as a specific TileEncoded scheme
     LinearEncodedSprite,
 
+    /// Mode specific bytes are stored in a gray code order char per char
+    GrayCodedSprite,
+
     /// Chuncky output where each pixel is encoded in one byte (and is supposed to be vertically duplicated)
     LinearEncodedChuncky,
 
@@ -526,6 +529,10 @@ impl OutputFormat {
     /// Generate output format for a linear sprite
     pub fn create_linear_encoded_sprite() -> Self {
         Self::LinearEncodedSprite
+    }
+
+    pub fn create_graycode_encoded_sprite() -> Self {
+        Self::GrayCodedSprite
     }
 
     /// Generate output format for an overscan screen
@@ -815,9 +822,9 @@ impl Default for GrayCodeLineCounter {
 }
 #[allow(missing_docs)]
 impl GrayCodeLineCounter {
-    const GRAYCODE_INDEX_TO_SCREEN_INDEX: [u8; 8] = [0, 1, 3, 2, 6, 7, 5, 4];
+    pub const GRAYCODE_INDEX_TO_SCREEN_INDEX: [u8; 8] = [0, 1, 3, 2, 6, 7, 5, 4];
     #[allow(unused)]
-    const SCREEN_INDEX_TO_GRAYCODE_INDEX: [u8; 8] = [0, 1, 3, 2, 7, 6, 4, 5];
+    pub const SCREEN_INDEX_TO_GRAYCODE_INDEX: [u8; 8] = [0, 1, 3, 2, 7, 6, 4, 5];
 
     pub fn new() -> Self {
         Self::default()
@@ -907,14 +914,21 @@ pub enum Output {
     LinearEncodedSprite {
         data: Vec<u8>,
         palette: Palette,
-        byte_width: usize,
+        bytes_width: usize,
         height: usize,
+    },
+
+    GrayCodedSprite {
+        data: Vec<u8>,
+        palette: Palette,
+        bytes_width: usize,
+        height: usize
     },
 
     LinearEncodedChuncky {
         data: Vec<u8>,
         palette: Palette,
-        byte_width: usize,
+        bytes_width: usize,
         height: usize,
     },
 
@@ -942,6 +956,9 @@ impl Debug for Output {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             Output::LinearEncodedSprite { .. } => writeln!(fmt, "LinearEncodedSprite"),
+
+            Output::GrayCodedSprite { .. } => writeln!(fmt, "LinearEncodedSprite"),
+
             Output::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
             Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
             Output::CPCMemoryOverscan(_, _, _) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
@@ -1031,9 +1048,9 @@ impl<'a> ImageConverter<'a> {
         output: &'a OutputFormat,
     ) -> anyhow::Result<Output> {
         let mut converter = ImageConverter {
-            palette,
+            palette: palette.clone(),
             mode,
-            transformations,
+            transformations: transformations.clone(),
             output,
         };
 
@@ -1044,10 +1061,59 @@ impl<'a> ImageConverter<'a> {
             Ok(Output::LinearEncodedChuncky {
                 data: sprite.to_linear_vec(),
                 palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set
-                byte_width: sprite.byte_width() as _,
+                bytes_width: sprite.bytes_width() as _,
                 height: sprite.height() as _,
             })
-        } else {
+        } 
+        else if let OutputFormat::GrayCodedSprite = output {
+            // get the linear version
+            let linear = Self::convert_impl(
+                input_file,
+                palette,
+                mode,
+                transformations,
+                &OutputFormat::LinearEncodedSprite
+            )?;
+
+            match linear {
+                Output::LinearEncodedSprite{
+                    data,
+                    palette,
+                    bytes_width,
+                    height
+                } => {
+                    println!("gray code");
+                    assert_eq!(height %8, 0);
+
+                    let nb_chars = height / 8;
+                    let mut new_data = Vec::new();
+                    for char_idx in 0..nb_chars {
+                        for line_idx in GrayCodeLineCounter::GRAYCODE_INDEX_TO_SCREEN_INDEX.iter() {
+
+                            let line_idx = *line_idx as usize;
+                            let start = line_idx + 8*char_idx;
+                            new_data.extend_from_slice(
+
+                                &data[
+                                    start*bytes_width .. (start+1)*bytes_width
+                                ]
+                            );
+                        }
+                    }
+
+                    Ok(Output::GrayCodedSprite {
+                            data: new_data,
+                            palette: palette.clone(),
+                            bytes_width: bytes_width,
+                            height: height 
+                        }
+                        
+                    )
+                },
+                _ => unreachable!()
+            }
+        }
+        else {
             let sprite = converter.load_sprite(input_file);
             converter.apply_sprite_conversion(&sprite)
         }
@@ -1123,7 +1189,7 @@ impl<'a> ImageConverter<'a> {
         Ok(Output::LinearEncodedSprite {
             data: sprite.to_linear_vec(),
             palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set
-            byte_width: sprite.byte_width() as _,
+            bytes_width: sprite.bytes_width() as _,
             height: sprite.height() as _,
         })
     }
@@ -1141,7 +1207,7 @@ impl<'a> ImageConverter<'a> {
     ) -> anyhow::Result<Output> {
         // Compute the real value of the arguments
         let tile_width = match tile_width {
-            TileWidthCapture::FullWidth => sprite.byte_width(),
+            TileWidthCapture::FullWidth => sprite.bytes_width(),
             TileWidthCapture::NbBytes(nb) => nb as _,
         };
         let tile_height = match tile_height {
@@ -1150,7 +1216,7 @@ impl<'a> ImageConverter<'a> {
         };
         let nb_columns = match grid_width {
             GridWidthCapture::TilesInRow(nb) => nb,
-            GridWidthCapture::FullWidth => sprite.byte_width() as usize / tile_width as usize,
+            GridWidthCapture::FullWidth => sprite.bytes_width() as usize / tile_width as usize,
         };
         let nb_rows = match grid_height {
             GridHeightCapture::TilesInColumn(nb) => nb,
