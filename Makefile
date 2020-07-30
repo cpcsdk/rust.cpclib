@@ -3,7 +3,7 @@ CRATES= cpclib-sna \
 		cpclib-disc\
 		cpclib-basic\
 		cpclib-xfer\
-		cpclib-tool\
+		cpclib-xfertool\
 		cpclib-asm\
 		cpclib-z80emu\
 		cpclib

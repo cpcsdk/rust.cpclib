@@ -1509,14 +1509,14 @@ pub fn parse_in(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = parse_instr("IN")(input)?;
 
     // get the port proposal
-    let (input, destination) = parse_register8(input)?;
-    let (input, _) = parse_comma(input)?;
-    let (input, port) = alt((
+    let (input, destination) = cut(parse_register8)(input)?;
+    let (input, _) = cut(parse_comma)(input)?;
+    let (input, port) = cut(alt((
         verify(parse_address, |_| {
             destination.get_register8().unwrap().is_a()
         }),
         parse_portc,
-    ))(input)?;
+    )))(input)?;
 
     Ok((
         input,
