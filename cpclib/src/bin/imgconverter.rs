@@ -248,6 +248,35 @@ fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
     }
 }
 
+fn get_requested_palette(matches: &ArgMatches<'_>) -> Option<Palette> {
+    if matches.is_present("PENS") {
+        let numbers = matches.value_of("PENS").unwrap()
+                .split(",")
+                .map(|ink| ink.parse::<u8>().unwrap())
+                .collect::<Vec<_>>();
+        return Some(numbers.into());
+    }
+    else {
+        let mut one_pen_set = false; 
+        let mut palette = Palette::new();
+        for i in 0..16 {
+            let key = format!("PEN{}", i);
+            if matches.is_present(&key) {
+                one_pen_set = true;
+                palette.set(i, matches.value_of(&key).unwrap().parse::<u8>().unwrap())
+            }
+
+        }
+
+        if one_pen_set {
+            return Some(palette);
+        }
+        else {
+            return None;
+        }
+    }
+}
+
 // TODO - Add the ability to import a target palette
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
@@ -256,6 +285,8 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let output_mode = matches.value_of("MODE").unwrap().parse::<u8>().unwrap();
     let mut transformations = TransformationsList::default();
 
+    let palette = get_requested_palette(matches);
+
     if matches.is_present("SKIP_ODD_PIXELS") {
         transformations = transformations.skip_odd_pixels();
     }
@@ -263,7 +294,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let output_format = get_output_format(&matches);
     let conversion = ImageConverter::convert(
         input_file,
-        None,
+        palette,
         output_mode.into(),
         transformations,
         &output_format,
@@ -285,15 +316,25 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 data,
                 bytes_width,
                 height,
-                ..
+                palette
             } |
             Output::GrayCodedSprite {
                 data,
                 bytes_width,
                 height,
-                ..
+                palette
             }
             => {
+                // Save the palette
+                if let Some(palette_fname) = sub_sprite.value_of("EXPORT_PALETTE") {
+                    println!("Write palette");
+                    let mut file =
+                    File::create(palette_fname)
+                        .expect("Unable to create the palette file");
+                    let p: Vec<u8> = palette.into();
+                    file.write_all(&p).unwrap();
+                }
+
                 // Save the binary data of the sprite
                 let sprite_fname = sub_sprite.value_of("SPRITE_FNAME").unwrap();
                 let mut file =
@@ -557,6 +598,7 @@ fn main() -> anyhow::Result<()> {
                             .required(false)
                             .help("Name of the binary file that contains the palette")
                         )
+                       
                         .arg(
                             Arg::with_name("CONFIGURATION")
                             .long("configuration")
@@ -671,6 +713,141 @@ fn main() -> anyhow::Result<()> {
                             .short("s")
                             .help("Skip odd pixels when reading the image (usefull when the picture is mode 0 with duplicated pixels")
                     )
+                    .arg(Arg::with_name("PENS")
+                            .long("pens")
+                            .short("")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Separated list of ink number. Use ',' as a separater")
+                        )
+                        .arg(
+                            Arg::with_name("PEN0")
+                            .long("pen0")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 0")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN1")
+                            .long("pen1")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 1")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN2")
+                            .long("pen2")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 2")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN3")
+                            .long("pen3")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 3")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN4")
+                            .long("pen4")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 4")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN5")
+                            .long("pen5")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 5")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN6")
+                            .long("pen6")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 6")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN7")
+                            .long("pen7")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 7")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN8")
+                            .long("pen8")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 8")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN9")
+                            .long("pen9")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 9")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN10")
+                            .long("pen10")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 10")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN11")
+                            .long("pen11")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 11")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN12")
+                            .long("pen12")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 12")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN13")
+                            .long("pen13")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 13")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN14")
+                            .long("pen14")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 14")
+                            .conflicts_with("PENS")
+                        )
+                        .arg(
+                            Arg::with_name("PEN15")
+                            .long("pen15")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Ink number of the pen 15")
+                            .conflicts_with("PENS")
+                        )
                     .arg(
                         Arg::with_name("SOURCE")
                             .takes_value(true)
