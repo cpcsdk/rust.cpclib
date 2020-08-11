@@ -218,6 +218,7 @@ fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
         match sprite_matches.value_of("FORMAT").unwrap() {
             "linear" => OutputFormat::LinearEncodedSprite,
             "graycoded" => OutputFormat::GrayCodedSprite,
+            "zigzag+graycoded" => OutputFormat::ZigZagGrayCodedSprite,
             _ => unimplemented!()
         }
         
@@ -319,6 +320,12 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 palette
             } |
             Output::GrayCodedSprite {
+                data,
+                bytes_width,
+                height,
+                palette
+            } |
+            Output::ZigZagGrayCodedSprite {
                 data,
                 bytes_width,
                 height,

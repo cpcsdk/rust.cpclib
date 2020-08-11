@@ -474,6 +474,8 @@ pub enum OutputFormat {
     /// Mode specific bytes are stored in a gray code order char per char
     GrayCodedSprite,
 
+    ZigZagGrayCodedSprite,
+
     /// Chuncky output where each pixel is encoded in one byte (and is supposed to be vertically duplicated)
     LinearEncodedChuncky,
 
@@ -535,6 +537,9 @@ impl OutputFormat {
         Self::GrayCodedSprite
     }
 
+    pub fn create_zigzag_graycode_encoded_sprite() -> Self {
+        Self::ZigZagGrayCodedSprite
+    }
     /// Generate output format for an overscan screen
     pub fn create_overscan_cpc_memory() -> Self {
         Self::CPCMemory {
@@ -925,6 +930,13 @@ pub enum Output {
         height: usize
     },
 
+    ZigZagGrayCodedSprite {
+        data: Vec<u8>,
+        palette: Palette,
+        bytes_width: usize,
+        height: usize
+    },
+
     LinearEncodedChuncky {
         data: Vec<u8>,
         palette: Palette,
@@ -957,7 +969,9 @@ impl Debug for Output {
         match self {
             Output::LinearEncodedSprite { .. } => writeln!(fmt, "LinearEncodedSprite"),
 
-            Output::GrayCodedSprite { .. } => writeln!(fmt, "LinearEncodedSprite"),
+            Output::GrayCodedSprite { .. } => writeln!(fmt, "GrayCodedSprite"),
+
+            Output::ZigZagGrayCodedSprite { .. } => writeln!(fmt, "ZigZagGrayCodedSprite"),
 
             Output::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
             Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
@@ -1082,7 +1096,6 @@ impl<'a> ImageConverter<'a> {
                     bytes_width,
                     height
                 } => {
-                    println!("gray code");
                     assert_eq!(height %8, 0);
 
                     let nb_chars = height / 8;
@@ -1112,6 +1125,47 @@ impl<'a> ImageConverter<'a> {
                 },
                 _ => unreachable!()
             }
+        }
+        else if let OutputFormat::ZigZagGrayCodedSprite = output {
+            let graycoded = Self::convert_impl(
+                input_file,
+                palette,
+                mode,
+                transformations,
+                &OutputFormat::GrayCodedSprite
+            )?;
+
+            match graycoded {
+                Output::GrayCodedSprite {
+                    data,
+                    palette,
+                    bytes_width,
+                    height
+                } => {
+
+                    let mut new_data = Vec::new();
+                    new_data.reserve_exact(data.len());
+
+                    for j in 0..height {
+                        let mut current_line = (&data[j*bytes_width..(j+1)*bytes_width]).to_vec();
+
+                        if j % 2 == 1 {
+                            current_line.reverse();
+                        }
+
+                        new_data.extend(current_line);
+                    }
+
+                    Ok(Output::ZigZagGrayCodedSprite {
+                        data: new_data,
+                        palette,
+                        bytes_width,
+                        height
+                    })
+                },
+                _ => unreachable!()
+            }
+
         }
         else {
             let sprite = converter.load_sprite(input_file);
