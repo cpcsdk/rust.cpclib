@@ -309,7 +309,9 @@ pub enum BinaryTransformation {
     // Compression with exomizer
     Exomizer,
     // Compression with lz49
-    Lz49
+    Lz49,
+    // compression with aplib
+    Aplib
 }
 
 #[remain::sorted]
@@ -474,6 +476,7 @@ impl fmt::Display for Token {
                         BinaryTransformation::None => "INCBIN",
                         BinaryTransformation::Exomizer => "INCEXO",
                         BinaryTransformation::Lz49 => "INCL49",
+                        BinaryTransformation::Aplib => "INCAPU",
                     };
 
                      write!(f, "{} \"{}\"", directive, fname)?;
