@@ -1223,15 +1223,26 @@ pub fn assemble_opcode(
 }
 
 fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(), AssemblerError> {
-    if address2.is_some() {
-        unimplemented!();
-    }
+    
 
-    let adr = env.eval(address)?;
+    let adr = if address2.is_none() && address == &"$".into() {
+        // TODO: add tests
+        env.outputadr as i32
+    }
+    else {
+        env.eval(address)?
+    };
+
+    let adr2 = if address2.is_some() {
+        // TODO: add tests
+        env.resolve_expr_must_never_fail(address2.unwrap())?
+    }
+    else {
+        adr.clone()
+    };
 
     // TODO Check overlapping region
-    // TODO manage rorg like instruction
-    env.outputadr = adr as _;
+    env.outputadr = adr2 as _;
     env.codeadr = adr as _;
 
     // Specify start address at first use
