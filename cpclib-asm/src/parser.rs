@@ -614,6 +614,50 @@ pub fn parse_incbin(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     ))
 }
 
+
+pub fn parse_save(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
+
+    let (input, filename) = preceded(tuple((tag_no_case("SAVE"), space1)), parse_fname)(input)?;
+
+    let (input, address) = preceded(parse_comma, expr)(input)?;
+    let (input, size) = preceded(parse_comma, expr)(input)?;
+
+    let (input, save_type) = opt(preceded(parse_comma, alt((
+        value(SaveType::Amsdos, tag_no_case("AMSDOS")),
+        value(SaveType::Dsk, tag_no_case("DSK"))
+    ))))(input)?;
+
+    let (input, dsk_filename) = if save_type.is_some() {
+        opt(preceded(parse_comma, parse_fname))(input)?
+    }
+    else {
+        (input, None)
+    };
+
+    let (input, side) = if dsk_filename.is_some() {
+        opt(preceded(parse_comma, expr))(input)?
+    }
+    else {
+        (input, None)
+    };
+
+    let filename = filename.to_string();
+    let dsk_filename = dsk_filename.map( |s| s.to_string());
+
+    Ok((
+        input,
+        Token::Save{
+            filename,
+            address,
+            size,
+            save_type,
+            dsk_filename,
+            side
+        }
+    ))
+
+}
+
 /// Parse  UNDEF directive.
 pub fn parse_undef(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, label) =
@@ -724,8 +768,10 @@ pub fn parse_directive(input: &str) -> IResult<&str, Token, VerboseError<&str>> 
         parse_protect,
         parse_run,
         parse_snaset,
+        parse_save,
         parse_stable_ticker,
         parse_undef,
+
         parse_noarg_directive,
         parse_macro_call, // need to be the very last one as it eats everything else
     ))(input)
