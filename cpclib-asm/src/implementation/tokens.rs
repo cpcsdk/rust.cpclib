@@ -257,7 +257,13 @@ impl TokenExt for Token {
                             }
 
                             BinaryTransformation::Aplib => {
-                                unimplemented!()
+                                if data.len() == 0 {
+                                    return Err(AssemblerError::EmptyBinaryFile(fname.to_string_lossy().to_string()))
+                                }
+
+                                let crunched = crate::crunchers::apultra::compress(&data);
+                                content.replace(crunched);
+
                             }
                         }
                     }

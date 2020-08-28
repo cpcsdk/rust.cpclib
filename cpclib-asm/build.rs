@@ -1,6 +1,8 @@
 use std::env;
 use std::path::Path;
 
+use cc;
+
 fn main() {
     let src = env::var("CARGO_MANIFEST_DIR").unwrap();
     let dst = Path::new(&env::var("OUT_DIR").unwrap()).join("built.rs");
@@ -10,4 +12,9 @@ fn main() {
         Path::new(&src), 
         &dst
     ).expect("Failed to acquire build-time information");
+
+
+    cc::Build::new()
+    .file("extra/apultra.c")
+    .compile("apultra");
 }
