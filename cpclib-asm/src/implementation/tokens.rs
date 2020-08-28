@@ -241,9 +241,11 @@ impl TokenExt for Token {
                             BinaryTransformation::None => {
                                 content.replace(data);
                             }
+
                             BinaryTransformation::Exomizer => {
                                 unimplemented!("Need to implement exomizer crunching")
                             }
+
                             BinaryTransformation::Lz49 => {
 
                                 if data.len() == 0 {
@@ -252,6 +254,10 @@ impl TokenExt for Token {
 
                                 let crunched = crate::crunchers::lz49::lz49_encode_legacy(&data);
                                 content.replace(crunched);
+                            }
+
+                            BinaryTransformation::Aplib => {
+                                unimplemented!()
                             }
                         }
                     }

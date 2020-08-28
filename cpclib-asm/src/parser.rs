@@ -587,6 +587,7 @@ pub fn parse_incbin(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         map(tag_no_case("INCBIN"), |_| BinaryTransformation::None),
         map(tag_no_case("INCEXO"), |_| BinaryTransformation::Exomizer),
         map(tag_no_case("INCL49"), |_| BinaryTransformation::Lz49),
+        map(tag_no_case("INCAPU"), |_| BinaryTransformation::Aplib),
     ))(input)?;
 
     let (input, fname) = preceded(space1, parse_fname)(input)?;
