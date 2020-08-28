@@ -1,0 +1,11 @@
+[
+    {
+        "arguments": [
+            "cc",
+            "-c",
+            "apultra.c"
+        ],
+        "directory": "/home/rgiot/Perso/CPC/rust.cpcdemotools/cpclib-asm/extra",
+        "file": "apultra.c"
+    }
+]
