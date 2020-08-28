@@ -1878,9 +1878,14 @@ pub fn parse_expr(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> 
 pub fn parse_org(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tuple((tag_no_case("ORG"), space1))(input)?;
 
-    let (input, val) = expr(input)?;
+    let (input, val1) = expr(input)?;
+    let (input, val2) = 
+        opt(preceded(
+            parse_comma,
+            expr
+        ))(input)?;
 
-    Ok((input, Token::Org(val, None)))
+    Ok((input, Token::Org(val1, val2)))
 }
 
 /// Parse defs instruction. TODO add optional parameters
