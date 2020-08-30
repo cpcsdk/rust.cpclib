@@ -97,6 +97,14 @@ pub enum AssemblerError {
     },
 }
 
+impl From<std::io::Error> for AssemblerError {
+    fn from(err: std::io::Error) -> Self {
+        AssemblerError::IOError {
+            msg: err.to_string(),
+        }
+    }
+}
+
 impl From<String> for AssemblerError {
     fn from(msg: String) -> Self {
         AssemblerError::GenericError { msg }

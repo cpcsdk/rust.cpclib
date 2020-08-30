@@ -11,7 +11,10 @@ use std::fmt;
 
 use delegate::delegate;
 use either::*;
+use std::convert::TryFrom;
 
+use crate::AmsdosFile;
+use crate::AmsdosFileName;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -725,6 +728,62 @@ impl Env {
         Ok(())
     }
 
+    // BUG the file is saved in any case EVEN if there is a crash in the assembler later
+    // TODO delay the save but retreive the data now
+    pub fn visit_save(&self, filename: &str, address: &Expr, size: &Expr, save_type: Option<&SaveType>, dsk_filename: Option<&String>, side: Option<&Expr>) -> Result<(), AssemblerError> {
+
+        // No need to do that before the last pass
+        if ! self.pass.is_second_pass() {
+            return Ok(());
+        }
+
+        // retreive the memory
+        // TODO check that bank stuff is properly taken into account
+        let address = self.resolve_expr_must_never_fail(address)?;
+        let size = self.resolve_expr_must_never_fail(size)?;
+        let data = self.memory(address as _, size as _);
+
+        // Add the header if any
+        let object : either::Either<Vec<u8>, AmsdosFile> = match save_type {
+            Some(r#type) => {
+                let loading_address = address as u16;
+                let execution_address = match self.run_options {
+                    Some((exec_address, _)) => exec_address,
+                    None => loading_address
+                };
+    
+                let amsdos_file = AmsdosFile::binary_file_from_buffer(
+                    &AmsdosFileName::try_from(filename)?, 
+                    loading_address, 
+                    execution_address,
+                    &data)?;
+
+                match r#type {
+                    SaveType::Amsdos => either::Left(
+                        amsdos_file.full_content()
+                        .copied()
+                        .collect::<Vec<u8>>()
+                    ),
+                    SaveType::Dsk => either::Right(amsdos_file)
+                }
+            }
+            None => either::Left(data)
+        };
+
+        // Save at the right place
+        match object {
+            either::Right(amsdos_file) => {
+                unimplemented!("DSK write will be implemented only if needed by someone. I don't need it myself.")
+
+            },
+            either::Left(data) => {
+                std::fs::write(filename, &data)?;
+            }
+        }
+
+        Ok(())
+    }
+
 
 
     pub fn visit_snaset(&mut self, flag: &cpclib_sna::SnapshotFlag, value: &cpclib_sna::FlagValue) -> Result<(), AssemblerError> {
@@ -831,6 +890,20 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Repeat(_, _, _) => visit_repeat(token, env),
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
+        Token::Save{
+            filename,
+            address,
+            size,
+            save_type,
+            dsk_filename,
+            side
+        } => env.visit_save(
+            filename, 
+            address, 
+            size, 
+            save_type.as_ref(), 
+            dsk_filename.as_ref(), 
+            side.as_ref()),
         Token::SnaSet(flag, value) => env.visit_snaset(flag, value),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
