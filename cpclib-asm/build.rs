@@ -15,6 +15,7 @@ fn main() {
 
 
     cc::Build::new()
+    .warnings(false)
     .file("extra/apultra.c")
     .compile("apultra");
 }
