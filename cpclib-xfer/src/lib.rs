@@ -126,8 +126,8 @@ impl CpcXfer {
     }
 
     /// Make a simple query
-    fn simple_query(&self, query: &[(&str, &str)]) -> reqwest::Result<reqwest::Response> {
-        reqwest::Client::new()
+    fn simple_query(&self, query: &[(&str, &str)]) -> reqwest::Result<reqwest::blocking::Response> {
+        reqwest::blocking::Client::new()
             .get(&self.uri("config.cgi"))
             .query(query)
             .header("User-Agent", "User-Agent: cpcxfer")

@@ -526,7 +526,7 @@ impl TrackInformation {
     }
 
     delegate! {
-        target self.sector_information_list {
+        to self.sector_information_list {
             pub fn sector(&self, sector_id: u8) -> Option<&Sector>;
             pub fn sector_mut(&mut self, sector_id: u8) -> Option<&mut Sector>;
         }
@@ -877,7 +877,7 @@ impl Sector {
     }
 
     delegate! {
-        target self.sector_information_bloc {
+        to self.sector_information_bloc {
             pub fn sector_id(&self) -> &u8;
         }
     }

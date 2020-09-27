@@ -419,7 +419,7 @@ impl SymbolsTableCaseDependent {
     }
 
     delegate! {
-        target self.table {
+        to self.table {
             pub fn current_address(&self) -> Result<u16, SymbolError>;
             pub fn set_current_address(&mut self, address: u16);
             pub fn set_current_page(&mut self, page: u8);

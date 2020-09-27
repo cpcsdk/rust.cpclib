@@ -165,7 +165,7 @@ impl fmt::Display for Mnemonic {
 
 macro_rules! is_mnemonic {
     ($($mnemonic:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             impl Mnemonic {
                 /// Check if this DataAccess corresonds to $mnemonic
                 pub fn [<is_ $mnemonic:lower>] (&self) -> bool {

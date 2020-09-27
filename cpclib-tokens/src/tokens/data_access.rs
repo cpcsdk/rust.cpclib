@@ -242,7 +242,7 @@ impl DataAccess {
 
 macro_rules! is_any_indexregister8 {
     ($($reg:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             impl DataAccess {
                 /// Check if this DataAccess corresonds to $reg
                 pub fn [<is_register_ $reg:lower>] (&self) -> bool {
@@ -259,7 +259,7 @@ is_any_indexregister8!(Ixh Ixl Iyh Iyl);
 
 macro_rules! is_any_register8 {
     ($($reg:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             impl DataAccess {
                 /// Check if this DataAccess corresonds to $reg
                 pub fn [<is_register_ $reg:lower>] (&self) -> bool {
@@ -276,7 +276,7 @@ is_any_register8!(A B C D E H L);
 
 macro_rules! is_any_register16 {
     ($($reg:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             impl DataAccess {
                 /// Check if this DataAccess corresonds to $reg
                 pub fn [<is_register_ $reg:lower>] (&self) -> bool {
@@ -293,7 +293,7 @@ is_any_register16!(Af Bc De Hl Sp);
 
 macro_rules! is_any_indexregister16 {
     ($($reg:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             impl DataAccess {
                 /// Check if this DataAccess corresonds to $reg
                 pub fn [<is_register_ $reg:lower>] (&self) -> bool {

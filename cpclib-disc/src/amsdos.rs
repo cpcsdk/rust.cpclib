@@ -584,7 +584,7 @@ impl AmsdosEntry {
     }
 
     delegate! {
-        target self.file_name {
+        to self.file_name {
             pub fn user(&self) -> u8;
             pub fn set_user(&mut self, user: u8);
 

@@ -242,7 +242,7 @@ pub fn incbin<S: AsRef<str>>(fname: S) -> Token {
 
 macro_rules! inc_r8 {
     ($($reg:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             /// Generate the opcode inc $reg
             #[allow(missing_docs)] pub fn [<inc_ $reg:lower>] () -> Token {
                 token_for_opcode_one_arg(
@@ -257,7 +257,7 @@ inc_r8! { A B C D E H L}
 
 macro_rules! inc_r16 {
     ($($reg:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             /// Generate the opcode inc $reg
             #[allow(missing_docs)] pub fn [<inc_ $reg:lower>] () -> Token {
                 token_for_opcode_one_arg(
@@ -282,7 +282,7 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
 
 macro_rules! ld_r16_expr {
     ($($reg:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             /// Generate the opcode LD $reg, expr
             #[allow(missing_docs)] pub fn [<ld_ $reg:lower _expr>] (val: Expr) -> Token {
                 token_for_opcode_two_args(
@@ -305,7 +305,7 @@ ld_r16_expr! {
 
 macro_rules! ld_r8_expr {
     ($($reg:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             /// Generate the opcode LD $reg, expr
             #[allow(missing_docs)] pub fn [<ld_ $reg:lower _expr>]<E: Into<Expr>> (val: E) -> Token {
                 token_for_opcode_two_args(
