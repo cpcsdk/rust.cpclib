@@ -20,7 +20,7 @@ pub fn compress(data: &[u8]) -> Vec<u8> {
 		let mut lenout : libc::c_int = 0;
 
 
-        let res = APULTRA_crunch(
+        let _res = APULTRA_crunch(
 			data,
 			len,
 			&mut dataout,

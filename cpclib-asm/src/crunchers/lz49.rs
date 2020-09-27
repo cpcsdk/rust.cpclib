@@ -35,7 +35,7 @@ fn lz49_encode_block(
 		0x70
 	};
 
-	for i in 0..literalcpt {
+	for _i in 0..literalcpt {
 		odata.push(data[literaloffset]);
 		literaloffset += 1;
 	}
@@ -74,7 +74,7 @@ pub fn lz49_encode_legacy(data: &[u8]) -> Vec<u8>
 
 	let length = data.len();
 
-	let mut token;
+	let token;
 
 
 	let mut literal=0;

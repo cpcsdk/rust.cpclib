@@ -20,7 +20,7 @@ pub fn parse_flag(input:&str) -> IResult<&str, SnapshotFlag, VerboseError<&str>>
 		Ok(flag) => {
 			Ok((input, flag))
 		}
-		Err(e) => {
+		Err(_e) => {
 			Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
 		}
 	}

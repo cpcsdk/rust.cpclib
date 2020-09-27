@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use cpclib_asm::preamble::*;
 use quote::ToTokens;
-use syn::{parse_macro_input, Result, token, Error};
+use syn::{parse_macro_input, Result};
 use syn::parse::Parse;
 use syn::parse::ParseStream;
 use syn::parse::Parser;

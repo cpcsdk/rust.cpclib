@@ -1,19 +1,19 @@
 use cpclib_tokens::tokens::*;
 use cpclib_tokens::symbols::*;
 
-use core::iter::FromIterator;
+
 
 use crate::assembler::{assemble_align, assemble_db_or_dw, assemble_defs, assemble_opcode, Bytes};
 use crate::parser::*;
 use crate::error::*;
 
-use cpclib_tokens::tokens::*;
-use cpclib_tokens::symbols::*;
+
+
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
 
 use crate::AssemblingOptions;
-use crate::implementation::listing::*;
+
 
 use std::fs::File;
 use std::io::Read;
@@ -113,7 +113,7 @@ impl TokenExt for Token {
         match self {
             Token::Defs(ref expr, ref value) => {
                 use crate::assembler::Env;
-                use crate::disass::disassemble;
+                
 
                 assemble_defs(expr, value.as_ref(), &Env::default())
                             .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
@@ -122,7 +122,7 @@ impl TokenExt for Token {
 
             Token::Defb(_) | Token::Defw(_) => {
                 use crate::assembler::Env;
-                use crate::disass::disassemble;
+                
 
                 assemble_db_or_dw(self, &Env::default())
                             .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
@@ -192,8 +192,8 @@ impl TokenExt for Token {
                 fname, 
                  offset, 
                  length, 
-                 extended_offset, 
-                 off, 
+                 extended_offset: _, 
+                 off: _, 
                  ref mut content, 
                  transformation
             }
@@ -201,7 +201,7 @@ impl TokenExt for Token {
             {
                 //TODO manage the optional arguments
                 match ctx.get_path_for(&fname) {
-                    Err(e) => {
+                    Err(_e) => {
                         return Err(AssemblerError::IOError {
                             msg: format!("{:?} not found", fname),
                         });

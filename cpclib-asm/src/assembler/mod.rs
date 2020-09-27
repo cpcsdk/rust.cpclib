@@ -6,11 +6,11 @@ use cpclib_basic::*;
 use cpclib_sna::*;
 
 use smallvec::SmallVec;
-use std::collections::HashMap;
+
 use std::fmt;
 
-use delegate::delegate;
-use either::*;
+
+
 use std::convert::TryFrom;
 
 use crate::AmsdosFile;
@@ -730,7 +730,7 @@ impl Env {
 
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
     // TODO delay the save but retreive the data now
-    pub fn visit_save(&self, filename: &str, address: &Expr, size: &Expr, save_type: Option<&SaveType>, dsk_filename: Option<&String>, side: Option<&Expr>) -> Result<(), AssemblerError> {
+    pub fn visit_save(&self, filename: &str, address: &Expr, size: &Expr, save_type: Option<&SaveType>, _dsk_filename: Option<&String>, _side: Option<&Expr>) -> Result<(), AssemblerError> {
 
         // No need to do that before the last pass
         if ! self.pass.is_second_pass() {
@@ -772,7 +772,7 @@ impl Env {
 
         // Save at the right place
         match object {
-            either::Right(amsdos_file) => {
+            either::Right(_amsdos_file) => {
                 unimplemented!("DSK write will be implemented only if needed by someone. I don't need it myself.")
 
             },
@@ -2631,7 +2631,7 @@ fn flag_test_to_code(flag: FlagTest) -> u8 {
 #[cfg(test)]
 #[allow(deprecated)]
 mod test {
-    use crate::preamble::*;
+    
     use super::*;
 
     #[test]
