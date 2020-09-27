@@ -1,5 +1,5 @@
 use cpclib_tokens::tokens::*;
-use cpclib_tokens::symbols::*;
+
 
 use crate::parser;
 use crate::error::*;
@@ -8,7 +8,7 @@ use std::fmt;
 use crate::implementation::tokens::*;
 use crate::implementation::expression::*;
 
-use std::iter::FromIterator;
+
 
 use crate::AssemblingOptions;
 

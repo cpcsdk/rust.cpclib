@@ -11,12 +11,12 @@ use nom::multi::separated_nonempty_list;
 use nom::multi::*;
 use nom::sequence::*;
 
-use either::*;
+
 #[allow(missing_docs)]
 use nom::*;
 use std::path::PathBuf;
 
-use std::str::FromStr;
+
 
 use crate::preamble::*;
 use cpclib_sna::parse::*;
@@ -281,11 +281,11 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&st
             context("macro only", delimited(
                 space1,
                 alt((
-                    context("repeat", map(parse_repeat, { |repeat| vec![repeat] })),
-                    context("macro", map(parse_macro, { |m| vec![m] })),
-                    context("basic", map(parse_basic, { |basic| vec![basic] })),
-                    context("rorg", map(parse_rorg, { |rorg| vec![rorg] })),
-                    context("condition", map(parse_conditional, { |cond| vec![cond] })),
+                    context("repeat", map(parse_repeat, |repeat| vec![repeat])),
+                    context("macro", map(parse_macro, |m| vec![m])),
+                    context("basic", map(parse_basic, |basic| vec![basic])),
+                    context("rorg", map(parse_rorg, |rorg| vec![rorg])),
+                    context("condition", map(parse_conditional, |cond| vec![cond])),
                 )),
                 preceded(space0, alt((line_ending, eof, tag(":")))),
             )),
@@ -594,7 +594,7 @@ pub fn parse_incbin(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
     let (input, offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
     let (input, length) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
-    let (input, extended_offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
+    let (input, _extended_offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
     let (input, off) = opt(preceded(
         tuple((space0, char(','), space0)),
         tag_no_case("OFF"),
@@ -1139,8 +1139,8 @@ pub fn parse_cp(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 /// Parse DB DW directives
 pub fn parse_db_or_dw(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, is_db) = alt((
-        map(alt((parse_instr("DB"), parse_instr("DEFB"))), { |_| true }),
-        map(alt((parse_instr("DW"), parse_instr("DEFW"))), { |_| false }),
+        map(alt((parse_instr("DB"), parse_instr("DEFB"))), |_| true),
+        map(alt((parse_instr("DW"), parse_instr("DEFW"))), |_| false),
     ))(input)?;
 
     let (input, expr) = expr_list(input)?;
@@ -1201,7 +1201,7 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token, VerboseError<&str>>
                     tuple((tag(","), space0)),
                     take_till(|c| c == ',' || c == '\n'),
                 ),
-                map(tag_no_case("(void)"), { |_| Vec::new() }),
+                map(tag_no_case("(void)"), |_| Vec::new()),
             ))),
         ))(input)?;
         
@@ -1828,8 +1828,8 @@ pub fn parse_indexregister16(input: &str) -> IResult<&str, DataAccess, VerboseEr
     terminated(
         map(
             alt((
-                map(tag_no_case("IX"), { |_| IndexRegister16::Ix }),
-                map(tag_no_case("IY"), { |_| IndexRegister16::Iy }),
+                map(tag_no_case("IX"), |_| IndexRegister16::Ix),
+                map(tag_no_case("IY"), |_| IndexRegister16::Iy),
             )),
             |reg| DataAccess::IndexRegister16(reg),
         ),
@@ -1955,19 +1955,19 @@ pub fn parse_opcode_no_arg(input: &str) -> IResult<&str, Token, VerboseError<&st
 
 fn parse_opcode_no_arg1(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, mnemonic) = alt((
-        map(parse_instr("DI"), { |_| Mnemonic::Di }),
-        map(parse_instr("CCF"), { |_| Mnemonic::Ccf }),
-        map(parse_instr("EI"), { |_| Mnemonic::Ei }),
-        map(parse_instr("EXX"), { |_| Mnemonic::Exx }),
-        map(parse_instr("HALT"), { |_| Mnemonic::Halt }),
-        map(parse_instr("LDIR"), { |_| Mnemonic::Ldir }),
-        map(parse_instr("LDDR"), { |_| Mnemonic::Lddr }),
-        map(parse_instr("LDI"), { |_| Mnemonic::Ldi }),
-        map(parse_instr("LDD"), { |_| Mnemonic::Ldd }),
-        map(parse_instr("NOPS2"), { |_| Mnemonic::Nops2 }),
-        map(parse_instr("NOP"), { |_| Mnemonic::Nop }),
-        map(parse_instr("OUTD"), { |_| Mnemonic::Outd }),
-        map(parse_instr("OUTI"), { |_| Mnemonic::Outi }),
+        map(parse_instr("DI"), |_| Mnemonic::Di),
+        map(parse_instr("CCF"), |_| Mnemonic::Ccf),
+        map(parse_instr("EI"), |_| Mnemonic::Ei),
+        map(parse_instr("EXX"), |_| Mnemonic::Exx),
+        map(parse_instr("HALT"), |_| Mnemonic::Halt),
+        map(parse_instr("LDIR"), |_| Mnemonic::Ldir),
+        map(parse_instr("LDDR"), |_| Mnemonic::Lddr),
+        map(parse_instr("LDI"), |_| Mnemonic::Ldi),
+        map(parse_instr("LDD"), |_| Mnemonic::Ldd),
+        map(parse_instr("NOPS2"), |_| Mnemonic::Nops2),
+        map(parse_instr("NOP"), |_| Mnemonic::Nop),
+        map(parse_instr("OUTD"), |_| Mnemonic::Outd),
+        map(parse_instr("OUTI"), |_| Mnemonic::Outi),
     ))(input)?;
 
     Ok((input, Token::OpCode(mnemonic, None, None)))
@@ -2033,7 +2033,7 @@ fn parse_snaset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
     eprintln!("flagname => {}", &flagname);
 
-    let (_, flag) = std::dbg!(parse_flag(&flagname)).map_err(|e| {
+    let (_, flag) = std::dbg!(parse_flag(&flagname)).map_err(|_e| {
         nom::Err::Error(VerboseError::from_error_kind(line, ErrorKind::AlphaNumeric))
     })?;
     Ok((input, Token::SnaSet(flag, value)))
@@ -2403,7 +2403,7 @@ pub fn decode_parsing_error(_orig: &str, _e: ::nom::Err<&str>) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::preamble::*;
+    
 
     #[test]
     fn parse_test_cond() {

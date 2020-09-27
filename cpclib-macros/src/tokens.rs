@@ -40,7 +40,7 @@ impl MyToTokens for String {
         self.as_str().to_tokens(tokens);
         tokens.append(Punct::new('.', Spacing::Joint));
         tokens.append(Ident::new("to_string", Span::call_site()));
-        let mut inner_token = TokenStream::new();
+        let inner_token = TokenStream::new();
         tokens.append(Group::new(Delimiter::Parenthesis, inner_token));
     }
 }

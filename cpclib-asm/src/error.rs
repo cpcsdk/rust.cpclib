@@ -5,7 +5,7 @@ use crate::parser::ParserContext;
 use cpclib_tokens::symbols::SymbolError;
 
 use cpclib_disc::amsdos::AmsdosError;
-use cpclib_disc::amsdos::AmsdosFile;
+
 
 use failure::Fail;
 
@@ -129,7 +129,7 @@ impl From<BasicError> for AssemblerError {
 
 /// TODO generate a real error
 impl From<SymbolError> for AssemblerError {
-    fn from(err: SymbolError) -> Self {
+    fn from(_err: SymbolError) -> Self {
         AssemblerError::GenericError {
             msg: "Unknown assembling address".to_string(),
         }

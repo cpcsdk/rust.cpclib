@@ -2,17 +2,17 @@
 
 use bitsets;
 
-use std::fmt;
+
 use std::fs::File;
 
 use std::io::prelude::*;
 
 use std::path::Path;
-use std::str::FromStr;
+
 
 use num_enum::TryFromPrimitive;
-use std::ops::AddAssign;
-use std::ops::DerefMut;
+
+
 
 pub mod flags;
 pub mod parse;

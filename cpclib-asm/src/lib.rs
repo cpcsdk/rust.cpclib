@@ -18,11 +18,11 @@ pub mod error;
 
 mod crunchers;
 
-use crate::parser::ParserContext;
+
 
 use cpclib_disc::amsdos::*;
 
-use error::*;
+
 use preamble::*;
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
@@ -143,7 +143,7 @@ pub fn assemble_to_amsdos_file(
 #[cfg(test)]
 mod test_super {
     use super::*;
-    use crate::preamble::*;
+    
 
     #[test]
     fn simple_test_assemble() {
