@@ -69,6 +69,8 @@ pub mod pixels;
 
 /// CPC Image manipulation. Useable.
 pub mod image;
+/// OCP related functions
+pub mod ocp;
 
 /// PC to CPC image conversions. WIP
 pub mod imageconverter;

@@ -31,6 +31,7 @@ use cpclib::sna;
 use cpclib::sna::*;
 use cpclib_disc::edsk::ExtendedDsk;
 use cpclib_disc::amsdos::*;
+use cpclib::ocp;
 
 use std::fs::File;
 use std::io::Write;
@@ -39,6 +40,21 @@ use anyhow;
 
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
+
+
+macro_rules! export_palette {
+    ($e: expr) => {
+        $e.arg(
+            Arg::with_name("EXPORT_PALETTE")
+            .long("palette")
+            .short("p")
+            .takes_value(true)
+            .required(false)
+            .help("Name of the binary file that contains the palette")
+        )
+    };
+}
+
 
 /// Compress data using lz4 algorithm.
 /// Should be decompressed on client side.
@@ -307,6 +323,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let sub_sprite = matches.subcommand_matches("sprite");
     let sub_tile = matches.subcommand_matches("tile");
     let sub_exec = matches.subcommand_matches("exec");
+    let sub_scr = matches.subcommand_matches("scr");
 
     if sub_sprite.is_some() {
         // TODO share code with the tile branch
@@ -515,6 +532,25 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                         .expect("An error occured while transfering the snapshot");
                 }
             }
+            else if let Some(sub_scr) = sub_scr {
+                let fname = sub_scr.value_of("SCR").unwrap();
+
+                let scr = match &conversion {
+                    Output::CPCMemoryStandard(memory, _) => {
+                        memory
+                    },
+                    _ => unreachable!()
+                };
+
+                let scr = if sub_scr.is_present("COMPRESSED") {
+                    ocp::compress(&scr)
+                }
+                else {
+                    scr.to_vec()
+                };
+
+                std::fs::write(fname, &scr)?;
+            }
         }
     }
 
@@ -523,7 +559,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
 
 fn main() -> anyhow::Result<()> {
     let args = App::new("CPC image conversion tool")
-                    .version("0.1")
+                    .version("0.1.2")
                     .author("Krusty/Benediction")
                     .about("Simple CPC image conversion tool")
 
@@ -566,6 +602,24 @@ fn main() -> anyhow::Result<()> {
                     )
 
                     .subcommand(
+                        export_palette!(SubCommand::with_name("scr")
+                        .about("Generate an OCP SCR file")
+                        .arg(
+                            Arg::with_name("SCR")
+                                .takes_value(true)
+                                .help("SCR file to generate")
+                                .required(true)
+                        )
+                        .arg(
+                            Arg::with_name("COMPRESSED")
+                                .help("Request a compressed screen")
+                                .long("compress")
+                                .short("c")
+                                .required(false)
+                        )
+                    ))
+
+                    .subcommand(
                         SubCommand::with_name("exec")
                         .about("Generate a binary file to manually copy in a DSK or M4 folder.")
                         .arg(
@@ -595,17 +649,8 @@ fn main() -> anyhow::Result<()> {
                     )
 
                     .subcommand(
-                        SubCommand::with_name("sprite")
+                        export_palette!(SubCommand::with_name("sprite")
                         .about("Generate a sprite file to be included inside an application")
-                        .arg(
-                            Arg::with_name("EXPORT_PALETTE")
-                            .long("palette")
-                            .short("p")
-                            .takes_value(true)
-                            .required(false)
-                            .help("Name of the binary file that contains the palette")
-                        )
-                       
                         .arg(
                             Arg::with_name("CONFIGURATION")
                             .long("configuration")
@@ -627,7 +672,7 @@ fn main() -> anyhow::Result<()> {
                             .help("Filename to generate")
                             .required(true)
                         )
-                    )
+                    ))
 
                     .subcommand(
                         SubCommand::with_name("tile")
@@ -902,12 +947,14 @@ fn main() -> anyhow::Result<()> {
         && matches.subcommand_matches("sprite").is_none()
         && matches.subcommand_matches("tile").is_none()
         && matches.subcommand_matches("exec").is_none()
+        && matches.subcommand_matches("scr").is_none()
     {
         eprintln!("[ERROR] you have not specified any action to do.");
         std::process::exit(exitcode::USAGE);
     }
 
-    convert(&matches).expect("Unable to make the conversion");
+    convert(&matches)
+        .expect("Unable to make the conversion");
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
         if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
