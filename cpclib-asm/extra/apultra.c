@@ -3,7 +3,7 @@
 #define MemMalloc malloc
 #define MemMove memmove
 
-#define FORCE_INLINE inline
+#define FORCE_INLINE 
 
 /*
  * apultra.c - command line compression utility for the apultra library
