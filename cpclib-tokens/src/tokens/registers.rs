@@ -52,7 +52,7 @@ impl Register16 {
 
 macro_rules! is_reg16 {
     ($($reg:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             impl Register16 {
                 /// Check if register is $reg
                 pub fn [<is_ $reg:lower>] (&self) -> bool {
@@ -154,7 +154,7 @@ impl Register8 {
 
 macro_rules! is_reg8 {
     ($($reg:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             impl Register8 {
                 /// Check if register is $reg
                 pub fn [<is_ $reg:lower>] (&self) -> bool {

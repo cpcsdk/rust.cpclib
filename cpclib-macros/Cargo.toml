@@ -11,9 +11,9 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 
 [dependencies]
 cpclib-asm = "0.4.2-alpha"
-syn = "1.0.17"
-quote = "1.0.3"
-proc-macro2 = "1.0.10"
+syn = "1.0.42"
+quote = "1.0.7"
+proc-macro2 = "1.0.23"
 
 [lib]
 proc-macro = true

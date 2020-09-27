@@ -1768,7 +1768,7 @@ pub fn parse_register_iy(input: &str) -> IResult<&str, DataAccess, VerboseError<
 // TODO find a way to not use that
 macro_rules! parse_any_indexregister8 {
     ($($reg:ident, $alias:ident)*) => {$(
-        paste::item_with_macros! {
+        paste::paste! {
             /// Parse register $reg
             pub fn [<parse_register_ $reg:lower>] (input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
                 value(
