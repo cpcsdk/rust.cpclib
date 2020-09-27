@@ -3,7 +3,6 @@ pub mod parser;
 /// Basic token encoding.
 pub mod tokens;
 
-
 use parser::parse_basic_program;
 
 use failure::Fail;

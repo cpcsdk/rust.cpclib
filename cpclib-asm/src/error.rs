@@ -1,28 +1,23 @@
-
-use cpclib_basic::BasicError;
-use cpclib_tokens::tokens;
 use crate::parser::ParserContext;
+use cpclib_basic::BasicError;
 use cpclib_tokens::symbols::SymbolError;
+use cpclib_tokens::tokens;
 
 use cpclib_disc::amsdos::AmsdosError;
-
 
 use failure::Fail;
 
 #[derive(Debug, Fail)]
 #[allow(missing_docs)]
 pub enum AssemblerError {
-
     #[fail(display = "Several errors arised: {:?}", errors)]
-    MultipleErrors{
-        errors: Vec<AssemblerError>
-    },
+    MultipleErrors { errors: Vec<AssemblerError> },
 
     #[fail(display = "{} cannot be empty.", 0)]
     EmptyBinaryFile(String),
 
     #[fail(display = "Amsdos error: {}", error)]
-    AmsdosError {error: AmsdosError},
+    AmsdosError { error: AmsdosError },
 
     #[fail(display = "Assembling bug: {}", msg)]
     BugInAssembler { msg: String },
@@ -43,34 +38,47 @@ pub enum AssemblerError {
     // TODO add more information
     #[fail(display = "Assembling error: {}", msg)]
     AssemblingError { msg: String },
-    
+
     #[fail(display = "Invalid argument: {}", msg)]
-    InvalidArgument {msg: String},
+    InvalidArgument { msg: String },
 
     // TODO remove this case and dispatch it everywhere else
     #[fail(display = "To be sorted error: {}", msg)]
     GenericError { msg: String },
 
     #[fail(display = "Assertion failed -- {} [{}]: {}", test, guidance, msg)]
-    AssertionFailed { test: String, msg: String, guidance: String },
+    AssertionFailed {
+        test: String,
+        msg: String,
+        guidance: String,
+    },
 
     #[fail(display = "Symbol `{}` already present on the symbol table", symbol)]
     SymbolAlreadyExists { symbol: String },
-    
-    #[fail(display = "There is no macro named `{}`. Closest one is: {:?}", symbol, closest)]    
-    UnknownMacro { symbol: String,  closest: Option<String>},
 
-    #[fail(display = "Error when applying macro {}. {}", name, root)]
-    MacroError{
-        name: String,
-        root: Box<AssemblerError>
+    #[fail(
+        display = "There is no macro named `{}`. Closest one is: {:?}",
+        symbol, closest
+    )]
+    UnknownMacro {
+        symbol: String,
+        closest: Option<String>,
     },
 
-    #[fail(display = "Macro `{}` expect {} arguments; {} are provided.", symbol, nb_arguments, nb_paramers)]
-    WrongNumberOfParameters{
+    #[fail(display = "Error when applying macro {}. {}", name, root)]
+    MacroError {
+        name: String,
+        root: Box<AssemblerError>,
+    },
+
+    #[fail(
+        display = "Macro `{}` expect {} arguments; {} are provided.",
+        symbol, nb_arguments, nb_paramers
+    )]
+    WrongNumberOfParameters {
         symbol: String,
         nb_paramers: usize,
-        nb_arguments: usize
+        nb_arguments: usize,
     },
 
     #[fail(display = "Unknown symbol: {}. Closest one is: {:?}", symbol, closest)]
@@ -80,10 +88,7 @@ pub enum AssemblerError {
     },
 
     #[fail(display = "Symbol {} is not a {}", symbol, isnot)]
-    WrongSymbolType {
-        symbol: String,
-        isnot: String
-    },
+    WrongSymbolType { symbol: String, isnot: String },
 
     #[fail(display = "IO error: {}", msg)]
     IOError { msg: String },
@@ -92,9 +97,7 @@ pub enum AssemblerError {
     UnknownAssemblingAddress,
 
     #[fail(display = "Unable to resolve expression {}.", expression)]
-    ExpressionUnresolvable {
-        expression: tokens::Expr,
-    },
+    ExpressionUnresolvable { expression: tokens::Expr },
 }
 
 impl From<std::io::Error> for AssemblerError {
@@ -136,11 +139,8 @@ impl From<SymbolError> for AssemblerError {
     }
 }
 
-
 impl From<AmsdosError> for AssemblerError {
     fn from(err: AmsdosError) -> Self {
-        AssemblerError::AmsdosError {
-            error: err,
-        }
+        AssemblerError::AmsdosError { error: err }
     }
 }

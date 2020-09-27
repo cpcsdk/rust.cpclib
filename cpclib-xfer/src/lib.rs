@@ -4,8 +4,8 @@ use curl::easy::{Easy, Form};
 use curl::Error;
 use path_absolutize::*;
 
-use cpclib_sna as sna;
 use cpclib_disc as disc;
+use cpclib_sna as sna;
 
 use crate::disc::amsdos::AmsdosFileType;
 
@@ -241,20 +241,19 @@ impl CpcXfer {
             .suffix(".sna")
             .rand_bytes(4)
             .tempfile()
-            .or_else(|e|{
-                Err(XferError::InternalError{reason: e.to_string()})
+            .or_else(|e| {
+                Err(XferError::InternalError {
+                    reason: e.to_string(),
+                })
             })?;
         let temp_path = file.into_temp_path();
 
-        sna.save(
-            &temp_path, 
-            SnapshotVersion::V2)
-            .or_else(|e|{
-                Err(XferError::InternalError{reason: format!("Unable to save the snapshot. {}", e)})
-            })?;
-        self.upload_and_run(
-            &temp_path, 
-            None)?;
+        sna.save(&temp_path, SnapshotVersion::V2).or_else(|e| {
+            Err(XferError::InternalError {
+                reason: format!("Unable to save the snapshot. {}", e),
+            })
+        })?;
+        self.upload_and_run(&temp_path, None)?;
 
         // sleep a bit to be sure the file is not deleted BEFORE sending it to CPC
         std::thread::sleep(std::time::Duration::from_secs(5));
@@ -353,8 +352,7 @@ impl CpcXfer {
 
                 let absolute = absolute.absolutize().unwrap();
                 let path: String = absolute.to_str().unwrap().into();
-                if cfg!(target_os = "windows")
-                {
+                if cfg!(target_os = "windows") {
                     return Ok(path.replace("C:\\", "/"));
                 }
 

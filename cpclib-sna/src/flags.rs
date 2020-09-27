@@ -1,5 +1,5 @@
-use std::str::FromStr;
 use std::fmt;
+use std::str::FromStr;
 
 use crate::error::*;
 
@@ -46,9 +46,9 @@ pub enum SnapshotFlag {
     Z80_LX,
     Z80_HX,
     GA_PAL(Option<usize>),
-	GA_PEN,
-	/// Naming of this one is inapproriate as documentatoin state: This byte in the snapshot represents the multi-configuration register of the Gate-Array. This byte is the last byte written to this register. For CPCEMU compatibility, bit 7 should be set to "1" and bit 6 and bit 5 set to "0".
-	/// Use it to select screen mode
+    GA_PEN,
+    /// Naming of this one is inapproriate as documentatoin state: This byte in the snapshot represents the multi-configuration register of the Gate-Array. This byte is the last byte written to this register. For CPCEMU compatibility, bit 7 should be set to "1" and bit 6 and bit 5 set to "0".
+    /// Use it to select screen mode
     GA_ROMCFG,
     GA_RAMCFG,
     CRTC_REG(Option<usize>),
@@ -393,14 +393,11 @@ impl FromStr for SnapshotFlag {
                 Err(format!("Wrong index size {:?}", indexed_flag))
             }
         } else {
-
-
             match s.as_str() {
-     /*           "GA_PAL" => Ok(SnapshotFlag::GA_PAL(None)),
+                /*           "GA_PAL" => Ok(SnapshotFlag::GA_PAL(None)),
                 "CRTC_REG" => Ok(SnapshotFlag::CRTC_REG(None)),
                 "PSG_REG" => Ok(SnapshotFlag::PSG_REG(None)),
                 "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(None)),*/
-
                 "Z80_AF" => Ok(SnapshotFlag::Z80_AF),
                 "Z80_F" => Ok(SnapshotFlag::Z80_F),
                 "Z80_A" => Ok(SnapshotFlag::Z80_A),
@@ -508,7 +505,7 @@ impl FlagValue {
         match self {
             Self::Byte(b) => Some(*b as u16),
             Self::Word(w) => Some(*w),
-            _ => None
+            _ => None,
         }
     }
 }

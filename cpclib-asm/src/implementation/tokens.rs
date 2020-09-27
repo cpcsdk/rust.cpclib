@@ -1,41 +1,30 @@
-use cpclib_tokens::tokens::*;
 use cpclib_tokens::symbols::*;
-
-
+use cpclib_tokens::tokens::*;
 
 use crate::assembler::{assemble_align, assemble_db_or_dw, assemble_defs, assemble_opcode, Bytes};
-use crate::parser::*;
 use crate::error::*;
-
-
+use crate::parser::*;
 
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
 
 use crate::AssemblingOptions;
 
-
 use std::fs::File;
 use std::io::Read;
 
 /// Needed methods for the Token defined in cpclib_tokens
-pub trait TokenExt : ListingElement {
-
-    
+pub trait TokenExt: ListingElement {
     fn estimated_duration(&self) -> Result<usize, String>;
     fn number_of_bytes(&self) -> Result<usize, String>;
     fn number_of_bytes_with_context(
         &self,
         table: &mut SymbolsTableCaseDependent,
-    )-> Result<usize, String>;
-
-
+    ) -> Result<usize, String>;
 
     /// Unroll the tokens when it represents a loop
-    fn unroll(
-        &self,
-        sym: &SymbolsTableCaseDependent,
-    ) -> Option<Result<Vec<&Self>, AssemblerError>>;
+    fn unroll(&self, sym: &SymbolsTableCaseDependent)
+        -> Option<Result<Vec<&Self>, AssemblerError>>;
 
     /// Generate the listing of opcodes for directives that embed bytes
     fn disassemble_data(&self) -> Result<Listing, String>;
@@ -61,9 +50,8 @@ pub trait TokenExt : ListingElement {
     }
 }
 
-
 impl TokenExt for Token {
-     /// Unroll the tokens when in a repetition loop
+    /// Unroll the tokens when in a repetition loop
     /// TODO return an iterator in order to not produce the vector each time
     fn unroll(
         &self,
@@ -92,7 +80,6 @@ impl TokenExt for Token {
     /// Generate the listing of opcodes for directives that contain data Defb/defw/Defs in order to have
     /// mnemonics. Fails when some values are not opcodes
     fn disassemble_data(&self) -> Result<Listing, String> {
-
         // Disassemble the bytes and return the listing ONLY if it has no more defb/w/s directives
         let wrap = |bytes: &[u8]| {
             use crate::disass::disassemble;
@@ -100,9 +87,9 @@ impl TokenExt for Token {
             let lst = disassemble(&bytes);
             for token in lst.listing() {
                 match token {
-                    Token::Defb(_)| Token::Defw(_) | Token::Defs(_, _) => {
+                    Token::Defb(_) | Token::Defw(_) | Token::Defs(_, _) => {
                         return Err(format!("{} as not been disassembled", token))
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -113,22 +100,19 @@ impl TokenExt for Token {
         match self {
             Token::Defs(ref expr, ref value) => {
                 use crate::assembler::Env;
-                
 
                 assemble_defs(expr, value.as_ref(), &Env::default())
-                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
-                            .and_then(|b| wrap(&b))
-            },
+                    .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
+                    .and_then(|b| wrap(&b))
+            }
 
             Token::Defb(_) | Token::Defw(_) => {
                 use crate::assembler::Env;
-                
 
                 assemble_db_or_dw(self, &Env::default())
-                            .or_else(|err|{ Err(format!("Unable to assemble {}: {:?}", self, err))})
-                            .and_then(|b| wrap(&b))
-
-            },
+                    .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
+                    .and_then(|b| wrap(&b))
+            }
 
             _ => {
                 let mut lst = Listing::new();
@@ -136,13 +120,11 @@ impl TokenExt for Token {
                 Ok(lst)
             }
         }
-
     }
 
     /// Modify the few tokens that need to read files
     /// TODO refactor file reading of filename search
     fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
-
         match self {
             Token::Include(ref fname, ref mut listing) if listing.is_none() => {
                 match ctx.get_path_for(fname) {
@@ -156,28 +138,28 @@ impl TokenExt for Token {
                             msg: format!("Unable to open {:?}. {}", fname, e),
                         })?;
 
-
                         let mut content = Vec::new();
                         f.read_to_end(&mut content)
-                            .map_err(|e| 
-                                AssemblerError::IOError { 
-                                    msg: format!("Unable to read {:?}. {}", fname, e.to_string())
-                        })?;
+                            .map_err(|e| AssemblerError::IOError {
+                                msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
+                            })?;
 
                         let result = chardet::detect(&content);
-                        let coder = encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
+                        let coder = encoding::label::encoding_from_whatwg_label(
+                            chardet::charset2encoding(&result.0),
+                        );
 
                         let content = match coder {
                             Some(coder) => {
-                                let utf8reader = coder.decode(
-                                    &content, 
-                                    encoding::DecoderTrap::Ignore)
+                                let utf8reader = coder
+                                    .decode(&content, encoding::DecoderTrap::Ignore)
                                     .expect("Error");
                                 utf8reader.to_string()
-                            },
+                            }
                             None => {
-                            return Err(AssemblerError::IOError { 
-                                msg: format!("Encoding error for {:?}.", fname)});
+                                return Err(AssemblerError::IOError {
+                                    msg: format!("Encoding error for {:?}.", fname),
+                                });
                             }
                         };
 
@@ -186,19 +168,17 @@ impl TokenExt for Token {
                         listing.replace(parse_str_with_context(&content, &new_ctx)?);
                     }
                 }
-            },
-
-            Token::Incbin{
-                fname, 
-                 offset, 
-                 length, 
-                 extended_offset: _, 
-                 off: _, 
-                 ref mut content, 
-                 transformation
             }
-                if content.is_none() =>
-            {
+
+            Token::Incbin {
+                fname,
+                offset,
+                length,
+                extended_offset: _,
+                off: _,
+                ref mut content,
+                transformation,
+            } if content.is_none() => {
                 //TODO manage the optional arguments
                 match ctx.get_path_for(&fname) {
                     Err(_e) => {
@@ -211,10 +191,10 @@ impl TokenExt for Token {
                             msg: format!("Unable to open {:?}", fname),
                         })?;
 
-
                         use std::io::{Seek, SeekFrom};
                         if offset.is_some() {
-                            f.seek(SeekFrom::Start(offset.as_ref().unwrap().eval()? as _)); // TODO use the symbol table for that
+                            f.seek(SeekFrom::Start(offset.as_ref().unwrap().eval()? as _));
+                            // TODO use the symbol table for that
                         }
 
                         let mut data = Vec::new();
@@ -222,21 +202,16 @@ impl TokenExt for Token {
                         if length.is_some() {
                             let mut f = f.take(length.as_ref().unwrap().eval()? as _);
                             f.read_to_end(&mut data)
-                                .map_err(|e| 
-                                    AssemblerError::IOError {
-                                        msg: format!("Unable to read {:?}. {}", fname, e)
-                                    }
-                                )?;
-                        }
-                        else {
+                                .map_err(|e| AssemblerError::IOError {
+                                    msg: format!("Unable to read {:?}. {}", fname, e),
+                                })?;
+                        } else {
                             f.read_to_end(&mut data)
-                            .map_err(|e| 
-                                AssemblerError::IOError { 
-                                    msg: format!("Unable to read {:?}. {}", fname, e.to_string())
-                        })?;
-                    };
-                        
-                        
+                                .map_err(|e| AssemblerError::IOError {
+                                    msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
+                                })?;
+                        };
+
                         match transformation {
                             BinaryTransformation::None => {
                                 content.replace(data);
@@ -247,9 +222,10 @@ impl TokenExt for Token {
                             }
 
                             BinaryTransformation::Lz49 => {
-
                                 if data.len() == 0 {
-                                    return Err(AssemblerError::EmptyBinaryFile(fname.to_string_lossy().to_string()))
+                                    return Err(AssemblerError::EmptyBinaryFile(
+                                        fname.to_string_lossy().to_string(),
+                                    ));
                                 }
 
                                 let crunched = crate::crunchers::lz49::lz49_encode_legacy(&data);
@@ -258,17 +234,17 @@ impl TokenExt for Token {
 
                             BinaryTransformation::Aplib => {
                                 if data.len() == 0 {
-                                    return Err(AssemblerError::EmptyBinaryFile(fname.to_string_lossy().to_string()))
+                                    return Err(AssemblerError::EmptyBinaryFile(
+                                        fname.to_string_lossy().to_string(),
+                                    ));
                                 }
 
                                 let crunched = crate::crunchers::apultra::compress(&data);
                                 content.replace(crunched);
-
                             }
                         }
                     }
                 }
- 
             }
 
             // Rorg may embed some instructions that read files
@@ -291,19 +267,15 @@ impl TokenExt for Token {
         self.to_bytes_with_context(table)
     }
 
-
-
     /// Assemble the symbol taking into account some context, but never modify this context
     #[allow(clippy::match_same_arms)]
     fn to_bytes_with_context(
         &self,
         table: &mut SymbolsTableCaseDependent,
     ) -> Result<Vec<u8>, AssemblerError> {
-
         let mut options = if table.is_case_sensitive() {
             AssemblingOptions::new_case_sensitive()
-        } 
-        else {
+        } else {
             AssemblingOptions::new_case_insensitive()
         };
         options.set_symbols(table.table());
@@ -314,7 +286,6 @@ impl TokenExt for Token {
         let listing: Listing = self.clone().into();
         listing.to_bytes_with_options(option)
     }
-
 
     /// Returns an estimation of the duration.
     /// This estimation may be wrong for instruction having several states.
@@ -329,13 +300,9 @@ impl TokenExt for Token {
             | Token::Protect(_, _) => 0,
 
             // Here, there is a strong limitation => it will works only if no symbols are used
-            Token::Defw(_) | Token::Defb(_) | Token::Defs(_, _) => {
-
-                self.disassemble_data()
-                    .and_then(|lst|{
-                        lst.estimated_duration()
-                    })?
-            }
+            Token::Defw(_) | Token::Defb(_) | Token::Defs(_, _) => self
+                .disassemble_data()
+                .and_then(|lst| lst.estimated_duration())?,
 
             Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 match mnemonic {
@@ -539,8 +506,6 @@ impl TokenExt for Token {
         }
     }
 
-
-
     /// Return the number of bytes of the token given the provided context
     fn number_of_bytes_with_context(
         &self,
@@ -556,13 +521,11 @@ impl TokenExt for Token {
     }
 }
 
-
 pub trait TokenTryFrom<T> {
     fn try_from(value: T) -> Result<Token, String>;
 }
 
 impl TokenTryFrom<&str> for Token {
-
     fn try_from(value: &str) -> Result<Self, String> {
         let tokens = {
             let res = parse_z80_str(value);
@@ -577,26 +540,22 @@ impl TokenTryFrom<&str> for Token {
         match tokens.len() {
             0 => Err("No ASM found.".to_owned()),
             1 => {
-                
                 let token = tokens[0].clone();
                 Ok(token)
-            },
+            }
             _ => Err(format!(
                 "{} tokens are present instead of one",
                 tokens.len()
-            ))
+            )),
         }
     }
 }
 
-
 impl TokenTryFrom<String> for Token {
-
     fn try_from(value: String) -> Result<Self, String> {
         Token::try_from(&value[..])
     }
 }
-
 
 #[cfg(test)]
 #[allow(clippy::pedantic)]
@@ -825,9 +784,7 @@ mod tests {
         assert_eq!(ld_d_mem_hl().estimated_duration().unwrap(), 2);
 
         assert_eq!(out_c_d().estimated_duration().unwrap(), 4);
-
     }
-
 
     #[test]
     fn is_valid_ok() {
@@ -836,6 +793,11 @@ mod tests {
 
     #[test]
     fn is_valid_nok() {
-        assert!(!Token::OpCode(Mnemonic::Out, Some(DataAccess::Register8(Register8::C)), Some(DataAccess::Register8(Register8::A))).is_valid());
+        assert!(!Token::OpCode(
+            Mnemonic::Out,
+            Some(DataAccess::Register8(Register8::C)),
+            Some(DataAccess::Register8(Register8::A))
+        )
+        .is_valid());
     }
 }

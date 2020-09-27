@@ -1,17 +1,11 @@
-
 use std::fmt;
 
-use itertools::Itertools;
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::tokens::Listing;
+use itertools::Itertools;
 
 use cpclib_sna::SnapshotVersion;
-
-
-
-
-
 
 #[remain::sorted]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -155,7 +149,7 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Rrc => write!(f, "RRC"),
             Mnemonic::Rrca => write!(f, "RRCA"),
             Mnemonic::Rrd => write!(f, "RRD"),
-            Mnemonic::Rst => write!(f,"RST"),
+            Mnemonic::Rst => write!(f, "RST"),
             Mnemonic::Sbc => write!(f, "SBC"),
             Mnemonic::Scf => write!(f, "SCF"),
             Mnemonic::Set => write!(f, "SET"),
@@ -168,7 +162,6 @@ impl fmt::Display for Mnemonic {
         }
     }
 }
-
 
 macro_rules! is_mnemonic {
     ($($mnemonic:ident)*) => {$(
@@ -185,7 +178,7 @@ macro_rules! is_mnemonic {
         }
     )*}
 }
-is_mnemonic!(    
+is_mnemonic!(
     Adc
     Add
     And
@@ -259,7 +252,6 @@ is_mnemonic!(
     Xor
 );
 
-
 /// Stable ticker serves to count nops with the assembler !
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -311,7 +303,7 @@ pub enum BinaryTransformation {
     // Compression with lz49
     Lz49,
     // compression with aplib
-    Aplib
+    Aplib,
 }
 
 #[remain::sorted]
@@ -393,7 +385,10 @@ pub enum Token {
     SetCPC(Expr),
     SetCrtc(Expr),
     /// This directive setup a value for a given flag of the snapshot
-    SnaSet(cpclib_sna::flags::SnapshotFlag, cpclib_sna::flags::FlagValue),
+    SnaSet(
+        cpclib_sna::flags::SnapshotFlag,
+        cpclib_sna::flags::FlagValue,
+    ),
     StableTicker(StableTickerAction),
     Str(Vec<u8>),
     Struct(String, Vec<(String, Token)>),
@@ -402,13 +397,10 @@ pub enum Token {
     Undef(String),
 
     While(Expr, Listing),
-
 }
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-
-
         let expr_list_to_string = |exprs: &Vec<Expr>| {
             exprs
                 .iter()
@@ -418,8 +410,7 @@ impl fmt::Display for Token {
         };
 
         let data_access_list_to_string = |data: &Vec<DataAccess>| {
-            data
-                .iter()
+            data.iter()
                 .map(|d| format!("{}", d))
                 .collect::<Vec<_>>()
                 .join(",")
@@ -585,29 +576,24 @@ impl From<u8> for Token {
     }
 }
 
-
-
 #[allow(missing_docs)]
 impl Token {
-
     /// When diassembling code, the token with relative information are not appropriate
     pub fn fix_relative_jumps_after_disassembling(&mut self) {
         if self.is_opcode() {
-
             let expression = match self {
                 Self::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(exp))) => Some(exp),
                 Self::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(exp)), _) => Some(exp),
-      //          Self::OpCode(_, Some(DataAccess::IndexRegister16WithIndex(_, exp)), _) => Some(exp),
-       //         Self::OpCode(_, _, Some(DataAccess::IndexRegister16WithIndex(_, exp))) => Some(exp),
-                
-                _ => None
+                //          Self::OpCode(_, Some(DataAccess::IndexRegister16WithIndex(_, exp)), _) => Some(exp),
+                //         Self::OpCode(_, _, Some(DataAccess::IndexRegister16WithIndex(_, exp))) => Some(exp),
+                _ => None,
             };
-                    
+
             if let Some(expr) = expression {
                 expr.fix_relative_value();
             };
         }
-    } 
+    }
 
     pub fn is_opcode(&self) -> bool {
         self.mnemonic().is_some()
@@ -620,11 +606,10 @@ impl Token {
         }
     }
 
-
     pub fn is_label(&self) -> bool {
         match self {
             Self::Label(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -651,7 +636,7 @@ impl Token {
 
     pub fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess> {
         match self {
-            Token::OpCode(_,  ref mut arg1, _) => arg1.as_mut(),
+            Token::OpCode(_, ref mut arg1, _) => arg1.as_mut(),
             _ => None,
         }
     }
@@ -677,6 +662,4 @@ impl Token {
             _ => None,
         }
     }
-
-   
 }

@@ -1,27 +1,15 @@
-
-use crate::tokens::listing::*;
 use crate::tokens::instructions::*;
-
+use crate::tokens::listing::*;
 
 use crate::tokens::expression::*;
 
-
-
-
-
-impl ListingElement for Token {
-
-}
+impl ListingElement for Token {}
 
 /// Standard listing is a specific implementation
 pub type Listing = BaseListing<Token>;
 
-
-
-
 // Set of methods that do not have additional dependencies
 impl Listing {
-    
     /// Add a new label to the listing
     pub fn add_label(&mut self, label: &str) {
         self.listing_mut().push(Token::Label(String::from(label)));
@@ -42,9 +30,7 @@ impl Listing {
         let tok = Token::Defb(exp);
         self.push(tok);
     }
-
 }
-
 
 impl From<&[u8]> for Listing {
     fn from(src: &[u8]) -> Listing {

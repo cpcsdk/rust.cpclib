@@ -21,8 +21,8 @@ use std::io::{Read, Write};
 use cpclib_disc::amsdos::*;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
-use simplelog::*;
 use num::Num;
+use simplelog::*;
 
 pub fn to_number<T>(repr: &str) -> T
 where
@@ -45,11 +45,8 @@ where
 }
 
 fn main() -> std::io::Result<()> {
-    TermLogger::init(
-        LevelFilter::Debug, 
-        Config::default(),
-        TerminalMode::Mixed
-    ).expect("Unable to build logger");
+    TermLogger::init(LevelFilter::Debug, Config::default(), TerminalMode::Mixed)
+        .expect("Unable to build logger");
 
     let matches = App::new("catalog")
 					.about("Amsdos catalog manipulation tool.")

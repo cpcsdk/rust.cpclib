@@ -2,21 +2,19 @@ use rustyline;
 
 use rustyline::error::ReadlineError;
 
-use term_grid::{Grid, GridOptions, Direction, Filling};
+use term_grid::{Direction, Filling, Grid, GridOptions};
 use termize;
 
+use rustyline::completion::{extract_word, Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
-use rustyline::completion::{Completer, FilenameCompleter, Pair, extract_word};
 use rustyline::hint::{Hinter, HistoryHinter};
-use rustyline_derive::{Helper, Validator, Highlighter, Hinter};
 use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
+use rustyline_derive::{Helper, Highlighter, Hinter, Validator};
 
 use subprocess::Exec;
 
 use crate::parser::{parse_command, XferCommand};
 use cpclib_xfer::CpcXfer;
-
-
 
 /// Help to add autocompletion.
 /// Done currently with filname, will be done later with M4 file names
@@ -25,9 +23,8 @@ struct XferInteractorHelper<'a> {
     commands: Vec<&'static str>,
     completer: FilenameCompleter,
     hinter: HistoryHinter,
-    xfer: &'a CpcXfer // TODO find a way to not share xfer there in order to not lost time to do too much calls to M4
+    xfer: &'a CpcXfer, // TODO find a way to not share xfer there in order to not lost time to do too much calls to M4
 }
-
 
 impl<'a> Completer for XferInteractorHelper<'a> {
     type Candidate = Pair;
@@ -43,8 +40,8 @@ impl<'a> Completer for XferInteractorHelper<'a> {
         let commands = self.complete_command_name(line, pos, ctx)?;
         let m4 = self.complete_m4_path_name(line, pos, ctx)?;
 
-        assert_eq!( local.0, commands.0);
-        assert_eq!( local.0, m4.0);
+        assert_eq!(local.0, commands.0);
+        assert_eq!(local.0, m4.0);
 
         let mut complete = Vec::with_capacity(local.1.len() + commands.1.len() + m4.1.len());
 
@@ -56,9 +53,8 @@ impl<'a> Completer for XferInteractorHelper<'a> {
             let mut idx = 0;
             for c in line.chars() {
                 if c == ' ' || c == '\t' {
-                    idx +=1;
-                }
-                else {
+                    idx += 1;
+                } else {
                     break;
                 }
             }
@@ -72,14 +68,14 @@ impl<'a> Completer for XferInteractorHelper<'a> {
 
         // Ensure local completion is only done for launch (at the moment)
         match command {
-            Some("launch") | Some("put") => {complete.extend(local.1)},
+            Some("launch") | Some("put") => complete.extend(local.1),
             _ => {}
         }
-        
+
         // Ensure M4 completion is not used for launch
         match command {
-            Some("launch") => {},
-            _ => {complete.extend(m4.1)}
+            Some("launch") => {}
+            _ => complete.extend(m4.1),
         }
 
         Ok((local.0, complete))
@@ -114,32 +110,26 @@ cfg_if::cfg_if! {
     }
 }
 
-
 impl<'a> XferInteractorHelper<'a> {
-
     pub fn new(xfer: &'a CpcXfer) -> Self {
-    
         XferInteractorHelper {
             completer: FilenameCompleter::new(),
             hinter: HistoryHinter {},
             xfer: xfer,
             commands: vec![
-                "rm", "del", "delete", "era",
-                "cd",
-                "exit",
-                "launch",
-                "ls",
-                "put",
-                "pwd",
-                "reset",
-                "reboot"
-            ]
+                "rm", "del", "delete", "era", "cd", "exit", "launch", "ls", "put", "pwd", "reset",
+                "reboot",
+            ],
         }
     }
-    
 
     /// Make the completion on the M4 filename
-    fn complete_m4_path_name(&self, line: &str, pos:usize, ctx: &Context<'_> ) -> Result<(usize, Vec<Pair>), ReadlineError> {
+    fn complete_m4_path_name(
+        &self,
+        line: &str,
+        pos: usize,
+        ctx: &Context<'_>,
+    ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let mut entries: Vec<Pair> = Vec::new();
 
         let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
@@ -148,15 +138,13 @@ impl<'a> XferInteractorHelper<'a> {
             let fname2 = ("./".to_owned() + &fname1);
 
             for &fname in [fname1, &fname2].iter() {
-
                 if fname.starts_with(word) {
-                    entries.push(Pair{
+                    entries.push(Pair {
                         display: fname.into(),
-                        replacement: fname.into()
+                        replacement: fname.into(),
                     });
                 }
             }
-
         }
 
         Ok((start, entries))
@@ -164,11 +152,14 @@ impl<'a> XferInteractorHelper<'a> {
 
     /// Search the possible command names for completion
     /// TODO do it only when first word
-    fn complete_command_name(&self, line: &str, pos: usize, ctx: &Context<'_> ) -> Result<(usize, Vec<Pair>), ReadlineError> {
-
-
+    fn complete_command_name(
+        &self,
+        line: &str,
+        pos: usize,
+        ctx: &Context<'_>,
+    ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let mut entries: Vec<Pair> = Vec::new();
-        
+
         let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
         // TODO check if it is the very first word
         for command in self.commands.iter() {
@@ -180,7 +171,6 @@ impl<'a> XferInteractorHelper<'a> {
             }
         }
 
-
         Ok((start, entries))
     }
 }
@@ -191,7 +181,6 @@ impl<'a> Hinter for XferInteractorHelper<'a> {
     }
 }
 
-
 /// The object htat manages the interaction.
 /// There are some state to store over commands.
 pub struct XferInteractor<'a> {
@@ -199,19 +188,18 @@ pub struct XferInteractor<'a> {
     xfer: &'a CpcXfer,
     /// Current Working Directory
     cwd: String,
-    exit: bool
+    exit: bool,
 }
 
 impl<'a> XferInteractor<'a> {
-
     pub fn treat_line(&mut self, line: &str) {
         let parse = parse_command(line);
         if let Ok((_, command)) = parse {
             println!("{:?}", command);
 
             match command {
-                XferCommand::Help => {
-                    println!("help       Displays the help.
+                XferCommand::Help => println!(
+                    "help       Displays the help.
 cd <folder>         Goes to <folder> in the M4.
 exit                Leaves the program.
 rm <file>           Remove the file for the M4. Synonyms: era, del, delete. 
@@ -222,9 +210,8 @@ reset               Reset.
 launch <fname>      Launch <fname> from the host machine.
 ls                  List the files in the current M4 directory.
 !<command>          Launch <command> on the host machine.
-                    ")
-
-                },
+                    "
+                ),
 
                 XferCommand::Exit => {
                     self.exit = true;
@@ -247,8 +234,8 @@ ls                  List the files in the current M4 directory.
                     }
 
                     let mut grid = Grid::new(GridOptions {
-                        filling:     Filling::Spaces(3),
-                        direction:   Direction::LeftToRight,
+                        filling: Filling::Spaces(3),
+                        direction: Direction::LeftToRight,
                     });
                     for file in content.unwrap().files() {
                         grid.add(file.fname().into());
@@ -256,8 +243,7 @@ ls                  List the files in the current M4 directory.
 
                     let grid_width = if let Some((w, h)) = termize::dimensions() {
                         w
-                    }
-                    else {
+                    } else {
                         80
                     };
 
@@ -274,8 +260,7 @@ ls                  List the files in the current M4 directory.
                     if res.is_err() {
                         eprintln!("{}", res.err().unwrap());
                         return;
-                    }
-                    else {
+                    } else {
                         self.cwd = self.xfer.current_working_directory().unwrap()
                     }
                 }
@@ -298,26 +283,19 @@ ls                  List the files in the current M4 directory.
                     let destination = self.cwd.clone();
 
                     // Put the file
-                    let res = self.xfer.upload(
-                        &path,
-                        &destination,
-                        None
-                    );
+                    let res = self.xfer.upload(&path, &destination, None);
                     if res.is_err() {
                         eprintln!("{}", res.err().unwrap());
                         return;
                     }
-
                 }
 
                 XferCommand::LaunchHost(path) => {
-                    if ! std::path::Path::new(&path).exists() {
+                    if !std::path::Path::new(&path).exists() {
                         eprintln!("{} not found.", path)
-                    }
-                    else {
-
+                    } else {
                         let res = self.xfer.upload_and_run(path, None);
-                        if res.is_err(){
+                        if res.is_err() {
                             eprintln!("{}", res.err().unwrap());
                             return;
                         }
@@ -326,15 +304,14 @@ ls                  List the files in the current M4 directory.
 
                 XferCommand::LaunchM4(path) => {
                     /// Ensure the path is absolute (TODO check if this code is not also elswhere)
-                    let path = if ! path.starts_with('/') {
-                        self.cwd.clone() + &path 
-                    }
-                    else {
+                    let path = if !path.starts_with('/') {
+                        self.cwd.clone() + &path
+                    } else {
                         path
                     };
 
                     let res = self.xfer.run(&path);
-                    if res.is_err(){
+                    if res.is_err() {
                         eprintln!("{}", res.err().unwrap());
                         return;
                     }
@@ -359,16 +336,13 @@ ls                  List the files in the current M4 directory.
 
     /// Start the interactive session on the current xfer session
     pub fn start(xfer: &'a CpcXfer) {
-
-
         let cwd = xfer.current_working_directory().unwrap();
         let mut interactor = XferInteractor {
             xfer: xfer,
             cwd,
-            exit: false
+            exit: false,
         };
         interactor.r#loop();
-
     }
 
     /// Manage the interactive loop
@@ -383,8 +357,6 @@ ls                  List the files in the current M4 directory.
             .output_stream(OutputStreamType::Stdout)
             .build();
         let h = XferInteractorHelper::new(self.xfer);
-        
-
 
         let mut rl = Editor::with_config(config);
         rl.set_helper(Some(h));
@@ -395,11 +367,7 @@ ls                  List the files in the current M4 directory.
 
         while !self.exit {
             // Build the prompt value
-            let prompt = format!(
-                "arnold@{}:{} $ ", 
-                self.xfer.hostname(), 
-                &self.cwd
-            );
+            let prompt = format!("arnold@{}:{} $ ", self.xfer.hostname(), &self.cwd);
 
             // Treat the line
             let readline = rl.readline(&prompt);

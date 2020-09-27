@@ -138,7 +138,10 @@ mod tests {
     fn fn_test_label() {
         assert_eq!(parse_label(false)("label").ok().unwrap().1, "label");
         assert_eq!(parse_label(false)("label").ok().unwrap().1, "label");
-        assert_eq!(parse_label(false)("module.label").ok().unwrap().1, "module.label");
+        assert_eq!(
+            parse_label(false)("module.label").ok().unwrap().1,
+            "module.label"
+        );
         assert_eq!(parse_label(false)("label15").ok().unwrap().1, "label15");
         assert_eq!(parse_label(false)(".label").ok().unwrap().1, ".label");
 
@@ -599,13 +602,11 @@ mod tests {
         assert!(res.is_ok());
     }
 
-
-
     #[test]
     fn test_call_macro() {
         let z80 = "MACRONAME";
         assert!(dbg!(parse_macro_call(z80.into())).is_ok());
-        
+
         let z80 = "BREAKPOINT_WINAPE";
         assert!(dbg!(parse_macro_call(z80.into())).is_ok());
 
@@ -947,7 +948,10 @@ INC_H equ opcode(inc h)
     ";
         let _tokens = get_val(parse_z80_code(code));
 
-        println!("{:?}", parse_label(false)("crtc_display_catart_if_needed".into()));
+        println!(
+            "{:?}",
+            parse_label(false)("crtc_display_catart_if_needed".into())
+        );
         println!(
             "{:?}",
             parse_z80_code(" call crtc_display_catart_if_needed".into())
@@ -1030,24 +1034,21 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn factor_test() {
-        assert_eq!(
-            factor("  3  "),
-            Ok(("", Expr::Value(3)))
-        );
+        assert_eq!(factor("  3  "), Ok(("", Expr::Value(3))));
     }
 
     fn comp_test() {
-        assert_eq!(
-            comp("1 "),
-            Ok(("", Expr::Value(1)))
-        );
+        assert_eq!(comp("1 "), Ok(("", Expr::Value(1))));
     }
 
     #[test]
     fn term_test() {
         assert_eq!(
             term(" 3 *  5   "),
-            Ok(("", Expr::Mul(Box::new(Expr::Value(3)), Box::new(Expr::Value(5)))))
+            Ok((
+                "",
+                Expr::Mul(Box::new(Expr::Value(3)), Box::new(Expr::Value(5)))
+            ))
         );
     }
 
@@ -1055,13 +1056,16 @@ INC_H equ opcode(inc h)
     fn expr_test() {
         assert_eq!(
             expr(" 1 + 2 *  3 "),
-            Ok(("", Expr::Add(
-                Box::new(Expr::Value(1)),
-                Box::new(Expr::Mul(
-                    Box::new(Expr::Value(2)),
-                    Box::new(Expr::Value(3))
-                ))
-            )))
+            Ok((
+                "",
+                Expr::Add(
+                    Box::new(Expr::Value(1)),
+                    Box::new(Expr::Mul(
+                        Box::new(Expr::Value(2)),
+                        Box::new(Expr::Value(3))
+                    ))
+                )
+            ))
         );
         assert_eq!(
             expr(" 1 + 2 *  3 / 4 - 5 ").map(|(i, x)| (i, format!("{}", x))),
@@ -1153,7 +1157,6 @@ INC_H equ opcode(inc h)
         let code = " ASSERT 1\n";
         let tokens = get_val(dbg!(parse_z80_line_complete(code)));
         assert_eq!(tokens.len(), 1);
-
 
         let code = " ASSERT 1 == 2";
         eprintln!("RES: {:?}", parse_z80_str(code));

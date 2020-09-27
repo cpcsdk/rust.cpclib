@@ -67,8 +67,7 @@ macro_rules! is_reg16 {
     )*
     }
 }
-is_reg16!{Af Bc De Hl Sp}
-
+is_reg16! {Af Bc De Hl Sp}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[allow(missing_docs)]
@@ -76,7 +75,6 @@ pub enum IndexRegister16 {
     Ix,
     Iy,
 }
-
 
 impl IndexRegister16 {
     pub fn high(self) -> IndexRegister8 {
@@ -93,7 +91,6 @@ impl IndexRegister16 {
             Self::Iy => IndexRegister8::Iyl,
         }
     }
-
 }
 
 impl fmt::Display for IndexRegister16 {
@@ -153,9 +150,7 @@ impl Register8 {
             Register8::H | Register8::L => Register16::Hl,
         }
     }
-
 }
-
 
 macro_rules! is_reg8 {
     ($($reg:ident)*) => {$(
@@ -174,8 +169,7 @@ macro_rules! is_reg8 {
     )*
     }
 }
-is_reg8!{A B C D E H L}
-
+is_reg8! {A B C D E H L}
 
 impl fmt::Display for Register8 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -215,7 +209,6 @@ impl fmt::Display for IndexRegister8 {
     }
 }
 
-
 impl IndexRegister8 {
     /// Return the 16 bit register composed by this 8 bits register
     pub fn complete(&self) -> IndexRegister16 {
@@ -228,7 +221,7 @@ impl IndexRegister8 {
     /// Return true if it is the high register for the complete one
     pub fn is_high(self) -> bool {
         match self {
-            IndexRegister8::Ixh | IndexRegister8::Iyh  => true,
+            IndexRegister8::Ixh | IndexRegister8::Iyh => true,
             _ => false,
         }
     }

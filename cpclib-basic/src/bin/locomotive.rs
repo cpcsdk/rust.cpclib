@@ -16,7 +16,7 @@
 use clap;
 
 use cpclib_basic::BasicProgram;
-use cpclib_disc::amsdos::{AmsdosManager, AmsdosFileName};
+use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 use clap::*;
 
@@ -72,8 +72,8 @@ fn main() -> std::io::Result<()> {
         // Add header if needed
         if matches.is_present("HEADER") {
             let header = AmsdosManager::compute_basic_header(
-                &AmsdosFileName::from_slice(output.as_bytes()), 
-                &basic_bytes
+                &AmsdosFileName::from_slice(output.as_bytes()),
+                &basic_bytes,
             );
             f.write_all(header.as_bytes().as_ref())?;
         }

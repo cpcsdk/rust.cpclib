@@ -1,7 +1,6 @@
 #![feature(register_attr)]
 #![register_attr(get)]
 
-
 /// Concerns all stuff related to Amsdos disc format
 pub mod amsdos;
 /// Utility function to build a DSK thanks to a format description

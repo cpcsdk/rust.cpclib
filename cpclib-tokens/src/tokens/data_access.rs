@@ -1,8 +1,8 @@
 use crate::tokens::expression::*;
 use crate::tokens::registers::*;
 
-use std::fmt;
 use paste;
+use std::fmt;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// Encode the way mnemonics access to data
@@ -87,11 +87,10 @@ impl fmt::Display for DataAccess {
             DataAccess::IndexRegister16WithIndex(ref reg, ref delta) => {
                 if delta.is_negated() {
                     write!(f, "({} - {})", reg, delta)
-                }
-                else {
+                } else {
                     write!(f, "({} + {})", reg, delta)
                 }
-            },
+            }
             DataAccess::IndexRegister16(ref reg) => write!(f, "{}", reg),
             DataAccess::Register16(ref reg) => write!(f, "{}", reg),
             DataAccess::IndexRegister8(ref reg) => write!(f, "{}", reg),
@@ -103,7 +102,7 @@ impl fmt::Display for DataAccess {
             DataAccess::FlagTest(ref test) => write!(f, "{}", test),
             DataAccess::SpecialRegisterI => write!(f, "I"),
             DataAccess::SpecialRegisterR => write!(f, "R"),
-            DataAccess::PortC => write!(f, "(C)")
+            DataAccess::PortC => write!(f, "(C)"),
         }
     }
 }
@@ -120,11 +119,9 @@ impl DataAccess {
     pub fn is_portc(&self) -> bool {
         match self {
             DataAccess::PortC => true,
-            _ => false
+            _ => false,
         }
     }
-
-
 
     pub fn is_register_i(&self) -> bool {
         match self {
@@ -171,7 +168,7 @@ impl DataAccess {
     pub fn is_indexregister_with_index(&self) -> bool {
         match self {
             DataAccess::IndexRegister16WithIndex(_, _) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -207,21 +204,17 @@ impl DataAccess {
 
     pub fn to_data_access_for_low_register(&self) -> Option<DataAccess> {
         match self {
-            DataAccess::IndexRegister16(ref reg) 
-                => Some(reg.low().into()),
-            DataAccess::Register16(ref reg)
-                => Some(reg.low().unwrap().into()),
-            _ => None
+            DataAccess::IndexRegister16(ref reg) => Some(reg.low().into()),
+            DataAccess::Register16(ref reg) => Some(reg.low().unwrap().into()),
+            _ => None,
         }
     }
 
     pub fn to_data_access_for_high_register(&self) -> Option<DataAccess> {
         match self {
-            DataAccess::IndexRegister16(ref reg) 
-                => Some(reg.high().into()),
-            DataAccess::Register16(ref reg)
-                => Some(reg.high().unwrap().into()),
-            _ => None
+            DataAccess::IndexRegister16(ref reg) => Some(reg.high().into()),
+            DataAccess::Register16(ref reg) => Some(reg.high().unwrap().into()),
+            _ => None,
         }
     }
 
@@ -235,20 +228,17 @@ impl DataAccess {
     pub fn get_expression(&self) -> Option<&Expr> {
         match self {
             DataAccess::Expression(ref exp) => Some(&exp),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn expression_mut(&mut self) -> Option<&mut Expr> {
         match self {
             DataAccess::Expression(ref mut exp) => Some(exp),
-            _ => None
+            _ => None,
         }
     }
-
-
 }
-
 
 macro_rules! is_any_indexregister8 {
     ($($reg:ident)*) => {$(

@@ -4,10 +4,10 @@ use image as im;
 
 use crate::ga::*;
 use crate::pixels;
-use itertools::Itertools;
-use std::collections::HashSet;
 use anyhow;
 use anyhow::Context;
+use itertools::Itertools;
+use std::collections::HashSet;
 
 /// Screen mode
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -158,8 +158,7 @@ pub struct ColorMatrix {
     data: Vec<Vec<Ink>>,
 }
 
-
-    /// We have to choose a strategy when reducing the number of colors of an image.
+/// We have to choose a strategy when reducing the number of colors of an image.
 /// This enumeration allows to set up them
 #[derive(Debug, Copy, Clone)]
 pub enum ColorConversionStrategy {
@@ -168,10 +167,8 @@ pub enum ColorConversionStrategy {
     /// The color is replaced by the closest one
     ReplaceWrongColorByClosestInk,
     /// An error is generated
-    Fail
+    Fail,
 }
-
-
 
 #[allow(missing_docs)]
 impl ColorMatrix {
@@ -305,11 +302,16 @@ impl ColorMatrix {
         p
     }
 
-
     /// Modify the image in order to keep the right amount of inks
-    pub fn reduce_colors_for_mode(&mut self, mode: Mode, strategy: ColorConversionStrategy) -> Result<(), anyhow::Error> {
+    pub fn reduce_colors_for_mode(
+        &mut self,
+        mode: Mode,
+        strategy: ColorConversionStrategy,
+    ) -> Result<(), anyhow::Error> {
         // Get the reduced palette
-        let inks = self.data.iter()
+        let inks = self
+            .data
+            .iter()
             .flatten()
             .unique()
             .copied()
@@ -321,16 +323,28 @@ impl ColorMatrix {
     }
 
     /// Modify the image in order to use only the provided palette
-    pub fn reduce_colors_with(&mut self, inks: &[Ink], strategy: ColorConversionStrategy) -> Result<(), anyhow::Error> {
+    pub fn reduce_colors_with(
+        &mut self,
+        inks: &[Ink],
+        strategy: ColorConversionStrategy,
+    ) -> Result<(), anyhow::Error> {
         for y in 0..(self.height() as usize) {
             for x in 0..(self.width() as usize) {
                 let ink = &mut self.data[y][x];
                 if !inks.contains(ink) {
                     match strategy {
-                        ColorConversionStrategy::ReplaceWrongColorByFirstColor => { *ink = inks[0];},
-                        ColorConversionStrategy::ReplaceWrongColorByClosestInk => { unimplemented!()},
+                        ColorConversionStrategy::ReplaceWrongColorByFirstColor => {
+                            *ink = inks[0];
+                        }
+                        ColorConversionStrategy::ReplaceWrongColorByClosestInk => unimplemented!(),
                         ColorConversionStrategy::Fail => {
-                            return Err(anyhow::anyhow!("{:?} not available in {:?} at [{}, {}]", ink, inks, x, y));
+                            return Err(anyhow::anyhow!(
+                                "{:?} not available in {:?} at [{}, {}]",
+                                ink,
+                                inks,
+                                x,
+                                y
+                            ));
                         }
                     }
                 }
@@ -349,13 +363,8 @@ impl ColorMatrix {
         }
     }
 
-    pub fn convert_from_fname(
-        fname: &str,
-        conversion: ConversionRule,
-    ) -> anyhow::Result<Self> {
-        let img = im::open(fname).with_context(||{
-            format!("{} does not exists.", fname)
-        })?;
+    pub fn convert_from_fname(fname: &str, conversion: ConversionRule) -> anyhow::Result<Self> {
+        let img = im::open(fname).with_context(|| format!("{} does not exists.", fname))?;
         Ok(Self::convert(&img.to_rgb(), conversion))
     }
 
@@ -425,7 +434,7 @@ impl ColorMatrix {
         for x in 0..(self.width() as usize) {
             for y in 0..(self.height() as usize) {
                 if self.data[y][x] == Ink::from(0) {
-                    res.push((x,y));
+                    res.push((x, y));
                 }
             }
         }
@@ -521,7 +530,7 @@ impl ColorMatrix {
             x: 0,
             y: 0,
             width: self.width(),
-            height: self.height()
+            height: self.height(),
         }
     }
 }
@@ -558,7 +567,6 @@ impl<'a> Iterator for Inks<'a> {
     }
 }
 
-
 /// Animation are stored in lists of ColorMatrices of same sze
 #[derive(Debug)]
 pub struct ColorMatrixList(Vec<ColorMatrix>);
@@ -588,7 +596,7 @@ pub enum HorizontalCropConstraint {
     /// No constrain at all
     None,
     /// Consider we are working in a specific and screen mode and bytes must be full
-    CompleteByteForMode(Mode)
+    CompleteByteForMode(Mode),
 }
 
 /// Defines how cropping occurs horizontally
@@ -601,10 +609,8 @@ pub enum HorizontalCrop {
     /// Cropping on left and right
     Both(HorizontalCropConstraint, HorizontalCropConstraint),
     /// No horinzotnalropping
-    None
+    None,
 }
-
-
 
 /// Defines how cropping occurs vertically
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -616,9 +622,8 @@ pub enum VerticalCrop {
     /// Cropping on top and bottom
     Both,
     /// No vertical cropping
-    None
+    None,
 }
-
 
 impl ColorMatrixList {
     /// Provide a Vec version of the items
@@ -629,8 +634,8 @@ impl ColorMatrixList {
     /// Animations are stored within GIF files.
     /// TODO allow over kind of image data
     pub fn convert_from_fname(fname: &str, conversion: ConversionRule) -> anyhow::Result<Self> {
-        use std::fs::File;
         use gif::SetParameter;
+        use std::fs::File;
 
         // Decode a gif into frames
         let file_in = File::open(fname)?;
@@ -644,26 +649,36 @@ impl ColorMatrixList {
             screen.blit_frame(&frame)?;
 
             let content = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::from_raw(
-                screen.pixels.width() as u32, 
-                screen.pixels.height() as u32, 
-                screen.pixels.buf().iter()
-                .map(|pix| [pix.r, pix.g, pix.b].to_vec())
-                .flatten().collect::<Vec<u8>>()
-            ).unwrap();
+                screen.pixels.width() as u32,
+                screen.pixels.height() as u32,
+                screen
+                    .pixels
+                    .buf()
+                    .iter()
+                    .map(|pix| [pix.r, pix.g, pix.b].to_vec())
+                    .flatten()
+                    .collect::<Vec<u8>>(),
+            )
+            .unwrap();
 
-            matrix_list.0.push(ColorMatrix::convert(&content, conversion));
+            matrix_list
+                .0
+                .push(ColorMatrix::convert(&content, conversion));
         }
 
         Ok(matrix_list)
     }
 
     /// Delegate the color reduction to the underlying ColorMatrix objects
-    pub fn reduce_colors_with(&mut self, inks: &[Ink], strategy: ColorConversionStrategy) -> Result<(), anyhow::Error> {
-        self.0.iter_mut().map(
-            |matrix| {
-                matrix.reduce_colors_with(inks, strategy)
-            }
-        ).collect()
+    pub fn reduce_colors_with(
+        &mut self,
+        inks: &[Ink],
+        strategy: ColorConversionStrategy,
+    ) -> Result<(), anyhow::Error> {
+        self.0
+            .iter_mut()
+            .map(|matrix| matrix.reduce_colors_with(inks, strategy))
+            .collect()
     }
 
     /// Number of frames in the animation
@@ -683,15 +698,12 @@ impl ColorMatrixList {
 
     /// Convert each matrice as a sprite using the same conversion method
     pub fn as_sprites(&self, mode: Mode, palette: Option<Palette>) -> SpriteList {
-        self.to_vec().iter().map(
-            |matrix| {
-                matrix.as_sprite(mode, palette.clone())
-            }
-        )
-        .collect::<Vec<Sprite>>()
-        .into()
+        self.to_vec()
+            .iter()
+            .map(|matrix| matrix.as_sprite(mode, palette.clone()))
+            .collect::<Vec<Sprite>>()
+            .into()
     }
-    
 
     /// Crop each matrix in order to only keep the maximal window where at least one pixel change over the animation
     pub fn crop(&mut self, hor_conf: HorizontalCrop, vert_conf: VerticalCrop) -> Self {
@@ -706,108 +718,100 @@ impl ColorMatrixList {
                 let diff = mata.diff(matb);
                 let diff_coords = diff.diff_to_positions();
 
-                diff_coords.iter().for_each(|(x,y)| {
+                diff_coords.iter().for_each(|(x, y)| {
                     modified_x.insert(*x);
                     modified_y.insert(*y);
                 });
             }
 
-            (modified_x.iter().map(|x|*x as u32).collect::<Vec<_>>(), 
-            modified_y.iter().map(|y|*y as u32).collect::<Vec<_>>())
+            (
+                modified_x.iter().map(|x| *x as u32).collect::<Vec<_>>(),
+                modified_y.iter().map(|y| *y as u32).collect::<Vec<_>>(),
+            )
         };
 
         // Make the croping on the left (first column to keep)
         let mut start_x = match hor_conf {
             HorizontalCrop::Both(_, _) | HorizontalCrop::Left(_) => {
-            let mut current_x = 0;
-            while current_x < self.width()-1 && current_x < modified_x[0] {
-                current_x += 1;
+                let mut current_x = 0;
+                while current_x < self.width() - 1 && current_x < modified_x[0] {
+                    current_x += 1;
+                }
+                current_x
             }
-            current_x
-            }, 
-            _ => {
-                0
-            }
+            _ => 0,
         } as usize;
 
         // Make the cropping on the right (last column to keep)
         let mut stop_x = match hor_conf {
-            HorizontalCrop::Both(_,_) | HorizontalCrop::Right(_) => {
-            let mut current_x = self.width() - 1;
-            while current_x > 0 && current_x > *modified_x.last().unwrap() {
-                current_x -=1;
+            HorizontalCrop::Both(_, _) | HorizontalCrop::Right(_) => {
+                let mut current_x = self.width() - 1;
+                while current_x > 0 && current_x > *modified_x.last().unwrap() {
+                    current_x -= 1;
+                }
+                current_x
             }
-            current_x
-        }, 
-        _ => {
-            self.width() -1
-        }
-     } as usize;
+            _ => self.width() - 1,
+        } as usize;
 
         // Make the cropping to the top
         let start_y = match vert_conf {
-            VerticalCrop::Both |  VerticalCrop::Top => {
-            let mut current_y = 0;
-            while current_y < self.height()-1 && current_y < modified_y[0] {
-                current_y += 1;
+            VerticalCrop::Both | VerticalCrop::Top => {
+                let mut current_y = 0;
+                while current_y < self.height() - 1 && current_y < modified_y[0] {
+                    current_y += 1;
+                }
+                current_y
             }
-            current_y
-        },
-        _ =>  {
-            0
-        }} as usize;
+            _ => 0,
+        } as usize;
 
         // Make the cropping to the bottom
         let stop_y = match vert_conf {
             VerticalCrop::Both | VerticalCrop::Bottom => {
-            let mut current_y = self.height() - 1;
-            while current_y > 0 && current_y > *modified_y.last().unwrap() {
-                current_y -=1;
+                let mut current_y = self.height() - 1;
+                while current_y > 0 && current_y > *modified_y.last().unwrap() {
+                    current_y -= 1;
+                }
+                current_y
             }
-            current_y
-        },
-        _ => {
-            self.height() -1
-        }} as usize;
+            _ => self.height() - 1,
+        } as usize;
 
         // Ensure horizontal start constraint is respected
         match hor_conf {
-            HorizontalCrop::Left(HorizontalCropConstraint::CompleteByteForMode(ref mode)) |
-            HorizontalCrop::Both(HorizontalCropConstraint::CompleteByteForMode(ref mode), _) => {
-                while start_x%mode.nb_pixels_per_byte() != 0 {
+            HorizontalCrop::Left(HorizontalCropConstraint::CompleteByteForMode(ref mode))
+            | HorizontalCrop::Both(HorizontalCropConstraint::CompleteByteForMode(ref mode), _) => {
+                while start_x % mode.nb_pixels_per_byte() != 0 {
                     start_x -= 1;
                 }
-            },
+            }
             _ => {}
         }
 
         // Ensure horizontal stop contraint is respected
         match hor_conf {
-            HorizontalCrop::Right(HorizontalCropConstraint::CompleteByteForMode(ref mode)) |
-            HorizontalCrop::Both(_, HorizontalCropConstraint::CompleteByteForMode(ref mode)) => {
-                while (stop_x+1)%mode.nb_pixels_per_byte() != 0 {
+            HorizontalCrop::Right(HorizontalCropConstraint::CompleteByteForMode(ref mode))
+            | HorizontalCrop::Both(_, HorizontalCropConstraint::CompleteByteForMode(ref mode)) => {
+                while (stop_x + 1) % mode.nb_pixels_per_byte() != 0 {
                     stop_x += 1;
                 }
-            },
+            }
             _ => {}
         }
 
         // Return the selected window
-       self.window(start_x, start_y, stop_x-start_x+1, stop_y-start_y+1)
+        self.window(start_x, start_y, stop_x - start_x + 1, stop_y - start_y + 1)
     }
 
     /// Apply the window operator on each ColorMatrix
     pub fn window(&self, start_x: usize, start_y: usize, width: usize, height: usize) -> Self {
-        self.to_vec().iter().map(
-            |matrix| {
-                matrix.window(start_x, start_y, width, height)
-            }
-        )
-        .collect::<Vec<ColorMatrix>>()
-        .into()
+        self.to_vec()
+            .iter()
+            .map(|matrix| matrix.window(start_x, start_y, width, height))
+            .collect::<Vec<ColorMatrix>>()
+            .into()
     }
-
-
 }
 
 /// List of sprites for animations
@@ -820,17 +824,12 @@ impl From<Vec<Sprite>> for SpriteList {
     }
 }
 
-
 impl std::ops::Deref for SpriteList {
     type Target = Vec<Sprite>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-
-
-
-
 
 /// A Sprite corresponds to a set of bytes encoded to the right CPC pixel format for a given
 /// palette.
@@ -968,7 +967,7 @@ impl Sprite {
         matrix.as_sprite(mode, palette)
     }
 
-    pub fn convert_from_fname<P:AsRef<std::path::Path>>(
+    pub fn convert_from_fname<P: AsRef<std::path::Path>>(
         fname: P,
         mode: Mode,
         conversion: ConversionRule,

@@ -44,7 +44,6 @@ pub type TransformationLinePosition = TransformationPosition;
 /// Type that represent the position in a column of the image
 pub type TransformationColumnPosition = TransformationPosition;
 
-
 /// List of all the possible transformations applicable to a ColorMatrix
 #[derive(Clone, Debug)]
 pub enum Transformation {
@@ -67,16 +66,17 @@ pub enum Transformation {
         /// The location of the column within the image
         position: TransformationPosition,
         /// The amount of columns to add
-        amount: u16
-    }
+        amount: u16,
+    },
 }
 
 impl Transformation {
     /// Apply the transformation to the list of colormatrix
     /// TODO find a way to use the same function name than for a ColorMatrix
     pub fn apply_to_list(&self, list: &ColorMatrixList) -> ColorMatrixList {
-        list.to_vec().iter()
-            .map(|matrix|{self.apply(matrix)})
+        list.to_vec()
+            .iter()
+            .map(|matrix| self.apply(matrix))
             .collect::<Vec<ColorMatrix>>()
             .into()
     }
@@ -88,7 +88,7 @@ impl Transformation {
                 let mut res = matrix.clone();
                 res.remove_odd_columns();
                 res
-            },
+            }
 
             Self::BlankLines {
                 pattern,
@@ -113,12 +113,12 @@ impl Transformation {
                     res.add_line(position, &line);
                 });
                 res
-            },
+            }
 
             Self::BlankColumns {
                 pattern,
                 position,
-                amount
+                amount,
             } => {
                 let column = {
                     let mut column = Vec::new();
@@ -131,7 +131,7 @@ impl Transformation {
                 let position = position.absolute_position(matrix.width() as _).unwrap();
 
                 let mut res = matrix.clone();
-                (0..*amount).into_iter().for_each(|_|{
+                (0..*amount).into_iter().for_each(|_| {
                     res.add_column(position, &column);
                 });
 
@@ -141,7 +141,11 @@ impl Transformation {
     }
 
     /// Create a transformation that adds blank lines
-    pub fn blank_lines<I:Into<Ink> + Copy>(pattern: &[I], position: TransformationLinePosition, amount: u16) -> Self {
+    pub fn blank_lines<I: Into<Ink> + Copy>(
+        pattern: &[I],
+        position: TransformationLinePosition,
+        amount: u16,
+    ) -> Self {
         Self::BlankLines {
             pattern: pattern.iter().map(|&i| i.into()).collect::<Vec<Ink>>(),
             position,
@@ -150,11 +154,15 @@ impl Transformation {
     }
 
     /// Create a transformation that adds blanck columns
-    pub fn blank_columns<I:Into<Ink> + Copy>(pattern: &[I], position: TransformationColumnPosition, amount: u16) -> Self {
+    pub fn blank_columns<I: Into<Ink> + Copy>(
+        pattern: &[I],
+        position: TransformationColumnPosition,
+        amount: u16,
+    ) -> Self {
         Self::BlankColumns {
             pattern: pattern.iter().map(|&i| i.into()).collect::<Vec<_>>(),
             position,
-            amount
+            amount,
         }
     }
 }
@@ -674,8 +682,8 @@ impl HorizontalWordCounter for StartFromLeftAndFlipAtTheEndOfLine {
 pub struct StandardHorizontalCounter {
     left_to_right: bool,
     current_step: usize,
-    // We cannot have sprite of width 
-    nb_columns: Option<std::num::NonZeroUsize>
+    // We cannot have sprite of width
+    nb_columns: Option<std::num::NonZeroUsize>,
 }
 
 impl StandardHorizontalCounter {
@@ -684,7 +692,7 @@ impl StandardHorizontalCounter {
         StandardHorizontalCounter {
             left_to_right: true,
             current_step: 0,
-            nb_columns: None
+            nb_columns: None,
         }
     }
 
@@ -694,7 +702,7 @@ impl StandardHorizontalCounter {
         StandardHorizontalCounter {
             left_to_right: false,
             current_step: 0,
-            nb_columns: None
+            nb_columns: None,
         }
     }
 }
@@ -704,8 +712,7 @@ impl HorizontalWordCounter for StandardHorizontalCounter {
     fn get_column_index(&self) -> usize {
         if self.left_to_right {
             self.current_step
-        }
-        else {
+        } else {
             usize::from(self.nb_columns.unwrap()) - self.current_step
         }
     }
@@ -725,7 +732,7 @@ impl TileHorizontalCapture {
         match self {
             Self::AlwaysFromLeftToRight => {
                 Box::new(StandardHorizontalCounter::always_from_left_to_right())
-            },
+            }
             Self::AlwaysFromRightToLeft => unimplemented!(),
             Self::StartFromRightAndFlipAtTheEndOfLine => unimplemented!(),
             Self::StartFromLeftAndFlipAtTheEndOfLine => {
@@ -927,14 +934,14 @@ pub enum Output {
         data: Vec<u8>,
         palette: Palette,
         bytes_width: usize,
-        height: usize
+        height: usize,
     },
 
     ZigZagGrayCodedSprite {
         data: Vec<u8>,
         palette: Palette,
         bytes_width: usize,
-        height: usize
+        height: usize,
     },
 
     LinearEncodedChuncky {
@@ -1078,61 +1085,53 @@ impl<'a> ImageConverter<'a> {
                 bytes_width: sprite.bytes_width() as _,
                 height: sprite.height() as _,
             })
-        } 
-        else if let OutputFormat::GrayCodedSprite = output {
+        } else if let OutputFormat::GrayCodedSprite = output {
             // get the linear version
             let linear = Self::convert_impl(
                 input_file,
                 palette,
                 mode,
                 transformations,
-                &OutputFormat::LinearEncodedSprite
+                &OutputFormat::LinearEncodedSprite,
             )?;
 
             match linear {
-                Output::LinearEncodedSprite{
+                Output::LinearEncodedSprite {
                     data,
                     palette,
                     bytes_width,
-                    height
+                    height,
                 } => {
-                    assert_eq!(height %8, 0);
+                    assert_eq!(height % 8, 0);
 
                     let nb_chars = height / 8;
                     let mut new_data = Vec::new();
                     for char_idx in 0..nb_chars {
                         for line_idx in GrayCodeLineCounter::GRAYCODE_INDEX_TO_SCREEN_INDEX.iter() {
-
                             let line_idx = *line_idx as usize;
-                            let start = line_idx + 8*char_idx;
+                            let start = line_idx + 8 * char_idx;
                             new_data.extend_from_slice(
-
-                                &data[
-                                    start*bytes_width .. (start+1)*bytes_width
-                                ]
+                                &data[start * bytes_width..(start + 1) * bytes_width],
                             );
                         }
                     }
 
                     Ok(Output::GrayCodedSprite {
-                            data: new_data,
-                            palette: palette.clone(),
-                            bytes_width: bytes_width,
-                            height: height 
-                        }
-                        
-                    )
-                },
-                _ => unreachable!()
+                        data: new_data,
+                        palette: palette.clone(),
+                        bytes_width: bytes_width,
+                        height: height,
+                    })
+                }
+                _ => unreachable!(),
             }
-        }
-        else if let OutputFormat::ZigZagGrayCodedSprite = output {
+        } else if let OutputFormat::ZigZagGrayCodedSprite = output {
             let graycoded = Self::convert_impl(
                 input_file,
                 palette,
                 mode,
                 transformations,
-                &OutputFormat::GrayCodedSprite
+                &OutputFormat::GrayCodedSprite,
             )?;
 
             match graycoded {
@@ -1140,14 +1139,14 @@ impl<'a> ImageConverter<'a> {
                     data,
                     palette,
                     bytes_width,
-                    height
+                    height,
                 } => {
-
                     let mut new_data = Vec::new();
                     new_data.reserve_exact(data.len());
 
                     for j in 0..height {
-                        let mut current_line = (&data[j*bytes_width..(j+1)*bytes_width]).to_vec();
+                        let mut current_line =
+                            (&data[j * bytes_width..(j + 1) * bytes_width]).to_vec();
 
                         if j % 2 == 1 {
                             current_line.reverse();
@@ -1160,14 +1159,12 @@ impl<'a> ImageConverter<'a> {
                         data: new_data,
                         palette,
                         bytes_width,
-                        height
+                        height,
                     })
-                },
-                _ => unreachable!()
+                }
+                _ => unreachable!(),
             }
-
-        }
-        else {
+        } else {
             let sprite = converter.load_sprite(input_file);
             converter.apply_sprite_conversion(&sprite)
         }

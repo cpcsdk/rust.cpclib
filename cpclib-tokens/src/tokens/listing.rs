@@ -1,16 +1,12 @@
-
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use std::iter::FromIterator;
 use core::fmt::Debug;
+use std::iter::FromIterator;
 
 /// The ListingElement trati contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
-pub trait ListingElement {
-
-    
-}
+pub trait ListingElement {}
 
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,14 +57,11 @@ impl<T: Clone + Debug + ListingElement> From<T> for BaseListing<T> {
     }
 }
 
-
-
 impl<T: Clone + ListingElement + Debug> FromIterator<T> for BaseListing<T> {
-    fn from_iter<I: IntoIterator<Item=T>>(src: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = T>>(src: I) -> Self {
         Self::new_with(&src.into_iter().collect::<Vec<T>>())
     }
 }
-
 
 #[allow(missing_docs)]
 impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
@@ -108,7 +101,6 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
     pub fn inject_listing(&mut self, other: &Self) {
         self.listing.extend_from_slice(&other.listing);
     }
-
 
     pub fn set_duration(&mut self, duration: usize) {
         let duration = Some(duration);

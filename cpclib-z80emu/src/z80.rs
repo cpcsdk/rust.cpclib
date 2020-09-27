@@ -1,7 +1,6 @@
 // trick to not be distirb by Register8/16
 use crate::preamble::*;
 
-
 use num::integer::Integer;
 use num::traits::{WrappingAdd, WrappingSub};
 use num::One;
@@ -360,11 +359,7 @@ impl Z80 {
         swap(&mut self.reg_hl, &mut self.reg_de);
     }
     // To reduce copy paste/implementation errors, all manipulation are translated as token usage
-    pub fn copy_to_from(
-        &mut self,
-        to: tokens::Register8,
-        from: tokens::Register8,
-    ) {
+    pub fn copy_to_from(&mut self, to: tokens::Register8, from: tokens::Register8) {
         self.execute(&Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(to)),
@@ -491,7 +486,6 @@ mod tests {
 
     #[test]
     fn eval() {
-
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);
         z80.hl_mut().set(0x8000);
