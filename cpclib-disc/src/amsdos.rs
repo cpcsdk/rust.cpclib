@@ -1,7 +1,6 @@
 use crate::edsk::ExtendedDsk;
 use crate::edsk::Head;
 
-
 use bitfield::Bit;
 
 use std::fs::File;
@@ -9,7 +8,6 @@ use std::io::Read;
 use std::path::Path;
 
 use std::iter::Iterator;
-
 
 use delegate::delegate;
 
@@ -38,7 +36,7 @@ pub enum AmsdosError {
     IO(std::io::Error),
 
     #[fail(display = "Various error")]
-    Various(String)
+    Various(String),
 }
 
 impl From<std::io::Error> for AmsdosError {
@@ -313,7 +311,6 @@ impl TryFrom<&str> for AmsdosFileName {
     }
 }
 
-
 #[derive(Clone, Copy)]
 /// Encodes the amsdos file type
 pub enum AmsdosFileType {
@@ -328,12 +325,15 @@ pub enum AmsdosFileType {
 impl TryFrom<u8> for AmsdosFileType {
     type Error = AmsdosError;
 
-    fn try_from(val: u8) -> Result<Self, Self::Error>  {
+    fn try_from(val: u8) -> Result<Self, Self::Error> {
         match val {
             0 => Ok(AmsdosFileType::Basic),
             1 => Ok(AmsdosFileType::Protected),
             2 => Ok(AmsdosFileType::Binary),
-            _ => Err(AmsdosError::Various(format!("{} is not a valid file type", val))),
+            _ => Err(AmsdosError::Various(format!(
+                "{} is not a valid file type",
+                val
+            ))),
         }
     }
 }
@@ -1385,10 +1385,7 @@ impl AmsdosHeader {
 
     /// Return the filename if possible
     pub fn amsdos_filename(&self) -> Result<AmsdosFileName, String> {
-        AmsdosFileName::new_incorrect_case(
-            self.user(), 
-            &self.filename(), 
-            &self.extension())
+        AmsdosFileName::new_incorrect_case(self.user(), &self.filename(), &self.extension())
     }
 
     pub fn set_filename(&mut self, filename: &[u8; 8]) -> &mut Self {
@@ -1610,7 +1607,7 @@ impl AmsdosFile {
     }
 
     /// Save the file at the given path
-    pub fn save_in_folder<P:AsRef<Path>>(&self, folder: P) -> std::io::Result<()> {
+    pub fn save_in_folder<P: AsRef<Path>>(&self, folder: P) -> std::io::Result<()> {
         use std::io::Write;
 
         let folder = folder.as_ref();

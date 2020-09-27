@@ -2,10 +2,6 @@ use crate::preamble::*;
 use crate::z80::*;
 
 impl Z80 {
-
-  
-
-
     /// Execute the given token.
     /// XXX Currently only OpCode are managed whereas some other
     /// tokens also have a sense there
@@ -19,17 +15,15 @@ impl Z80 {
         match opcode {
             Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
                 self.execute_opcode(*mnemonic, arg1.as_ref(), arg2.as_ref())
-            },
+            }
 
             // Transform the raw data as real opcodes
             // and indiivudally execute them
             // crash when it is not possible to disassemble
             Token::Defs(_, _) | Token::Defb(_) | Token::Defw(_) => {
                 let lst = opcode.disassemble_data().unwrap();
-                lst.listing().iter()
-                    .map(|token|{self.execute(token)})
-                    .sum()
-            },
+                lst.listing().iter().map(|token| self.execute(token)).sum()
+            }
 
             _ => panic!("{:?} is not yet handled", opcode),
         }
@@ -44,15 +38,12 @@ impl Z80 {
         arg1: Option<&DataAccess>,
         arg2: Option<&DataAccess>,
     ) -> usize {
-
         let opcode = Token::OpCode(mnemonic, arg1.cloned(), arg2.cloned());
         self.pc_mut().add(opcode.number_of_bytes().unwrap() as _);
 
-
         // this is the minimal duration; it can be updated depending on the instruction
-        let mut duration = opcode.estimated_duration()
-                                .unwrap();
-        let mut inc_duration = ||{
+        let mut duration = opcode.estimated_duration().unwrap();
+        let mut inc_duration = || {
             duration += 1;
         };
 
@@ -63,10 +54,7 @@ impl Z80 {
                     self.get_register_8_mut(arg1.unwrap()).add(val as _);
                 }
 
-                (
-                    Some(&DataAccess::Register16(tokens::Register16::Hl)),
-                    Some(_),
-                ) => {
+                (Some(&DataAccess::Register16(tokens::Register16::Hl)), Some(_)) => {
                     let val = self.get_value(arg2.unwrap()).unwrap();
                     if mnemonic == Mnemonic::Add {
                         self.get_register_16_mut(arg1.unwrap()).add(val);
@@ -87,7 +75,8 @@ impl Z80 {
 
             Mnemonic::And => {
                 let val = self.get_value(arg1.unwrap()).unwrap() as _;
-                self.get_register_8_mut(&tokens::Register8::A.into()).and(val);
+                self.get_register_8_mut(&tokens::Register8::A.into())
+                    .and(val);
             }
 
             Mnemonic::Res => {
@@ -161,13 +150,11 @@ impl Z80 {
                         self.pc_mut().add(delta as _);
                     } else if delta < 0 {
                         self.pc_mut().sub(-delta as _);
-                    }
-                    else {
+                    } else {
                         // go back at the beginning of the instruction
                         self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
                     }
                 }
-                
             }
 
             Mnemonic::Jr => {
@@ -193,8 +180,7 @@ impl Z80 {
                         self.pc_mut().add(delta as _);
                     } else if delta < 0 {
                         self.pc_mut().sub(-delta as _);
-                    }
-                    else if delta == 0 {
+                    } else if delta == 0 {
                         self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
                     }
                 }
@@ -213,10 +199,8 @@ impl Z80 {
                         let value = self.get_value(arg2.unwrap()).unwrap();
                         self.pc_mut().set(value);
                         inc_duration();
-                    }
-                    else {
+                    } else {
                         self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
-
                     }
                 }
 
@@ -251,7 +235,6 @@ impl Z80 {
             Mnemonic::Nop => {
                 // nothing to do
             }
-
 
             _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2),
         }
@@ -406,7 +389,7 @@ impl Z80 {
     }
 }
 
-pub trait FlagIsActive{
+pub trait FlagIsActive {
     fn flag_is_active(self, f_value: u8) -> bool;
 }
 
@@ -441,7 +424,6 @@ mod test {
 
     #[test]
     fn jp_value() {
-
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);
 
@@ -458,7 +440,6 @@ mod test {
 
     #[test]
     fn jp_symbol() {
-
         let mut z80 = Z80::default();
         let mut symbols = SymbolsTableCaseDependent::default();
         symbols.set_symbol_to_value("LABEL", 0x4000);
@@ -479,7 +460,6 @@ mod test {
 
     #[test]
     fn jp_dollar() {
-
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);
 
@@ -496,7 +476,6 @@ mod test {
 
     #[test]
     fn jr_dollar() {
-
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);
 

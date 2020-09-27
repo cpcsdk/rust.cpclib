@@ -1,16 +1,12 @@
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
-
 use crate::tokens::Token;
-
 
 /// Expression nodes.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[allow(missing_docs)]
 pub enum Expr {
-
-
     /// Only used for disassembled code
     RelativeDelta(i8),
 
@@ -23,9 +19,9 @@ pub enum Expr {
     /// Label with a prefix
     PrefixedLabel(LabelPrefix, String),
 
-        /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
-        Duration(Box<Token>), // TODO move in a token function stuff
-        OpCode(Box<Token>), // TODO move in a token general function stuff
+    /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
+    Duration(Box<Token>), // TODO move in a token function stuff
+    OpCode(Box<Token>), // TODO move in a token general function stuff
 
     // Arithmetic operations
     Add(Box<Expr>, Box<Expr>),
@@ -58,10 +54,9 @@ pub enum Expr {
     UnaryFunction(UnaryFunction, Box<Expr>),
     // Function with two arguments
     BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
-
 }
 
-#[derive(Clone, Copy, PartialEq, Eq,Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 /// Represents a prefix that provides information related to banks for a label
 pub enum LabelPrefix {
     /// We want the bank of the label
@@ -69,16 +64,15 @@ pub enum LabelPrefix {
     /// We want the page of the label
     Page,
     /// We want the Gate array configuration for the label
-    Pageset
+    Pageset,
 }
 
 impl Display for LabelPrefix {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
-        let repr :&'static str  = match self {
+        let repr: &'static str = match self {
             Self::Bank => "{bank}",
             Self::Page => "{page}",
             Self::Pageset => "{pageset}",
-
         };
         write!(format, "{}", repr)
     }
@@ -87,7 +81,7 @@ impl Display for LabelPrefix {
 /// Format to represent an expression
 /// Stolen documentation of rasm
 /// Write text, variables or the result of evaluation of an expression during assembly.
-/// By default, numerical values are formatted as 
+/// By default, numerical values are formatted as
 // oating point values, but you may use prexes to change
 /// this behaviour:
 ///  fhexg Display in hexadecimal format. If the value is less than #FF two digits will be displayed.
@@ -98,16 +92,16 @@ impl Display for LabelPrefix {
 /// set to 1 will be displayed as a 16 bits value.
 ///  fbin8g,fbin16g,fbin32g Force binary display with 8, 16 or 32 bits.
 ///  fintg Display value as integer.
-#[derive(Clone, Copy, PartialEq, Eq,Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ExprFormat {
-        Hex(Option<u8>),
-        Bin(Option<u8>),
-        Int
+    Hex(Option<u8>),
+    Bin(Option<u8>),
+    Int,
 }
 
 impl Display for ExprFormat {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
-        let repr :&'static str  = match self {
+        let repr: &'static str = match self {
             Self::Hex(None) => "{hex}",
             Self::Bin(None) => "{bin}",
 
@@ -121,7 +115,7 @@ impl Display for ExprFormat {
             Self::Bin(Some(16)) => "{bin16}",
             Self::Bin(Some(32)) => "{bin32}",
 
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         write!(format, "{}", repr)
     }
@@ -130,7 +124,7 @@ impl Display for ExprFormat {
 impl ExprFormat {
     /// Generate the string representation of the given value
     pub fn string_representation(&self, val: i32) -> String {
-         match self {
+        match self {
             Self::Hex(None) => format!("0x{:x}", val),
             Self::Bin(None) => format!("0b{:x}", val),
 
@@ -144,10 +138,9 @@ impl ExprFormat {
             Self::Bin(Some(16)) => format!("0b{:16x}", val),
             Self::Bin(Some(32)) => format!("0b{:32x}", val),
 
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
-
 }
 
 /// Expression for a print expression
@@ -156,15 +149,14 @@ pub enum FormattedExpr {
     // A raw expression is represented as it is
     Raw(Expr),
     // A formatted expression has a representatio nthat depends on its format
-    Formatted(ExprFormat, Expr)
+    Formatted(ExprFormat, Expr),
 }
-
 
 impl Display for FormattedExpr {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Raw(expr) => write!(formatter, "{}", expr),
-            Self::Formatted(format, expr) => write!(formatter, "{}{}", format, expr)
+            Self::Formatted(format, expr) => write!(formatter, "{}{}", format, expr),
         }
     }
 }
@@ -174,10 +166,6 @@ impl From<Expr> for FormattedExpr {
         Self::Raw(e)
     }
 }
-
-
-
-
 
 /// Represent a function with one argument
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -190,7 +178,7 @@ impl Display for UnaryFunction {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         let repr = match self {
             Self::High => "HI",
-            Self::Low => "LO"
+            Self::Low => "LO",
         };
         write!(format, "{}", repr)
     }
@@ -207,13 +195,11 @@ impl Display for BinaryFunction {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         let repr = match self {
             Self::Min => "MIN",
-            Self::Max => "MAX"
+            Self::Max => "MAX",
         };
         write!(format, "{}", repr)
     }
 }
-
-
 
 impl From<&str> for Expr {
     fn from(src: &str) -> Self {
@@ -229,7 +215,7 @@ macro_rules! convert_number_to_expr {
             impl From<$i> for Expr {
                 fn from(src: $i) -> Self {
                     Expr::Value(src as _)
-                }    
+                }
             }
         )*
     };
@@ -237,29 +223,25 @@ macro_rules! convert_number_to_expr {
 
 convert_number_to_expr!(i32 i16 i8 u8 u16 u32 usize);
 
-
 #[allow(missing_docs)]
 impl Expr {
-
     pub fn is_negated(&self) -> bool {
         match self {
             Expr::Neg(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_relative(&self) -> bool {
         match self {
             Expr::RelativeDelta(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn neg(&self) -> Self {
         Expr::Neg(Box::new(self.clone()))
     }
-
- 
 
     /// Check if it is necessary to read within a symbol table
     pub fn is_context_independant(&self) -> bool {
@@ -270,14 +252,13 @@ impl Expr {
         }
     }
 
-
     /// When disassembling an instruction with relative expressions, the contained value needs to be transformed as an absolute value
     pub fn fix_relative_value(&mut self) {
         if let Expr::Value(val) = self {
             let mut new_expr = Expr::RelativeDelta(*val as i8);
             std::mem::swap(self, &mut new_expr);
         }
-    }  
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -301,7 +282,7 @@ pub enum Oper {
     GreaterOrEqual,
     StrictlyGreater,
     StrictlyLower,
-    Different
+    Different,
 }
 
 impl Display for Oper {
@@ -318,7 +299,6 @@ impl Display for Oper {
             BinaryAnd => write!(format, "&"),
             BinaryOr => write!(format, "|"),
             BinaryXor => write!(format, "^"),
-
 
             BooleanAnd => write!(format, "&&"),
             BooleanOr => write!(format, "||"),
@@ -348,16 +328,9 @@ impl Display for Expr {
             &Label(ref label) => write!(format, "{}", label),
             PrefixedLabel(prefix, label) => write!(format, "{}{}", prefix, label),
 
-            UnaryFunction(func, arg) => {
-                write!(format, "{}({})", func, arg)
-            },
+            UnaryFunction(func, arg) => write!(format, "{}({})", func, arg),
 
-
-            BinaryFunction(func, arg1, arg2) => {
-                write!(format, "{}({}, {})", func, arg1, arg2)
-            },
-
-
+            BinaryFunction(func, arg1, arg2) => write!(format, "{}({}, {})", func, arg1, arg2),
 
             &Duration(ref token) => write!(format, "DURATION({})", token),
             &OpCode(ref token) => write!(format, "OPCODE({})", token),
@@ -378,7 +351,6 @@ impl Display for Expr {
                 write!(format, "{} {} {}", left, Oper::BinaryXor, right)
             }
 
-
             BooleanAnd(ref left, ref right) => {
                 write!(format, "{} {} {}", left, Oper::BooleanAnd, right)
             }
@@ -396,7 +368,7 @@ impl Display for Expr {
             &StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
             &LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
 
-            PrefixedLabel(prefix, label) =>write!(format, "{}{}", prefix, label)
+            PrefixedLabel(prefix, label) => write!(format, "{}{}", prefix, label),
         }
     }
 }
@@ -438,6 +410,3 @@ impl Debug for Expr {
     }
 }
 */
-
-
-

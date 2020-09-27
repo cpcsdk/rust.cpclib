@@ -2,26 +2,22 @@
 
 use bitsets;
 
-
 use std::fs::File;
 
 use std::io::prelude::*;
 
 use std::path::Path;
 
-
 use num_enum::TryFromPrimitive;
 
-
-
-pub mod flags;
-pub mod parse;
 mod chunks;
 mod error;
+pub mod flags;
+pub mod parse;
 
-pub use flags::*;
 pub use chunks::*;
 pub use error::*;
+pub use flags::*;
 
 ///! Re-implementation of createsnapshot by Ramlaid/Arkos
 ///! in rust by Krusty/Benediction
@@ -60,7 +56,6 @@ pub enum SnapshotVersion {
     V3,
 }
 
-
 impl SnapshotVersion {
     /// Check if snapshot ius V3 version
     pub fn is_v3(self) -> bool {
@@ -71,10 +66,6 @@ impl SnapshotVersion {
         }
     }
 }
-
-
-
-
 
 const PAGE_SIZE: usize = 0x4000;
 const HEADER_SIZE: usize = 256;
@@ -184,17 +175,16 @@ impl SnapshotMemory {
         let memory = self.memory();
         let mut chunks = Vec::new();
         let mut current_idx = [b'M', b'E', b'M', b'0'];
-        let mut cursor = 0;        
+        let mut cursor = 0;
 
         while cursor < memory.len() {
             let next_cursor = cursor + 64 * 1024;
             let current_memory = &memory[cursor..next_cursor.min(memory.len())];
-            
+
             let current_chunk = MemoryChunk::build(current_idx, current_memory, true);
             chunks.push(SnapshotChunk::Memory(current_chunk));
             cursor = next_cursor;
             current_idx[3] += 1;
-
         }
 
         chunks
@@ -311,9 +301,7 @@ impl Snapshot {
         sna.memory = SnapshotMemory::new(file_content.drain(0..memory_dump_size * 1024).as_slice());
 
         if version == 3 {
-            while let Some(chunk) = Self::read_chunk(
-                                            &mut file_content, 
-                                            &mut sna) {
+            while let Some(chunk) = Self::read_chunk(&mut file_content, &mut sna) {
                 sna.chunks.push(chunk);
             }
         }
@@ -410,9 +398,9 @@ impl Snapshot {
         let code = file_content.drain(0..4).as_slice().to_vec();
         let data_length = file_content.drain(0..4).as_slice().to_vec();
 
-       // eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
+        // eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
 
-       // compute the data length based on the 4 bytes that represent it
+        // compute the data length based on the 4 bytes that represent it
         let data_length = {
             let mut count = 0;
             for i in 0..4 {
@@ -453,7 +441,11 @@ impl Snapshot {
         self.save(fname, SnapshotVersion::V2)
     }
 
-    pub fn save<P: AsRef<Path>>(&self, fname: P, version: SnapshotVersion) -> Result<(), std::io::Error> {
+    pub fn save<P: AsRef<Path>>(
+        &self,
+        fname: P,
+        version: SnapshotVersion,
+    ) -> Result<(), std::io::Error> {
         let mut buffer = File::create(fname.as_ref())?;
         self.write(&mut buffer, version)
     }
@@ -473,7 +465,7 @@ impl Snapshot {
             );
             buffer.write_all(&sna.memory.memory())?;
         }
-        println!("Memory header: {}", sna.memory_size_header() );
+        println!("Memory header: {}", sna.memory_size_header());
 
         // Write chunks if any
         for chunk in &sna.chunks {
@@ -512,9 +504,7 @@ impl Snapshot {
 
     /// Check if the snapshot has some memory chunk
     pub fn has_memory_chunk(&self) -> bool {
-        self.chunks.iter().any(|c|{
-            c.is_memory_chunk()
-        })
+        self.chunks.iter().any(|c| c.is_memory_chunk())
     }
 
     /// Returns the memory that is hardcoded in the snapshot
@@ -543,10 +533,10 @@ impl Snapshot {
     /// let mut sna = Snapshot::default();
     /// let data = vec![0,2,3,5];
     /// sna.add_data(&data, 0x4000);
-    /// 
+    ///
     /// ```
     /// TODO: re-implement with set_byte
-    /// 
+    ///
     pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError> {
         if address + data.len() > 0x10000 * 2 {
             Err(SnapshotError::NotEnougSpaceAvailable)
@@ -586,15 +576,13 @@ impl Snapshot {
             while idx < self.chunks.len() {
                 if self.chunks[0].is_memory_chunk() {
                     self.chunks.remove(idx);
+                } else {
+                    idx += 1;
                 }
-                else {
-                    idx +=1;
-                }
-            } 
-            self.set_memory_size_header( (self.memory.len() / 1024) as u16);
-
+            }
+            self.set_memory_size_header((self.memory.len() / 1024) as u16);
         }
- 
+
         // finally write in memory
         self.memory.memory_mut()[address] = value;
     }

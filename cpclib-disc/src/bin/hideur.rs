@@ -20,19 +20,18 @@ use std::io::Write;
 
 use cpclib_disc::amsdos::*;
 
-
-    /**
-     * Convert a string to its unsigned 32 bits representation (to access to extra memory)
-     * TODO share implementation
-     */
-    pub fn string_to_nb(source: &str) -> u32 {
-        let error = format!("Unable to read the value: {}", source);
-        if source.starts_with("0x") {
-            u32::from_str_radix(&source[2..], 16).expect(&error)
-        } else {
-            source.parse::<u32>().expect(&error)
-        }
+/**
+ * Convert a string to its unsigned 32 bits representation (to access to extra memory)
+ * TODO share implementation
+ */
+pub fn string_to_nb(source: &str) -> u32 {
+    let error = format!("Unable to read the value: {}", source);
+    if source.starts_with("0x") {
+        u32::from_str_radix(&source[2..], 16).expect(&error)
+    } else {
+        source.parse::<u32>().expect(&error)
     }
+}
 
 fn main() -> std::io::Result<()> {
     let matches = clap::App::new("hideur")
@@ -102,7 +101,6 @@ fn main() -> std::io::Result<()> {
     let filename = {
         let user = matches.value_of("USER").map_or(0, string_to_nb) as u8;
         let (filename, extension) = {
-
             let parts = complete_filename.split('.').collect::<Vec<_>>();
             let (filename, extension) = match parts.len() {
                 1 => (parts[0].to_owned(), "".to_owned()),
@@ -145,8 +143,7 @@ fn main() -> std::io::Result<()> {
         let header = amsfile.header();
         if header.is_checksum_valid() {
             println!("{:?}", header);
-        }
-        else {
+        } else {
             eprintln!("This is not an Amsdos file");
         }
     } else {

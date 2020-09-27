@@ -9,10 +9,9 @@ pub fn nop() -> Token {
 }
 
 /// Generate org directive
-pub fn org<E:Into<Expr>>(val: E) -> Token {
+pub fn org<E: Into<Expr>>(val: E) -> Token {
     Token::Org(val.into(), None)
 }
-
 
 #[allow(missing_docs)]
 pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {
@@ -31,9 +30,7 @@ pub fn assert_str<S: AsRef<str>>(expr: S) -> Token {
     Token::Assert(expr.as_ref().into(), None)
 }
 
-
 /// Generate a call
-
 
 #[allow(missing_docs)]
 pub fn comment<S: AsRef<str>>(label: S) -> Token {
@@ -51,13 +48,15 @@ pub fn defs_expr_expr<E1: Into<Expr>, E2: Into<Expr>>(count: E1, value: E2) -> T
 }
 
 /// Generate defw directive with one argument
-pub fn defb<E:Into<Expr>>(val: E) -> Token {
+pub fn defb<E: Into<Expr>>(val: E) -> Token {
     Token::Defb(vec![val.into()])
 }
 
 /// Generate defb directive from a slice of expression
-pub fn defb_elements<E: Into<Expr>>(elements: &[E]) -> Token 
-where E: Copy {
+pub fn defb_elements<E: Into<Expr>>(elements: &[E]) -> Token
+where
+    E: Copy,
+{
     let mut data = Vec::new();
     for val in elements {
         let val = *val;
@@ -68,30 +67,24 @@ where E: Copy {
 }
 
 /// Generate defw directive with one argument
-pub fn defw<E:Into<Expr>>(val: E) -> Token {
+pub fn defw<E: Into<Expr>>(val: E) -> Token {
     Token::Defw(vec![val.into()])
 }
 
 /// DJNZ opcode
-pub fn djnz_expr<E: Into<Expr>>(expr:E) -> Token {
+pub fn djnz_expr<E: Into<Expr>>(expr: E) -> Token {
     mnemonic_with_single_expr(Mnemonic::Djnz, expr)
 }
 
 /// Call opcode
-pub fn call_expr<E: Into<Expr>>(expr:E) -> Token {
+pub fn call_expr<E: Into<Expr>>(expr: E) -> Token {
     mnemonic_with_single_expr(Mnemonic::Call, expr)
 }
 
-
-
 /// Use this function to generate tokens having a mnemonic with a single expression argument
 /// TODO write a macro instead and automatically generate all the cases
-fn mnemonic_with_single_expr<E: Into<Expr>>(mne: Mnemonic, expr:E) -> Token{
-    Token::OpCode(
-        mne,
-        Some(expr.into().into()),
-        None
-    )
+fn mnemonic_with_single_expr<E: Into<Expr>>(mne: Mnemonic, expr: E) -> Token {
+    Token::OpCode(mne, Some(expr.into().into()), None)
 }
 
 #[allow(missing_docs)]
@@ -211,11 +204,7 @@ pub fn pop_iy() -> Token {
 
 /// Ret token
 pub fn ret() -> Token {
-    Token::OpCode(
-        Mnemonic::Ret,
-        None,
-        None
-    )
+    Token::OpCode(Mnemonic::Ret, None, None)
 }
 
 #[allow(missing_docs)]
@@ -240,18 +229,16 @@ pub fn exx() -> Token {
 
 #[allow(missing_docs)]
 pub fn incbin<S: AsRef<str>>(fname: S) -> Token {
-    Token::Incbin{
-        fname: fname.as_ref().to_string(), 
+    Token::Incbin {
+        fname: fname.as_ref().to_string(),
         transformation: BinaryTransformation::None,
         offset: None,
         length: None,
         extended_offset: None,
         off: false,
-        content: None
+        content: None,
     }
 }
-
-
 
 macro_rules! inc_r8 {
     ($($reg:ident)*) => {$(
@@ -282,7 +269,6 @@ macro_rules! inc_r16 {
     )*}
 }
 inc_r16! {Af Bc De Hl}
-
 
 /// I have clear doubt that  this exists really
 #[allow(missing_docs)]
@@ -316,7 +302,6 @@ ld_r16_expr! {
     De
     Hl
 }
-
 
 macro_rules! ld_r8_expr {
     ($($reg:ident)*) => {$(
@@ -467,31 +452,29 @@ pub fn token_for_opcode_two_args(mne: Mnemonic, data1: DataAccess, data2: DataAc
 
 /// Code function that generate Listing instead of Tokens
 pub mod routines {
-    use crate::tokens::tokens::Listing;
     use crate::builder::*;
+    use crate::tokens::tokens::Listing;
 
     /// Generate the listing that handle a wait loop
     /// Idea comes from Rhino/Batman Group http://cpcrulez.fr/forum/viewtopic.php?p=15827#p15827
 
     #[allow(dead_code)]
     pub fn wait(mut duration: u32) -> Listing {
-        
+        let wait_code_for = |l_duration| {
+            assert!(l_duration > 0);
+            let loops = (l_duration - 1) / 4;
+            let loopsx4 = loops * 4;
+            let nops = l_duration - loopsx4 - 1;
 
-    let wait_code_for = |l_duration| {
-        assert!(l_duration > 0);
-        let loops = (l_duration-1) / 4;
-        let loopsx4 = loops*4;
-        let nops = l_duration - loopsx4 - 1;
+            let mut listing = Listing::default();
+            if loops != 0 {
+                listing.push(ld_b_expr(loops));
+                listing.push(djnz_expr("$"));
+            }
 
-        let mut listing = Listing::default();
-        if loops != 0 {
-            listing.push(ld_b_expr(loops));
-            listing.push(djnz_expr("$"));
-        }
-
-        listing.push(defs_expr_expr(nops, 0));
-        listing
-    };
+            listing.push(defs_expr_expr(nops, 0));
+            listing
+        };
 
         let mut full_code = Listing::new();
         while duration > 1024 {
@@ -506,18 +489,13 @@ pub mod routines {
     }
 }
 
-
-
-
-
 #[cfg(test)]
 mod tests {
 
-
-#[test]
-fn test_ld_r16() {
-    use super::*;
-    // just check if it compiles
-    ld_af_expr(0.into());
-}
+    #[test]
+    fn test_ld_r16() {
+        use super::*;
+        // just check if it compiles
+        ld_af_expr(0.into());
+    }
 }

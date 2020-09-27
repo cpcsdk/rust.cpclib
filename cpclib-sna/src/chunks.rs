@@ -1,5 +1,5 @@
-use std::ops::DerefMut;
 use std::ops::AddAssign;
+use std::ops::DerefMut;
 
 #[derive(Clone, Debug)]
 /// Raw chunk data.
@@ -53,16 +53,17 @@ impl MemoryChunk {
         assert!(code[0] == b'M');
         assert!(code[1] == b'E');
         assert!(code[2] == b'M');
-        assert!(code[3] == b'0' || 
-                code[3] == b'1' || 
-                code[3] == b'2' ||
-                code[3] == b'3' ||
-                code[3] == b'4' ||
-                code[3] == b'5' ||
-                code[3] == b'6' ||
-                code[3] == b'7' ||
-                code[3] == b'8' 
-            );
+        assert!(
+            code[3] == b'0'
+                || code[3] == b'1'
+                || code[3] == b'2'
+                || code[3] == b'3'
+                || code[3] == b'4'
+                || code[3] == b'5'
+                || code[3] == b'6'
+                || code[3] == b'7'
+                || code[3] == b'8'
+        );
         dbg!(code);
         Self {
             data: SnapshotChunkData { code, data },
@@ -71,17 +72,15 @@ impl MemoryChunk {
 
     /// Build the memory chunk from the memory content. Chunk can be built in a compressed or uncompressed version
     pub fn build(code: [u8; 4], data: &[u8], compressed: bool) -> Self {
-        assert_eq!(data.len(), 64*1024);
+        assert_eq!(data.len(), 64 * 1024);
         let mut res = Vec::new();
-     
+
         if !compressed {
-            assert_eq!(data.len(), 64*1024);
+            assert_eq!(data.len(), 64 * 1024);
             res.extend(data);
             assert_eq!(res.len(), data.len());
             res.resize(0x100000, 0);
-        }
-        else {
-
+        } else {
             let mut previous = None;
             let mut count = 0;
 
@@ -90,7 +89,7 @@ impl MemoryChunk {
                     None => {
                         previous = Some(*current);
                         count = 1;
-                    },
+                    }
                     Some(previous_value) => {
                         if *current == 0xe5 || previous_value != *current || count == 255 {
                             if previous.is_some() {
@@ -107,21 +106,17 @@ impl MemoryChunk {
                                 count = 0;
                                 res.push(0xe5);
                                 res.push(0);
-                            }
-                            else {
+                            } else {
                                 previous = Some(*current);
                                 count = 1;
                             }
-                        }
-                        else{
-                            assert_eq!(previous_value,*current);
+                        } else {
+                            assert_eq!(previous_value, *current);
                             count += 1;
                             previous = Some(*current);
-
                         }
                     }
                 } // end match
-
             } // end for
 
             if previous.is_some() {
@@ -132,7 +127,6 @@ impl MemoryChunk {
                 }
                 res.push(previous.unwrap()); // store the value to be replaced
             }
-
         }
 
         Self::from(code, res)
@@ -141,7 +135,7 @@ impl MemoryChunk {
     /// Uncrunch the 64kbio of RLE crunched data if crunched. Otherwise, return the whole memory
     pub fn uncrunched_memory(&self) -> Vec<u8> {
         if self.is_crunched() {
-            return self.data.data.clone()
+            return self.data.data.clone();
         }
 
         let mut content = Vec::new();
@@ -158,10 +152,10 @@ impl MemoryChunk {
                     let amount = read_byte();
                     if amount == 0 {
                         content.push(0xe5)
-                    }
-                    else {
+                    } else {
                         let val = read_byte();
-                        for _idx in 0..amount { // TODO use resize
+                        for _idx in 0..amount {
+                            // TODO use resize
                             content.push(val);
                         }
                     }
@@ -176,7 +170,7 @@ impl MemoryChunk {
         content
     }
 
-     /// Returns the address in the memory array
+    /// Returns the address in the memory array
     pub fn abstract_address(&self) -> usize {
         let nb = (self.data.code[3] - b'0') as usize;
         nb * 0x10000
@@ -184,7 +178,7 @@ impl MemoryChunk {
 
     /// A uncrunched memory taaks 64*1024 bytes
     pub fn is_crunched(&self) -> bool {
-        self.data.data.len() == 64*1024
+        self.data.data.len() == 64 * 1024
     }
 }
 
@@ -289,5 +283,5 @@ impl From<MemoryChunk> for SnapshotChunk {
 impl From<UnknownChunk> for SnapshotChunk {
     fn from(chunk: UnknownChunk) -> Self {
         SnapshotChunk::Unknown(chunk)
-	}
+    }
 }

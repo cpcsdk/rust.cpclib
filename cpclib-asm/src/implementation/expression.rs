@@ -1,6 +1,6 @@
-use cpclib_tokens::tokens::*;
-use cpclib_tokens::symbols::*;
 use crate::error::*;
+use cpclib_tokens::symbols::*;
+use cpclib_tokens::tokens::*;
 
 use crate::implementation::tokens::*;
 
@@ -14,15 +14,10 @@ pub trait ExprEvaluationExt {
         self.resolve(&sym)
     }
 
-
     fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError>;
-
-
 }
 
 impl ExprEvaluationExt for Expr {
-    
-
     fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError> {
         use self::Expr::*;
 
@@ -42,8 +37,8 @@ impl ExprEvaluationExt for Expr {
                     Oper::BinaryOr => Ok(a | b),
                     Oper::BinaryXor => Ok(a ^ b),
 
-                    Oper::BooleanAnd => Ok( ((a != 0) &&  (b!=0)) as _ ),
-                    Oper::BooleanOr => Ok( ((a != 0) || (b !=0)) as _),
+                    Oper::BooleanAnd => Ok(((a != 0) && (b != 0)) as _),
+                    Oper::BooleanOr => Ok(((a != 0) || (b != 0)) as _),
 
                     Oper::Equal => Ok((a == b) as i32),
                     Oper::Different => Ok((a != b) as i32),
@@ -68,10 +63,7 @@ impl ExprEvaluationExt for Expr {
         };
 
         match self {
-
-            RelativeDelta(delta) => {
-                Ok(Expr::Label("$".into()).resolve(sym)? + *delta as i32)
-            },
+            RelativeDelta(delta) => Ok(Expr::Label("$".into()).resolve(sym)? + *delta as i32),
 
             Value(val) => Ok(*val),
 
@@ -79,20 +71,19 @@ impl ExprEvaluationExt for Expr {
 
             Label(ref label) => match sym.value(label) {
                 Some(cpclib_tokens::symbols::Value::Integer(ref val)) => Ok(*val),
-                Some(_) => Err(
-                    AssemblerError::WrongSymbolType {
-                        symbol: label.to_owned(),
-                        isnot: "a value".to_owned()
-                    }
-                ),
+                Some(_) => Err(AssemblerError::WrongSymbolType {
+                    symbol: label.to_owned(),
+                    isnot: "a value".to_owned(),
+                }),
                 None => Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
                     closest: sym.closest_symbol(label),
                 }),
             },
 
-
-            PrefixedLabel(_prefix, _label) => unimplemented!("Need to add management of the prefix. Not sur the symbol table fits this purpose"),
+            PrefixedLabel(_prefix, _label) => unimplemented!(
+                "Need to add management of the prefix. Not sur the symbol table fits this purpose"
+            ),
 
             Duration(ref token) => {
                 let duration = token.estimated_duration()?;
@@ -135,16 +126,14 @@ impl ExprEvaluationExt for Expr {
             Paren(ref e) => e.resolve(sym),
 
             UnaryFunction(func, exp) => UnaryFunctionWrapper::new(func, &exp).resolve(sym),
-            BinaryFunction(func, exp1, exp2) => BinaryFunctionWrapper::new(func, &exp1, &exp2).resolve(sym),
-
-
-            PrefixedLabel(prefix, label) => {
-                match sym.prefixed_value(prefix, label) {
-                    Some(value) => Ok(value as _),
-                    None => Err(format!("Unable to obtain {} of {}", prefix, label).into())
-                }
+            BinaryFunction(func, exp1, exp2) => {
+                BinaryFunctionWrapper::new(func, &exp1, &exp2).resolve(sym)
             }
 
+            PrefixedLabel(prefix, label) => match sym.prefixed_value(prefix, label) {
+                Some(value) => Ok(value as _),
+                None => Err(format!("Unable to obtain {} of {}", prefix, label).into()),
+            },
         }
     }
 }
@@ -152,14 +141,12 @@ impl ExprEvaluationExt for Expr {
 /// utility class for unary function evaluation
 struct UnaryFunctionWrapper<'a> {
     func: &'a UnaryFunction,
-    arg: &'a Expr
+    arg: &'a Expr,
 }
 
 impl<'a> UnaryFunctionWrapper<'a> {
-    fn  new(func: &'a UnaryFunction, arg: &'a Expr) -> UnaryFunctionWrapper<'a> {
-        UnaryFunctionWrapper {
-            func, arg
-        }
+    fn new(func: &'a UnaryFunction, arg: &'a Expr) -> UnaryFunctionWrapper<'a> {
+        UnaryFunctionWrapper { func, arg }
     }
 }
 
@@ -174,7 +161,6 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
     }
 }
 
-
 /// utility class for binary function evaluation
 struct BinaryFunctionWrapper<'a> {
     func: &'a BinaryFunction,
@@ -183,10 +169,8 @@ struct BinaryFunctionWrapper<'a> {
 }
 
 impl<'a> BinaryFunctionWrapper<'a> {
-    fn  new(func: &'a BinaryFunction, arg1: &'a Expr, arg2: &'a Expr) -> BinaryFunctionWrapper<'a> {
-        BinaryFunctionWrapper {
-            func, arg1, arg2
-        }
+    fn new(func: &'a BinaryFunction, arg1: &'a Expr, arg2: &'a Expr) -> BinaryFunctionWrapper<'a> {
+        BinaryFunctionWrapper { func, arg1, arg2 }
     }
 }
 

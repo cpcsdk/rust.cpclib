@@ -12,17 +12,13 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
-
 pub mod interact;
 pub mod parser;
 
-
-use std::env;
-use clap;
-use std::path::Path;
 use anyhow;
-
-
+use clap;
+use std::env;
+use std::path::Path;
 
 use hotwatch::{Event, Hotwatch};
 
@@ -30,10 +26,9 @@ use crossbeam_channel::unbounded;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::time::Duration;
 
-use cpclib_sna as sna;
 use cpclib_disc as disc;
+use cpclib_sna as sna;
 use cpclib_xfer as xfer;
-
 
 /// Send and run the file on the CPC.
 /// Snapshot V3 are downgraded to the V2 version
@@ -51,8 +46,7 @@ fn send_and_run_file(xfer: &xfer::CpcXfer, fname: &str) {
                     .unwrap()
                     .to_str()
                     .unwrap();
-                sna.save(sna_fname, sna::SnapshotVersion::V2)
-                    .unwrap();
+                sna.save(sna_fname, sna::SnapshotVersion::V2).unwrap();
                 xfer.upload_and_run(sna_fname, None)
                     .expect("Unable to launch SNA");
                 done = true;
@@ -140,18 +134,16 @@ fn main() -> anyhow::Result<()> {
         .get_matches();
 
     // Retreivethe hostname from the args or from the environment
-    let hostname: String = 
-    match matches.value_of("CPCADDR") {
+    let hostname: String = match matches.value_of("CPCADDR") {
         Some(cpcaddr) => cpcaddr.to_string(),
-        None => { 
-            match env::var("CPCIP") {
-                Ok(cpcaddr) => cpcaddr.to_string(),
-                Err(_) => panic!("You should provide the CPCADDR argument or set the CPCIP environmeent variable")
-            }
-
-        }
+        None => match env::var("CPCIP") {
+            Ok(cpcaddr) => cpcaddr.to_string(),
+            Err(_) => panic!(
+                "You should provide the CPCADDR argument or set the CPCIP environmeent variable"
+            ),
+        },
     };
-    
+
     let xfer = xfer::CpcXfer::new(hostname);
 
     if matches.is_present("-r") {
@@ -166,22 +158,26 @@ fn main() -> anyhow::Result<()> {
 
         if y_opt.is_present("WATCH") {
             let (tx, rx) = std::sync::mpsc::channel();
-            let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| tx.send(res).unwrap())?;
+            let mut watcher: RecommendedWatcher =
+                Watcher::new_immediate(move |res| tx.send(res).unwrap())?;
             watcher.watch(&fname, RecursiveMode::NonRecursive)?;
 
             for res in rx {
                 match res {
-                   Ok(notify::event::Event{kind: notify::event::EventKind::Modify(_), ..}) |
-                   Ok(notify::event::Event{kind: notify::event::EventKind::Create(_), ..})
-                    => {
-                       send_and_run_file(&xfer, &fname);
-                   },
-                   _ => {}
+                    Ok(notify::event::Event {
+                        kind: notify::event::EventKind::Modify(_),
+                        ..
+                    })
+                    | Ok(notify::event::Event {
+                        kind: notify::event::EventKind::Create(_),
+                        ..
+                    }) => {
+                        send_and_run_file(&xfer, &fname);
+                    }
+                    _ => {}
                 }
             }
-
         }
-
     } else if let Some(x_opt) = matches.subcommand_matches("-x") {
         let fname = x_opt.value_of("fname").unwrap();
         xfer.run(fname)?; /*.expect("Unable to launch file on CPC.");*/

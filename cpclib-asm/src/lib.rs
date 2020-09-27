@@ -1,11 +1,8 @@
-
-
 /// Implementation of various behvior for the tokens of cpclib_tokens
 pub mod implementation;
 
 /// All the stuff to parse z80 code.
 pub mod parser;
-
 
 /// Production of the bytecodes from the tokens.
 pub mod assembler;
@@ -18,10 +15,7 @@ pub mod error;
 
 mod crunchers;
 
-
-
 use cpclib_disc::amsdos::*;
-
 
 use preamble::*;
 
@@ -106,7 +100,7 @@ pub fn assemble_with_options(
 /// Assemble the predifined list of tokens
 pub fn assemble_tokens_with_options(
     tokens: &[Token],
-    options: &AssemblingOptions
+    options: &AssemblingOptions,
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
@@ -116,8 +110,8 @@ pub fn assemble_tokens_with_options(
 /// XXX probably crash if filename is not coherent
 pub fn assemble_to_amsdos_file(
     code: &str,
-    amsdos_filename: &str
-) ->  Result<AmsdosFile, AssemblerError> {
+    amsdos_filename: &str,
+) -> Result<AmsdosFile, AssemblerError> {
     use std::convert::TryFrom;
 
     let amsdos_filename = AmsdosFileName::try_from(amsdos_filename)?;
@@ -127,23 +121,17 @@ pub fn assemble_to_amsdos_file(
 
     let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
 
-
     Ok(AmsdosFile::binary_file_from_buffer(
-        &amsdos_filename, 
-        env.loading_address().unwrap() as  u16, 
-        env.execution_address().unwrap() as u16, 
-        &env.produced_bytes()
+        &amsdos_filename,
+        env.loading_address().unwrap() as u16,
+        env.execution_address().unwrap() as u16,
+        &env.produced_bytes(),
     )?)
-    
-
-
-
 }
 
 #[cfg(test)]
 mod test_super {
     use super::*;
-    
 
     #[test]
     fn simple_test_assemble() {
@@ -185,8 +173,6 @@ Truc
         println!("{:?}", assemble_with_options(code, &options));
         assert!(assemble_with_options(code, &options).is_ok());
     }
-
-
 
     #[test]
     fn test_size() {
@@ -249,9 +235,7 @@ Truc
         assert_eq!(listing.estimated_duration().unwrap(), 100);
     }
 
-
-    
-    fn code_test(code: &'static str){      
+    fn code_test(code: &'static str) {
         let options = AssemblingOptions::new_case_insensitive();
         let res = assemble_with_options(code, &options);
         res.unwrap();
@@ -260,7 +244,6 @@ Truc
     /// Test stolen to rasm
     #[test]
     fn rasm_pagetag1() {
-
         let code = "  
         bankset 0
         org #5000
@@ -275,49 +258,44 @@ label2
         assert {pageset}label2==#7fC2
         nop";
         code_test(code);
-        
-
-
     }
     /* /// This test currently does not pass
-    #[test]
-    fn rasm_pagetag2() {
-        let code = "
-        bankset 0
-        call maroutine
-        
-        bank 4
-        org #C000
-autreroutine
-        nop
-        ret
-        
-        bank 5
-        org #8000
-maroutine
-        ldir
-        ret
-        
-        bankset 2
-        org #9000
-troize
-        nop
-        assert {page}maroutine==#7FC5
-        assert {pageset}maroutine==#7FC2
-        assert {page}autreroutine==#7FC4
-        assert {pageset}autreroutine==#7FC2
-        assert {page}troize==#7FCE
-        assert {pageset}troize==#7FCA";
-        rasm_test(code);
+        #[test]
+        fn rasm_pagetag2() {
+            let code = "
+            bankset 0
+            call maroutine
 
-    }
-    */
-	/*						
-#define AUTOTEST_PAGETAG3	"buildsna:bank 2:assert {bank}$==2:assert {page}$==0x7FC0:assert {pageset}$==#7FC0:" \
-							"bankset 1:org #4000:assert {bank}$==5:assert {page}$==0x7FC5:assert {pageset}$==#7FC2"
-    */	
-    
+            bank 4
+            org #C000
+    autreroutine
+            nop
+            ret
 
+            bank 5
+            org #8000
+    maroutine
+            ldir
+            ret
+
+            bankset 2
+            org #9000
+    troize
+            nop
+            assert {page}maroutine==#7FC5
+            assert {pageset}maroutine==#7FC2
+            assert {page}autreroutine==#7FC4
+            assert {pageset}autreroutine==#7FC2
+            assert {page}troize==#7FCE
+            assert {pageset}troize==#7FCA";
+            rasm_test(code);
+
+        }
+        */
+    /*
+    #define AUTOTEST_PAGETAG3	"buildsna:bank 2:assert {bank}$==2:assert {page}$==0x7FC0:assert {pageset}$==#7FC0:" \
+                                "bankset 1:org #4000:assert {bank}$==5:assert {page}$==0x7FC5:assert {pageset}$==#7FC2"
+        */
 
     #[test]
     fn test_duration() {
@@ -371,8 +349,6 @@ troize
         assert_eq!(listing.estimated_duration().unwrap(), (3 + 1 + 2 + 1 + 2));
     }
 
-
-
     #[test]
     fn test_real1() {
         let code = "    RUN 0x50, 0xc0";
@@ -383,6 +359,5 @@ troize
         endif
         ";
         code_test(code);
-
     }
 }

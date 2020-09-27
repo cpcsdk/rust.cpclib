@@ -23,15 +23,15 @@ use clap::{App, Arg, ArgMatches, SubCommand};
 use std::path::Path;
 use tempfile::Builder;
 
-use cpclib_asm::preamble::*;
 use cpclib::ga::Palette;
+use cpclib_asm::preamble::*;
 
 use cpclib::imageconverter::*;
+use cpclib::ocp;
 use cpclib::sna;
 use cpclib::sna::*;
-use cpclib_disc::edsk::ExtendedDsk;
 use cpclib_disc::amsdos::*;
-use cpclib::ocp;
+use cpclib_disc::edsk::ExtendedDsk;
 
 use std::fs::File;
 use std::io::Write;
@@ -41,20 +41,18 @@ use anyhow;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
 
-
 macro_rules! export_palette {
     ($e: expr) => {
         $e.arg(
             Arg::with_name("EXPORT_PALETTE")
-            .long("palette")
-            .short("p")
-            .takes_value(true)
-            .required(false)
-            .help("Name of the binary file that contains the palette")
+                .long("palette")
+                .short("p")
+                .takes_value(true)
+                .required(false)
+                .help("Name of the binary file that contains the palette"),
         )
     };
 }
-
 
 /// Compress data using lz4 algorithm.
 /// Should be decompressed on client side.
@@ -70,9 +68,9 @@ fn lz4_compress(bytes: &[u8]) -> Vec<u8> {
 
 fn palette_code(pal: &Palette) -> String {
     let mut asm = " ld bc, 0x7f00\n".to_string();
-            // TODO create the linker
+    // TODO create the linker
 
-    for idx in 0..(16/2) {
+    for idx in 0..(16 / 2) {
         asm += &format!("\tld hl, 256*{} + {} : out (c), c : out (c), h : inc c : out (c), c: out (c), l : inc c\n", 
             pal[2*idx + 0].gate_array(), 
             pal[2*idx + 1].gate_array()
@@ -82,10 +80,10 @@ fn palette_code(pal: &Palette) -> String {
     return asm;
 }
 
-fn standard_linked_code(mode:u8, pal: &Palette, screen: &[u8]) -> String {
+fn standard_linked_code(mode: u8, pal: &Palette, screen: &[u8]) -> String {
     let base_code = standard_display_code(mode);
     format!(
-    "   org 0x1000
+        "   org 0x1000
         di
         ld sp, $
 
@@ -118,10 +116,10 @@ image_end
 
         assert $<0xc000
     ",
-    palette = palette_code(pal),
-    decompressor = include_str!("lz4_docent.asm"),
-    code = defb_elements(&assemble(&base_code).unwrap()),
-    screen = defb_elements(screen)
+        palette = palette_code(pal),
+        decompressor = include_str!("lz4_docent.asm"),
+        code = defb_elements(&assemble(&base_code).unwrap()),
+        screen = defb_elements(screen)
     )
 }
 
@@ -235,15 +233,12 @@ fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
             "linear" => OutputFormat::LinearEncodedSprite,
             "graycoded" => OutputFormat::GrayCodedSprite,
             "zigzag+graycoded" => OutputFormat::ZigZagGrayCodedSprite,
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
-        
-    } 
-    else if let Some(_tile_mathces) = matches.subcommand_matches("tile") {
+    } else if let Some(_tile_mathces) = matches.subcommand_matches("tile") {
         // will be postprocessed
         OutputFormat::LinearEncodedSprite
-    }
-    else {
+    } else {
         // Standard case
         if matches.is_present("OVERSCAN") {
             OutputFormat::CPCMemory {
@@ -267,14 +262,15 @@ fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
 
 fn get_requested_palette(matches: &ArgMatches<'_>) -> Option<Palette> {
     if matches.is_present("PENS") {
-        let numbers = matches.value_of("PENS").unwrap()
-                .split(",")
-                .map(|ink| ink.parse::<u8>().unwrap())
-                .collect::<Vec<_>>();
+        let numbers = matches
+            .value_of("PENS")
+            .unwrap()
+            .split(",")
+            .map(|ink| ink.parse::<u8>().unwrap())
+            .collect::<Vec<_>>();
         return Some(numbers.into());
-    }
-    else {
-        let mut one_pen_set = false; 
+    } else {
+        let mut one_pen_set = false;
         let mut palette = Palette::new();
         for i in 0..16 {
             let key = format!("PEN{}", i);
@@ -282,13 +278,11 @@ fn get_requested_palette(matches: &ArgMatches<'_>) -> Option<Palette> {
                 one_pen_set = true;
                 palette.set(i, matches.value_of(&key).unwrap().parse::<u8>().unwrap())
             }
-
         }
 
         if one_pen_set {
             return Some(palette);
-        }
-        else {
+        } else {
             return None;
         }
     }
@@ -334,27 +328,25 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 data,
                 bytes_width,
                 height,
-                palette
-            } |
-            Output::GrayCodedSprite {
-                data,
-                bytes_width,
-                height,
-                palette
-            } |
-            Output::ZigZagGrayCodedSprite {
-                data,
-                bytes_width,
-                height,
-                palette
+                palette,
             }
-            => {
+            | Output::GrayCodedSprite {
+                data,
+                bytes_width,
+                height,
+                palette,
+            }
+            | Output::ZigZagGrayCodedSprite {
+                data,
+                bytes_width,
+                height,
+                palette,
+            } => {
                 // Save the palette
                 if let Some(palette_fname) = sub_sprite.value_of("EXPORT_PALETTE") {
                     println!("Write palette");
                     let mut file =
-                    File::create(palette_fname)
-                        .expect("Unable to create the palette file");
+                        File::create(palette_fname).expect("Unable to create the palette file");
                     let p: Vec<u8> = palette.into();
                     file.write_all(&p).unwrap();
                 }
@@ -384,8 +376,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
             }
             _ => unreachable!(),
         }
-    } 
-    else if let Some(sub_tile) = sub_tile {
+    } else if let Some(sub_tile) = sub_tile {
         // TODO share code with the sprite branch
         match &conversion {
             Output::LinearEncodedSprite {
@@ -394,8 +385,16 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 height,
                 ..
             } => {
-                let tile_width = sub_tile.value_of("WIDTH").unwrap().parse::<usize>().unwrap();
-                let tile_height = sub_tile.value_of("HEIGHT").unwrap().parse::<usize>().unwrap();
+                let tile_width = sub_tile
+                    .value_of("WIDTH")
+                    .unwrap()
+                    .parse::<usize>()
+                    .unwrap();
+                let tile_height = sub_tile
+                    .value_of("HEIGHT")
+                    .unwrap()
+                    .parse::<usize>()
+                    .unwrap();
 
                 let nb_tiles_width = bytes_width / tile_width;
                 let nb_tiles_height = height / tile_height;
@@ -404,21 +403,15 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 // individually extract each tile
                 for j in 0..nb_tiles_height {
                     for i in 0..nb_tiles_width {
-
                         // Collect only the bytes
-                        let tile_data = {
-                            unimplemented!("Need to finish this implementation")
-                        };
+                        let tile_data = { unimplemented!("Need to finish this implementation") };
                     }
                 }
-            },
-            _ => unreachable! {
-
             }
+            _ => unreachable! {},
         }
     } else {
         // Make the conversion before feeding sna or dsk
-
 
         /// TODO manage the presence/absence of file in the dsk, the choice of filename and so on
         if sub_dsk.is_some() || sub_exec.is_some() {
@@ -426,19 +419,16 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 Output::CPCMemoryStandard(memory, pal) => {
                     standard_linked_code(output_mode, pal, memory)
                 }
-    
-                Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
-                    unimplemented!()
-                }
-    
+
+                Output::CPCMemoryOverscan(_memory1, _memory2, pal) => unimplemented!(),
+
                 _ => unreachable!(),
             };
 
             let filename = {
                 if sub_dsk.is_some() {
                     "test.bin"
-                }
-                else {
+                } else {
                     sub_exec.as_ref().unwrap().value_of("FILENAME").unwrap()
                 }
             };
@@ -450,38 +440,37 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 let folder = filename.parent().unwrap();
                 let folder = if folder == Path::new("") {
                     std::env::current_dir().unwrap()
-                } 
-                else {
+                } else {
                     folder.canonicalize().unwrap()
                 };
                 file.save_in_folder(folder)?;
-            }
-            else {
-                
+            } else {
                 use cpclib_disc::cfg::DiscConfig;
                 let cfg = cpclib_disc::cfg::DiscConfig::single_head_data_format();
                 let dsk = cpclib_disc::builder::build_disc_from_cfg(&cfg);
                 let mut manager = AmsdosManager::new_from_disc(dsk, 0);
                 manager.add_file(&file, false, false).unwrap();
-                manager.dsk().save(sub_dsk.unwrap().value_of("DSK").unwrap()).unwrap();
+                manager
+                    .dsk()
+                    .save(sub_dsk.unwrap().value_of("DSK").unwrap())
+                    .unwrap();
             }
-
         }
         if sub_sna.is_some() || sub_m4.is_some() {
-
             let (palette, code) = match &conversion {
                 Output::CPCMemoryStandard(_memory, pal) => {
                     (pal, assemble(&standard_display_code(output_mode)).unwrap())
                 }
-    
+
                 Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
-                    let code = assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal)).unwrap();
+                    let code =
+                        assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal)).unwrap();
                     (pal, code)
                 }
-    
+
                 _ => unreachable!(),
             };
-            
+
             // Create a snapshot with a standard screen
             let mut sna = Snapshot::default();
 
@@ -506,7 +495,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 sna.set_value(
                     SnapshotFlag::GA_PAL(Some(i)),
                     u16::from(palette.get((i as i32).into()).gate_array()),
-                )   
+                )
                 .unwrap();
             }
 
@@ -531,21 +520,17 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                     xfer.upload_and_run(tmp_file_name, None)
                         .expect("An error occured while transfering the snapshot");
                 }
-            }
-            else if let Some(sub_scr) = sub_scr {
+            } else if let Some(sub_scr) = sub_scr {
                 let fname = sub_scr.value_of("SCR").unwrap();
 
                 let scr = match &conversion {
-                    Output::CPCMemoryStandard(memory, _) => {
-                        memory
-                    },
-                    _ => unreachable!()
+                    Output::CPCMemoryStandard(memory, _) => memory,
+                    _ => unreachable!(),
                 };
 
                 let scr = if sub_scr.is_present("COMPRESSED") {
                     ocp::compress(&scr)
-                }
-                else {
+                } else {
                     scr.to_vec()
                 };
 
@@ -953,29 +938,35 @@ fn main() -> anyhow::Result<()> {
         std::process::exit(exitcode::USAGE);
     }
 
-    convert(&matches)
-        .expect("Unable to make the conversion");
+    convert(&matches).expect("Unable to make the conversion");
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
         if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
-
             let (tx, rx) = std::sync::mpsc::channel();
-            let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| tx.send(res).unwrap())?;
-            watcher.watch(matches.value_of("SOURCE").unwrap(), RecursiveMode::NonRecursive)?;
+            let mut watcher: RecommendedWatcher =
+                Watcher::new_immediate(move |res| tx.send(res).unwrap())?;
+            watcher.watch(
+                matches.value_of("SOURCE").unwrap(),
+                RecursiveMode::NonRecursive,
+            )?;
 
             for res in rx {
                 match res {
-                   Ok(notify::event::Event{kind: notify::event::EventKind::Modify(_), ..}) |
-                   Ok(notify::event::Event{kind: notify::event::EventKind::Create(_), ..})
-                    => {
+                    Ok(notify::event::Event {
+                        kind: notify::event::EventKind::Modify(_),
+                        ..
+                    })
+                    | Ok(notify::event::Event {
+                        kind: notify::event::EventKind::Create(_),
+                        ..
+                    }) => {
                         if let Err(e) = convert(&matches) {
                             eprintln!("[ERROR] Unable to convert the image {}", e);
                         }
-                   },
-                   _ => {}
+                    }
+                    _ => {}
                 }
             }
-
         }
     }
 

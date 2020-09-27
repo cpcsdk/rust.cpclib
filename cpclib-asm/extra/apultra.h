@@ -3,8 +3,6 @@
 #define MemMalloc malloc
 #define MemMove memmove
 
-#define FORCE_INLINE 
-
 /*
  * apultra.c - command line compression utility for the apultra library
  * Copyright (C) 2019 Emmanuel Marty
@@ -1147,7 +1145,7 @@ int APULTRA_crunch(unsigned char *data, int len, unsigned char **dataout, int *l
 #include <string.h>
 
 
- FORCE_INLINE int apultra_read_bit(const unsigned char **ppInBlock, const unsigned char *pDataEnd, int *nCurBitMask, unsigned char *bits) {
+  int apultra_read_bit(const unsigned char **ppInBlock, const unsigned char *pDataEnd, int *nCurBitMask, unsigned char *bits) {
    const unsigned char *pInBlock = *ppInBlock;
    int nBit;
 
@@ -1166,7 +1164,7 @@ int APULTRA_crunch(unsigned char *data, int len, unsigned char **dataout, int *l
    return nBit;
 }
 
- FORCE_INLINE int apultra_read_gamma2(const unsigned char **ppInBlock, const unsigned char *pDataEnd, int *nCurBitMask, unsigned char *bits) {
+  int apultra_read_gamma2(const unsigned char **ppInBlock, const unsigned char *pDataEnd, int *nCurBitMask, unsigned char *bits) {
    int bit;
    unsigned int v = 1;
 

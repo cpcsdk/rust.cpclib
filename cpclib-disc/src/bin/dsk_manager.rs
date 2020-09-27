@@ -12,7 +12,6 @@
 )]
 #![deny(clippy::pedantic)]
 
-
 use clap::{App, Arg, ArgGroup, SubCommand};
 use std::fs::File;
 use std::io::{Read, Write};

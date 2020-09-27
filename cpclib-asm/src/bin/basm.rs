@@ -64,19 +64,15 @@ impl From<AssemblerError> for BasmError {
 /// Parse the given code.
 /// TODO read options to configure the search path
 fn parse(matches: &ArgMatches<'_>) -> Result<Listing, BasmError> {
-    
-
     let (filename, code) = {
         if let Some(filename) = matches.value_of("INPUT") {
             let mut f = File::open(filename)?;
             let mut content = String::new();
             f.read_to_string(&mut content)?;
             (filename, content)
-        }
-        else if let Some(code) = matches.value_of("INLINE") {
+        } else if let Some(code) = matches.value_of("INLINE") {
             ("<inline code>", format!(" {}", code))
-        }
-        else {
+        } else {
             panic!("No code provided to assemble");
         }
     };
@@ -116,8 +112,7 @@ fn assemble(matches: &ArgMatches<'_>, listing: &Listing) -> Result<Env, BasmErro
         }
     }
 
-    visit_tokens_all_passes_with_options(&listing.listing(), &options)
-        .map_err(|e| e.into())
+    visit_tokens_all_passes_with_options(&listing.listing(), &options).map_err(|e| e.into())
 }
 
 /// Save the provided result
@@ -126,17 +121,17 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
     if matches.is_present("SNAPSHOT") {
         let pc_filename = matches.value_of("OUTPUT").unwrap();
         env.save_sna(pc_filename)?;
-    }
-    else {
+    } else {
         // Collect the produced bytes
         let binary = env.produced_bytes();
 
         if matches.is_present("DB_LIST") {
-            println!("{}", PrintableListing::from(&Listing::from(env.produced_bytes().as_ref())));
-        }
-        else {
+            println!(
+                "{}",
+                PrintableListing::from(&Listing::from(env.produced_bytes().as_ref()))
+            );
+        } else {
             use std::convert::TryFrom;
-
 
             let pc_filename = matches.value_of("OUTPUT").unwrap();
             let amsdos_filename = AmsdosFileName::try_from(pc_filename);
@@ -147,7 +142,6 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
                     filename: pc_filename.to_string(),
                 });
             }
-
 
             // Compute the headers if needed
             let header = if matches.is_present("BINARY_HEADER") {
@@ -174,14 +168,12 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
             }
             f.write_all(&binary)?;
         }
-
     }
     Ok(())
 }
 
 /// Launch the assembling of everythin
 fn process(matches: &ArgMatches<'_>) -> Result<(), BasmError> {
-
     // standard assembling
     let listing = parse(matches)?;
     let env = assemble(matches, &listing)?;
@@ -286,10 +278,9 @@ fn main() {
 					.get_matches();
 
     match process(&matches) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             eprintln!("Error while assembling.\n{}", e);
         }
     }
 }
-

@@ -1,12 +1,8 @@
 // TryFrom is used in the assembler stuff
 #![feature(type_ascription)]
 #![feature(associated_type_bounds)]
-
-
 #![feature(register_attr)]
 #![register_attr(get)]
-
-
 #![feature(proc_macro_hygiene)]
 // Notes for later when clippy will work:
 // https://rust-lang.github.io/rust-clippy/master/index.html#identity_op must be deactivated
@@ -51,15 +47,15 @@
 #[macro_use]
 extern crate dbg;
 
-pub use cpclib_basic as basic;
 pub use cpclib_asm as assembler;
+pub use cpclib_basic as basic;
 pub use cpclib_sna as sna;
 pub use cpclib_z80emu as z80emu;
 
+pub use cpclib_disc as disc;
 /// CPC Wifi extension related stuff. Useable
 #[cfg(any(feature = "xferlib", feature = "xfer"))]
 pub use cpclib_xfer as xfer;
-pub use cpclib_disc as disc;
 
 /// Screen emulation. Unknown state ;)
 pub mod screen;
@@ -81,13 +77,7 @@ pub mod ga;
 /// ???
 pub mod asm;
 
-
-
 /// Disk (edsk) manipulation. WIP
-
-
-
-
 // Some reexports
 pub use crate::disc::edsk::ExtendedDsk;
 pub use crate::ga::{Ink, Palette, Pen};
@@ -107,20 +97,20 @@ pub mod util {
     }
 }
 
-
-
 #[cfg(test)]
 mod test {
     #[test]
     fn test_wait() {
-        use cpclib_z80emu::execute_dummy_listing;
         use cpclib_asm::preamble::*;
-    
+        use cpclib_z80emu::execute_dummy_listing;
+
         // This test cannot run. The time must be obtained by emulating the code
         // TODO add emulation
-       assert_eq!(
-           20, 
-           execute_dummy_listing(&routines::wait(20)).unwrap().duration()
-       );
+        assert_eq!(
+            20,
+            execute_dummy_listing(&routines::wait(20))
+                .unwrap()
+                .duration()
+        );
     }
 }

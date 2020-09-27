@@ -1,11 +1,7 @@
-
-
-
 /// Z80 emulator
 pub mod emul;
-mod z80;
 mod preamble;
-
+mod z80;
 
 use cpclib_asm::preamble::*;
 
@@ -15,21 +11,18 @@ pub use self::z80::{HasValue, Z80};
 #[derive(Default, Debug, Copy, Clone)]
 pub struct ListingExecution {
     /// Number of nops needed to execute the listing
-    nops: usize
+    nops: usize,
 }
 
-
 impl ListingExecution {
-
     /// Emulated duration of the executed listing
     pub fn duration(&self) -> usize {
         self.nops
     }
 }
 
-  /// Execute the Listing as soon as there is no jumps except for djnz/jp $ (i.e. instructions are taken from the stream)
+/// Execute the Listing as soon as there is no jumps except for djnz/jp $ (i.e. instructions are taken from the stream)
 pub fn execute_dummy_listing(lst: &Listing) -> Result<ListingExecution, String> {
-    
     let mut res = ListingExecution::default();
     let mut z80 = z80::Z80::default();
 

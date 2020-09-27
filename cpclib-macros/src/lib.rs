@@ -1,18 +1,17 @@
-use proc_macro::TokenStream;
 use cpclib_asm::preamble::*;
+use proc_macro::TokenStream;
 use quote::ToTokens;
-use syn::{parse_macro_input, Result};
 use syn::parse::Parse;
 use syn::parse::ParseStream;
 use syn::parse::Parser;
+use syn::{parse_macro_input, Result};
 mod tokens;
-
 
 /// Structure that contains the input f the macro.
 /// Will be updated once we'll have additional parameters
 struct AssemblyMacroInput {
     /// Code provided by the user of the macro
-    code: String
+    code: String,
 }
 
 mod kw {
@@ -24,35 +23,28 @@ mod kw {
 /// - a file if "fname:" is provided
 impl Parse for AssemblyMacroInput {
     fn parse(input: ParseStream) -> Result<Self> {
-
-
         let lookahead = input.lookahead1();
         if lookahead.peek(kw::fname) {
             input.parse::<kw::fname>()?;
             input.parse::<syn::Token![:]>()?;
             let fname = (input.parse::<syn::LitStr>()?).value();
-            let content = std::fs::read_to_string(fname)
-                .or_else(|e|{
-                    Err(syn::Error::new(proc_macro2::Span::call_site(), e.to_string()))
-                })?;
+            let content = std::fs::read_to_string(fname).or_else(|e| {
+                Err(syn::Error::new(
+                    proc_macro2::Span::call_site(),
+                    e.to_string(),
+                ))
+            })?;
 
-            Ok(
-                AssemblyMacroInput{
-                    code: content
-                }
-            )
+            Ok(AssemblyMacroInput { code: content })
         } else if lookahead.peek(syn::LitStr) {
-            Ok(AssemblyMacroInput{
-                code: (input.parse::<syn::LitStr>()?).value()
+            Ok(AssemblyMacroInput {
+                code: (input.parse::<syn::LitStr>()?).value(),
             })
         } else {
             Err(lookahead.error())
         }
     }
-
 }
-
-
 
 #[proc_macro]
 /// Parse an assembly code and produce the appropriate Listing while compiling the rust code.
@@ -70,37 +62,35 @@ pub fn parse_z80(tokens: TokenStream) -> TokenStream {
             let mut stream = proc_macro2::TokenStream::new();
             listing.to_tokens(&mut stream);
             stream.into()
-        },
+        }
         Err(e) => {
             panic!("[ERROR] {:?}", e);
         }
     }
 }
 
-fn get_listing(input: AssemblyMacroInput) -> std::result::Result<Listing, cpclib_asm::error::AssemblerError> {
+fn get_listing(
+    input: AssemblyMacroInput,
+) -> std::result::Result<Listing, cpclib_asm::error::AssemblerError> {
     Listing::from_str(&input.code)
 }
 
 /// Generte the bytes of asssembled data
 #[proc_macro]
-pub fn assemble(tokens: TokenStream) -> TokenStream
-{
-
+pub fn assemble(tokens: TokenStream) -> TokenStream {
     let input = parse_macro_input!(tokens as AssemblyMacroInput);
     let listing = get_listing(input);
 
     match listing {
-        Ok(listing) => {
-            match listing.to_bytes() {
-                Ok(ref bytes) => {
-                    let mut tokens = proc_macro2::TokenStream::default();
-                    proc_macro2::Literal::byte_string(&bytes).to_tokens(&mut tokens);
-                    return tokens.into();
-                },
+        Ok(listing) => match listing.to_bytes() {
+            Ok(ref bytes) => {
+                let mut tokens = proc_macro2::TokenStream::default();
+                proc_macro2::Literal::byte_string(&bytes).to_tokens(&mut tokens);
+                return tokens.into();
+            }
 
-                Err(e) => {
-                    panic!("Unable to assemble the provided code. {}", e);
-                }
+            Err(e) => {
+                panic!("Unable to assemble the provided code. {}", e);
             }
         },
         Err(e) => {
@@ -108,4 +98,3 @@ pub fn assemble(tokens: TokenStream) -> TokenStream
         }
     }
 }
-

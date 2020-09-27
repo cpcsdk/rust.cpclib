@@ -13,6 +13,4 @@ pub use registers::*;
 pub use tokens::*;
 
 #[cfg(test)]
-mod test {
-  
-}
+mod test {}

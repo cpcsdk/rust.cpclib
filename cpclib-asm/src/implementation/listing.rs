@@ -1,31 +1,26 @@
 use cpclib_tokens::tokens::*;
 
-
-use crate::parser;
 use crate::error::*;
+use crate::parser;
 use std::fmt;
 
-use crate::implementation::tokens::*;
 use crate::implementation::expression::*;
-
-
+use crate::implementation::tokens::*;
 
 use crate::AssemblingOptions;
-
-
 
 /// Additional methods for the listings
 pub trait ListingExt {
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
         code: S,
-    ) -> Result<(), AssemblerError> ;
+    ) -> Result<(), AssemblerError>;
 
-    /// Assemble the listing (without context) and returns the bytes 
+    /// Assemble the listing (without context) and returns the bytes
     fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError>;
     fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError>;
 
-          /// Compute the size of the listing.
+    /// Compute the size of the listing.
     /// The listing has a size only if its tokens has a size
     fn number_of_bytes(&self) -> Result<usize, AssemblerError>;
 
@@ -37,35 +32,31 @@ pub trait ListingExt {
 
     fn to_string(&self) -> String;
 
-        /// Generate a string that contains also the bytes
-        /// panic even for simple corner cases
-        fn to_enhanced_string(&self) -> String;
-
-
+    /// Generate a string that contains also the bytes
+    /// panic even for simple corner cases
+    fn to_enhanced_string(&self) -> String;
 
     /// Modify the listing to inject labels at the given addresses
     fn inject_labels(&mut self, labels: &[(u16, &str)]);
 }
 
 impl ListingExt for Listing {
-        /// Add additional tokens, that need to be parsed from a string, to the listing
-        fn add_code<S: AsRef<str> + core::fmt::Display>(
-            &mut self,
-            code: S,
-        ) -> Result<(), AssemblerError> {
-            parser::parse_z80_str(code.as_ref())
-                .map_err(|e| AssemblerError::SyntaxError {
-                    error: format!("{:?}", e),
-                })
-                .map(|(_res, local_tokens)| {
-                    self.listing_mut().extend_from_slice(&local_tokens);
-                })
-        }
-
-
+    /// Add additional tokens, that need to be parsed from a string, to the listing
+    fn add_code<S: AsRef<str> + core::fmt::Display>(
+        &mut self,
+        code: S,
+    ) -> Result<(), AssemblerError> {
+        parser::parse_z80_str(code.as_ref())
+            .map_err(|e| AssemblerError::SyntaxError {
+                error: format!("{:?}", e),
+            })
+            .map(|(_res, local_tokens)| {
+                self.listing_mut().extend_from_slice(&local_tokens);
+            })
+    }
 
     /// Compute the size of the listing when assembling it.
-    /// 
+    ///
     fn number_of_bytes(&self) -> Result<usize, AssemblerError> {
         Ok(self.to_bytes()?.len())
     }
@@ -75,16 +66,14 @@ impl ListingExt for Listing {
         self.to_bytes_with_options(&options)
     }
 
-    fn to_bytes_with_options(&self, options: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
-        let env = crate::assembler::visit_tokens_all_passes_with_options(
-            &self.listing(), 
-            options)?;
+    fn to_bytes_with_options(
+        &self,
+        options: &AssemblingOptions,
+    ) -> Result<Vec<u8>, AssemblerError> {
+        let env = crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), options)?;
         Ok(env.produced_bytes())
     }
 
-
-
-    
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
     fn estimated_duration(&self) -> Result<usize, String> {
@@ -99,200 +88,170 @@ impl ListingExt for Listing {
         }
     }
 
-        /// Save the listing on disc in a string version
+    /// Save the listing on disc in a string version
     fn save<P: AsRef<std::path::Path>>(&self, path: P) -> ::std::io::Result<()> {
-            use std::fs::File;
-            use std::io::prelude::*;
-    
-            // Open a file in write-only mode, returns `io::Result<File>`
-            let mut file = File::create(path.as_ref())?;
-            file.write_all(self.to_string().as_bytes())?;
-    
-            Ok(())
-        }
-    
+        use std::fs::File;
+        use std::io::prelude::*;
 
-        fn to_string(&self) -> String {
-            PrintableListing::from(self).to_string()
-        }
+        // Open a file in write-only mode, returns `io::Result<File>`
+        let mut file = File::create(path.as_ref())?;
+        file.write_all(self.to_string().as_bytes())?;
 
-        fn to_enhanced_string(&self) -> String {
-            // TODO - allow assembling module to generate this listing by itself. This way no need to implement it properly a second time
+        Ok(())
+    }
 
-            let mut res = String::new();
-            let mut current_address: Option<u16> = None;
-    
-            let mut options = AssemblingOptions::default();
+    fn to_string(&self) -> String {
+        PrintableListing::from(self).to_string()
+    }
 
-            for instruction in self.listing() {
+    fn to_enhanced_string(&self) -> String {
+        // TODO - allow assembling module to generate this listing by itself. This way no need to implement it properly a second time
 
-                if let Token::Org(address, _) = instruction {
-                    current_address = Some(address.eval().unwrap() as u16);
+        let mut res = String::new();
+        let mut current_address: Option<u16> = None;
+
+        let mut options = AssemblingOptions::default();
+
+        for instruction in self.listing() {
+            if let Token::Org(address, _) = instruction {
+                current_address = Some(address.eval().unwrap() as u16);
+            }
+
+            match current_address.as_ref() {
+                Some(address) => {
+                    res += &format!("{:4x} ", address);
+                    options.symbols_mut().set_current_address(*address);
                 }
-
-                match current_address.as_ref() {
-                    Some(address) => {
-                        res+= &format!("{:4x} ", address);
-                        options.symbols_mut().set_current_address(*address);
-
-                    },
-                    None => {res+= "???? ";}
-                }
-
-                
-                let remaining = match instruction.to_bytes_with_options(&options) {
-                    Ok(bytes) => {
-                        for i in 0..4 {
-                            if bytes.len() > i {
-                                res += &format!("{:2X} ", bytes[i]);
-                            }
-                            else {
-                                res += "   ";
-                            }
-                        }
-
-                        res += "  ";
-                        for i in 0..4 {
-                            if bytes.len() > i {
-                                let mut c: char = bytes[i] as char; 
-                                if !c.is_ascii_graphic() {
-                                    c = '.';
-                                }
-                                res += &format!("{} ", 
-                                c);
-                            }
-                            else {
-                                res += " ";
-                            }
-                        }
-
-
-                        if current_address.is_some() {
-                            current_address = Some(bytes.len() as u16 + current_address.unwrap());
-                        }
-
-                        if bytes.len() > 4 {
-                            bytes[4..].to_vec()
-                        }
-                        else {
-                            Vec::new()
-                        }
-                    },
-                    Err(err) => {
-                        panic!("{:?} {:?} {:?}", instruction, err, options);
-                        // BUG need to better manage interpretation to never achieve such error
-                        res += "?? ?? ?? ?? ";
-                        current_address = None;
-                        Vec::new()
-                    }
-                };
-
-                if !instruction.is_label() {
-                    res += "\t";
-                }
-                res += &instruction.to_string();
-                res += "\n";
-
-
-                if !remaining.is_empty() {
-                    let mut idx = 0;
-                    while idx < remaining.len() {
-                        res += "     ";
-                        for i in 0..4 {
-                            if remaining.len() > (i+idx) {
-                                res += &format!("{:2X} ", remaining[i+idx]);
-                            }
-                            else {
-                                res += "   ";
-                            }
-                        }
-                        
-                        res += "  ";
-                        for i in 0..4 {
-                            if remaining.len() > (i+idx) {
-                                let mut c: char = remaining[i+idx] as char; 
-                                if !c.is_ascii_graphic() {
-                                    c = '.';
-                                }
-                                res += &format!("{} ", 
-                                c);
-                            }
-                            else {
-                                res += " ";
-                            }
-                        }
-
-
-
-                        res += "\n";
-                        idx += 4;
-                    }
+                None => {
+                    res += "???? ";
                 }
             }
-    
-            res
-    
-        }
 
-
-        /// Panic if Org is not one of the first instructions
-        fn inject_labels(&mut self, sorted_labels: &[(u16, &str)]) {
-            use cpclib_tokens::builder::label;
-            use cpclib_tokens::builder::equ;
-
-            let mut current_address: Option<u16> = None;
-            let mut current_idx = 0;
-            let mut nb_labels_added = 0;
-
-
-            while current_idx < self.len() && nb_labels_added < sorted_labels.len(){
-
-
-                let current_instruction = &self.listing()[current_idx];;
-
-                let next_address = if let Token::Org(address, _) = current_instruction {
-                    current_address = Some(address.eval().unwrap() as u16);
-                    current_address.clone()
-                }
-                else {
-                    let nb_bytes = current_instruction.number_of_bytes().unwrap();
-                    match current_address {
-                        Some(address) => Some(address + nb_bytes as u16),
-                        None => {
-                            if nb_bytes != 0 {
-                                panic!("Unable to run if assembling address is unknown")
-                            }
-                            else {
-                                None
-                            }
+            let remaining = match instruction.to_bytes_with_options(&options) {
+                Ok(bytes) => {
+                    for i in 0..4 {
+                        if bytes.len() > i {
+                            res += &format!("{:2X} ", bytes[i]);
+                        } else {
+                            res += "   ";
                         }
                     }
-                };
-            
 
+                    res += "  ";
+                    for i in 0..4 {
+                        if bytes.len() > i {
+                            let mut c: char = bytes[i] as char;
+                            if !c.is_ascii_graphic() {
+                                c = '.';
+                            }
+                            res += &format!("{} ", c);
+                        } else {
+                            res += " ";
+                        }
+                    }
+
+                    if current_address.is_some() {
+                        current_address = Some(bytes.len() as u16 + current_address.unwrap());
+                    }
+
+                    if bytes.len() > 4 {
+                        bytes[4..].to_vec()
+                    } else {
+                        Vec::new()
+                    }
+                }
+                Err(err) => {
+                    panic!("{:?} {:?} {:?}", instruction, err, options);
+                    // BUG need to better manage interpretation to never achieve such error
+                    res += "?? ?? ?? ?? ";
+                    current_address = None;
+                    Vec::new()
+                }
+            };
+
+            if !instruction.is_label() {
+                res += "\t";
+            }
+            res += &instruction.to_string();
+            res += "\n";
+
+            if !remaining.is_empty() {
+                let mut idx = 0;
+                while idx < remaining.len() {
+                    res += "     ";
+                    for i in 0..4 {
+                        if remaining.len() > (i + idx) {
+                            res += &format!("{:2X} ", remaining[i + idx]);
+                        } else {
+                            res += "   ";
+                        }
+                    }
+
+                    res += "  ";
+                    for i in 0..4 {
+                        if remaining.len() > (i + idx) {
+                            let mut c: char = remaining[i + idx] as char;
+                            if !c.is_ascii_graphic() {
+                                c = '.';
+                            }
+                            res += &format!("{} ", c);
+                        } else {
+                            res += " ";
+                        }
+                    }
+
+                    res += "\n";
+                    idx += 4;
+                }
+            }
+        }
+
+        res
+    }
+
+    /// Panic if Org is not one of the first instructions
+    fn inject_labels(&mut self, sorted_labels: &[(u16, &str)]) {
+        use cpclib_tokens::builder::equ;
+        use cpclib_tokens::builder::label;
+
+        let mut current_address: Option<u16> = None;
+        let mut current_idx = 0;
+        let mut nb_labels_added = 0;
+
+        while current_idx < self.len() && nb_labels_added < sorted_labels.len() {
+            let current_instruction = &self.listing()[current_idx];
+
+            let next_address = if let Token::Org(address, _) = current_instruction {
+                current_address = Some(address.eval().unwrap() as u16);
+                current_address.clone()
+            } else {
+                let nb_bytes = current_instruction.number_of_bytes().unwrap();
+                match current_address {
+                    Some(address) => Some(address + nb_bytes as u16),
+                    None => {
+                        if nb_bytes != 0 {
+                            panic!("Unable to run if assembling address is unknown")
+                        } else {
+                            None
+                        }
+                    }
+                }
+            };
 
             let (expected, new_label) = sorted_labels[nb_labels_added];
 
-
             match (current_address, next_address) {
-
                 (Some(current), Some(next)) => {
-
                     if current == expected {
-                        self.listing_mut().insert(
-                            current_idx, 
-                            label(new_label)
-                        );
+                        self.listing_mut().insert(current_idx, label(new_label));
                         nb_labels_added += 1;
-                    }
-                    else if current < expected && next > expected {
+                    } else if current < expected && next > expected {
                         self.listing_mut().insert(
                             current_idx,
-                            equ(new_label, expected) // TODO check if realtive address is better or not
+                            equ(new_label, expected), // TODO check if realtive address is better or not
                         );
-                        nb_labels_added += 1;  
-                    }
-                    else {
+                        nb_labels_added += 1;
+                    } else {
                         current_idx += 1;
                     }
                 }
@@ -304,15 +263,14 @@ impl ListingExt for Listing {
             current_address = next_address;
         }
 
-
         while nb_labels_added < sorted_labels.len() {
             panic!("{} remaining", sorted_labels.len() - nb_labels_added);
             self.listing_mut().insert(
                 0,
                 equ(
                     sorted_labels[nb_labels_added].1,
-                    sorted_labels[nb_labels_added].0
-                )
+                    sorted_labels[nb_labels_added].0,
+                ),
             );
             nb_labels_added += 1;
         }
@@ -343,16 +301,13 @@ impl<'a> fmt::Display for PrintableListing<'a> {
     }
 }
 
-
-
-
 /// Generate a listing from a string
 pub trait ListingFromStr {
-    fn from_str(s: &str) -> Result<Listing, AssemblerError> ;
+    fn from_str(s: &str) -> Result<Listing, AssemblerError>;
 }
 
 impl ListingFromStr for Listing {
     fn from_str(s: &str) -> Result<Listing, AssemblerError> {
         crate::parser::parse_str(s)
-    } 
+    }
 }

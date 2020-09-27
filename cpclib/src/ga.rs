@@ -34,7 +34,7 @@ const INK20: im::Rgba<u8> = im::Rgba([0x00, 0xFF, 0xFF, 255]);
 const INK21: im::Rgba<u8> = im::Rgba([0x80, 0xFF, 0x00, 255]);
 const INK22: im::Rgba<u8> = im::Rgba([0x80, 0xFF, 0x80, 255]);
 const INK23: im::Rgba<u8> = im::Rgba([0x80, 0xFF, 0xFF, 255]);
-const INK24: im::Rgba<u8> = im::Rgba ([0xFF, 0xFF, 0x00, 255]);
+const INK24: im::Rgba<u8> = im::Rgba([0xFF, 0xFF, 0x00, 255]);
 const INK25: im::Rgba<u8> = im::Rgba([0xFF, 0xFF, 0x80, 255]);
 const INK26: im::Rgba<u8> = im::Rgba([0xFF, 0xFF, 0xFF, 255]);
 
@@ -67,18 +67,18 @@ pub const INKS_GA_VALUE: [u8; 27] = [
     0x5e, //12
     0x40, //13
     0x5f, //14
-    0x4e,//15
-    0x47,//16
-     0x4f, //17
-     0x52, //18
-     0x42,//19
-      0x53,//20
-       0x5a, //21
-       0x59, //22
-       0x5b, //23
-       0x4a, //24
-       0x43, //25
-       0x4b,//26
+    0x4e, //15
+    0x47, //16
+    0x4f, //17
+    0x52, //18
+    0x42, //19
+    0x53, //20
+    0x5a, //21
+    0x59, //22
+    0x5b, //23
+    0x4a, //24
+    0x43, //25
+    0x4b, //26
 ];
 
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -96,7 +96,7 @@ pub enum InkComponentQuantity {
     /// 50%
     Half,
     /// 100%
-    Full
+    Full,
 }
 
 impl InkComponentQuantity {
@@ -105,51 +105,171 @@ impl InkComponentQuantity {
         match self {
             Self::Zero => Self::Zero,
             Self::Half => Self::Zero,
-            Self::Full => Self::Half
+            Self::Full => Self::Half,
         }
     }
 }
 
 /// Build an ink from its RGB components
-impl From<(InkComponentQuantity, InkComponentQuantity, InkComponentQuantity)> for Ink {
-    fn from(d: (InkComponentQuantity, InkComponentQuantity, InkComponentQuantity)) -> Self {
+impl
+    From<(
+        InkComponentQuantity,
+        InkComponentQuantity,
+        InkComponentQuantity,
+    )> for Ink
+{
+    fn from(
+        d: (
+            InkComponentQuantity,
+            InkComponentQuantity,
+            InkComponentQuantity,
+        ),
+    ) -> Self {
         let value = match d {
             //   R           G           B
-            (InkComponentQuantity::Zero, InkComponentQuantity::Zero, InkComponentQuantity::Zero) => 0,
-            (InkComponentQuantity::Zero, InkComponentQuantity::Zero, InkComponentQuantity::Half) => 1,
-            (InkComponentQuantity::Zero, InkComponentQuantity::Zero, InkComponentQuantity::Full) => 2,
+            (
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero,
+            ) => 0,
+            (
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Half,
+            ) => 1,
+            (
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Full,
+            ) => 2,
 
-            (InkComponentQuantity::Zero, InkComponentQuantity::Half, InkComponentQuantity::Zero) => 9,
-            (InkComponentQuantity::Zero, InkComponentQuantity::Half, InkComponentQuantity::Half) => 10,
-            (InkComponentQuantity::Zero, InkComponentQuantity::Half, InkComponentQuantity::Full) => 11,
+            (
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Zero,
+            ) => 9,
+            (
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Half,
+            ) => 10,
+            (
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Full,
+            ) => 11,
 
-            (InkComponentQuantity::Zero, InkComponentQuantity::Full, InkComponentQuantity::Zero) => 18,
-            (InkComponentQuantity::Zero, InkComponentQuantity::Full, InkComponentQuantity::Half) => 19,
-            (InkComponentQuantity::Zero, InkComponentQuantity::Full, InkComponentQuantity::Full) => 20,
+            (
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Zero,
+            ) => 18,
+            (
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Half,
+            ) => 19,
+            (
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Full,
+            ) => 20,
 
-            (InkComponentQuantity::Half, InkComponentQuantity::Zero, InkComponentQuantity::Zero) => 3,
-            (InkComponentQuantity::Half, InkComponentQuantity::Zero, InkComponentQuantity::Half) => 4,
-            (InkComponentQuantity::Half, InkComponentQuantity::Zero, InkComponentQuantity::Full) => 5,
+            (
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero,
+            ) => 3,
+            (
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Half,
+            ) => 4,
+            (
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Full,
+            ) => 5,
 
-            (InkComponentQuantity::Half, InkComponentQuantity::Half, InkComponentQuantity::Zero) => 12,
-            (InkComponentQuantity::Half, InkComponentQuantity::Half, InkComponentQuantity::Half) => 13,
-            (InkComponentQuantity::Half, InkComponentQuantity::Half, InkComponentQuantity::Full) => 14,
+            (
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Zero,
+            ) => 12,
+            (
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Half,
+            ) => 13,
+            (
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Full,
+            ) => 14,
 
-            (InkComponentQuantity::Half, InkComponentQuantity::Full, InkComponentQuantity::Zero) => 21,
-            (InkComponentQuantity::Half, InkComponentQuantity::Full, InkComponentQuantity::Half) => 22,
-            (InkComponentQuantity::Half, InkComponentQuantity::Full, InkComponentQuantity::Full) => 23,
+            (
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Zero,
+            ) => 21,
+            (
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Half,
+            ) => 22,
+            (
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Full,
+            ) => 23,
 
-            (InkComponentQuantity::Full, InkComponentQuantity::Zero, InkComponentQuantity::Zero) => 6,
-            (InkComponentQuantity::Full, InkComponentQuantity::Zero, InkComponentQuantity::Half) => 7,
-            (InkComponentQuantity::Full, InkComponentQuantity::Zero, InkComponentQuantity::Full) => 8,
+            (
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero,
+            ) => 6,
+            (
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Half,
+            ) => 7,
+            (
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Zero,
+                InkComponentQuantity::Full,
+            ) => 8,
 
-            (InkComponentQuantity::Full, InkComponentQuantity::Half, InkComponentQuantity::Zero) => 15,
-            (InkComponentQuantity::Full, InkComponentQuantity::Half, InkComponentQuantity::Half) => 16,
-            (InkComponentQuantity::Full, InkComponentQuantity::Half, InkComponentQuantity::Full) => 17,
+            (
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Zero,
+            ) => 15,
+            (
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Half,
+            ) => 16,
+            (
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Half,
+                InkComponentQuantity::Full,
+            ) => 17,
 
-            (InkComponentQuantity::Full, InkComponentQuantity::Full, InkComponentQuantity::Zero) => 24,
-            (InkComponentQuantity::Full, InkComponentQuantity::Full, InkComponentQuantity::Half) => 25,
-            (InkComponentQuantity::Full, InkComponentQuantity::Full, InkComponentQuantity::Full) => 26
+            (
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Zero,
+            ) => 24,
+            (
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Half,
+            ) => 25,
+            (
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Full,
+                InkComponentQuantity::Full,
+            ) => 26,
         };
         value.into()
     }
@@ -163,7 +283,7 @@ pub enum InkComponent {
     /// Green component
     Green,
     /// Blue component
-    Blue
+    Blue,
 }
 
 #[allow(missing_docs)]
@@ -175,12 +295,12 @@ impl Ink {
 
     /// Give the quantity of red for the given color
     /// http://cpc.sylvestre.org/technique/technique_coul1.html
-    pub fn red_quantity(&self) -> InkComponentQuantity { 
+    pub fn red_quantity(&self) -> InkComponentQuantity {
         match self.value {
-            0|1|2|9|10|11|18|19|20 => InkComponentQuantity::Zero,
-            3|4|5|12|13|14|21|22|23 => InkComponentQuantity::Half,
-            6|7|8|15|16|17|24|25|26 => InkComponentQuantity::Full,
-            _ => unreachable!()
+            0 | 1 | 2 | 9 | 10 | 11 | 18 | 19 | 20 => InkComponentQuantity::Zero,
+            3 | 4 | 5 | 12 | 13 | 14 | 21 | 22 | 23 => InkComponentQuantity::Half,
+            6 | 7 | 8 | 15 | 16 | 17 | 24 | 25 | 26 => InkComponentQuantity::Full,
+            _ => unreachable!(),
         }
     }
 
@@ -188,22 +308,21 @@ impl Ink {
     /// http://cpc.sylvestre.org/technique/technique_coul1.html
     pub fn blue_quantity(&self) -> InkComponentQuantity {
         match self.value {
-            0|3|6|9|12|15|18|21|24 => InkComponentQuantity::Zero,
-            1|4|7|10|13|16|19|22|25 => InkComponentQuantity::Half,
-            2|5|8|11|14|17|20|23|26 => InkComponentQuantity::Full,
-            _ => unreachable!()
+            0 | 3 | 6 | 9 | 12 | 15 | 18 | 21 | 24 => InkComponentQuantity::Zero,
+            1 | 4 | 7 | 10 | 13 | 16 | 19 | 22 | 25 => InkComponentQuantity::Half,
+            2 | 5 | 8 | 11 | 14 | 17 | 20 | 23 | 26 => InkComponentQuantity::Full,
+            _ => unreachable!(),
         }
     }
 
     /// Give the quantity of green for the given ink
     /// http://cpc.sylvestre.org/technique/technique_coul1.html
-    pub fn green_quantity(&self) ->  InkComponentQuantity {
+    pub fn green_quantity(&self) -> InkComponentQuantity {
         match self.value {
-            0|3|6|1|4|7|2|5|8 => InkComponentQuantity::Zero,
-            9|12|15|10|13|16|11|14|17 => InkComponentQuantity::Half,
-            18|21|24|19|22|25|20|23|26 => InkComponentQuantity::Full,
-            _ => unreachable!()
-
+            0 | 3 | 6 | 1 | 4 | 7 | 2 | 5 | 8 => InkComponentQuantity::Zero,
+            9 | 12 | 15 | 10 | 13 | 16 | 11 | 14 | 17 => InkComponentQuantity::Half,
+            18 | 21 | 24 | 19 | 22 | 25 | 20 | 23 | 26 => InkComponentQuantity::Full,
+            _ => unreachable!(),
         }
     }
 
@@ -212,14 +331,17 @@ impl Ink {
         match comp {
             InkComponent::Red => self.red_quantity(),
             InkComponent::Green => self.green_quantity(),
-            InkComponent::Blue => self.blue_quantity()
-
+            InkComponent::Blue => self.blue_quantity(),
         }
     }
 
     /// Decrease the component of interest
     pub fn decrease_component(&mut self, comp: InkComponent) {
-        let  (mut r, mut g, mut b) = (self.red_quantity(), self.green_quantity(), self.blue_quantity());
+        let (mut r, mut g, mut b) = (
+            self.red_quantity(),
+            self.green_quantity(),
+            self.blue_quantity(),
+        );
         match comp {
             InkComponent::Red => r = r.decrease(),
             InkComponent::Green => g = g.decrease(),
@@ -539,12 +661,12 @@ where
     }
 }
 
-impl<T> From<[T;16]> for Palette
+impl<T> From<[T; 16]> for Palette
 where
-    Ink:From<T>,
+    Ink: From<T>,
     T: Copy,
 {
-    fn from(items: [T;16]) -> Self {
+    fn from(items: [T; 16]) -> Self {
         items.to_vec().into()
     }
 }
@@ -593,15 +715,16 @@ impl<'de> Deserialize<'de> for Palette {
     }
 }
 
-
-impl<P> std::ops::Index<P> for Palette where P:Into<Pen>{
+impl<P> std::ops::Index<P> for Palette
+where
+    P: Into<Pen>,
+{
     type Output = Ink;
 
     fn index(&self, p: P) -> &Self::Output {
         self.get(&p.into())
     }
 }
-
 
 #[allow(missing_docs)]
 impl Palette {
@@ -765,32 +888,28 @@ impl Palette {
     pub fn decrease_component(&mut self, c: InkComponent) {
         self.values
             .iter_mut()
-            .for_each(|(_p,  i)| i.decrease_component(c));
+            .for_each(|(_p, i)| i.decrease_component(c));
     }
-    
-
 
     /// Generate the list of palette needed to obtain an RGB fadout.
     /// The current palette is included in the list of palette
     /// http://cpc.sylvestre.org/technique/technique_coul5.html
     pub fn rgb_fadout(&self) -> Vec<Palette> {
-
-
         // Check if we can still decrease the components
-        let is_finished =  |p: &Palette, c: InkComponent|{
+        let is_finished = |p: &Palette, c: InkComponent| {
             p.inks()
                 .iter()
                 .all(|ink| ink.component_quantity(c) == InkComponentQuantity::Zero)
         };
 
         // Decrease a given component
-        let decrease_component = |p:&Palette, c: InkComponent| {
+        let decrease_component = |p: &Palette, c: InkComponent| {
             let mut decreased_palettes = Vec::new();
 
-            loop  {
+            loop {
                 let current = match decreased_palettes.last() {
                     Some(palette) => palette,
-                    None => p
+                    None => p,
                 };
                 if is_finished(current, c) {
                     break;
@@ -809,7 +928,7 @@ impl Palette {
             println!("Decrease for {:?}", &component);
             let current = match palettes.last() {
                 Some(palette) => palette,
-                None => self
+                None => self,
             };
             let new_palettes = decrease_component(current, *component);
             palettes.extend_from_slice(&new_palettes);

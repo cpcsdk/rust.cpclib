@@ -11,12 +11,9 @@ use nom::multi::separated_nonempty_list;
 use nom::multi::*;
 use nom::sequence::*;
 
-
 #[allow(missing_docs)]
 use nom::*;
 use std::path::PathBuf;
-
-
 
 use crate::preamble::*;
 use cpclib_sna::parse::*;
@@ -45,7 +42,6 @@ pub struct ParserContext {
 
 #[allow(missing_docs)]
 impl ParserContext {
-
     /// Specify the path that contains the code
     pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
         let file = file.into();
@@ -54,7 +50,7 @@ impl ParserContext {
 
     /// Add a search path and ensure it is ABSOLUTE
     /// Method crashes if the search path does not exist
-    pub fn add_search_path<P: Into<PathBuf>>(&mut self, path: P)  -> Result<(), AssemblerError>  {
+    pub fn add_search_path<P: Into<PathBuf>>(&mut self, path: P) -> Result<(), AssemblerError> {
         let path = path.into();
 
         if std::path::Path::new(&path).is_dir() {
@@ -65,47 +61,44 @@ impl ParserContext {
             const prefix: &'static str = "\\\\?\\";
             let path = if path.starts_with(prefix) {
                 path[prefix.len()..].to_string()
-            }
-            else {
+            } else {
                 path.to_string()
             };
 
             // Really add
             self.search_path.push(path.into());
             Ok(())
-        }
-        else {
+        } else {
             Err(AssemblerError::IOError {
-                msg: format!("{} is not a path and cannot be added in the search path", path.to_str().unwrap().to_string())
+                msg: format!(
+                    "{} is not a path and cannot be added in the search path",
+                    path.to_str().unwrap().to_string()
+                ),
             })
         }
     }
 
     /// Add the folder that contains the given file. Ignore if there are issues with the filename
-    pub fn add_search_path_from_file<P: Into<PathBuf>>(&mut self, file: P) -> Result<(), AssemblerError> {
+    pub fn add_search_path_from_file<P: Into<PathBuf>>(
+        &mut self,
+        file: P,
+    ) -> Result<(), AssemblerError> {
         let file = file.into();
-        let path = file
-            .canonicalize();
+        let path = file.canonicalize();
 
         match path {
             Ok(path) => {
-                let path = path
-                    .parent()
-                    .unwrap()
-                    .to_owned();
+                let path = path.parent().unwrap().to_owned();
                 self.add_search_path(path)
-            },
-
-            Err(err) => {
-                Err( AssemblerError::IOError{
-                        msg: format!(
-                        "Unable to add search path for {}. {}", 
-                        file.to_str().unwrap().to_string(),  
-                        err.to_string())
-                    }
-                )
             }
 
+            Err(err) => Err(AssemblerError::IOError {
+                msg: format!(
+                    "Unable to add search path for {}. {}",
+                    file.to_str().unwrap().to_string(),
+                    err.to_string()
+                ),
+            }),
         }
     }
 
@@ -124,21 +117,19 @@ impl ParserContext {
         } else {
             // loop over all possibilities
             for search in &self.search_path {
-
                 assert!(std::path::Path::new(&search).is_dir());
                 let current_path = search.join(fname.clone());
 
                 if current_path.is_file() {
                     return Ok(current_path);
-                }
-                else {
+                } else {
                     does_not_exists.push(current_path.to_str().unwrap().to_owned())
                 }
             }
         }
 
         // No file found
-        return Err(does_not_exists)
+        return Err(does_not_exists);
     }
 }
 
@@ -278,17 +269,20 @@ pub fn parse_z80_line(input: &str) -> IResult<&str, Vec<Token>, VerboseError<&st
         context("not eof", not(eof)),
         alt((
             context("empty line", parse_empty_line),
-            context("macro only", delimited(
-                space1,
-                alt((
-                    context("repeat", map(parse_repeat, |repeat| vec![repeat])),
-                    context("macro", map(parse_macro, |m| vec![m])),
-                    context("basic", map(parse_basic, |basic| vec![basic])),
-                    context("rorg", map(parse_rorg, |rorg| vec![rorg])),
-                    context("condition", map(parse_conditional, |cond| vec![cond])),
-                )),
-                preceded(space0, alt((line_ending, eof, tag(":")))),
-            )),
+            context(
+                "macro only",
+                delimited(
+                    space1,
+                    alt((
+                        context("repeat", map(parse_repeat, |repeat| vec![repeat])),
+                        context("macro", map(parse_macro, |m| vec![m])),
+                        context("basic", map(parse_basic, |basic| vec![basic])),
+                        context("rorg", map(parse_rorg, |rorg| vec![rorg])),
+                        context("condition", map(parse_conditional, |cond| vec![cond])),
+                    )),
+                    preceded(space0, alt((line_ending, eof, tag(":")))),
+                ),
+            ),
             context("line with label only", parse_z80_line_label_only),
             context("standard line", parse_z80_line_complete),
         )),
@@ -337,7 +331,7 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         separated_nonempty_list(
             tuple((space0, parse_comma, space0)),
             /*parse_label(false)*/
-            take_till(|c| c == '\n' || c == ':' ||  c== ',' ),
+            take_till(|c| c == '\n' || c == ':' || c == ','),
         ),
     ))(input)?;
 
@@ -345,10 +339,9 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         "macro content",
         cut(preceded(
             space0,
-            many_till(take(1usize), alt((
-                tag_no_case("ENDM"),
-                tag_no_case("MEND")
-            ))
+            many_till(
+                take(1usize),
+                alt((tag_no_case("ENDM"), tag_no_case("MEND"))),
             ),
         )),
     )(input)?;
@@ -614,48 +607,46 @@ pub fn parse_incbin(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     ))
 }
 
-
 pub fn parse_save(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-
     let (input, filename) = preceded(tuple((tag_no_case("SAVE"), space1)), parse_fname)(input)?;
 
     let (input, address) = preceded(parse_comma, expr)(input)?;
     let (input, size) = preceded(parse_comma, expr)(input)?;
 
-    let (input, save_type) = opt(preceded(parse_comma, alt((
-        value(SaveType::Amsdos, tag_no_case("AMSDOS")),
-        value(SaveType::Dsk, tag_no_case("DSK"))
-    ))))(input)?;
+    let (input, save_type) = opt(preceded(
+        parse_comma,
+        alt((
+            value(SaveType::Amsdos, tag_no_case("AMSDOS")),
+            value(SaveType::Dsk, tag_no_case("DSK")),
+        )),
+    ))(input)?;
 
     let (input, dsk_filename) = if save_type.is_some() {
         opt(preceded(parse_comma, parse_fname))(input)?
-    }
-    else {
+    } else {
         (input, None)
     };
 
     let (input, side) = if dsk_filename.is_some() {
         opt(preceded(parse_comma, expr))(input)?
-    }
-    else {
+    } else {
         (input, None)
     };
 
     let filename = filename.to_string();
-    let dsk_filename = dsk_filename.map( |s| s.to_string());
+    let dsk_filename = dsk_filename.map(|s| s.to_string());
 
     Ok((
         input,
-        Token::Save{
+        Token::Save {
             filename,
             address,
             size,
             save_type,
             dsk_filename,
-            side
-        }
+            side,
+        },
     ))
-
 }
 
 /// Parse  UNDEF directive.
@@ -771,7 +762,6 @@ pub fn parse_directive(input: &str) -> IResult<&str, Token, VerboseError<&str>> 
         parse_save,
         parse_stable_ticker,
         parse_undef,
-
         parse_noarg_directive,
         parse_macro_call, // need to be the very last one as it eats everything else
     ))(input)
@@ -873,14 +863,11 @@ pub fn parse_breakpoint(input: &str) -> IResult<&str, Token, VerboseError<&str>>
     })(input)
 }
 
-
-
 pub fn parse_bankset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    let (input, _) = parse_instr("bankset")(input)?;   
+    let (input, _) = parse_instr("bankset")(input)?;
     let (input, count) = expr(input)?;
 
     Ok((input, Token::Bankset(count)))
-
 }
 
 pub fn parse_buildsna(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
@@ -913,7 +900,6 @@ pub fn parse_run(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
     Ok((input, Token::Run(exp, ga)))
 }
-
 
 /// Parse tickin directives
 pub fn parse_stable_ticker(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
@@ -950,23 +936,22 @@ pub fn parse_stable_ticker_stop(input: &str) -> IResult<&str, Token, VerboseErro
     )(input)
 }
 
-
 pub fn parse_bank(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    let (input, _) = parse_instr("bank")(input)?;   
+    let (input, _) = parse_instr("bank")(input)?;
     let (input, count) = expr(input)?;
 
     Ok((input, Token::Bankset(count)))
-
 }
-
-
 
 /// Parse fake and real LD instructions
 pub fn parse_ld(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    context("ld", alt((
-        context("fake ld", parse_ld_fake), 
-        context("normal ld", parse_ld_normal))
-    ))(input)
+    context(
+        "ld",
+        alt((
+            context("fake ld", parse_ld_fake),
+            context("normal ld", parse_ld_normal),
+        )),
+    )(input)
 }
 
 /// Parse artifical LD instruction (would be replaced by several real instructions)
@@ -974,12 +959,8 @@ pub fn parse_ld_fake(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tuple((tag_no_case("LD"), space1))(input)?;
 
     let (input, dst) = terminated(
-        parse_register16, 
-        not(alt((
-            tag_no_case(".low"), 
-            tag_no_case(".high")
-            ))
-        )
+        parse_register16,
+        not(alt((tag_no_case(".low"), tag_no_case(".high")))),
     )(input)?;
 
     let (input, _) = tuple((space0, tag(","), space0))(input)?;
@@ -993,26 +974,25 @@ pub fn parse_ld_fake(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 pub fn parse_ld_normal(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = context("...", tuple((space0, parse_instr("LD"), space0)))(input)?;
 
-    let (input, dst) = context("output", cut(alt((
-        parse_reg_address,
-        parse_indexregister_with_index,
-        parse_register_sp,
-        terminated(
-            parse_register16, 
-            not(alt((
-                tag_no_case(".low"), 
-                tag_no_case(".high")
-                ))
-            )
-        ),
-        parse_register8,
-        parse_indexregister16,
-        parse_indexregister8,
-        parse_register_i,
-        parse_register_r,
-        parse_hl_address,
-        parse_address,
-    ))))(input)?;
+    let (input, dst) = context(
+        "output",
+        cut(alt((
+            parse_reg_address,
+            parse_indexregister_with_index,
+            parse_register_sp,
+            terminated(
+                parse_register16,
+                not(alt((tag_no_case(".low"), tag_no_case(".high")))),
+            ),
+            parse_register8,
+            parse_indexregister16,
+            parse_indexregister8,
+            parse_register_i,
+            parse_register_r,
+            parse_hl_address,
+            parse_address,
+        ))),
+    )(input)?;
 
     let (input, _) = context("comma", cut(parse_comma))(input)?;
 
@@ -1181,20 +1161,23 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token, VerboseError<&str>>
     // BUG: added because of parsing issues. Need to find why and remove ot
     let (input, _) = space0(input)?;
     let (input, name) = parse_label(false)(input)?;
-    
+
     // Check if the macro name is allowed
     if FIRST_DIRECTIVE
-    .iter()
-    .chain(FINAL_DIRECTIVE.iter())
-    .find(|&&a| a.to_lowercase() == name.to_lowercase())
-    .is_some()
+        .iter()
+        .chain(FINAL_DIRECTIVE.iter())
+        .find(|&&a| a.to_lowercase() == name.to_lowercase())
+        .is_some()
     {
         Err(Err::Failure(
             nom::error::ParseError::<&str>::from_error_kind(input, ErrorKind::AlphaNumeric),
         ))
     } else {
         let (input, args) = alt((
-            value(Default::default(), delimited(space0, tag_no_case("(void)"), space0)),
+            value(
+                Default::default(),
+                delimited(space0, tag_no_case("(void)"), space0),
+            ),
             opt(alt((
                 /*expr_list,  */ // initially a list of expression was used; now it is just plain strings
                 separated_nonempty_list(
@@ -1204,27 +1187,22 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token, VerboseError<&str>>
                 map(tag_no_case("(void)"), |_| Vec::new()),
             ))),
         ))(input)?;
-        
+
         Ok((
             input,
             Token::MacroCall(
                 name,
                 args.unwrap_or_default()
-                .iter()
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>(),
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>(),
             ),
         ))
     }
 }
 
 fn parse_instr(name: &str) -> impl Fn(&str) -> IResult<&str, (), VerboseError<&str>> + '_ {
-    move |input: &str| map(
-        tuple((
-            tag_no_case(name), 
-            not(alpha1), 
-            space0)
-        ), |_| ())(input)
+    move |input: &str| map(tuple((tag_no_case(name), not(alpha1), space0)), |_| ())(input)
 }
 
 /// ...
@@ -1241,24 +1219,17 @@ pub fn expr_list(input: &str) -> IResult<&str, Vec<Expr>, VerboseError<&str>> {
 
 /// ...
 pub fn parse_assert(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    let (input, _) = context(
-        "assert", 
-        preceded(
-            space0,
-            parse_instr("ASSERT")
-        )
-    )(input)?;
-    
-    
-    let (input, expr) = context(
-        "expr",
-        expr
-    )(input)?;
+    let (input, _) = context("assert", preceded(space0, parse_instr("ASSERT")))(input)?;
 
-    let (input, comment) = context("assert comment", opt(preceded(
-        delimited(space0, tag(","), space0),
-        delimited(tag("\""), take_until("\""), tag("\"")),
-    )))(input)?;
+    let (input, expr) = context("expr", expr)(input)?;
+
+    let (input, comment) = context(
+        "assert comment",
+        opt(preceded(
+            delimited(space0, tag(","), space0),
+            delimited(tag("\""), take_until("\""), tag("\"")),
+        )),
+    )(input)?;
 
     Ok((input, Token::Assert(expr, comment.map(|s| s.to_string()))))
 }
@@ -1687,23 +1658,25 @@ pub fn parse_register16(input: &str) -> IResult<&str, DataAccess, VerboseError<&
 /// TODO rename to emphasize it is standard reigsters
 pub fn parse_register8(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
     alt((
-        map(tuple((
+        map(
+            tuple((
                 parse_register16,
-                preceded(tag("."), alt((
-                    value('L', tag_no_case("low")),
-                    value('H', tag_no_case("high"))
-                ))),
-                space0
+                preceded(
+                    tag("."),
+                    alt((
+                        value('L', tag_no_case("low")),
+                        value('H', tag_no_case("high")),
+                    )),
+                ),
+                space0,
             )),
             |(r16, code, _)| {
                 if code == 'L' {
                     r16.to_data_access_for_low_register().unwrap()
-                }
-                else {
+                } else {
                     r16.to_data_access_for_high_register().unwrap()
-
                 }
-            }
+            },
         ),
         parse_register_a,
         parse_register_b,
@@ -1926,11 +1899,7 @@ pub fn parse_org(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tuple((tag_no_case("ORG"), space1))(input)?;
 
     let (input, val1) = expr(input)?;
-    let (input, val2) = 
-        opt(preceded(
-            parse_comma,
-            expr
-        ))(input)?;
+    let (input, val2) = opt(preceded(parse_comma, expr))(input)?;
 
     Ok((input, Token::Org(val1, val2)))
 }
@@ -2165,7 +2134,7 @@ pub fn factor(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
     )(input)
 }
 
-pub fn parse_labelprefix(input: &str) -> IResult<&str, LabelPrefix>{
+pub fn parse_labelprefix(input: &str) -> IResult<&str, LabelPrefix> {
     alt((
         value(LabelPrefix::Pageset, tag_no_case("{pageset}")),
         value(LabelPrefix::Bank, tag_no_case("{bank}")),
@@ -2403,7 +2372,6 @@ pub fn decode_parsing_error(_orig: &str, _e: ::nom::Err<&str>) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
-    
 
     #[test]
     fn parse_test_cond() {
@@ -2508,13 +2476,7 @@ mod test {
 
     #[test]
     fn test_parse_prefix_label() {
-        assert_eq!(
-            parse_labelprefix("{bank}"),
-            Ok((
-                "",
-                LabelPrefix::Bank
-            ))
-        );
+        assert_eq!(parse_labelprefix("{bank}"), Ok(("", LabelPrefix::Bank)));
 
         assert_eq!(
             expr("{bank}label"),
@@ -2552,18 +2514,19 @@ mod test {
                 Token::Print(vec![
                     FormattedExpr::Raw(Expr::Label("VAR".to_string())),
                     FormattedExpr::Raw(Expr::Label("VAR".to_string()))
-                    ])
-            )
-            ),
+                ])
+            )),
             parse_print("PRINT VAR, VAR")
         );
 
         assert_eq!(
             Ok((
                 "",
-                Token::Print(vec![FormattedExpr::Formatted(ExprFormat::Hex(None), Expr::Label("VAR".to_string()))])
-            )
-            ),
+                Token::Print(vec![FormattedExpr::Formatted(
+                    ExprFormat::Hex(None),
+                    Expr::Label("VAR".to_string())
+                )])
+            )),
             parse_print("PRINT {hex}VAR")
         );
 
@@ -2706,32 +2669,40 @@ mod test {
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
     }
 
-
     #[test]
     fn test_parse_r16_to_r8() {
         let res = parse_z80_line(" ld a, hl.low");
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
-
         let res = parse_ld_normal("ld bc.low, a");
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
-        assert_eq!(res.unwrap(), ("", Token::OpCode(
-            Mnemonic::Ld, 
-            Some(Register8::C.into()),
-            Some(Register8::A.into()),
-        ))
+        assert_eq!(
+            res.unwrap(),
+            (
+                "",
+                Token::OpCode(
+                    Mnemonic::Ld,
+                    Some(Register8::C.into()),
+                    Some(Register8::A.into()),
+                )
+            )
         );
 
         let res = parse_z80_line(" ld bc.low, a");
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
-        assert_eq!(res.unwrap(), ("", vec![Token::OpCode(
-            Mnemonic::Ld, 
-            Some(Register8::C.into()),
-            Some(Register8::A.into()),
-        )])
+        assert_eq!(
+            res.unwrap(),
+            (
+                "",
+                vec![Token::OpCode(
+                    Mnemonic::Ld,
+                    Some(Register8::C.into()),
+                    Some(Register8::A.into()),
+                )]
+            )
         );
 
         let res = parse_z80_line("\t\tld  bc.low, a\n\t");
