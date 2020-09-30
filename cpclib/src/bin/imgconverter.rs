@@ -49,7 +49,15 @@ macro_rules! export_palette {
                 .short("p")
                 .takes_value(true)
                 .required(false)
-                .help("Name of the binary file that contains the palette"),
+                .help("Name of the binary file that contains the palette (Gate Array format)"),
+        )
+        .arg(
+            Arg::with_name("EXPORT_INKS")
+            .long("inks")
+            .short("i")
+            .takes_value(true)
+            .required(false)
+            .help("Name of the binary file that contains the ink numbers (usefull for system based color change)")
         )
     };
 }
@@ -62,6 +70,13 @@ macro_rules! do_export_palette {
                 File::create(palette_fname).expect("Unable to create the palette file");
             let p: Vec<u8> = $palette.into();
             file.write_all(&p).unwrap();
+        }
+
+        if let Some(palette_fname) = $arg.value_of("EXPORT_INKS")  {
+            let mut file =
+                File::create(palette_fname).expect("Unable to create the palette file");
+            let inks = $palette.inks().iter().map(|i| i.number()).collect::<Vec<_>>();
+            file.write_all(&inks).unwrap();
         }
     }
 }
