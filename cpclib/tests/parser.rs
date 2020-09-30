@@ -834,29 +834,29 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn fn_test_asm_prog1() {
-        let code = "  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let tokens = get_val(parse_z80_str(code));
+        let code = "  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n  jp $";
+        let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 6);
 
         let code = "\n\n  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let tokens = get_val(parse_z80_str(code));
+        let tokens = get_val(dbg!(parse_z80_code(code)));
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let tokens = get_val(parse_z80_str(code));
+        let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let tokens = get_val(parse_z80_str(code));
+        let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 6);
 
         let code =
             "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
-        let tokens = get_val(parse_z80_str(code));
+        let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \nlabel ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
-        let tokens = get_val(parse_z80_str(code));
+        let tokens = get_val(parse_z80_code(code));
         assert_eq!(tokens.len(), 7);
     }
 

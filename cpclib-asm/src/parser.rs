@@ -240,7 +240,7 @@ pub fn parse_z80_code(input: &str) -> IResult<&str, Listing, VerboseError<&str>>
 /// For an unknwon reason, the parse_z80_code function fails when there is no comment...
 /// // Mainly used for test
 /// This one is a workaround as still as the other is not fixed
-// RODO ASAP #[deprecated]
+#[deprecated]
 pub fn parse_z80_str(code: &str) -> IResult<&str, Listing, VerboseError<&str>> {
     let mut tokens = Vec::new();
     let mut rest = None;
