@@ -768,6 +768,7 @@ impl Palette {
         None
     }
 
+    /// Returns an array of gate array values
     pub fn to_gate_array(&self) -> [u8; NB_PENS as usize] {
         let mut res = [0; NB_PENS as usize];
         for pen in 0..NB_PENS {
@@ -776,6 +777,7 @@ impl Palette {
         res
     }
 
+ 
     /// Add the inks if not present in empty slots of the palette as soon as it is possible. Returns the number of inks added a,d the number of inks impossible to add because of the lack of space.
     pub fn add_novel_inks_except_in_border(&mut self, inks: &[Ink]) -> (usize, usize) {
         let counter_added = 0;
@@ -826,7 +828,10 @@ impl Palette {
 
     /// Get the ink of the requested pen. Pen MUST be present
     pub fn get(&self, pen: &Pen) -> &Ink {
-        self.values.get(pen).expect("Wrong pen")
+        match self.values.get(pen) {
+            Some(ink) => ink,
+            None => panic!("Wrong pen {:?}", pen)
+        }
     }
 
     // Get the ink of the border
