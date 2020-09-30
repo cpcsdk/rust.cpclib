@@ -410,7 +410,25 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
             }
             _ => unreachable! {},
         }
-    } else {
+    } 
+    else if let Some(sub_scr) = sub_scr {
+        let fname = dbg!(sub_scr.value_of("SCR").unwrap());
+
+        let scr = match &conversion {
+            Output::CPCMemoryStandard(memory, _) => memory,
+            _ => unreachable!(),
+        };
+
+        let scr = if sub_scr.is_present("COMPRESSED") {
+            ocp::compress(&scr)
+        } else {
+            scr.to_vec()
+        };
+
+        std::fs::write(fname, &scr)?;
+    }
+    
+    else {
         // Make the conversion before feeding sna or dsk
 
         /// TODO manage the presence/absence of file in the dsk, the choice of filename and so on
@@ -520,22 +538,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                     xfer.upload_and_run(tmp_file_name, None)
                         .expect("An error occured while transfering the snapshot");
                 }
-            } else if let Some(sub_scr) = sub_scr {
-                let fname = sub_scr.value_of("SCR").unwrap();
-
-                let scr = match &conversion {
-                    Output::CPCMemoryStandard(memory, _) => memory,
-                    _ => unreachable!(),
-                };
-
-                let scr = if sub_scr.is_present("COMPRESSED") {
-                    ocp::compress(&scr)
-                } else {
-                    scr.to_vec()
-                };
-
-                std::fs::write(fname, &scr)?;
-            }
+            } 
         }
     }
 
@@ -938,7 +941,8 @@ fn main() -> anyhow::Result<()> {
         std::process::exit(exitcode::USAGE);
     }
 
-    convert(&matches).expect("Unable to make the conversion");
+    convert(&matches)
+        .expect("Unable to make the conversion");
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
         if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
