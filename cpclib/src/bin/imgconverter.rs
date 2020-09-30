@@ -54,6 +54,18 @@ macro_rules! export_palette {
     };
 }
 
+
+macro_rules! do_export_palette {
+    ($arg: expr, $palette: ident) => {
+        if let Some(palette_fname) = $arg.value_of("EXPORT_PALETTE")  {
+            let mut file =
+                File::create(palette_fname).expect("Unable to create the palette file");
+            let p: Vec<u8> = $palette.into();
+            file.write_all(&p).unwrap();
+        }
+    }
+}
+
 /// Compress data using lz4 algorithm.
 /// Should be decompressed on client side.
 fn lz4_compress(bytes: &[u8]) -> Vec<u8> {
@@ -343,13 +355,8 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 palette,
             } => {
                 // Save the palette
-                if let Some(palette_fname) = sub_sprite.value_of("EXPORT_PALETTE") {
-                    println!("Write palette");
-                    let mut file =
-                        File::create(palette_fname).expect("Unable to create the palette file");
-                    let p: Vec<u8> = palette.into();
-                    file.write_all(&p).unwrap();
-                }
+                do_export_palette!(sub_sprite, palette);
+
 
                 // Save the binary data of the sprite
                 let sprite_fname = sub_sprite.value_of("SPRITE_FNAME").unwrap();
@@ -424,13 +431,9 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 };
         
                 std::fs::write(fname, &scr)?;
-        
-                    if let Some(palette_fname) = sub_scr.value_of("EXPORT_PALETTE")  {
-                        let mut file =
-                            File::create(palette_fname).expect("Unable to create the palette file");
-                        let p: Vec<u8> = palette.into();
-                        file.write_all(&p).unwrap();
-                    }
+
+                do_export_palette!(sub_scr, palette);
+
             },
             _ => unreachable!(),
         };
