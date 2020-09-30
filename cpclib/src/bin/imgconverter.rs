@@ -414,18 +414,29 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     else if let Some(sub_scr) = sub_scr {
         let fname = dbg!(sub_scr.value_of("SCR").unwrap());
 
-        let scr = match &conversion {
-            Output::CPCMemoryStandard(memory, _) => memory,
+         match &conversion {
+            Output::CPCMemoryStandard(scr, palette) => {
+
+                let scr = if sub_scr.is_present("COMPRESSED") {
+                    ocp::compress(&scr)
+                } else {
+                    scr.to_vec()
+                };
+        
+                std::fs::write(fname, &scr)?;
+        
+                    if let Some(palette_fname) = sub_scr.value_of("EXPORT_PALETTE")  {
+                        let mut file =
+                            File::create(palette_fname).expect("Unable to create the palette file");
+                        let p: Vec<u8> = palette.into();
+                        file.write_all(&p).unwrap();
+                    }
+            },
             _ => unreachable!(),
         };
 
-        let scr = if sub_scr.is_present("COMPRESSED") {
-            ocp::compress(&scr)
-        } else {
-            scr.to_vec()
-        };
 
-        std::fs::write(fname, &scr)?;
+
     }
     
     else {
