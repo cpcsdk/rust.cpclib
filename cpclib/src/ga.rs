@@ -9,6 +9,7 @@ use serde::{Deserializer, Serializer};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter, Result};
 use std::ops::Add;
+use itertools::Itertools;
 
 const INK0: im::Rgba<u8> = im::Rgba([0, 0, 0, 255]);
 const INK1: im::Rgba<u8> = im::Rgba([0x00, 0x00, 0x80, 255]);
@@ -802,13 +803,16 @@ impl Palette {
 
     /// Returns the list of inks contained in the palette with the border
     pub fn inks_with_border(&self) -> Vec<Ink> {
-        self.values.iter().map(|(_, i)| *i).collect::<Vec<Ink>>()
+        self.values.iter()
+        .sorted_by(|a, b|{ Ord::cmp(&a.0.number(), &b.0.number())})
+        .map(|(_, i)| *i).collect::<Vec<Ink>>()
     }
 
     /// Returns the list of inks contained in the palette without taking into account the border
     pub fn inks(&self) -> Vec<Ink> {
         self.values
             .iter()
+            .sorted_by(|a, b|{ Ord::cmp(&a.0.number(), &b.0.number())})
             .filter_map(|(&p, i)| if p.number() == 16 { None } else { Some(*i) })
             .collect::<Vec<Ink>>()
     }
@@ -822,6 +826,7 @@ impl Palette {
     pub fn pens(&self) -> Vec<Pen> {
         self.values
             .iter()
+            .sorted_by(|a, b|{ Ord::cmp(&a.0.number(), &b.0.number())})
             .filter_map(|(&p, _)| if p.number() == 16 { None } else { Some(p) })
             .collect::<Vec<Pen>>()
     }
