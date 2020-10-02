@@ -74,7 +74,7 @@ macro_rules! do_export_palette {
 
         if let Some(palette_fname) = $arg.value_of("EXPORT_INKS")  {
             let mut file =
-                File::create(palette_fname).expect("Unable to create the palette file");
+                File::create(palette_fname).expect("Unable to create the inks file");
             let inks = $palette.inks().iter().map(|i| i.number()).collect::<Vec<_>>();
             file.write_all(&inks).unwrap();
         }
