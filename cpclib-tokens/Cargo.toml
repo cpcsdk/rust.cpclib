@@ -1,7 +1,7 @@
 [package]
 
 name = "cpclib-tokens"
-version = "0.4.2-alpha"
+version = "0.4.3-alpha"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -9,7 +9,7 @@ description = "cpclib libraries related to assembly tokens. Only structures are 
 repository = "https://github.com/cpcsdk/rust.cpclib"
 
 [dependencies]
-cpclib-sna = "0.4.2-alpha"
+cpclib-sna = "0.4.3-alpha"
 
 
 bitsets = "0.1.1"
