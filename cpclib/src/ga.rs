@@ -802,19 +802,30 @@ impl Palette {
     }
 
     /// Returns the list of inks contained in the palette with the border
+    /// the number of inks corresponds to the number of available pens
     pub fn inks_with_border(&self) -> Vec<Ink> {
-        self.values.iter()
-        .sorted_by(|a, b|{ Ord::cmp(&a.0.number(), &b.0.number())})
-        .map(|(_, i)| *i).collect::<Vec<Ink>>()
+        let mut vec = Vec::with_capacity(17);
+        for pen in 0..17 {
+            let pen = Pen::from(pen);
+            if self.contains_pen(pen) {
+                vec.push(*self.get(&pen));
+            }
+        }
+        vec
     }
 
     /// Returns the list of inks contained in the palette without taking into account the border
+    /// the number of inks corresponds to the number of available pens
     pub fn inks(&self) -> Vec<Ink> {
-        self.values
-            .iter()
-            .sorted_by(|a, b|{ Ord::cmp(&a.0.number(), &b.0.number())})
-            .filter_map(|(&p, i)| if p.number() == 16 { None } else { Some(*i) })
-            .collect::<Vec<Ink>>()
+
+        let mut vec = Vec::with_capacity(16);
+        for pen in 0..16 {
+            let pen = Pen::from(pen);
+            if self.contains_pen(pen) {
+                vec.push(*self.get(&pen));
+            }
+        }
+        vec
     }
 
     /// Returns all the set pens (without the border)
