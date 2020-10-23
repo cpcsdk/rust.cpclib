@@ -1,4 +1,3 @@
-#![feature(vec_drain_as_slice)]
 
 use bitsets;
 
