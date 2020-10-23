@@ -10,6 +10,6 @@ CRATES= cpclib-sna \
 publish:
 	for project in $(CRATES) ; \
 	do cd $$project ; \
-	   cargo publish || exit -1; \
+	   cargo +nightly publish || exit -1; \
 	   cd ..; \
 	done
