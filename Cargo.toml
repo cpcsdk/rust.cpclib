@@ -8,7 +8,7 @@ members = [
     "cpclib-tokens",
     "cpclib-xfer",
     "cpclib-xfertool",
-    "cpclib-xferfs",
+  #  "cpclib-xferfs",
     "cpclib-z80emu",
     "cpclib"
 ]
@@ -24,7 +24,7 @@ cpclib-tokens = {path = "./cpclib-tokens/"}
 cpclib-xfer = {path = "./cpclib-xfer/"}
 cpclib-xfertool = {path = "./cpclib-xfertool/"}
 cpclib-z80emu = {path = "./cpclib-z80emu/"}
-cpclib-xferfs = {path = "./cpclib-xferfs/"}
+#cpclib-xferfs = {path = "./cpclib-xferfs/"}
 
 [profile.dev]
 opt-level = 0
