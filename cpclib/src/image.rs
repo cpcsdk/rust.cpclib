@@ -365,7 +365,7 @@ impl ColorMatrix {
 
     pub fn convert_from_fname(fname: &str, conversion: ConversionRule) -> anyhow::Result<Self> {
         let img = im::open(fname).with_context(|| format!("{} does not exists.", fname))?;
-        Ok(Self::convert(&img.to_rgb(), conversion))
+        Ok(Self::convert(&img.to_rgb8(), conversion))
     }
 
     pub fn convert(
@@ -974,7 +974,7 @@ impl Sprite {
         palette: Option<Palette>,
     ) -> Result<Self, im::ImageError> {
         let img = im::open(fname.as_ref())?;
-        Ok(Self::convert(&img.to_rgb(), mode, conversion, palette))
+        Ok(Self::convert(&img.to_rgb8(), mode, conversion, palette))
     }
 
     /// Apply a transformation function on each line
