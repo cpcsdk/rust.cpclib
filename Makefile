@@ -6,6 +6,7 @@ CRATES= cpclib-sna \
 		cpclib-xfertool\
 		cpclib-asm\
 		cpclib-z80emu\
+		cpclib-macros \
 		cpclib
 publish:
 	for project in $(CRATES) ; \
