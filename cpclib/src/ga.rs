@@ -749,6 +749,17 @@ impl Palette {
         }
     }
 
+    /// Returns true if all standard inks are different
+    pub fn nb_different_inks(&self) -> usize {
+        use std::collections::HashSet;
+        let mut set = HashSet::<Ink>::default();
+        for pen in 0..16 {
+            set.insert(*self.get(&pen.into()));
+        };
+        
+        set.len()
+    }
+
     /// Verifies if the palette contains the required pen
     pub fn contains_pen(&self, pen: Pen) -> bool {
         self.values.contains_key(&pen)

@@ -32,20 +32,42 @@ pub mod error_code {
 
 /// Context information that can guide the parser
 /// TODO add assembling flags
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct ParserContext {
     /// Filename that is currently parsed
     current_filename: Option<PathBuf>,
+    context_name: Option<String>,
     /// Search path to find files
     search_path: Vec<PathBuf>,
+    /// When activated, the parser also read and parse the include-like directives (deactivated by default)
+    read_referenced_files: bool,
 }
 
+
+impl Default for ParserContext {
+    fn default() -> Self {
+        ParserContext {
+            current_filename: None,
+            context_name: None,
+            search_path: Default::default(),
+            read_referenced_files: false
+        }
+    }
+}
 #[allow(missing_docs)]
 impl ParserContext {
     /// Specify the path that contains the code
     pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
         let file = file.into();
         self.current_filename = Some(file.canonicalize().unwrap_or(file))
+    }
+
+    pub fn set_context_name(&mut self, name: &str) {
+        self.context_name = Some(name.to_owned());
+    }
+
+    pub fn set_read_referenced_files(&mut self, tag: bool) {
+        self.read_referenced_files = true;
     }
 
     /// Add a search path and ensure it is ABSOLUTE
@@ -164,21 +186,23 @@ pub fn parse_str_with_context(code: &str, ctx: &ParserContext) -> Result<Listing
                     context: ctx.clone(),
                 })
             } else {
-                let errors = parsed.listing_mut()./*par_*/iter_mut()
-                .map(|token|
-                    token.read_referenced_file(ctx)
-                ).filter(
-                    Result::is_err
-                )
-                .map(
-                    Result::err
-                )
-                .map(
-                    Option::unwrap
-                )
-                .collect::<Vec<_>>();
-                if errors.len() > 0 {
-                    return Err(AssemblerError::MultipleErrors { errors });
+                if ctx.read_referenced_files {
+                    let errors = parsed.listing_mut()./*par_*/iter_mut()
+                    .map(|token|
+                        token.read_referenced_file(ctx)
+                    ).filter(
+                        Result::is_err
+                    )
+                    .map(
+                        Result::err
+                    )
+                    .map(
+                        Option::unwrap
+                    )
+                    .collect::<Vec<_>>();
+                    if errors.len() > 0 {
+                        return Err(AssemblerError::MultipleErrors { errors });
+                    }
                 }
 
                 Ok(parsed)

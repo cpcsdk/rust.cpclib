@@ -1,7 +1,7 @@
 [package]
 
 name = "cpclib-asm"
-version = "0.4.3-alpha"
+version = "0.4.4"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -12,10 +12,10 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 [dependencies]
 
 
-cpclib-basic = "0.4.3-alpha"
-cpclib-sna = "0.4.3-alpha"
-cpclib-tokens = "0.4.3-alpha"
-cpclib-disc = "0.4.3-alpha"
+cpclib-basic = "0.4.4"
+cpclib-sna = "0.4.4"
+cpclib-tokens = "0.4.4"
+cpclib-disc = "0.4.4"
 
 
 arrayref= "0.3.6"

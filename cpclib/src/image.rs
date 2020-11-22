@@ -948,8 +948,8 @@ impl Sprite {
     }
 
     /// Returns the line of interest
-    pub fn get_line(&self, y: usize) -> &Vec<u8> {
-        &self.data[y]
+    pub fn get_line(&self, y: usize) -> &[u8] {
+        self.data[y].as_ref()
     }
 
     /// Convert an RGB image to a sprite that code the pixels

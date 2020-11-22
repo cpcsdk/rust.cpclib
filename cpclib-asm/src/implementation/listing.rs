@@ -11,6 +11,8 @@ use crate::AssemblingOptions;
 
 /// Additional methods for the listings
 pub trait ListingExt {
+
+
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
         code: S,
@@ -41,6 +43,9 @@ pub trait ListingExt {
 }
 
 impl ListingExt for Listing {
+
+
+
     /// Add additional tokens, that need to be parsed from a string, to the listing
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
@@ -310,6 +315,8 @@ impl ListingFromStr for Listing {
     fn from_str(s: &str) -> Result<Listing, AssemblerError> {
         crate::parser::parse_str(s)
     }
+
+
 }
 
 
