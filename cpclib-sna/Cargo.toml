@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-sna"
-version = "0.4.3-alpha"
+version = "0.4.4"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
