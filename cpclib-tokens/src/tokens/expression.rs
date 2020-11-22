@@ -316,6 +316,15 @@ impl Display for Oper {
     }
 }
 
+impl Expr {
+    pub fn to_simplified_string(&self)  -> String {
+        let exp = self.to_string();
+        let exp = exp.trim();
+        let exp = exp.strip_prefix('(').unwrap_or_else(|| exp);
+        let exp = exp.strip_suffix(')').unwrap_or_else(|| exp);
+        exp.to_owned()
+    }
+}
 impl Display for Expr {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         use self::Expr::*;

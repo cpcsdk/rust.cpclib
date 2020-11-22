@@ -12,5 +12,6 @@ publish:
 	for project in $(CRATES) ; \
 	do cd $$project ; \
 	   cargo +nightly publish || exit -1; \
+	   sleep 10 ; \
 	   cd ..; \
 	done

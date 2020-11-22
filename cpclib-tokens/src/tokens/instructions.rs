@@ -404,7 +404,7 @@ impl fmt::Display for Token {
         let expr_list_to_string = |exprs: &Vec<Expr>| {
             exprs
                 .iter()
-                .map(|expr| format!("{}", expr))
+                .map(|expr| expr.to_simplified_string())
                 .collect::<Vec<_>>()
                 .join(",")
         };
@@ -420,18 +420,18 @@ impl fmt::Display for Token {
         match self {
 
             Token::Align(ref expr, None)
-                => write!(f, "ALIGN {}", expr),
+                => write!(f, "ALIGN {}", expr.to_simplified_string()),
             Token::Align(ref expr, Some(ref fill))
-                => write!(f, "ALIGN {}, {}", expr, fill),
+                => write!(f, "ALIGN {}, {}", expr.to_simplified_string(), fill),
             Token::Assert(ref expr, None)
-                => write!(f, "ASSERT {}", expr),
+                => write!(f, "ASSERT {}", expr.to_simplified_string()),
             Token::Assert(ref expr, Some(ref text))
-                => write!(f, "ASSERT {}, {}", expr, text),
+                => write!(f, "ASSERT {}, {}", expr.to_simplified_string(), text),
 
             Token::Breakpoint(None)
                 => write!(f, "BREAKPOINT"),
             Token::Breakpoint(Some(ref expr))
-                 => write!(f, "BREAKPOINT {}", expr),
+                 => write!(f, "BREAKPOINT {}", expr.to_simplified_string()),
 
             Token::Comment(ref string)
                  => write!(f, " ; {}", string.replace("\n","\n;")),
@@ -439,16 +439,16 @@ impl fmt::Display for Token {
                  Token::Defb(ref exprs)
                  => write!(f, "DB {}", expr_list_to_string(exprs)),
             Token::Defs(ref expr, None)
-                 => write!(f, "DEFS {}", expr),
+                 => write!(f, "DEFS {}", expr.to_simplified_string()),
             Token::Defs(ref expr, Some(ref expr2))
-                 => write!(f, "DEFS {}, {}", expr, expr2),
+                 => write!(f, "DEFS {}, {}", expr.to_simplified_string(), expr2.to_simplified_string()),
 
  
             Token::Defw(ref exprs)
                  => write!(f, "DW {}", expr_list_to_string(exprs)),
  
             Token::Equ(ref name, ref expr)
-                 => write!(f, "{} EQU {}", name, expr),
+                 => write!(f, "{} EQU {}", name, expr.to_simplified_string()),
 
             
 
