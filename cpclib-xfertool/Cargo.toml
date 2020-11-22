@@ -14,42 +14,42 @@ cpclib-sna = "0.4.3-alpha"
 cpclib-xfer = "0.4.3-alpha"
 
 
-anyhow = "1.0.32"
+anyhow = "1.0.34"
 arrayref= "0.3.6"
 bitfield = "0.13.2"
 bitflags = "1.2.1"
 bitsets = "0.1.1"
-cfg-if = "0.1.10"
+cfg-if = "1.0.0"
 custom_error = "1.8.0"
-delegate = "0.4.3"
+delegate = "0.5.0"
 either = "1.6.1"
 failure = "0.1.8"
 getset = "0.1.1"
 itertools= "0.9.0"
 lazy_static= "1.4.0"
 matches = "0.1.8"
-memchr = "2.3.3"
-nom = "5.1.2"
+memchr = "2.3.4"
+nom = "6.0.0"
 num_enum = "0.5.1"
-serde = { version = "1.0.116", features = ["derive"] }
-smallvec = "1.4.2"
+serde = { version = "1.0.117", features = ["derive"] }
+smallvec = "1.5.0"
 strsim = "0.10.0"
 tempfile= "3.1.0"
 
 path-absolutize = { version = "3.0.6", optional = false }
-curl = { version = "0.4.33", optional = false }
-reqwest = { version = "0.10.8", optional = false }
+curl = { version = "0.4.34", optional = false }
+reqwest = { version = "0.10.9", optional = false }
 
 
 clap = { version = "2.33.3", optional = false }
-time = { version = "0.2.22", optional = false }
+time = { version = "0.2.23", optional = false }
 
 rustyline = { version = "6.3.0", optional = false }
 rustyline-derive = { version = "0.3.1", optional = false }
 subprocess = { version = "0.2.6", optional = false }
-notify = { version = "5.0.0-pre.3", optional = false }
-crossbeam-channel = { version = "0.4.4", optional = false }
-hotwatch = { version = "0.4.3", optional = false }
+notify = { version = "5.0.0-pre.4", optional = false }
+crossbeam-channel = { version = "0.5.0", optional = false }
+hotwatch = { version = "0.4.4", optional = false }
 
 
 term_grid = { version = "0.2.0", optional = false }

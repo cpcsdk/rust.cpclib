@@ -185,7 +185,7 @@ impl MyToTokens for Token {
                 three_params("Repeat", exp, lst, lab, tokens);
             }
 
-            _ => unimplemented!("{:?}", self),
+            _ => unimplemented!("impl MyToTokens for Token {{ fn to_tokens ...}} {:?}", self),
         }
     }
 }
@@ -264,6 +264,13 @@ impl MyToTokens for DataAccess {
                 let mut inside = TokenStream::new();
                 reg.to_tokens(&mut inside);
                 tokens.append(Group::new(Delimiter::Parenthesis, inside));
+            }
+
+            DataAccess::MemoryRegister16(reg) => {
+                tokens.append(Ident::new("MemoryRegister16", Span::call_site()));
+                let mut inside = TokenStream::new();
+                reg.to_tokens(&mut inside);
+                tokens.append(Group::new(Delimiter::Parenthesis, inside))
             }
 
             _ => unimplemented!("DataAccess::{:?}", self),

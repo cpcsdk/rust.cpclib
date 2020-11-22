@@ -7,7 +7,7 @@ use nom::bytes::complete::*;
 use nom::character::complete::*;
 use nom::combinator::*;
 use nom::error::*;
-use nom::multi::separated_nonempty_list;
+use nom::multi::separated_list1;
 use nom::multi::*;
 use nom::sequence::*;
 
@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use crate::preamble::*;
 use cpclib_sna::parse::*;
 use cpclib_sna::SnapshotVersion;
-
+use nom::lib::std::convert::Into;
 use rayon::prelude::*;
 /// ...
 pub mod error_code {
@@ -247,6 +247,8 @@ pub fn parse_z80_str(code: &str) -> IResult<&str, Listing, VerboseError<&str>> {
     let src = "<str>";
 
     for (line_number, line) in code.split('\n').enumerate() {
+        if line.trim().len() == 0 {continue}
+
         let res = parse_z80_line(line);
         match res {
             Ok((res, local_tokens)) => {
@@ -328,7 +330,7 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     // macro arguments
     let (input, arguments) = opt(preceded(
         tuple((space0, parse_comma, space0)),
-        separated_nonempty_list(
+        separated_list1(
             tuple((space0, parse_comma, space0)),
             /*parse_label(false)*/
             take_till(|c| c == '\n' || c == ':' || c == ','),
@@ -407,7 +409,7 @@ pub fn parse_repeat(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 pub fn parse_basic(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tuple((space0, tag_no_case("LOCOMOTIVE"), space0))(input)?;
 
-    let (input, args) = opt(separated_nonempty_list(
+    let (input, args) = opt(separated_list1(
         preceded(space0, char(',')),
         preceded(space0, map(parse_label(false), |s| s.to_string())),
     ))(input)?;
@@ -427,7 +429,7 @@ pub fn parse_basic(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 /// Parse the instruction to hide basic lines
 pub fn parse_basic_hide_lines(input: &str) -> IResult<&str, Vec<u16>, VerboseError<&str>> {
     let (input, _) = tuple((tag_no_case("HIDE_LINES"), space1))(input)?;
-    separated_nonempty_list(preceded(space0, char(',')), preceded(space0, dec_number))(input)
+    separated_list1(preceded(space0, char(',')), preceded(space0, dec_number))(input)
 }
 
 /// TODO - currently consume several lines. Should do it only one time
@@ -1180,7 +1182,7 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token, VerboseError<&str>>
             ),
             opt(alt((
                 /*expr_list,  */ // initially a list of expression was used; now it is just plain strings
-                separated_nonempty_list(
+                separated_list1(
                     tuple((tag(","), space0)),
                     take_till(|c| c == ',' || c == '\n'),
                 ),
@@ -1214,7 +1216,7 @@ pub fn parse_djnz(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
 /// ...
 pub fn expr_list(input: &str) -> IResult<&str, Vec<Expr>, VerboseError<&str>> {
-    separated_nonempty_list(tuple((tag(","), space0)), alt((expr, string_expr)))(input)
+    separated_list1(tuple((tag(","), space0)), alt((expr, string_expr)))(input)
 }
 
 /// ...
@@ -1246,7 +1248,7 @@ pub fn parse_print(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(
         preceded(
             parse_instr("PRINT"),
-            cut(separated_nonempty_list(
+            cut(separated_list1(
                 delimited(space0, char(','), space0),
                 alt((
                     formatted_expr,
@@ -1442,7 +1444,7 @@ pub fn parse_push_n_pop(input: &str) -> IResult<&str, Token, VerboseError<&str>>
         value(Mnemonic::Pop, parse_instr("POP")),
     ))(input)?;
 
-    let (input, registers) = separated_nonempty_list(
+    let (input, registers) = separated_list1(
         parse_comma,
         alt((parse_register16, parse_indexregister16)),
     )(input)?;
@@ -1986,7 +1988,7 @@ fn parse_snaset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, flagname) = cut(parse_label(false))(input)?;
     let (input, _) = delimited(space0, parse_comma, space0)(input)?;
 
-    let (input, values) = cut(separated_nonempty_list(
+    let (input, values) = cut(separated_list1(
         delimited(space0, parse_comma, space0),
         parse_flag_value,
     ))(input)?;

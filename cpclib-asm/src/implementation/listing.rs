@@ -46,7 +46,7 @@ impl ListingExt for Listing {
         &mut self,
         code: S,
     ) -> Result<(), AssemblerError> {
-        parser::parse_z80_str(code.as_ref())
+        parser::parse_z80_str(code.as_ref().trim_end())
             .map_err(|e| AssemblerError::SyntaxError {
                 error: format!("{:?}", e),
             })
@@ -311,3 +311,5 @@ impl ListingFromStr for Listing {
         crate::parser::parse_str(s)
     }
 }
+
+
