@@ -12,6 +12,8 @@ use std::str::FromStr;
 
 use crate::flags::{FlagValue, SnapshotFlag};
 
+use separated_list1 as separated_nonempty_list;
+
 pub fn parse_flag(input: &str) -> IResult<&str, SnapshotFlag, VerboseError<&str>> {
     let (input, word) =
         is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:")(input)?;

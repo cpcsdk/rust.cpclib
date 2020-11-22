@@ -19,6 +19,7 @@ use std::io::Read;
 use std::path::Path;
 
 use std::str::FromStr;
+use nom::lib::std::convert::Into;
 
 const DATA_FORMAT_CFG: &str = "
 NbTrack = 40
@@ -372,7 +373,7 @@ fn number(input: &str) -> IResult<&str, u16> {
 }
 
 fn list_of_values(input: &str) -> IResult<&str, Vec<u16>> {
-    separated_list(tag(","), number)(input)
+    separated_list0(tag(","), number)(input)
 }
 
 fn from_hex(input: &str) -> Result<u16, std::num::ParseIntError> {

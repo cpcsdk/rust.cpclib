@@ -634,18 +634,17 @@ impl ColorMatrixList {
     /// Animations are stored within GIF files.
     /// TODO allow over kind of image data
     pub fn convert_from_fname(fname: &str, conversion: ConversionRule) -> anyhow::Result<Self> {
-        use gif::SetParameter;
         use std::fs::File;
 
         // Decode a gif into frames
-        let file_in = File::open(fname)?;
-        let mut decoder = gif::Decoder::new(file_in);
-        decoder.set(gif::ColorOutput::Indexed);
-        let mut reader = decoder.read_info()?;
-        let mut screen = gif_dispose::Screen::new_reader(&reader);
+        let input = File::open(fname)?;
+        let mut options = gif::DecodeOptions::new();
+        options.set_color_output(gif::ColorOutput::Indexed);
+        let mut decoder = options.read_info(input).unwrap();
+        let mut screen = gif_dispose::Screen::new_decoder(&decoder);
 
         let mut matrix_list = ColorMatrixList(Vec::new());
-        while let Some(frame) = reader.read_next_frame()? {
+        while let Some(frame) = decoder.read_next_frame()? {
             screen.blit_frame(&frame)?;
 
             let content = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::from_raw(

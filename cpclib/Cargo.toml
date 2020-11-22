@@ -23,32 +23,32 @@ cpclib-xfer = "0.4.3-alpha"
 cpclib-disc = "0.4.3-alpha"
 cpclib-macros = "0.4.3-alpha"
 
-anyhow = "1.0.32"
+anyhow = "1.0.34"
 arrayref= "0.3.6"
 as-slice = "0.1.4"
 bitfield = "0.13.2"
 bitflags = "1.2.1"
 bitsets = "0.1.1"
-cfg-if = "0.1.10"
+cfg-if = "1.0.0"
 custom_error = "1.8.0"
 dbg = "1.0.4"
-delegate = "0.4.3"
+delegate = "0.5.0"
 either = "1.6.1"
 failure = "0.1.8"
 getset = "0.1.1"
-gif = "0.10.3"
-gif-dispose = "2.4.1"
-image = "0.23.10"
+gif = "0.11.1"
+gif-dispose = "3.0.1"
+image = "0.23.12"
 itertools= "0.9.0"
 lazy_static= "1.4.0"
 matches = "0.1.8"
-memchr = "2.3.3"
-nom = "5.1.2"
+memchr = "2.3.4"
+nom = "6.0.0"
 num_enum = "0.5.1"
-num= "0.3.0"
-paste = "1.0.1"
-serde = { version = "1.0.116", features = ["derive"] }
-smallvec = "1.4.2"
+num= "0.3.1"
+paste = "1.0.3"
+serde = { version = "1.0.117", features = ["derive"] }
+smallvec = "1.5.0"
 strsim = "0.10.0"
 tempfile= "3.1.0"
 
@@ -57,19 +57,19 @@ tempfile= "3.1.0"
 semver = { version = "0.11.0", optional = true }
 
 path-absolutize = { version = "3.0.6", optional = true }
-curl = { version = "0.4.33", optional = true }
-reqwest = { version = "0.10.8", optional = true }
+curl = { version = "0.4.34", optional = true }
+reqwest = { version = "0.10.9", optional = true }
 
 clap = { version = "2.33.3", optional = true }
-time = { version = "0.2.22", optional = true }
+time = { version = "0.2.23", optional = true }
 exitcode = { version = "1.1.2", optional = true }
 
 lz4 = { version = "1.23.2", optional = true }
 
 
 
-notify = { version = "5.0.0-pre.3", optional = true }
-crossbeam-channel = { version = "0.4.4", optional = true }
+notify = { version = "5.0.0-pre.4", optional = true }
+crossbeam-channel = { version = "0.5.0", optional = true }
 
 log = { version = "0.4.11", optional = true }
 

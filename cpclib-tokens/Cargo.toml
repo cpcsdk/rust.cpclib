@@ -13,16 +13,16 @@ cpclib-sna = "0.4.3-alpha"
 
 
 bitsets = "0.1.1"
-cfg-if = "0.1.10"
-delegate = "0.4.3"
+cfg-if = "1.0.0"
+delegate = "0.5.0"
 either = "1.6.1"
 itertools= "0.9.0"
 matches = "0.1.8"
 num_enum = "0.5.1"
-paste = "1.0.1"
+paste = "1.0.3"
 remain = "0.2.2"
-serde = { version = "1.0.116", features = ["derive"] }
-smallvec = "1.4.2"
+serde = { version = "1.0.117", features = ["derive"] }
+smallvec = "1.5.0"
 strsim = "0.10.0"
 
 
