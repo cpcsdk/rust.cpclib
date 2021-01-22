@@ -450,6 +450,18 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 do_export_palette!(sub_scr, palette);
 
             },
+
+            Output::CPCMemoryOverscan(scr1, scr2, palette) => {
+                if sub_scr.is_present("COMPRESSED") {
+                    unimplemented!();
+                }
+
+                let mut buffer = File::create(fname)?;
+                buffer.write_all(scr1)?;
+                buffer.write_all(scr2)?;
+                do_export_palette!(sub_scr, palette);
+            },
+            
             _ => unreachable!(),
         };
 
@@ -682,6 +694,7 @@ fn main() -> anyhow::Result<()> {
                             .short("f")
                             .required(true)
                             .default_value("linear")
+                            .possible_values(&["linear", "graycoded", "zigzag+graycoded"])
                         )
                         .arg(
                             Arg::with_name("SPRITE_FNAME")
