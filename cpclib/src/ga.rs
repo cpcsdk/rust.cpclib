@@ -781,6 +781,8 @@ impl Palette {
     }
 
     /// Returns an array of gate array values
+    /// Crash when pen is not set up
+    /// TODO Return an option
     pub fn to_gate_array(&self) -> [u8; NB_PENS as usize] {
         let mut res = [0; NB_PENS as usize];
         for pen in 0..NB_PENS {
@@ -789,7 +791,18 @@ impl Palette {
         res
     }
 
- 
+    pub fn to_gate_array_with_default(&self, default: Ink) -> [u8; NB_PENS as usize] {
+        let mut res = [0; NB_PENS as usize];
+        for pen in 0..NB_PENS {
+            res[pen as usize] = self.get_with_default(&pen.into(), &default)
+                                    .gate_array();
+        }
+        res
+    }
+
+
+
+
     /// Add the inks if not present in empty slots of the palette as soon as it is possible. Returns the number of inks added a,d the number of inks impossible to add because of the lack of space.
     pub fn add_novel_inks_except_in_border(&mut self, inks: &[Ink]) -> (usize, usize) {
         let counter_added = 0;
@@ -858,6 +871,13 @@ impl Palette {
         match self.values.get(pen) {
             Some(ink) => ink,
             None => panic!("Wrong pen {:?}", pen)
+        }
+    }
+
+    pub fn get_with_default<'a>(&'a self, pen: &'a Pen, default: &'a Ink) -> &'a Ink {
+        match self.values.get(pen) {
+            Some(ink) => ink,
+            None =>  default
         }
     }
 

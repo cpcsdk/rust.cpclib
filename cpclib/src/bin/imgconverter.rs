@@ -59,6 +59,20 @@ macro_rules! export_palette {
             .required(false)
             .help("Name of the binary file that contains the ink numbers (usefull for system based color change)")
         )
+        .arg(
+            Arg::with_name("EXPORT_PALETTE_FADEOUT")
+                .long("palette_fadeout")
+                .takes_value(true)
+                .required(false)
+                .help("Name of the file that will contain all the steps for a fade out transition (Gate Array format)")
+        )
+        .arg(
+            Arg::with_name("EXPORT_INK_FADEOUT")
+                .long("ink_fadeout")
+                .takes_value(true)
+                .required(false)
+                .help("Name of the file that will contain all the steps for a fade out transition")
+        )
     };
 }
 
@@ -72,12 +86,46 @@ macro_rules! do_export_palette {
             file.write_all(&p).unwrap();
         }
 
+
+        if let Some(fade_fname) = $arg.value_of("EXPORT_PALETTE_FADEOUT") {
+            let palettes = $palette.rgb_fadout();
+            let bytes = palettes.iter()
+                                .fold(
+                                    Vec::<u8>::default(), 
+                                    |mut acc, x| {
+                                        acc.extend(&x.to_gate_array_with_default(0.into()));
+                                        acc
+                                    });
+            
+                assert_eq!(palettes.len()*17, bytes.len());
+                                    
+                let mut file =
+                File::create(fade_fname).expect("Unable to create the fade out file");
+            file.write_all(&bytes).unwrap();
+            }
+
+
         if let Some(palette_fname) = $arg.value_of("EXPORT_INKS")  {
             let mut file =
                 File::create(palette_fname).expect("Unable to create the inks file");
             let inks = $palette.inks().iter().map(|i| i.number()).collect::<Vec<_>>();
             file.write_all(&inks).unwrap();
         }
+
+        if let Some(fade_fname) = $arg.value_of("EXPORT_INK_FADEOUT") {
+            let palettes = $palette.rgb_fadout();
+            let bytes = palettes.iter()
+                                .map(|p| p.inks().iter().map(|i| i.number()).collect::<Vec<_>>())
+                                .fold(
+                                    Vec::default(), 
+                                    |mut acc, x| {
+                                        acc.extend(&x);
+                                        acc
+                                    });
+            let mut file =
+                File::create(fade_fname).expect("Unable to create the fade out file");
+            file.write_all(&bytes).unwrap();
+            }
     }
 }
 
