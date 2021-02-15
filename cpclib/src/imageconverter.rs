@@ -248,7 +248,7 @@ impl CPCScreenDimension {
     pub fn overscan() -> Self {
         Self {
             horizontal_displayed: 96 / 2,
-            vertical_displayed: 36,
+            vertical_displayed: 39, // it was 36 before? need to find why,
             maximum_raster_address: 7,
         }
     }
