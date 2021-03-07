@@ -29,7 +29,7 @@ impl From<u8> for Mode {
             1 => Mode::One,
             2 => Mode::Two,
             3 => Mode::Three,
-            _ => panic!(format!("{} is not a valid mode.", val)),
+            _ => panic!("{} is not a valid mode.", val),
         }
     }
 }
