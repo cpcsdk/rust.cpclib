@@ -8,7 +8,7 @@ use termize;
 use rustyline::completion::{extract_word, Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
 use rustyline::hint::{Hinter, HistoryHinter};
-use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyPress};
+use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyEvent};
 use rustyline_derive::{Helper, Highlighter, Hinter, Validator};
 
 use subprocess::Exec;
@@ -176,6 +176,9 @@ impl<'a> XferInteractorHelper<'a> {
 }
 
 impl<'a> Hinter for XferInteractorHelper<'a> {
+
+    type Hint = String;
+    
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
         self.hinter.hint(line, pos, ctx)
     }
