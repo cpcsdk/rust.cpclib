@@ -214,7 +214,7 @@ pub mod mode0 {
 
     /// Convert a couple of pen and pixel position to the corresponding byte value
     pub fn pen_to_pixel_byte(pen: Pen, pixel: PixelPosition) -> u8 {
-        assert!(pen.number() < 16, format!("{} >=16", pen.number()));
+        assert!(pen.number() < 16, "{} >=16", pen.number());
 
         let bits_position: [u8; 4] = {
             let mut pos = match pixel {
