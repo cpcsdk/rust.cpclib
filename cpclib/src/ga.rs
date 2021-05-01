@@ -977,7 +977,7 @@ impl Palette {
         // Progressively decrease the components
         let mut palettes = Vec::new();
         for component in [InkComponent::Green, InkComponent::Red, InkComponent::Blue].iter() {
-            println!("Decrease for {:?}", &component);
+          //  println!("Decrease for {:?}", &component);
             let current = match palettes.last() {
                 Some(palette) => palette,
                 None => self,
