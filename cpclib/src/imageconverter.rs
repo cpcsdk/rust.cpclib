@@ -1424,10 +1424,15 @@ impl<'a> ImageConverter<'a> {
             .collect::<Vec<_>>();
 
         if is_overscan && used_pages.len() != 2 {
+            /*
             return Err(anyhow::anyhow!(
                 "An overscan screen is requested but {} pages has been feed",
                 used_pages.len()
             ));
+            */
+
+            eprintln!("An overscan screen is requested but {} pages has been feed",
+            used_pages.len()); // TODO need to investigate
         }
 
         // Generate the right output format
