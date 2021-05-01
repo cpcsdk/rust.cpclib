@@ -18,7 +18,7 @@ bitfield = "0.13.2"
 bitflags = "1.2.1"
 bitsets = "0.1.1"
 cfg-if = "1.0.0"
-custom_error = "1.8.0"
+custom_error = "1.9.2"
 delegate = "0.5.1"
 either = "1.6.1"
 failure = "0.1.8"
@@ -29,13 +29,13 @@ matches = "0.1.8"
 memchr = "2.3.4"
 nom = "6.1.2"
 num_enum = "0.5.1"
-serde = { version = "1.0.124", features = ["derive"] }
+serde = { version = "1.0.125", features = ["derive"] }
 smallvec = "1.6.1"
 tempfile= "3.2.0"
 
-path-absolutize = { version = "3.0.6", optional = false }
-curl = { version = "0.4.34", optional = false }
-reqwest = { version = "0.11.1", features = ["blocking"] }
+path-absolutize = { version = "3.0.7", optional = false }
+curl = { version = "0.4.35", optional = false }
+reqwest = { version = "0.11.3", features = ["blocking"] }
 
 
 [build-dependencies]
