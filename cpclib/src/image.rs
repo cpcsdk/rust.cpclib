@@ -111,8 +111,6 @@ fn encode(pens: &[Vec<Pen>], mode: Mode) -> Vec<Vec<u8>> {
 fn merge_mode0_mode3(line1: &[u8], line2: &[u8]) -> Vec<u8> {
     assert_eq!(line1.len(), line2.len());
 
-    eprintln!("Line 1 {:?}", line1);
-    eprintln!("Line 2 {:?}", line2);
     line1
         .iter()
         .zip(line2.iter())
@@ -493,18 +491,18 @@ impl ColorMatrix {
             };
 
             // get the pens for the current line
-            let pens = self.get_line(y).iter().enumerate().map(|(x, ink)|-> Pen {
+            let pens = self.get_line(y).iter().enumerate().map(|(_x, ink)|-> Pen {
                 let pen = line_palette.get_pen_for_ink(*ink);
                 if let Some(pen) = pen {
                     pen
                 } else {
-                        eprintln!("
+                       /* eprintln!("
                             [ERROR] In line {}, pixel {} color ({:?}) is not in the palette {:?}. Background is used insted", 
                             y,
                             x,
                             ink,
                             line_palette
-                        );
+                        );*/
                         Pen::from(0)
                     } // If the color is not in the palette, use pen 0
             }).collect::<Vec<Pen>>();

@@ -32,7 +32,7 @@ use cpclib_xfer as xfer;
 
 /// Send and run the file on the CPC.
 /// Snapshot V3 are downgraded to the V2 version
-fn send_and_run_file(xfer: &xfer::CpcXfer, fname: &str) {
+fn send_and_run_file(xfer: &xfer::CpcXfer, fname: &str, run: bool) {
     let mut done = false;
     // Snapshot needs to be converted in V2 format and handled differently
     if let Some(extension) = std::path::Path::new(fname).extension() {
@@ -54,8 +54,14 @@ fn send_and_run_file(xfer: &xfer::CpcXfer, fname: &str) {
         }
     }
     if !done {
-        xfer.upload_and_run(fname, None)
-            .expect("Unable to launch file")
+        if run {
+            xfer.upload_and_run(fname, None)
+                .expect("Unable to launch file");
+        }
+        else {
+            xfer.upload(fname, "/", None)
+                .expect("Unable to put the file");
+        }
     };
 }
 
@@ -75,6 +81,28 @@ fn main() -> anyhow::Result<()> {
         .subcommand(
             clap::SubCommand::with_name("-s")
             .about("Reboot CPC.")
+        )
+        .subcommand(
+            clap::SubCommand::with_name("-p")
+            .about("Upload the given file in the current folder or the provided one")
+            .arg(
+                clap::Arg::with_name("fname")
+                .help("Filename to send to the CPC")
+                .validator(|fname| {
+                    if Path::new(&fname).exists() {
+                        Ok(())
+                    }
+                    else {
+                        Err(format!("{} does not exists", fname))
+                    }
+                })
+                .required(true)
+            )/* To implement when needed
+            .arg(
+                clap::with_name("destination")
+                .help("Destination folder.")
+                .required(false)
+            )*/
         )
         .subcommand(
             clap::SubCommand::with_name("-y")
@@ -150,11 +178,15 @@ fn main() -> anyhow::Result<()> {
         xfer.reset_m4()?;
     } else if matches.is_present("-s") {
         xfer.reset_cpc()?;
+    } else if let Some(p_opt) = matches.subcommand_matches("-p") {
+        let fname: String = p_opt.value_of("fname").unwrap().to_string();
+        send_and_run_file(&xfer, &fname, false);
+
     } else if let Some(y_opt) = matches.subcommand_matches("-y") {
         let fname: String = y_opt.value_of("fname").unwrap().to_string();
 
         // Simple file sending
-        send_and_run_file(&xfer, &fname);
+        send_and_run_file(&xfer, &fname, true);
 
         if y_opt.is_present("WATCH") {
             let (tx, rx) = std::sync::mpsc::channel();
@@ -172,7 +204,7 @@ fn main() -> anyhow::Result<()> {
                         kind: notify::event::EventKind::Create(_),
                         ..
                     }) => {
-                        send_and_run_file(&xfer, &fname);
+                        send_and_run_file(&xfer, &fname, true);
                     }
                     _ => {}
                 }

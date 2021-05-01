@@ -70,13 +70,33 @@ pub struct M4FilesList {
 }
 
 impl From<&str> for M4FilesList {
+// TODO Better test for catart
+
     fn from(buffer: &str) -> Self {
-        let mut iter = buffer.lines();
-        let mut path = iter.next().unwrap();
+
+        let mut lines = buffer.lines();
+        let mut path = lines.next().unwrap();
         if path == "//" {
             path = "/";
         }
-        let files = iter.map(|s| s.into()).collect::<Vec<M4File>>();
+
+        let mut lines = lines.map(String::from).collect::<Vec<String>>();
+        let mut idx = 0; 
+        while idx < lines.len() {
+            // check if current line is ok
+            if lines[idx].match_indices(';').count() >= 2 && lines[lines.len()-1] == "K" {
+                idx = idx +1; // we can assume it is a standard file even if it may not be one
+            }
+            else if lines[idx].ends_with(",0,0") {
+                // we can assume it is a directory
+                idx = idx +1;
+            } else {
+                // we can consider it is a mistake because of cat art
+                let new_string = format!("{}\n{}", lines[idx], lines[idx+1]);
+                lines[idx] = new_string;
+            }
+        }
+        let files = lines.iter().map(|s| s.as_str().into()).collect::<Vec<M4File>>();
         Self {
             cwd: path.into(),
             files,
