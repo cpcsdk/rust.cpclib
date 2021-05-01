@@ -6,7 +6,7 @@ use crate::preamble::*;
 
 /// TODO replace JR nn by JR $+nn in order to assemble even with current address is unknown
 
-const TABINSTRFDCB: [&'static str; 256] = [
+pub static TABINSTRFDCB: [&'static str; 256] = [
     "",
     "",
     "",
@@ -265,7 +265,7 @@ const TABINSTRFDCB: [&'static str; 256] = [
     "",
 ];
 
-const TABINSTRDDCB: [&'static str; 256] = [
+pub static TABINSTRDDCB: [&'static str; 256] = [
     "",
     "",
     "",
@@ -524,7 +524,7 @@ const TABINSTRDDCB: [&'static str; 256] = [
     "",
 ];
 
-const TABINSTRCB: [&'static str; 256] = [
+pub static TABINSTRCB: [&'static str; 256] = [
     "RLC B",
     "RLC C",
     "RLC D",
@@ -783,7 +783,7 @@ const TABINSTRCB: [&'static str; 256] = [
     "SET 7,A",
 ];
 
-const TABINSTRED: [&'static str; 256] = [
+pub static TABINSTRED: [&'static str; 256] = [
     "",
     "",
     "",
@@ -1042,7 +1042,7 @@ const TABINSTRED: [&'static str; 256] = [
     "",
 ];
 
-const TABINSTRDD: [&'static str; 256] = [
+pub static TABINSTRDD: [&'static str; 256] = [
     "",
     "",
     "",
@@ -1301,7 +1301,7 @@ const TABINSTRDD: [&'static str; 256] = [
     "",
 ];
 
-const TABINSTRFD: [&'static str; 256] = [
+pub static TABINSTRFD: [&'static str; 256] = [
     "",
     "",
     "",
@@ -1560,7 +1560,7 @@ const TABINSTRFD: [&'static str; 256] = [
     "",
 ];
 
-const TABINSTR: [&'static str; 256] = [
+pub static TABINSTR: [&'static str; 256] = [
     "NOP",
     "LD BC,nnnn",
     "LD (BC),A",
@@ -1883,7 +1883,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
 
 /// Manage the disassembling of the current instraction. However this instruction may need an argument.
 /// For this reason the byte stream is provided to collect this argument if needed
-fn disassemble_with_potential_argument<'stream>(
+pub fn disassemble_with_potential_argument<'stream>(
     opcode: u8,
     lut: &[&'static str; 256],
     bytes: &'stream [u8],
