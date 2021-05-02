@@ -15,6 +15,18 @@ pub mod mode1 {
         Fourth = 3,
     }
 
+    impl From<u8> for PixelPosition {
+        fn from(b: u8) -> Self {
+            match b {
+                0 => PixelPosition.First,
+                1 => PixelPosition.Second,
+                2 => PixelPosition.Third,
+                3 => PixelPosition.Fourth,
+                _ => unreachable!()
+            }
+        }
+    }
+
     /// Signification of the bits in the byte
     #[repr(u8)]
     #[derive(Copy, Clone, Debug)]
@@ -173,6 +185,16 @@ pub mod mode0 {
     pub enum PixelPosition {
         First = 0,
         Second = 1,
+    }
+
+    impl From<u8> for PixelPosition {
+        fn from(b: u8) -> Self {
+            match b {
+                0 => PixelPosition.First,
+                1 => PixelPosition.Second,
+                _ => unreachable!()
+            }
+        }
     }
 
     /// Signification of the bites in the byte
