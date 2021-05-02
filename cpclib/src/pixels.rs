@@ -18,10 +18,10 @@ pub mod mode1 {
     impl From<u8> for PixelPosition {
         fn from(b: u8) -> Self {
             match b {
-                0 => PixelPosition.First,
-                1 => PixelPosition.Second,
-                2 => PixelPosition.Third,
-                3 => PixelPosition.Fourth,
+                0 => PixelPosition::First,
+                1 => PixelPosition::Second,
+                2 => PixelPosition::Third,
+                3 => PixelPosition::Fourth,
                 _ => unreachable!()
             }
         }
@@ -190,8 +190,8 @@ pub mod mode0 {
     impl From<u8> for PixelPosition {
         fn from(b: u8) -> Self {
             match b {
-                0 => PixelPosition.First,
-                1 => PixelPosition.Second,
+                0 => PixelPosition::First,
+                1 => PixelPosition::Second,
                 _ => unreachable!()
             }
         }
