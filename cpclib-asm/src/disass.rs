@@ -6,7 +6,7 @@ use crate::preamble::*;
 
 /// TODO replace JR nn by JR $+nn in order to assemble even with current address is unknown
 
-const TABINSTRFDCB: [&'static str; 256] = [
+pub const TABINSTRFDCB: [&'static str; 256] = [
     "",
     "",
     "",
@@ -265,7 +265,7 @@ const TABINSTRFDCB: [&'static str; 256] = [
     "",
 ];
 
-const TABINSTRDDCB: [&'static str; 256] = [
+pub const TABINSTRDDCB: [&'static str; 256] = [
     "",
     "",
     "",
@@ -524,7 +524,7 @@ const TABINSTRDDCB: [&'static str; 256] = [
     "",
 ];
 
-const TABINSTRCB: [&'static str; 256] = [
+pub const TABINSTRCB: [&'static str; 256] = [
     "RLC B",
     "RLC C",
     "RLC D",
@@ -783,7 +783,7 @@ const TABINSTRCB: [&'static str; 256] = [
     "SET 7,A",
 ];
 
-const TABINSTRED: [&'static str; 256] = [
+pub const TABINSTRED: [&'static str; 256] = [
     "",
     "",
     "",
@@ -1042,7 +1042,7 @@ const TABINSTRED: [&'static str; 256] = [
     "",
 ];
 
-const TABINSTRDD: [&'static str; 256] = [
+pub const TABINSTRDD: [&'static str; 256] = [
     "",
     "",
     "",
@@ -1301,7 +1301,7 @@ const TABINSTRDD: [&'static str; 256] = [
     "",
 ];
 
-const TABINSTRFD: [&'static str; 256] = [
+pub const TABINSTRFD: [&'static str; 256] = [
     "",
     "",
     "",
@@ -1560,7 +1560,7 @@ const TABINSTRFD: [&'static str; 256] = [
     "",
 ];
 
-const TABINSTR: [&'static str; 256] = [
+pub const TABINSTR: [&'static str; 256] = [
     "NOP",
     "LD BC,nnnn",
     "LD (BC),A",
@@ -1883,7 +1883,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
 
 /// Manage the disassembling of the current instraction. However this instruction may need an argument.
 /// For this reason the byte stream is provided to collect this argument if needed
-fn disassemble_with_potential_argument<'stream>(
+pub fn disassemble_with_potential_argument<'stream>(
     opcode: u8,
     lut: &[&'static str; 256],
     bytes: &'stream [u8],
@@ -1916,7 +1916,7 @@ fn disassemble_with_potential_argument<'stream>(
 }
 
 /// The 8bits argument has already been read
-fn disassemble_with_one_argument(
+pub fn disassemble_with_one_argument(
     opcode: u8,
     argument: u8,
     lut: &[&'static str; 256],
@@ -1927,13 +1927,13 @@ fn disassemble_with_one_argument(
 }
 
 /// No argument is expected
-fn disassemble_without_argument(opcode: u8, lut: &[&'static str; 256]) -> Result<Token, String> {
+pub fn disassemble_without_argument(opcode: u8, lut: &[&'static str; 256]) -> Result<Token, String> {
     let representation: &'static str = lut[opcode as usize];
     string_to_token(&representation)
 }
 
 /// Thje method never fails now => it generate a db opcode
-fn string_to_token(representation: &str) -> Result<Token, String> {
+pub fn string_to_token(representation: &str) -> Result<Token, String> {
     if representation.len() == 0 {
         Err("Empty opcode".to_string())
     } else {
