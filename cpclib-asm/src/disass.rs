@@ -1916,7 +1916,7 @@ pub fn disassemble_with_potential_argument<'stream>(
 }
 
 /// The 8bits argument has already been read
-fn disassemble_with_one_argument(
+pub fn disassemble_with_one_argument(
     opcode: u8,
     argument: u8,
     lut: &[&'static str; 256],
@@ -1927,13 +1927,13 @@ fn disassemble_with_one_argument(
 }
 
 /// No argument is expected
-fn disassemble_without_argument(opcode: u8, lut: &[&'static str; 256]) -> Result<Token, String> {
+pub fn disassemble_without_argument(opcode: u8, lut: &[&'static str; 256]) -> Result<Token, String> {
     let representation: &'static str = lut[opcode as usize];
     string_to_token(&representation)
 }
 
 /// Thje method never fails now => it generate a db opcode
-fn string_to_token(representation: &str) -> Result<Token, String> {
+pub fn string_to_token(representation: &str) -> Result<Token, String> {
     if representation.len() == 0 {
         Err("Empty opcode".to_string())
     } else {
