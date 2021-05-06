@@ -42,6 +42,34 @@ pub mod mode1 {
         FirstBit0 = 7,
     }
 
+    /// Return the 4 pens encoded by this byte from left to right
+    pub fn byte_to_pens(b: u8) -> (Pen, Pen, Pen, Pen) {
+        let pen1 =  (BitMapping::FirstBit1, BitMapping::FirstBit0);
+        let pen2 =  (BitMapping::SecondBit1, BitMapping::SecondBit0);
+        let pen3 =  (BitMapping::ThirdBit1, BitMapping::ThirdBit0);
+        let pen4 =  (BitMapping::FourthBit1, BitMapping::FourthBit0);
+
+        let compute = |bits: (BitMapping, BitMapping) | -> Pen {
+            let mut value = 0;
+            if b & (1<<bits.0 as u8) != 0 {
+                value += 2;
+            }
+
+            if b & (1<<bits.1 as u8) != 0 {
+                value += 1;
+            }
+
+            value.into()
+        };
+
+        (
+            compute(pen1),
+            compute(pen2),
+            compute(pen3),
+            compute(pen4),
+        )
+    }
+
     /// Convert the pen value to its byte representation at the proper place
     pub fn pen_to_pixel_byte(pen: Pen, pixel: PixelPosition) -> u8 {
         let pen = if pen.number() > 3 {
