@@ -1,3 +1,31 @@
+
+/// Mode 2 specific pixels managment functions
+pub mod mode2 {
+    use crate::ga::Pen;
+
+    /// Returns the 8 pens for the given byte in mode 0
+    pub fn byte_to_pens(byte: u8)-> (Pen, Pen, Pen, Pen, Pen, Pen, Pen, Pen) {
+        let get_bit = |pos: u8|  {if byte & (1 << pos) != 0 {
+            Pen::from(1)
+        } else {
+            Pen::from(0)
+        }};
+
+        (
+            get_bit(7),
+            get_bit(6),
+            get_bit(5),
+            get_bit(4),
+            get_bit(3),
+            get_bit(2),
+            get_bit(1),
+            get_bit(0),
+        )
+    }
+
+
+}
+
 /// Manage all the stuff related to mode 1 pixels
 #[allow(clippy::identity_op)]
 pub mod mode1 {
@@ -481,5 +509,20 @@ mod tests {
         test_mode3(3.into(), 1.into(), 9.into());
         test_mode3(3.into(), 2.into(), 14.into());
         test_mode3(3.into(), 3.into(), 3.into());
+    }
+
+    #[test]
+    fn mode2() {
+        let res = mode2::byte_to_pens(0b11000100);
+        assert_eq!(res.0, Pen::from(1));
+        assert_eq!(res.1, Pen::from(1));
+        assert_eq!(res.2, Pen::from(0));
+        assert_eq!(res.3, Pen::from(0));
+        assert_eq!(res.4, Pen::from(0));
+        assert_eq!(res.5, Pen::from(1));
+        assert_eq!(res.6, Pen::from(0));
+        assert_eq!(res.7, Pen::from(0));
+
+
     }
 }
