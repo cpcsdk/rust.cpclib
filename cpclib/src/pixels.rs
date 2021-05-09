@@ -406,8 +406,8 @@ pub mod mode0 {
 #[cfg(test)]
 #[allow(clippy::pedantic)]
 mod tests {
+    use super::*;
     use crate::ga::Pen;
-    use crate::pixels::*;
 
     #[allow(clippy::similar_names)]
     fn test_couple(a: u8, b: u8) {
@@ -438,6 +438,30 @@ mod tests {
         // 1000000
         let res = crate::pixels::mode0::byte_to_pens(64);
         assert!(res.0.number() != res.1.number());
+
+        let res = crate::pixels::mode1::byte_to_pens(0b10001000);
+        assert_eq!(res.0, Pen::from(3));
+        assert_eq!(res.1, Pen::from(0));
+        assert_eq!(res.2, Pen::from(0));
+        assert_eq!(res.2, Pen::from(0));
+
+        let res = crate::pixels::mode1::byte_to_pens(0b01000100);
+        assert_eq!(res.0, Pen::from(0));
+        assert_eq!(res.1, Pen::from(3));
+        assert_eq!(res.2, Pen::from(0));
+        assert_eq!(res.2, Pen::from(0));
+
+        let res = crate::pixels::mode1::byte_to_pens(0b00100010);
+        assert_eq!(res.0, Pen::from(0));
+        assert_eq!(res.1, Pen::from(0));
+        assert_eq!(res.2, Pen::from(3));
+        assert_eq!(res.2, Pen::from(0));
+
+        let res = crate::pixels::mode1::byte_to_pens(0b00010001);
+        assert_eq!(res.0, Pen::from(0));
+        assert_eq!(res.1, Pen::from(0));
+        assert_eq!(res.2, Pen::from(0));
+        assert_eq!(res.2, Pen::from(3));
     }
 
     fn test_mode3(a: Pen, b: Pen, c: Pen) {
