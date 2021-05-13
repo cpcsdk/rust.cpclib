@@ -7,7 +7,7 @@ use syn::parse::Parser;
 use syn::{parse_macro_input, Result};
 mod tokens;
 
-/// Structure that contains the input f the macro.
+/// Structure that contains the input of the macro.
 /// Will be updated once we'll have additional parameters
 struct AssemblyMacroInput {
     /// Code provided by the user of the macro
@@ -28,10 +28,10 @@ impl Parse for AssemblyMacroInput {
             input.parse::<kw::fname>()?;
             input.parse::<syn::Token![:]>()?;
             let fname = (input.parse::<syn::LitStr>()?).value();
-            let content = std::fs::read_to_string(fname).or_else(|e| {
+            let content = std::fs::read_to_string(&fname).or_else(|e| {
                 Err(syn::Error::new(
                     proc_macro2::Span::call_site(),
-                    e.to_string(),
+                    format!("Unable to load {}.\n{}", fname, e.to_string()),
                 ))
             })?;
 
