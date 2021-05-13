@@ -599,6 +599,29 @@ impl Token {
         self.mnemonic().is_some()
     }
 
+    pub fn is_output_opcode(&self) -> bool {
+       match self {
+           Token::OpCode(Mnemonic::Out, _, _) |
+           Token::OpCode(Mnemonic::Outd, _, _) |
+           Token::OpCode(Mnemonic::Outi, _, _) |
+           Token::OpCode(Mnemonic::Otdr, _, _) |
+           Token::OpCode(Mnemonic::Otir, _, _) 
+           => true,
+           _ => false
+       }
+    }
+
+    pub fn is_input_opcode(&self) -> bool {
+        match self {
+            Token::OpCode(Mnemonic::In, _, _) |
+            Token::OpCode(Mnemonic::Ind, _, _) |
+            Token::OpCode(Mnemonic::Ini, _, _)|
+            Token::OpCode(Mnemonic::Indr, _, _) |
+            Token::OpCode(Mnemonic::Inir, _, _) => true,
+            _ => false
+        }
+     }
+
     pub fn label(&self) -> Option<&String> {
         match self {
             Token::Label(ref value) | Token::Equ(ref value, _) => Some(value),
