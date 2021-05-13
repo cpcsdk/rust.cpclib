@@ -31,6 +31,8 @@ pub enum DataAccess {
     SpecialRegisterR,
     /// Used for in/out instructions
     PortC,
+    /// Used for in/out instructions
+    PortN(Expr)
 }
 
 impl From<u8> for DataAccess {
@@ -105,6 +107,7 @@ impl fmt::Display for DataAccess {
             DataAccess::SpecialRegisterI => write!(f, "I"),
             DataAccess::SpecialRegisterR => write!(f, "R"),
             DataAccess::PortC => write!(f, "(C)"),
+            DataAccess::PortN(n) => write!(f, "({})", n),
         }
     }
 }
