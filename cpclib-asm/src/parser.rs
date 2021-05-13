@@ -1530,7 +1530,7 @@ pub fn parse_out(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = parse_instr("OUT")(input)?;
 
     // get the port proposal
-    let (input, port) = alt((parse_portc, parse_address))(input)?;
+    let (input, port) = alt((parse_portc, parse_portnn))(input)?;
 
     let (input, _) = parse_comma(input)?;
 
@@ -1556,10 +1556,10 @@ pub fn parse_in(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, destination) = cut(parse_register8)(input)?;
     let (input, _) = cut(parse_comma)(input)?;
     let (input, port) = cut(alt((
-        verify(parse_address, |_| {
+        parse_portc,
+        verify(parse_portnn, |_| {
             destination.get_register8().unwrap().is_a()
         }),
-        parse_portc,
     )))(input)?;
 
     Ok((
@@ -1867,6 +1867,14 @@ pub fn parse_portc(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>>
     value(
         DataAccess::PortC,
         tuple((tag("("), space0, parse_register_c, space0, tag(")"))),
+    )(input)
+}
+
+/// Parse (nn) used in in/out
+pub fn parse_portnn(input: &str) -> IResult<&str, DataAccess, VerboseError<&str>> {
+    map(
+        delimited(tag("("), expr, preceded(space0, tag(")"))),
+        |address| DataAccess::PortN(address),
     )(input)
 }
 

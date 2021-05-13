@@ -2146,7 +2146,7 @@ fn assemble_in(
             _ => panic!(),
         },
 
-        DataAccess::Memory(ref exp) => {
+        DataAccess::PortN(ref exp) => {
             if let DataAccess::Register8(Register8::A) = arg1 {
                 let val = (exp.resolve(sym)? & 0xff) as u8;
                 bytes.push(0xDB);
@@ -2154,7 +2154,7 @@ fn assemble_in(
             }
         }
 
-        _ => panic!(),
+        _ => panic!("{:?}", arg2),
     };
 
     if bytes.is_empty() {
@@ -2176,6 +2176,12 @@ fn assemble_out(
             if let DataAccess::Register8(ref reg) = arg2 {
                 bytes.push(0xED);
                 bytes.push(0b0100_0001 | (register8_to_code(*reg) << 3))
+            }
+
+            if let DataAccess::PortN(ref exp) = arg2 {
+                bytes.push(0xD3);
+                let val = (exp.resolve(sym)? & 0xff) as u8;
+                bytes.push(val)
             }
 
             if let DataAccess::Expression(Expr::Value(0)) = arg2 {
