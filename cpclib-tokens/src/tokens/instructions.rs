@@ -622,6 +622,15 @@ impl Token {
         }
      }
 
+    pub fn is_retlike_opcode(&self) -> bool {
+        match self {
+            Token::OpCode(Mnemonic::Ret, _, _) |
+            Token::OpCode(Mnemonic::Reti, _, _) |
+            Token::OpCode(Mnemonic::Retn, _, _)  => true,
+            _ => false
+        }
+    }
+
     pub fn label(&self) -> Option<&String> {
         match self {
             Token::Label(ref value) | Token::Equ(ref value, _) => Some(value),
