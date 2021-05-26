@@ -362,6 +362,40 @@ impl Ink {
     pub fn gate_array(self) -> u8 {
         INKS_GA_VALUE[self.value as usize]
     }
+
+
+    pub fn from_hardware_color_number(col: u8) -> Ink {
+        match col {
+            20 => 0,
+            4 => 1,
+            21 => 2,
+            28 => 3,
+            24 => 4,
+            29 => 5,
+            12 => 6,
+            5 => 7,
+            13 => 8,
+            22 => 9,
+            6 => 10,
+            23 => 11,
+            30 => 12,
+            0 => 13,
+            31 => 14,
+            14 => 15,
+            7 => 16,
+            15 => 17,
+            18 => 18,
+            2 => 19,
+            19 => 20,
+            26 => 21,
+            25 => 22,
+            27 => 23,
+            10 => 24,
+            3 => 25,
+            11 => 26,
+            _ => panic!("{} bad value", col)
+        }.into()
+    }
 }
 
 impl Into<u8> for Ink {

@@ -6,7 +6,7 @@ use crate::preamble::*;
 
 /// TODO replace JR nn by JR $+nn in order to assemble even with current address is unknown
 
-pub static TABINSTRFDCB: [&'static str; 256] = [
+pub const TABINSTRFDCB: [&'static str; 256] = [
     "",
     "",
     "",
@@ -265,7 +265,7 @@ pub static TABINSTRFDCB: [&'static str; 256] = [
     "",
 ];
 
-pub static TABINSTRDDCB: [&'static str; 256] = [
+pub const TABINSTRDDCB: [&'static str; 256] = [
     "",
     "",
     "",
@@ -524,7 +524,7 @@ pub static TABINSTRDDCB: [&'static str; 256] = [
     "",
 ];
 
-pub static TABINSTRCB: [&'static str; 256] = [
+pub const TABINSTRCB: [&'static str; 256] = [
     "RLC B",
     "RLC C",
     "RLC D",
@@ -783,7 +783,7 @@ pub static TABINSTRCB: [&'static str; 256] = [
     "SET 7,A",
 ];
 
-pub static TABINSTRED: [&'static str; 256] = [
+pub const TABINSTRED: [&'static str; 256] = [
     "",
     "",
     "",
@@ -1042,7 +1042,7 @@ pub static TABINSTRED: [&'static str; 256] = [
     "",
 ];
 
-pub static TABINSTRDD: [&'static str; 256] = [
+pub const TABINSTRDD: [&'static str; 256] = [
     "",
     "",
     "",
@@ -1301,7 +1301,7 @@ pub static TABINSTRDD: [&'static str; 256] = [
     "",
 ];
 
-pub static TABINSTRFD: [&'static str; 256] = [
+pub const TABINSTRFD: [&'static str; 256] = [
     "",
     "",
     "",
@@ -1560,7 +1560,7 @@ pub static TABINSTRFD: [&'static str; 256] = [
     "",
 ];
 
-pub static TABINSTR: [&'static str; 256] = [
+pub const TABINSTR: [&'static str; 256] = [
     "NOP",
     "LD BC,nnnn",
     "LD (BC),A",
