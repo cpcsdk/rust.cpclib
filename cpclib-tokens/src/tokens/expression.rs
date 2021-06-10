@@ -239,6 +239,13 @@ impl Expr {
         }
     }
 
+    pub fn relative_delta(&self) -> Option<i8> {
+        match self {
+            Expr::RelativeDelta(val) => Some(*val),
+            _ => None,
+        }
+    }
+
     pub fn neg(&self) -> Self {
         Expr::Neg(Box::new(self.clone()))
     }
