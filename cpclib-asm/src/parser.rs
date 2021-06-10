@@ -2152,9 +2152,7 @@ pub fn factor(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
                     parse_duration,
                     parse_assemble,
                     // manage values
-                    map(alt((hex_number, bin_u16, dec_number)), |d: u16| {
-                        Expr::Value(d as i32)
-                    }),
+                    alt((positive_number, negative_number)),
                     // manage $
                     map(tag("$"), |_x| Expr::Label(String::from("$"))),
                     prefixed_label_expr,
@@ -2166,6 +2164,28 @@ pub fn factor(input: &str) -> IResult<&str, Expr, VerboseError<&str>> {
             space0,
         ),
     )(input)
+}
+
+
+pub fn negative_number(input: &str) ->  IResult<&str, Expr, VerboseError<&str>> {
+    map(
+        preceded(
+            tag("-"),
+            positive_number
+        ),
+        |exp| {
+            match exp {
+                Expr::Value(v) =>  Expr::Value(-v),
+                _ => unreachable!()
+            }
+        }
+    )(input)
+}
+
+pub fn positive_number(input: &str) ->  IResult<&str, Expr, VerboseError<&str>> {
+    map(alt((hex_number, bin_u16, dec_number)), |d: u16| {
+        Expr::Value(d as i32)
+    })(input)
 }
 
 pub fn parse_labelprefix(input: &str) -> IResult<&str, LabelPrefix> {

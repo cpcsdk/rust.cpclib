@@ -2595,6 +2595,14 @@ mod test {
     use super::*;
 
     #[test]
+    pub fn test_inc_b() {
+        let mut env = Env::default();
+        let res = assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register8(Register8::B), &mut env).unwrap();
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0], 0x04);
+    }
+
+    #[test]
     pub fn test_pop() {
         let res = assemble_pop(&DataAccess::Register16(Register16::Af)).unwrap();
         assert_eq!(res.len(), 1);

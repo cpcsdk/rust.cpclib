@@ -23,7 +23,7 @@ pub enum DataAccess {
     Expression(Expr),
     /// Represents an address
     Memory(Expr),
-    /// Represnts the test of bit flag
+    /// Represnts the test of bit flag 
     FlagTest(FlagTest),
     /// Special register I
     SpecialRegisterI,

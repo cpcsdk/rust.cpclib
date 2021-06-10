@@ -39,4 +39,39 @@ fn test_regression1() {
 	assert!(res.is_ok());
 }		
 		
-		
+	
+#[test]
+fn expr_negative_regression() {
+	assert_eq!(
+		expr("18").unwrap().1,
+		Expr::Value(18)
+	);
+
+	assert_eq!(
+		expr("-18").unwrap().1,
+		Expr::Value(-18)
+	);
+}
+
+	
+#[test]
+fn db_negative_regression() {    
+
+	let code = "	db 18";
+	let listing  = parse_str(code).unwrap();
+	assert_eq!(listing.len(), 1);
+	assert_eq!(listing[0],
+		Token::Defb(vec![Expr::Value(18)])
+	);
+
+
+	let code = "	db -18";
+	let listing  = parse_str(code).unwrap();
+	assert_eq!(listing.len(), 1);
+	assert_eq!(listing[0],
+		Token::Defb(vec![Expr::Value(-18)])
+	);
+
+
+
+}
