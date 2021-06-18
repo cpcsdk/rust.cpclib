@@ -295,7 +295,7 @@ impl Ink {
     }
 
     /// Give the quantity of red for the given color
-    /// http://cpc.sylvestre.org/technique/technique_coul1.html
+    /// <http://cpc.sylvestre.org/technique/technique_coul1.html>
     pub fn red_quantity(&self) -> InkComponentQuantity {
         match self.value {
             0 | 1 | 2 | 9 | 10 | 11 | 18 | 19 | 20 => InkComponentQuantity::Zero,
@@ -306,7 +306,7 @@ impl Ink {
     }
 
     /// Give the quantit of blue for the given ink
-    /// http://cpc.sylvestre.org/technique/technique_coul1.html
+    /// <http://cpc.sylvestre.org/technique/technique_coul1.html>
     pub fn blue_quantity(&self) -> InkComponentQuantity {
         match self.value {
             0 | 3 | 6 | 9 | 12 | 15 | 18 | 21 | 24 => InkComponentQuantity::Zero,
@@ -317,7 +317,7 @@ impl Ink {
     }
 
     /// Give the quantity of green for the given ink
-    /// http://cpc.sylvestre.org/technique/technique_coul1.html
+    /// <http://cpc.sylvestre.org/technique/technique_coul1.html>
     pub fn green_quantity(&self) -> InkComponentQuantity {
         match self.value {
             0 | 3 | 6 | 1 | 4 | 7 | 2 | 5 | 8 => InkComponentQuantity::Zero,
@@ -979,7 +979,7 @@ impl Palette {
 
     /// Generate the list of palette needed to obtain an RGB fadout.
     /// The current palette is included in the list of palette
-    /// http://cpc.sylvestre.org/technique/technique_coul5.html
+    /// <http://cpc.sylvestre.org/technique/technique_coul5.html>
     pub fn rgb_fadout(&self) -> Vec<Palette> {
         // Check if we can still decrease the components
         let is_finished = |p: &Palette, c: InkComponent| {
