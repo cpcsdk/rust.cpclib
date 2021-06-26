@@ -353,7 +353,7 @@ pub fn parse_macro(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
     // macro arguments
     let (input, arguments) = opt(preceded(
-        tuple((space0, parse_comma, space0)),
+        tuple((space0, opt(parse_comma), space0)), // comma after macro name is not mandatory
         separated_list1(
             tuple((space0, parse_comma, space0)),
             /*parse_label(false)*/
