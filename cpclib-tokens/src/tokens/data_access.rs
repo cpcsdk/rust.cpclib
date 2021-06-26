@@ -112,6 +112,23 @@ impl fmt::Display for DataAccess {
     }
 }
 
+impl DataAccess {
+    /// Rename the local labels used in macros (with @)
+    pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+        match self {
+            Self::Expression(e) |
+            Self::IndexRegister16WithIndex(_, e) |
+            Self::Memory(e) |
+            Self::PortN(e) => {
+                e.fix_local_macro_labels_with_seed(seed);
+            },
+            _ => {
+                // nothing to do there
+            }
+        }
+    }
+}
+
 #[allow(missing_docs)]
 impl DataAccess {
     pub fn expr(&self) -> Option<&Expr> {

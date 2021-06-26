@@ -216,6 +216,9 @@ pub struct Env {
     /// Currently selected bank
     activepage: usize,
 
+    /// Counter for the unique labels within macros
+    macro_seed: usize,
+
     /// Memory configuration is controlled by the underlying snapshot.
     /// It will ease the generation of snapshots but may complexify the generation of files
     sna: cpclib_sna::Snapshot,
@@ -250,6 +253,7 @@ impl Default for Env {
             codeadr: 0,
             maxptr: 0xffff,
             activepage: 0,
+            macro_seed: 0,
 
             sna: Default::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
@@ -293,6 +297,7 @@ impl Env {
             self.codeadr = 0;
             self.maxptr = 0xffff;
             self.activepage = 0;
+            self.macro_seed = 0;
             self.sna = Default::default();
             self.sna_version = cpclib_sna::SnapshotVersion::V3;
             self.iorg = 0;
@@ -670,7 +675,9 @@ impl Env {
         let code = r#macro.develop(parameters);
 
         // Tokenize with the same assembling parameters and context
-        let listing = Listing::from_str(&code)?;
+        let mut listing = Listing::from_str(&code)?;
+        self.macro_seed += 1;
+        listing.fix_local_macro_labels_with_seed(self.macro_seed);
         self.visit_listing(&listing).or_else(|e| {
             Err(AssemblerError::MacroError {
                 name: name.to_owned(),
