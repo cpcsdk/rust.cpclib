@@ -680,6 +680,27 @@ impl Token {
         }
     }
 
+    pub fn macro_name(&self) -> Option<&str> {
+        match self {
+            Self::Macro(name, _args, _content) => Some(name),
+            _ => None
+        }
+    }
+    pub fn macro_arguments(&self) -> Option<&[String]> {
+        match self {
+            Self::Macro(_name, args, _content) => Some(args),
+            _ => None
+        }
+    }
+    pub fn macro_content(&self) -> Option<&str> {
+        match self {
+            Self::Macro(_name, _args,content) => Some(content),
+            _ => None
+        }
+    }
+
+
+
     #[deprecated(
         since = "0.1.1",
         note = "please use `expr` instead as other token need it"
