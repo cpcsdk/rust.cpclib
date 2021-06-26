@@ -37,7 +37,10 @@ impl Macro {
     pub fn develop(&self, args: &[String]) -> String {
         assert_eq!(args.len(), self.nb_args());
 
+
         let mut listing = self.code.to_string();
+
+        // replace the arguments for the listing
         for (argname, argvalue) in self.args.iter().zip(args.iter()) {
             listing = listing.replace(&format!("{{{}}}", argname), argvalue);
         }

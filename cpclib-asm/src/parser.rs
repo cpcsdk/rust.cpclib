@@ -2068,7 +2068,7 @@ pub fn parse_label(doubledots: bool) -> impl Fn(&str) -> IResult<&str, String, V
         // Get the label
 
         let (input, first) =
-            one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._")(input)?;
+            one_of("@abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._")(input)?;
         let (input, middle) =
             is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")(input)?;
 

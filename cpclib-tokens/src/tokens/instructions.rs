@@ -699,7 +699,99 @@ impl Token {
         }
     }
 
+    /// Rename the @labels in macros
+    pub fn  fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+        match self {
+            Self::Align(a, b) |  
+            Self::Defs(a, b) |
+            Self::Org(a, b) |
+            Self::Run(a, b) => {
+                a.fix_local_macro_labels_with_seed(seed);
+                b.as_mut().map(|b| b.fix_local_macro_labels_with_seed(seed));
+            },
 
+            Self::Protect(a, b) => {
+                a.fix_local_macro_labels_with_seed(seed);
+                b.fix_local_macro_labels_with_seed(seed);
+            }
+
+            Self::Assert(a, _) | 
+            Self::Bank(a) | 
+            Self::Bankset(a) |
+            Self::Breakpoint(Some(a)) | 
+            Self::Limit(a) |
+            Self::SetCPC(a) |
+            Self::SetCrtc(a)=> {
+                a.fix_local_macro_labels_with_seed(seed);
+            }
+
+            Self::Defb(v)| Self::Defw(v) => {
+                v.iter_mut()
+                    .for_each(|e| e.fix_local_macro_labels_with_seed(seed) );
+            }
+
+            Self::Equ(a, b) | Self::Let(a,b)=> {
+                Expr::do_apply_macro_labels_modification(a, seed);
+                b.fix_local_macro_labels_with_seed(seed);
+            },
+
+            Self::Save{address, size, side, ..} => {
+                address.fix_local_macro_labels_with_seed(seed);
+                size.fix_local_macro_labels_with_seed(seed);
+                side.as_mut().map(|s| s.fix_local_macro_labels_with_seed(seed));
+            }
+      
+            Self::Basic(_,_,_) | Self::Break | Self::BuildCpr | Self::BuildSna(_) | Self::Comment(_) | Self::CrunchedBinary(_, _) | Self::CrunchedSection(_,_) | Self::List | Self::MultiPop(_) |
+            Self::MultiPush(_) | Self::NoList  | Self::SnaSet(_,_) |
+            Self::StableTicker(_) | Self::Str(_) | Self::Struct(_, _)
+
+            
+            => {
+
+            }
+
+
+            Self::If(v, o) => {
+                v.iter_mut()
+                    .map(|(t,l)| l)
+                    .for_each(|l| l.fix_local_macro_labels_with_seed(seed));
+                o.as_mut().map(|l| l.fix_local_macro_labels_with_seed(seed)) ; 
+            }
+
+            Self::Label(s) => {
+                Expr::do_apply_macro_labels_modification(s, seed);
+            }
+
+            Self::MacroCall(_n, v) => {
+                v.iter_mut()
+                    .for_each(|s| Expr::do_apply_macro_labels_modification(s, seed));
+            }
+
+            Self::OpCode(_m, a, b) => {
+                a.as_mut().map(|d| d.fix_local_macro_labels_with_seed(seed));
+                b.as_mut().map(|d| d.fix_local_macro_labels_with_seed(seed));
+            }
+
+            Self::Repeat(e, l, _) | 
+            Self::RepeatUntil(e, l ) |
+            Self::Rorg(e, l) |
+            Self::While(e, l) =>
+            {
+                e.fix_local_macro_labels_with_seed(seed);
+                l.fix_local_macro_labels_with_seed(seed);
+            }
+
+            Self::Switch(l) => {
+                l.iter_mut()
+                .for_each(|(e,l)| {
+                    e.fix_local_macro_labels_with_seed(seed);
+                    l.fix_local_macro_labels_with_seed(seed);
+                });
+            }
+            _ => unimplemented!("{:?}", self)
+        }
+
+    }
 
     #[deprecated(
         since = "0.1.1",
