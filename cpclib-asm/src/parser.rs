@@ -1370,8 +1370,14 @@ pub fn parse_sub(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 pub fn parse_sbc(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = tag_no_case("SBC")(input)?;
     let (input, _) = space1(input)?;
-    let (input, opera) = alt((parse_register_a, parse_register_hl))(input)?;
-    let (input, _) = parse_comma(input)?;
+
+
+    let (input, opera) = opt(terminated(
+        alt((parse_register_a, parse_register_hl)),
+        parse_comma
+    ))(input)?;
+
+    let opera = opera.unwrap_or(DataAccess::Register8(Register8::A));
 
     let (input, operb) = if opera.is_register_a() {
         alt((
