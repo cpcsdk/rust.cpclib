@@ -897,7 +897,7 @@ pub const TABINSTRED: [&'static str; 256] = [
     "",
     "",
     "RLD",
-    "",
+    "IN 0, (C)",
     "OUT (C),0",
     "SBC HL,SP",
     "LD (nnnn),SP",
