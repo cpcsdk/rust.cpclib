@@ -1122,6 +1122,23 @@ pub fn parse_res_set_bit(input: &str) -> IResult<&str, Token, VerboseError<&str>
         parse_indexregister_with_index,
     ))(input)?;
 
+
+    // Bit and Res can copy the result in a reg
+    let (input, mut hidden_arg) = if res_or_set == Mnemonic::Bit {
+        (input, None)
+    }
+    else { opt(
+            preceded(
+                parse_comma,
+                parse_register8
+            )
+        )(input)?
+    };
+
+
+    assert!(hidden_arg.is_none(), "Need to implement this 3rd argument !");
+
+
     Ok((input, Token::OpCode(res_or_set, Some(bit), Some(operand))))
 }
 
@@ -1621,8 +1638,6 @@ pub fn parse_shifts_and_rotations(input: &str) -> IResult<&str, Token, VerboseEr
 
 
     // hidden opcodes
-    // TODO check if some of them do not take part of it
-   // RLC / RRC / RL / RR / SLA / SRA / Sl1 / SRL / BIT (but there is reg transfer i nfact, just duplicated instruction) / res / set
     let (input, arg2) = opt(
         preceded(
             parse_comma,
