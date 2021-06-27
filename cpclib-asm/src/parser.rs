@@ -1619,7 +1619,18 @@ pub fn parse_shifts_and_rotations(input: &str) -> IResult<&str, Token, VerboseEr
         parse_indexregister_with_index,
     ))(input)?;
 
-    Ok((input, Token::OpCode(oper, Some(arg), None)))
+
+    // hidden opcodes
+    // TODO check if some of them do not take part of it
+   // RLC / RRC / RL / RR / SLA / SRA / SLL / SRL / BIT (but there is reg transfer i nfact, just duplicated instruction) / res / set
+    let (input, arg2) = opt(
+        preceded(
+            parse_comma,
+            parse_register8
+        )
+    )(input)?;
+
+    Ok((input, Token::OpCode(oper, Some(arg), arg2)))
 }
 
 /// TODO reduce the flag space for jr"],
