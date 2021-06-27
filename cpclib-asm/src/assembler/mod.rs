@@ -1289,7 +1289,7 @@ pub fn assemble_opcode(
         Mnemonic::Sla
         | Mnemonic::Sra
         | Mnemonic::Srl
-        | Mnemonic::Sll
+        | Mnemonic::Sl1
         | Mnemonic::Rl
         | Mnemonic::Rr
         | Mnemonic::Rlc
@@ -1771,7 +1771,7 @@ impl Env {
                 0b0001_0000
             } else if mne.is_rr() {
                 0b0001_1000
-            } else if mne.is_sll() {
+            } else if mne.is_sl1() {
                 0b0011_0000
             } else {
                 unreachable!()
@@ -1818,7 +1818,7 @@ impl Env {
                 0x16
             } else if mne.is_rr() {
                 0x1e
-            } else if mne.is_sll() {
+            } else if mne.is_sl1() {
                 0x36
             } else {
                 unreachable!()

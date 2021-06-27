@@ -76,8 +76,8 @@ pub enum Mnemonic {
     Sbc,
     Scf,
     Set,
+    Sl1,
     Sla,
-    Sll,
     Sra,
     Srl,
     Sub,
@@ -153,8 +153,8 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Sbc => write!(f, "SBC"),
             Mnemonic::Scf => write!(f, "SCF"),
             Mnemonic::Set => write!(f, "SET"),
+            Mnemonic::Sl1 => write!(f, "SL1"),
             Mnemonic::Sla => write!(f, "SLA"),
-            Mnemonic::Sll => write!(f, "SLL"),
             Mnemonic::Sra => write!(f, "SRA"),
             Mnemonic::Srl => write!(f, "SRL"),
             Mnemonic::Sub => write!(f, "SUB"),
@@ -245,7 +245,7 @@ is_mnemonic!(
     Scf
     Set
     Sla
-    Sll
+    Sl1
     Sra
     Srl
     Sub

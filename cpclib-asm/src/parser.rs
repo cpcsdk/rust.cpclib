@@ -1610,7 +1610,7 @@ pub fn parse_shifts_and_rotations(input: &str) -> IResult<&str, Token, VerboseEr
         value(Mnemonic::Sla, parse_instr("SLA")),
         value(Mnemonic::Sra, parse_instr("SRA")),
         value(Mnemonic::Srl, parse_instr("SRL")),
-        value(Mnemonic::Sll, parse_instr("SLL")),
+        value(Mnemonic::Sl1, parse_instr("SL1")),
     ))(input)?;
 
     let (input, arg) = alt((
@@ -1622,7 +1622,7 @@ pub fn parse_shifts_and_rotations(input: &str) -> IResult<&str, Token, VerboseEr
 
     // hidden opcodes
     // TODO check if some of them do not take part of it
-   // RLC / RRC / RL / RR / SLA / SRA / SLL / SRL / BIT (but there is reg transfer i nfact, just duplicated instruction) / res / set
+   // RLC / RRC / RL / RR / SLA / SRA / Sl1 / SRL / BIT (but there is reg transfer i nfact, just duplicated instruction) / res / set
     let (input, arg2) = opt(
         preceded(
             parse_comma,
