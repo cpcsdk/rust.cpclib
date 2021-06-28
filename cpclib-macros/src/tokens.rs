@@ -158,7 +158,7 @@ impl MyToTokens for Token {
                 one_param("Label", arg, tokens);
             }
 
-            Self::OpCode(mnemo, arg1, arg2) => {
+            Self::OpCode(mnemo, arg1, arg2, arg3) => {
                 tokens.append(Ident::new("OpCode", Span::call_site()));
                 let mut inner_content = TokenStream::new();
 
@@ -169,6 +169,9 @@ impl MyToTokens for Token {
                 inner_content.append(Punct::new(',', Spacing::Joint));
 
                 arg2.to_tokens(&mut inner_content);
+                inner_content.append(Punct::new(',', Spacing::Joint));
+
+                arg3.to_tokens(&mut inner_content);
 
                 tokens.append(Group::new(Delimiter::Parenthesis, inner_content));
             }

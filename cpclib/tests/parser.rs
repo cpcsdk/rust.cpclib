@@ -13,7 +13,7 @@ mod tests {
             Err(e) => panic!("{:?}", e),
             Ok((_, opcode)) => {
                 let mut res = false;
-                if let Token::OpCode(expected, _, _) = opcode {
+                if let Token::OpCode(expected, _, _, _) = opcode {
                     res = expected == mnemonic
                 }
                 res
@@ -307,7 +307,7 @@ mod tests {
         let code = " jp nz, .other_lines + (9+4+1+2)     ; 4";
         let tokens = get_val(parse_z80_line(code));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0], Token::OpCode(Mnemonic::Jp, _, _));
+        assert_matches!(tokens[0], Token::OpCode(Mnemonic::Jp, _, _, _));
     }
 
     #[test]
@@ -331,6 +331,7 @@ mod tests {
                 Mnemonic::Ld,
                 Some(DataAccess::Register16(_)),
                 Some(DataAccess::Register16(_)),
+                None
             )
         );
     }
