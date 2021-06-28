@@ -13,8 +13,8 @@ impl Z80 {
             .set_symbol_to_value("$", self.pc().value() as i32);
 
         match opcode {
-            Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
-                self.execute_opcode(*mnemonic, arg1.as_ref(), arg2.as_ref())
+            Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
+                self.execute_opcode(*mnemonic, arg1.as_ref(), arg2.as_ref(), arg3.as_ref())
             }
 
             // Transform the raw data as real opcodes
@@ -37,8 +37,9 @@ impl Z80 {
         mnemonic: Mnemonic,
         arg1: Option<&DataAccess>,
         arg2: Option<&DataAccess>,
+        arg3: Option<&cpclib_asm::preamble::Register8>
     ) -> usize {
-        let opcode = Token::OpCode(mnemonic, arg1.cloned(), arg2.cloned());
+        let opcode = Token::OpCode(mnemonic, arg1.cloned(), arg2.cloned(), arg3.cloned());
         self.pc_mut().add(opcode.number_of_bytes().unwrap() as _);
 
         // this is the minimal duration; it can be updated depending on the instruction
@@ -432,7 +433,7 @@ mod test {
         z80.execute(&Token::OpCode(
             Mnemonic::Jp,
             None,
-            Some(DataAccess::Expression(Expr::Value(0x4000))),
+            Some(DataAccess::Expression(Expr::Value(0x4000))), None
         ));
 
         assert_eq!(z80.pc().value(), 0x4000);
@@ -452,7 +453,7 @@ mod test {
         z80.execute(&Token::OpCode(
             Mnemonic::Jp,
             None,
-            Some(DataAccess::Expression(Expr::Label("LABEL".to_owned()))),
+            Some(DataAccess::Expression(Expr::Label("LABEL".to_owned()))), None
         ));
 
         assert_eq!(z80.pc().value(), 0x4000);
@@ -468,7 +469,7 @@ mod test {
         z80.execute(&Token::OpCode(
             Mnemonic::Jp,
             None,
-            Some(DataAccess::Expression(Expr::Label("$".to_owned()))),
+            Some(DataAccess::Expression(Expr::Label("$".to_owned()))), None
         ));
 
         assert_eq!(z80.pc().value(), 0x4000);
@@ -484,7 +485,7 @@ mod test {
         z80.execute(&Token::OpCode(
             Mnemonic::Jr,
             None,
-            Some(DataAccess::Expression(Expr::Label("$".to_owned()))),
+            Some(DataAccess::Expression(Expr::Label("$".to_owned()))), None
         ));
 
         assert_eq!(z80.pc().value(), 0x4000);

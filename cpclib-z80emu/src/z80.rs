@@ -364,7 +364,9 @@ impl Z80 {
             Mnemonic::Ld,
             Some(DataAccess::Register8(to)),
             Some(DataAccess::Register8(from)),
+            None
         ));
+        
     }
 }
 
@@ -495,19 +497,19 @@ mod tests {
         let pop_bc = Token::OpCode(
             Mnemonic::Pop,
             Some(DataAccess::Register16(tokens::Register16::Bc)),
-            None,
+            None, None
         );
         let ld_l_a = Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(tokens::Register8::L)),
-            Some(DataAccess::Register8(tokens::Register8::A)),
+            Some(DataAccess::Register8(tokens::Register8::A)),None
         );
         let add_a_b = Token::OpCode(
             Mnemonic::Add,
             Some(DataAccess::Register8(tokens::Register8::A)),
-            Some(DataAccess::Register8(tokens::Register8::B)),
+            Some(DataAccess::Register8(tokens::Register8::B)),None
         );
-        let ldi = Token::OpCode(Mnemonic::Ldi, None, None);
+        let ldi = Token::OpCode(Mnemonic::Ldi, None, None,None);
 
         assert_eq!(z80.pc().value(), 0x4000);
 

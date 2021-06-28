@@ -1,4 +1,6 @@
-/// Z80 emulator
+///! Z80 emulator
+///! This should be deprecated in favor of a real emulator (WIP in another repo)
+
 pub mod emul;
 mod preamble;
 mod z80;

@@ -1,12 +1,14 @@
 use crate::preamble::*;
 
+use lazy_static;
+
 // Tables stolen from https://github.com/jeromelesaux/dsk/blob/master/desassembly.go
 // Note that these table do not all contain 256 values; I have added missing ones without checking if they are at the right place
 // replace eeee by nnnn
 
 /// TODO replace JR nn by JR $+nn in order to assemble even with current address is unknown
 
-pub const TABINSTRFDCB: [&'static str; 256] = [
+pub static TABINSTRFDCB: [&'static str; 256] = [
     "RLC (IY+nn), B",
     "RLC (IY+nn), C",
     "RLC (IY+nn), D",
@@ -265,7 +267,8 @@ pub const TABINSTRFDCB: [&'static str; 256] = [
     "SET 7,(IY+nn), A",
 ];
 
-pub const TABINSTRDDCB: [&'static str; 256] = [
+pub static TABINSTRDDCB: [&'static str; 256] = 
+[
     "RLC (IX+nn), B",
     "RLC (IX+nn), C",
     "RLC (IX+nn), D",
