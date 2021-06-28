@@ -18,7 +18,7 @@ fn test_macro_parse_z80_single_instruction() {
         Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(Register8::A)),
-            Some(DataAccess::Expression(0.into()))
+            Some(DataAccess::Expression(0.into())), None 
         )
     );
 
@@ -57,7 +57,7 @@ fn test_macro_parse_z80_several_instructions_a() {
         Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(Register8::A)),
-            Some(DataAccess::Expression(0.into()))
+            Some(DataAccess::Expression(0.into())), None 
         )
     );
     assert_eq!(
@@ -65,7 +65,7 @@ fn test_macro_parse_z80_several_instructions_a() {
         Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(Register8::A)),
-            Some(DataAccess::Expression(0.into()))
+            Some(DataAccess::Expression(0.into())), None 
         )
     );
 }
@@ -83,15 +83,14 @@ fn test_macro_parse_z80_several_instructions_b() {
         Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(Register8::A)),
-            Some(DataAccess::Expression(0.into()))
-        )
+            Some(DataAccess::Expression(0.into())), None        )
     );
     assert_eq!(
         listing[1],
         Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(Register8::A)),
-            Some(DataAccess::Expression(0.into()))
+            Some(DataAccess::Expression(0.into())), None 
         )
     );
 }
