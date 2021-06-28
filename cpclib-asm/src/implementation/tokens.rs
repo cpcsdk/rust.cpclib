@@ -291,6 +291,7 @@ impl TokenExt for Token {
     /// This estimation may be wrong for instruction having several states.
     #[allow(clippy::match_same_arms)]
     fn estimated_duration(&self) -> Result<usize, String> {
+        todo!("Reuse the code of emulator");
         let duration = match self {
             Token::Assert(_, _)
             | Token::Breakpoint(_)
@@ -304,7 +305,7 @@ impl TokenExt for Token {
                 .disassemble_data()
                 .and_then(|lst| lst.estimated_duration())?,
 
-            Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
+            Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
                 match mnemonic {
                     &Mnemonic::Add => match arg1 {
                         Some(DataAccess::Register8(_)) => match arg2 {
@@ -796,7 +797,8 @@ mod tests {
         assert!(!Token::OpCode(
             Mnemonic::Out,
             Some(DataAccess::Register8(Register8::C)),
-            Some(DataAccess::Register8(Register8::A))
+            Some(DataAccess::Register8(Register8::A)),
+            None
         )
         .is_valid());
     }

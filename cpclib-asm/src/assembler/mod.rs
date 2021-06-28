@@ -868,8 +868,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | &Token::Defw(_) => visit_db_or_dw(token, env),
         Token::Defs(_, _) => visit_defs(token, env),
-        Token::OpCode(ref mnemonic, ref arg1, ref arg2) => {
-            visit_opcode(*mnemonic, &arg1, &arg2, env)?;
+        Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
+            visit_opcode(*mnemonic, &arg1, &arg2, &arg3, env)?;
             // Compute duration only if it is necessary
             if !env.stable_counters.is_empty() {
                 let duration = token.estimated_duration()?;
@@ -1193,10 +1193,11 @@ pub(crate) fn visit_opcode(
     mnemonic: Mnemonic,
     arg1: &Option<DataAccess>,
     arg2: &Option<DataAccess>,
+    arg3: &Option<Register8>,
     env: &mut Env,
 ) -> Result<(), AssemblerError> {
     // TODO update $ in the symbol table
-    let bytes = assemble_opcode(mnemonic, arg1, arg2, env)?;
+    let bytes = assemble_opcode(mnemonic, arg1, arg2, arg3, env)?;
     for b in bytes.iter() {
         env.output(*b)?;
     }
@@ -1211,6 +1212,7 @@ pub fn assemble_opcode(
     mnemonic: Mnemonic,
     arg1: &Option<DataAccess>,
     arg2: &Option<DataAccess>,
+    arg3: &Option<Register8>,
     env: &mut Env,
 ) -> Result<Bytes, AssemblerError> {
     let sym = env.symbols_mut();
@@ -1787,6 +1789,7 @@ impl Env {
             // add prefix for ix/iy
             match target {
                 DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
+                    /// TODO manage assembling of hidden opcode with a 2nd argument
                     let val = self.resolve_expr_may_fail_in_first_pass(exp)? as u8;
                     bytes.push(indexed_register16_to_code(*reg));
                     add_byte(&mut bytes, 0xcb);
@@ -2720,7 +2723,7 @@ mod test {
             Token::Org(0.into(), None),
             Token::Repeat(
                 10.into(),
-                vec![Token::OpCode(Mnemonic::Nop, None, None)].into(),
+                vec![Token::OpCode(Mnemonic::Nop, None, None,None)].into(),
                 None,
             ),
         ];
@@ -2737,7 +2740,7 @@ mod test {
                 10.into(),
                 vec![Token::Repeat(
                     10.into(),
-                    vec![Token::OpCode(Mnemonic::Nop, None, None)].into(),
+                    vec![Token::OpCode(Mnemonic::Nop, None, None,None)].into(),
                     None,
                 )]
                 .into(),
@@ -2761,7 +2764,7 @@ mod test {
 
         for operator in &operators {
             for operand in &operands {
-                let token = Token::OpCode(*operator, Some(operand.clone()), None);
+                let token = Token::OpCode(*operator, Some(operand.clone()), None, None);
                 visit_tokens(&[token]).unwrap();
             }
         }
@@ -2771,16 +2774,16 @@ mod test {
     pub fn test_count() {
         let tokens = vec![
             Token::Org(0.into(), None),
-            Token::OpCode(Mnemonic::Nop, None, None),
-            Token::OpCode(Mnemonic::Nop, None, None),
-            Token::OpCode(Mnemonic::Nop, None, None),
-            Token::OpCode(Mnemonic::Nop, None, None),
-            Token::OpCode(Mnemonic::Nop, None, None),
-            Token::OpCode(Mnemonic::Nop, None, None),
-            Token::OpCode(Mnemonic::Nop, None, None),
-            Token::OpCode(Mnemonic::Nop, None, None),
-            Token::OpCode(Mnemonic::Nop, None, None),
-            Token::OpCode(Mnemonic::Nop, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None, None),
+            Token::OpCode(Mnemonic::Nop, None, None, None),
         ];
 
         let count = visit_tokens(&tokens).unwrap().size();
@@ -2795,6 +2798,7 @@ mod test {
                 Mnemonic::Inc,
                 Some(DataAccess::Register16(Register16::Hl)),
                 None,
+                None
             ),
             Token::StableTicker(StableTickerAction::Stop),
         ];
@@ -2855,9 +2859,9 @@ mod test {
                 Token::OpCode(
                     Mnemonic::Inc,
                     Some(DataAccess::Register16(Register16::Hl)),
-                    None,
+                    None, None
                 ),
-            )))),
+            )))),None
         )];
 
         let env = visit_tokens(&tokens);
@@ -2876,9 +2880,9 @@ mod test {
                 Token::OpCode(
                     Mnemonic::Inc,
                     Some(DataAccess::Register16(Register16::Hl)),
-                    None,
+                    None, None
                 ),
-            )))),
+            )))), None
         )];
 
         let env = visit_tokens(&tokens);
@@ -2949,6 +2953,7 @@ mod test {
                 Mnemonic::Ld,
                 Some(DataAccess::Register16(Register16::Hl)),
                 Some(DataAccess::Expression(Expr::Label("test".to_string()))),
+                None
             ),
             Token::Label("test".to_string()),
         ];

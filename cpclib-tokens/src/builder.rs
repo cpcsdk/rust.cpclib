@@ -84,8 +84,9 @@ pub fn call_expr<E: Into<Expr>>(expr: E) -> Token {
 /// Use this function to generate tokens having a mnemonic with a single expression argument
 /// TODO write a macro instead and automatically generate all the cases
 fn mnemonic_with_single_expr<E: Into<Expr>>(mne: Mnemonic, expr: E) -> Token {
-    Token::OpCode(mne, Some(expr.into().into()), None)
+    Token::OpCode(mne, Some(expr.into().into()), None, None)
 }
+
 
 #[allow(missing_docs)]
 pub fn out_c_b() -> Token {
@@ -171,7 +172,7 @@ pub fn push_ix() -> Token {
     Token::OpCode(
         Mnemonic::Push,
         Some(DataAccess::IndexRegister16(IndexRegister16::Ix)),
-        None,
+        None, None
     )
 }
 
@@ -180,7 +181,7 @@ pub fn push_iy() -> Token {
     Token::OpCode(
         Mnemonic::Push,
         Some(DataAccess::IndexRegister16(IndexRegister16::Iy)),
-        None,
+        None, None
     )
 }
 
@@ -189,7 +190,7 @@ pub fn pop_ix() -> Token {
     Token::OpCode(
         Mnemonic::Pop,
         Some(DataAccess::IndexRegister16(IndexRegister16::Ix)),
-        None,
+        None, None
     )
 }
 
@@ -198,13 +199,13 @@ pub fn pop_iy() -> Token {
     Token::OpCode(
         Mnemonic::Pop,
         Some(DataAccess::IndexRegister16(IndexRegister16::Iy)),
-        None,
+        None, None
     )
 }
 
 /// Ret token
 pub fn ret() -> Token {
-    Token::OpCode(Mnemonic::Ret, None, None)
+    Token::OpCode(Mnemonic::Ret, None, None, None)
 }
 
 #[allow(missing_docs)]
@@ -429,25 +430,25 @@ pub fn set_reg_pos(reg: Register8, bit: u8) -> Token {
 /// Build a token that represents a mnemonic without any argument
 #[allow(missing_docs)]
 pub fn token_for_opcode_no_arg(mne: Mnemonic) -> Token {
-    Token::OpCode(mne, None, None)
+    Token::OpCode(mne, None, None, None)
 }
 
 /// Build a token that represents a mnemonic with only one argument
 #[allow(missing_docs)]
 pub fn token_for_opcode_one_arg(mne: Mnemonic, data1: DataAccess) -> Token {
-    Token::OpCode(mne, Some(data1), None)
+    Token::OpCode(mne, Some(data1), None, None)
 }
 
 /// Build a token that represents a mnemonic with only one argument BUT positionned in the last position (for jp for example)
 #[allow(missing_docs)]
 pub fn token_for_opcode_latest_arg(mne: Mnemonic, data2: DataAccess) -> Token {
-    Token::OpCode(mne, None, Some(data2))
+    Token::OpCode(mne, None, Some(data2), None)
 }
 
 /// Build a token that represents a mnemonic with two arguments
 #[allow(missing_docs)]
 pub fn token_for_opcode_two_args(mne: Mnemonic, data1: DataAccess, data2: DataAccess) -> Token {
-    Token::OpCode(mne, Some(data1), Some(data2))
+    Token::OpCode(mne, Some(data1), Some(data2), None)
 }
 
 /// Code function that generate Listing instead of Tokens

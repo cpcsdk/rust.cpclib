@@ -2021,8 +2021,8 @@ mod test {
             );
 
             let mut env = Env::default();
-            if let Token::OpCode(ref mnemonic, ref arg1, ref arg2) = obtained.listing()[0] {
-                let obtained_bytes = assemble_opcode(*mnemonic, &arg1, &arg2, &mut env).unwrap();
+            if let Token::OpCode( mnemonic,  arg1,  arg2, arg3) = &obtained.listing()[0] {
+                let obtained_bytes = assemble_opcode(*mnemonic, arg1, arg2, arg3, &mut env).unwrap();
                 assert_eq!(&expected_bytes[..], &obtained_bytes[..]);
             } else {
                 println!("ERROR, this is not a Token {:?}", obtained);
@@ -2090,11 +2090,11 @@ mod test {
 
             // check if it is possible to assemble it
             let mut env = Env::default();
-            if let Token::OpCode(ref mnemonic, ref arg1, ref arg2) = obtained.listing()[0] {
+            if let Token::OpCode( mnemonic,  arg1,  arg2,  arg3) = &obtained.listing()[0] {
                 // relative addresses are not properly managed
                 if !(mnemonic.is_djnz() || mnemonic.is_jr()) {
                     let obtained_bytes =
-                        assemble_opcode(*mnemonic, &arg1, &arg2, &mut env).unwrap();
+                        assemble_opcode(*mnemonic, arg1, arg2, arg3, &mut env).unwrap();
                     assert_eq!(&bytes[..], &obtained_bytes[..]);
                 }
             } else {
