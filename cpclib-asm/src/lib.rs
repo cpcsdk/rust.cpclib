@@ -180,7 +180,8 @@ Truc
             Token::OpCode(
                 Mnemonic::Jp,
                 None,
-                Some(DataAccess::Expression(Expr::Value(0)))
+                Some(DataAccess::Expression(Expr::Value(0))),
+                None
             )
             .number_of_bytes(),
             Ok(3)
@@ -190,7 +191,8 @@ Truc
             Token::OpCode(
                 Mnemonic::Jr,
                 None,
-                Some(DataAccess::Expression(Expr::Value(0)))
+                Some(DataAccess::Expression(Expr::Value(0))),
+                None
             )
             .number_of_bytes(),
             Ok(2)
@@ -200,7 +202,8 @@ Truc
             Token::OpCode(
                 Mnemonic::Jr,
                 Some(DataAccess::FlagTest(FlagTest::NC)),
-                Some(DataAccess::Expression(Expr::Value(0)))
+                Some(DataAccess::Expression(Expr::Value(0))),
+                None
             )
             .number_of_bytes(),
             Ok(2)
@@ -210,6 +213,7 @@ Truc
             Token::OpCode(
                 Mnemonic::Push,
                 Some(DataAccess::Register16(Register16::De)),
+                None,
                 None
             )
             .number_of_bytes(),
@@ -220,6 +224,7 @@ Truc
             Token::OpCode(
                 Mnemonic::Dec,
                 Some(DataAccess::Register8(Register8::A)),
+                None,
                 None
             )
             .number_of_bytes(),

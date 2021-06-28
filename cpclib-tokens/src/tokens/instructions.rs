@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::Register8;
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::tokens::Listing;
@@ -360,7 +361,8 @@ pub enum Token {
 
     NoList,
 
-    OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>),
+    /// Very last argument concerns only few undocumented instructions that save their results in a register
+    OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>, Option<Register8>),
     Org(Expr, Option<Expr>),
 
     Print(Vec<FormattedExpr>),
@@ -516,16 +518,19 @@ impl fmt::Display for Token {
             },
 
                 // TODO remove this one / it is not coherent as we have the PortC
-            Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2)) if &Mnemonic::Out == mne
+            Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2), None) if &Mnemonic::Out == mne
                 => write!(f, "{} (C), {}", mne, arg2),
-            Token::OpCode(ref mne, None, None)
+            Token::OpCode(ref mne, None, None, None)
                 => write!(f, "{}", mne),
-            Token::OpCode(ref mne, Some(ref arg1), None)
+            Token::OpCode(ref mne, Some(ref arg1), None, None)
                 => write!(f, "{} {}", mne, arg1),
-            Token::OpCode(ref mne, None, Some(ref arg2)) // JP/JR without flags
+            Token::OpCode(ref mne, None, Some(ref arg2), None) // JP/JR without flags
                => write!(f, "{} {}", mne, arg2),
-            Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2))
+            Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2), None)
                 => write!(f, "{} {}, {}", mne, arg1, arg2),
+
+            Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2), Some(arg3))
+                => write!(f, "{} {}, {}, {}", mne, arg1, arg2, arg3),    
 
             Token::Org(ref expr, None)
                 => write!(f, "ORG {}", expr),
@@ -578,12 +583,18 @@ impl From<u8> for Token {
 
 #[allow(missing_docs)]
 impl Token {
+
+
+    pub fn new_opcode(mne: Mnemonic, arg1: Option<DataAccess>, arg2: Option<DataAccess>)-> Self {
+        Token::OpCode(mne, arg1, arg2, None)
+    }
+
     /// When diassembling code, the token with relative information are not appropriate
     pub fn fix_relative_jumps_after_disassembling(&mut self) {
         if self.is_opcode() {
             let expression = match self {
-                Self::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(exp))) => Some(exp),
-                Self::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(exp)), _) => Some(exp),
+                Self::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(exp)), _) => Some(exp),
+                Self::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(exp)), _, _) => Some(exp),
                 //          Self::OpCode(_, Some(DataAccess::IndexRegister16WithIndex(_, exp)), _) => Some(exp),
                 //         Self::OpCode(_, _, Some(DataAccess::IndexRegister16WithIndex(_, exp))) => Some(exp),
                 _ => None,
@@ -601,11 +612,11 @@ impl Token {
 
     pub fn is_output_opcode(&self) -> bool {
        match self {
-           Token::OpCode(Mnemonic::Out, _, _) |
-           Token::OpCode(Mnemonic::Outd, _, _) |
-           Token::OpCode(Mnemonic::Outi, _, _) |
-           Token::OpCode(Mnemonic::Otdr, _, _) |
-           Token::OpCode(Mnemonic::Otir, _, _) 
+           Token::OpCode(Mnemonic::Out, _, _, _) |
+           Token::OpCode(Mnemonic::Outd, _, _, _) |
+           Token::OpCode(Mnemonic::Outi, _, _, _) |
+           Token::OpCode(Mnemonic::Otdr, _, _, _) |
+           Token::OpCode(Mnemonic::Otir, _, _, _) 
            => true,
            _ => false
        }
@@ -613,20 +624,20 @@ impl Token {
 
     pub fn is_input_opcode(&self) -> bool {
         match self {
-            Token::OpCode(Mnemonic::In, _, _) |
-            Token::OpCode(Mnemonic::Ind, _, _) |
-            Token::OpCode(Mnemonic::Ini, _, _)|
-            Token::OpCode(Mnemonic::Indr, _, _) |
-            Token::OpCode(Mnemonic::Inir, _, _) => true,
+            Token::OpCode(Mnemonic::In, _, _, _) |
+            Token::OpCode(Mnemonic::Ind, _, _, _) |
+            Token::OpCode(Mnemonic::Ini, _, _, _)|
+            Token::OpCode(Mnemonic::Indr, _, _, _) |
+            Token::OpCode(Mnemonic::Inir, _, _, _) => true,
             _ => false
         }
      }
 
     pub fn is_retlike_opcode(&self) -> bool {
         match self {
-            Token::OpCode(Mnemonic::Ret, _, _) |
-            Token::OpCode(Mnemonic::Reti, _, _) |
-            Token::OpCode(Mnemonic::Retn, _, _)  => true,
+            Token::OpCode(Mnemonic::Ret, _, _, _) |
+            Token::OpCode(Mnemonic::Reti, _, _, _) |
+            Token::OpCode(Mnemonic::Retn, _, _, _)  => true,
             _ => false
         }
     }
@@ -647,35 +658,35 @@ impl Token {
 
     pub fn mnemonic(&self) -> Option<&Mnemonic> {
         match self {
-            Token::OpCode(ref mnemonic, _, _) => Some(mnemonic),
+            Token::OpCode(ref mnemonic, _, _, _) => Some(mnemonic),
             _ => None,
         }
     }
 
     pub fn mnemonic_arg1(&self) -> Option<&DataAccess> {
         match self {
-            Token::OpCode(_, ref arg1, _) => arg1.as_ref(),
+            Token::OpCode(_, ref arg1, _, _) => arg1.as_ref(),
             _ => None,
         }
     }
 
     pub fn mnemonic_arg2(&self) -> Option<&DataAccess> {
         match self {
-            Token::OpCode(_, _, ref arg2) => arg2.as_ref(),
+            Token::OpCode(_, _, ref arg2, _) => arg2.as_ref(),
             _ => None,
         }
     }
 
     pub fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess> {
         match self {
-            Token::OpCode(_, ref mut arg1, _) => arg1.as_mut(),
+            Token::OpCode(_, ref mut arg1, _, _) => arg1.as_mut(),
             _ => None,
         }
     }
 
     pub fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess> {
         match self {
-            Token::OpCode(_, _, ref mut arg2) => arg2.as_mut(),
+            Token::OpCode(_, _, ref mut arg2, _) => arg2.as_mut(),
             _ => None,
         }
     }
@@ -767,7 +778,7 @@ impl Token {
                     .for_each(|s| Expr::do_apply_macro_labels_modification(s, seed));
             }
 
-            Self::OpCode(_m, a, b) => {
+            Self::OpCode(_m, a, b, _) => {
                 a.as_mut().map(|d| d.fix_local_macro_labels_with_seed(seed));
                 b.as_mut().map(|d| d.fix_local_macro_labels_with_seed(seed));
             }

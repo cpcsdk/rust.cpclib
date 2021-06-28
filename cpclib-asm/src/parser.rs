@@ -713,7 +713,7 @@ pub fn parse_token(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 /// Parse ex af, af' instruction
 pub fn parse_ex_af(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     value(
-        Token::OpCode(Mnemonic::ExAf, None, None),
+        Token::new_opcode(Mnemonic::ExAf, None, None),
         tuple((
             tag_no_case("EX"),
             space1,
@@ -727,7 +727,7 @@ pub fn parse_ex_af(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 /// Parse ex hl, de instruction
 pub fn parse_ex_hl_de(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     value(
-        Token::OpCode(Mnemonic::ExHlDe, None, None),
+        Token::new_opcode(Mnemonic::ExHlDe, None, None),
         alt((
             tuple((
                 tag_no_case("EX"),
@@ -763,7 +763,7 @@ pub fn parse_ex_mem_sp(input: &str) -> IResult<&str, Token, VerboseError<&str>> 
 
     Ok((
         input,
-        Token::OpCode(Mnemonic::ExMemSp, Some(destination.8), None),
+        Token::new_opcode(Mnemonic::ExMemSp, Some(destination.8), None),
     ))
 }
 
@@ -993,7 +993,7 @@ pub fn parse_ld_fake(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
     let (input, src) = parse_register16(input)?;
 
-    Ok((input, Token::OpCode(Mnemonic::Ld, Some(dst), Some(src))))
+    Ok((input, Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src))))
 }
 
 /// Parse the valids LD versions
@@ -1025,7 +1025,7 @@ pub fn parse_ld_normal(input: &str) -> IResult<&str, Token, VerboseError<&str>> 
     // src possibilities depend on dst
     let (input, src) = context("input", cut(parse_ld_normal_src(&dst)))(input)?;
 
-    Ok((input, Token::OpCode(Mnemonic::Ld, Some(dst), Some(src))))
+    Ok((input, Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src))))
 }
 
 /// Parse the source of LD depending on its destination
@@ -1139,7 +1139,7 @@ pub fn parse_res_set_bit(input: &str) -> IResult<&str, Token, VerboseError<&str>
     assert!(hidden_arg.is_none(), "Need to implement this 3rd argument !");
 
 
-    Ok((input, Token::OpCode(res_or_set, Some(bit), Some(operand))))
+    Ok((input, Token::new_opcode(res_or_set, Some(bit), Some(operand))))
 }
 
 /// Parse CP tokens
@@ -1155,7 +1155,7 @@ pub fn parse_cp(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
                 parse_expr,
             )),
         ),
-        |operand| Token::OpCode(Mnemonic::Cp, Some(operand), None),
+        |operand| Token::new_opcode(Mnemonic::Cp, Some(operand), None),
     )(input)
 }
 
@@ -1251,7 +1251,7 @@ fn parse_instr(name: &str) -> impl Fn(&str) -> IResult<&str, (), VerboseError<&s
 /// ...
 pub fn parse_djnz(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(preceded(parse_instr("DJNZ"), parse_expr), |expr| {
-        Token::OpCode(Mnemonic::Djnz, Some(expr), None)
+        Token::new_opcode(Mnemonic::Djnz, Some(expr), None)
     })(input)
 }
 
@@ -1360,7 +1360,7 @@ pub fn parse_logical_operator(input: &str) -> IResult<&str, Token, VerboseError<
         )),
     ))(input)?;
 
-    Ok((input, Token::OpCode(operator, Some(operand), None)))
+    Ok((input, Token::new_opcode(operator, Some(operand), None)))
 }
 
 /// ...
@@ -1380,7 +1380,7 @@ pub fn parse_sub(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         parse_expr,
     ))(input)?;
 
-    Ok((input, Token::OpCode(Mnemonic::Sub, Some(operand), None)))
+    Ok((input, Token::new_opcode(Mnemonic::Sub, Some(operand), None)))
 }
 
 /// Par se the SBC instruction
@@ -1410,7 +1410,7 @@ pub fn parse_sbc(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
     Ok((
         input,
-        Token::OpCode(Mnemonic::Sbc, Some(opera), Some(operb)),
+        Token::new_opcode(Mnemonic::Sbc, Some(opera), Some(operb)),
     ))
 }
 
@@ -1457,7 +1457,7 @@ pub fn parse_add_or_adc_complete(input: &str) -> IResult<&str, Token, VerboseErr
         )));
     }?;
 
-    Ok((input, Token::OpCode(add_or_adc, Some(first), Some(second))))
+    Ok((input, Token::new_opcode(add_or_adc, Some(first), Some(second))))
 }
 
 /// TODO Find a way to not duplicate code with complete version
@@ -1476,7 +1476,7 @@ pub fn parse_add_or_adc_shorten(input: &str) -> IResult<&str, Token, VerboseErro
 
     Ok((
         input,
-        Token::OpCode(
+        Token::new_opcode(
             add_or_adc,
             Some(DataAccess::Register8(Register8::A)),
             Some(second),
@@ -1505,7 +1505,7 @@ pub fn parse_push_n_pop(input: &str) -> IResult<&str, Token, VerboseError<&str>>
     } else {
         Ok((
             input,
-            Token::OpCode(push_or_pop, Some(registers[0].clone()), None),
+            Token::new_opcode(push_or_pop, Some(registers[0].clone()), None),
         ))
     }
 }
@@ -1515,7 +1515,7 @@ pub fn parse_ret(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     map(
         preceded(tag_no_case("RET"), opt(preceded(space1, parse_flag_test))),
         |cond| {
-            Token::OpCode(
+            Token::new_opcode(
                 Mnemonic::Ret,
                 if cond.is_some() {
                     Some(DataAccess::FlagTest(cond.unwrap()))
@@ -1545,7 +1545,7 @@ pub fn parse_inc_dec(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         parse_indexregister_with_index,
     ))(input)?;
 
-    Ok((input, Token::OpCode(inc_or_dec, Some(register), None)))
+    Ok((input, Token::new_opcode(inc_or_dec, Some(register), None)))
 }
 
 /// TODO manage other out formats
@@ -1568,7 +1568,7 @@ pub fn parse_out(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         parse_register_a(input)?
     };
 
-    Ok((input, Token::OpCode(Mnemonic::Out, Some(port), Some(value))))
+    Ok((input, Token::new_opcode(Mnemonic::Out, Some(port), Some(value))))
 }
 
 /// Parse all the in flavors
@@ -1587,7 +1587,7 @@ pub fn parse_in(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
 
     Ok((
         input,
-        Token::OpCode(Mnemonic::In, Some(destination), Some(port)),
+        Token::new_opcode(Mnemonic::In, Some(destination), Some(port)),
     ))
 }
 
@@ -1596,7 +1596,7 @@ pub fn parse_rst(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = parse_instr("RST")(input)?;
     let (input, val) = parse_expr(input)?;
 
-    Ok((input, Token::OpCode(Mnemonic::Rst, Some(val), None)))
+    Ok((input, Token::new_opcode(Mnemonic::Rst, Some(val), None)))
 }
 
 /// Parse the IM instruction
@@ -1604,7 +1604,7 @@ pub fn parse_im(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = parse_instr("IM")(input)?;
     let (input, val) = parse_expr(input)?;
 
-    Ok((input, Token::OpCode(Mnemonic::Im, Some(val), None)))
+    Ok((input, Token::new_opcode(Mnemonic::Im, Some(val), None)))
 }
 
 /// Parse all RLC, RL, RR, SLA, SRA flavors
@@ -1645,7 +1645,7 @@ pub fn parse_shifts_and_rotations(input: &str) -> IResult<&str, Token, VerboseEr
         )
     )(input)?;
 
-    Ok((input, Token::OpCode(oper, Some(arg), arg2)))
+    Ok((input, Token::new_opcode(oper, Some(arg), arg2)))
 }
 
 /// TODO reduce the flag space for jr"],
@@ -1674,7 +1674,7 @@ pub fn parse_call_jp_or_jr(input: &str) -> IResult<&str, Token, VerboseError<&st
         None
     };
 
-    Ok((input, Token::OpCode(call_jp_or_jr, flag_test, Some(dst))))
+    Ok((input, Token::new_opcode(call_jp_or_jr, flag_test, Some(dst))))
 }
 
 /// ...
@@ -2005,7 +2005,7 @@ fn parse_opcode_no_arg1(input: &str) -> IResult<&str, Token, VerboseError<&str>>
         map(parse_instr("OUTI"), |_| Mnemonic::Outi),
     ))(input)?;
 
-    Ok((input, Token::OpCode(mnemonic, None, None)))
+    Ok((input, Token::new_opcode(mnemonic, None, None)))
 }
 
 fn parse_opcode_no_arg2(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
@@ -2028,7 +2028,7 @@ fn parse_opcode_no_arg2(input: &str) -> IResult<&str, Token, VerboseError<&str>>
         value(Mnemonic::Cpl, parse_instr("CPL")),
     ))(input)?;
 
-    Ok((input, Token::OpCode(mnemonic, None, None)))
+    Ok((input, Token::new_opcode(mnemonic, None, None)))
 }
 
 fn parse_opcode_no_arg3(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
@@ -2041,7 +2041,7 @@ fn parse_opcode_no_arg3(input: &str) -> IResult<&str, Token, VerboseError<&str>>
         value(Mnemonic::Rrd, parse_instr("RRD")),
     ))(input)?;
 
-    Ok((input, Token::OpCode(mnemonic, None, None)))
+    Ok((input, Token::new_opcode(mnemonic, None, None)))
 }
 
 fn parse_snaset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
@@ -2768,7 +2768,7 @@ mod test {
             res.unwrap(),
             (
                 "",
-                Token::OpCode(
+                Token::new_opcode(
                     Mnemonic::Ld,
                     Some(Register8::C.into()),
                     Some(Register8::A.into()),
@@ -2783,7 +2783,7 @@ mod test {
             res.unwrap(),
             (
                 "",
-                vec![Token::OpCode(
+                vec![Token::new_opcode(
                     Mnemonic::Ld,
                     Some(Register8::C.into()),
                     Some(Register8::A.into()),
