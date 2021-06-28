@@ -1135,11 +1135,12 @@ pub fn parse_res_set_bit(input: &str) -> IResult<&str, Token, VerboseError<&str>
         )(input)?
     };
 
-
-    assert!(hidden_arg.is_none(), "Need to implement this 3rd argument !");
-
-
-    Ok((input, Token::new_opcode(res_or_set, Some(bit), Some(operand))))
+    Ok((input, Token::OpCode(
+        res_or_set, 
+        Some(bit), 
+        Some(operand), 
+        hidden_arg.map(|d| d.get_register8().unwrap()))
+    ))
 }
 
 /// Parse CP tokens
@@ -2581,6 +2582,35 @@ mod test {
                 "",
                 FormattedExpr::Formatted(ExprFormat::Hex(None), Expr::Label("VAL".to_string()))
             ))
+        );
+    }
+
+    #[test]
+    fn test_undocumented_code() {
+        let listing = parse_str(" RLC (IY+2), B").unwrap();
+        let token = &listing[0];
+        assert_eq!(
+            *token,
+            Token::OpCode(
+                Mnemonic::Rlc,
+                Some(DataAccess::IndexRegister16WithIndex(IndexRegister16::Iy, 2.into())),
+                Some(DataAccess::Register8(Register8::B)),
+                None
+            )
+        );
+
+
+
+        let listing = parse_str(" RES 5, (IY+2), B").unwrap();
+        let token = &listing[0];
+        assert_eq!(
+            *token,
+            Token::OpCode(
+                Mnemonic::Res,
+                Some(DataAccess::Expression(5.into())),
+                Some(DataAccess::IndexRegister16WithIndex(IndexRegister16::Iy, 2.into())),
+                Some(Register8::B)
+            )
         );
     }
 
