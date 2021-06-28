@@ -1295,7 +1295,7 @@ pub fn assemble_opcode(
         | Mnemonic::Rl
         | Mnemonic::Rr
         | Mnemonic::Rlc
-        | Mnemonic::Rrc => env.assemble_shift(mnemonic, arg1.as_ref().unwrap()),
+        | Mnemonic::Rrc => env.assemble_shift(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref()),
     }
 }
 
@@ -1754,6 +1754,7 @@ impl Env {
         &mut self,
         mne: Mnemonic,
         target: &DataAccess,
+        hidden: Option<&DataAccess>
     ) -> Result<Bytes, AssemblerError> {
         let mut bytes = Bytes::new();
 
@@ -1789,7 +1790,7 @@ impl Env {
             // add prefix for ix/iy
             match target {
                 DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                    /// TODO manage assembling of hidden opcode with a 2nd argument
+
                     let val = self.resolve_expr_may_fail_in_first_pass(exp)? as u8;
                     bytes.push(indexed_register16_to_code(*reg));
                     add_byte(&mut bytes, 0xcb);
@@ -1807,7 +1808,8 @@ impl Env {
                 }
             };
 
-            let byte = if mne.is_sla() {
+            // some hidden opcode modify this byte
+            let mut byte:u8 = if mne.is_sla() {
                 0x26
             } else if mne.is_sra() {
                 0x2e
@@ -1826,6 +1828,23 @@ impl Env {
             } else {
                 unreachable!()
             };
+
+            if hidden.is_some() {
+                let delta:i8 = match hidden.unwrap().get_register8().unwrap() {
+                    Register8::A => 1,
+                    Register8::L => -1,
+                    Register8::H => -2,
+                    Register8::E => -3,
+                    Register8::D => -4,
+                    Register8::C => -5,
+                    Register8::B => -6,
+                };
+                if delta < 0 {
+                    byte -= delta.abs() as u8;
+                } else {
+                    byte += delta as u8;
+                }
+            }
             bytes.push(byte);
         }
 
@@ -2987,5 +3006,47 @@ mod test {
         let env = visit_tokens(&tokens).unwrap();
         let bytes = env.memory(0x100, 4);
         assert_eq!(bytes, vec![1, 2, 3, 4]);
+    }
+
+
+    #[test]
+    pub fn test_undocumented_rlc() {
+        let res = visit_tokens_all_passes(&[
+            Token::Org(0x100.into(), None),
+            Token::OpCode(
+                Mnemonic::Rlc,
+                Some(DataAccess::IndexRegister16WithIndex(IndexRegister16::Iy, 2.into())),
+                Some(DataAccess::Register8(Register8::C)),
+                None
+            )
+        ]);
+        assert!(res.is_ok());
+        let env = res.unwrap();
+        let bytes =  env.memory(0x100, 4);
+        assert_eq!(
+            bytes,
+            vec![0xfd, 0xcb, 0x2, 0x1]
+        );
+    }
+    
+
+    #[test]
+    pub fn test_undocumented_res() {
+        let res = visit_tokens_all_passes(&[
+            Token::Org(0x100.into(), None),
+            Token::OpCode(
+                Mnemonic::Res,
+                Some(DataAccess::Expression(4.into())),
+                Some(DataAccess::IndexRegister16WithIndex(IndexRegister16::Iy, 2.into())),
+                Some(Register8::C),
+            )
+        ]);
+        assert!(res.is_ok());
+        let env = res.unwrap();
+        let bytes =  env.memory(0x100, 4);
+        assert_eq!(
+            bytes,
+            vec![0xfd, 0xcb, 0x2, 227]
+        );
     }
 }
