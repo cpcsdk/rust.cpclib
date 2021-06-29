@@ -8,7 +8,7 @@ use lazy_static;
 
 /// TODO replace JR nn by JR $+nn in order to assemble even with current address is unknown
 
-pub static TABINSTRFDCB: [&'static str; 256] = [
+pub const TABINSTRFDCB: [&'static str; 256] = [
     "RLC (IY+nn), B",
     "RLC (IY+nn), C",
     "RLC (IY+nn), D",
@@ -267,7 +267,7 @@ pub static TABINSTRFDCB: [&'static str; 256] = [
     "SET 7,(IY+nn), A",
 ];
 
-pub static TABINSTRDDCB: [&'static str; 256] = 
+pub const TABINSTRDDCB: [&'static str; 256] = 
 [
     "RLC (IX+nn), B",
     "RLC (IX+nn), C",
@@ -900,7 +900,7 @@ pub const TABINSTRED: [&'static str; 256] = [
     "RETN",
     "IM 0",
     "RLD",
-    "IN 0, (C)",
+    "IN 0,(C)",
     "OUT (C),0",
     "SBC HL,SP",
     "LD (nnnn),SP",
@@ -1956,6 +1956,7 @@ mod test {
     fn disass_simple_instruction() {
         assert_eq!("PUSH HL", disassemble(&[0xe5]).to_string().trim());
         assert_eq!("RES 0x3, E", disassemble(&[0xcb, 0x9b]).to_string().trim());
+        assert_eq!("SBC HL, DE", disassemble(&[0xed, 0b01010010]).to_string().trim());
     }
 
     #[test]

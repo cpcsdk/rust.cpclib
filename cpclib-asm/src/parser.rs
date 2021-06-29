@@ -1577,7 +1577,13 @@ pub fn parse_in(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, _) = parse_instr("IN")(input)?;
 
     // get the port proposal
-    let (input, destination) = cut(parse_register8)(input)?;
+    let (input, destination) = cut(
+ alt((
+                parse_register8,
+                value(DataAccess::from(Expr::from(0)), tag("0")),
+        ))
+    )(input)?;
+    // TODO portc only if first arg is not 0
     let (input, _) = cut(parse_comma)(input)?;
     let (input, port) = cut(alt((
         parse_portc,

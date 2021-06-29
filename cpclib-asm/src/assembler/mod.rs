@@ -2166,26 +2166,38 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
         sym: &SymbolsTableCaseDependent,
     ) -> Result<Bytes, AssemblerError> {
         let mut bytes = Bytes::new();
+
+        if *arg1 == DataAccess::Expression(0.into()) {
+            assert_eq!(
+                arg2,
+                &DataAccess::PortC
+            );
+            bytes.push(0xED);
+            bytes.push(0x70);
+        }
+        else {
+            match arg2 {
+                DataAccess::PortC => match arg1 {
+                    DataAccess::Register8(ref reg) => {
+                        bytes.push(0xED);
+                        bytes.push(0b0100_0000 | (register8_to_code(*reg) << 3))
+                    }
+                    _ => panic!(),
+                },
+                
+                DataAccess::PortN(ref exp) => {
+                    if let DataAccess::Register8(Register8::A) = arg1 {
+                        let val = (exp.resolve(sym)? & 0xff) as u8;
+                        bytes.push(0xDB);
+                        bytes.push(val);
+                    }
+                }
+                
+                _ => panic!("{:?}", arg2),
+            };
+        }
         
-        match arg2 {
-            DataAccess::PortC => match arg1 {
-                DataAccess::Register8(ref reg) => {
-                    bytes.push(0xED);
-                    bytes.push(0b0100_0000 | (register8_to_code(*reg) << 3))
-                }
-                _ => panic!(),
-            },
-            
-            DataAccess::PortN(ref exp) => {
-                if let DataAccess::Register8(Register8::A) = arg1 {
-                    let val = (exp.resolve(sym)? & 0xff) as u8;
-                    bytes.push(0xDB);
-                    bytes.push(val);
-                }
-            }
-            
-            _ => panic!("{:?}", arg2),
-        };
+
         
         if bytes.is_empty() {
             Err(format!("IN not properly implemented for '{:?}, {:?}'", arg1, arg2).into())
@@ -2201,34 +2213,44 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
     ) -> Result<Bytes, AssemblerError> {
         let mut bytes = Bytes::new();
         
-        match arg1 {
-            DataAccess::PortC => {
-                if let DataAccess::Register8(ref reg) = arg2 {
-                    bytes.push(0xED);
-                    bytes.push(0b0100_0001 | (register8_to_code(*reg) << 3))
+        if *arg2 == DataAccess::Expression(0.into()) {
+            assert_eq!(
+                arg1,
+                &DataAccess::PortC
+            );
+            bytes.push(0xED);
+            bytes.push(0x71);
+        }
+        else {        
+            match arg1 {
+                DataAccess::PortC => {
+                    if let DataAccess::Register8(ref reg) = arg2 {
+                        bytes.push(0xED);
+                        bytes.push(0b0100_0001 | (register8_to_code(*reg) << 3))
+                    }
+                    
+                    if let DataAccess::PortN(ref exp) = arg2 {
+                        bytes.push(0xD3);
+                        let val = (exp.resolve(sym)? & 0xff) as u8;
+                        bytes.push(val)
+                    }
+                    
+                    if let DataAccess::Expression(Expr::Value(0)) = arg2 {
+                        bytes.push(0xED);
+                        bytes.push(0x71);
+                    }
                 }
                 
-                if let DataAccess::PortN(ref exp) = arg2 {
-                    bytes.push(0xD3);
-                    let val = (exp.resolve(sym)? & 0xff) as u8;
-                    bytes.push(val)
+                DataAccess::Memory(ref exp) => {
+                    if let DataAccess::Register8(Register8::A) = arg2 {
+                        let val = (exp.resolve(sym)? & 0xff) as u8;
+                        bytes.push(0xD3);
+                        bytes.push(val);
+                    }
                 }
-                
-                if let DataAccess::Expression(Expr::Value(0)) = arg2 {
-                    bytes.push(0xED);
-                    bytes.push(0x71);
-                }
-            }
-            
-            DataAccess::Memory(ref exp) => {
-                if let DataAccess::Register8(Register8::A) = arg2 {
-                    let val = (exp.resolve(sym)? & 0xff) as u8;
-                    bytes.push(0xD3);
-                    bytes.push(val);
-                }
-            }
-            _ => {}
-        };
+                _ => {}
+            };
+        }
         
         if bytes.is_empty() {
             Err(format!("OUT not properly implemented for '{:?}, {:?}'", arg1, arg2).into())
