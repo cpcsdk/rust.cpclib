@@ -2529,7 +2529,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
         
         // Apply it to the right thing
         if let DataAccess::Register8(ref reg) = arg2 {
-            let mut code = code + 0b0110;
+        //    let mut code = code + 0b0110;
             
             bytes.push(0xcb);
             bytes.push(code | (bit << 3) | register8_to_code(*reg))
@@ -2746,6 +2746,78 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
             assert_eq!(res[0], 0x05);
         }
         
+        #[test]
+        pub fn test_res() {
+            let env = Env::default();
+            let res = assemble_bit_res_or_set(
+                Mnemonic::Res, 
+                &DataAccess::Expression(0.into()), 
+                &DataAccess::Register8(Register8::B), 
+                None, 
+                &env).unwrap();
+
+            assert_eq!(
+                res.as_ref(),
+                &[0xCB,  0b10000000]
+            );
+
+
+
+            let env = Env::default();
+            let res = assemble_bit_res_or_set(
+                Mnemonic::Res, 
+                &DataAccess::Expression(2.into()), 
+                &DataAccess::Register8(Register8::C), 
+                None, 
+                &env).unwrap();
+
+            assert_eq!(
+                res.as_ref(),
+                &[0xCB,  0b10010001]
+            );
+
+
+            let env = Env::default();
+            let res = assemble_bit_res_or_set(
+                Mnemonic::Res, 
+                &DataAccess::Expression(2.into()), 
+                &DataAccess::MemoryRegister16(Register16::Hl), 
+                None, 
+                &env).unwrap();
+
+            assert_eq!(
+                res.as_ref(),
+                &[0xCB,  0b10010110]
+            );
+
+
+            let env = Env::default();
+            let res = assemble_bit_res_or_set(
+                Mnemonic::Res, 
+                &DataAccess::Expression(2.into()), 
+                &DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, 3.into()), 
+                None, 
+                &env).unwrap();
+
+            assert_eq!(
+                res.as_ref(),
+                &[0xDD, 0xCB,  3, 0b10010110]
+            );
+
+            let env = Env::default();
+            let res = assemble_bit_res_or_set(
+                Mnemonic::Res, 
+                &DataAccess::Expression(2.into()), 
+                &DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, 3.into()), 
+                Some(&Register8::B), 
+                &env).unwrap();
+
+            assert_eq!(
+                res.as_ref(),
+                &[0xDD, 0xCB,  3, 0b10010000]
+            );
+        }
+
         #[test]
         pub fn test_ld() {
             let res = assemble_ld(
