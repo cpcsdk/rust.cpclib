@@ -1953,10 +1953,15 @@ mod test {
     use super::*;
 
     #[test]
-    fn disass_simple_instruction() {
+    fn disass_from_bytes() {
         assert_eq!("PUSH HL", disassemble(&[0xe5]).to_string().trim());
         assert_eq!("RES 0x3, E", disassemble(&[0xcb, 0x9b]).to_string().trim());
         assert_eq!("SBC HL, DE", disassemble(&[0xed, 0b01010010]).to_string().trim());
+
+
+        assert_eq!("RLC (IX + 0x1)", disassemble(&[0xdd, 0xcb, 01, 06]).to_string().trim());
+        assert_eq!("RLC (IX + 0x1), B", disassemble(&[0xdd, 0xcb, 01, 00]).to_string().trim());
+        assert_eq!("RLC (IY + 0x2), C", disassemble(&[0xfd, 0xcb, 02, 01 ]).to_string().trim());
     }
 
     #[test]
