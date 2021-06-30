@@ -2229,19 +2229,14 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
                         bytes.push(0b0100_0001 | (register8_to_code(*reg) << 3))
                     }
                     
-                    if let DataAccess::PortN(ref exp) = arg2 {
-                        bytes.push(0xD3);
-                        let val = (exp.resolve(sym)? & 0xff) as u8;
-                        bytes.push(val)
-                    }
-                    
+
                     if let DataAccess::Expression(Expr::Value(0)) = arg2 {
                         bytes.push(0xED);
                         bytes.push(0x71);
                     }
                 }
                 
-                DataAccess::Memory(ref exp) => {
+                DataAccess::PortN(ref exp) => {
                     if let DataAccess::Register8(Register8::A) = arg2 {
                         let val = (exp.resolve(sym)? & 0xff) as u8;
                         bytes.push(0xD3);
