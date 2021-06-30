@@ -2049,8 +2049,8 @@ fn parse_opcode_no_arg3(input: &str) -> IResult<&str, Token, VerboseError<&str>>
     let (input, mnemonic) = alt((
         value(Mnemonic::Daa, parse_instr("DAA")),
         value(Mnemonic::Neg, parse_instr("NEG")),
-        value(Mnemonic::Otdr, parse_instr("OTDR")),
-        value(Mnemonic::Otir, parse_instr("OTIR")),
+        value(Mnemonic::Otdr, alt((parse_instr("OUTDR"), parse_instr("OTDR")))),
+        value(Mnemonic::Otir, alt((parse_instr("OUTIR"), parse_instr("OTIR")))),
         value(Mnemonic::Rld, parse_instr("RLD")),
         value(Mnemonic::Rrd, parse_instr("RRD")),
     ))(input)?;
