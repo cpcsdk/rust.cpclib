@@ -220,6 +220,7 @@ impl DataAccess {
         match self {
             DataAccess::IndexRegister16(ref reg) => Some(*reg),
             DataAccess::MemoryIndexRegister16(ref reg) => Some(*reg),
+            &DataAccess::IndexRegister16WithIndex(ref reg, _) => Some(*reg),
             _ => None,
         }
     }
