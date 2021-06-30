@@ -1669,11 +1669,18 @@ pub fn parse_call_jp_or_jr(input: &str) -> IResult<&str, Token, VerboseError<&st
     ))(input)?;
 
     let (input, dst) = alt((
-        verify(alt((parse_hl_address, parse_indexregister_address)), |_| {
+        verify(alt((parse_hl_address, parse_indexregister_address, parse_register_hl, parse_indexregister16)), |_| {
             call_jp_or_jr.is_jp() && flag_test.is_none()
         }), // not possible for call and for jp/jr when there is flag
         parse_expr,
     ))(input)?;
+
+    // Allow to parse JP HL as to be JP (HL) original notation is misleading
+    let dst = match dst {
+        DataAccess::IndexRegister16(reg) => DataAccess::MemoryIndexRegister16(reg),
+        DataAccess::Register16(reg) => DataAccess::MemoryRegister16(reg),
+        other => other
+    };
 
     let flag_test = if flag_test.is_some() {
         Some(DataAccess::FlagTest(flag_test.unwrap()))
