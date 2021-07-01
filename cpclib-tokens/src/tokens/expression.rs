@@ -337,7 +337,7 @@ pub enum Expr {
             use self::Expr::*;
             match self {
                 // Should not be displayed often
-                &RelativeDelta(delta) => write!(format, "$ + {}", delta),
+                &RelativeDelta(delta) => write!(format, "$ + {} + 2", delta),
                 
                 &Value(val) => write!(format, "0x{:x}", val),
                 &String(ref string) => write!(format, "\"{}\"", string),
