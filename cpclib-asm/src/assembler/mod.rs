@@ -1272,7 +1272,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
             Mnemonic::Nops2 => assemble_nops2(),
             Mnemonic::Out => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
             Mnemonic::Jr | Mnemonic::Jp | Mnemonic::Call => {
-                assemble_call_jr_or_jp(mnemonic, arg1, &arg2.as_ref().unwrap(), env)
+                assemble_call_jr_or_jp(mnemonic, arg1.as_ref(), arg2.as_ref().unwrap(), env)
             }
             Mnemonic::Pop => assemble_pop(arg1.as_ref().unwrap()),
             Mnemonic::Push => assemble_push(arg1.as_ref().unwrap()),
@@ -1524,7 +1524,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
     /// arg2 contains the information
     fn assemble_call_jr_or_jp(
         mne: Mnemonic,
-        arg1: &Option<DataAccess>,
+        arg1: Option<&DataAccess>,
         arg2: &DataAccess,
         env: &Env,
     ) -> Result<Bytes, AssemblerError> {
@@ -2683,7 +2683,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
         fn test_jump() {
             let res = assemble_call_jr_or_jp(
                 Mnemonic::Jp,
-                &Some(DataAccess::FlagTest(FlagTest::Z)),
+                Some(&DataAccess::FlagTest(FlagTest::Z)),
                 &DataAccess::Expression(Expr::Value(0x1234)),
                 &Env::default(),
             )
@@ -3054,6 +3054,28 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
             assert_eq!(env.symbols().int_value("hello"), 0x4000.into());
         }
         
+
+        #[test]
+        pub fn test_jr() {
+            let res = visit_tokens_all_passes(&[
+                Token::Org(0x4000.into(), None),
+                Token::OpCode(
+                    Mnemonic::Jr,
+                    None,
+                    Some(DataAccess::Expression(Expr::Label("$".into()))),
+                    None
+                )
+                ]);
+
+                assert!(res.is_ok()); 
+                let env = res.unwrap();
+                
+                assert_eq!(                
+                    env.memory(0x4000, 2),
+                    &[0x18, 0u8.wrapping_sub(1).wrapping_sub(1)]
+                );
+        }
+
         /// Check if  label already exists
         #[test]
         pub fn label_exists() {
