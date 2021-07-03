@@ -642,6 +642,25 @@ impl Token {
         }
     }
 
+    /// Check if it is an undocumented instruction that makes a copy of the data to save in an additional register
+    pub fn is_autocopy_opcode(&self) -> bool {
+        matches!(
+            self,
+            Self::OpCode(
+                Mnemonic::Rlc | Mnemonic::Rrc | Mnemonic::Rl | Mnemonic::Rr | Mnemonic::Sla | Mnemonic::Sra | Mnemonic::Sl1 | Mnemonic::Srl,
+                Some(DataAccess::IndexRegister16WithIndex(_, _)),
+                Some(DataAccess::Register8(_)),
+                None
+            ) |
+            Self::OpCode(
+                Mnemonic::Set | Mnemonic::Res,
+                Some(DataAccess::Expression(_)),
+                Some(DataAccess::IndexRegister16WithIndex(_,_)),
+                Some(_)
+            )
+        ) 
+    }
+
     pub fn label(&self) -> Option<&String> {
         match self {
             Token::Label(ref value) | Token::Equ(ref value, _) => Some(value),
