@@ -38,7 +38,7 @@ impl Listing {
         self.iter_mut()
             .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
 
-            dbg!(&self);
+       //     dbg!(&self);
     }
 }
 

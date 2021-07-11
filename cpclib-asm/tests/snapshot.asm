@@ -1,9 +1,9 @@
 ; dummy example that generate a snapshot
 ; basm snapshot.asm --sna -o test.sna
 
-	SNASET Z80_SP 0x200 
-	SNASET CRTC_REG:7 0 
-	SNASET GA_PAL:0 30 
+	SNASET Z80_SP, 0x200 
+	SNASET CRTC_REG, 7, 0 
+	SNASET GA_PAL, 0, 30 
 
 	org 0x4000
 	jp $
