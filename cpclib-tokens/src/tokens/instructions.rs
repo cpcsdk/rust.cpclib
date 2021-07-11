@@ -352,6 +352,7 @@ pub enum Token {
     List,
 
     Macro(String, Vec<String>, String), // Content of the macro is parsed on use
+    // macro call can be used for struct too
     MacroCall(String, Vec<String>), // String are used in order to not be limited to expression and allow opcode/registers use
 
     // Fake pop directive with several arguments

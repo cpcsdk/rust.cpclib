@@ -673,36 +673,50 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
             Ok(())
         }
         
-        pub fn visit_call_macro(
+        pub fn visit_call_macro_or_build_struct(
             &mut self,
             name: &str,
             parameters: &[String],
         ) -> Result<(), AssemblerError> {
-            // Retreive the macro
+
+
+
+
+            // Retreive the macro or structure definition
             let r#macro = self.symbols().macro_value(name);
-            if r#macro.is_none() {
+            let r#struct = self.symbols().struct_value(name);
+
+            if r#macro.is_none() && r#struct.is_none() {
                 return Err(AssemblerError::UnknownMacro {
                     symbol: name.to_owned(),
                     closest: self.symbols().closest_symbol(name),
                 });
             }
-            let r#macro = r#macro.unwrap();
-            
-            // Check if there is the right number of arguments
-            if r#macro.nb_args() != parameters.len() {
-                return Err(AssemblerError::WrongNumberOfParameters {
-                    symbol: name.to_owned(),
-                    nb_paramers: parameters.len(),
-                    nb_arguments: r#macro.nb_args(),
-                });
+
+            // get the generated code
+            let code = if r#macro.is_some() {
+                r#macro.unwrap().develop(parameters)
             }
-            
-            let code = r#macro.develop(parameters);
+            else {
+                let r#struct = r#struct.unwrap();
+                let mut parameters = parameters.to_vec();
+                parameters.resize(r#struct.nb_args(), "".to_owned());
+                r#struct.develop(&parameters)
+            };
+
+
+            dbg!(&code);
             
             // Tokenize with the same assembling parameters and context
             let mut listing = Listing::from_str(&code)?;
-            self.macro_seed += 1;
-            listing.fix_local_macro_labels_with_seed(self.macro_seed);
+
+            // For a macro we have to fix label names
+            if r#macro.is_some(){
+                self.macro_seed += 1;
+                listing.fix_local_macro_labels_with_seed(self.macro_seed);
+            }
+
+            // really assemble the produced tokens
             self.visit_listing(&listing).or_else(|e| {
                 Err(AssemblerError::MacroError {
                     name: name.to_owned(),
@@ -941,7 +955,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
             Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
             Token::Undef(ref label) => env.visit_undef(label),
             Token::Macro(name, arguments, code) => env.visit_macro(name, arguments, code),
-            Token::MacroCall(name, parameters) => env.visit_call_macro(name, parameters),
+            Token::MacroCall(name, parameters) => env.visit_call_macro_or_build_struct(name, parameters),
             Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice()),
             _ => panic!("Not treated {:?}", token),
         }
