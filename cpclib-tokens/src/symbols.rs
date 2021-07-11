@@ -1,14 +1,62 @@
 use std::collections::HashMap;
 
 use delegate::delegate;
+use itertools::Itertools;
 
 use crate::tokens::expression::LabelPrefix;
+use crate::{Token, Expr};
 
 #[derive(Debug, Clone, Copy)]
 pub enum SymbolError {
     UnknownAssemblingAddress,
 }
 
+/// Encode the data for the structure directive
+#[derive(Debug, Clone)]
+pub struct Struct {
+    name: String,
+    content: Vec<(String, Token)>
+}
+
+impl Struct {
+    pub fn new(name: impl AsRef<str>, content: &[(String, Token)]) -> Self {
+        Self {
+            name: name.as_ref().to_owned(),
+            content: content.iter().map(|(s,t)| (s.clone(), t.clone())).collect_vec()
+        }
+    }
+
+    pub fn fields_size(&self, table: & SymbolsTable) -> Vec<(&str, i32)> {
+        self.content.iter()
+            .map(|(n, t)| (n.as_ref(), Self::field_size(t, table)))
+            .collect_vec()
+    }
+
+    /// Get the len of any field
+    pub fn field_size(token: &Token, table: & SymbolsTable) -> i32 {
+        match token {
+            Token::Defb(c) => c.len() as i32,
+            Token::Defw(c) => 2*c.len() as i32,
+            Token::Struct(n, _) => {
+                let s = table.struct_value(n).unwrap(); // TODO handle error here
+                s.len(table)
+            },
+            _ => unreachable!("{:?}", token)
+        }
+    }
+
+    /// Get the len of the structure
+    pub fn len(&self, table: & SymbolsTable) -> i32{
+        self.fields_size(table).iter()
+            .map(|(_, s)| *s)
+            .sum()
+    }
+
+    /// Generate the token that correspond to the current structure
+    pub fn develop(&self, content: Vec<Option<Expr>> ) -> Vec<Token> {
+        unimplemented!()
+    }
+}
 #[derive(Debug, Clone)]
 pub struct Macro {
     name: String,
@@ -54,6 +102,7 @@ impl Macro {
 pub enum Value {
     Integer(i32),
     Macro(Macro),
+    Struct(Struct)
 }
 
 impl Value {
@@ -70,6 +119,13 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn r#struct(&self) -> Option<&Struct> {
+        match self {
+            Value::Struct(s) => Some(s),
+            _=> None
+        }
+    }
 }
 
 impl From<Macro> for Value {
@@ -81,6 +137,12 @@ impl From<Macro> for Value {
 impl From<i32> for Value {
     fn from(i: i32) -> Self {
         Self::Integer(i)
+    }
+}
+
+impl From<Struct> for Value {
+    fn from(s: Struct) -> Self {
+        Self::Struct(s)
     }
 }
 
@@ -236,7 +298,10 @@ impl SymbolsTable {
         let symbol = self.extend_symbol(symbol);
         self.value(symbol).map(|v| v.r#macro()).map(|v| v.unwrap())
     }
-
+    pub fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Struct> {
+        let symbol = self.extend_symbol(symbol);
+        self.value(symbol).map(|v| v.r#struct()).map(|v| v.unwrap())
+    }
     /// Instead of returning the value, return the bank information
     /// logic stolen to rasm
     pub fn prefixed_value<S: Into<Symbol>>(&self, prefix: &LabelPrefix, key: S) -> Option<u16> {
