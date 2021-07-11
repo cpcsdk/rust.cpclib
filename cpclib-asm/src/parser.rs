@@ -2061,10 +2061,12 @@ fn parse_opcode_no_arg3(input: &str) -> IResult<&str, Token, VerboseError<&str>>
 fn parse_snaset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let line = input;
 
+
     let (input, _) = parse_instr("SNASET")(input)?;
 
+
     let (input, flagname) = cut(parse_label(false))(input)?;
-    let (input, _) = delimited(space0, parse_comma, space0)(input)?;
+    let (input, _) = context("missing comma",cut(parse_comma))(input)?;
 
     let (input, values) = cut(separated_list1(
         delimited(space0, parse_comma, space0),
@@ -2080,9 +2082,8 @@ fn parse_snaset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         )
     };
 
-    eprintln!("flagname => {}", &flagname);
-
-    let (_, flag) = std::dbg!(parse_flag(&flagname)).map_err(|_e| {
+    
+    let (_, flag) = (parse_flag(&flagname)).map_err(|_e| {
         nom::Err::Error(VerboseError::from_error_kind(line, ErrorKind::AlphaNumeric))
     })?;
     Ok((input, Token::SnaSet(flag, value)))
