@@ -2071,7 +2071,7 @@ fn parse_struct(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let (input, fields) = many1(
         pair(
             verify(terminated(parse_label(false), space1), |label: &str| label.to_ascii_lowercase() != "endstruct"),
-            cut(terminated(alt((parse_db_or_dw, parse_defs)), pair(space0, line_ending)))
+            cut(terminated(alt((parse_db_or_dw, parse_macro_call)), pair(space0, line_ending)))
         )
     )(input)?;
 

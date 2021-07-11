@@ -6,6 +6,7 @@ use itertools::Itertools;
 use crate::tokens::expression::LabelPrefix;
 use crate::{Token, Expr};
 
+
 #[derive(Debug, Clone, Copy)]
 pub enum SymbolError {
     UnknownAssemblingAddress,
@@ -37,7 +38,7 @@ impl Struct {
         match token {
             Token::Defb(c) => c.len() as i32,
             Token::Defw(c) => 2*c.len() as i32,
-            Token::Struct(n, _) => {
+            Token::MacroCall(n, _) => {
                 let s = table.struct_value(n).unwrap(); // TODO handle error here
                 s.len(table)
             },
@@ -52,9 +53,45 @@ impl Struct {
             .sum()
     }
 
+    pub fn nb_args(&self) -> usize {
+        self.content.len()
+    }
+
     /// Generate the token that correspond to the current structure
-    pub fn develop(&self, content: Vec<Option<Expr>> ) -> Vec<Token> {
-        unimplemented!()
+    /// Current bersion does not handle at all directive with several arguments
+    pub fn develop(&self, args: &[String] ) -> String {
+        assert_eq!(args.len(), self.content.len());
+
+        self.content.iter().zip(args.iter())
+            .map(|( (name, token), value)| {
+                match token {
+                    Token::Defb(c) => {
+                        assert_eq!(c.len(), 1);
+                        if value.trim().is_empty() {
+                            format!(" db {}", c[0].to_string())
+                        } else {
+                            format!(" db {}", value)
+                        }
+                    },
+                    Token::Defw(c) => {
+                        assert_eq!(c.len(), 1);
+                        if value.trim().is_empty() {
+                            format!(" dw {}", c[0].to_string())
+                        } else {
+                            format!(" dw {}", value)
+                        }
+                    },
+                    Token::MacroCall(n, args) => {
+                        if value.trim().is_empty() {
+                            format!(" {}", n)
+                        } else {
+                            format!(" {}, {}", n, value)
+                        }
+                    },
+                    _ => unreachable!("{:?}", token)                    
+                }
+            })
+		    .join("\n")
     }
 }
 #[derive(Debug, Clone)]
@@ -119,12 +156,16 @@ impl Value {
             _ => None,
         }
     }
-
     pub fn r#struct(&self) -> Option<&Struct> {
         match self {
-            Value::Struct(s) => Some(s),
-            _=> None
+            Value::Struct(m) => Some(m),
+            _ => None,
         }
+    }
+}
+impl From<Struct> for Value {
+    fn from(m: Struct) -> Self {
+        Self::Struct(m)
     }
 }
 
@@ -137,12 +178,6 @@ impl From<Macro> for Value {
 impl From<i32> for Value {
     fn from(i: i32) -> Self {
         Self::Integer(i)
-    }
-}
-
-impl From<Struct> for Value {
-    fn from(s: Struct) -> Self {
-        Self::Struct(s)
     }
 }
 
@@ -296,12 +331,17 @@ impl SymbolsTable {
     }
     pub fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Macro> {
         let symbol = self.extend_symbol(symbol);
-        self.value(symbol).map(|v| v.r#macro()).map(|v| v.unwrap())
+        self.value(symbol)
+            .map(|v| v.r#macro())
+            .unwrap_or(None)
     }
     pub fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Struct> {
         let symbol = self.extend_symbol(symbol);
-        self.value(symbol).map(|v| v.r#struct()).map(|v| v.unwrap())
+        self.value(symbol)
+            .map(|v| v.r#struct())
+            .unwrap_or(None)
     }
+
     /// Instead of returning the value, return the bank information
     /// logic stolen to rasm
     pub fn prefixed_value<S: Into<Symbol>>(&self, prefix: &LabelPrefix, key: S) -> Option<u16> {
@@ -476,6 +516,9 @@ impl SymbolsTableCaseDependent {
 
     pub fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Macro> {
         self.table.macro_value(self.normalize_symbol(symbol))
+    }
+    pub fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Struct> {
+        self.table.struct_value(self.normalize_symbol(symbol))
     }
 
     pub fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Option<Value> {
