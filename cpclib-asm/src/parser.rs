@@ -787,6 +787,7 @@ pub fn parse_directive(input: &str) -> IResult<&str, Token, VerboseError<&str>> 
         parse_snaset,
         parse_save,
         parse_stable_ticker,
+        parse_struct,
         parse_undef,
         parse_noarg_directive,
         parse_macro_call, // need to be the very last one as it eats everything else
@@ -2057,6 +2058,34 @@ fn parse_opcode_no_arg3(input: &str) -> IResult<&str, Token, VerboseError<&str>>
 
     Ok((input, Token::new_opcode(mnemonic, None, None)))
 }
+
+
+fn parse_struct(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
+    let (input, _) = parse_instr("STRUCT")(input)?;
+    let (input, name) = cut(parse_label(false))(input)?;
+
+
+
+    let (input, _) = preceded(space0, line_ending)(input)?;
+
+    let (input, fields) = many1(
+        pair(
+            verify(terminated(parse_label(false), space1), |label: &str| label.to_ascii_lowercase() != "endstruct"),
+            cut(terminated(alt((parse_db_or_dw, parse_defs)), pair(space0, line_ending)))
+        )
+    )(input)?;
+
+ 
+
+    let (input, _) = cut(preceded(space0, parse_instr("ENDSTRUCT")))(input)?;
+
+    Ok((
+        input,
+        Token::Struct(name.to_owned(), fields)
+    ))
+
+}
+
 
 fn parse_snaset(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
     let line = input;
