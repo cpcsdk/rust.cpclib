@@ -621,6 +621,31 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
             );
             Ok(())
         }
+
+        pub fn visit_struct_definition(&mut self, name: &str, content: &[(String, Token)]) -> Result<(), AssemblerError> {
+            if self.pass.is_first_pass() && self.symbols().contains_symbol(name) {
+                return Err(AssemblerError::SymbolAlreadyExists {
+                    symbol: name.to_owned(),
+                });
+            }
+
+            let r#struct = Struct::new(name, content);
+            // add inner index BEFORE the structure. It should reduce infinite loops
+            let mut index = 0;
+            for (f,s) in r#struct.fields_size(self.symbols().as_ref()) {
+                self.symbols_mut().set_symbol_to_value(
+                    format!("{}.{}", name, f), 
+                    index
+                );
+                index += s;
+            }
+            self.symbols_mut().set_symbol_to_value(
+                name, 
+                r#struct
+            );
+
+            Ok(())
+        }
         
         pub fn visit_buildsna(
             &mut self,
@@ -917,6 +942,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
             Token::Undef(ref label) => env.visit_undef(label),
             Token::Macro(name, arguments, code) => env.visit_macro(name, arguments, code),
             Token::MacroCall(name, parameters) => env.visit_call_macro(name, parameters),
+            Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice()),
             _ => panic!("Not treated {:?}", token),
         }
     }
