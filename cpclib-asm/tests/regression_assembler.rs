@@ -162,3 +162,91 @@ my_triangle1 triangle [11, 12, 13],, [1, 2, 3]
 		]
 	)
 }
+
+
+#[test]
+pub fn test_inner_struct_deeper() {
+	let code = "
+	struct point
+xx    db 4
+yy    db 5
+zz    db 6
+	  endstruct
+
+	struct triangle
+p1 point 1, 2 , 3
+p2 point ,,8
+p3 point 9
+	endstruct
+
+
+	struct shape
+tr1 triangle
+tr2 triangle
+	endstruct
+	
+	
+	
+my_shape shape	
+";
+
+
+	// just check that it assemble
+	let binary = assemble(code).unwrap();
+	assert_eq!(binary.len(), 3*3*2);
+	assert_eq!(
+		&binary,
+		&[
+			1,2,3,
+			4,5,8,
+			9,5,6,
+			1,2,3,
+			4,5,8,
+			9,5,6,
+		]
+	)
+}
+
+
+#[test]
+pub fn test_inner_struct_deeper2() {
+	let code = "
+	struct point
+xx    db 4
+yy    db 5
+zz    db 6
+	  endstruct
+
+	struct triangle
+p1 point 1, 2 , 3
+p2 point ,,8
+p3 point 9
+	endstruct
+
+
+	struct shape
+tr1 triangle
+tr2 triangle
+	endstruct
+	
+	
+	
+my_shape shape	, [ [1,2,3], [1,2,3], [1,2,3] ]
+";
+
+
+	// just check that it assemble
+	let binary = assemble(code).unwrap();
+	assert_eq!(binary.len(), 3*3*2);
+	assert_eq!(
+		&binary,
+		&[
+			1,2,3,
+			4,5,8,
+			9,5,6,
+			1,2,3,
+			1,2,3,
+			1,2,3,
+		]
+	)
+}
