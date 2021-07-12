@@ -60,3 +60,105 @@ pub fn macro_local_labels() {
 	let binary = assemble(code).unwrap();
 	assert!(binary.len() != 0);
 }
+
+
+#[test]
+pub fn test_inner_struct1() {
+	let code = "
+	struct point
+xx    db 4
+yy    db 5
+zz    db 6
+	  endstruct
+
+	struct triangle
+p1 point 
+p2 point 
+p3 point 
+	endstruct
+
+
+my_triangle1 triangle
+	";
+
+
+	// just check that it assemble
+	let binary = assemble(code).unwrap();
+	assert_eq!(binary.len(), 3*3);
+	assert_eq!(
+		&binary,
+		&[
+			4,5,6,
+			4,5,6,
+			4,5,6,
+		]
+	)
+}
+
+#[test]
+pub fn test_inner_struct2() {
+	let code = "
+	struct point
+xx    db 4
+yy    db 5
+zz    db 6
+	  endstruct
+
+	struct triangle
+p1 point 1, 2 , 3
+p2 point ,,8
+p3 point 9
+	endstruct
+
+
+my_triangle1 triangle [1, 2, 3], [1, 2, 3], [1, 2, 3]
+	";
+
+
+	// just check that it assemble
+	let binary = assemble(code).unwrap();
+	assert_eq!(binary.len(), 3*3);
+	assert_eq!(
+		&binary,
+		&[
+			1,2,3,
+			1,2,3,
+			1,2,3,
+		]
+	)
+}
+
+
+
+#[test]
+pub fn test_inner_struct3() {
+	let code = "
+	struct point
+xx    db 4
+yy    db 5
+zz    db 6
+	  endstruct
+
+	struct triangle
+p1 point 1, 2 , 3
+p2 point ,,8
+p3 point 9
+	endstruct
+
+
+my_triangle1 triangle [11, 12, 13],, [1, 2, 3]
+	";
+
+
+	// just check that it assemble
+	let binary = assemble(code).unwrap();
+	assert_eq!(binary.len(), 3*3);
+	assert_eq!(
+		&binary,
+		&[
+			11,12,13,
+			4,5,8,
+			1,2,3,
+		]
+	)
+}

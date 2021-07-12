@@ -78,7 +78,7 @@ fn db_negative_regression() {
 
 
 #[test]
-fn macro_args() {
+fn macro_args1() {
 	let code = "
 	MACRO CRC32XOR x1,x2,x3,x4
 	rr b
@@ -111,4 +111,63 @@ fn macro_args() {
 	);
 	
 
+}
+
+#[test]
+fn macro_args_single() {
+	let code = "1";
+	let arg = dbg!(parse_macro_arg(code)).unwrap().1;
+
+	assert_eq!(
+		arg,
+		MacroParam::Single("1".to_string())
+	)
+}
+
+#[test]
+fn macro_args_list_1() {
+	let code = "[1]";
+	let arg = dbg!(parse_macro_arg(code)).unwrap().1;
+
+	assert_eq!(
+		arg,
+		MacroParam::List(
+			vec![
+				Box::new(MacroParam::Single("1".to_string()))
+			]
+		)
+	)
+}
+
+#[test]
+fn macro_args_list_2() {
+	let code = "[1, 3]";
+	let arg = dbg!(parse_macro_arg(code)).unwrap().1;
+
+	assert_eq!(
+		arg,
+		MacroParam::List(
+			vec![
+				Box::new(MacroParam::Single("1".to_string())),
+				Box::new(MacroParam::Single(" 3".to_string())),
+			]
+		)
+	)
+}
+
+#[test]
+fn macro_args_list_3() {
+	let code = "[1, ,3]";
+	let arg = dbg!(parse_macro_arg(code)).unwrap().1;
+
+	assert_eq!(
+		arg,
+		MacroParam::List(
+			vec![
+				Box::new(MacroParam::Single("1".to_string())),
+				Box::new(MacroParam::Single(" ".to_string())),
+				Box::new(MacroParam::Single("3".to_string())),
+			]
+		)
+	)
 }

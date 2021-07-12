@@ -8,6 +8,90 @@ use itertools::Itertools;
 
 use cpclib_sna::SnapshotVersion;
 
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+/// This structures encode the parameters of macros.
+/// The usual parameter is a string.
+/// However, it can be a list of parameters to allows nested structs
+pub enum MacroParam {
+    /// Standard argument
+    Single(String),
+    /// A list of argument that will be provided in a nested macro call
+    List(Vec<Box<MacroParam>>)
+}
+
+
+impl ToString for MacroParam {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Single(s ) => s.clone(),
+            Self::List(l) => {
+                format!(
+                    "[{}]",
+                    l.iter()
+                    .map(|p| p.to_string())
+                    .join(",")
+                )
+            }
+        }
+    }
+}
+
+impl MacroParam {
+    pub fn empty() -> Self {
+        Self::Single("".to_owned())
+    }
+
+    pub fn is_single(&self) -> bool {
+        match self {
+            Self::Single(_) => true,
+            _ => false
+        }
+    }
+
+    /// Expansion is slightly different thant to_string has it does not print the bracket
+    pub fn expand(&self) -> String {
+        match self {
+            Self::Single(s ) => s.clone(),
+            Self::List(l) => {
+                format!(
+                    "{}",
+                    l.iter()
+                    .map(|p| p.to_string())
+                    .join(",")
+                )
+            }
+        }
+    }
+
+    /// Rename the arguments when they are a macro call
+    /// XXX I am pretty sure such implementation is faulty when there are nested calls !!! It needs to be checked (maybe nested stuff has to be removed)
+    pub fn do_apply_macro_labels_modification(&mut self, seed: usize) {
+        match self {
+            Self::Single(s ) => {
+                Expr::do_apply_macro_labels_modification(s, seed);
+            },
+            Self::List(l) => {    
+                l.iter_mut()
+                    .for_each(|m|{
+                        m.do_apply_macro_labels_modification(seed);
+                    })
+            }  
+        }  
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Single(s ) => {
+                s.trim().is_empty()
+            },
+            Self::List(l) => {
+                false
+            }
+        }
+    }
+}
+
 #[remain::sorted]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[allow(missing_docs)]
@@ -353,7 +437,7 @@ pub enum Token {
 
     Macro(String, Vec<String>, String), // Content of the macro is parsed on use
     // macro call can be used for struct too
-    MacroCall(String, Vec<String>), // String are used in order to not be limited to expression and allow opcode/registers use
+    MacroCall(String, Vec<MacroParam>), // String are used in order to not be limited to expression and allow opcode/registers use
 
     // Fake pop directive with several arguments
     MultiPop(Vec<DataAccess>),
@@ -795,7 +879,7 @@ impl Token {
 
             Self::MacroCall(_n, v) => {
                 v.iter_mut()
-                    .for_each(|s| Expr::do_apply_macro_labels_modification(s, seed));
+                    .for_each(|p| p.do_apply_macro_labels_modification(seed));
             }
 
             Self::OpCode(_m, a, b, _) => {

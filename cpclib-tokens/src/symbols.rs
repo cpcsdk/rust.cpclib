@@ -4,9 +4,9 @@ use delegate::delegate;
 use itertools::Itertools;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{Token, Expr};
+use crate::{Token, Expr, MacroParam};
 
-
+use std::ops::Deref;
 #[derive(Debug, Clone, Copy)]
 pub enum SymbolError {
     UnknownAssemblingAddress,
@@ -59,34 +59,101 @@ impl Struct {
 
     /// Generate the token that correspond to the current structure
     /// Current bersion does not handle at all directive with several arguments
-    pub fn develop(&self, args: &[String] ) -> String {
+    pub fn develop(&self, args: &[MacroParam] ) -> String {
         assert_eq!(args.len(), self.content.len());
 
-        self.content.iter().zip(args.iter())
-            .map(|( (name, token), value)| {
+        self.content.iter().zip(args.iter()).enumerate()
+            .map(|( idx, ((name, token), current_param))| {
                 match token {
-                    Token::Defb(c) => {
+                    Token::Defb(c) | Token::Defw(c)=> {
                         assert_eq!(c.len(), 1);
-                        if value.trim().is_empty() {
-                            format!(" db {}", c[0].to_string())
+
+                        let tok = if matches!(token, Token::Defb(_)) {
+                            "db"
                         } else {
-                            format!(" db {}", value)
+                            "dw"
+                        };
+
+                        if current_param.is_empty() {
+                            format!(" {} {}", tok, c[0].to_string())
+                        } else {
+                            format!(" {} {}", tok, current_param.expand())
                         }
                     },
-                    Token::Defw(c) => {
-                        assert_eq!(c.len(), 1);
-                        if value.trim().is_empty() {
-                            format!(" dw {}", c[0].to_string())
-                        } else {
-                            format!(" dw {}", value)
-                        }
-                    },
-                    Token::MacroCall(n, args) => {
-                        if value.trim().is_empty() {
-                            format!(" {}", n)
-                        } else {
-                            format!(" {}, {}", n, value)
-                        }
+
+                    Token::MacroCall(n, current_default_arg) => {
+                        let mut call = format!(" {} ", n);
+                        
+                        
+                        // The way to manage default/provided params differ depending on the combination
+                        let args = match (current_param, current_default_arg.len()) {
+
+                            // no default
+                            (_, 0) => {
+                                vec![current_param.expand()]
+                            }
+
+                            // one default
+                            (_, 1) => {
+                                let val = if current_param.is_empty() {
+                                    &current_default_arg[0]
+                                } else {
+                                    current_param
+                                };
+                                vec![val.expand()]
+                            },
+
+                            // default is several, provided is single. Use provided only if not empty
+                            (MacroParam::Single(_), nb_default) => {
+                                let mut default_iter = current_default_arg.iter();
+                                let first_default = default_iter.next().unwrap();
+                                let mut collected = Vec::new();
+                                collected.push(
+                                    if current_param.is_empty() {
+                                        first_default
+                                    } else {
+                                        current_param
+                                    }     
+                                );
+                                collected.extend(default_iter);
+
+                                collected.iter()
+                                    .map(|p| p.expand())
+                                    .collect_vec()
+
+                            },
+                            
+                            // default and provided are several
+                            (MacroParam::List(all_curr), nb_default) => {
+
+
+                                let max_size = all_curr.len().max(nb_default);
+
+                                let mut collected = Vec::new();
+                                for idx2 in 0..max_size {
+                                    if idx2>=all_curr.len() {
+                                        collected.push(current_default_arg[idx2].expand());
+                                    } 
+                                    else if idx2>=nb_default {
+                                        collected.push(all_curr[idx2].expand());
+                                    }
+                                    else {
+                                        let current = &all_curr[idx2];
+                                        let default = &current_default_arg[idx2];
+
+                                        if current.is_empty() {
+                                            collected.push(default.expand());
+                                        } else {
+                                            collected.push(current.expand());
+                                        }
+                                    }
+                                }
+                                collected
+                            }
+                        };
+
+                        call.push_str(&args.join(","));
+                       call
                     },
                     _ => unreachable!("{:?}", token)                    
                 }
@@ -119,7 +186,7 @@ impl Macro {
     }
 
     /// Develop the macro with the given arguments
-    pub fn develop(&self, args: &[String]) -> String {
+    pub fn develop(&self, args: &[MacroParam]) -> String {
         assert_eq!(args.len(), self.nb_args());
 
 
@@ -127,7 +194,10 @@ impl Macro {
 
         // replace the arguments for the listing
         for (argname, argvalue) in self.args.iter().zip(args.iter()) {
-            listing = listing.replace(&format!("{{{}}}", argname), argvalue);
+            listing = listing.replace(
+                &format!("{{{}}}", argname), 
+                &argvalue.expand()
+            );
         }
 
         listing
