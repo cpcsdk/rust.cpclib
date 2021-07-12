@@ -8,6 +8,8 @@ impl ListingElement for Token {}
 /// Standard listing is a specific implementation
 pub type Listing = BaseListing<Token>;
 
+
+
 // Set of methods that do not have additional dependencies
 impl Listing {
     /// Add a new label to the listing
