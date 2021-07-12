@@ -701,8 +701,6 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
                 r#struct.develop(&parameters)
             };
 
-
-            dbg!(&code);
             
             // Tokenize with the same assembling parameters and context
             let mut listing = Listing::from_str(&code)?;
