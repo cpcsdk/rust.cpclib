@@ -676,11 +676,8 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
         pub fn visit_call_macro_or_build_struct(
             &mut self,
             name: &str,
-            parameters: &[String],
+            parameters: &[MacroParam],
         ) -> Result<(), AssemblerError> {
-
-
-
 
             // Retreive the macro or structure definition
             let r#macro = self.symbols().macro_value(name);
@@ -700,7 +697,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
             else {
                 let r#struct = r#struct.unwrap();
                 let mut parameters = parameters.to_vec();
-                parameters.resize(r#struct.nb_args(), "".to_owned());
+                parameters.resize(r#struct.nb_args(), MacroParam::empty());
                 r#struct.develop(&parameters)
             };
 

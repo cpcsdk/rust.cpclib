@@ -1199,6 +1199,34 @@ pub fn parse_forbidden_keyword(input: &str) -> IResult<&str, String, VerboseErro
 
     Ok((input, name))
 }
+pub fn parse_macro_arg(input: &str) -> IResult<&str, MacroParam, VerboseError<&str>> {
+    alt((
+        map(
+            delimited(
+                tuple((space0, char('['))), 
+                separated_list0(
+                    char(','),
+                    parse_macro_arg
+                ),
+                tuple((char(']'), space0))
+            ),
+            |l| {
+                MacroParam::List(
+                    l.into_iter()
+                        .map(|p| Box::new(p.clone()))
+                        .collect::<Vec<_>>()
+                )
+            }
+        ),
+
+        map(
+            many0(none_of(",\r\n][")),
+            |s| {
+                MacroParam::Single(s.iter().collect::<String>())
+            }
+        )
+    ))(input)
+}
 
 /// Manage the call of a macro.
 /// TODO use parse_forbidden_keyword
@@ -1227,7 +1255,7 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token, VerboseError<&str>>
                 /*expr_list,  */ // initially a list of expression was used; now it is just plain strings
                 separated_list1(
                     tuple((tag(","), space0)),
-                    take_till(|c| c == ',' || c == '\n'),
+                    parse_macro_arg,
                 ),
                 map(tag_no_case("(void)"), |_| Vec::new()),
             ))),
@@ -1237,10 +1265,7 @@ pub fn parse_macro_call(input: &str) -> IResult<&str, Token, VerboseError<&str>>
             input,
             Token::MacroCall(
                 name,
-                args.unwrap_or_default()
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<String>>(),
+                args.unwrap_or_default(),
             ),
         ))
     }
