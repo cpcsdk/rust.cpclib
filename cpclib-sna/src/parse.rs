@@ -96,7 +96,7 @@ pub fn bin_number<'src, T>(input: LocatedSpan<&'src str, T>) -> IResult<LocatedS
 where T:Clone
 {
     let (input, digits) = preceded(
-        tag("0b"),
+        alt((tag("0b"), tag("%"))),
         many1(alt((tag("0"), tag("1"))))
     )(input)?;
     let number = digits.iter()
