@@ -91,7 +91,7 @@ fn parse(matches: &ArgMatches<'_>) -> Result<Listing, BasmError> {
         }
     }
 
-    parse_str_with_context(&code, &context).map_err(|e| e.into())
+    parse_z80_str_with_context(&code, &context).map_err(|e| e.into())
 }
 
 /// Assemble the given code

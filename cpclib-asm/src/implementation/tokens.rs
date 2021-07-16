@@ -165,7 +165,7 @@ impl TokenExt for Token {
 
                         let mut new_ctx = ctx.clone();
                         new_ctx.set_current_filename(fname);
-                        listing.replace(parse_str_with_context(&content, &new_ctx)?);
+                        listing.replace(parse_z80_str_with_context(&content, &new_ctx)?);
                     }
                 }
             }
@@ -530,7 +530,7 @@ impl TokenTryFrom<&str> for Token {
         let tokens = {
             let res = parse_z80_str(value);
             match res {
-                Ok(tokens) => tokens.1,
+                Ok(tokens) => tokens,
                 Err(_e) => {
                     return Err("ERROR -- need to code why ...".to_owned());
                 }

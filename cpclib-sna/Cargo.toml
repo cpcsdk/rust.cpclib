@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-sna"
-version = "0.4.4"
+version = "0.5.0"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -17,6 +17,7 @@ serde = { version = "1.0.126", features = ["derive"] }
 smallvec = "1.6.1"
 strsim = "0.10.0"
 nom = "6.2.1"
+nom_locate = "3.0.1"
 
 
 clap = { version = "2.33.3", optional = true }
