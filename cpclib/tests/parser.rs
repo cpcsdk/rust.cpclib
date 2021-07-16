@@ -98,17 +98,6 @@ mod tests {
         );
     }
 
-    #[test]
-    #[should_panic]
-    fn test_dec_number_overflow() {
-        get_val::<u32>(dec_number_inner(CTX.build_span("65536")));
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_hex_number_overflow() {
-        get_val::<u32>(hex_number_inner(CTX.build_span("0x10000")));
-    }
 
     #[test]
     fn test_org_value_decimal() {
@@ -1233,14 +1222,7 @@ INC_H equ opcode(inc h)
         let _tokens = get_val(parse_ld(CTX.build_span(code)));
     }
 
-    #[test]
-    #[should_panic]
-    fn assert_test_should_assemble_later() {
-        let code = " ASSERT 1 < 0x10000"; // ATM such number is not parsed
-        eprintln!("RES: {:?}", parse_z80_str(code));
-        let tokens = parse_z80_str(code).unwrap();
-        assert_eq!(tokens.len(), 1);
-    }
+
 
     #[test]
     fn expr_previous_failures() {
