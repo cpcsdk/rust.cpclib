@@ -55,7 +55,7 @@ impl ListingExt for Listing {
             .map_err(|e| AssemblerError::SyntaxError {
                 error: format!("{:?}", e),
             })
-            .map(|(_res, local_tokens)| {
+            .map(|local_tokens| {
                 self.listing_mut().extend_from_slice(&local_tokens);
             })
     }
@@ -313,7 +313,7 @@ pub trait ListingFromStr {
 
 impl ListingFromStr for Listing {
     fn from_str(s: &str) -> Result<Listing, AssemblerError> {
-        crate::parser::parse_str(s)
+        crate::parser::parse_z80_str(s)
     }
 
 

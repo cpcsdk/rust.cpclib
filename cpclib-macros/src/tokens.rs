@@ -1,4 +1,4 @@
-use cpclib_asm::preamble::*;
+use cpclib_asm::preamble::{Token, Listing, Expr, DataAccess, Mnemonic, Register16, Register8, FlagTest, StableTickerAction, UnaryFunction, BinaryFunction};
 use proc_macro2::*;
 use quote::TokenStreamExt;
 

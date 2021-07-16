@@ -1,5 +1,10 @@
 use cpclib_asm::preamble::*;
-
+static CTX: ParserContext = ParserContext {
+	context_name: None,
+	current_filename: None,
+	read_referenced_files: false,
+	search_path: Vec::new()
+};
 #[test]
 fn test_regression1() {
 
@@ -43,12 +48,12 @@ fn test_regression1() {
 #[test]
 fn expr_negative_regression() {
 	assert_eq!(
-		expr("18").unwrap().1,
+		expr(CTX.build_span("18")).unwrap().1,
 		Expr::Value(18)
 	);
 
 	assert_eq!(
-		expr("-18").unwrap().1,
+		expr(CTX.build_span("-18")).unwrap().1,
 		Expr::Value(-18)
 	);
 }
@@ -58,7 +63,7 @@ fn expr_negative_regression() {
 fn db_negative_regression() {    
 
 	let code = "	db 18";
-	let listing  = parse_str(code).unwrap();
+	let listing  = parse_z80_str(code).unwrap();
 	assert_eq!(listing.len(), 1);
 	assert_eq!(listing[0],
 		Token::Defb(vec![Expr::Value(18)])
@@ -66,7 +71,7 @@ fn db_negative_regression() {
 
 
 	let code = "	db -18";
-	let listing  = parse_str(code).unwrap();
+	let listing  = parse_z80_str(code).unwrap();
 	assert_eq!(listing.len(), 1);
 	assert_eq!(listing[0],
 		Token::Defb(vec![Expr::Value(-18)])
@@ -98,7 +103,7 @@ fn macro_args1() {
 @nextBit
   MEND
 	";
-	let listing  = dbg!(parse_str(code).unwrap());
+	let listing  = dbg!(parse_z80_str(code).unwrap());
 	assert_eq!(listing.len(), 1);
 	let token = listing.get(0).unwrap();
 	assert_eq!(
@@ -116,7 +121,7 @@ fn macro_args1() {
 #[test]
 fn macro_args_single() {
 	let code = "1";
-	let arg = dbg!(parse_macro_arg(code)).unwrap().1;
+	let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
 
 	assert_eq!(
 		arg,
@@ -127,7 +132,7 @@ fn macro_args_single() {
 #[test]
 fn macro_args_list_1() {
 	let code = "[1]";
-	let arg = dbg!(parse_macro_arg(code)).unwrap().1;
+	let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
 
 	assert_eq!(
 		arg,
@@ -142,7 +147,7 @@ fn macro_args_list_1() {
 #[test]
 fn macro_args_list_2() {
 	let code = "[1, 3]";
-	let arg = dbg!(parse_macro_arg(code)).unwrap().1;
+	let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
 
 	assert_eq!(
 		arg,
@@ -158,7 +163,7 @@ fn macro_args_list_2() {
 #[test]
 fn macro_args_list_3() {
 	let code = "[1, ,3]";
-	let arg = dbg!(parse_macro_arg(code)).unwrap().1;
+	let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
 
 	assert_eq!(
 		arg,
