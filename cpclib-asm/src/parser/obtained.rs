@@ -262,8 +262,36 @@ impl<'src, 'ctx> Locate<'src, 'ctx> for Token {
 	type Output = LocatedToken<'src, 'ctx>;
 	
 	fn locate(self, span: Z80Span<'src, 'ctx>) -> LocatedToken<'src, 'ctx> {
-		if self.has_at_least_one_listing() {
-			panic!("We cannot transparently build a LocatedToken from a Token that embeds some Listing")
+		if self.has_at_least_one_listing() {/*/
+			match self {
+				Token::CrunchedSection(a, b) => {
+					LocatedToken::CrunchedSection(a, b, span)
+				},
+				Token::Include(a,b) => {
+					LocatedToken::Include(a, b, span)
+				},
+				Token::If(a, b) => {
+					LocatedToken::If(a, b, span)
+				},
+				Token::Repeat(a,b, c,) => {
+					LocatedToken::Repeat(a,b,c,span)
+				},
+				Token::RepeatUntil(a, b) => {
+					LocatedToken::RepeatUntil(a, b, span)
+				},
+				Token::Rorg(a, b) => {
+					LocatedToken::Rorg(a, b, span)
+				},
+				Token::Switch(a) => {
+					LocatedToken::Switch(a, span)
+				},
+				Token::While(a, b) => {
+					LocatedToken::While(a, b, span)
+				},
+				_ => unreachable!()
+				
+			}*/
+			unreachable!()
 		} else {
 			LocatedToken::Standard{token: self, span}
 		}
