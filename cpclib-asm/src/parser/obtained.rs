@@ -77,14 +77,42 @@ impl<'src, 'ctx>  LocatedToken<'src, 'ctx> {
 	pub fn as_token(&self) -> Token {
 		match self {
 			LocatedToken::Standard{ token, ..} => token.clone(),
-			LocatedToken::CrunchedSection(_, _, span)  => unimplemented!(),
-			LocatedToken::Include(_, _, span)  => unimplemented!(),
-			LocatedToken::If(_, _, span)  => unimplemented!(),
-			LocatedToken::Repeat(_, _, _, span)  => unimplemented!(),
-			LocatedToken::RepeatUntil(_, _, span)  => unimplemented!(),
-			LocatedToken::Rorg(_, _, span)  => unimplemented!(),
-			LocatedToken::Switch(_, span)  => unimplemented!(),
-			LocatedToken::While(_, _, span)  => unimplemented!(),
+			LocatedToken::CrunchedSection(c, l, _span)  => {
+				Token::CrunchedSection(*c, l.as_listing())
+			},
+			LocatedToken::Include(s, l, _span)  => {
+				Token::Include(s.clone(), l.as_ref().map(|l| l.as_listing()))
+			}
+			LocatedToken::If(v, e, _span)  => {
+				Token::If(
+					v.iter()
+						.map(|(k,l)| (k.clone(), l.as_listing()))
+						.collect_vec(),
+					e.as_ref().map(|l| l.as_listing())
+				)
+			},
+			LocatedToken::Repeat(e, l, s, _span)  => {
+				Token::Repeat(e.clone(), l.as_listing(), s.clone())
+			},
+			LocatedToken::RepeatUntil(e, l, _span)  => {
+				Token::RepeatUntil(e.clone(), l.as_listing())
+			},
+			LocatedToken::Rorg(e, l, _span)  => {
+				Token::Rorg(e.clone(), l.as_listing())
+			},
+			LocatedToken::Switch(v, _span)  => {
+				Token::Switch(
+					v.iter()
+						.map(|(e, l)| (e.clone(), l.as_listing()))
+						.collect_vec()
+				)
+			},
+			LocatedToken::While(e, l, _span)  => {
+				Token::While(
+					e.clone(),
+					l.as_listing()
+				)
+			},
 		}
 	}
 	
