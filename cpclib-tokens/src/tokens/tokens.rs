@@ -5,6 +5,7 @@ use crate::tokens::expression::*;
 
 impl ListingElement for Token {}
 
+
 /// Standard listing is a specific implementation
 pub type Listing = BaseListing<Token>;
 
