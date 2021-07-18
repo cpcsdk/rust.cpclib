@@ -210,7 +210,8 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
             let token = self.as_token();
             token.visited(env)
                 .map_err(|err| {
-                    todo!("inject location knowledge")
+                    eprintln!("TODO - inject location knowledge");
+                    err
                 })
         }
     }

@@ -2736,14 +2736,14 @@ macro_rules! parse_any_indexregister8 {
                     .replace("\u{C2}\u{A0}", " ");
                     let res = std::dbg!(parse_z80_line_complete(Z80Span::new_extra(&code, &CTX)));
                     assert!(res.is_ok(), "{:?}", &res);
-                    assert!(res.unwrap().0.is_empty());
+                    assert!(res.unwrap().0.trim().is_empty());
                     
                     let code = " nop
                     "
                     .replace("\u{C2}\u{A0}", " ");
                     let res = std::dbg!(parse_z80_line(Z80Span::new_extra(&code, &CTX)));
                     assert!(res.is_ok(), "{:?}", &res);
-                    assert!(res.unwrap().0.is_empty());
+                    assert!(res.unwrap().0.trim().is_empty());
                     
                     let code = " nop
                     nop
