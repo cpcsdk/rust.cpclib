@@ -24,7 +24,8 @@ remain = "0.2.2"
 serde = { version = "1.0.126", features = ["derive"] }
 smallvec = "1.6.1"
 strsim = "0.10.0"
-
+nom = "6.2.1"
+nom_locate = "3.0.1"
 
 
 [build-dependencies]

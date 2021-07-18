@@ -65,7 +65,7 @@ fn db_negative_regression() {
 	let code = "	db 18";
 	let listing  = parse_z80_str(code).unwrap();
 	assert_eq!(listing.len(), 1);
-	assert_eq!(listing[0],
+	assert_eq!(*listing[0].clone().token().unwrap(),
 		Token::Defb(vec![Expr::Value(18)])
 	);
 
@@ -73,7 +73,7 @@ fn db_negative_regression() {
 	let code = "	db -18";
 	let listing  = parse_z80_str(code).unwrap();
 	assert_eq!(listing.len(), 1);
-	assert_eq!(listing[0],
+	assert_eq!(*listing[0].clone().token().unwrap(),
 		Token::Defb(vec![Expr::Value(-18)])
 	);
 
@@ -107,11 +107,11 @@ fn macro_args1() {
 	assert_eq!(listing.len(), 1);
 	let token = listing.get(0).unwrap();
 	assert_eq!(
-		token.macro_name(),
+		token.clone().token().unwrap().macro_name(),
 		Some("CRC32XOR")
 	);
 	assert_eq!(
-		token.macro_arguments().unwrap().len(),
+		token.clone().token().unwrap().macro_arguments().unwrap().len(),
 		4
 	);
 	

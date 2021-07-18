@@ -1,9 +1,14 @@
 use std::fmt;
 
+
+
+use crate::Listing;
+
+
 use crate::Register8;
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
-use crate::tokens::Listing;
+
 use itertools::Itertools;
 
 use cpclib_sna::SnapshotVersion;
@@ -391,6 +396,9 @@ pub enum BinaryTransformation {
     Aplib,
 }
 
+
+
+/// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -486,7 +494,7 @@ pub enum Token {
     While(Expr, Listing),
 }
 
-impl fmt::Display for Token {
+impl fmt::Display for Token{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let expr_list_to_string = |exprs: &Vec<Expr>| {
             exprs
@@ -920,6 +928,22 @@ impl Token {
         match self {
             Token::Org(ref expr, _) | Token::Equ(_, ref expr) => Some(expr),
             _ => None,
+        }
+    }
+
+
+    /// Return true for directives that can emebed some listing information
+    pub fn has_at_least_one_listing(&self) -> bool {
+        match self {
+            Self::CrunchedSection(_, _) |
+            Self::Include(_,_) |
+			Self::If(_, _) |
+			Self::Repeat(_, _, _,) |
+			Self::RepeatUntil(_, _) |
+			Self::Rorg(_, _) |
+			Self::Switch(_) |
+			Self::While(_, _) => true,
+            _ => false
         }
     }
 }

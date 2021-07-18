@@ -190,7 +190,31 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
         _memstart: usize,
         _memend: usize,
     }
-    
+
+
+/// Trait to implement for each type of token.
+/// it allows to drive the appropriate data vonversion
+    pub trait Visited {
+        /// Make all the necessary for the given token
+        fn visited(&self, env: &mut Env) -> Result<(), AssemblerError>;
+    }
+
+    impl Visited for Token {
+        fn visited(&self, env: &mut Env) -> Result<(), AssemblerError> {
+            visit_token(self, env)
+        }
+    }
+
+    impl Visited for LocatedToken<'_, '_> {
+        fn visited(&self, env: &mut Env) -> Result<(), AssemblerError> {
+            let token = self.as_token();
+            token.visited(env)
+                .map_err(|err| {
+                    todo!("inject location knowledge")
+                })
+        }
+    }
+
     /// Environment of the assembly
     #[allow(missing_docs)]
     pub struct Env {
@@ -511,7 +535,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
         /// Visit all the tokens of the listing
         pub fn visit_listing(&mut self, listing: &Listing) -> Result<(), AssemblerError> {
             for token in listing.listing().iter() {
-                visit_token(token, self)?;
+                token.visited(self)?;
             }
             
             Ok(())
@@ -842,14 +866,14 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
     }
     
     /// Visit the tokens during several passes without providing a specific symbol table.
-    pub fn visit_tokens_all_passes(tokens: &[Token]) -> Result<Env, AssemblerError> {
+    pub fn visit_tokens_all_passes<T:Visited>(tokens: &[T]) -> Result<Env, AssemblerError> {
         let options = AssemblingOptions::default();
         visit_tokens_all_passes_with_options(tokens, &options)
     }
     
     /// Visit the tokens during several passes by providing a specific symbol table.
-    pub fn visit_tokens_all_passes_with_options(
-        tokens: &[Token],
+    pub fn visit_tokens_all_passes_with_options<T:Visited>(
+        tokens: &[T],
         options: &AssemblingOptions,
     ) -> Result<Env, AssemblerError> {
         let mut env = Env::default();
@@ -865,7 +889,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
             }
             
             for token in tokens.iter() {
-                visit_token(token, &mut env)?;
+                token.visited(&mut env)?;
             }
         }
         
@@ -874,22 +898,21 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
     
     /// Visit the tokens during a single pass. Is deprecated in favor to the mulitpass version
     #[deprecated(note = "use visit_tokens_one_pass")]
-    pub fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
+    pub fn visit_tokens<T:Visited>(tokens: &[T]) -> Result<Env, AssemblerError> {
         visit_tokens_one_pass(tokens)
     }
     
     /// Assemble the tokens doing one pass only (so symbols are not properly treated)
-    pub fn visit_tokens_one_pass(tokens: &[Token]) -> Result<Env, AssemblerError> {
+    pub fn visit_tokens_one_pass<T:Visited>(tokens: &[T]) -> Result<Env, AssemblerError> {
         let mut env = Env::default();
         
         for token in tokens.iter() {
-            visit_token(token, &mut env)?;
+            token.visited(&mut env)?;
         }
         
         Ok(env)
     }
-    
-    /// TODO org is a directive, not an opcode => need to change that
+     /// TODO org is a directive, not an opcode => need to change that
     pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         env.update_dollar();
         match token {

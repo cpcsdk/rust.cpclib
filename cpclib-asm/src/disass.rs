@@ -1941,7 +1941,7 @@ pub fn string_to_token(representation: &str) -> Result<Token, String> {
     if representation.len() == 0 {
         Err("Empty opcode".to_string())
     } else {
-        Token::try_from(["\t", &representation].join("")).and_then(|mut token| {
+        Token::parse_token(&["\t", &representation].join("")).and_then(|mut token| {
             token.fix_relative_jumps_after_disassembling();
             Ok(token)
         })

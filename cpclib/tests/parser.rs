@@ -7,6 +7,7 @@ mod tests {
 
     use cpclib_asm::preamble::*;
     use cpclib_sna::parse::*; // todo : move its tests at the right place
+    use std::ops::Deref;
 
     use nom::IResult;
 
@@ -180,7 +181,7 @@ mod tests {
     fn test_label_opcode() {
         let tokens = get_val(parse_z80_line(CTX.build_span("ORG 0x1000")));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0], Token::Label(_));
+        assert_matches!(tokens[0].deref(), Token::Label(_));
     }
 
     #[test]
@@ -190,53 +191,53 @@ mod tests {
 
         let tokens = get_val(parse_z80_line(CTX.build_span(" ORG 0x1000")));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0], Token::Org(_, None));
+        assert_matches!(tokens[0].deref(), Token::Org(_, None));
 
         let tokens = get_val(parse_z80_line(CTX.build_span(" ORG 0x1000 ")));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0], Token::Org(_, None));
+        assert_matches!(tokens[0].deref(), Token::Org(_, None));
 
         let tokens = get_val(parse_z80_line(CTX.build_span("\tORG 0x1000")));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0], Token::Org(_, None));
+        assert_matches!(tokens[0].deref(), Token::Org(_, None));
 
         let tokens = get_val(parse_z80_line(CTX.build_span("    ORG 0x1000")));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0], Token::Org(_, None));
+        assert_matches!(tokens[0].deref(), Token::Org(_, None));
 
         let tokens = get_val(parse_z80_line(CTX.build_span(" ORG 0x1000; test")));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0], Token::Org(_, None));
+        assert_matches!(tokens[0].deref(), Token::Org(_, None));
 
         let tokens = get_val(parse_z80_line(CTX.build_span(" ORG 0x1000 ; test")));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0], Token::Org(_, None));
+        assert_matches!(tokens[0].deref(), Token::Org(_, None));
 
         let tokens = get_val(parse_z80_line(CTX.build_span("label ORG 0x1000")));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0], Token::Label(_));
-        assert_matches!(tokens[1], Token::Org(_, _));
+        assert_matches!(tokens[0].deref(), Token::Label(_));
+        assert_matches!(tokens[1].deref(), Token::Org(_, _));
 
         let tokens = get_val(parse_z80_line(CTX.build_span("label ORG 0x1000 : ORG 0x000 : ORG 10")));
         assert_eq!(tokens.len(), 4);
-        assert_matches!(tokens[0], Token::Label(_));
-        assert_matches!(tokens[1], Token::Org(_, _));
-        assert_matches!(tokens[2], Token::Org(_, _));
+        assert_matches!(tokens[0].deref(), Token::Label(_));
+        assert_matches!(tokens[1].deref(), Token::Org(_, _));
+        assert_matches!(tokens[2].deref(), Token::Org(_, _));
 
         let tokens = get_val(parse_z80_line(CTX.build_span(
             "label ORG 0x1000 : ORG 0x000 : ORG 10 ; fdfs"),
         ));
         assert_eq!(tokens.len(), 5);
-        assert_matches!(tokens[0], Token::Label(_));
-        assert_matches!(tokens[1], Token::Org(_, _));
-        assert_matches!(tokens[2], Token::Org(_, _));
+        assert_matches!(tokens[0].deref(), Token::Label(_));
+        assert_matches!(tokens[1].deref(), Token::Org(_, _));
+        assert_matches!(tokens[2].deref(), Token::Org(_, _));
 
         let tokens = get_val(parse_z80_line(CTX.build_span(
             "label ORG 0x1000 ; : ORG 0x000 : ORG 10 ; fdfs"),
         ));
         assert_eq!(tokens.len(), 3);
-        assert_matches!(tokens[0], Token::Label(_));
-        assert_matches!(tokens[1], Token::Org(_, _));
+        assert_matches!(tokens[0].deref(), Token::Label(_));
+        assert_matches!(tokens[1].deref(), Token::Org(_, _));
     }
 
     #[test]
@@ -305,7 +306,7 @@ mod tests {
         let code = " jp nz, .other_lines + (9+4+1+2)     ; 4";
         let tokens = get_val(parse_z80_line(CTX.build_span(code)));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0], Token::OpCode(Mnemonic::Jp, _, _, _));
+        assert_matches!(tokens[0].deref(), Token::OpCode(Mnemonic::Jp, _, _, _));
     }
 
     #[test]
@@ -324,7 +325,7 @@ mod tests {
         let tokens = get_val(parse_z80_line(CTX.build_span(code)));
         println!("{:?}", tokens);
         assert_matches!(
-            tokens[0],
+            tokens[0].deref(),
             Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register16(_)),

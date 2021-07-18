@@ -1,4 +1,6 @@
 #![feature(assert_matches)]
+#![feature(in_band_lifetimes)]
+#![feature(specialization)]
 
 /// Implementation of various behvior for the tokens of cpclib_tokens
 pub mod implementation;
@@ -100,8 +102,8 @@ pub fn assemble_with_options(
 }
 
 /// Assemble the predifined list of tokens
-pub fn assemble_tokens_with_options(
-    tokens: &[Token],
+pub fn assemble_tokens_with_options<T:Visited> (
+    tokens: &[T],
     options: &AssemblingOptions,
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
