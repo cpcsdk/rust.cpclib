@@ -1,9 +1,8 @@
 #![allow(clippy::cast_lossless)]
-
-
-
+use std::convert::TryInto;
 use std::convert::TryFrom;
 use std::ops::Deref;
+use std::rc::Rc;
 
 use cpclib_sna::FlagValue;
 use cpclib_sna::parse::bin_number;
@@ -61,16 +60,17 @@ const FINAL_DIRECTIVE: &[&str] = &[
 "ENDIF", // if directive
 "ELSE",
 ];
-pub fn parse_z80_strboxed_with_contextboxed<'src, 'ctx> (code: Box<String>, ctx: Box<ParserContext>) -> Result<LocatedListing<'src, 'ctx>, AssemblerError> {
+pub fn parse_z80_strboxed_with_contextboxed (code: Rc<String>, ctx: Rc<ParserContext>) -> Result<LocatedListing, AssemblerError> {
     todo!("Inject the source in the listing to keep its address correct")
 }
 
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
 /// In case of success loop over all the tokens in order to expand those that read files
-pub fn parse_z80_str_with_context<'src, 'ctx> (code: &'src str, ctx: &'ctx ParserContext) -> Result<LocatedListing<'src, 'ctx>, AssemblerError> {
-    let code = ctx.build_span(code);
-    match parse_z80_code(code) {
+pub fn parse_z80_str_with_context(str: String, ctx: ParserContext) -> Result<LocatedListing, AssemblerError> {
+    let mut listing = LocatedListing::new_empty(str, ctx);
+    let ctx = listing.ctx();
+    match parse_z80_code(listing.span()) {
         Err(e) => {
             return Err(AssemblerError::SyntaxError {
                 error: format!("Error while parsing: {:?}", e), //TODO add context
@@ -85,14 +85,14 @@ pub fn parse_z80_str_with_context<'src, 'ctx> (code: &'src str, ctx: &'ctx Parse
                         "Bug in the parser. The remaining source has not been assembled:\n{}",
                         remaining.deref()
                     ),
-                    context: ctx.clone(),
+                    context: ctx.deref().clone(),
                 });
             } 
             
             if ctx.read_referenced_files {
                 let errors = parsed.listing_mut()./*par_*/iter_mut()
                 .map(|token|
-                    token.read_referenced_file(ctx)
+                    token.read_referenced_file(&ctx)
                 ).filter(
                     Result::is_err
                 )
@@ -115,14 +115,14 @@ pub fn parse_z80_str_with_context<'src, 'ctx> (code: &'src str, ctx: &'ctx Parse
 
 /// Parse a string and return the corresponding listing
 pub fn parse_z80_str(code: &str) -> Result<LocatedListing, AssemblerError> {
-    parse_z80_str_with_context(code, &DEFAULT_CTX)
+    parse_z80_str_with_context(code.to_owned(), DEFAULT_CTX.clone())
 }
 
 /// nom many0 does not seem to fit our parser requirements
-pub fn my_many0<O, E, F>(mut f: F) -> impl for <'src, 'ctx> FnMut(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Vec<O>, E>
+pub fn my_many0<O, E, F>(mut f: F) -> impl  FnMut(Z80Span) -> IResult<Z80Span, Vec<O>, E>
 where
-F: for <'src, 'ctx> Parser<Z80Span<'src, 'ctx>, O, E>,
-E: for <'src, 'ctx> ParseError<Z80Span<'src, 'ctx>>,
+F:   Parser<Z80Span, O, E>,
+E:   ParseError<Z80Span>,
 {
     move |mut i: Z80Span| {
         let mut acc = Vec::with_capacity(4);
@@ -143,18 +143,18 @@ E: for <'src, 'ctx> ParseError<Z80Span<'src, 'ctx>>,
     }
 }
 
-/// Parse a complete code
-pub fn parse_z80_code<'src,'ctx>(input: Z80Span<'src,'ctx>) -> IResult<Z80Span<'src,'ctx>, LocatedListing<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+/// Parse a complete code from a span
+pub fn parse_z80_code<'src, 'ctx, 'a>(input: Z80Span) -> IResult<Z80Span, LocatedListing, VerboseError<Z80Span>> {
     let (input, tokens) = many0(parse_z80_line)(input)?; // here it is my_many0 supposed to be used
     if input.is_empty() {
         let tokens = tokens.iter()
         .flatten()
         .cloned()
         .collect_vec();
-        Ok((input, tokens.into()))
+        Ok((input, tokens.try_into().unwrap()))
     } else {
         // Everything should have been consumed
-        return Err(Err::Error(nom::error::ParseError::<Z80Span<'src,'ctx>>::from_error_kind(
+        return Err(Err::Error(nom::error::ParseError::<Z80Span>::from_error_kind(
             input,
             ErrorKind::Many0,
         )));
@@ -162,7 +162,7 @@ pub fn parse_z80_code<'src,'ctx>(input: Z80Span<'src,'ctx>) -> IResult<Z80Span<'
 }
 
 /// Parse a single line of Z80. Code useing directive on several lines cannot work
-pub fn parse_z80_line<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Vec<LocatedToken<'src, 'ctx>>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_z80_line(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     let before_elem = input.clone();
     let (input2, tokens) = tuple((
         context("not eof", not(eof)),
@@ -203,7 +203,7 @@ pub fn parse_z80_line<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span
 }
 
 /// Workaround because many0 is not used in the main root function
-fn inner_code<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Vec<LocatedToken<'src, 'ctx>>, VerboseError<Z80Span<'src,'ctx>>> {
+fn inner_code(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     context(
         "inner code",
         fold_many0(parse_z80_line, Vec::new(), |mut inner, tokens| {
@@ -214,7 +214,7 @@ fn inner_code<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, '
 }
 
 /// TODO
-pub fn parse_rorg<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, LocatedToken<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_rorg(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let (input, _) = space0(input)?;
     let rorg_start = input.clone();
     let (input, _) = alt((tag_no_case("PHASE"), tag_no_case("RORG")))(input)?;
@@ -227,11 +227,11 @@ pub fn parse_rorg<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'sr
     
     let (input, _) = preceded(space0, alt((tag_no_case("DEPHASE"), tag_no_case("REND"))))(input)?;
     
-    Ok((input, LocatedToken::Rorg(exp, inner.into(), rorg_start)))
+    Ok((input, LocatedToken::Rorg(exp, inner.try_into().unwrap(), rorg_start)))
 }
 
 /// TODO
-pub fn parse_macro<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = preceded(space0, parse_instr("MACRO"))(input)?;
     
     // macro name
@@ -281,7 +281,7 @@ pub fn parse_macro<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'s
 }
 
 /// TODO
-pub fn parse_repeat<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, LocatedToken<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     
     let repeat_start = input.clone();
     let (input, _) = preceded(
@@ -314,11 +314,11 @@ pub fn parse_repeat<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'
         )),
     ))(input)?;
     
-    Ok((input, LocatedToken::Repeat(count, LocatedListing::from(inner), None, repeat_start)))
+    Ok((input, LocatedToken::Repeat(count, LocatedListing::try_from(inner).unwrap(), None, repeat_start)))
 }
 
 /// TODO
-pub fn parse_basic<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = tuple((space0, tag_no_case("LOCOMOTIVE"), space0))(input)?;
     
     let (input, args) = opt(separated_list1(
@@ -340,57 +340,58 @@ pub fn parse_basic<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'s
 }
 
 /// Parse the instruction to hide basic lines
-pub fn parse_basic_hide_lines<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Vec<u16>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_basic_hide_lines(input: Z80Span) -> IResult<Z80Span, Vec<u16>, VerboseError<Z80Span>> {
     let (input, _) = tuple((tag_no_case("HIDE_LINES"), space1))(input)?;
     separated_list1(
         preceded(space0, char(',')),
         preceded(space0, map(dec_number_inner, |d| d as u16))
     )(input)
 }
-pub fn dec_number_inner<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, u32, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn dec_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z80Span>> {
     
-    let input = *input.deref();
-    let (input, number) = dec_number(input)
+    let input_inner = input.deref().clone();
+    let (input, number) = dec_number(input_inner)
     .map_err(|err| {
-        nom::Err::Error(VerboseError::from_error_kind(Z80Span(input), ErrorKind::AlphaNumeric))
+        nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::AlphaNumeric))
     })?;
     
     Ok((Z80Span(input), number))
 }
-pub fn bin_number_inner<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, u32, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn bin_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z80Span>> {
     
-    let input = *input.deref();
-    let (input, number) = bin_number(input)
+    let input_inner = input.deref().clone();
+    let (input, number) = bin_number(input_inner)
     .map_err(|err| {
-        nom::Err::Error(VerboseError::from_error_kind(Z80Span(input), ErrorKind::AlphaNumeric))
+        nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::AlphaNumeric))
     })?;
     
     Ok((Z80Span(input), number))
 }
-pub fn hex_number_inner<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, u32, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn hex_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z80Span>> {
     
-    let input = *input.deref();
-    let (input, number) = hex_number(input)
+    let input_inner = input.deref().clone();
+    let (input, number) = hex_number(input_inner)
     .map_err(|err| {
-        nom::Err::Error(VerboseError::from_error_kind(Z80Span(input), ErrorKind::AlphaNumeric))
+        nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::AlphaNumeric))
     })?;
     
     Ok((Z80Span(input), number))
 }
 
-pub fn parse_flag_value_inner<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, FlagValue, VerboseError<Z80Span<'src,'ctx>>> {
-    
-    let input = *input.deref();
-    let (input, number) = parse_flag_value(input)
+pub fn parse_flag_value_inner(input: Z80Span) -> IResult<Z80Span, FlagValue, VerboseError<Z80Span>> {
+    let inner_input = input.deref().clone();
+
+    let (input, number) = parse_flag_value(inner_input)
     .map_err(|err| {
-        nom::Err::Error(VerboseError::from_error_kind(Z80Span(input), ErrorKind::AlphaNumeric))
+        nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::AlphaNumeric))
     })?;
     
+
     Ok((Z80Span(input), number))
 }
 
 /// TODO - currently consume several lines. Should do it only one time
-pub fn parse_empty_line<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Vec<LocatedToken<'src, 'ctx>>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_empty_line(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     // let (input, _) = opt(line_ending)(input)?;
     let before_comment = input.clone();
     let (input, comment) = delimited(space0, opt(comment), space0)(input)?;
@@ -404,7 +405,7 @@ pub fn parse_empty_line<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Sp
     Ok((input, res))
 }
 
-fn parse_single_token(first: bool) -> impl for<'src, 'ctx> Fn(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, LocatedToken<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+fn parse_single_token(first: bool) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     move |input: Z80Span| {
         // Do not match ':' for the first case
         let input = if first {
@@ -424,7 +425,7 @@ fn parse_single_token(first: bool) -> impl for<'src, 'ctx> Fn(Z80Span<'src, 'ctx
     }
 }
 
-fn eof<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Z80Span<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+fn eof(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
     if input.len() == 0 {
         Ok((input.clone(), input))
     } else {
@@ -434,7 +435,7 @@ fn eof<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Z
 
 /// Parse a line
 /// TODO add an argument o manage cases like '... : ENDIF'
-pub fn parse_z80_line_complete<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Vec<LocatedToken<'src, 'ctx>>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_z80_line_complete(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     // Eat previous line ending
     let (input, _) = opt(line_ending)(input)?;
     
@@ -491,7 +492,7 @@ pub fn parse_z80_line_complete<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResul
 /// No opcodes are expected there.
 /// Initially it was supposed to manage lines with only labels, however it has been extended
 /// to labels fallowed by specific commands.
-pub fn parse_z80_line_label_only<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Vec<LocatedToken<'src, 'ctx>>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_z80_line_label_only(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     let before_label = input.clone();
     let (input, label) = parse_label(true)(input)?;
     
@@ -525,7 +526,7 @@ pub fn parse_z80_line_label_only<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IRes
 }
 
 /// Parser for file names in appropriate directives
-pub fn parse_fname<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Z80Span<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_fname(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
     alt((
         preceded(tag("\""), terminated(take_until("\""), take(1usize))),
         preceded(tag("'"), terminated(take_until("'"), take(1usize))),
@@ -533,7 +534,7 @@ pub fn parse_fname<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'s
 }
 
 /// Parser for the include directive
-pub fn parse_include<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, LocatedToken<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let include_start = input.clone();
     let (input, fname) = preceded(tuple((tag_no_case("INCLUDE"), space1)), parse_fname)(input)?;
     
@@ -541,7 +542,7 @@ pub fn parse_include<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<
 }
 
 /// Parse for the various binary include directives
-pub fn parse_incbin<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, transformation) = alt((
         map(tag_no_case("INCBIN"), |_| BinaryTransformation::None),
         map(tag_no_case("INCEXO"), |_| BinaryTransformation::Exomizer),
@@ -573,7 +574,7 @@ pub fn parse_incbin<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'
     ))
 }
 
-pub fn parse_save<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, filename) = preceded(tuple((tag_no_case("SAVE"), space1)), parse_fname)(input)?;
     
     let (input, address) = preceded(parse_comma, expr)(input)?;
@@ -616,7 +617,7 @@ pub fn parse_save<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'sr
 }
 
 /// Parse  UNDEF directive.
-pub fn parse_undef<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_undef(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, label) =
     preceded(tuple((tag_no_case("UNDEF"), space1)), parse_label(false))(input)?;
     
@@ -624,7 +625,7 @@ pub fn parse_undef<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'s
 }
 
 /// Parse the opcodes. TODO rename as parse_opcode ...
-pub fn parse_token<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, LocatedToken<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     alt((
         parse_ex_af,
         parse_ex_hl_de,
@@ -652,7 +653,7 @@ pub fn parse_token<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'s
 }
 
 /// Parse ex af, af' instruction
-pub fn parse_ex_af<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_ex_af(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     value(
         Token::new_opcode(Mnemonic::ExAf, None, None),
         
@@ -668,7 +669,7 @@ pub fn parse_ex_af<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'s
 }
 
 /// Parse ex hl, de instruction
-pub fn parse_ex_hl_de<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_ex_hl_de(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     value(
         Token::new_opcode(Mnemonic::ExHlDe, None, None),
         alt((
@@ -691,7 +692,7 @@ pub fn parse_ex_hl_de<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span
 }
 
 /// Parse ex (sp), hl
-pub fn parse_ex_mem_sp<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, destination) = tuple((
         tag_no_case("EX"),
         space1,
@@ -711,7 +712,7 @@ pub fn parse_ex_mem_sp<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Spa
 }
 
 /// Parse any directive
-pub fn parse_directive<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, LocatedToken<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let dir_start = input.clone();
     alt((
         parse_include,
@@ -744,7 +745,7 @@ pub fn parse_directive<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Spa
 }
 
 /// Parse directives with no arguments
-pub fn parse_noarg_directive<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_noarg_directive(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     alt((
         value(Token::List, tag_no_case("list")),
         value(Token::NoList, tag_no_case("nolist")),
@@ -760,7 +761,7 @@ enum KindOfConditional {
 }
 
 /// Parse if expression.TODO finish the implementation in order to have ELSEIF and ELSE branches"
-pub fn parse_conditional<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, LocatedToken<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let if_start = input.clone();
     // Gest the kind of test to do
     let (input, test_kind) = alt((
@@ -807,8 +808,8 @@ pub fn parse_conditional<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80S
     Ok((
         input,
         LocatedToken::If(
-            vec![(cond, code.into())], 
-            r#else.map(LocatedListing::from),
+            vec![(cond, code.try_into().unwrap())], 
+            r#else.map(|v| LocatedListing::try_from(v).unwrap()),
             if_start
         )
     ))
@@ -817,7 +818,7 @@ pub fn parse_conditional<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80S
 /// Read the condition part in the parse_conditional macro
 fn parse_conditional_condition(
     code: KindOfConditional,
-) -> impl for <'src, 'ctx> Fn(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, TestKind, VerboseError<Z80Span<'src,'ctx>>> {
+) -> impl  Fn(Z80Span) -> IResult<Z80Span, TestKind, VerboseError<Z80Span>> {
     move |input: Z80Span| -> IResult<Z80Span, TestKind, VerboseError<Z80Span>> {
         match &code {
             KindOfConditional::If => map(expr, |e| TestKind::True(e))(input),
@@ -838,20 +839,20 @@ fn parse_conditional_condition(
 }
 
 /// Parse a breakpint instruction
-pub fn parse_breakpoint<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_breakpoint(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(preceded(parse_instr("BREAKPOINT"), opt(expr)), |exp| {
         Token::Breakpoint(exp)
     })(input)
 }
 
-pub fn parse_bankset<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_bankset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_instr("bankset")(input)?;
     let (input, count) = expr(input)?;
     
     Ok((input, Token::Bankset(count)))
 }
 
-pub fn parse_buildsna<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_buildsna(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     terminated(
         map(
             preceded(
@@ -875,7 +876,7 @@ pub fn parse_buildsna<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span
     )(input)
 }
 
-pub fn parse_run<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_run(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, exp) = preceded(parse_instr("RUN"), expr)(input)?;
     let (input, ga) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
     
@@ -883,12 +884,12 @@ pub fn parse_run<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src
 }
 
 /// Parse tickin directives
-pub fn parse_stable_ticker<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_stable_ticker(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     alt((parse_stable_ticker_start, parse_stable_ticker_stop))(input)
 }
 
 /// Parse begining of ticker
-pub fn parse_stable_ticker_start<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_stable_ticker_start(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
         preceded(
             tuple((
@@ -905,7 +906,7 @@ pub fn parse_stable_ticker_start<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IRes
 }
 
 /// Parse end of ticker
-pub fn parse_stable_ticker_stop<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_stable_ticker_stop(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     value(
         Token::StableTicker(StableTickerAction::Stop),
         tuple((
@@ -917,7 +918,7 @@ pub fn parse_stable_ticker_stop<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResu
     )(input)
 }
 
-pub fn parse_bank<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_bank(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_instr("bank")(input)?;
     let (input, count) = expr(input)?;
     
@@ -925,7 +926,7 @@ pub fn parse_bank<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'sr
 }
 
 /// Parse fake and real LD instructions
-pub fn parse_ld<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_ld(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     context(
         "ld",
         alt((
@@ -936,7 +937,7 @@ pub fn parse_ld<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src,
 }
 
 /// Parse artifical LD instruction (would be replaced by several real instructions)
-pub fn parse_ld_fake<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_ld_fake(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = tuple((tag_no_case("LD"), space1))(input)?;
     
     let (input, dst) = terminated(
@@ -952,7 +953,7 @@ pub fn parse_ld_fake<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<
 }
 
 /// Parse the valids LD versions
-pub fn parse_ld_normal<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_ld_normal(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = context("...", tuple((space0, parse_instr("LD"), space0)))(input)?;
     
     let (input, dst) = context(
@@ -986,7 +987,7 @@ pub fn parse_ld_normal<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Spa
 /// Parse the source of LD depending on its destination
 fn parse_ld_normal_src(
     dst: &DataAccess,
-) -> impl for<'src, 'ctx> Fn(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> + '_ {
+) -> impl  Fn(Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> + '_ {
     move |input: Z80Span| {
         if dst.is_register_sp() {
             alt((
@@ -1060,7 +1061,7 @@ fn parse_ld_normal_src(
 }
 
 /// Parse RES, SET and BIT instructions
-pub fn parse_res_set_bit<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_res_set_bit(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, res_or_set) = alt((
         value(Mnemonic::Res, tag_no_case("RES")),
         value(Mnemonic::Bit, tag_no_case("BIT")),
@@ -1099,7 +1100,7 @@ Ok((input, Token::OpCode(
 }
 
 /// Parse CP tokens
-pub fn parse_cp<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
         preceded(
             parse_instr("CP"),
@@ -1116,7 +1117,7 @@ pub fn parse_cp<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src,
 }
 
 /// Parse DB DW directives
-pub fn parse_db_or_dw<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_db_or_dw(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, is_db) = alt((
         map(alt((parse_instr("DB"), parse_instr("DEFB"))), |_| true),
         map(alt((parse_instr("DW"), parse_instr("DEFW"))), |_| false),
@@ -1134,7 +1135,7 @@ pub fn parse_db_or_dw<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span
 }
 
 // Fail if we do not read a forbidden keyword
-pub fn parse_forbidden_keyword<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, String, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
     let (input, _) = space0(input)?;
     let (input, name) = parse_label(false)(input)?;
     
@@ -1153,7 +1154,7 @@ pub fn parse_forbidden_keyword<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResul
     
     Ok((input, name))
 }
-pub fn parse_macro_arg<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, MacroParam, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseError<Z80Span>> {
     alt((
         map(
             delimited(
@@ -1184,7 +1185,7 @@ pub fn parse_macro_arg<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Spa
 
 /// Manage the call of a macro.
 /// TODO use parse_forbidden_keyword
-pub fn parse_macro_call<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     // BUG: added because of parsing issues. Need to find why and remove ot
     let (input, _) = space0(input)?;
     let (input, name) = parse_label(false)(input)?;
@@ -1197,7 +1198,7 @@ pub fn parse_macro_call<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Sp
     .is_some()
     {
         Err(Err::Failure(
-            nom::error::ParseError::<Z80Span<'src, 'ctx>>::from_error_kind(input, ErrorKind::AlphaNumeric),
+            nom::error::ParseError::<Z80Span>::from_error_kind(input, ErrorKind::AlphaNumeric),
         ))
     } else {
         let (input, args) = alt((
@@ -1225,7 +1226,7 @@ pub fn parse_macro_call<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Sp
     }
 }
 
-fn parse_instr(name: &'static str) -> impl for<'src, 'ctx> Fn(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, (), VerboseError<Z80Span<'src,'ctx>>> + 'static {
+fn parse_instr(name: &'static str) -> impl Fn(Z80Span) -> IResult<Z80Span, (), VerboseError<Z80Span>> + 'static {
     move |input: Z80Span| {
         map(
             tuple((tag_no_case(name), not(alpha1), space0)), 
@@ -1235,19 +1236,19 @@ fn parse_instr(name: &'static str) -> impl for<'src, 'ctx> Fn(Z80Span<'src, 'ctx
 }
 
 /// ...
-pub fn parse_djnz<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_djnz(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(preceded(parse_instr("DJNZ"), parse_expr), |expr| {
         Token::new_opcode(Mnemonic::Djnz, Some(expr), None)
     })(input)
 }
 
 /// ...
-pub fn expr_list<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Vec<Expr>, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn expr_list(input: Z80Span) -> IResult<Z80Span, Vec<Expr>, VerboseError<Z80Span>> {
     separated_list1(tuple((tag(","), space0)), alt((expr, string_expr)))(input)
 }
 
 /// ...
-pub fn parse_assert<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = context("assert", preceded(space0, parse_instr("ASSERT")))(input)?;
     
     let (input, expr) = context("expr", expr)(input)?;
@@ -1264,14 +1265,14 @@ pub fn parse_assert<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'
 }
 
 /// ...
-pub fn parse_align<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_align(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(preceded(parse_instr("ALIGN"), expr), |expr| {
         Token::Align(expr, None)
     })(input)
 }
 
 /// ...
-pub fn parse_print<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
         preceded(
             parse_instr("PRINT"),
@@ -1281,7 +1282,7 @@ pub fn parse_print<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'s
                     formatted_expr,
                     map(expr, FormattedExpr::from),
                     map(string_between_quotes, {
-                        |s: Z80Span<'src, 'ctx>| FormattedExpr::from(Expr::String(s.to_string()))
+                        |s: Z80Span| FormattedExpr::from(Expr::String(s.to_string()))
                     }),
                 )),
             )),
@@ -1292,7 +1293,7 @@ pub fn parse_print<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'s
 
 /// Parse formatted expression for print like directives
 /// WARNING: only formated case is taken into account
-fn formatted_expr<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, FormattedExpr, VerboseError<Z80Span<'src,'ctx>>> {
+fn formatted_expr(input: Z80Span) -> IResult<Z80Span, FormattedExpr, VerboseError<Z80Span>> {
     let (input, _) = char('{')(input)?;
     let (input, format) = cut(alt((
         value(ExprFormat::Int, tag_no_case("INT")),
@@ -1314,12 +1315,12 @@ fn formatted_expr<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'sr
     Ok((input, FormattedExpr::Formatted(format, exp)))
 }
 
-fn parse_comma<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, (), VerboseError<Z80Span<'src,'ctx>>> {
+fn parse_comma(input: Z80Span) -> IResult<Z80Span, (), VerboseError<Z80Span>> {
     map(tuple((space0, tag(","), space0)), |_| ())(input)
 }
 
 /// ...
-pub fn parse_protect<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_protect(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, start) = preceded(parse_instr("PROTECT"), expr)(input)?;
     
     let (input, end) = preceded(parse_comma, expr)(input)?;
@@ -1328,7 +1329,7 @@ pub fn parse_protect<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<
 }
 
 /// ...
-pub fn parse_logical_operator<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_logical_operator(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, operator) = alt((
         value(Mnemonic::And, parse_instr("AND")),
         value(Mnemonic::Or, parse_instr("Or")),
@@ -1350,12 +1351,12 @@ pub fn parse_logical_operator<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult
 }
 
 /// ...
-pub fn parse_add_or_adc<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_add_or_adc(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     alt((parse_add_or_adc_complete, parse_add_or_adc_shorten))(input)
 }
 
 /// Substraction with A register
-pub fn parse_sub<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_sub(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = tag_no_case("SUB")(input)?;
     let (input, _) = space1(input)?;
     let (input, operand) = alt((
@@ -1370,7 +1371,7 @@ pub fn parse_sub<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src
 }
 
 /// Par se the SBC instruction
-pub fn parse_sbc<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_sbc(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = tag_no_case("SBC")(input)?;
     let (input, _) = space1(input)?;
     
@@ -1401,7 +1402,7 @@ pub fn parse_sbc<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src
 }
 
 /// Parse ADC and ADD instructions
-pub fn parse_add_or_adc_complete<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_add_or_adc_complete(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, add_or_adc) = alt((
         value(Mnemonic::Adc, tag_no_case("ADC")),
         value(Mnemonic::Add, tag_no_case("ADD")),
@@ -1447,7 +1448,7 @@ pub fn parse_add_or_adc_complete<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IRes
 }
 
 /// TODO Find a way to not duplicate code with complete version
-pub fn parse_add_or_adc_shorten<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_add_or_adc_shorten(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, add_or_adc) = alt((
         value(Mnemonic::Adc, parse_instr("ADC")),
         value(Mnemonic::Add, parse_instr("ADD")),
@@ -1471,7 +1472,7 @@ pub fn parse_add_or_adc_shorten<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResu
 }
 
 /// ...
-pub fn parse_push_n_pop<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_push_n_pop(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, push_or_pop) = alt((
         value(Mnemonic::Push, parse_instr("PUSH")),
         value(Mnemonic::Pop, parse_instr("POP")),
@@ -1497,7 +1498,7 @@ pub fn parse_push_n_pop<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Sp
 }
 
 /// ...
-pub fn parse_ret<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_ret(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
         preceded(tag_no_case("RET"), opt(preceded(space1, parse_flag_test))),
         |cond| {
@@ -1515,7 +1516,7 @@ pub fn parse_ret<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src
 }
 
 /// ...
-pub fn parse_inc_dec<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_inc_dec(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, inc_or_dec) = alt((
         value(Mnemonic::Inc, parse_instr("INC")),
         value(Mnemonic::Dec, parse_instr("DEC")),
@@ -1535,7 +1536,7 @@ pub fn parse_inc_dec<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<
 }
 
 /// TODO manage other out formats
-pub fn parse_out<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_out(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_instr("OUT")(input)?;
     
     // get the port proposal
@@ -1558,7 +1559,7 @@ pub fn parse_out<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src
 }
 
 /// Parse all the in flavors
-pub fn parse_in<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_in(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_instr("IN")(input)?;
     
     // get the port proposal
@@ -1584,7 +1585,7 @@ pub fn parse_in<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src,
 }
 
 /// Parse the rst instruction
-pub fn parse_rst<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_rst(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_instr("RST")(input)?;
     let (input, val) = parse_expr(input)?;
     
@@ -1592,7 +1593,7 @@ pub fn parse_rst<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src
 }
 
 /// Parse the IM instruction
-pub fn parse_im<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_im(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_instr("IM")(input)?;
     let (input, val) = parse_expr(input)?;
     
@@ -1610,7 +1611,7 @@ pub fn parse_im<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src,
 /// RLC (HL)
 /// RLC (IX+n)
 /// RLC (IY+n)
-pub fn parse_shifts_and_rotations<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_shifts_and_rotations(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, oper) = alt((
         value(Mnemonic::Rlc, parse_instr("RLC")),
         value(Mnemonic::Rrc, parse_instr("RRC")),
@@ -1641,7 +1642,7 @@ pub fn parse_shifts_and_rotations<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IRe
 }
 
 /// TODO reduce the flag space for jr"],
-pub fn parse_call_jp_or_jr<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, call_jp_or_jr) = alt((
         value(Mnemonic::Jp, parse_instr("JP")),
         value(Mnemonic::Jr, parse_instr("JR")),
@@ -1677,7 +1678,7 @@ pub fn parse_call_jp_or_jr<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z8
 }
 
 /// ...
-pub fn parse_flag_test<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, FlagTest, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_flag_test(input: Z80Span) -> IResult<Z80Span, FlagTest, VerboseError<Z80Span>> {
     alt((
         value(FlagTest::NZ, tag_no_case("NZ")),
         value(FlagTest::Z, tag_no_case("Z")),
@@ -1702,7 +1703,7 @@ parse_dollar <&str, Expr>, do_parse!(
 
 /// Parse any standard 16bits register
 /// TODO rename to emphasize it is standard reigsters
-pub fn parse_register16<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_register16(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
     alt((
         parse_register_hl,
         parse_register_bc,
@@ -1713,7 +1714,7 @@ pub fn parse_register16<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Sp
 
 /// Parse any standard 16bits register
 /// TODO rename to emphasize it is standard reigsters
-pub fn parse_register8<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_register8(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
     alt((
         map(
             tuple((
@@ -1746,7 +1747,7 @@ pub fn parse_register8<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Spa
 }
 
 /// Parse register i
-pub fn parse_register_i<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_register_i(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
     value(
         DataAccess::SpecialRegisterI,
         tuple((tag_no_case("I"), not(alphanumeric1))),
@@ -1754,7 +1755,7 @@ pub fn parse_register_i<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Sp
 }
 
 /// Parse register r
-pub fn parse_register_r<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_register_r(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
     value(
         DataAccess::SpecialRegisterR,
         tuple((tag_no_case("R"), not(alphanumeric1))),
@@ -1764,7 +1765,7 @@ pub fn parse_register_r<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Sp
 macro_rules! parse_any_register8 {
     ($name: ident, $char:expr, $reg:expr) => {
         /// Parse register $char
-        pub fn $name<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+        pub fn $name(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
             value(DataAccess::Register8($reg), parse_instr($char))(input)
         }
     };
@@ -1782,7 +1783,7 @@ parse_any_register8!(parse_register_l, "l", Register8::L);
 fn register16_parser(
     representation: &'static str,
     register: Register16,
-)-> impl for<'src,'ctx> Fn(Z80Span<'src,'ctx>) -> IResult<Z80Span<'src,'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+)-> impl for<'src,'ctx> Fn(Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
     move |input: Z80Span| {
         value(
             DataAccess::Register16(register),
@@ -1794,7 +1795,7 @@ fn register16_parser(
 macro_rules! parse_any_register16 {
     ($name: ident, $char:expr, $reg:expr) => {
         /// Parse the $char register and return it as a DataAccess
-        pub fn $name<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+        pub fn $name(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
             register16_parser($char, $reg)(input)
         }
     };
@@ -1807,7 +1808,7 @@ parse_any_register16!(parse_register_de, "DE", Register16::De);
 parse_any_register16!(parse_register_hl, "HL", Register16::Hl);
 
 /// Parse the IX register
-pub fn parse_register_ix<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_register_ix(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
     value(
         DataAccess::IndexRegister16(IndexRegister16::Ix),
         tuple((tag_no_case("IX"), not(alphanumeric1))),
@@ -1815,7 +1816,7 @@ pub fn parse_register_ix<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80S
 }
 
 /// Parse the IY register
-pub fn parse_register_iy<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+pub fn parse_register_iy(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
     value(
         DataAccess::IndexRegister16(IndexRegister16::Iy),
         tuple((tag_no_case("IY"), not(alphanumeric1))),
@@ -1827,7 +1828,7 @@ macro_rules! parse_any_indexregister8 {
     ($($reg:ident, $alias:ident)*) => {$(
         paste::paste! {
             /// Parse register $reg
-            pub fn [<parse_register_ $reg:lower>] <'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+            pub fn [<parse_register_ $reg:lower>] (input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
                 value(
                     DataAccess::IndexRegister8(IndexRegister8::$reg),
                     tuple((
@@ -1844,7 +1845,7 @@ macro_rules! parse_any_indexregister8 {
     parse_any_indexregister8!(Ixh,hx Ixl,lx Iyh,hy Iyl,ly);
     
     /// Parse and indexed register in 8bits
-    pub fn parse_indexregister8<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_indexregister8(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
         alt((
             parse_register_ixh,
             parse_register_iyh,
@@ -1854,7 +1855,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse a 16 bits indexed register
-    pub fn parse_indexregister16<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_indexregister16(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
         terminated(
             map(
                 alt((
@@ -1868,9 +1869,9 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse the use of an indexed register as (IX + 5)"
-    pub fn parse_indexregister_with_index<'src, 'ctx>(
-        input: Z80Span<'src, 'ctx>,
-    ) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_indexregister_with_index(
+        input: Z80Span,
+    ) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
         let (input, reg) = preceded(tuple((tag("("), space0)), parse_indexregister16)(input)?;
         
         let (input, op) = preceded(
@@ -1894,7 +1895,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse (C) used in in/out
-    pub fn parse_portc<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_portc(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
         value(
             DataAccess::PortC,
             tuple((tag("("), space0, parse_register_c, space0, tag(")"))),
@@ -1902,7 +1903,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse (nn) used in in/out
-    pub fn parse_portnn<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_portnn(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
         map(
             delimited(tag("("), expr, preceded(space0, tag(")"))),
             |address| DataAccess::PortN(address),
@@ -1910,7 +1911,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse an address access `(expression)`
-    pub fn parse_address<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_address(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
         map(
             delimited(tag("("), expr, preceded(space0, tag(")"))),
             |address| DataAccess::Memory(address),
@@ -1918,7 +1919,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse (R16)
-    pub fn parse_reg_address<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_reg_address(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
         map(
             delimited(
                 terminated(tag("("), space0),
@@ -1930,7 +1931,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse (HL)
-    pub fn parse_hl_address<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_hl_address(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
         value(
             DataAccess::MemoryRegister16(Register16::Hl),
             delimited(
@@ -1942,7 +1943,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse (ix) and (iy)
-    pub fn parse_indexregister_address<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_indexregister_address(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
         map(
             delimited(
                 terminated(tag("("), space0),
@@ -1954,13 +1955,13 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse an expression and returns it inside a DataAccession::Expression
-    pub fn parse_expr<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, DataAccess, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_expr(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
         let (input, expr) = expr(input)?;
         Ok((input, DataAccess::Expression(expr)))
     }
     
     /// Parse standard org directive
-    pub fn parse_org<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_org(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
         let (input, _) = tuple((tag_no_case("ORG"), space1))(input)?;
         
         let (input, val1) = expr(input)?;
@@ -1970,7 +1971,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse defs instruction. TODO add optional parameters
-    pub fn parse_defs<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_defs(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
         let (input, _) = tuple((tag_no_case("DEFS"), space1))(input)?;
         
         let (input, val) = expr(input)?;
@@ -1979,7 +1980,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse any opcode having no argument
-    pub fn parse_opcode_no_arg<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_opcode_no_arg(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
         alt((
             parse_opcode_no_arg1,
             parse_opcode_no_arg2,
@@ -1987,7 +1988,7 @@ macro_rules! parse_any_indexregister8 {
         ))(input)
     }
     
-    fn parse_opcode_no_arg1<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+    fn parse_opcode_no_arg1(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
         let (input, mnemonic) = alt((
             map(parse_instr("DI"), |_| Mnemonic::Di),
             map(parse_instr("CCF"), |_| Mnemonic::Ccf),
@@ -2007,7 +2008,7 @@ macro_rules! parse_any_indexregister8 {
         Ok((input, Token::new_opcode(mnemonic, None, None)))
     }
     
-    fn parse_opcode_no_arg2<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+    fn parse_opcode_no_arg2(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
         let (input, mnemonic) = alt((
             value(Mnemonic::Rla, parse_instr("RLA")),
             value(Mnemonic::Rra, parse_instr("RRA")),
@@ -2030,7 +2031,7 @@ macro_rules! parse_any_indexregister8 {
         Ok((input, Token::new_opcode(mnemonic, None, None)))
     }
     
-    fn parse_opcode_no_arg3<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+    fn parse_opcode_no_arg3(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
         let (input, mnemonic) = alt((
             value(Mnemonic::Daa, parse_instr("DAA")),
             value(Mnemonic::Neg, parse_instr("NEG")),
@@ -2044,7 +2045,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     
-    fn parse_struct<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+    fn parse_struct(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
         let (input, _) = parse_instr("STRUCT")(input)?;
         let (input, name) = cut(parse_label(false))(input)?;
         
@@ -2071,7 +2072,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     
-    fn parse_snaset<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+    fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
         
         let (input, _) = parse_instr("SNASET")(input)?;
         
@@ -2101,7 +2102,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse a comment that start by `;` and ends at the end of the line.
-    pub fn comment<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn comment(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
         map(
             preceded(tag(";"), take_till(|ch| ch == '\n')),
             |string: Z80Span| Token::Comment(string.to_string()),
@@ -2109,19 +2110,19 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Usefull later for db
-    pub fn string_between_quotes<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Z80Span<'src, 'ctx>, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn string_between_quotes(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
         delimited(char('\"'), is_not("\""), char('\"'))(input)
     }
     
     /// TODO
-    pub fn string_expr<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn string_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         map(string_between_quotes, |string| {
             Expr::String(string.to_string())
         })(input)
     }
     
     /// Parse a label(label: S)
-    pub fn parse_label(doubledots: bool) -> impl for<'src, 'ctx> Fn(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, String, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_label(doubledots: bool) -> impl Fn(Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
         move |input: Z80Span| {
             // Get the label
             
@@ -2148,7 +2149,7 @@ macro_rules! parse_any_indexregister8 {
         }
     }
     
-    pub fn prefixed_label_expr<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         let (input, prefix) = alt((
             value(LabelPrefix::Bank, tag_no_case("{bank}")),
             value(LabelPrefix::Page, tag_no_case("{page}")),
@@ -2158,7 +2159,7 @@ macro_rules! parse_any_indexregister8 {
             space0,
             alt((
                 parse_label(false),
-                map(tag_no_case("$"), |s:Z80Span<'src, 'ctx>| s.to_string()),
+                map(tag_no_case("$"), |s:Z80Span| s.to_string()),
             )),
         )(input)?;
         
@@ -2181,16 +2182,20 @@ macro_rules! parse_any_indexregister8 {
     // XXX Code greatly inspired from https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs
     
     /// Read a value
-    pub fn parse_value<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
-        let (input, val) = alt((hex_number, dec_number, bin_number))(*input.deref())
+    pub fn parse_value(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+        let extra = input.extra.clone();
+        let (input, val) = alt((hex_number, dec_number, bin_number))(input.clone().into())
         .map_err(|op| {
             nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::ParseTo))
         })?;
-        Ok((Z80Span(input), Expr::Value(val as i32)))
+
+        // rebuild the rightly typed span
+        let input = Z80Span::from_standard_span(input, extra);
+        Ok((input, Expr::Value(val as i32)))
     }
     
     /// Read a parenthesed expression
-    pub fn parens<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parens(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         delimited(
             delimited(space0, tag("("), space0),
             map(map(expr, Box::new), Expr::Paren),
@@ -2199,7 +2204,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Get a factor
-    pub fn factor<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         context(
             "factor",
             delimited(
@@ -2228,7 +2233,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     
-    pub fn negative_number<'src, 'ctx>(input: Z80Span<'src, 'ctx>) ->  IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn negative_number(input: Z80Span) ->  IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         map(
             preceded(
                 tag("-"),
@@ -2243,13 +2248,13 @@ macro_rules! parse_any_indexregister8 {
         )(input)
     }
     
-    pub fn positive_number<'src, 'ctx>(input: Z80Span<'src, 'ctx>) ->  IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn positive_number(input: Z80Span) ->  IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         map(alt((hex_number_inner, bin_number_inner, dec_number_inner)), |d: u32| {
             Expr::Value(d as i32)
         })(input)
     }
     
-    pub fn parse_labelprefix<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, LabelPrefix> {
+    pub fn parse_labelprefix(input: Z80Span) -> IResult<Z80Span, LabelPrefix> {
         alt((
             value(LabelPrefix::Pageset, tag_no_case("{pageset}")),
             value(LabelPrefix::Bank, tag_no_case("{bank}")),
@@ -2285,7 +2290,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Compute operations related to * % /
-    pub fn term<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn term(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         let (input, initial) = factor(input)?;
         let (input, remainder) = many0(alt((
             parse_oper(factor, "*", Oper::Mul),
@@ -2304,9 +2309,9 @@ macro_rules! parse_any_indexregister8 {
         inner: F,
         pattern: &'static str,
         symbol: Oper,
-    ) -> impl for<'src, 'ctx> Fn(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, (Oper, Expr), VerboseError<Z80Span<'src,'ctx>>>
+    ) -> impl  Fn(Z80Span) -> IResult<Z80Span, (Oper, Expr), VerboseError<Z80Span>>
     where
-    F: for<'src, 'ctx> Fn(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>>,
+    F:  Fn(Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>>,
     {
         move |input: Z80Span| {
             let (input, _) = space0(input)?;
@@ -2322,9 +2327,9 @@ macro_rules! parse_any_indexregister8 {
         inner: F,
         pattern: &'static str,
         symbol: Oper,
-    ) -> impl for<'src, 'ctx> Fn(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, (Oper, Expr), VerboseError<Z80Span<'src,'ctx>>>
+    ) -> impl  Fn(Z80Span) -> IResult<Z80Span, (Oper, Expr), VerboseError<Z80Span>>
     where
-    F: for <'src, 'ctx> Fn(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>>,
+    F:  Fn(Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>>,
     {
         move |input: Z80Span| {
             let (input, _) = space0(input)?;
@@ -2337,7 +2342,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse an expression
-    pub fn expr<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         let (input, initial) = comp(input)?;
         let (input, remainder) = many0(alt((
             parse_oper(comp, "<=", Oper::LowerOrEqual),
@@ -2354,7 +2359,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// parse functions with one argument
-    pub fn parse_unary_functions<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_unary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         let (input, func) = alt((
             value(UnaryFunction::High, tag_no_case("HI")),
             value(UnaryFunction::Low, tag_no_case("LO")),
@@ -2370,7 +2375,7 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// parse functions with two arguments
-    pub fn parse_binary_functions<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_binary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         let (input, func) = alt((
             value(BinaryFunction::Min, tag_no_case("MIN")),
             value(BinaryFunction::Max, tag_no_case("MAX")),
@@ -2393,7 +2398,7 @@ macro_rules! parse_any_indexregister8 {
     /// Parser for functions taking into argument a token
     pub fn token_function<'a>(
         function_name: &'static str,
-    ) -> impl for <'src, 'ctx> Fn(Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Token, VerboseError<Z80Span<'src,'ctx>>> {
+    ) -> impl  Fn(Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
         move |input: Z80Span| {
             let (input, _) = tuple((tag_no_case(function_name), space0, char('('), space0))(input)?;
             
@@ -2407,19 +2412,19 @@ macro_rules! parse_any_indexregister8 {
     }
     
     /// Parse the duration function
-    pub fn parse_duration<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_duration(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         let (input, token) = token_function("duration")(input)?;
         Ok((input, Expr::Duration(Box::new(token))))
     }
     
     /// Parse the single opcode assembling function
-    pub fn parse_assemble<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn parse_assemble(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         let (input, token) = token_function("opcode")(input)?;
         Ok((input, Expr::OpCode(Box::new(token))))
     }
     
     /// Parse operation related to + - & |
-    pub fn comp<'src, 'ctx>(input: Z80Span<'src, 'ctx>) -> IResult<Z80Span<'src, 'ctx>, Expr, VerboseError<Z80Span<'src,'ctx>>> {
+    pub fn comp(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         let (input, initial) = term(input)?;
         let (input, remainder) = many0(alt((
             parse_oper(term, "+", Oper::Add),
@@ -2501,7 +2506,7 @@ macro_rules! parse_any_indexregister8 {
         fn parse_test_cond() {
             let res = inner_code(
                 Z80Span::new_extra(" nop
-                endif", &CTX)
+                endif".to_owned(), CTX.clone())
             );
             assert!(res.is_ok());
             assert_eq!(res.unwrap().1.len(), 1);
@@ -2509,12 +2514,12 @@ macro_rules! parse_any_indexregister8 {
             let res = inner_code(Z80Span::new_extra(
                 " nop
                 else",
-                &CTX));
+                CTX.clone()));
                 assert!(res.is_ok());
                 assert_eq!(res.unwrap().1.len(), 1);
                 
                 let res = parse_conditional_condition(KindOfConditional::If)(Z80Span::new_extra("THING",
-                &CTX));
+                CTX.clone()));
                 assert!(res.is_ok());
                 
                 let res = std::dbg!(parse_conditional(Z80Span::new_extra(
@@ -2522,7 +2527,7 @@ macro_rules! parse_any_indexregister8 {
                     nop
                     endif 
                     ",
-                    &CTX),
+                    CTX.clone()),
                 ));
                 assert!(res.is_ok());
                 assert_eq!("", res.unwrap().0.trim());
@@ -2531,7 +2536,7 @@ macro_rules! parse_any_indexregister8 {
                     "if THING
                     nop
                     endif ",
-                    &CTX),
+                    CTX.clone()),
                 ));
                 assert!(res.is_ok());
                 assert_eq!("", res.unwrap().0.trim());
@@ -2542,7 +2547,7 @@ macro_rules! parse_any_indexregister8 {
                     else
                     nop
                     endif",
-                    &CTX),
+                    CTX.clone()),
                 );
                 assert!(res.is_ok());
                 assert_eq!(b"", res.unwrap().0.as_bytes());
@@ -2553,7 +2558,7 @@ macro_rules! parse_any_indexregister8 {
                     else
                     nop
                     endif",
-                    &CTX),
+                    CTX.clone()),
                 );
                 assert!(res.is_ok());
                 assert_eq!(b"", res.unwrap().0.as_bytes());
@@ -2567,7 +2572,7 @@ macro_rules! parse_any_indexregister8 {
                     WAIT_CYCLES 64*16
                     ret
                     endif",
-                    &CTX)
+                    CTX.clone())
                 ));
                 assert!(res.is_ok());
                 assert_eq!(b"", res.unwrap().0.as_bytes());
@@ -2576,7 +2581,7 @@ macro_rules! parse_any_indexregister8 {
                     "ifndef __DEFINED_DEBUG__
                     __DEFINED_DEBUG__ equ 1
                     endif",
-                    &CTX)
+                    CTX.clone())
                 ));
                 assert!(res.is_ok());
                 assert_eq!(b"", res.unwrap().0.as_bytes());
@@ -2585,7 +2590,7 @@ macro_rules! parse_any_indexregister8 {
                     " ifndef __DEFINED_DEBUG__
                     __DEFINED_DEBUG__ equ 1
                     endif",
-                    &CTX)
+                    CTX.clone())
                 ));
                 assert!(res.is_ok(), "{:?}", res);
                 assert_eq!(b"", res.unwrap().0.as_bytes());
@@ -2594,28 +2599,28 @@ macro_rules! parse_any_indexregister8 {
             #[test]
             fn parse_indexregister8() {
                 assert_eq!(
-                    parse_register_ixl(Z80Span::new_extra("ixl", &CTX)).unwrap().1,
+                    parse_register_ixl(Z80Span::new_extra("ixl".to_owned(), CTX.clone())).unwrap().1,
                     DataAccess::IndexRegister8(IndexRegister8::Ixl)
                 );
                 
                 assert_eq!(
-                    parse_register_ixl(Z80Span::new_extra("lx", &CTX)).unwrap().1,
+                    parse_register_ixl(Z80Span::new_extra("lx".to_owned(), CTX.clone())).unwrap().1,
                     DataAccess::IndexRegister8(IndexRegister8::Ixl)
                 );
                 
-                assert!(parse_register_iyl(Z80Span::new_extra("ixl", &CTX)).is_err());
+                assert!(parse_register_iyl(Z80Span::new_extra("ixl".to_owned(), CTX.clone())).is_err());
             }
             
             #[test]
             fn test_parse_prefix_label() {
-                let (span, res) = parse_labelprefix(Z80Span::new_extra("{bank}", &CTX)).unwrap();
+                let (span, res) = parse_labelprefix(Z80Span::new_extra("{bank}".to_owned(), CTX.clone())).unwrap();
                 assert!(span.is_empty());
                 assert_eq!(
                     res,
                     LabelPrefix::Bank
                 );
                 
-                let (span, res) = expr(Z80Span::new_extra("{bank}label", &CTX)).unwrap();
+                let (span, res) = expr(Z80Span::new_extra("{bank}label".to_owned(), CTX.clone())).unwrap();
                 assert!(span.is_empty());
                 assert_eq!(
                     res,
@@ -2626,7 +2631,7 @@ macro_rules! parse_any_indexregister8 {
             
             #[test]
             fn test_parse_expr_format() {
-                let res = formatted_expr(Z80Span::new_extra("{hex} VAL", &CTX));
+                let res = formatted_expr(Z80Span::new_extra("{hex} VAL".to_owned(), CTX.clone()));
                 assert!(res.is_ok());
                 let (span, res) = res.unwrap();
                 assert!(span.is_empty());
@@ -2675,14 +2680,14 @@ macro_rules! parse_any_indexregister8 {
             #[test]
             fn test_parse_print() {
                 
-                let (span, res) = parse_print(Z80Span::new_extra("PRINT VAR", &CTX)).unwrap();
+                let (span, res) = parse_print(Z80Span::new_extra("PRINT VAR".to_owned(), CTX.clone())).unwrap();
                 assert!(span.is_empty());
                 assert_eq!(
                     res,
                     Token::Print(vec![FormattedExpr::Raw(Expr::Label("VAR".to_string()))])
                 );
                 
-                let (span, res)= parse_print(Z80Span::new_extra("PRINT VAR, VAR", &CTX)).unwrap();
+                let (span, res)= parse_print(Z80Span::new_extra("PRINT VAR, VAR".to_owned(), CTX.clone())).unwrap();
                 assert!(span.is_empty());
                 assert_eq!(
                     res,
@@ -2692,7 +2697,7 @@ macro_rules! parse_any_indexregister8 {
                         ])
                     );
                     
-                    let (span, res) = parse_print(Z80Span::new_extra("PRINT {hex}VAR", &CTX)).unwrap();
+                    let (span, res) = parse_print(Z80Span::new_extra("PRINT {hex}VAR".to_owned(), CTX.clone())).unwrap();
                     assert!(span.is_empty());
                     assert_eq!(
                         res,
@@ -2703,7 +2708,7 @@ macro_rules! parse_any_indexregister8 {
                         
                     );
                     
-                    let (span, res) = parse_print(Z80Span::new_extra("PRINT \"hello\"", &CTX)).unwrap();
+                    let (span, res) = parse_print(Z80Span::new_extra("PRINT \"hello\"".to_owned(), CTX.clone())).unwrap();
                     assert!(span.is_empty());
                     
                     assert_eq!(
@@ -2720,7 +2725,7 @@ macro_rules! parse_any_indexregister8 {
                         endrepeat
                         "
                     );
-                    let res = parse_repeat(Z80Span::new_extra(z80, &CTX));
+                    let res = parse_repeat(Z80Span::new_extra(z80.to_owned(), CTX.clone()));
                     assert!(res.is_ok(), "{:?}", res);
                     let res = res.unwrap();
                     assert_eq!(res.0.trim().len(), 0, "{:?}", res);
@@ -2728,20 +2733,20 @@ macro_rules! parse_any_indexregister8 {
                 
                 #[test]
                 fn parser_regression_1() {
-                    let res = std::dbg!(parse_ld_normal(Z80Span::new_extra("ld a, chessboard_file", &CTX)));
+                    let res = std::dbg!(parse_ld_normal(Z80Span::new_extra("ld a, chessboard_file".to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", res);
                     
                     let code = " nop
                     "
                     .replace("\u{C2}\u{A0}", " ");
-                    let res = std::dbg!(parse_z80_line_complete(Z80Span::new_extra(&code, &CTX)));
+                    let res = std::dbg!(parse_z80_line_complete(Z80Span::new_extra(&code.to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert!(res.unwrap().0.trim().is_empty());
                     
                     let code = " nop
                     "
                     .replace("\u{C2}\u{A0}", " ");
-                    let res = std::dbg!(parse_z80_line(Z80Span::new_extra(&code, &CTX)));
+                    let res = std::dbg!(parse_z80_line(Z80Span::new_extra(&code.to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert!(res.unwrap().0.trim().is_empty());
                     
@@ -2749,7 +2754,7 @@ macro_rules! parse_any_indexregister8 {
                     nop
                     "
                     .replace("\u{C2}\u{A0}", " ");
-                    let res = std::dbg!(many0(parse_z80_line)(Z80Span::new_extra(&code, &CTX)));
+                    let res = std::dbg!(many0(parse_z80_line)(Z80Span::new_extra(&code.to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
                     
@@ -2757,7 +2762,7 @@ macro_rules! parse_any_indexregister8 {
                     nop
                     "
                     .replace("\u{C2}\u{A0}", " ");
-                    let res = std::dbg!(inner_code(Z80Span::new_extra(&code, &CTX)));
+                    let res = std::dbg!(inner_code(Z80Span::new_extra(&code.to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
                     
@@ -2765,7 +2770,7 @@ macro_rules! parse_any_indexregister8 {
                         "
                         ld a, chessboard_file
                         jp .common_part_loading_in_main_memory
-                        ", &CTX)
+                        ".to_owned(), CTX.clone())
                     ));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
@@ -2781,7 +2786,7 @@ macro_rules! parse_any_indexregister8 {
                         ld a, main_memory_chessboard_extra_file
                         ld a, chessboard_file
                         jp .common_part_loading_in_main_memory
-                        ", &CTX)
+                        ".to_owned(), CTX.clone())
                     ));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
@@ -2797,58 +2802,58 @@ macro_rules! parse_any_indexregister8 {
                         ld a, chessboard_file
                         jp .common_part_loading_in_main_memory
                         
-                        endif", &CTX)
+                        endif".to_owned(), CTX.clone())
                     ));
                     assert!(res.is_ok(), "{:?}", res);
                 }
                 
                 #[test]
                 fn parser_regression2() {
-                    let res = std::dbg!(parse_assert(Z80Span::new_extra("assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)", &CTX)));
+                    let res = std::dbg!(parse_assert(Z80Span::new_extra("assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)".to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                 }
                 
                 #[test]
                 fn parser_sna() {
-                    let res = std::dbg!(parse_buildsna(Z80Span::new_extra("BUILDSNA", &CTX)));
+                    let res = std::dbg!(parse_buildsna(Z80Span::new_extra("BUILDSNA".to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                     
-                    let res = std::dbg!(parse_buildsna(Z80Span::new_extra("BUILDSNA V2", &CTX)));
+                    let res = std::dbg!(parse_buildsna(Z80Span::new_extra("BUILDSNA V2".to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                     
-                    let res = std::dbg!(parse_buildsna(Z80Span::new_extra("BUILDSNA V3", &CTX)));
+                    let res = std::dbg!(parse_buildsna(Z80Span::new_extra("BUILDSNA V3".to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                     
-                    let res = std::dbg!(parse_buildsna(Z80Span::new_extra("BUILDSNA V4", &CTX)));
+                    let res = std::dbg!(parse_buildsna(Z80Span::new_extra("BUILDSNA V4".to_owned(), CTX.clone())));
                     assert!(res.is_err(), "{:?}", &res);
                 }
                 
                 #[test]
                 fn test_parse_snaset() {
-                    let res = std::dbg!(parse_snaset(Z80Span::new_extra("SNASET Z80_SP, 0x500", &CTX)));
+                    let res = std::dbg!(parse_snaset(Z80Span::new_extra("SNASET Z80_SP, 0x500".to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                     
-                    let res = std::dbg!(parse_snaset(Z80Span::new_extra("SNASET GA_PAL, 0, 30", &CTX)));
+                    let res = std::dbg!(parse_snaset(Z80Span::new_extra("SNASET GA_PAL, 0, 30".to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                     
-                    let res = std::dbg!(parse_snaset(Z80Span::new_extra("SNASET CRTC_REG, 1, 48", &CTX)));
+                    let res = std::dbg!(parse_snaset(Z80Span::new_extra("SNASET CRTC_REG, 1, 48".to_owned(), CTX.clone())));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                 }
                 
                 #[test]
                 fn test_parse_r16_to_r8() {
-                    let res = parse_z80_line(Z80Span::new_extra(" ld a, hl.low", &CTX));
+                    let res = parse_z80_line(Z80Span::new_extra(" ld a, hl.low".to_owned(), CTX.clone()));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                     
-                    let res = parse_ld_normal(Z80Span::new_extra("ld bc.low, a", &CTX));
+                    let res = parse_ld_normal(Z80Span::new_extra("ld bc.low, a".to_owned(), CTX.clone()));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                     
@@ -2864,7 +2869,7 @@ macro_rules! parse_any_indexregister8 {
                         
                     );
                     
-                    let res = parse_z80_line(Z80Span::new_extra(" ld bc.low, a", &CTX));
+                    let res = parse_z80_line(Z80Span::new_extra(" ld bc.low, a".to_owned(), CTX.clone()));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                     
@@ -2880,7 +2885,7 @@ macro_rules! parse_any_indexregister8 {
                         )]
                     );
                     
-                    let res = parse_z80_line(Z80Span::new_extra("\t\tld  bc.low, a\n\t", &CTX));
+                    let res = parse_z80_line(Z80Span::new_extra("\t\tld  bc.low, a\n\t".to_owned(), CTX.clone()));
                     assert!(res.is_ok(), "{:?}", &res);
                     assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
                 }

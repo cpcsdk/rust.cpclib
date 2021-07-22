@@ -30,11 +30,13 @@ impl Default for ParserContext {
         }
     }
 }
+
+
 #[allow(missing_docs)]
 impl ParserContext {
 
-    pub fn build_span<'src, 'ctx>(&'ctx self, src: &'src str) -> Z80Span<'src, 'ctx> {
-        Z80Span::new_extra(src, self)
+    pub fn build_span<S: Into<String>>(&self, src: S) -> Z80Span {
+        Z80Span::new_extra(src, self.clone())
     }
 
     /// Specify the path that contains the code

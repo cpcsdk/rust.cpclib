@@ -19,7 +19,7 @@ mod tests {
     };
 
     fn check_mnemonic(code: &str, mnemonic: Mnemonic) -> bool {
-        match parse_org(CTX.build_span(code)) {
+        match parse_org(CTX.build_span(code.to_owned())) {
             Err(e) => panic!("{:?}", e),
             Ok((_, opcode)) => {
                 let mut res = false;
@@ -32,13 +32,13 @@ mod tests {
     }
 
     fn get_opcode(code: &str) -> Token {
-        match parse_org(CTX.build_span(code)) {
+        match parse_org(CTX.build_span(code.to_owned())) {
             Err(e) => panic!("{:?}", e),
             Ok((_, opcode)) => opcode,
         }
     }
 
-    fn get_val<'src, 'ctx,T: core::fmt::Debug>(res: IResult<Z80Span<'src,'ctx>, T, nom::error::VerboseError<Z80Span<'src,'ctx>>>) -> T {
+    fn get_val<'src, 'ctx,T: core::fmt::Debug>(res: IResult<Z80Span, T, nom::error::VerboseError<Z80Span>>) -> T {
         match res {
             Err(e) => panic!("{:?}", e),
             Ok((rest, val)) => {
@@ -145,34 +145,34 @@ mod tests {
         assert_eq!(parse_label(false)(CTX.build_span(".label")).ok().unwrap().1, ".label");
 
         let code = "label";
-        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = "label";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = "label\n";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = "label      \n";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = "label      \n";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = "demo_system_binary_start \n";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
     }
 
     #[test]
     fn test_equ() {
         let code = "LABEL EQU VALUE";
-        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
     }
 
@@ -243,68 +243,68 @@ mod tests {
     #[test]
     fn test_address() {
         let code = "(125)";
-        let token = get_val(parse_address(CTX.build_span(code)));
+        let token = get_val(parse_address(CTX.build_span(code.to_owned())));
         assert_matches!(token, DataAccess::Memory(_));
     }
     #[test]
     fn test_ld() {
         let code = " ld hl, 0xc9fb\n";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld hl, 0xc9fb";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld de, 0xc9fb";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld de, (0xc9fb)";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld (0xc9fb),de";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld d, 0xc9";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld d, a";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld (hl), d";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
     }
 
     #[test]
     fn test_jump() {
         let code = " jr $";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " jp 0xc9fb\n";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " jr 0xc9fb";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " jp nz, 0xc9fb";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " jr nz, .other_lines";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " jp nz, .other_lines + (9+4+1+2)     ; 4";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 2);
         assert_matches!(tokens[0].deref(), Token::OpCode(Mnemonic::Jp, _, _, _));
     }
@@ -316,13 +316,13 @@ mod tests {
         // XXX Do we allow that ? The parse knows de is not a register but a label
         // XXX Do we forbid labels with the same name as a register ? => Probably better
         let code = " ld hl, a";
-        let _tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
     }
 
     #[test]
     pub fn ld_16_16() {
         let code = " ld hl, de";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         println!("{:?}", tokens);
         assert_matches!(
             tokens[0].deref(),
@@ -398,11 +398,11 @@ mod tests {
         assert_eq!(tokens.len(), 1);
 
         let code = "  org 0x100 :  di : ld hl, 0xc9fb : ld (0x38), hl : ei : jp $";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 6);
 
         let code = "  org 0x100:di:ld hl, 0xc9fb:ld (0x38), hl :ei:jp $";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 6);
     }
 
@@ -416,52 +416,52 @@ mod tests {
     #[test]
     fn fn_test_empty() {
         let code = "\n";
-        let tokens = get_val(parse_empty_line(CTX.build_span(code)));
+        let tokens = get_val(parse_empty_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 0);
 
         let code = ";with comment\n";
-        let tokens = get_val(parse_empty_line(CTX.build_span(code)));
+        let tokens = get_val(parse_empty_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = "\n\n";
-        let (code, _) = parse_empty_line(CTX.build_span(code)).unwrap();
+        let (code, _) = parse_empty_line(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(code.as_bytes(), b"\n");
         let (code, _) = parse_empty_line(code).unwrap();
         assert_eq!(code.as_bytes(), b"");
 
         let code = "\n\n";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 0);
 
         let code = "";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 0);
 
         let code = "";
-        let tokens = get_val(parse_empty_line(CTX.build_span(code)));
+        let tokens = get_val(parse_empty_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 0);
 
         let code = "  ";
-        let _tokens = get_val(parse_empty_line(CTX.build_span(code)));
+        let _tokens = get_val(parse_empty_line(CTX.build_span(code.to_owned())));
 
         let code = "  ";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 0);
 
         let code = "  ";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 0);
 
         let code = "  \n";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 0);
 
         let code = "  ; comment \n";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = "  ; comment \n";
-        let tokens = get_val(parse_empty_line(CTX.build_span(code)));
+        let tokens = get_val(parse_empty_line(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
     }
 
@@ -469,12 +469,12 @@ mod tests {
     fn registers() {
         for reg in ["A", "B", "C", "D", "E", "H", "L"].iter() {
             let line = reg;
-            get_val(parse_register8(CTX.build_span(line)));
+            get_val(parse_register8(CTX.build_span(*line)));
         }
 
         for reg in ["IXL", "IXH", "IYL", "IYH"].iter() {
             let line = reg;
-            get_val(parse_indexregister8(CTX.build_span(line)));
+            get_val(parse_indexregister8(CTX.build_span(*line)));
         }
     }
 
@@ -750,7 +750,7 @@ mod tests {
         let code = "		ex af, af'
 			dec a
 			jr nz, player_line_loop";
-        let res = parse_z80_code(CTX.build_span(code));
+        let res = parse_z80_code(CTX.build_span(code.to_owned()));
         println!("{:?}", &res);
         assert!(res.is_ok());
         assert_eq!(0, res.unwrap().0.len());
@@ -762,7 +762,7 @@ mod tests {
         stableticker start stuff
             inc a
         stableticker stop";
-        let res = parse_z80_code(CTX.build_span(code));
+        let res = parse_z80_code(CTX.build_span(code.to_owned()));
         println!("{:?}", &res);
         assert!(res.is_ok());
         assert_eq!(0, res.unwrap().0.len());
@@ -775,7 +775,7 @@ mod tests {
             ld a, duration(ld a, label)
             defs  duration(inc hl) + thing
         ";
-        let res = parse_z80_code(CTX.build_span(code));
+        let res = parse_z80_code(CTX.build_span(code.to_owned()));
         println!("{:?}", &res);
         assert!(res.is_ok());
         assert_eq!(0, res.unwrap().0.len());
@@ -786,28 +786,28 @@ mod tests {
         let code = "
             ld a, opcode(inc a)
         ";
-        let res = parse_z80_code(CTX.build_span(code));
+        let res = parse_z80_code(CTX.build_span(code.to_owned()));
         assert!(res.is_ok());
         assert_eq!(0, res.unwrap().0.len());
 
         let code = "
             ld hl, opcode(inc a)
         ";
-        let res = parse_z80_code(CTX.build_span(code));
+        let res = parse_z80_code(CTX.build_span(code.to_owned()));
         assert!(res.is_ok());
         assert_eq!(0, res.unwrap().0.len());
 
         let code = "
             ld a, opcode(ldd)
         ";
-        let res = parse_z80_code(CTX.build_span(code));
+        let res = parse_z80_code(CTX.build_span(code.to_owned()));
         assert!(res.is_ok()); // Failure is detected in the assembler pass not the parser pass
         assert_eq!(0, res.unwrap().0.len());
 
         let code = "
             ld hl, opcode(ldd)
         ";
-        let res = parse_z80_code(CTX.build_span(code));
+        let res = parse_z80_code(CTX.build_span(code.to_owned()));
         assert!(res.is_ok());
         assert_eq!(0, res.unwrap().0.len());
 
@@ -815,7 +815,7 @@ mod tests {
 INC_L equ opcode(inc l)
 INC_H equ opcode(inc h)
         ";
-        let res = parse_z80_code(CTX.build_span(code));
+        let res = parse_z80_code(CTX.build_span(code.to_owned()));
         println!("{:?}", res);
         assert!(res.is_ok());
         assert_eq!(0, res.unwrap().0.len());
@@ -826,7 +826,7 @@ INC_H equ opcode(inc h)
         ld a, INC_L
         ld (hl), a
         ";
-        let res = parse_z80_code(CTX.build_span(code));
+        let res = parse_z80_code(CTX.build_span(code.to_owned()));
         println!("{:?}", res);
         assert!(res.is_ok());
         assert_eq!(0, res.unwrap().0.len());
@@ -835,28 +835,28 @@ INC_H equ opcode(inc h)
     #[test]
     fn fn_test_asm_prog1() {
         let code = "  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n  jp $";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 6);
 
         let code = "\n\n  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let tokens = get_val(dbg!(parse_z80_code(CTX.build_span(code))));
+        let tokens = get_val(dbg!(parse_z80_code(CTX.build_span(code.to_owned()))));
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 6);
 
         let code =
             "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \nlabel ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 7);
     }
 
@@ -868,7 +868,7 @@ INC_H equ opcode(inc h)
 30 call {titi}
         ENDLOCOMOTIVE";
 
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
     }
 
@@ -880,7 +880,7 @@ INC_H equ opcode(inc h)
 30 call {titi_2}
         ENDLOCOMOTIVE";
 
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
     }
 
@@ -891,19 +891,19 @@ INC_H equ opcode(inc h)
         ld a, b
         ld a, b
     ENDIF";
-        println!("{:?}", parse_conditional(CTX.build_span(code)));
-        let _tokens = get_val(parse_conditional(CTX.build_span(code)));
+        println!("{:?}", parse_conditional(CTX.build_span(code.to_owned())));
+        let _tokens = get_val(parse_conditional(CTX.build_span(code.to_owned())));
 
         let code = "IF expression
         ld a, b : ld a, b : ld a, b
     ENDIF";
-        println!("{:?}", parse_conditional(CTX.build_span(code)));
-        let _tokens = get_val(parse_conditional(CTX.build_span(code)));
+        println!("{:?}", parse_conditional(CTX.build_span(code.to_owned())));
+        let _tokens = get_val(parse_conditional(CTX.build_span(code.to_owned())));
 
         let code = "IF expression : ld a, b : ld a, b : ld a, b
     ENDIF";
-        println!("{:?}", parse_conditional(CTX.build_span(code)));
-        let _tokens = get_val(parse_conditional(CTX.build_span(code)));
+        println!("{:?}", parse_conditional(CTX.build_span(code.to_owned())));
+        let _tokens = get_val(parse_conditional(CTX.build_span(code.to_owned())));
 
         // TODO modify the parser to handle this case
         /*
@@ -919,7 +919,7 @@ INC_H equ opcode(inc h)
         ld a, b
     ENDIF";
 
-        let _tokens = get_val(parse_conditional(CTX.build_span(code)));
+        let _tokens = get_val(parse_conditional(CTX.build_span(code.to_owned())));
 
         let code = "\tIF expression
         ld a, b
@@ -927,13 +927,13 @@ INC_H equ opcode(inc h)
         call label
         ld a, b
     ENDIF";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
 
         let code = "\t	if ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
 
         get_val(parse_z80_code(CTX.build_span(
             "
@@ -946,7 +946,7 @@ INC_H equ opcode(inc h)
 		call blabla
 	endif
     ";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
 
         println!(
             "{:?}",
@@ -961,29 +961,29 @@ INC_H equ opcode(inc h)
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
 
         let code = "\t	ifndef ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
 
         let code = "\t	ifnot ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
 
         let code =
             "\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\n"
         ;
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
 
         let code =
             "STACK_SIZE equ 20 ; XXX Very small stack; hope 10 calls is enough\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\nSTACK_END"
         ;
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
     }
 
     #[test]
@@ -1001,7 +1001,7 @@ INC_H equ opcode(inc h)
     jr nz, .other_lines ; 3
     ";
 
-        let tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
         println!("{:?}", tokens);
         assert_eq!(tokens.len(), 18);
 
@@ -1124,7 +1124,7 @@ INC_H equ opcode(inc h)
     #[test]
     fn quoted_string() {
         let code = "\"file.asm\"";
-        let tokens = get_val(string_between_quotes(CTX.build_span(code)));
+        let tokens = get_val(string_between_quotes(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.to_string(), "file.asm".to_owned());
 
         let msg = "TODO -- Set the real address (in c7 space)";
@@ -1157,26 +1157,26 @@ INC_H equ opcode(inc h)
     #[test]
     fn assert_test() {
         let code = " ASSERT 1\n";
-        let token = parse_assert(CTX.build_span(code));
+        let token = parse_assert(CTX.build_span(code.to_owned()));
         assert!(token.is_ok());
 
         let code = " ASSERT 1\n";
-        let tokens = get_val(dbg!(parse_z80_line_complete(CTX.build_span(code))));
+        let tokens = get_val(dbg!(parse_z80_line_complete(CTX.build_span(code.to_owned()))));
         assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1 == 2";
         eprintln!("RES: {:?}", parse_z80_str(code));
-        let tokens = get_val(parse_z80_line_complete(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line_complete(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1 < 0x1000";
         eprintln!("RES: {:?}", parse_z80_str(code));
-        let tokens = get_val(parse_z80_line_complete(CTX.build_span(code)));
+        let tokens = get_val(parse_z80_line_complete(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1 < 0x1000, \"blabla\"";
-        eprintln!("RES: {:?}", parse_z80_line_complete(CTX.build_span(code)));
-        let tokens = get_val(parse_z80_line_complete(CTX.build_span(code)));
+        eprintln!("RES: {:?}", parse_z80_line_complete(CTX.build_span(code.to_owned())));
+        let tokens = get_val(parse_z80_line_complete(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
     }
 
@@ -1193,34 +1193,34 @@ INC_H equ opcode(inc h)
     #[test]
     fn rorg() {
         let code = "\tRORG 1\n\tREND";
-        let _tokens = get_val(parse_rorg(CTX.build_span(code)));
+        let _tokens = get_val(parse_rorg(CTX.build_span(code.to_owned())));
 
         let code = "\tRORG 1\n\tdb 5\n\tREND";
-        let _tokens = get_val(parse_rorg(CTX.build_span(code)));
+        let _tokens = get_val(parse_rorg(CTX.build_span(code.to_owned())));
 
         let code = "\tRORG 1\n\tdb 5\n\tREND";
-        let _tokens = get_val(parse_rorg(CTX.build_span(code)));
+        let _tokens = get_val(parse_rorg(CTX.build_span(code.to_owned())));
     }
 
     #[test]
     fn ld() {
         let code = "LD HL, 0";
-        let _tokens = get_val(parse_ld(CTX.build_span(code)));
+        let _tokens = get_val(parse_ld(CTX.build_span(code.to_owned())));
 
         let code = "LD HL, label";
-        let _tokens = get_val(parse_ld(CTX.build_span(code)));
+        let _tokens = get_val(parse_ld(CTX.build_span(code.to_owned())));
 
         let code = "LD HL, label_with_underscore";
-        let _tokens = get_val(parse_ld(CTX.build_span(code)));
+        let _tokens = get_val(parse_ld(CTX.build_span(code.to_owned())));
 
         let code = "\tld hl, label_with_underscore";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
 
         let code = "\n\tld hl, label_with_underscore";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code)));
+        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
 
         let code = "ld i,a";
-        let _tokens = get_val(parse_ld(CTX.build_span(code)));
+        let _tokens = get_val(parse_ld(CTX.build_span(code.to_owned())));
     }
 
 
