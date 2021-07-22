@@ -1,37 +1,39 @@
-use std::{fs::File, io::Read, ops::{DerefMut, Deref}, thread::LocalKey};
+use std::{convert::TryFrom, fs::File, io::Read, ops::{DerefMut, Deref}, rc::Rc, thread::LocalKey};
 
 use cpclib_tokens::{BaseListing, BinaryTransformation, CrunchType, Expr, Listing, ListingElement, TestKind, Token};
 use itertools::Itertools;
 
 use crate::{error::AssemblerError, implementation::expression::ExprEvaluationExt, preamble::{parse_z80_str, parse_z80_strboxed_with_contextboxed}};
 
-use super::{ParserContext, Z80Span};
+use super::{ParserContext, Z80Span, parse_z80_code};
 use super::parse_z80_str_with_context;
+
+
 
 ///! This crate is related to the adaptation of tokens and listing for the case where they are parsed
 
 #[derive(Clone, Debug)]
 /// Add span information for a Token.
 /// This hierarchy is a mirror of the original token one
-pub enum LocatedToken<'src, 'ctx> {
+pub enum LocatedToken {
 	/// A token without any listing embedding
 	Standard{
 		/// The original token without any span information
 		token: Token,
 		/// The span that correspond to the token
-		span: Z80Span<'src, 'ctx>
+		span: Z80Span
 	},
-	CrunchedSection(CrunchType, LocatedListing<'src, 'ctx>, Z80Span<'src, 'ctx>),
-	Include(String, Option<LocatedListing<'src,'ctx>>, Z80Span<'src, 'ctx>),
-	If(Vec<(TestKind, LocatedListing<'src, 'ctx>)>, Option<LocatedListing<'src, 'ctx>>, Z80Span<'src, 'ctx>),
-	Repeat(Expr, LocatedListing<'src, 'ctx>, Option<String>, Z80Span<'src, 'ctx>),
-	RepeatUntil(Expr, LocatedListing<'src, 'ctx>, Z80Span<'src, 'ctx>),
-	Rorg(Expr, LocatedListing<'src, 'ctx>, Z80Span<'src, 'ctx>),
-	Switch(Vec<(Expr, LocatedListing<'src, 'ctx>)>, Z80Span<'src, 'ctx>),
-	While(Expr, LocatedListing<'src, 'ctx>, Z80Span<'src, 'ctx>),
+	CrunchedSection(CrunchType, LocatedListing, Z80Span),
+	Include(String, Option<LocatedListing>, Z80Span),
+	If(Vec<(TestKind, LocatedListing)>, Option<LocatedListing>, Z80Span),
+	Repeat(Expr, LocatedListing, Option<String>, Z80Span),
+	RepeatUntil(Expr, LocatedListing, Z80Span),
+	Rorg(Expr, LocatedListing, Z80Span),
+	Switch(Vec<(Expr, LocatedListing)>, Z80Span),
+	While(Expr, LocatedListing, Z80Span),
 }
 
-impl<'src, 'ctx> Deref for  LocatedToken<'src, 'ctx> {
+impl Deref for  LocatedToken {
 	type Target = Token;
 	fn deref(&self) -> &Self::Target {
 		match self.token() {
@@ -43,7 +45,7 @@ impl<'src, 'ctx> Deref for  LocatedToken<'src, 'ctx> {
 	}
 }
 
-impl<'src, 'ctx> LocatedToken<'src, 'ctx> {
+impl LocatedToken {
 	/// We can obtain a token only for "standard ones". Those that rely on listing need to be handled differently
 	pub fn token(&self) -> Result<&Token, ()> {
 		match self {
@@ -53,7 +55,7 @@ impl<'src, 'ctx> LocatedToken<'src, 'ctx> {
 	}
 	
 	/// Get the span of the current token
-	pub fn span(&self) -> &Z80Span<'src, 'ctx> {
+	pub fn span(&self) -> &Z80Span {
 		match self {
 			Self::Standard{span, ..} |
 			Self::CrunchedSection(_, _, span) |
@@ -67,13 +69,13 @@ impl<'src, 'ctx> LocatedToken<'src, 'ctx> {
 		}
 	}
 	
-	pub fn context(&self) -> &'ctx ParserContext {
-		self.span().extra
+	pub fn context(&self) -> &(Rc<String>, Rc<ParserContext>) {
+		&self.span().extra
 	}
 }
 
 
-impl<'src, 'ctx>  LocatedToken<'src, 'ctx> {
+impl  LocatedToken {
 	pub fn as_token(&self) -> Token {
 		match self {
 			LocatedToken::Standard{ token, ..} => token.clone(),
@@ -180,9 +182,14 @@ impl<'src, 'ctx>  LocatedToken<'src, 'ctx> {
 								});
 							}
 						};
-						let content = Box::new(content);
-						let mut new_ctx = Box::new(ctx.clone());
-						new_ctx.set_current_filename(fname);
+						let content = Rc::new(content);
+						let new_ctx = {
+							let mut new_ctx = ctx.deref().clone();;
+							new_ctx.set_current_filename(fname);
+							Rc::new(new_ctx)
+						};
+
+
 						listing.replace(parse_z80_strboxed_with_contextboxed(content, new_ctx)?);
 					}
 				}
@@ -280,16 +287,16 @@ impl<'src, 'ctx>  LocatedToken<'src, 'ctx> {
 }
 /// Implement this trait for type previousy defined without source location.
 
-pub trait Locate<'src, 'ctx>  {
+pub trait Locate  {
 	type Output;
 	
-	fn locate(self, span: Z80Span<'src, 'ctx>) -> Self::Output;
+	fn locate(self, span: Z80Span) -> Self::Output;
 }
 
-impl<'src, 'ctx> Locate<'src, 'ctx> for Token {
-	type Output = LocatedToken<'src, 'ctx>;
+impl Locate for Token {
+	type Output = LocatedToken;
 	
-	fn locate(self, span: Z80Span<'src, 'ctx>) -> LocatedToken<'src, 'ctx> {
+	fn locate(self, span: Z80Span) -> LocatedToken {
 		if self.has_at_least_one_listing() {/*/
 			match self {
 				Token::CrunchedSection(a, b) => {
@@ -328,35 +335,88 @@ impl<'src, 'ctx> Locate<'src, 'ctx> for Token {
 
 
 
-impl ListingElement for LocatedToken<'_, '_> {}
+impl ListingElement for LocatedToken {}
 
-pub type InnerLocatedListing<'src, 'ctx> = BaseListing<LocatedToken<'src, 'ctx>>;
+pub type InnerLocatedListing = BaseListing<LocatedToken>;
 
 /// Represents a Listing of located tokens
+/// Lifetimes 'src and 'ctx are in fact the same and correspond to hte lifetime of the object itself
 #[derive(Clone, Debug)]
-pub struct LocatedListing<'src, 'ctx>(InnerLocatedListing<'src, 'ctx> );
+pub struct LocatedListing {
+	/// The real listing
+	listing: InnerLocatedListing,
+	/// Its source code
+	src: Rc<String>,
+	/// Its Parsing Context
+	ctx: Rc<ParserContext>
+}
 
-impl<'src, 'ctx>  Deref for LocatedListing<'src, 'ctx> {
-	type Target = InnerLocatedListing<'src, 'ctx>;
+impl LocatedListing {
+	/// Create an empty listing. Code as to be parsed afterwhise
+	pub fn new_empty(str: String, ctx: ParserContext) -> Self {
+		Self {
+			listing: Default::default(),
+			src: Rc::new(str),
+			ctx: Rc::new(ctx)
+		}
+	}
+
+	pub fn src(&self) -> &Rc<String> {
+		&self.src
+	}
+
+	pub fn ctx(&self) -> &Rc<ParserContext> {
+		&self.ctx
+	}
+
+	pub fn span(&self) -> Z80Span {
+		Z80Span::new_extra_from_rc(
+			Rc::clone(&self.src),
+			Rc::clone(&self.ctx)
+		)
+	}
+}
+
+impl  Deref for LocatedListing {
+	type Target = InnerLocatedListing;
 	fn deref(&self) -> &Self::Target {
-		&self.0
+		&self.listing
 	}
 }
-impl<'src, 'ctx>  DerefMut for LocatedListing<'src, 'ctx> {
+impl  DerefMut for LocatedListing {
 	fn deref_mut(&mut self) -> &mut Self::Target {
-		&mut self.0
+		&mut self.listing
 	}
 }
 
-impl<'src, 'ctx>  From<Vec<LocatedToken<'src, 'ctx>>> for LocatedListing<'src, 'ctx> {
-	fn from(tokens: Vec<LocatedToken<'src, 'ctx>>) -> Self {
-		Self(tokens.into())
+impl TryFrom<Vec<LocatedToken>> for LocatedListing {
+	type Error = ();
+
+	/// Conversion fails only when the vec is empty.
+	/// In this case a workaround has to be used
+	fn try_from(tokens: Vec<LocatedToken>) ->Result<Self, Self::Error>  {
+
+		match tokens.first() {
+			Some(token) => {
+				let extra = &token.span().extra;
+				let src = Rc::clone(&extra.0);
+				let ctx = Rc::clone(&extra.1);
+				Ok(LocatedListing {
+					listing: tokens.into(),
+					ctx,
+					src
+				})
+			}
+			None => {
+				Err(())
+			}
+		}
 	}
 }
 
-impl<'src, 'ctx> LocatedListing<'src, 'ctx> {
+impl LocatedListing {
 	pub fn as_listing(&self) -> Listing {
-		self.0.iter()
+		self.deref().iter()
 		.map( |lt| lt.as_token())
 		.collect_vec()
 		.into()

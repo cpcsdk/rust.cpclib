@@ -1,42 +1,88 @@
-use std::ops::{DerefMut,Deref};
+use std::{ops::{DerefMut,Deref}, rc::Rc};
 
 
 use nom::{Compare, CompareResult, Err, FindSubstring, IResult, InputIter, InputLength, InputTake, Needed, Slice, error::{ErrorKind, ParseError}};
 use nom_locate::LocatedSpan;
 
-use super::context::{ParserContext, DEFAULT_CTX};
+use super::context::ParserContext;
 
 
 #[derive(Clone, PartialEq)]
-pub struct Z80Span<'src, 'ctx>(pub(crate) LocatedSpan<&'src str, &'ctx ParserContext>);
-impl<'src, 'ctx> From<&'src str> for Z80Span<'src, 'ctx> {
+pub struct Z80Span(
+    pub(crate) LocatedSpan<
+        // the type of data
+        &'static str, 
+        (
+            // The full source (same as the &str)
+            Rc<String>,
+            // The parsing context
+            Rc<ParserContext>
+        )
+    >
+);
+
+
+
+impl From<&'src str> for Z80Span {
     fn from(s: &'src str) -> Self {
-        Self(LocatedSpan::new_extra(s, &DEFAULT_CTX))
+        let src = Rc::new(s.to_owned());
+        let ctx = Rc::default();
+
+        Self(LocatedSpan::new_extra(
+            // The string is safe on the heap
+            unsafe{&*(src.as_str() as *const str) as &'static str}, 
+            (src, ctx)))
     }
 }
-impl<'src, 'ctx> Deref for  Z80Span<'src, 'ctx> {
-    type Target = LocatedSpan<&'src str, &'ctx ParserContext>;
+
+impl Z80Span {
+    pub fn from_standard_span(span: LocatedSpan<&'static str, ()>, extra: (Rc<String>, Rc<ParserContext>)) -> Self {
+        {
+            let span_addr = *span.fragment() as *const str;
+            let extra_addr = extra.0.as_str() as  *const str;
+            assert!(std::ptr::eq(span_addr, extra_addr));
+        }
+
+        Self(
+            unsafe{LocatedSpan::new_from_raw_offset(
+                span.location_offset(), 
+                span.location_line(),
+                 span.fragment(), 
+                 extra)}
+        )
+    }}
+
+impl<'a> Into<LocatedSpan<&'a str>> for Z80Span {
+    fn into(self) -> LocatedSpan<&'a str> {
+        unsafe{
+            LocatedSpan::new_from_raw_offset(self.location_offset(), self.location_line(), self.fragment(), ())
+        }
+    }
+}
+
+impl Deref for  Z80Span {
+    type Target = LocatedSpan<&'static  str, (Rc<String>, Rc<ParserContext>)>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl<'src, 'ctx> DerefMut for  Z80Span<'src, 'ctx> {
+impl DerefMut for  Z80Span {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
-impl<'src, 'ctx> AsRef<LocatedSpan<&'src str, &'ctx ParserContext>> for  Z80Span<'src, 'ctx> {
-    fn as_ref(&self) -> &LocatedSpan<&'src str, &'ctx ParserContext>{
+impl AsRef<LocatedSpan<&'static  str, (Rc<String>, Rc<ParserContext>)>> for  Z80Span {
+    fn as_ref(&self) -> &LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> {
         self.deref()
     }
 }
-impl<'src, 'ctx> std::fmt::Debug for  Z80Span<'src, 'ctx> {
+impl std::fmt::Debug for  Z80Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.deref().fmt(f)
     }
 
 }
-impl<'src, 'ctx> Compare<&'static str> for  Z80Span<'src, 'ctx> {
+impl Compare<&'static str> for  Z80Span {
  fn compare(&self, t: &'static str) -> CompareResult {
      self.deref().compare(t)
  }
@@ -45,12 +91,12 @@ impl<'src, 'ctx> Compare<&'static str> for  Z80Span<'src, 'ctx> {
 }
 
 }
-impl<'src, 'ctx>  nom::InputIter for  Z80Span<'src, 'ctx> {
-    type Item = <LocatedSpan<&'src str, &'ctx ParserContext> as nom::InputIter>::Item;
+impl  nom::InputIter for  Z80Span {
+    type Item = <LocatedSpan<&'static  str, (Rc<String>, Rc<ParserContext>)> as nom::InputIter>::Item;
 
-    type Iter = <LocatedSpan<&'src str, &'ctx ParserContext> as nom::InputIter>::Iter;
+    type Iter = <LocatedSpan<&'static  str, (Rc<String>, Rc<ParserContext>)> as nom::InputIter>::Iter;
 
-    type IterElem = <LocatedSpan<&'src str, &'ctx ParserContext> as nom::InputIter>::IterElem;
+    type IterElem = <LocatedSpan<&'static  str, (Rc<String>, Rc<ParserContext>)> as nom::InputIter>::IterElem;
 
     fn iter_indices(&self) -> Self::Iter {
         self.deref().iter_indices()
@@ -71,13 +117,13 @@ impl<'src, 'ctx>  nom::InputIter for  Z80Span<'src, 'ctx> {
     }
 }
 
-impl<'src, 'ctx>  nom::InputLength for  Z80Span<'src, 'ctx> {
+impl  nom::InputLength for  Z80Span {
     fn input_len(&self) -> usize {
         self.deref().input_len()
     }
 }
 
-impl<'src, 'ctx>  nom::InputTake for  Z80Span<'src, 'ctx> 
+impl  nom::InputTake for  Z80Span 
 {
     fn take(&self, count: usize) -> Self {
         Self(self.deref().take(count))
@@ -90,8 +136,8 @@ impl<'src, 'ctx>  nom::InputTake for  Z80Span<'src, 'ctx>
 }
 
 
-impl<'src, 'ctx>  nom::InputTakeAtPosition for  Z80Span<'src, 'ctx> {
-    type Item = <LocatedSpan<&'src str, &'ctx ParserContext> as nom::InputIter>::Item;
+impl  nom::InputTakeAtPosition for  Z80Span {
+    type Item = <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as nom::InputIter>::Item;
 
     fn split_at_position<P, E: ParseError<Self>>(&self, predicate: P) -> IResult<Self, Self, E>
   where
@@ -148,7 +194,7 @@ impl<'src, 'ctx>  nom::InputTakeAtPosition for  Z80Span<'src, 'ctx> {
         }
     }
 }
-impl<'src, 'ctx, U> FindSubstring<U> for  Z80Span<'src, 'ctx>
+impl<'src, 'ctx, U> FindSubstring<U> for  Z80Span
 where
     &'src str: FindSubstring<U>,
 {
@@ -158,24 +204,36 @@ where
     }
 }
 
-impl<'src, 'ctx> Slice<std::ops::Range<usize>> for  Z80Span<'src, 'ctx> {
+impl Slice<std::ops::Range<usize>> for  Z80Span {
     fn slice(&self, range: std::ops::Range<usize>) -> Self {
         Self(self.deref().slice(range))
     }
 }
-impl<'src, 'ctx> Slice<std::ops::RangeFrom<usize>> for  Z80Span<'src, 'ctx> {
+impl Slice<std::ops::RangeFrom<usize>> for  Z80Span {
     fn slice(&self, range: std::ops::RangeFrom<usize>) -> Self {
         Self(self.deref().slice(range))
     }
 }
-impl<'src, 'ctx> Slice<std::ops::RangeTo<usize>> for  Z80Span<'src, 'ctx> {
+impl Slice<std::ops::RangeTo<usize>> for  Z80Span {
     fn slice(&self, range: std::ops::RangeTo<usize>) -> Self {
         Self(self.deref().slice(range))
     }
 }
 
-impl<'src, 'ctx>  Z80Span<'src, 'ctx> {
-    pub fn new_extra(src: &'src str, ctx: &'ctx ParserContext) -> Self {
-        Self(LocatedSpan::new_extra(src, ctx))
+impl  Z80Span {
+    pub fn new_extra<S: Into<String>>(src: S, ctx: ParserContext) -> Self {
+        let src = Rc::new(src.into());
+        let ctx = Rc::new(ctx);
+
+        Self::new_extra_from_rc(src, ctx)
+    }
+
+    pub fn new_extra_from_rc(src: Rc<String>, ctx: Rc<ParserContext>) -> Self {
+
+        Self(LocatedSpan::new_extra(
+            // pointer is always good as source is store in a Rc
+            unsafe{ &*(src.as_str() as *const str)  as &'static str}, 
+            (Rc::clone(&src), Rc::clone(&ctx))
+        ))
     }
 }

@@ -48,12 +48,12 @@ fn test_regression1() {
 #[test]
 fn expr_negative_regression() {
 	assert_eq!(
-		expr(CTX.build_span("18")).unwrap().1,
+		expr(CTX.build_span("18".to_owned())).unwrap().1,
 		Expr::Value(18)
 	);
 
 	assert_eq!(
-		expr(CTX.build_span("-18")).unwrap().1,
+		expr(CTX.build_span("-18".to_owned())).unwrap().1,
 		Expr::Value(-18)
 	);
 }
@@ -120,7 +120,7 @@ fn macro_args1() {
 
 #[test]
 fn macro_args_single() {
-	let code = "1";
+	let code = "1".to_owned();
 	let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
 
 	assert_eq!(
@@ -131,7 +131,7 @@ fn macro_args_single() {
 
 #[test]
 fn macro_args_list_1() {
-	let code = "[1]";
+	let code = "[1]".to_owned();
 	let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
 
 	assert_eq!(
@@ -146,7 +146,7 @@ fn macro_args_list_1() {
 
 #[test]
 fn macro_args_list_2() {
-	let code = "[1, 3]";
+	let code = "[1, 3]".to_owned();
 	let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
 
 	assert_eq!(
@@ -162,7 +162,7 @@ fn macro_args_list_2() {
 
 #[test]
 fn macro_args_list_3() {
-	let code = "[1, ,3]";
+	let code = "[1, ,3]".to_owned();
 	let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
 
 	assert_eq!(

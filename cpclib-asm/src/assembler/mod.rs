@@ -205,7 +205,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
         }
     }
 
-    impl Visited for LocatedToken<'_, '_> {
+    impl Visited for LocatedToken {
         fn visited(&self, env: &mut Env) -> Result<(), AssemblerError> {
             let token = self.as_token();
             token.visited(env)
