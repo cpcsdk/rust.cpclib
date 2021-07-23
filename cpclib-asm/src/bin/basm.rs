@@ -131,10 +131,14 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
         let binary = env.produced_bytes();
 
         if matches.is_present("DB_LIST") {
-            println!(
-                "{}",
-                PrintableListing::from(&Listing::from(env.produced_bytes().as_ref()))
-            );
+            let bytes = env.produced_bytes();
+            if !bytes.is_empty() {
+                let listing = Listing::from(bytes.as_ref());
+                println!(
+                    "{}",
+                    PrintableListing::from(&Listing::from(listing))
+                );
+            }
         } else {
             use std::convert::TryFrom;
 
