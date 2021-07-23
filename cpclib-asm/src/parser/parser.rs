@@ -1665,7 +1665,7 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
         delimited(space0, tag(","), space0),
     ))(input)?;
 
-    let (input, dst) = alt((
+    let (input, dst) = cut(context("Wrong destination parameter", alt((
         verify(
             alt((
                 parse_hl_address,
@@ -1676,7 +1676,7 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
             |_| call_jp_or_jr.is_jp() && flag_test.is_none(),
         ), // not possible for call and for jp/jr when there is flag
         parse_expr,
-    ))(input)?;
+    ))))(input)?;
 
     // Allow to parse JP HL as to be JP (HL) original notation is misleading
     let dst = match dst {
