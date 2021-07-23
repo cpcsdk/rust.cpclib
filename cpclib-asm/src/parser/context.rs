@@ -4,21 +4,18 @@ use crate::error::AssemblerError;
 
 use super::Z80Span;
 
-
-
 /// Context information that can guide the parser
 /// TODO add assembling flags
 #[derive(Clone, Debug)]
 pub struct ParserContext {
     /// Filename that is currently parsed
-   pub  current_filename: Option<PathBuf>,
-  pub  context_name: Option<String>,
+    pub current_filename: Option<PathBuf>,
+    pub context_name: Option<String>,
     /// Search path to find files
     pub search_path: Vec<PathBuf>,
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
     pub read_referenced_files: bool,
 }
-
 
 impl Default for ParserContext {
     fn default() -> Self {
@@ -26,15 +23,13 @@ impl Default for ParserContext {
             current_filename: None,
             context_name: None,
             search_path: Default::default(),
-            read_referenced_files: false
+            read_referenced_files: false,
         }
     }
 }
 
-
 #[allow(missing_docs)]
 impl ParserContext {
-
     pub fn build_span<S: Into<String>>(&self, src: S) -> Z80Span {
         Z80Span::new_extra(src, self.clone())
     }
@@ -138,11 +133,9 @@ impl ParserContext {
     }
 }
 
-
 pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
-context_name: None,
-current_filename: None,
-read_referenced_files: false,
-search_path: Vec::new()
+    context_name: None,
+    current_filename: None,
+    read_referenced_files: false,
+    search_path: Vec::new(),
 };
-

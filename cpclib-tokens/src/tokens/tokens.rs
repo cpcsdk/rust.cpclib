@@ -5,11 +5,8 @@ use crate::tokens::expression::*;
 
 impl ListingElement for Token {}
 
-
 /// Standard listing is a specific implementation
 pub type Listing = BaseListing<Token>;
-
-
 
 // Set of methods that do not have additional dependencies
 impl Listing {
@@ -34,14 +31,13 @@ impl Listing {
         self.push(tok);
     }
 
-
     /// Macro can have labels like @stuff.
     /// They must be replaced by unique values to be sure they can be called several times
-    pub fn  fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+    pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         self.iter_mut()
             .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
 
-       //     dbg!(&self);
+        //     dbg!(&self);
     }
 }
 

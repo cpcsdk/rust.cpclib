@@ -15,7 +15,7 @@
 
 use std::fs::File;
 use std::io;
-
+use std::rc::Rc;
 use std::io::{Read, Write};
 use std::path::Path;
 
@@ -63,7 +63,7 @@ impl From<AssemblerError> for BasmError {
 
 /// Parse the given code.
 /// TODO read options to configure the search path
-fn parse<'arg>(matches: &'arg ArgMatches<'_>) -> Result<LocatedListing<'arg, 'arg>, BasmError> {
+fn parse<'arg>(matches: &'arg ArgMatches<'_>) -> Result<LocatedListing, BasmError> {
     let (filename, code) = {
         if let Some(filename) = matches.value_of("INPUT") {
             let mut f = File::open(filename)?;
@@ -75,7 +75,6 @@ fn parse<'arg>(matches: &'arg ArgMatches<'_>) -> Result<LocatedListing<'arg, 'ar
         } else {
             panic!("No code provided to assemble");
         }
-        
     };
 
     let mut context = ParserContext::default();
@@ -92,15 +91,17 @@ fn parse<'arg>(matches: &'arg ArgMatches<'_>) -> Result<LocatedListing<'arg, 'ar
         }
     }
 
-    let code = Box::new(code);
-    let context = Box::new(context);
-    parse_z80_strboxed_with_contextboxed(code, context)
-                .map_err(|e| e.into())
+    let code = Rc::new(code);
+    let context = Rc::new(context);
+    parse_z80_strrc_with_contextrc(code, context).map_err(|e| e.into())
 }
 
 /// Assemble the given code
 /// TODO use options to configure the base symbole table
-fn assemble<'arg>(matches: &'arg ArgMatches<'_>, listing: &LocatedListing<'arg, 'arg>) -> Result<Env, BasmError> {
+fn assemble<'arg>(
+    matches: &'arg ArgMatches<'_>,
+    listing: &LocatedListing,
+) -> Result<Env, BasmError> {
     let mut options = AssemblingOptions::default();
 
     options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));

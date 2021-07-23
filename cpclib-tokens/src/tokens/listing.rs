@@ -115,4 +115,3 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
         self.listing.get(idx)
     }
 }
-

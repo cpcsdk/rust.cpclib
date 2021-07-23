@@ -10,14 +10,15 @@ use nom::sequence::*;
 use nom::*;
 use nom_locate::LocatedSpan;
 
-
-
 use crate::flags::{FlagValue, SnapshotFlag};
 
 use separated_list1 as separated_nonempty_list;
 
-pub fn parse_flag<'src, T> (input: LocatedSpan<&'src str, T>) -> IResult<LocatedSpan<&'src str, T>, SnapshotFlag, VerboseError<LocatedSpan<&'src str, T>>> 
-where T:Clone
+pub fn parse_flag<'src, T>(
+    input: LocatedSpan<&'src str, T>,
+) -> IResult<LocatedSpan<&'src str, T>, SnapshotFlag, VerboseError<LocatedSpan<&'src str, T>>>
+where
+    T: Clone,
 {
     let (input, word) =
         is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:")(input)?;
@@ -28,8 +29,11 @@ where T:Clone
     }
 }
 
-pub fn parse_flag_value<'src, T> (input: LocatedSpan<&'src str, T>) -> IResult<LocatedSpan<&'src str, T>, FlagValue, VerboseError<LocatedSpan<&'src str, T>>> 
-where T:Clone
+pub fn parse_flag_value<'src, T>(
+    input: LocatedSpan<&'src str, T>,
+) -> IResult<LocatedSpan<&'src str, T>, FlagValue, VerboseError<LocatedSpan<&'src str, T>>>
+where
+    T: Clone,
 {
     alt((
         map(parse_value, |val| {
@@ -54,57 +58,61 @@ where T:Clone
 }
 
 /// Read a value
-fn parse_value<'src, T>(input: LocatedSpan<&'src str, T>) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where T:Clone
+fn parse_value<'src, T>(
+    input: LocatedSpan<&'src str, T>,
+) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
+where
+    T: Clone,
 {
     alt((hex_number, bin_number, dec_number))(input)
 }
 
-
 #[inline]
 /// Parse an usigned 32 bit number
-pub fn dec_number<'src, T>(input: LocatedSpan<&'src str, T>) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where T:Clone
+pub fn dec_number<'src, T>(
+    input: LocatedSpan<&'src str, T>,
+) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
+where
+    T: Clone,
 {
     let (input, digits) = digit1(input)?;
-    let number = digits.chars()
+    let number = digits
+        .chars()
         .map(|c| c.to_digit(10).unwrap())
-        .fold(0, |acc, val| {
-            acc*10 + val
-        });
+        .fold(0, |acc, val| acc * 10 + val);
 
     Ok((input, number))
 }
 
-pub fn hex_number<'src, T>(input: LocatedSpan<&'src str, T>) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where T:Clone
+pub fn hex_number<'src, T>(
+    input: LocatedSpan<&'src str, T>,
+) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
+where
+    T: Clone,
 {
-    let (input, digits) = preceded(
-        alt((tag("0x"), tag("#"), tag("$"), tag("&"))),
-        hex_digit1
-    )(input)?;
-    let number = digits.chars()
+    let (input, digits) =
+        preceded(alt((tag("0x"), tag("#"), tag("$"), tag("&"))), hex_digit1)(input)?;
+    let number = digits
+        .chars()
         .map(|c| c.to_digit(16).unwrap())
-        .fold(0, |acc, val| {
-            acc*16 + val
-        });
+        .fold(0, |acc, val| acc * 16 + val);
 
     Ok((input, number))
 }
 
-pub fn bin_number<'src, T>(input: LocatedSpan<&'src str, T>) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where T:Clone
+pub fn bin_number<'src, T>(
+    input: LocatedSpan<&'src str, T>,
+) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
+where
+    T: Clone,
 {
-    let (input, digits) = preceded(
-        alt((tag("0b"), tag("%"))),
-        many1(alt((tag("0"), tag("1"))))
-    )(input)?;
-    let number = digits.iter()
+    let (input, digits) =
+        preceded(alt((tag("0b"), tag("%"))), many1(alt((tag("0"), tag("1")))))(input)?;
+    let number = digits
+        .iter()
         .map(|d| d.chars().next().unwrap())
         .map(|c| c.to_digit(2).unwrap())
-        .fold(0, |acc, val| {
-            acc*2 + val
-        });
+        .fold(0, |acc, val| acc * 2 + val);
 
     Ok((input, number))
 }

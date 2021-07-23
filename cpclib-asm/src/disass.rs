@@ -267,8 +267,7 @@ pub const TABINSTRFDCB: [&'static str; 256] = [
     "SET 7,(IY+nn), A",
 ];
 
-pub const TABINSTRDDCB: [&'static str; 256] = 
-[
+pub const TABINSTRDDCB: [&'static str; 256] = [
     "RLC (IX+nn), B",
     "RLC (IX+nn), C",
     "RLC (IX+nn), D",
@@ -526,7 +525,6 @@ pub const TABINSTRDDCB: [&'static str; 256] =
     "SET 7,(IX+nn)",
     "SET 7,(IX+nn), A",
 ];
-
 
 pub const TABINSTRCB: [&'static str; 256] = [
     "RLC B",
@@ -1931,7 +1929,10 @@ pub fn disassemble_with_one_argument(
 }
 
 /// No argument is expected
-pub fn disassemble_without_argument(opcode: u8, lut: &[&'static str; 256]) -> Result<Token, String> {
+pub fn disassemble_without_argument(
+    opcode: u8,
+    lut: &[&'static str; 256],
+) -> Result<Token, String> {
     let representation: &'static str = lut[opcode as usize];
     string_to_token(&representation)
 }
@@ -1956,12 +1957,23 @@ mod test {
     fn disass_from_bytes() {
         assert_eq!("PUSH HL", disassemble(&[0xe5]).to_string().trim());
         assert_eq!("RES 0x3, E", disassemble(&[0xcb, 0x9b]).to_string().trim());
-        assert_eq!("SBC HL, DE", disassemble(&[0xed, 0b01010010]).to_string().trim());
+        assert_eq!(
+            "SBC HL, DE",
+            disassemble(&[0xed, 0b01010010]).to_string().trim()
+        );
 
-
-        assert_eq!("RLC (IX + 0x1)", disassemble(&[0xdd, 0xcb, 01, 06]).to_string().trim());
-        assert_eq!("RLC (IX + 0x1), B", disassemble(&[0xdd, 0xcb, 01, 00]).to_string().trim());
-        assert_eq!("RLC (IY + 0x2), C", disassemble(&[0xfd, 0xcb, 02, 01 ]).to_string().trim());
+        assert_eq!(
+            "RLC (IX + 0x1)",
+            disassemble(&[0xdd, 0xcb, 01, 06]).to_string().trim()
+        );
+        assert_eq!(
+            "RLC (IX + 0x1), B",
+            disassemble(&[0xdd, 0xcb, 01, 00]).to_string().trim()
+        );
+        assert_eq!(
+            "RLC (IY + 0x2), C",
+            disassemble(&[0xfd, 0xcb, 02, 01]).to_string().trim()
+        );
     }
 
     #[test]
@@ -2030,8 +2042,9 @@ mod test {
             );
 
             let mut env = Env::default();
-            if let Token::OpCode( mnemonic,  arg1,  arg2, arg3) = &obtained.listing()[0] {
-                let obtained_bytes = assemble_opcode(*mnemonic, arg1, arg2, arg3, &mut env).unwrap();
+            if let Token::OpCode(mnemonic, arg1, arg2, arg3) = &obtained.listing()[0] {
+                let obtained_bytes =
+                    assemble_opcode(*mnemonic, arg1, arg2, arg3, &mut env).unwrap();
                 assert_eq!(&expected_bytes[..], &obtained_bytes[..]);
             } else {
                 println!("ERROR, this is not a Token {:?}", obtained);
@@ -2099,7 +2112,7 @@ mod test {
 
             // check if it is possible to assemble it
             let mut env = Env::default();
-            if let Token::OpCode( mnemonic,  arg1,  arg2,  arg3) = &obtained.listing()[0] {
+            if let Token::OpCode(mnemonic, arg1, arg2, arg3) = &obtained.listing()[0] {
                 // relative addresses are not properly managed
                 if !(mnemonic.is_djnz() || mnemonic.is_jr()) {
                     let obtained_bytes =

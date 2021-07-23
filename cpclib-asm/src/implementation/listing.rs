@@ -1,17 +1,14 @@
-use cpclib_tokens::tokens::*;
-use crate::AssemblingOptions;
 use crate::error::*;
 use crate::preamble::parse_z80_str;
+use crate::AssemblingOptions;
+use cpclib_tokens::tokens::*;
 use std::fmt;
 
 use crate::implementation::expression::*;
 use crate::implementation::tokens::*;
 
-
 /// Additional methods for the listings
 pub trait ListingExt {
-
-
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
         code: S,
@@ -57,9 +54,6 @@ pub trait ListingExt {
 }
 
 impl ListingExt for Listing {
-
-
-
     /// Add additional tokens, that need to be parsed from a string, to the listing
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
@@ -74,7 +68,6 @@ impl ListingExt for Listing {
                 self.listing_mut().append(&mut local_tokens);
             })
     }
-
 
     fn to_bytes_with_options(
         &self,
@@ -97,8 +90,6 @@ impl ListingExt for Listing {
             Ok(duration)
         }
     }
-
-
 
     fn to_string(&self) -> String {
         PrintableListing::from(self).to_string()
@@ -308,10 +299,6 @@ pub trait ListingFromStr {
 
 impl ListingFromStr for Listing {
     fn from_str(s: &str) -> Result<Listing, AssemblerError> {
-        crate::parser::parse_z80_str(s)
-            .map(|ll| ll.as_listing())
+        crate::parser::parse_z80_str(s).map(|ll| ll.as_listing())
     }
-
-
 }
-

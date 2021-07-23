@@ -87,7 +87,6 @@ fn mnemonic_with_single_expr<E: Into<Expr>>(mne: Mnemonic, expr: E) -> Token {
     Token::OpCode(mne, Some(expr.into().into()), None, None)
 }
 
-
 #[allow(missing_docs)]
 pub fn out_c_b() -> Token {
     out_c_register8(Register8::B)
@@ -172,7 +171,8 @@ pub fn push_ix() -> Token {
     Token::OpCode(
         Mnemonic::Push,
         Some(DataAccess::IndexRegister16(IndexRegister16::Ix)),
-        None, None
+        None,
+        None,
     )
 }
 
@@ -181,7 +181,8 @@ pub fn push_iy() -> Token {
     Token::OpCode(
         Mnemonic::Push,
         Some(DataAccess::IndexRegister16(IndexRegister16::Iy)),
-        None, None
+        None,
+        None,
     )
 }
 
@@ -190,7 +191,8 @@ pub fn pop_ix() -> Token {
     Token::OpCode(
         Mnemonic::Pop,
         Some(DataAccess::IndexRegister16(IndexRegister16::Ix)),
-        None, None
+        None,
+        None,
     )
 }
 
@@ -199,7 +201,8 @@ pub fn pop_iy() -> Token {
     Token::OpCode(
         Mnemonic::Pop,
         Some(DataAccess::IndexRegister16(IndexRegister16::Iy)),
-        None, None
+        None,
+        None,
     )
 }
 

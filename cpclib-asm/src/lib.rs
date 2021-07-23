@@ -102,7 +102,7 @@ pub fn assemble_with_options(
 }
 
 /// Assemble the predifined list of tokens
-pub fn assemble_tokens_with_options<T:Visited> (
+pub fn assemble_tokens_with_options<T: Visited>(
     tokens: &[T],
     options: &AssemblingOptions,
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {

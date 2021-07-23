@@ -1,4 +1,3 @@
-
 use bitsets;
 
 use std::fs::File;
