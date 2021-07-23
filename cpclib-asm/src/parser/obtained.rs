@@ -351,6 +351,8 @@ pub struct LocatedListing {
 	ctx: Rc<ParserContext>
 }
 
+
+
 impl LocatedListing {
 	/// Create an empty listing. Code as to be parsed afterwhise
 	pub fn new_empty(str: String, ctx: ParserContext) -> Self {
@@ -360,6 +362,16 @@ impl LocatedListing {
 			ctx: Rc::new(ctx)
 		}
 	}
+
+	pub fn new_empty_span(span: Z80Span) -> Self {
+		Self {
+			listing: Default::default(),
+			src: Rc::clone(&span.extra.0),
+			ctx: Rc::clone(&span.extra.1),
+		}
+	}
+
+
 
 	pub fn src(&self) -> &Rc<String> {
 		&self.src

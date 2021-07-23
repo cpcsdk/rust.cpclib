@@ -151,7 +151,10 @@ pub fn parse_z80_code<'src, 'ctx, 'a>(input: Z80Span) -> IResult<Z80Span, Locate
         .flatten()
         .cloned()
         .collect_vec();
-        Ok((input, tokens.try_into().unwrap()))
+        Ok((
+            input.clone(), 
+            tokens.try_into()
+                .unwrap_or_else(|_| LocatedListing::new_empty_span(input))))
     } else {
         // Everything should have been consumed
         return Err(Err::Error(nom::error::ParseError::<Z80Span>::from_error_kind(
@@ -227,7 +230,7 @@ pub fn parse_rorg(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError
     
     let (input, _) = preceded(space0, alt((tag_no_case("DEPHASE"), tag_no_case("REND"))))(input)?;
     
-    Ok((input, LocatedToken::Rorg(exp, inner.try_into().unwrap(), rorg_start)))
+    Ok((input.clone(), LocatedToken::Rorg(exp, inner.try_into().unwrap_or_else(|_| LocatedListing::new_empty_span(input)), rorg_start)))
 }
 
 /// TODO
@@ -314,7 +317,7 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         )),
     ))(input)?;
     
-    Ok((input, LocatedToken::Repeat(count, LocatedListing::try_from(inner).unwrap(), None, repeat_start)))
+    Ok((input.clone(), LocatedToken::Repeat(count, LocatedListing::try_from(inner).unwrap_or_else(|_| LocatedListing::new_empty_span(input)), None, repeat_start)))
 }
 
 /// TODO
@@ -785,6 +788,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
     
     let (input, code) = context("main case", cut(inner_code))(input)?;
     
+    let else_input = input.clone();
     let (input, r#else) = context(
         "else",
         opt(preceded(
@@ -809,7 +813,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
         input,
         LocatedToken::If(
             vec![(cond, code.try_into().unwrap())], 
-            r#else.map(|v| LocatedListing::try_from(v).unwrap()),
+            r#else.map(|v| LocatedListing::try_from(v).unwrap_or_else(|_| LocatedListing::new_empty_span(else_input))),
             if_start
         )
     ))
