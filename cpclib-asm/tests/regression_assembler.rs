@@ -1,9 +1,8 @@
 use cpclib_asm::assemble;
 
-
 #[test]
 pub fn assemble_vsync_test() {
-	let code = "
+    let code = "
 	org 0x4000
 	ld b, 0xf5
 loop
@@ -15,24 +14,17 @@ end
 	jr $
 	";
 
+    let binary = assemble(code).unwrap();
 
-	let binary = assemble(code).unwrap();
-
-	assert_eq!(
-		&binary,
-		&[
-			0x06, 0xf5,
-			0xed, 0x78,
-			0x1f,
-			0x30, 0xfb,
-			0x18, 0xfe
-		]
-	);
+    assert_eq!(
+        &binary,
+        &[0x06, 0xf5, 0xed, 0x78, 0x1f, 0x30, 0xfb, 0x18, 0xfe]
+    );
 }
 
 #[test]
 pub fn macro_local_labels() {
-	let code = "
+    let code = "
 	MACRO CRC32XOR x1,x2,x3,x4
 	rr b
 	jr nc,@nextBit
@@ -55,16 +47,14 @@ pub fn macro_local_labels() {
 		   CRC32XOR &19,&C4,&6D,&07
 	";
 
-
-	// just check that it assemble
-	let binary = assemble(code).unwrap();
-	assert!(binary.len() != 0);
+    // just check that it assemble
+    let binary = assemble(code).unwrap();
+    assert!(binary.len() != 0);
 }
-
 
 #[test]
 pub fn test_inner_struct1() {
-	let code = "
+    let code = "
 	struct point
 xx    db 4
 yy    db 5
@@ -81,23 +71,15 @@ p3 point
 my_triangle1 triangle
 	";
 
-
-	// just check that it assemble
-	let binary = assemble(code).unwrap();
-	assert_eq!(binary.len(), 3*3);
-	assert_eq!(
-		&binary,
-		&[
-			4,5,6,
-			4,5,6,
-			4,5,6,
-		]
-	)
+    // just check that it assemble
+    let binary = assemble(code).unwrap();
+    assert_eq!(binary.len(), 3 * 3);
+    assert_eq!(&binary, &[4, 5, 6, 4, 5, 6, 4, 5, 6,])
 }
 
 #[test]
 pub fn test_inner_struct2() {
-	let code = "
+    let code = "
 	struct point
 xx    db 4
 yy    db 5
@@ -114,25 +96,15 @@ p3 point 9
 my_triangle1 triangle [1, 2, 3], [1, 2, 3], [1, 2, 3]
 	";
 
-
-	// just check that it assemble
-	let binary = assemble(code).unwrap();
-	assert_eq!(binary.len(), 3*3);
-	assert_eq!(
-		&binary,
-		&[
-			1,2,3,
-			1,2,3,
-			1,2,3,
-		]
-	)
+    // just check that it assemble
+    let binary = assemble(code).unwrap();
+    assert_eq!(binary.len(), 3 * 3);
+    assert_eq!(&binary, &[1, 2, 3, 1, 2, 3, 1, 2, 3,])
 }
-
-
 
 #[test]
 pub fn test_inner_struct3() {
-	let code = "
+    let code = "
 	struct point
 xx    db 4
 yy    db 5
@@ -149,24 +121,15 @@ p3 point 9
 my_triangle1 triangle [11, 12, 13],, [1, 2, 3]
 	";
 
-
-	// just check that it assemble
-	let binary = assemble(code).unwrap();
-	assert_eq!(binary.len(), 3*3);
-	assert_eq!(
-		&binary,
-		&[
-			11,12,13,
-			4,5,8,
-			1,2,3,
-		]
-	)
+    // just check that it assemble
+    let binary = assemble(code).unwrap();
+    assert_eq!(binary.len(), 3 * 3);
+    assert_eq!(&binary, &[11, 12, 13, 4, 5, 8, 1, 2, 3,])
 }
-
 
 #[test]
 pub fn test_inner_struct_deeper() {
-	let code = "
+    let code = "
 	struct point
 xx    db 4
 yy    db 5
@@ -190,27 +153,18 @@ tr2 triangle
 my_shape shape	
 ";
 
-
-	// just check that it assemble
-	let binary = assemble(code).unwrap();
-	assert_eq!(binary.len(), 3*3*2);
-	assert_eq!(
-		&binary,
-		&[
-			1,2,3,
-			4,5,8,
-			9,5,6,
-			1,2,3,
-			4,5,8,
-			9,5,6,
-		]
-	)
+    // just check that it assemble
+    let binary = assemble(code).unwrap();
+    assert_eq!(binary.len(), 3 * 3 * 2);
+    assert_eq!(
+        &binary,
+        &[1, 2, 3, 4, 5, 8, 9, 5, 6, 1, 2, 3, 4, 5, 8, 9, 5, 6,]
+    )
 }
-
 
 #[test]
 pub fn test_inner_struct_deeper2() {
-	let code = "
+    let code = "
 	struct point
 xx    db 4
 yy    db 5
@@ -234,19 +188,11 @@ tr2 triangle
 my_shape shape	, [ [1,2,3], [1,2,3], [1,2,3] ]
 ";
 
-
-	// just check that it assemble
-	let binary = assemble(code).unwrap();
-	assert_eq!(binary.len(), 3*3*2);
-	assert_eq!(
-		&binary,
-		&[
-			1,2,3,
-			4,5,8,
-			9,5,6,
-			1,2,3,
-			1,2,3,
-			1,2,3,
-		]
-	)
+    // just check that it assemble
+    let binary = assemble(code).unwrap();
+    assert_eq!(binary.len(), 3 * 3 * 2);
+    assert_eq!(
+        &binary,
+        &[1, 2, 3, 4, 5, 8, 9, 5, 6, 1, 2, 3, 1, 2, 3, 1, 2, 3,]
+    )
 }

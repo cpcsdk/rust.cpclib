@@ -15,7 +15,7 @@ mod tests {
         context_name: None,
         current_filename: None,
         read_referenced_files: false,
-        search_path: Vec::new()
+        search_path: Vec::new(),
     };
 
     fn check_mnemonic(code: &str, mnemonic: Mnemonic) -> bool {
@@ -38,7 +38,9 @@ mod tests {
         }
     }
 
-    fn get_val<'src, 'ctx,T: core::fmt::Debug>(res: IResult<Z80Span, T, nom::error::VerboseError<Z80Span>>) -> T {
+    fn get_val<'src, 'ctx, T: core::fmt::Debug>(
+        res: IResult<Z80Span, T, nom::error::VerboseError<Z80Span>>,
+    ) -> T {
         match res {
             Err(e) => panic!("{:?}", e),
             Ok((rest, val)) => {
@@ -64,15 +66,30 @@ mod tests {
 
     #[test]
     fn test_bin_u16() {
-        assert_eq!(get_val::<u32>(bin_number_inner(CTX.build_span("0b101011"))), 0b101011);
+        assert_eq!(
+            get_val::<u32>(bin_number_inner(CTX.build_span("0b101011"))),
+            0b101011
+        );
     }
 
     #[test]
     fn test_hex_number() {
-        assert_eq!(get_val::<u32>(hex_number_inner(CTX.build_span("0x123"))), 0x123);
-        assert_eq!(get_val::<u32>(hex_number_inner(CTX.build_span("0xffff"))), 0xffff);
-        assert_eq!(get_val::<u32>(hex_number_inner(CTX.build_span("0x0000"))), 0x0000);
-        assert_eq!(get_val::<u32>(hex_number_inner(CTX.build_span("0xc9fb"))), 0xc9fb);
+        assert_eq!(
+            get_val::<u32>(hex_number_inner(CTX.build_span("0x123"))),
+            0x123
+        );
+        assert_eq!(
+            get_val::<u32>(hex_number_inner(CTX.build_span("0xffff"))),
+            0xffff
+        );
+        assert_eq!(
+            get_val::<u32>(hex_number_inner(CTX.build_span("0x0000"))),
+            0x0000
+        );
+        assert_eq!(
+            get_val::<u32>(hex_number_inner(CTX.build_span("0xc9fb"))),
+            0xc9fb
+        );
     }
 
     #[test]
@@ -98,7 +115,6 @@ mod tests {
             0xbd00 + 0x20 + 0b00001100
         );
     }
-
 
     #[test]
     fn test_org_value_decimal() {
@@ -135,14 +151,32 @@ mod tests {
 
     #[test]
     fn fn_test_label() {
-        assert_eq!(parse_label(false)(CTX.build_span("label")).ok().unwrap().1, "label");
-        assert_eq!(parse_label(false)(CTX.build_span("label")).ok().unwrap().1, "label");
         assert_eq!(
-            parse_label(false)(CTX.build_span("module.label")).ok().unwrap().1,
+            parse_label(false)(CTX.build_span("label")).ok().unwrap().1,
+            "label"
+        );
+        assert_eq!(
+            parse_label(false)(CTX.build_span("label")).ok().unwrap().1,
+            "label"
+        );
+        assert_eq!(
+            parse_label(false)(CTX.build_span("module.label"))
+                .ok()
+                .unwrap()
+                .1,
             "module.label"
         );
-        assert_eq!(parse_label(false)(CTX.build_span("label15")).ok().unwrap().1, "label15");
-        assert_eq!(parse_label(false)(CTX.build_span(".label")).ok().unwrap().1, ".label");
+        assert_eq!(
+            parse_label(false)(CTX.build_span("label15"))
+                .ok()
+                .unwrap()
+                .1,
+            "label15"
+        );
+        assert_eq!(
+            parse_label(false)(CTX.build_span(".label")).ok().unwrap().1,
+            ".label"
+        );
 
         let code = "label";
         let tokens = get_val(parse_z80_line_label_only(CTX.build_span(code.to_owned())));
@@ -218,22 +252,24 @@ mod tests {
         assert_matches!(tokens[0].deref(), Token::Label(_));
         assert_matches!(tokens[1].deref(), Token::Org(_, _));
 
-        let tokens = get_val(parse_z80_line(CTX.build_span("label ORG 0x1000 : ORG 0x000 : ORG 10")));
+        let tokens = get_val(parse_z80_line(
+            CTX.build_span("label ORG 0x1000 : ORG 0x000 : ORG 10"),
+        ));
         assert_eq!(tokens.len(), 4);
         assert_matches!(tokens[0].deref(), Token::Label(_));
         assert_matches!(tokens[1].deref(), Token::Org(_, _));
         assert_matches!(tokens[2].deref(), Token::Org(_, _));
 
-        let tokens = get_val(parse_z80_line(CTX.build_span(
-            "label ORG 0x1000 : ORG 0x000 : ORG 10 ; fdfs"),
+        let tokens = get_val(parse_z80_line(
+            CTX.build_span("label ORG 0x1000 : ORG 0x000 : ORG 10 ; fdfs"),
         ));
         assert_eq!(tokens.len(), 5);
         assert_matches!(tokens[0].deref(), Token::Label(_));
         assert_matches!(tokens[1].deref(), Token::Org(_, _));
         assert_matches!(tokens[2].deref(), Token::Org(_, _));
 
-        let tokens = get_val(parse_z80_line(CTX.build_span(
-            "label ORG 0x1000 ; : ORG 0x000 : ORG 10 ; fdfs"),
+        let tokens = get_val(parse_z80_line(
+            CTX.build_span("label ORG 0x1000 ; : ORG 0x000 : ORG 10 ; fdfs"),
         ));
         assert_eq!(tokens.len(), 3);
         assert_matches!(tokens[0].deref(), Token::Label(_));
@@ -938,9 +974,8 @@ INC_H equ opcode(inc h)
         get_val(parse_z80_code(CTX.build_span(
             "
         \n\tif FDC_Is_Musical_Loader\r\n\t\tei\r\n\telse\r\n\t\tdi\r\n\tendif\n
-        "
-            ),
-        ));
+        ",
+        )));
 
         let code = "\t	ifdef ENABLE_CATART_DISPLAY
 		call blabla
@@ -1047,11 +1082,11 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn term_test() {
-        let (input, res) =term(CTX.build_span(" 3 *  5   ")).unwrap();
+        let (input, res) = term(CTX.build_span(" 3 *  5   ")).unwrap();
         assert!(input.is_empty());
         assert_eq!(
             res,
-                Expr::Mul(Box::new(Expr::Value(3)), Box::new(Expr::Value(5)))
+            Expr::Mul(Box::new(Expr::Value(3)), Box::new(Expr::Value(5)))
         );
     }
 
@@ -1060,64 +1095,60 @@ INC_H equ opcode(inc h)
         let (input, res) = expr(CTX.build_span(" 1 + 2 *  3 ")).unwrap();
         assert!(input.is_empty());
         assert_eq!(
-           res,
-                Expr::Add(
-                    Box::new(Expr::Value(1)),
-                    Box::new(Expr::Mul(
-                        Box::new(Expr::Value(2)),
-                        Box::new(Expr::Value(3))
-                    ))
-                )
+            res,
+            Expr::Add(
+                Box::new(Expr::Value(1)),
+                Box::new(Expr::Mul(
+                    Box::new(Expr::Value(2)),
+                    Box::new(Expr::Value(3))
+                ))
+            )
         );
 
-        let (input, res) = expr(CTX.build_span(" 1 + 2 *  3 / 4 - 5 ")).map(|(i, x)| (i, format!("{}", x))).unwrap();
+        let (input, res) = expr(CTX.build_span(" 1 + 2 *  3 / 4 - 5 "))
+            .map(|(i, x)| (i, format!("{}", x)))
+            .unwrap();
         assert!(input.is_empty());
-        assert_eq!(
-            res,
-             String::from("((0x1 + ((0x2 * 0x3) / 0x4)) - 0x5)")
-        );
+        assert_eq!(res, String::from("((0x1 + ((0x2 * 0x3) / 0x4)) - 0x5)"));
 
-        let (input, res) = expr(CTX.build_span(" 72 / 2 / 3 ")).map(|(i, x)| (i, format!("{}", x))).unwrap();
+        let (input, res) = expr(CTX.build_span(" 72 / 2 / 3 "))
+            .map(|(i, x)| (i, format!("{}", x)))
+            .unwrap();
         assert!(input.is_empty());
-        assert_eq!(
-            res,
-             String::from("((0x48 / 0x2) / 0x3)")
-        );
+        assert_eq!(res, String::from("((0x48 / 0x2) / 0x3)"));
     }
 
     #[test]
     fn parens_test() {
-        let (input, res) = expr(CTX.build_span(" ( 1 + 2 ) *  3 ")).map(|(i, x)| (i, format!("{}", x))).unwrap();
+        let (input, res) = expr(CTX.build_span(" ( 1 + 2 ) *  3 "))
+            .map(|(i, x)| (i, format!("{}", x)))
+            .unwrap();
         assert!(input.is_empty());
-        assert_eq!(
-            res, String::from("(((0x1 + 0x2)) * 0x3)")
-        );
+        assert_eq!(res, String::from("(((0x1 + 0x2)) * 0x3)"));
     }
 
     #[test]
     fn functions_test() {
-        let (input, res) = expr(CTX.build_span("lo(5)")).map(|(i, x)| (i, format!("{}", x))).unwrap();
+        let (input, res) = expr(CTX.build_span("lo(5)"))
+            .map(|(i, x)| (i, format!("{}", x)))
+            .unwrap();
         assert!(input.is_empty());
-        assert_eq!(
-            res,
-             String::from("LO(0x5)")
-        );
+        assert_eq!(res, String::from("LO(0x5)"));
     }
 
     #[test]
     fn boolean_test() {
-        let (input, res) = expr(CTX.build_span(" 0 == 1 ")).map(|(i, x)| (i, format!("{}", x))).unwrap();
+        let (input, res) = expr(CTX.build_span(" 0 == 1 "))
+            .map(|(i, x)| (i, format!("{}", x)))
+            .unwrap();
         assert!(input.is_empty());
-        assert_eq!(
-            res,
-             String::from("0x0 == 0x1")
-        )
+        assert_eq!(res, String::from("0x0 == 0x1"))
     }
 
     #[test]
     fn include_test() {
         let code = "  include \"file.asm\"";
-        let tokens = parse_z80_str(code).unwrap();;
+        let tokens = parse_z80_str(code).unwrap();
         assert_eq!(tokens.len(), 1);
     }
 
@@ -1151,7 +1182,6 @@ INC_H equ opcode(inc h)
             " PRINT zoomscroller_inject_for_step0_line_1 - zoomscroller_inject_for_step0_line_0";
         let tokens = parse_z80_str(code).unwrap();
         assert_eq!(tokens.len(), 1);
-
     }
 
     #[test]
@@ -1161,7 +1191,9 @@ INC_H equ opcode(inc h)
         assert!(token.is_ok());
 
         let code = " ASSERT 1\n";
-        let tokens = get_val(dbg!(parse_z80_line_complete(CTX.build_span(code.to_owned()))));
+        let tokens = get_val(dbg!(parse_z80_line_complete(
+            CTX.build_span(code.to_owned())
+        )));
         assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1 == 2";
@@ -1175,7 +1207,10 @@ INC_H equ opcode(inc h)
         assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1 < 0x1000, \"blabla\"";
-        eprintln!("RES: {:?}", parse_z80_line_complete(CTX.build_span(code.to_owned())));
+        eprintln!(
+            "RES: {:?}",
+            parse_z80_line_complete(CTX.build_span(code.to_owned()))
+        );
         let tokens = get_val(parse_z80_line_complete(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
     }
@@ -1185,8 +1220,9 @@ INC_H equ opcode(inc h)
         let code = CTX.build_span("db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector");
         get_val(parse_db_or_dw(code));
 
-        let code =
-        CTX.build_span("db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector and %1111, Gfx1_bin_size");
+        let code = CTX.build_span(
+            "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector and %1111, Gfx1_bin_size",
+        );
         get_val(parse_db_or_dw(code));
     }
 
@@ -1222,8 +1258,6 @@ INC_H equ opcode(inc h)
         let code = "ld i,a";
         let _tokens = get_val(parse_ld(CTX.build_span(code.to_owned())));
     }
-
-
 
     #[test]
     fn expr_previous_failures() {

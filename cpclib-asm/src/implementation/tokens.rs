@@ -4,12 +4,10 @@ use cpclib_tokens::tokens::*;
 use crate::assembler::{assemble_align, assemble_db_or_dw, assemble_defs, assemble_opcode, Bytes};
 use crate::error::*;
 
-
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
 
 use crate::AssemblingOptions;
-
 
 /// Needed methods for the Token defined in cpclib_tokens
 pub trait TokenExt: ListingElement {
@@ -26,8 +24,6 @@ pub trait TokenExt: ListingElement {
 
     /// Generate the listing of opcodes for directives that embed bytes
     fn disassemble_data(&self) -> Result<Listing, String>;
-
-
 
     /// Assemble the token to a stream of bytes
     fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError>;
@@ -119,7 +115,6 @@ impl TokenExt for Token {
         }
     }
 
-  
     /// Dummy version that assemble without taking into account the context
     /// TODO find a way to not build a symbol table each time
     fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
@@ -382,13 +377,11 @@ impl TokenExt for Token {
     }
 }
 
-
 #[cfg(test)]
 #[allow(clippy::pedantic)]
 #[allow(warnings)]
 mod tests {
     use crate::preamble::*;
-
 
     #[test]
     fn test_timing2() {
@@ -432,210 +425,207 @@ mod tests {
         .is_valid());
     }
 
+    #[cfg(test)]
+    mod test {
 
+        use super::*;
+        use ParseToken;
+        #[test]
+        fn fixup_duration() {
+            assert_eq!(
+                Token::parse_token(" di")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                Token::parse_token(" add a,c ")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                Token::parse_token(" ld l, a")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                Token::parse_token(" ld b, e")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                Token::parse_token(" ld e, b")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                Token::parse_token(" exx")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                Token::parse_token(" push bc")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                4
+            );
+            assert_eq!(
+                Token::parse_token(" pop bc")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                3
+            );
+            assert_eq!(
+                Token::parse_token(" push ix")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                5
+            );
+            assert_eq!(
+                Token::parse_token(" pop ix")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                4
+            );
+            assert_eq!(
+                Token::parse_token(" ld b, nnn")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                2
+            );
+            assert_eq!(
+                Token::parse_token(" ld e, (hl)")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                2
+            );
+            assert_eq!(
+                Token::parse_token(" ld d, (hl)")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                2
+            );
+            assert_eq!(
+                Token::parse_token(" ld a, (hl)")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                2
+            );
+            assert_eq!(
+                Token::parse_token(" ld a, (dd)")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                4
+            );
+            assert_eq!(
+                Token::parse_token(" ld hl, (dd)")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                5
+            );
+            println!("{:?}", Token::parse_token(" ld de, (dd)").unwrap());
+            assert_eq!(
+                Token::parse_token(" ld de, (dd)")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                6
+            );
+            assert_eq!(
+                Token::parse_token(" ld a, (ix+0)")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                5
+            );
+            assert_eq!(
+                Token::parse_token(" ld l, (ix+0)")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                5
+            );
+            assert_eq!(
+                Token::parse_token(" ldi")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                5
+            );
+            assert_eq!(
+                Token::parse_token(" inc c")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                Token::parse_token(" inc l")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                Token::parse_token(" dec c")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                Token::parse_token(" out (c), d")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                4
+            );
+            assert_eq!(
+                Token::parse_token(" out (c), c")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                4
+            );
+            assert_eq!(
+                Token::parse_token(" out (c), e")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                4
+            );
+            assert_eq!(
+                Token::parse_token(" ld b, 0x7f")
+                    .unwrap()
+                    .estimated_duration()
+                    .unwrap(),
+                2
+            );
 
-#[cfg(test)]
-mod test {
-  
-
-    use super::*;
-    use ParseToken;
-#[test]
-fn fixup_duration() {
-	assert_eq!(
-		Token::parse_token(" di")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		1
-	);
-	assert_eq!(
-		Token::parse_token(" add a,c ")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		1
-	);
-	assert_eq!(
-		Token::parse_token(" ld l, a")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		1
-	);
-	assert_eq!(
-		Token::parse_token(" ld b, e")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		1
-	);
-	assert_eq!(
-		Token::parse_token(" ld e, b")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		1
-	);
-	assert_eq!(
-		Token::parse_token(" exx")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		1
-	);
-	assert_eq!(
-		Token::parse_token(" push bc")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		4
-	);
-	assert_eq!(
-		Token::parse_token(" pop bc")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		3
-	);
-	assert_eq!(
-		Token::parse_token(" push ix")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		5
-	);
-	assert_eq!(
-		Token::parse_token(" pop ix")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		4
-	);
-	assert_eq!(
-		Token::parse_token(" ld b, nnn")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		2
-	);
-	assert_eq!(
-		Token::parse_token(" ld e, (hl)")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		2
-	);
-	assert_eq!(
-		Token::parse_token(" ld d, (hl)")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		2
-	);
-	assert_eq!(
-		Token::parse_token(" ld a, (hl)")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		2
-	);
-	assert_eq!(
-		Token::parse_token(" ld a, (dd)")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		4
-	);
-	assert_eq!(
-		Token::parse_token(" ld hl, (dd)")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		5
-	);
-	println!("{:?}", Token::parse_token(" ld de, (dd)").unwrap());
-	assert_eq!(
-		Token::parse_token(" ld de, (dd)")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		6
-	);
-	assert_eq!(
-		Token::parse_token(" ld a, (ix+0)")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		5
-	);
-	assert_eq!(
-		Token::parse_token(" ld l, (ix+0)")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		5
-	);
-	assert_eq!(
-		Token::parse_token(" ldi")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		5
-	);
-	assert_eq!(
-		Token::parse_token(" inc c")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		1
-	);
-	assert_eq!(
-		Token::parse_token(" inc l")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		1
-	);
-	assert_eq!(
-		Token::parse_token(" dec c")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		1
-	);
-	assert_eq!(
-		Token::parse_token(" out (c), d")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		4
-	);
-	assert_eq!(
-		Token::parse_token(" out (c), c")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		4
-	);
-	assert_eq!(
-		Token::parse_token(" out (c), e")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		4
-	);
-	assert_eq!(
-		Token::parse_token(" ld b, 0x7f")
-			.unwrap()
-			.estimated_duration()
-			.unwrap(),
-		2
-	);
-
-	assert!(Token::Basic(None, None, "".to_owned())
-		.estimated_duration()
-		.is_err());
-}
-}
+            assert!(Token::Basic(None, None, "".to_owned())
+                .estimated_duration()
+                .is_err());
+        }
+    }
 }

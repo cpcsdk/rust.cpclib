@@ -23,7 +23,7 @@ pub enum DataAccess {
     Expression(Expr),
     /// Represents an address
     Memory(Expr),
-    /// Represnts the test of bit flag 
+    /// Represnts the test of bit flag
     FlagTest(FlagTest),
     /// Special register I
     SpecialRegisterI,
@@ -32,7 +32,7 @@ pub enum DataAccess {
     /// Used for in/out instructions
     PortC,
     /// Used for in/out instructions
-    PortN(Expr)
+    PortN(Expr),
 }
 
 impl From<u8> for DataAccess {
@@ -85,8 +85,6 @@ impl From<FlagTest> for DataAccess {
 
 impl fmt::Display for DataAccess {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-
-
         match self {
             DataAccess::IndexRegister16WithIndex(ref reg, ref delta) => {
                 if delta.is_negated() {
@@ -116,12 +114,12 @@ impl DataAccess {
     /// Rename the local labels used in macros (with @)
     pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         match self {
-            Self::Expression(e) |
-            Self::IndexRegister16WithIndex(_, e) |
-            Self::Memory(e) |
-            Self::PortN(e) => {
+            Self::Expression(e)
+            | Self::IndexRegister16WithIndex(_, e)
+            | Self::Memory(e)
+            | Self::PortN(e) => {
                 e.fix_local_macro_labels_with_seed(seed);
-            },
+            }
             _ => {
                 // nothing to do there
             }

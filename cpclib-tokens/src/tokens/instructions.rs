@@ -1,18 +1,14 @@
 use std::fmt;
 
-
-
 use crate::Listing;
 
-
-use crate::Register8;
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
+use crate::Register8;
 
 use itertools::Itertools;
 
 use cpclib_sna::SnapshotVersion;
-
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// This structures encode the parameters of macros.
@@ -22,21 +18,15 @@ pub enum MacroParam {
     /// Standard argument
     Single(String),
     /// A list of argument that will be provided in a nested macro call
-    List(Vec<Box<MacroParam>>)
+    List(Vec<Box<MacroParam>>),
 }
-
 
 impl ToString for MacroParam {
     fn to_string(&self) -> String {
         match self {
-            Self::Single(s ) => s.clone(),
+            Self::Single(s) => s.clone(),
             Self::List(l) => {
-                format!(
-                    "[{}]",
-                    l.iter()
-                    .map(|p| p.to_string())
-                    .join(",")
-                )
+                format!("[{}]", l.iter().map(|p| p.to_string()).join(","))
             }
         }
     }
@@ -50,21 +40,16 @@ impl MacroParam {
     pub fn is_single(&self) -> bool {
         match self {
             Self::Single(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     /// Expansion is slightly different thant to_string has it does not print the bracket
     pub fn expand(&self) -> String {
         match self {
-            Self::Single(s ) => s.clone(),
+            Self::Single(s) => s.clone(),
             Self::List(l) => {
-                format!(
-                    "{}",
-                    l.iter()
-                    .map(|p| p.to_string())
-                    .join(",")
-                )
+                format!("{}", l.iter().map(|p| p.to_string()).join(","))
             }
         }
     }
@@ -73,26 +58,19 @@ impl MacroParam {
     /// XXX I am pretty sure such implementation is faulty when there are nested calls !!! It needs to be checked (maybe nested stuff has to be removed)
     pub fn do_apply_macro_labels_modification(&mut self, seed: usize) {
         match self {
-            Self::Single(s ) => {
+            Self::Single(s) => {
                 Expr::do_apply_macro_labels_modification(s, seed);
-            },
-            Self::List(l) => {    
-                l.iter_mut()
-                    .for_each(|m|{
-                        m.do_apply_macro_labels_modification(seed);
-                    })
-            }  
-        }  
+            }
+            Self::List(l) => l.iter_mut().for_each(|m| {
+                m.do_apply_macro_labels_modification(seed);
+            }),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
         match self {
-            Self::Single(s ) => {
-                s.trim().is_empty()
-            },
-            Self::List(l) => {
-                false
-            }
+            Self::Single(s) => s.trim().is_empty(),
+            Self::List(l) => false,
         }
     }
 }
@@ -396,8 +374,6 @@ pub enum BinaryTransformation {
     Aplib,
 }
 
-
-
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -455,7 +431,12 @@ pub enum Token {
     NoList,
 
     /// Very last argument concerns only few undocumented instructions that save their results in a register
-    OpCode(Mnemonic, Option<DataAccess>, Option<DataAccess>, Option<Register8>),
+    OpCode(
+        Mnemonic,
+        Option<DataAccess>,
+        Option<DataAccess>,
+        Option<Register8>,
+    ),
     Org(Expr, Option<Expr>),
 
     Print(Vec<FormattedExpr>),
@@ -494,7 +475,7 @@ pub enum Token {
     While(Expr, Listing),
 }
 
-impl fmt::Display for Token{
+impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let expr_list_to_string = |exprs: &Vec<Expr>| {
             exprs
@@ -676,9 +657,7 @@ impl From<u8> for Token {
 
 #[allow(missing_docs)]
 impl Token {
-
-
-    pub fn new_opcode(mne: Mnemonic, arg1: Option<DataAccess>, arg2: Option<DataAccess>)-> Self {
+    pub fn new_opcode(mne: Mnemonic, arg1: Option<DataAccess>, arg2: Option<DataAccess>) -> Self {
         Token::OpCode(mne, arg1, arg2, None)
     }
 
@@ -704,34 +683,33 @@ impl Token {
     }
 
     pub fn is_output_opcode(&self) -> bool {
-       match self {
-           Token::OpCode(Mnemonic::Out, _, _, _) |
-           Token::OpCode(Mnemonic::Outd, _, _, _) |
-           Token::OpCode(Mnemonic::Outi, _, _, _) |
-           Token::OpCode(Mnemonic::Otdr, _, _, _) |
-           Token::OpCode(Mnemonic::Otir, _, _, _) 
-           => true,
-           _ => false
-       }
+        match self {
+            Token::OpCode(Mnemonic::Out, _, _, _)
+            | Token::OpCode(Mnemonic::Outd, _, _, _)
+            | Token::OpCode(Mnemonic::Outi, _, _, _)
+            | Token::OpCode(Mnemonic::Otdr, _, _, _)
+            | Token::OpCode(Mnemonic::Otir, _, _, _) => true,
+            _ => false,
+        }
     }
 
     pub fn is_input_opcode(&self) -> bool {
         match self {
-            Token::OpCode(Mnemonic::In, _, _, _) |
-            Token::OpCode(Mnemonic::Ind, _, _, _) |
-            Token::OpCode(Mnemonic::Ini, _, _, _)|
-            Token::OpCode(Mnemonic::Indr, _, _, _) |
-            Token::OpCode(Mnemonic::Inir, _, _, _) => true,
-            _ => false
+            Token::OpCode(Mnemonic::In, _, _, _)
+            | Token::OpCode(Mnemonic::Ind, _, _, _)
+            | Token::OpCode(Mnemonic::Ini, _, _, _)
+            | Token::OpCode(Mnemonic::Indr, _, _, _)
+            | Token::OpCode(Mnemonic::Inir, _, _, _) => true,
+            _ => false,
         }
-     }
+    }
 
     pub fn is_retlike_opcode(&self) -> bool {
         match self {
-            Token::OpCode(Mnemonic::Ret, _, _, _) |
-            Token::OpCode(Mnemonic::Reti, _, _, _) |
-            Token::OpCode(Mnemonic::Retn, _, _, _)  => true,
-            _ => false
+            Token::OpCode(Mnemonic::Ret, _, _, _)
+            | Token::OpCode(Mnemonic::Reti, _, _, _)
+            | Token::OpCode(Mnemonic::Retn, _, _, _) => true,
+            _ => false,
         }
     }
 
@@ -740,18 +718,24 @@ impl Token {
         matches!(
             self,
             Self::OpCode(
-                Mnemonic::Rlc | Mnemonic::Rrc | Mnemonic::Rl | Mnemonic::Rr | Mnemonic::Sla | Mnemonic::Sra | Mnemonic::Sl1 | Mnemonic::Srl,
+                Mnemonic::Rlc
+                    | Mnemonic::Rrc
+                    | Mnemonic::Rl
+                    | Mnemonic::Rr
+                    | Mnemonic::Sla
+                    | Mnemonic::Sra
+                    | Mnemonic::Sl1
+                    | Mnemonic::Srl,
                 Some(DataAccess::IndexRegister16WithIndex(_, _)),
                 Some(DataAccess::Register8(_)),
                 None
-            ) |
-            Self::OpCode(
+            ) | Self::OpCode(
                 Mnemonic::Set | Mnemonic::Res,
                 Some(DataAccess::Expression(_)),
-                Some(DataAccess::IndexRegister16WithIndex(_,_)),
+                Some(DataAccess::IndexRegister16WithIndex(_, _)),
                 Some(_)
             )
-        ) 
+        )
     }
 
     pub fn label(&self) -> Option<&String> {
@@ -806,79 +790,88 @@ impl Token {
     pub fn macro_name(&self) -> Option<&str> {
         match self {
             Self::Macro(name, _args, _content) => Some(name),
-            _ => None
+            _ => None,
         }
     }
     pub fn macro_arguments(&self) -> Option<&[String]> {
         match self {
             Self::Macro(_name, args, _content) => Some(args),
-            _ => None
+            _ => None,
         }
     }
     pub fn macro_content(&self) -> Option<&str> {
         match self {
-            Self::Macro(_name, _args,content) => Some(content),
-            _ => None
+            Self::Macro(_name, _args, content) => Some(content),
+            _ => None,
         }
     }
 
     /// Rename the @labels in macros
-    pub fn  fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+    pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         match self {
-            Self::Align(a, b) |  
-            Self::Defs(a, b) |
-            Self::Org(a, b) |
-            Self::Run(a, b) => {
+            Self::Align(a, b) | Self::Defs(a, b) | Self::Org(a, b) | Self::Run(a, b) => {
                 a.fix_local_macro_labels_with_seed(seed);
                 b.as_mut().map(|b| b.fix_local_macro_labels_with_seed(seed));
-            },
+            }
 
             Self::Protect(a, b) => {
                 a.fix_local_macro_labels_with_seed(seed);
                 b.fix_local_macro_labels_with_seed(seed);
             }
 
-            Self::Assert(a, _) | 
-            Self::Bank(a) | 
-            Self::Bankset(a) |
-            Self::Breakpoint(Some(a)) | 
-            Self::Limit(a) |
-            Self::SetCPC(a) |
-            Self::SetCrtc(a)=> {
+            Self::Assert(a, _)
+            | Self::Bank(a)
+            | Self::Bankset(a)
+            | Self::Breakpoint(Some(a))
+            | Self::Limit(a)
+            | Self::SetCPC(a)
+            | Self::SetCrtc(a) => {
                 a.fix_local_macro_labels_with_seed(seed);
             }
 
-            Self::Defb(v)| Self::Defw(v) => {
+            Self::Defb(v) | Self::Defw(v) => {
                 v.iter_mut()
-                    .for_each(|e| e.fix_local_macro_labels_with_seed(seed) );
+                    .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
             }
 
-            Self::Equ(a, b) | Self::Let(a,b)=> {
+            Self::Equ(a, b) | Self::Let(a, b) => {
                 Expr::do_apply_macro_labels_modification(a, seed);
                 b.fix_local_macro_labels_with_seed(seed);
-            },
+            }
 
-            Self::Save{address, size, side, ..} => {
+            Self::Save {
+                address,
+                size,
+                side,
+                ..
+            } => {
                 address.fix_local_macro_labels_with_seed(seed);
                 size.fix_local_macro_labels_with_seed(seed);
-                side.as_mut().map(|s| s.fix_local_macro_labels_with_seed(seed));
-            }
-      
-            Self::Basic(_,_,_) | Self::Break | Self::BuildCpr | Self::BuildSna(_) | Self::Comment(_) | Self::CrunchedBinary(_, _) | Self::CrunchedSection(_,_) | Self::List | Self::MultiPop(_) |
-            Self::MultiPush(_) | Self::NoList  | Self::SnaSet(_,_) |
-            Self::StableTicker(_) | Self::Str(_) | Self::Struct(_, _)
-
-            
-            => {
-
+                side.as_mut()
+                    .map(|s| s.fix_local_macro_labels_with_seed(seed));
             }
 
+            Self::Basic(_, _, _)
+            | Self::Break
+            | Self::BuildCpr
+            | Self::BuildSna(_)
+            | Self::Comment(_)
+            | Self::CrunchedBinary(_, _)
+            | Self::CrunchedSection(_, _)
+            | Self::List
+            | Self::MultiPop(_)
+            | Self::MultiPush(_)
+            | Self::NoList
+            | Self::SnaSet(_, _)
+            | Self::StableTicker(_)
+            | Self::Str(_)
+            | Self::Struct(_, _) => {}
 
             Self::If(v, o) => {
                 v.iter_mut()
-                    .map(|(t,l)| l)
+                    .map(|(t, l)| l)
                     .for_each(|l| l.fix_local_macro_labels_with_seed(seed));
-                o.as_mut().map(|l| l.fix_local_macro_labels_with_seed(seed)) ; 
+                o.as_mut().map(|l| l.fix_local_macro_labels_with_seed(seed));
             }
 
             Self::Label(s) => {
@@ -895,25 +888,22 @@ impl Token {
                 b.as_mut().map(|d| d.fix_local_macro_labels_with_seed(seed));
             }
 
-            Self::Repeat(e, l, _) | 
-            Self::RepeatUntil(e, l ) |
-            Self::Rorg(e, l) |
-            Self::While(e, l) =>
-            {
+            Self::Repeat(e, l, _)
+            | Self::RepeatUntil(e, l)
+            | Self::Rorg(e, l)
+            | Self::While(e, l) => {
                 e.fix_local_macro_labels_with_seed(seed);
                 l.fix_local_macro_labels_with_seed(seed);
             }
 
             Self::Switch(l) => {
-                l.iter_mut()
-                .for_each(|(e,l)| {
+                l.iter_mut().for_each(|(e, l)| {
                     e.fix_local_macro_labels_with_seed(seed);
                     l.fix_local_macro_labels_with_seed(seed);
                 });
             }
-            _ => unimplemented!("{:?}", self)
+            _ => unimplemented!("{:?}", self),
         }
-
     }
 
     #[deprecated(
@@ -931,19 +921,18 @@ impl Token {
         }
     }
 
-
     /// Return true for directives that can emebed some listing information
     pub fn has_at_least_one_listing(&self) -> bool {
         match self {
-            Self::CrunchedSection(_, _) |
-            Self::Include(_,_) |
-			Self::If(_, _) |
-			Self::Repeat(_, _, _,) |
-			Self::RepeatUntil(_, _) |
-			Self::Rorg(_, _) |
-			Self::Switch(_) |
-			Self::While(_, _) => true,
-            _ => false
+            Self::CrunchedSection(_, _)
+            | Self::Include(_, _)
+            | Self::If(_, _)
+            | Self::Repeat(_, _, _)
+            | Self::RepeatUntil(_, _)
+            | Self::Rorg(_, _)
+            | Self::Switch(_)
+            | Self::While(_, _) => true,
+            _ => false,
         }
     }
 }

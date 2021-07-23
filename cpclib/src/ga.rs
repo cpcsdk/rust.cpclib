@@ -2,6 +2,7 @@ use image as im;
 
 use self::im::Pixel;
 use crate::image::Mode;
+use itertools::Itertools;
 use num::Integer;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
@@ -9,7 +10,6 @@ use serde::{Deserializer, Serializer};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter, Result};
 use std::ops::Add;
-use itertools::Itertools;
 
 const INK0: im::Rgba<u8> = im::Rgba([0, 0, 0, 255]);
 const INK1: im::Rgba<u8> = im::Rgba([0x00, 0x00, 0x80, 255]);
@@ -363,7 +363,6 @@ impl Ink {
         INKS_GA_VALUE[self.value as usize]
     }
 
-
     pub fn from_hardware_color_number(col: u8) -> Ink {
         match col {
             20 => 0,
@@ -393,8 +392,9 @@ impl Ink {
             10 => 24,
             3 => 25,
             11 => 26,
-            _ => panic!("{} bad value", col)
-        }.into()
+            _ => panic!("{} bad value", col),
+        }
+        .into()
     }
 }
 
@@ -789,8 +789,8 @@ impl Palette {
         let mut set = HashSet::<Ink>::default();
         for pen in 0..16 {
             set.insert(*self.get(&pen.into()));
-        };
-        
+        }
+
         set.len()
     }
 
@@ -828,14 +828,10 @@ impl Palette {
     pub fn to_gate_array_with_default(&self, default: Ink) -> [u8; NB_PENS as usize] {
         let mut res = [0; NB_PENS as usize];
         for pen in 0..NB_PENS {
-            res[pen as usize] = self.get_with_default(&pen.into(), &default)
-                                    .gate_array();
+            res[pen as usize] = self.get_with_default(&pen.into(), &default).gate_array();
         }
         res
     }
-
-
-
 
     /// Add the inks if not present in empty slots of the palette as soon as it is possible. Returns the number of inks added a,d the number of inks impossible to add because of the lack of space.
     pub fn add_novel_inks_except_in_border(&mut self, inks: &[Ink]) -> (usize, usize) {
@@ -875,7 +871,6 @@ impl Palette {
     /// Returns the list of inks contained in the palette without taking into account the border
     /// the number of inks corresponds to the number of available pens
     pub fn inks(&self) -> Vec<Ink> {
-
         let mut vec = Vec::with_capacity(16);
         for pen in 0..16 {
             let pen = Pen::from(pen);
@@ -895,7 +890,7 @@ impl Palette {
     pub fn pens(&self) -> Vec<Pen> {
         self.values
             .iter()
-            .sorted_by(|a, b|{ Ord::cmp(&a.0.number(), &b.0.number())})
+            .sorted_by(|a, b| Ord::cmp(&a.0.number(), &b.0.number()))
             .filter_map(|(&p, _)| if p.number() == 16 { None } else { Some(p) })
             .collect::<Vec<Pen>>()
     }
@@ -904,14 +899,14 @@ impl Palette {
     pub fn get(&self, pen: &Pen) -> &Ink {
         match self.values.get(pen) {
             Some(ink) => ink,
-            None => panic!("Wrong pen {:?}", pen)
+            None => panic!("Wrong pen {:?}", pen),
         }
     }
 
     pub fn get_with_default<'a>(&'a self, pen: &'a Pen, default: &'a Ink) -> &'a Ink {
         match self.values.get(pen) {
             Some(ink) => ink,
-            None =>  default
+            None => default,
         }
     }
 
@@ -1011,7 +1006,7 @@ impl Palette {
         // Progressively decrease the components
         let mut palettes = Vec::new();
         for component in [InkComponent::Green, InkComponent::Red, InkComponent::Blue].iter() {
-          //  println!("Decrease for {:?}", &component);
+            //  println!("Decrease for {:?}", &component);
             let current = match palettes.last() {
                 Some(palette) => palette,
                 None => self,
