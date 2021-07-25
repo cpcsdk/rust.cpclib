@@ -66,9 +66,19 @@ pub fn parse_z80_strrc_with_contextrc(
     let ctx = listing.ctx();
     match parse_z80_code(listing.span()) {
         Err(e) => {
-            return Err(AssemblerError::SyntaxError {
-                error: format!("Error while parsing: {:?}", e), //TODO add context
-            });
+            match e {
+                nom::Err::Error(e) | Err::Failure(e) => {
+                    return Err(AssemblerError::SyntaxError{
+                        error: e 
+                    });
+                }
+                nom::Err::Incomplete(_) => {
+                    return Err(AssemblerError::BugInParser {
+                        error:"Bug in the parser".to_owned(),
+                        context: ctx.deref().clone(),
+                    });
+                },
+            }
         }
 
         Ok((remaining, mut parsed)) => {
@@ -172,11 +182,11 @@ pub fn parse_z80_line(
 ) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     let before_elem = input.clone();
     let (input2, tokens) = tuple((
-        context("not eof", not(eof)),
+        context("[DBG]not eof", not(eof)),
         alt((
-            context("empty line", parse_empty_line),
+            context("[DBG]empty line", parse_empty_line),
             context(
-                "macro only",
+                "[DBG]macro only",
                 delimited(
                     space1,
                     alt((
@@ -196,8 +206,8 @@ pub fn parse_z80_line(
                     preceded(space0, alt((line_ending, eof, tag(":")))),
                 ),
             ),
-            context("line with label only", parse_z80_line_label_only),
-            context("standard line", parse_z80_line_complete),
+            context("[DBG] line with label only", parse_z80_line_label_only),
+            context("[DBG] standard line", parse_z80_line_complete),
         )),
     ))(input)?;
 
@@ -207,7 +217,7 @@ pub fn parse_z80_line(
 /// Workaround because many0 is not used in the main root function
 fn inner_code(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     context(
-        "inner code",
+        "[DBG] inner code",
         fold_many0(parse_z80_line, Vec::new(), |mut inner, tokens| {
             inner.extend_from_slice(&tokens);
             inner
@@ -246,7 +256,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     let (input, _) = preceded(space0, parse_instr("MACRO"))(input)?;
 
     // macro name
-    let (input, name) = context("macro name", cut(parse_label(false)))(input)?; // TODO use a specific function for that
+    let (input, name) = context("MACRO: wrong name", cut(parse_label(false)))(input)?; // TODO use a specific function for that
 
     // macro arguments
     let (input, arguments) = opt(preceded(
@@ -259,7 +269,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     ))(input)?;
 
     let (input, content) = context(
-        "macro content",
+        "MACRO: issue in the content",
         cut(preceded(
             space0,
             many_till(
@@ -305,12 +315,12 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
 
     eprintln!("rep");
 
-    let (input, count) = cut(context("repeat count", expr))(input)?;
+    let (input, count) = cut(context("REPEAT: wrong number of iterations", expr))(input)?;
 
-    let (input, inner) = cut(context("repeat content", inner_code))(input)?;
+    let (input, inner) = cut(context("REPEAT: issue in the content", inner_code))(input)?;
 
     let (input, _) = cut(context(
-        "repeat closure",
+        "REPEAT: not closed",
         tuple((
             space0,
             alt((
@@ -439,13 +449,13 @@ fn parse_single_token(
         let input = if first {
             input
         } else {
-            let (input, _) = context("delimitation", delimited(space0, char(':'), space0))(input)?;
+            let (input, _) = context("[DBG] delimitation", delimited(space0, char(':'), space0))(input)?;
             input
         };
 
         // Get the token
         let (input, opcode) = context(
-            "single token",
+            "[DBG] single token",
             preceded(space0, alt((parse_token, parse_directive))),
         )(input)?;
 
@@ -478,11 +488,11 @@ pub fn parse_z80_line_complete(
     let (input, _) = not(parse_forbidden_keyword)(input)?;
 
     // Eat first token or directive
-    let (input, opcode) = context("first token", cut(parse_single_token(true)))(input)?;
+    let (input, opcode) = context("[DBG] first token", cut(parse_single_token(true)))(input)?;
 
     // Eat the additional opcodes
     let (input, additional_opcodes) = context(
-        "other tokens",
+        "[DBG] other tokens",
         cut(fold_many0(
             parse_single_token(false),
             Vec::new(),
@@ -964,10 +974,10 @@ pub fn parse_bank(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
 /// Parse fake and real LD instructions
 pub fn parse_ld(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     context(
-        "ld",
+        "[DBG] ld",
         alt((
-            context("fake ld", parse_ld_fake),
-            context("normal ld", parse_ld_normal),
+            context("[DBG] fake ld", parse_ld_fake),
+            context("[DBG] normal ld", parse_ld_normal),
         )),
     )(input)
 }
@@ -990,11 +1000,11 @@ pub fn parse_ld_fake(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
 
 /// Parse the valids LD versions
 pub fn parse_ld_normal(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = context("...", tuple((space0, parse_instr("LD"), space0)))(input)?;
+    let (input, _) = context("[DBG] ...", tuple((space0, parse_instr("LD"), space0)))(input)?;
 
-    let (input, dst) = context(
-        "output",
-        cut(alt((
+    let (input, dst) = cut(context(
+        LD_WRONG_DESTINATION,
+        alt((
             parse_reg_address,
             parse_indexregister_with_index,
             parse_register_sp,
@@ -1012,10 +1022,10 @@ pub fn parse_ld_normal(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z
         ))),
     )(input)?;
 
-    let (input, _) = context("comma", cut(parse_comma))(input)?;
+    let (input, _) = context("LD: missing comma", cut(parse_comma))(input)?;
 
     // src possibilities depend on dst
-    let (input, src) = context("input", cut(parse_ld_normal_src(&dst)))(input)?;
+    let (input, src) = context(LD_WRONG_SOURCE, cut(parse_ld_normal_src(&dst)))(input)?;
 
     Ok((input, Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src))))
 }
@@ -1665,18 +1675,25 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
         delimited(space0, tag(","), space0),
     ))(input)?;
 
-    let (input, dst) = cut(context("Wrong destination parameter", alt((
-        verify(
-            alt((
-                parse_hl_address,
-                parse_indexregister_address,
-                parse_register_hl,
-                parse_indexregister16,
-            )),
-            |_| call_jp_or_jr.is_jp() && flag_test.is_none(),
-        ), // not possible for call and for jp/jr when there is flag
-        parse_expr,
-    ))))(input)?;
+    let (input, dst) = cut(
+        context(match call_jp_or_jr {
+            Mnemonic::Jp => JP_WRONG_PARAM,
+            Mnemonic::Jr => JR_WRONG_PARAM,
+            Mnemonic::Call => CALL_WRONG_PARAM,
+            _ => unreachable!()
+        }, 
+        alt((
+            verify(
+                alt((
+                    parse_hl_address,
+                    parse_indexregister_address,
+                    parse_register_hl,
+                    parse_indexregister16,
+                )),
+                |_| call_jp_or_jr.is_jp() && flag_test.is_none(),
+            ), // not possible for call and for jp/jr when there is flag
+            parse_expr,
+        ))))(input)?;
 
     // Allow to parse JP HL as to be JP (HL) original notation is misleading
     let dst = match dst {
@@ -2098,8 +2115,8 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
 fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_instr("SNASET")(input)?;
 
-    let (input, flagname) = cut(parse_label(false))(input)?;
-    let (input, _) = context("missing comma", cut(parse_comma))(input)?;
+    let (input, flagname) = cut(context(SNASET_WRONG_LABEL, parse_label(false)))(input)?;
+    let (input, _) = context(SNASET_MISSING_COMMA, cut(parse_comma))(input)?;
 
     let (input, values) = cut(separated_list1(
         delimited(space0, parse_comma, space0),
@@ -2229,11 +2246,11 @@ pub fn parens(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
 /// Get a factor
 pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     context(
-        "factor",
+        "[DBG]factor",
         delimited(
             space0,
             context(
-                "alt",
+                "[DBG]alt",
                 alt((
                     // Manage functions
                     parse_unary_functions,

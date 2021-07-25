@@ -77,7 +77,7 @@ impl MyDefault for Banks {
 /// First pass consists in collecting the various labels to manipulate and so on. Some labels stay unknown at this moment.
 /// Second pass serves to get the final values
 #[derive(Clone, Copy, Debug)]
-enum AssemblingPass {
+pub enum AssemblingPass {
     Uninitialized,
     FirstPass,
     SecondPass,
@@ -478,15 +478,16 @@ impl Env {
     ) -> Result<u8, AssemblerError> {
         match absolute_to_relative(address, opcode_delta, self.symbols()) {
             Ok(value) => Ok(value),
-            Err(e) => {
+            Err(error) => {
                 if self.pass.is_first_pass() {
                     Ok(0)
                 } else {
-                    Err(format!(
-                        "Impossible to compute relative address {:?} at pass {:?}. {}",
-                        address, self.pass, e
-                    )
-                    .into())
+                    Err(
+                        AssemblerError::RelativeAddressUncomputable {
+                            address,
+                            pass: self.pass,
+                            error: Box::new(error)
+                        })
                 }
             }
         }

@@ -13,6 +13,7 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation)]
 
+use std::fmt::Display;
 use std::fs::File;
 use std::io;
 use std::rc::Rc;
@@ -24,28 +25,39 @@ use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 use clap;
 use clap::{App, Arg, ArgGroup, ArgMatches};
-use failure::Fail;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 enum BasmError {
-    #[fail(display = "IO error: {}", io)]
+    //#[fail(display = "IO error: {}", io)]
     Io { io: io::Error },
 
-    #[fail(display = "Assembling error: {}", error)]
+   // #[fail(display = "Assembling error: {}", error)]
     AssemblerError { error: AssemblerError },
 
-    #[fail(display = "Invalid Amsdos filename: {}", filename)]
+   // #[fail(display = "Invalid Amsdos filename: {}", filename)]
     InvalidAmsdosFilename { filename: String },
 
-    #[fail(display = "{} is not a valid directory.", path)]
+   // #[fail(display = "{} is not a valid directory.", path)]
     NotAValidDirectory { path: String },
 
-    #[fail(display = "{} is not a valid file.", file)]
+  //  #[fail(display = "{} is not a valid file.", file)]
     NotAValidFile { file: String },
+}
+
+impl Display for BasmError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io{io} => write!(f, "IO Error: {}", io),
+            Self::AssemblerError{error} => write!(f, "Assembling error: {}", error),
+            BasmError::InvalidAmsdosFilename { filename } => write!(f, "Invalid Amsdos filename: {}", filename),
+            BasmError::NotAValidDirectory { path } => write!(f,  "{} is not a valid directory.", path),
+            BasmError::NotAValidFile { file } => write!(f, "{} is not a valid file.", file),
+        }
+    }
 }
 
 // XXX I do not understand why I have to do that !!!
