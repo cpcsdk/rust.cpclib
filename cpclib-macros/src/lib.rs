@@ -90,7 +90,7 @@ pub fn assemble(tokens: TokenStream) -> TokenStream {
             }
 
             Err(e) => {
-                panic!("Unable to assemble the provided code. {}", e);
+                panic!("Unable to assemble the provided code. {:?}", e);
             }
         },
         Err(e) => {

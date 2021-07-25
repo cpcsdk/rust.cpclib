@@ -60,9 +60,6 @@ impl ListingExt for Listing {
         code: S,
     ) -> Result<(), AssemblerError> {
         parse_z80_str(code.as_ref().trim_end())
-            .map_err(|e| AssemblerError::SyntaxError {
-                error: format!("{:?}", e),
-            })
             .map(|local_tokens| {
                 let mut local_tokens = local_tokens.as_listing();
                 self.listing_mut().append(&mut local_tokens);
