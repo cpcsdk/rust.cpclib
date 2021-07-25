@@ -323,7 +323,14 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
 
     let guesser = GUESSER_LUT.get(ctx).unwrap_or(&EndKind::End);
 
-    guesser.guess(code, offset)
+    let mut end = guesser.guess(code, offset);
+    // remove whitespace from selection
+    for previous in code[offset..end].chars() {
+        if previous.is_whitespace() {
+            end -= 1;
+        }
+    }
+    end
 }
 
 
