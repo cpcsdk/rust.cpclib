@@ -325,9 +325,12 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
 
     let mut end = guesser.guess(code, offset);
     // remove whitespace from selection
-    for previous in code[offset..end].chars() {
+    for previous in code[offset..end].chars().rev() {
+        dbg!(previous);
         if previous.is_whitespace() {
             end -= 1;
+        } else {
+            break;
         }
     }
     end
