@@ -143,10 +143,12 @@ impl LocatedToken {
     }
 
     /// Modify the few tokens that need to read files
-    /// TODO move this code elswhere as it can be useful in other contexts
-    pub fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
+    /// Works in read only tokens thanks to RefCell
+    pub fn read_referenced_file(&self, ctx: &ParserContext) -> Result<(), AssemblerError> {
+        dbg!(12);
         match self {
-            LocatedToken::Include(ref fname, ref mut cell, span) if cell.borrow().is_none() => {
+            LocatedToken::Include(ref fname, ref cell, span) => {
+                dbg!(34);
                 match ctx.get_path_for(fname) {
                     Err(e) => {
                         return Err(AssemblerError::IOError {
@@ -182,14 +184,20 @@ impl LocatedToken {
                                 });
                             }
                         };
+
+
                         let content = Rc::new(content);
+                        dbg!(&content);
                         let new_ctx = {
                             let mut new_ctx = ctx.deref().clone();
                             new_ctx.set_current_filename(fname);
                             Rc::new(new_ctx)
                         };
 
-                        cell.replace(parse_z80_strrc_with_contextrc(content, new_ctx)?.into());
+                        let listing = dbg!(parse_z80_strrc_with_contextrc(content, new_ctx))?;
+                        cell.replace(Some(listing));
+                        assert!(cell.borrow().is_some());
+                        dbg!(self);
                     }
                 }
             }
@@ -202,7 +210,7 @@ impl LocatedToken {
                         length,
                         extended_offset: _,
                         off: _,
-                        ref mut content,
+                        ref content,
                         transformation,
                     },
                 span,
@@ -276,8 +284,8 @@ impl LocatedToken {
             }
 
             // Rorg may embed some instructions that read files
-            LocatedToken::Rorg(_, ref mut listing, _) => {
-                for token in listing.iter_mut() {
+            LocatedToken::Rorg(_, ref listing, _) => {
+                for token in listing.iter() {
                     token.read_referenced_file(ctx)?;
                 }
             }

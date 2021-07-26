@@ -7,6 +7,7 @@ use cpclib_sna::*;
 
 use smallvec::SmallVec;
 
+use std::any::Any;
 use std::fmt;
 
 use std::convert::TryFrom;
@@ -206,11 +207,7 @@ impl Visited for Token {
 
 impl Visited for LocatedToken {
     fn visited(&self, env: &mut Env) -> Result<(), AssemblerError> {
-        let token = self.as_token();
-        token.visited(env).map_err(|err| {
-            eprintln!("TODO - inject location knowledge");
-            err
-        })
+        visit_located_token(self, env)
     }
 }
 
@@ -534,6 +531,15 @@ impl Env {
 impl Env {
     /// Visit all the tokens of the listing
     pub fn visit_listing(&mut self, listing: &Listing) -> Result<(), AssemblerError> {
+        for token in listing.listing().iter() {
+            token.visited(self)?;
+        }
+
+        Ok(())
+    }
+
+    /// Visit all the tokens of the located listing
+    pub fn visit_located_listing(&mut self, listing: &LocatedListing) -> Result<(), AssemblerError> {
         for token in listing.listing().iter() {
             token.visited(self)?;
         }
@@ -908,7 +914,49 @@ pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerE
 
     Ok(env)
 }
-/// TODO org is a directive, not an opcode => need to change that
+
+/// Apply the effect of the localised token. Most of the action is delegated to visit_token.
+/// The difference with the standard token is the ability to embed listing
+pub fn visit_located_token(token: &LocatedToken, env: &mut Env) -> Result<(), AssemblerError> {
+    let span = token.span();
+    match token {
+        LocatedToken::Standard { token, span } => {
+            token.visited(env).map_err(|err| {
+                eprintln!("TODO - inject location knowledge in error message");
+                err
+            })
+        },
+
+        LocatedToken::CrunchedSection(_, _, _) => todo!(),
+
+        LocatedToken::Include(fname, ref cell, span) => {
+            if cell.borrow().is_some() {
+                env.visit_located_listing(cell.borrow().as_ref().unwrap())
+            }
+            else {
+                token.read_referenced_file(&token.context().1)
+                    .and_then(|_| {
+                        visit_located_token(token, env)
+                    })
+            }.map_err(|err| {
+                AssemblerError::IncludedFileError {
+                    span: span.clone(),
+                    error: Box::new(err)
+                }
+            })
+        },
+
+        LocatedToken::If(_, _, _) => todo!(),
+        LocatedToken::Repeat(_, _, _, _) => todo!(),
+        LocatedToken::RepeatUntil(_, _, _) => todo!(),
+        LocatedToken::Rorg(_, _, _) => todo!(),
+        LocatedToken::Switch(_, _) => todo!(),
+        LocatedToken::While(_, _, _) => todo!(),
+    }
+   
+}
+
+/// Apply the effect of the token
 pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     env.update_dollar();
     match token {
@@ -932,6 +980,9 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         }
         Token::Comment(_) | Token::List | Token::NoList => Ok(()), // Nothing to do for a comment
         Token::Include(_, cell) if cell.borrow().is_some() => env.visit_listing(cell.borrow().as_ref().unwrap()),
+        Token::Include(fname, cell) if cell.borrow().is_none() => {
+           todo!("Read the file (without being able to specify parser options)")
+        },
         Token::Incbin {
             fname: _,
             offset: _,
