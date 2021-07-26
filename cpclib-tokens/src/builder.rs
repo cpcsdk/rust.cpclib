@@ -240,7 +240,7 @@ pub fn incbin<S: AsRef<str>>(fname: S) -> Token {
         length: None,
         extended_offset: None,
         off: false,
-        content: None,
+        content: None.into(),
     }
 }
 

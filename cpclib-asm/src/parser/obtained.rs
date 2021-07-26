@@ -35,7 +35,7 @@ pub enum LocatedToken {
         span: Z80Span,
     },
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
-    Include(String, Option<LocatedListing>, Z80Span),
+    Include(String, std::cell::RefCell<Option<LocatedListing>>, Z80Span),
     If(
         Vec<(TestKind, LocatedListing)>,
         Option<LocatedListing>,
@@ -97,7 +97,7 @@ impl LocatedToken {
                 Token::CrunchedSection(*c, l.as_listing())
             }
             LocatedToken::Include(s, l, _span) => {
-                Token::Include(s.clone(), l.as_ref().map(|l| l.as_listing()))
+                Token::Include(s.clone(), l.borrow().as_ref().map(|l| l.as_listing()).into())
             }
             LocatedToken::If(v, e, _span) => Token::If(
                 v.iter()
@@ -146,7 +146,7 @@ impl LocatedToken {
     /// TODO move this code elswhere as it can be useful in other contexts
     pub fn read_referenced_file(&mut self, ctx: &ParserContext) -> Result<(), AssemblerError> {
         match self {
-            LocatedToken::Include(ref fname, ref mut listing, span) if listing.is_none() => {
+            LocatedToken::Include(ref fname, ref mut cell, span) if cell.borrow().is_none() => {
                 match ctx.get_path_for(fname) {
                     Err(e) => {
                         return Err(AssemblerError::IOError {
@@ -189,7 +189,7 @@ impl LocatedToken {
                             Rc::new(new_ctx)
                         };
 
-                        listing.replace(parse_z80_strrc_with_contextrc(content, new_ctx)?);
+                        cell.replace(parse_z80_strrc_with_contextrc(content, new_ctx)?.into());
                     }
                 }
             }
@@ -206,7 +206,7 @@ impl LocatedToken {
                         transformation,
                     },
                 span,
-            } if content.is_none() => {
+            } if content.borrow().is_none() => {
                 //TODO manage the optional arguments
                 match ctx.get_path_for(&fname) {
                     Err(_e) => {
@@ -242,7 +242,7 @@ impl LocatedToken {
 
                         match transformation {
                             BinaryTransformation::None => {
-                                content.replace(data);
+                                content.replace(data.into());
                             }
 
                             BinaryTransformation::Exomizer => {
@@ -257,7 +257,7 @@ impl LocatedToken {
                                 }
 
                                 let crunched = crate::crunchers::lz49::lz49_encode_legacy(&data);
-                                content.replace(crunched);
+                                content.replace(crunched.into());
                             }
 
                             BinaryTransformation::Aplib => {
@@ -268,7 +268,7 @@ impl LocatedToken {
                                 }
 
                                 let crunched = crate::crunchers::apultra::compress(&data);
-                                content.replace(crunched);
+                                content.replace(crunched.into());
                             }
                         }
                     }
