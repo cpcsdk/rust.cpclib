@@ -39,6 +39,11 @@ pub enum AssemblerError {
     //#[fail(display = "Syntax error:\n{}", error)]
     SyntaxError { error: VerboseError<Z80Span> },
 
+    IncludedFileError {
+        span: Z80Span,
+        error: Box<AssemblerError>
+    },
+
     //#[fail(display = "Basic error: {}", error)]
     BasicError { error: String },
 
@@ -189,7 +194,6 @@ impl Display for AssemblerError {
 
         match self {
             Self::SyntaxError{error} => {
-                dbg!(error);
                 let mut source_files = SimpleFiles::new();
                 let mut fname_to_id = std::collections::BTreeMap::new();
 
@@ -270,6 +274,43 @@ impl Display for AssemblerError {
                     )
                     .join("\n");
                 write!(f, "{}", str)
+            },
+
+
+            AssemblerError::IncludedFileError{span, error} => {
+                eprintln!("TODO - add stuff indicating it comes from an include directive");
+
+                let filename = Box::new(span.extra.1.current_filename.as_ref()
+                    .map(|p| p.as_os_str().to_str().unwrap().to_owned())
+                    .unwrap_or_else(|| "no file".to_owned()));
+                let source = span.extra.0.as_ref();
+        
+                let mut source_files = SimpleFiles::new();
+                let file = source_files.add(filename, source);
+
+                let sample_range = std::ops::Range{
+                    start:span.location_offset(), 
+                    end: guess_error_end(
+                        source_files.get(file).unwrap().source(), 
+                        span.location_offset(), 
+                        JP_WRONG_PARAM // fake value
+                    )};
+
+                let mut diagnostic = Diagnostic::error()
+                .with_message("Error in imported file")                    
+                                .with_labels(vec![
+                    Label::new(
+                        codespan_reporting::diagnostic::LabelStyle::Primary,
+                        file, 
+                        sample_range
+                    )
+                ]);;
+               
+                let writer = StandardStream::stderr(ColorChoice::Always);
+                                    let config = codespan_reporting::term::Config::default();
+                                    term::emit(&mut writer.lock(), &config, &source_files, &diagnostic).unwrap();
+
+                error.fmt(f)
             }
 
             _ => unimplemented!("{:?}", self)
@@ -326,7 +367,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
     let mut end = guesser.guess(code, offset);
     // remove whitespace from selection
     for previous in code[offset..end].chars().rev() {
-        dbg!(previous);
+       previous;
         if previous.is_whitespace() {
             end -= 1;
         } else {
