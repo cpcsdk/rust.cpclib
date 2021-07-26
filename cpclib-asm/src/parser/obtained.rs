@@ -96,9 +96,10 @@ impl LocatedToken {
             LocatedToken::CrunchedSection(c, l, _span) => {
                 Token::CrunchedSection(*c, l.as_listing())
             }
-            LocatedToken::Include(s, l, _span) => {
-                Token::Include(s.clone(), l.borrow().as_ref().map(|l| l.as_listing()).into())
-            }
+            LocatedToken::Include(s, l, _span) => Token::Include(
+                s.clone(),
+                l.borrow().as_ref().map(|l| l.as_listing()).into(),
+            ),
             LocatedToken::If(v, e, _span) => Token::If(
                 v.iter()
                     .map(|(k, l)| (k.clone(), l.as_listing()))
@@ -184,7 +185,6 @@ impl LocatedToken {
                                 });
                             }
                         };
-
 
                         let content = Rc::new(content);
                         dbg!(&content);

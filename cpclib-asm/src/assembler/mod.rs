@@ -479,12 +479,11 @@ impl Env {
                 if self.pass.is_first_pass() {
                     Ok(0)
                 } else {
-                    Err(
-                        AssemblerError::RelativeAddressUncomputable {
-                            address,
-                            pass: self.pass,
-                            error: Box::new(error)
-                        })
+                    Err(AssemblerError::RelativeAddressUncomputable {
+                        address,
+                        pass: self.pass,
+                        error: Box::new(error),
+                    })
                 }
             }
         }
@@ -539,7 +538,10 @@ impl Env {
     }
 
     /// Visit all the tokens of the located listing
-    pub fn visit_located_listing(&mut self, listing: &LocatedListing) -> Result<(), AssemblerError> {
+    pub fn visit_located_listing(
+        &mut self,
+        listing: &LocatedListing,
+    ) -> Result<(), AssemblerError> {
         for token in listing.listing().iter() {
             token.visited(self)?;
         }
@@ -920,31 +922,24 @@ pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerE
 pub fn visit_located_token(token: &LocatedToken, env: &mut Env) -> Result<(), AssemblerError> {
     let span = token.span();
     match token {
-        LocatedToken::Standard { token, span } => {
-            token.visited(env).map_err(|err| {
-                eprintln!("TODO - inject location knowledge in error message");
-                err
-            })
-        },
+        LocatedToken::Standard { token, span } => token.visited(env).map_err(|err| {
+            eprintln!("TODO - inject location knowledge in error message");
+            err
+        }),
 
         LocatedToken::CrunchedSection(_, _, _) => todo!(),
 
-        LocatedToken::Include(fname, ref cell, span) => {
-            if cell.borrow().is_some() {
-                env.visit_located_listing(cell.borrow().as_ref().unwrap())
-            }
-            else {
-                token.read_referenced_file(&token.context().1)
-                    .and_then(|_| {
-                        visit_located_token(token, env)
-                    })
-            }.map_err(|err| {
-                AssemblerError::IncludedFileError {
-                    span: span.clone(),
-                    error: Box::new(err)
-                }
-            })
-        },
+        LocatedToken::Include(fname, ref cell, span) => if cell.borrow().is_some() {
+            env.visit_located_listing(cell.borrow().as_ref().unwrap())
+        } else {
+            token
+                .read_referenced_file(&token.context().1)
+                .and_then(|_| visit_located_token(token, env))
+        }
+        .map_err(|err| AssemblerError::IncludedFileError {
+            span: span.clone(),
+            error: Box::new(err),
+        }),
 
         LocatedToken::If(_, _, _) => todo!(),
         LocatedToken::Repeat(_, _, _, _) => todo!(),
@@ -953,7 +948,6 @@ pub fn visit_located_token(token: &LocatedToken, env: &mut Env) -> Result<(), As
         LocatedToken::Switch(_, _) => todo!(),
         LocatedToken::While(_, _, _) => todo!(),
     }
-   
 }
 
 /// Apply the effect of the token
@@ -979,10 +973,12 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             Ok(())
         }
         Token::Comment(_) | Token::List | Token::NoList => Ok(()), // Nothing to do for a comment
-        Token::Include(_, cell) if cell.borrow().is_some() => env.visit_listing(cell.borrow().as_ref().unwrap()),
+        Token::Include(_, cell) if cell.borrow().is_some() => {
+            env.visit_listing(cell.borrow().as_ref().unwrap())
+        }
         Token::Include(fname, cell) if cell.borrow().is_none() => {
-           todo!("Read the file (without being able to specify parser options)")
-        },
+            todo!("Read the file (without being able to specify parser options)")
+        }
         Token::Incbin {
             fname: _,
             offset: _,
