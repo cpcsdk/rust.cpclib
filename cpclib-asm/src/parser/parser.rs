@@ -1,4 +1,5 @@
 #![allow(clippy::cast_lossless)]
+use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::ops::Deref;
@@ -581,7 +582,7 @@ pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
 
     Ok((
         input,
-        LocatedToken::Include(fname.to_string(), None, include_start),
+        LocatedToken::Include(fname.to_string(), RefCell::new(None), include_start),
     ))
 }
 
@@ -612,7 +613,7 @@ pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
             length,
             extended_offset: None,
             off: off.is_some(),
-            content: None,
+            content: None.into(),
             transformation,
         },
     ))

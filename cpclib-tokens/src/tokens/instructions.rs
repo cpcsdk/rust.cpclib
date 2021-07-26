@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fmt;
 
 use crate::Listing;
@@ -409,10 +410,11 @@ pub enum Token {
         length: Option<Expr>,
         extended_offset: Option<Expr>,
         off: bool,
-        content: Option<Vec<u8>>,
+        content: RefCell<Option<Vec<u8>>>,
         transformation: BinaryTransformation,
     },
-    Include(String, Option<Listing>),
+    // file may or may not be read during parse. If not, it is read on demand when assembling
+    Include(String, RefCell<Option<Listing>>),
 
     Label(String),
     Let(String, Expr),

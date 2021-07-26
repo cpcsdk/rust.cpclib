@@ -931,7 +931,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             Ok(())
         }
         Token::Comment(_) | Token::List | Token::NoList => Ok(()), // Nothing to do for a comment
-        Token::Include(_, Some(ref listing)) => env.visit_listing(listing),
+        Token::Include(_, cell) if cell.borrow().is_some() => env.visit_listing(cell.borrow().as_ref().unwrap()),
         Token::Incbin {
             fname: _,
             offset: _,
@@ -940,7 +940,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             off: _,
             content,
             transformation: _,
-        } => env.visit_incbin(content.as_ref().unwrap()),
+        } if content.borrow().is_some() => env.visit_incbin(content.borrow().as_ref().unwrap()),
         Token::If(ref cases, ref other) => env.visit_if(cases, other.as_ref()),
         Token::Label(ref label) => env.visit_label(label),
         Token::MultiPush(ref regs) => env.visit_multi_pushes(regs),
