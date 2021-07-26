@@ -16,9 +16,9 @@
 use std::fmt::Display;
 use std::fs::File;
 use std::io;
-use std::rc::Rc;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::rc::Rc;
 
 use cpclib_asm::preamble::*;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
@@ -35,26 +35,30 @@ enum BasmError {
     //#[fail(display = "IO error: {}", io)]
     Io { io: io::Error },
 
-   // #[fail(display = "Assembling error: {}", error)]
+    // #[fail(display = "Assembling error: {}", error)]
     AssemblerError { error: AssemblerError },
 
-   // #[fail(display = "Invalid Amsdos filename: {}", filename)]
+    // #[fail(display = "Invalid Amsdos filename: {}", filename)]
     InvalidAmsdosFilename { filename: String },
 
-   // #[fail(display = "{} is not a valid directory.", path)]
+    // #[fail(display = "{} is not a valid directory.", path)]
     NotAValidDirectory { path: String },
 
-  //  #[fail(display = "{} is not a valid file.", file)]
+    //  #[fail(display = "{} is not a valid file.", file)]
     NotAValidFile { file: String },
 }
 
 impl Display for BasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Io{io} => write!(f, "IO Error: {}", io),
-            Self::AssemblerError{error} => write!(f, "Assembling error: {}", error),
-            BasmError::InvalidAmsdosFilename { filename } => write!(f, "Invalid Amsdos filename: {}", filename),
-            BasmError::NotAValidDirectory { path } => write!(f,  "{} is not a valid directory.", path),
+            Self::Io { io } => write!(f, "IO Error: {}", io),
+            Self::AssemblerError { error } => write!(f, "Assembling error: {}", error),
+            BasmError::InvalidAmsdosFilename { filename } => {
+                write!(f, "Invalid Amsdos filename: {}", filename)
+            }
+            BasmError::NotAValidDirectory { path } => {
+                write!(f, "{} is not a valid directory.", path)
+            }
             BasmError::NotAValidFile { file } => write!(f, "{} is not a valid file.", file),
         }
     }
@@ -146,10 +150,7 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
             let bytes = env.produced_bytes();
             if !bytes.is_empty() {
                 let listing = Listing::from(bytes.as_ref());
-                println!(
-                    "{}",
-                    PrintableListing::from(&Listing::from(listing))
-                );
+                println!("{}", PrintableListing::from(&Listing::from(listing)));
             }
         } else {
             use std::convert::TryFrom;

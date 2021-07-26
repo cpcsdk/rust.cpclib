@@ -66,21 +66,17 @@ pub fn parse_z80_strrc_with_contextrc(
     let mut listing = LocatedListing::new_empty_span(span);
     let ctx = listing.ctx();
     match parse_z80_code(listing.span()) {
-        Err(e) => {
-            match e {
-                nom::Err::Error(e) | Err::Failure(e) => {
-                    return Err(AssemblerError::SyntaxError{
-                        error: e 
-                    });
-                }
-                nom::Err::Incomplete(_) => {
-                    return Err(AssemblerError::BugInParser {
-                        error:"Bug in the parser".to_owned(),
-                        context: ctx.deref().clone(),
-                    });
-                },
+        Err(e) => match e {
+            nom::Err::Error(e) | Err::Failure(e) => {
+                return Err(AssemblerError::SyntaxError { error: e });
             }
-        }
+            nom::Err::Incomplete(_) => {
+                return Err(AssemblerError::BugInParser {
+                    error: "Bug in the parser".to_owned(),
+                    context: ctx.deref().clone(),
+                });
+            }
+        },
 
         Ok((remaining, mut parsed)) => {
             if remaining.len() > 0 {
@@ -450,7 +446,8 @@ fn parse_single_token(
         let input = if first {
             input
         } else {
-            let (input, _) = context("[DBG] delimitation", delimited(space0, char(':'), space0))(input)?;
+            let (input, _) =
+                context("[DBG] delimitation", delimited(space0, char(':'), space0))(input)?;
             input
         };
 
@@ -1020,8 +1017,8 @@ pub fn parse_ld_normal(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z
             parse_register_r,
             parse_hl_address,
             parse_address,
-        ))),
-    )(input)?;
+        )),
+    ))(input)?;
 
     let (input, _) = context("LD: missing comma", cut(parse_comma))(input)?;
 
@@ -1676,13 +1673,13 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
         delimited(space0, tag(","), space0),
     ))(input)?;
 
-    let (input, dst) = cut(
-        context(match call_jp_or_jr {
+    let (input, dst) = cut(context(
+        match call_jp_or_jr {
             Mnemonic::Jp => JP_WRONG_PARAM,
             Mnemonic::Jr => JR_WRONG_PARAM,
             Mnemonic::Call => CALL_WRONG_PARAM,
-            _ => unreachable!()
-        }, 
+            _ => unreachable!(),
+        },
         alt((
             verify(
                 alt((
@@ -1694,7 +1691,8 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
                 |_| call_jp_or_jr.is_jp() && flag_test.is_none(),
             ), // not possible for call and for jp/jr when there is flag
             parse_expr,
-        ))))(input)?;
+        )),
+    ))(input)?;
 
     // Allow to parse JP HL as to be JP (HL) original notation is misleading
     let dst = match dst {
