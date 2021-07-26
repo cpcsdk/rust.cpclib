@@ -207,7 +207,7 @@ impl Display for AssemblerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use codespan_reporting::files::SimpleFiles;
         use codespan_reporting::term;
-        use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+        use codespan_reporting::term::termcolor::{ColorChoice, StandardStream, Buffer};
         use nom::error::ErrorKind;
         use nom::error::VerboseErrorKind;
         use std::ops::Deref;
@@ -278,12 +278,11 @@ impl Display for AssemblerError {
                                 diagnostic = diagnostic.with_notes(notes);
                             }
 
-                            let writer = StandardStream::stderr(ColorChoice::Always);
+                            let mut writer = Buffer::ansi();
                             let config = codespan_reporting::term::Config::default();
-                            term::emit(&mut writer.lock(), &config, &source_files, &diagnostic)
-                                .unwrap();
-
-                            ctx.to_string()
+                            term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
+                            
+                            std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
                         }
 
                         _ => unreachable!(),
@@ -293,7 +292,7 @@ impl Display for AssemblerError {
             }
 
             AssemblerError::IncludedFileError { span, error } => {
-                eprintln!("TODO - add stuff indicating it comes from an include directive");
+ 
 
                 let filename = Box::new(
                     span.extra
@@ -325,10 +324,11 @@ impl Display for AssemblerError {
                         sample_range,
                     )]);
 
-                let writer = StandardStream::stderr(ColorChoice::Always);
+                let mut writer = Buffer::ansi();
                 let config = codespan_reporting::term::Config::default();
-                term::emit(&mut writer.lock(), &config, &source_files, &diagnostic).unwrap();
-
+                term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
+                
+                write!(f, "{}", std::str::from_utf8(writer.as_slice()).unwrap())?;
                 error.fmt(f)
             }
 
