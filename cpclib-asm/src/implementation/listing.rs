@@ -1,36 +1,47 @@
-use cpclib_tokens::tokens::*;
-
 use crate::error::*;
-use crate::parser;
+use crate::preamble::parse_z80_str;
+use crate::AssemblingOptions;
+use cpclib_tokens::tokens::*;
 use std::fmt;
 
 use crate::implementation::expression::*;
 use crate::implementation::tokens::*;
 
-use crate::AssemblingOptions;
-
 /// Additional methods for the listings
 pub trait ListingExt {
-
-
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
         code: S,
     ) -> Result<(), AssemblerError>;
 
     /// Assemble the listing (without context) and returns the bytes
-    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError>;
+    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
+        let options = crate::AssemblingOptions::default();
+        self.to_bytes_with_options(&options)
+    }
+
     fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError>;
 
     /// Compute the size of the listing.
     /// The listing has a size only if its tokens has a size
-    fn number_of_bytes(&self) -> Result<usize, AssemblerError>;
+    fn number_of_bytes(&self) -> Result<usize, AssemblerError> {
+        Ok(self.to_bytes()?.len())
+    }
 
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
     fn estimated_duration(&self) -> Result<usize, String>;
+    /// Save the listing on disc in a string version
+    fn save<P: AsRef<std::path::Path>>(&self, path: P) -> ::std::io::Result<()> {
+        use std::fs::File;
+        use std::io::prelude::*;
 
-    fn save<P: AsRef<std::path::Path>>(&self, path: P) -> ::std::io::Result<()>;
+        // Open a file in write-only mode, returns `io::Result<File>`
+        let mut file = File::create(path.as_ref())?;
+        file.write_all(self.to_string().as_bytes())?;
+
+        Ok(())
+    }
 
     fn to_string(&self) -> String;
 
@@ -43,32 +54,15 @@ pub trait ListingExt {
 }
 
 impl ListingExt for Listing {
-
-
-
     /// Add additional tokens, that need to be parsed from a string, to the listing
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
         code: S,
     ) -> Result<(), AssemblerError> {
-        parser::parse_z80_str(code.as_ref().trim_end())
-            .map_err(|e| AssemblerError::SyntaxError {
-                error: format!("{:?}", e),
-            })
-            .map(|(_res, local_tokens)| {
-                self.listing_mut().extend_from_slice(&local_tokens);
-            })
-    }
-
-    /// Compute the size of the listing when assembling it.
-    ///
-    fn number_of_bytes(&self) -> Result<usize, AssemblerError> {
-        Ok(self.to_bytes()?.len())
-    }
-
-    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
-        let options = crate::AssemblingOptions::default();
-        self.to_bytes_with_options(&options)
+        parse_z80_str(code.as_ref().trim_end()).map(|local_tokens| {
+            let mut local_tokens = local_tokens.as_listing();
+            self.listing_mut().append(&mut local_tokens);
+        })
     }
 
     fn to_bytes_with_options(
@@ -91,18 +85,6 @@ impl ListingExt for Listing {
             }
             Ok(duration)
         }
-    }
-
-    /// Save the listing on disc in a string version
-    fn save<P: AsRef<std::path::Path>>(&self, path: P) -> ::std::io::Result<()> {
-        use std::fs::File;
-        use std::io::prelude::*;
-
-        // Open a file in write-only mode, returns `io::Result<File>`
-        let mut file = File::create(path.as_ref())?;
-        file.write_all(self.to_string().as_bytes())?;
-
-        Ok(())
     }
 
     fn to_string(&self) -> String {
@@ -313,10 +295,6 @@ pub trait ListingFromStr {
 
 impl ListingFromStr for Listing {
     fn from_str(s: &str) -> Result<Listing, AssemblerError> {
-        crate::parser::parse_str(s)
+        crate::parser::parse_z80_str(s).map(|ll| ll.as_listing())
     }
-
-
 }
-
-

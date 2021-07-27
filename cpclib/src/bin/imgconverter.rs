@@ -76,57 +76,50 @@ macro_rules! export_palette {
     };
 }
 
-
 macro_rules! do_export_palette {
     ($arg: expr, $palette: ident) => {
-        if let Some(palette_fname) = $arg.value_of("EXPORT_PALETTE")  {
-            let mut file =
-                File::create(palette_fname).expect("Unable to create the palette file");
+        if let Some(palette_fname) = $arg.value_of("EXPORT_PALETTE") {
+            let mut file = File::create(palette_fname).expect("Unable to create the palette file");
             let p: Vec<u8> = $palette.into();
             file.write_all(&p).unwrap();
         }
 
-
         if let Some(fade_fname) = $arg.value_of("EXPORT_PALETTE_FADEOUT") {
             let palettes = $palette.rgb_fadout();
-            let bytes = palettes.iter()
-                                .fold(
-                                    Vec::<u8>::default(), 
-                                    |mut acc, x| {
-                                        acc.extend(&x.to_gate_array_with_default(0.into()));
-                                        acc
-                                    });
-            
-                assert_eq!(palettes.len()*17, bytes.len());
-                                    
-                let mut file =
-                File::create(fade_fname).expect("Unable to create the fade out file");
+            let bytes = palettes.iter().fold(Vec::<u8>::default(), |mut acc, x| {
+                acc.extend(&x.to_gate_array_with_default(0.into()));
+                acc
+            });
+
+            assert_eq!(palettes.len() * 17, bytes.len());
+
+            let mut file = File::create(fade_fname).expect("Unable to create the fade out file");
             file.write_all(&bytes).unwrap();
-            }
+        }
 
-
-        if let Some(palette_fname) = $arg.value_of("EXPORT_INKS")  {
-            let mut file =
-                File::create(palette_fname).expect("Unable to create the inks file");
-            let inks = $palette.inks().iter().map(|i| i.number()).collect::<Vec<_>>();
+        if let Some(palette_fname) = $arg.value_of("EXPORT_INKS") {
+            let mut file = File::create(palette_fname).expect("Unable to create the inks file");
+            let inks = $palette
+                .inks()
+                .iter()
+                .map(|i| i.number())
+                .collect::<Vec<_>>();
             file.write_all(&inks).unwrap();
         }
 
         if let Some(fade_fname) = $arg.value_of("EXPORT_INK_FADEOUT") {
             let palettes = $palette.rgb_fadout();
-            let bytes = palettes.iter()
-                                .map(|p| p.inks().iter().map(|i| i.number()).collect::<Vec<_>>())
-                                .fold(
-                                    Vec::default(), 
-                                    |mut acc, x| {
-                                        acc.extend(&x);
-                                        acc
-                                    });
-            let mut file =
-                File::create(fade_fname).expect("Unable to create the fade out file");
+            let bytes = palettes
+                .iter()
+                .map(|p| p.inks().iter().map(|i| i.number()).collect::<Vec<_>>())
+                .fold(Vec::default(), |mut acc, x| {
+                    acc.extend(&x);
+                    acc
+                });
+            let mut file = File::create(fade_fname).expect("Unable to create the fade out file");
             file.write_all(&bytes).unwrap();
-            }
-    }
+        }
+    };
 }
 
 /// Compress data using lz4 algorithm.
@@ -420,7 +413,6 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 // Save the palette
                 do_export_palette!(sub_sprite, palette);
 
-
                 // Save the binary data of the sprite
                 let sprite_fname = sub_sprite.value_of("SPRITE_FNAME").unwrap();
                 let mut file =
@@ -480,24 +472,21 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
             }
             _ => unreachable! {},
         }
-    } 
-    else if let Some(sub_scr) = sub_scr {
+    } else if let Some(sub_scr) = sub_scr {
         let fname = dbg!(sub_scr.value_of("SCR").unwrap());
 
-         match &conversion {
+        match &conversion {
             Output::CPCMemoryStandard(scr, palette) => {
-
                 let scr = if sub_scr.is_present("COMPRESSED") {
                     ocp::compress(&scr)
                 } else {
                     scr.to_vec()
                 };
-        
+
                 std::fs::write(fname, &scr)?;
 
                 do_export_palette!(sub_scr, palette);
-
-            },
+            }
 
             Output::CPCMemoryOverscan(scr1, scr2, palette) => {
                 if sub_scr.is_present("COMPRESSED") {
@@ -508,16 +497,11 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 buffer.write_all(scr1)?;
                 buffer.write_all(scr2)?;
                 do_export_palette!(sub_scr, palette);
-            },
-            
+            }
+
             _ => unreachable!(),
         };
-
-
-
-    }
-    
-    else {
+    } else {
         // Make the conversion before feeding sna or dsk
 
         /// TODO manage the presence/absence of file in the dsk, the choice of filename and so on
@@ -627,7 +611,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                     xfer.upload_and_run(tmp_file_name, None)
                         .expect("An error occured while transfering the snapshot");
                 }
-            } 
+            }
         }
     }
 
@@ -1031,8 +1015,7 @@ fn main() -> anyhow::Result<()> {
         std::process::exit(exitcode::USAGE);
     }
 
-    convert(&matches)
-        .expect("Unable to make the conversion");
+    convert(&matches).expect("Unable to make the conversion");
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
         if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {

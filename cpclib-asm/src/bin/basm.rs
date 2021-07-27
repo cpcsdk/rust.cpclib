@@ -13,39 +13,55 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation)]
 
+use std::fmt::Display;
 use std::fs::File;
 use std::io;
-
 use std::io::{Read, Write};
 use std::path::Path;
+use std::rc::Rc;
 
 use cpclib_asm::preamble::*;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 use clap;
 use clap::{App, Arg, ArgGroup, ArgMatches};
-use failure::Fail;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 enum BasmError {
-    #[fail(display = "IO error: {}", io)]
+    //#[fail(display = "IO error: {}", io)]
     Io { io: io::Error },
 
-    #[fail(display = "Assembling error: {}", error)]
+    // #[fail(display = "Assembling error: {}", error)]
     AssemblerError { error: AssemblerError },
 
-    #[fail(display = "Invalid Amsdos filename: {}", filename)]
+    // #[fail(display = "Invalid Amsdos filename: {}", filename)]
     InvalidAmsdosFilename { filename: String },
 
-    #[fail(display = "{} is not a valid directory.", path)]
+    // #[fail(display = "{} is not a valid directory.", path)]
     NotAValidDirectory { path: String },
 
-    #[fail(display = "{} is not a valid file.", file)]
+    //  #[fail(display = "{} is not a valid file.", file)]
     NotAValidFile { file: String },
+}
+
+impl Display for BasmError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io { io } => write!(f, "IO Error: {}", io),
+            Self::AssemblerError { error } => write!(f, "Assembling error: {}", error),
+            BasmError::InvalidAmsdosFilename { filename } => {
+                write!(f, "Invalid Amsdos filename: {}", filename)
+            }
+            BasmError::NotAValidDirectory { path } => {
+                write!(f, "{} is not a valid directory.", path)
+            }
+            BasmError::NotAValidFile { file } => write!(f, "{} is not a valid file.", file),
+        }
+    }
 }
 
 // XXX I do not understand why I have to do that !!!
@@ -63,7 +79,7 @@ impl From<AssemblerError> for BasmError {
 
 /// Parse the given code.
 /// TODO read options to configure the search path
-fn parse(matches: &ArgMatches<'_>) -> Result<Listing, BasmError> {
+fn parse<'arg>(matches: &'arg ArgMatches<'_>) -> Result<LocatedListing, BasmError> {
     let (filename, code) = {
         if let Some(filename) = matches.value_of("INPUT") {
             let mut f = File::open(filename)?;
@@ -91,12 +107,17 @@ fn parse(matches: &ArgMatches<'_>) -> Result<Listing, BasmError> {
         }
     }
 
-    parse_str_with_context(&code, &context).map_err(|e| e.into())
+    let code = Rc::new(code);
+    let context = Rc::new(context);
+    parse_z80_strrc_with_contextrc(code, context).map_err(|e| e.into())
 }
 
 /// Assemble the given code
 /// TODO use options to configure the base symbole table
-fn assemble(matches: &ArgMatches<'_>, listing: &Listing) -> Result<Env, BasmError> {
+fn assemble<'arg>(
+    matches: &'arg ArgMatches<'_>,
+    listing: &LocatedListing,
+) -> Result<Env, BasmError> {
     let mut options = AssemblingOptions::default();
 
     options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
@@ -126,10 +147,11 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
         let binary = env.produced_bytes();
 
         if matches.is_present("DB_LIST") {
-            println!(
-                "{}",
-                PrintableListing::from(&Listing::from(env.produced_bytes().as_ref()))
-            );
+            let bytes = env.produced_bytes();
+            if !bytes.is_empty() {
+                let listing = Listing::from(bytes.as_ref());
+                println!("{}", PrintableListing::from(&Listing::from(listing)));
+            }
         } else {
             use std::convert::TryFrom;
 

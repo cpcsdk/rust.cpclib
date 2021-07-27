@@ -57,8 +57,7 @@ fn send_and_run_file(xfer: &xfer::CpcXfer, fname: &str, run: bool) {
         if run {
             xfer.upload_and_run(fname, None)
                 .expect("Unable to launch file");
-        }
-        else {
+        } else {
             xfer.upload(fname, "/", None)
                 .expect("Unable to put the file");
         }
@@ -181,7 +180,6 @@ fn main() -> anyhow::Result<()> {
     } else if let Some(p_opt) = matches.subcommand_matches("-p") {
         let fname: String = p_opt.value_of("fname").unwrap().to_string();
         send_and_run_file(&xfer, &fname, false);
-
     } else if let Some(y_opt) = matches.subcommand_matches("-y") {
         let fname: String = y_opt.value_of("fname").unwrap().to_string();
 

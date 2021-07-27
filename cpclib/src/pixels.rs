@@ -1,15 +1,16 @@
-
 /// Mode 2 specific pixels managment functions
 pub mod mode2 {
     use crate::ga::Pen;
 
     /// Returns the 8 pens for the given byte in mode 0
-    pub fn byte_to_pens(byte: u8)-> (Pen, Pen, Pen, Pen, Pen, Pen, Pen, Pen) {
-        let get_bit = |pos: u8|  {if byte & (1 << pos) != 0 {
-            Pen::from(1)
-        } else {
-            Pen::from(0)
-        }};
+    pub fn byte_to_pens(byte: u8) -> (Pen, Pen, Pen, Pen, Pen, Pen, Pen, Pen) {
+        let get_bit = |pos: u8| {
+            if byte & (1 << pos) != 0 {
+                Pen::from(1)
+            } else {
+                Pen::from(0)
+            }
+        };
 
         (
             get_bit(7),
@@ -22,8 +23,6 @@ pub mod mode2 {
             get_bit(0),
         )
     }
-
-
 }
 
 /// Manage all the stuff related to mode 1 pixels
@@ -50,7 +49,7 @@ pub mod mode1 {
                 1 => PixelPosition::Second,
                 2 => PixelPosition::Third,
                 3 => PixelPosition::Fourth,
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
     }
@@ -72,30 +71,25 @@ pub mod mode1 {
 
     /// Return the 4 pens encoded by this byte from left to right
     pub fn byte_to_pens(b: u8) -> (Pen, Pen, Pen, Pen) {
-        let pen1 =  (BitMapping::FirstBit0, BitMapping::FirstBit1);
-        let pen2 =  (BitMapping::SecondBit0, BitMapping::SecondBit1);
-        let pen3 =  (BitMapping::ThirdBit0, BitMapping::ThirdBit1);
-        let pen4 =  (BitMapping::FourthBit0, BitMapping::FourthBit1);
+        let pen1 = (BitMapping::FirstBit0, BitMapping::FirstBit1);
+        let pen2 = (BitMapping::SecondBit0, BitMapping::SecondBit1);
+        let pen3 = (BitMapping::ThirdBit0, BitMapping::ThirdBit1);
+        let pen4 = (BitMapping::FourthBit0, BitMapping::FourthBit1);
 
-        let compute = |bits: (BitMapping, BitMapping) | -> Pen {
+        let compute = |bits: (BitMapping, BitMapping)| -> Pen {
             let mut value = 0;
-            if b & (1<<bits.0 as u8) != 0 {
+            if b & (1 << bits.0 as u8) != 0 {
                 value += 2;
             }
 
-            if b & (1<<bits.1 as u8) != 0 {
+            if b & (1 << bits.1 as u8) != 0 {
                 value += 1;
             }
 
             value.into()
         };
 
-        (
-            compute(pen1),
-            compute(pen2),
-            compute(pen3),
-            compute(pen4),
-        )
+        (compute(pen1), compute(pen2), compute(pen3), compute(pen4))
     }
 
     /// Convert the pen value to its byte representation at the proper place
@@ -248,7 +242,7 @@ pub mod mode0 {
             match b {
                 0 => PixelPosition::First,
                 1 => PixelPosition::Second,
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
     }
@@ -522,7 +516,5 @@ mod tests {
         assert_eq!(res.5, Pen::from(1));
         assert_eq!(res.6, Pen::from(0));
         assert_eq!(res.7, Pen::from(0));
-
-
     }
 }

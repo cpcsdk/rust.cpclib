@@ -18,7 +18,8 @@ mod tests {
             &Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
-                Some(DataAccess::Register8(Register8::L)),None
+                Some(DataAccess::Register8(Register8::L)),
+                None,
             ),
             &mut env,
         );
@@ -33,7 +34,8 @@ mod tests {
             &Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
-                Some(DataAccess::Register8(Register8::A)),None
+                Some(DataAccess::Register8(Register8::A)),
+                None,
             ),
             &mut env,
         );
@@ -43,7 +45,8 @@ mod tests {
             &Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
-                Some(DataAccess::Register8(Register8::L)),None
+                Some(DataAccess::Register8(Register8::L)),
+                None,
             ),
             &mut env,
         );
@@ -53,7 +56,8 @@ mod tests {
             &Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::C)),
-                Some(DataAccess::Register8(Register8::C)), None
+                Some(DataAccess::Register8(Register8::C)),
+                None,
             ),
             &mut env,
         );
@@ -67,7 +71,8 @@ mod tests {
             Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
-                Some(DataAccess::Register8(Register8::L)),None
+                Some(DataAccess::Register8(Register8::L)),
+                None,
             ),
         ];
 

@@ -3,7 +3,6 @@ use std::ops::DerefMut;
 
 use core::fmt::Debug;
 use std::iter::FromIterator;
-
 /// The ListingElement trati contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
 pub trait ListingElement {}
