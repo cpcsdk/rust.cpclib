@@ -1210,11 +1210,7 @@ impl<'a> ImageConverter<'a> {
                 ref output_dimension,
                 ref display_address,
             } => {
-                self.build_memory_blocks(
-                    sprite, 
-                    output_dimension.clone(), 
-                    display_address.clone()
-                )
+                self.build_memory_blocks(sprite, output_dimension.clone(), display_address.clone())
             }
             OutputFormat::CPCSplittingMemory(ref _vec) => unimplemented!(),
             OutputFormat::TileEncoded {
@@ -1379,7 +1375,10 @@ impl<'a> ImageConverter<'a> {
         used_pages.insert(current_address.page());
 
         // loop over the chars vertically
-        for char_y in 0..dim.nb_char_lines().min((sprite.height() as f32 / 8 as f32).ceil() as u8) {
+        for char_y in 0..dim
+            .nb_char_lines()
+            .min((sprite.height() as f32 / 8 as f32).ceil() as u8)
+        {
             let char_y = char_y as usize;
 
             // loop over the chars horiontally (2 bytes)
@@ -1435,8 +1434,10 @@ impl<'a> ImageConverter<'a> {
             ));
             */
 
-            eprintln!("An overscan screen is requested but {} pages has been feed",
-            used_pages.len()); // TODO need to investigate
+            eprintln!(
+                "An overscan screen is requested but {} pages has been feed",
+                used_pages.len()
+            ); // TODO need to investigate
         }
 
         // Generate the right output format

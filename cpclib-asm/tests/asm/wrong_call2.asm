@@ -1,0 +1,2 @@
+	; Missing label
+	call unknown

@@ -9,7 +9,7 @@ mod test {
             Mnemonic::Push,
             Some(DataAccess::Register16(Register16::De)),
             None,
-            None
+            None,
         );
 
         assert_eq!(de_res, de_expected);

@@ -1,4 +1,4 @@
-pub  mod data_access;
+pub mod data_access;
 pub mod expression;
 pub mod instructions;
 pub mod listing;
@@ -11,6 +11,5 @@ pub use instructions::*;
 pub use listing::*;
 pub use registers::*;
 pub use tokens::*;
-
 #[cfg(test)]
 mod test {}

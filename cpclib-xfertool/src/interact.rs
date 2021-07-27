@@ -176,9 +176,8 @@ impl<'a> XferInteractorHelper<'a> {
 }
 
 impl<'a> Hinter for XferInteractorHelper<'a> {
-
     type Hint = String;
-    
+
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {
         self.hinter.hint(line, pos, ctx)
     }

@@ -18,8 +18,8 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use std::str::FromStr;
 use nom::lib::std::convert::Into;
+use std::str::FromStr;
 
 const DATA_FORMAT_CFG: &str = "
 NbTrack = 40

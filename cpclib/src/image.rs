@@ -491,13 +491,17 @@ impl ColorMatrix {
             };
 
             // get the pens for the current line
-            let pens = self.get_line(y).iter().enumerate().map(|(_x, ink)|-> Pen {
-                let pen = line_palette.get_pen_for_ink(*ink);
-                if let Some(pen) = pen {
-                    pen
-                } else {
-                       /* eprintln!("
-                            [ERROR] In line {}, pixel {} color ({:?}) is not in the palette {:?}. Background is used insted", 
+            let pens = self
+                .get_line(y)
+                .iter()
+                .enumerate()
+                .map(|(_x, ink)| -> Pen {
+                    let pen = line_palette.get_pen_for_ink(*ink);
+                    if let Some(pen) = pen {
+                        pen
+                    } else {
+                        /* eprintln!("
+                            [ERROR] In line {}, pixel {} color ({:?}) is not in the palette {:?}. Background is used insted",
                             y,
                             x,
                             ink,
@@ -505,7 +509,8 @@ impl ColorMatrix {
                         );*/
                         Pen::from(0)
                     } // If the color is not in the palette, use pen 0
-            }).collect::<Vec<Pen>>();
+                })
+                .collect::<Vec<Pen>>();
 
             // Transform the pens in bytes
             data.push(pens);
