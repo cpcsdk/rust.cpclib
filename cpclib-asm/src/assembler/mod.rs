@@ -5,12 +5,14 @@ use crate::AssemblingOptions;
 use cpclib_basic::*;
 use cpclib_sna::*;
 
+use lazy_static::__Deref;
 use smallvec::SmallVec;
 
 use std::any::Any;
 use std::fmt;
 
 use std::convert::TryFrom;
+use std::rc::Rc;
 
 use crate::AmsdosFile;
 use crate::AmsdosFileName;
@@ -626,7 +628,7 @@ impl Env {
         }
     }
 
-    pub fn visit_macro(
+    pub fn visit_macro_definition(
         &mut self,
         name: &str,
         arguments: &[String],
@@ -695,23 +697,56 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_call_macro_or_build_struct(
+    pub fn visit_call_macro_or_build_struct<T:ListingElement + core::fmt::Debug +  'static>(
         &mut self,
-        name: &str,
-        parameters: &[MacroParam],
+        caller: & T,
     ) -> Result<(), AssemblerError> {
+
+        dbg!(caller);
+
+        // Get the macro call information
+        let (name, parameters, caller_span) = {
+            let located_caller = (caller as &dyn Any).downcast_ref::<LocatedToken>();
+            let standard_caller = (caller as &dyn Any).downcast_ref::<Token>();
+
+            let (token, span) = match (located_caller, standard_caller) {
+                (Some(caller), Option::None) => {
+                    (caller.token().unwrap(), Some(caller.span()))
+                },
+                (None, Some(caller)) => {
+        panic!();
+
+                    (caller, None)
+                },
+                _ => unreachable!()
+            };
+
+            match token {
+                Token::MacroCall(name, params) => {
+                    (name, params, span)
+                },
+                _ => unreachable!()
+            }
+
+        };
+
         // Retreive the macro or structure definition
         let r#macro = self.symbols().macro_value(name);
         let r#struct = self.symbols().struct_value(name);
 
         if r#macro.is_none() && r#struct.is_none() {
-            return Err(AssemblerError::UnknownMacro {
+            let e = AssemblerError::UnknownMacro {
                 symbol: name.to_owned(),
                 closest: self.symbols().closest_symbol(name),
-            });
+            };
+            return match caller_span {
+                Some(span) => Err(AssemblerError::RelocatedError{error: e.into(), span: span.clone()}),
+                None => Err(e)
+            };
         }
 
         // get the generated code
+        // TODO handle some errors there
         let code = if r#macro.is_some() {
             r#macro.unwrap().develop(parameters)
         } else {
@@ -721,8 +756,19 @@ impl Env {
             r#struct.develop(&parameters)
         };
 
-        // Tokenize with the same assembling parameters and context
-        let mut listing = Listing::from_str(&code)?;
+        // Tokenize with the same parsing  parameters and context when possible
+        let mut listing = match caller_span {
+            Some(span) => {
+                let mut ctx = span.extra.1.deref().clone();
+                ctx.remove_filename();
+                ctx.set_context_name(&format!("MACRO: {}", name));
+                let code = Box::new(code);
+                parse_z80_str_with_context(code.as_ref(), ctx)?
+            },
+            _ => {
+                parse_z80_str(&code)?
+            }
+        };
 
         // For a macro we have to fix label names
         if r#macro.is_some() {
@@ -731,11 +777,15 @@ impl Env {
         }
 
         // really assemble the produced tokens
-        self.visit_listing(&listing).or_else(|e| {
-            Err(AssemblerError::MacroError {
+        self.visit_located_listing(&listing).or_else(|e| {
+            let e = AssemblerError::MacroError {
                 name: name.to_owned(),
                 root: Box::new(e),
-            })
+            };
+             match caller_span {
+                Some(span) => Err(AssemblerError::RelocatedError{error: e.into(), span: span.clone()}),
+                None => Err(e)
+            }
         })?;
 
         Ok(())
@@ -916,24 +966,35 @@ pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerE
 
 /// Apply the effect of the localised token. Most of the action is delegated to visit_token.
 /// The difference with the standard token is the ability to embed listing
-pub fn visit_located_token(token: &LocatedToken, env: &mut Env) -> Result<(), AssemblerError> {
-    let span = token.span();
-    match token {
-        LocatedToken::Standard { token, span } => token.visited(env).map_err(|err| {
-            AssemblerError::RelocatedError{
-                error: Box::new(err),
-                span: span.clone()
+pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<(), AssemblerError> {
+    let span = outer_token.span();
+    match outer_token {
+        LocatedToken::Standard { token, span } => {
+
+            match token {
+                Token::MacroCall(_, _) => {
+                    env.visit_call_macro_or_build_struct(outer_token)
+                },
+                _ => {
+                    token.visited(env).map_err(|err| {
+                        AssemblerError::RelocatedError{
+                            error: Box::new(err),
+                            span: span.clone()
+                        }
+                    })
+                }
             }
-        }),
+
+        },
 
         LocatedToken::CrunchedSection(_, _, _) => todo!(),
 
         LocatedToken::Include(fname, ref cell, span) => if cell.borrow().is_some() {
             env.visit_located_listing(cell.borrow().as_ref().unwrap())
         } else {
-            token
-                .read_referenced_file(&token.context().1)
-                .and_then(|_| visit_located_token(token, env))
+            outer_token
+                .read_referenced_file(&outer_token.context().1)
+                .and_then(|_| visit_located_token(outer_token, env))
         }
         .map_err(|err| AssemblerError::IncludedFileError {
             span: span.clone(),
@@ -1014,9 +1075,9 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::SnaSet(flag, value) => env.visit_snaset(flag, value),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
-        Token::Macro(name, arguments, code) => env.visit_macro(name, arguments, code),
+        Token::Macro(name, arguments, code) => env.visit_macro_definition(name, arguments, code),
         Token::MacroCall(name, parameters) => {
-            env.visit_call_macro_or_build_struct(name, parameters)
+            env.visit_call_macro_or_build_struct(token)
         }
         Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice()),
         _ => panic!("Not treated {:?}", token),

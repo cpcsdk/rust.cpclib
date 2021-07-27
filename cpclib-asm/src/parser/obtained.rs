@@ -294,6 +294,40 @@ impl LocatedToken {
 
         Ok(())
     }
+
+    fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+        match self {
+            LocatedToken::Standard { token, span } => {
+                token.fix_local_macro_labels_with_seed(seed)
+            },
+            LocatedToken::CrunchedSection(_, _, _) => todo!(),
+            LocatedToken::Include(_, _, _) => todo!(),
+           
+            Self::If(v, o, _) => {
+                v.iter_mut()
+                    .map(|(t, l)| l)
+                    .for_each(|l| l.fix_local_macro_labels_with_seed(seed));
+                o.as_mut().map(|l| l.fix_local_macro_labels_with_seed(seed));
+            }
+
+            Self::Switch(l, _) => {
+                l.iter_mut().for_each(|(e, l)| {
+                    e.fix_local_macro_labels_with_seed(seed);
+                    l.fix_local_macro_labels_with_seed(seed);
+                });
+            }
+
+
+
+            Self::Repeat(e, l, _, _)
+            | Self::RepeatUntil(e, l, _)
+            | Self::Rorg(e, l, _)
+            | Self::While(e, l, _) => {
+                e.fix_local_macro_labels_with_seed(seed);
+                l.fix_local_macro_labels_with_seed(seed);
+            }
+        }
+    }
 }
 /// Implement this trait for type previousy defined without source location.
 
@@ -388,6 +422,11 @@ impl LocatedListing {
 
     pub fn span(&self) -> Z80Span {
         Z80Span::new_extra_from_rc(Rc::clone(&self.src), Rc::clone(&self.ctx))
+    }
+
+    pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+        self.iter_mut()
+            .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
     }
 }
 
