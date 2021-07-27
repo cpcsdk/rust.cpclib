@@ -257,11 +257,11 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
 
     // macro arguments
     let (input, arguments) = opt(preceded(
-        tuple((space0, opt(parse_comma), space0)), // comma after macro name is not mandatory
+        parse_comma, // comma after macro name is not mandatory
         separated_list1(
-            tuple((space0, parse_comma, space0)),
+            parse_comma,
             /*parse_label(false)*/
-            take_till(|c| c == '\n' || c == ':' || c == ','),
+            take_till(|c| c == '\n' || c == ':' || c == ',' || c == ' '),
         ),
     ))(input)?;
 
@@ -1211,7 +1211,7 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseEr
                 )
             },
         ),
-        map(many0(none_of(",\r\n][")), |s| {
+        map(many1(none_of(",\r\n][")), |s| {
             MacroParam::Single(s.iter().collect::<String>())
         }),
     ))(input)
@@ -1247,7 +1247,7 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
             ))),
         ))(input)?;
 
-        Ok((input, Token::MacroCall(name, args.unwrap_or_default())))
+        dbg!(Ok((input, Token::MacroCall(name, args.unwrap_or_default()))))
     }
 }
 
@@ -2822,16 +2822,15 @@ mod test {
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
 
-        let res = std::dbg!(inner_code(Z80Span::new_extra(
+        let res = std::dbg!(parse_z80_str(
             "
                         ld a, chessboard_file
                         jp .common_part_loading_in_main_memory
                         "
-            .to_owned(),
-            CTX.clone()
-        )));
+        ));
+ 
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+     //   assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
         let res = std::dbg!(inner_code(Z80Span::new_extra(
             "

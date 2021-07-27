@@ -90,8 +90,39 @@ pub fn hex_number<'src, T>(
 where
     T: Clone,
 {
+    alt((hex_number1, hex_number2))(input)
+}
+
+pub fn hex_number1<'src, T>(
+    input: LocatedSpan<&'src str, T>,
+) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
+where
+    T: Clone,
+{
     let (input, digits) =
         preceded(alt((tag("0x"), tag("#"), tag("$"), tag("&"))), hex_digit1)(input)?;
+    let number = digits
+        .chars()
+        .map(|c| c.to_digit(16).unwrap())
+        .fold(0, |acc, val| acc * 16 + val);
+
+    Ok((input, number))
+}
+
+pub fn hex_number2<'src, T>(
+    input: LocatedSpan<&'src str, T>,
+) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
+where
+    T: Clone,
+{
+    let (input, digits) =
+        terminated( 
+            hex_digit1, 
+            terminated(
+                tag_no_case("h"),
+                not(alpha1)
+            )
+        )(input)?;
     let number = digits
         .chars()
         .map(|c| c.to_digit(16).unwrap())

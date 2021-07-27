@@ -184,6 +184,8 @@ impl Macro {
 
     /// Develop the macro with the given arguments
     pub fn develop(&self, args: &[MacroParam]) -> String {
+
+        dbg!(&self);
         assert_eq!(args.len(), self.nb_args());
 
         let mut listing = self.code.to_string();
