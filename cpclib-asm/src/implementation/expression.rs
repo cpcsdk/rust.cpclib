@@ -95,10 +95,10 @@ impl ExprEvaluationExt for Expr {
             OpCode(ref token) => {
                 let bytes = token.as_ref().to_bytes()?;
                 match bytes.len() {
-                    0 => Err(Assembler::ExpressionError{msg:format!("{} is assembled with 0 bytes", token)}),
+                    0 => Err(AssemblerError::ExpressionError{msg:format!("{} is assembled with 0 bytes", token)}),
                     1 => Ok(i32::from(bytes[0])),
                     2 => Ok(i32::from(bytes[0]) * 256 + i32::from(bytes[1])),
-                    val => Err(Assembler::ExpressionError{msg:format!("{} is assembled with {} bytes", token, val)}),
+                    val => Err(AssemblerError::ExpressionError{msg:format!("{} is assembled with {} bytes", token, val)}),
                 }
             }
 
@@ -133,7 +133,7 @@ impl ExprEvaluationExt for Expr {
 
             PrefixedLabel(prefix, label) => match sym.prefixed_value(prefix, label) {
                 Some(value) => Ok(value as _),
-                None => Err(Assembler::ExpressionError{msg: format!("Unable to obtain {} of {}", prefix, label)}),
+                None => Err(AssemblerError::ExpressionError{msg: format!("Unable to obtain {} of {}", prefix, label)}),
             },
         }
     }

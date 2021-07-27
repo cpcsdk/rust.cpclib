@@ -158,6 +158,7 @@ impl TokenExt for Token {
             // Here, there is a strong limitation => it will works only if no symbols are used
             Token::Defw(_) | Token::Defb(_) | Token::Defs(_, _) => self
                 .disassemble_data()
+                .map_err(|e| AssemblerError::DisassemblerError{msg:e})
                 .and_then(|lst| lst.estimated_duration())?,
 
             Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {

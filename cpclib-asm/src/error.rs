@@ -9,9 +9,11 @@ use cpclib_basic::BasicError;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_tokens::symbols::SymbolError;
 use cpclib_tokens::tokens;
-use failure::Fail;
 use itertools::Itertools;
 use nom::error::VerboseError;
+use nom::error::ErrorKind;
+use nom::error::VerboseErrorKind;
+use std::ops::Deref;
 
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
@@ -60,6 +62,10 @@ pub enum AssemblerError {
         error: BasicError,
     },
 
+    DisassemblerError {
+        msg: String
+    },
+
     // TODO add more information
     // #[fail(display = "Assembling error: {}", msg)]
     AssemblingError {
@@ -89,7 +95,7 @@ pub enum AssemblerError {
 
     IncoherentCode {
         msg: String
-    }
+    },
 
     //    #[fail(
     //        display = "There is no macro named `{}`. Closest one is: {:?}",
@@ -218,14 +224,8 @@ pub(crate) const SNASET_MISSING_COMMA: &'static str = "SNASET: missing comma";
 impl Display for AssemblerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 
-        use nom::error::ErrorKind;
-        use nom::error::VerboseErrorKind;
-        use std::ops::Deref;
-        use std::ops::DerefMut;
-        use std::rc::Rc;
-
         match self {
-            Self::SyntaxError { error } => {
+            AssemblerError::SyntaxError { error } => {
                 let mut source_files = SimpleFiles::new();
                 let mut fname_to_id = std::collections::BTreeMap::new();
 
@@ -302,24 +302,85 @@ impl Display for AssemblerError {
             }
 
             AssemblerError::IncludedFileError { span, error } => {
- 
-
-
-                let msg =  build_simple_error_message("Error in imported file", span);
+                 let msg =  build_simple_error_message("Error in imported file", span);
                 write!(f, "{}",msg)?;
                 error.fmt(f)
-            
             }
+
+            AssemblerError::DisassemblerError{msg} => write!(f, "Disassembler error: {}", msg),
             AssemblerError::ExpressionError{msg} => write!(f, "Expression error: {}", msg),
             AssemblerError::CounterAlreadyExists{symbol} => write!(f, "A counter named `{}` already exists", symbol),
             AssemblerError::SymbolAlreadyExists{symbol} => write!(f, "A symbol named `{}` already exists", symbol),
             AssemblerError::IncoherentCode{msg} => write!(f, "Incoherent code: {}", msg),
             AssemblerError::NoActiveCounter => write!(f, "No active counter"),
             AssemblerError::OutputExceedsLimits => write!(f, "Output exceeds limits"),
-            AssemblerError::RelocatedError => write!(f, "RUN has already been specified"),
+            AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
             AssemblerError::AlreadyDefinedSymbol{symbol, kind} => write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind),
 
-            _ => unimplemented!("{:#?}", self),
+            AssemblerError::MultipleErrors { errors } => {
+                for e in errors.iter() {
+                    writeln!(f, "{}", e)?;
+                }
+                Ok(())
+            },
+
+            AssemblerError::UnknownSymbol { symbol, closest } => write!(f, "Unknown symbol: {}. Closest one is: {:?}", symbol, closest),
+
+            AssemblerError::EmptyBinaryFile(_) => todo!(),
+            AssemblerError::AmsdosError { error } => {
+                todo!()
+            },
+            AssemblerError::BugInAssembler { msg } => todo!(),
+            AssemblerError::BugInParser { error, context } => todo!(),
+
+            AssemblerError::BasicError { error } => todo!(),
+            AssemblerError::AssemblingError { msg } => todo!(),
+            AssemblerError::InvalidArgument { msg } => todo!(),
+            AssemblerError::AssertionFailed { test, msg, guidance } => todo!(),
+            AssemblerError::UnknownMacro { symbol, closest } => todo!(),
+            AssemblerError::MacroError { name, root } => todo!(),
+            AssemblerError::WrongNumberOfParameters { symbol, nb_paramers, nb_arguments } => todo!(),
+
+            AssemblerError::WrongSymbolType { symbol, isnot } => todo!(),
+            AssemblerError::IOError { msg } => todo!(),
+            AssemblerError::UnknownAssemblingAddress => todo!(),
+            AssemblerError::ExpressionUnresolvable { expression } => todo!(),
+            AssemblerError::ExpressionError { msg } => todo!(),
+            AssemblerError::RelativeAddressUncomputable { address, pass, error } => todo!(),
+
+            // By construction contains only error with no span information
+            AssemblerError::RelocatedError { error, span } => {
+
+                // Relocated error format may vary among errors
+                match error.deref() {
+                    AssemblerError::UnknownSymbol { symbol, closest } => {
+                        let msg =  match closest {
+                            Some(closest) => {
+                                build_simple_error_message_with_notes(
+                                    &format!("Unknown symbol: {}", symbol),
+                                    vec![format!("Closest one is: {}", closest)],
+                                    span
+                                )
+                            },
+                            None => {
+                                  build_simple_error_message(
+                                &format!("Unknown symbol: {}", symbol),
+                                span
+                              )
+                            }
+                        };
+        
+                        write!(f, "{}",msg)
+                    },
+
+                    _ => {
+                        let msg =  build_simple_error_message(&format!("{}", error), span);
+                        write!(f, "{}",msg)
+                    }
+                }
+
+            },
+           
         }
     }
 }
@@ -362,6 +423,46 @@ fn build_simple_error_message(title: &str, span: &Z80Span) -> String {
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
 }
 
+
+fn build_simple_error_message_with_notes(title: &str, notes: Vec<String>, span: &Z80Span) -> String {
+    let filename = Box::new(
+        span.extra
+            .1
+            .current_filename
+            .as_ref()
+            .map(|p| p.as_os_str().to_str().unwrap().to_owned())
+            .unwrap_or_else(|| "no file".to_owned()),
+    );
+    let source = span.extra.0.as_ref();
+
+    let mut source_files = SimpleFiles::new();
+    let file = source_files.add(filename, source);
+
+    let sample_range = std::ops::Range {
+        start: span.location_offset(),
+        end: guess_error_end(
+            source_files.get(file).unwrap().source(),
+            span.location_offset(),
+            JP_WRONG_PARAM, // fake value
+        ),
+    };
+
+    let mut diagnostic = Diagnostic::error()
+        .with_message(title)
+        .with_labels(vec![Label::new(
+            codespan_reporting::diagnostic::LabelStyle::Primary,
+            file,
+            sample_range,
+        )])
+        .with_notes(notes);
+
+    let mut writer = Buffer::ansi();
+    let config = codespan_reporting::term::Config::default();
+    term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
+
+    std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
+}
+
 /// The parser is unable to provide the end of the error.
 /// This function tries to get it
 fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
@@ -378,7 +479,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
                         if current == ':'
                             || current == '\n'
                             || current == ':'
-                            || offset == code.len() - 1
+                            || offset == code.len()
                         {
                             break;
                         }
@@ -393,7 +494,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
                             || current == ':'
                             || current == '\n'
                             || current == ':'
-                            || offset == code.len() - 1
+                            || offset == code.len()
                         {
                             break;
                         }
