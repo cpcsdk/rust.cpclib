@@ -302,9 +302,21 @@ impl Display for AssemblerError {
             }
 
             AssemblerError::IncludedFileError { span, error } => {
-                 let msg =  build_simple_error_message("Error in imported file", span);
-                write!(f, "{}",msg)?;
-                error.fmt(f)
+                match error.as_ref() {
+                    AssemblerError::IOError{msg} => {
+                        let msg =  build_simple_error_message_with_message(
+                            "Error for imported file", 
+                            msg,
+                            span);
+                        write!(f, "{}",msg)
+                    }
+                    _ => {
+                        let msg =  build_simple_error_message("Error in imported file", span);
+                        write!(f, "{}",msg)?;
+                        error.fmt(f)
+                    }
+                }
+
             }
 
             AssemblerError::DisassemblerError{msg} => write!(f, "Disassembler error: {}", msg),
@@ -384,6 +396,46 @@ impl Display for AssemblerError {
         }
     }
 }
+
+
+fn build_simple_error_message_with_message(title: &str,message: &str,  span: &Z80Span) -> String {
+    let filename = Box::new(
+        span.extra
+            .1
+            .current_filename
+            .as_ref()
+            .map(|p| p.as_os_str().to_str().unwrap().to_owned())
+            .unwrap_or_else(|| "no file".to_owned()),
+    );
+    let source = span.extra.0.as_ref();
+
+    let mut source_files = SimpleFiles::new();
+    let file = source_files.add(filename, source);
+
+    let sample_range = std::ops::Range {
+        start: span.location_offset(),
+        end: guess_error_end(
+            source_files.get(file).unwrap().source(),
+            span.location_offset(),
+            JP_WRONG_PARAM, // fake value
+        ),
+    };
+
+    let mut diagnostic = Diagnostic::error()
+        .with_message(title)
+        .with_labels(vec![Label::new(
+            codespan_reporting::diagnostic::LabelStyle::Primary,
+            file,
+            sample_range,
+        ).with_message(message)]);
+
+    let mut writer = Buffer::ansi();
+    let config = codespan_reporting::term::Config::default();
+    term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
+
+    std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
+}
+
 
 fn build_simple_error_message(title: &str, span: &Z80Span) -> String {
     let filename = Box::new(
@@ -479,6 +531,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
                         if current == ':'
                             || current == '\n'
                             || current == ':'
+                            || current == ';'
                             || offset == code.len()
                         {
                             break;
@@ -494,6 +547,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
                             || current == ':'
                             || current == '\n'
                             || current == ':'
+                            || current == ';'
                             || offset == code.len()
                         {
                             break;
