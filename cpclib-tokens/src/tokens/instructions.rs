@@ -905,6 +905,10 @@ impl Token {
                     l.fix_local_macro_labels_with_seed(seed);
                 });
             }
+
+            Self::Print(ref mut vec) => {
+                vec.iter_mut().for_each(|e| e.fix_local_macro_labels_with_seed(seed))
+            }
             _ => unimplemented!("{:?}", self),
         }
     }
