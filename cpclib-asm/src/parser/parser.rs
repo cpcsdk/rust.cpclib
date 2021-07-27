@@ -195,7 +195,7 @@ pub fn parse_z80_line(
                             alt((
                                 context("repeat", parse_repeat),
                                 context("rorg", parse_rorg),
-                                context("condition", parse_conditional),
+                                context("[DBG] condition", parse_conditional),
                             )),
                             |lt| vec![lt],
                         ),
@@ -2244,6 +2244,13 @@ pub fn parens(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
 
 /// Get a factor
 pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+    let (input, neg) = opt(delimited(
+        space0,
+        tag("!"),
+        space0
+    ))(input)?;
+    
+    let (input, factor) = 
     context(
         "[DBG]factor",
         delimited(
@@ -2268,7 +2275,14 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
             ),
             space0,
         ),
-    )(input)
+    )(input)?;
+
+    let factor = match neg {
+        Some(_) => Expr::Neg(factor.into()),
+        None => factor
+    };
+
+    Ok((input, factor))
 }
 
 pub fn negative_number(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
