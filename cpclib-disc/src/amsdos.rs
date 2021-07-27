@@ -37,6 +37,9 @@ pub enum AmsdosError {
 
     #[fail(display = "Various error")]
     Various(String),
+
+    #[fail(display = "File name error: {}", msg)]
+    WrongFileName{msg: String},
 }
 
 impl From<std::io::Error> for AmsdosError {
@@ -229,7 +232,7 @@ impl AmsdosFileName {
     }
 
     // Build a AmsdosFileName ensuring the case is correct
-    pub fn new_correct_case<S1, S2>(user: u8, filename: S1, extension: S2) -> Result<Self, String>
+    pub fn new_correct_case<S1, S2>(user: u8, filename: S1, extension: S2) -> Result<Self, AmsdosError>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -242,25 +245,25 @@ impl AmsdosFileName {
     }
 
     // Build a AmsdosFileName without checking case
-    pub fn new_incorrect_case(user: u8, filename: &str, extension: &str) -> Result<Self, String> {
+    pub fn new_incorrect_case(user: u8, filename: &str, extension: &str) -> Result<Self, AmsdosError> {
         let filename = filename.trim();
         let extension = extension.trim();
 
         // TODO check the user validity
         if filename.len() > 8 {
-            return Err(format!("{} should use at most 8 chars", filename));
+            return Err(AmsdosError::WrongFileName{msg: format!("{} should use at most 8 chars", filename)});
         }
 
         if extension.len() > 3 {
-            return Err(format!("{} should use at most 3 chars", extension));
+            return Err(AmsdosError::WrongFileName{msg: format!("{} should use at most 3 chars", extension)});
         }
 
         if filename.to_ascii_uppercase() != filename.to_ascii_uppercase() {
-            return Err(format!("{} contains non ascii characters", filename));
+            return Err(AmsdosError::WrongFileName{msg: format!("{} contains non ascii characters", filename)});
         }
 
         if extension.to_ascii_uppercase() != extension.to_ascii_uppercase() {
-            return Err(format!("{} contains non ascii characters", extension));
+            return Err(AmsdosError::WrongFileName{msg: format!("{} contains non ascii characters", extension)});
         }
 
         let name = {
@@ -290,7 +293,7 @@ impl AmsdosFileName {
 
 // TODO use tryfrom asap
 impl TryFrom<&str> for AmsdosFileName {
-    type Error = String;
+    type Error = AmsdosError;
     /// Make a filename conversion by considering the following format is used: user:name.extension
     fn try_from(content: &str) -> Result<Self, Self::Error> {
         let (user, rest) = match content.find(':') {
@@ -1384,7 +1387,7 @@ impl AmsdosHeader {
     }
 
     /// Return the filename if possible
-    pub fn amsdos_filename(&self) -> Result<AmsdosFileName, String> {
+    pub fn amsdos_filename(&self) -> Result<AmsdosFileName, AmsdosError> {
         AmsdosFileName::new_incorrect_case(self.user(), &self.filename(), &self.extension())
     }
 
@@ -1576,7 +1579,7 @@ impl AmsdosFile {
         }
     }
 
-    pub fn amsdos_filename(&self) -> Result<AmsdosFileName, String> {
+    pub fn amsdos_filename(&self) -> Result<AmsdosFileName, AmsdosError> {
         self.header.amsdos_filename()
     }
 

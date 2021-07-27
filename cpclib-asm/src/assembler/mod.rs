@@ -156,7 +156,7 @@ impl StableTickerCounters {
     pub fn add_counter<S: AsRef<str>>(&mut self, name: S) -> Result<(), AssemblerError> {
         let name: String = name.as_ref().to_owned();
         if self.has_counter(&name) {
-            return Err(format!("A counter named `{}` already exists", name).into());
+            return Err(AssemblerError::CounterAlreadyExists{symbol: name});
         }
         self.counters.push((name, 0));
         Ok(())
@@ -382,7 +382,7 @@ impl Env {
             self.codeadr += 1;
             Ok(())
         } else {
-            Err("Output exceeded limits".to_owned().into())
+            Err(AssemblerError::OutputExceedsLimits)
         }
     }
 
@@ -444,11 +444,7 @@ impl Env {
                 if self.pass.is_first_pass() {
                     Ok(0)
                 } else {
-                    Err(format!(
-                        "Impossible to evaluate {:?} at pass {:?}. {:?}",
-                        exp, self.pass, e
-                    )
-                    .into())
+                    Err(e)
                 }
             }
         }
@@ -457,14 +453,7 @@ impl Env {
     /// Compute the expression thanks to the symbol table of the environment.
     /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
     fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<i32, AssemblerError> {
-        match exp.resolve(self.symbols()) {
-            Ok(value) => Ok(value),
-            Err(e) => Err(format!(
-                "Impossible to evaluate {:?} at pass {:?}. {:?}",
-                exp, self.pass, e
-            )
-            .into()),
-        }
+        exp.resolve(self.symbols())
     }
 
     /// Compute the relative address. Is authorized to fail at first pass
@@ -503,11 +492,10 @@ impl Env {
             (true, AssemblingPass::FirstPass) => Err(AssemblerError::SymbolAlreadyExists {
                 symbol: label.to_string(),
             }),
-            (false, AssemblingPass::SecondPass) => Err(format!(
-                "Label {} is not present in the symbol table in pass {}",
+            (false, AssemblingPass::SecondPass) => Err(AssemblerError::IncoherentCode{msg: format!(
+                "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
                 label, self.pass
-            )
-            .into()),
+            )}),
             (false, AssemblingPass::FirstPass) | (false, AssemblingPass::Uninitialized) => {
                 self.symbols_mut()
                     .set_symbol_to_value(&label.to_owned(), value);
@@ -558,7 +546,10 @@ impl Env {
 
         // A label cannot be defined multiple times
         if self.pass.is_first_pass() && self.symbols().contains_symbol(label) {
-            Err(format!("Symbol \"{}\" already present in symbols table", label).into())
+            Err(AlreadyDefinedSymbol {
+                symbol: label.to_owned(),
+                kind: self.symbols().kind(label)
+            })
         } else {
             if !label.starts_with('.') {
                 self.symbols_mut().set_current_label(label);
@@ -754,7 +745,13 @@ impl Env {
     pub fn visit_undef(&mut self, label: &str) -> Result<(), AssemblerError> {
         match self.symbols_mut().remove_symbol(label) {
             Some(_) => Ok(()),
-            None => Err(format!("Unknown symbol `{}`", label).into()),
+            None => {
+                Err(AssemblerError::UnknownSymbol {
+                    symbol: label.to_owned(),
+                    closest: self.symbols().closest_symbol(label),
+                })
+                
+            },
         }
     }
 
@@ -923,8 +920,10 @@ pub fn visit_located_token(token: &LocatedToken, env: &mut Env) -> Result<(), As
     let span = token.span();
     match token {
         LocatedToken::Standard { token, span } => token.visited(env).map_err(|err| {
-            eprintln!("TODO - inject location knowledge in error message");
-            err
+            AssemblerError::RelocatedError{
+                error: Box::new(err),
+                span: span.clone()
+            }
         }),
 
         LocatedToken::CrunchedSection(_, _, _) => todo!(),
@@ -1084,7 +1083,7 @@ impl Env {
         let address = self.resolve_expr_may_fail_in_first_pass(address)?;
 
         if self.run_options.is_some() {
-            return Err("RUN has already been specified".to_owned().into());
+            return Err(AssemblerError::RunAlreadySpecified);
         }
         self.sna
             .set_value(cpclib_sna::SnapshotFlag::Z80_PC, address as _);
@@ -1104,8 +1103,15 @@ impl Env {
 }
 
 fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
+ 
+
     if env.symbols().contains_symbol(label) && env.pass.is_first_pass() {
-        Err(format!("Symbol \"{}\" already present in symbols table", label).into())
+
+
+        Err(AssemblerError::AlreadyDefinedSymbol{
+            symbol: label.to_owned(),
+            kind: env.symbols().kind(label).to_owned()
+        })
     } else {
         let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
         env.add_symbol_to_symbol_table(label, value)
@@ -1211,7 +1217,7 @@ pub fn visit_stableticker(
             Ok(())
         }
         StableTickerAction::Stop => match env.stable_counters.release_last_counter() {
-            None => Err("No active counter.".to_string().into()),
+            None => Err(AssemblerError::NoActiveCounter),
             Some((label, count)) => env.add_symbol_to_symbol_table(&label, count as _),
         },
     }
@@ -1469,7 +1475,7 @@ fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, AssemblerError> {
         Mnemonic::Rld => &[0xed, 0x6f],
         Mnemonic::Rrd => &[0xed, 0x67],
         _ => {
-            return Err(format!("{} not treated", mnemonic).into());
+            return Err(AssemblerError::BugInAssembler{msg: format!("{} not treated", mnemonic)});
         }
     };
 
@@ -1523,7 +1529,7 @@ fn assemble_inc_dec(mne: Mnemonic, arg1: &DataAccess, env: &Env) -> Result<Bytes
             bytes.push(val);
         }
         _ => {
-            return Err(format!("Inc/dec not implemented for {:?}", arg1).into());
+            return Err(AssemblerError::BugInAssembler{msg: format!("{}: not implemented for {:?}", mne.to_string().to_owned() arg1)});
         }
     }
 
@@ -1537,15 +1543,15 @@ pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(
     sym: T,
 ) -> Result<u8, AssemblerError> {
     match sym.as_ref().current_address() {
-        Err(msg) => Err(format!("Unable to compute the relative address {:?}", msg).into()),
+        Err(msg) => Err(AssemblerError::UnknownAssemblingAddress),
         Ok(root) => {
             let delta = (address - i32::from(root)) - opcode_delta;
             if delta > 128 || delta < -127 {
-                Err(format!(
+                Err(AssemblerError::InvalidArgument{msg: format!(
                     "Address 0x{:x} relative to 0x{:x} is too far {}",
                     address, root, delta
                 )
-                .into())
+                })
             } else {
                 let res = (delta & 0xff) as u8;
                 Ok(res)
@@ -1562,7 +1568,7 @@ fn assemble_ret(arg1: &Option<DataAccess>) -> Result<Bytes, AssemblerError> {
             let flag = flag_test_to_code(*test);
             bytes.push(0b1100_0000 | (flag << 3));
         } else {
-            return Err(format!("Wrong argument for ret {:?}", arg1).into());
+            return Err(AssemblerError::InvalidArgument{msg: format!("RET: wrong argument for ret")});
         }
     } else {
         bytes.push(0xc9);
@@ -1652,7 +1658,7 @@ fn assemble_call_jr_or_jp(
     let flag_code = if arg1.is_some() {
         match arg1.as_ref() {
             Some(DataAccess::FlagTest(ref test)) => Some(flag_test_to_code(*test)),
-            _ => return Err(format!("Wrong flag argument {:?}", arg1).into()),
+            _ => return Err(AssemblerError::InvalidArgument{msg: format!("{}: wrong flag argument", mne.to_string().to_ascii_uppercase())}),
         }
     } else {
         None
@@ -1699,7 +1705,7 @@ fn assemble_call_jr_or_jp(
         add_byte(&mut bytes, indexed_register16_to_code(*reg));
         add_byte(&mut bytes, 0xe9);
     } else {
-        return Err(format!("Parameter {:?} not treated", arg2).into());
+        return Err(AssemblerError::BugInAssembler{msg: format!("{}: parameter {:?} not treated", mne, arg2)});
     }
 
     Ok(bytes)
@@ -1719,7 +1725,7 @@ fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> 
 
         Ok(bytes)
     } else {
-        Err("DJNZ must be followed by an expression".to_owned().into())
+        unreachable!()
     }
 }
 
@@ -2026,7 +2032,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
             _ => {
                 return Err(
-                    format!("LD not properly implemented for '{:?}, {:?}'", arg1, arg2).into(),
+                    AssemblerError::BugInAssembler{msg: format!("LD: not properly implemented for '{:?}, {:?}'", arg1, arg2)}
                 );
             }
         }
@@ -2243,7 +2249,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
     }
 
     if bytes.is_empty() {
-        Err(format!("LD not properly implemented for '{:?}, {:?}'", arg1, arg2).into())
+        Err(AssemblerError::BugInAssembler{msg: format!("LD: not properly implemented for '{:?}, {:?}'", arg1, arg2)})
     } else {
         Ok(bytes)
     }
@@ -2296,7 +2302,7 @@ fn assemble_in(
     }
 
     if bytes.is_empty() {
-        Err(format!("IN not properly implemented for '{:?}, {:?}'", arg1, arg2).into())
+        Err(Assembler::BugInAssembler{msg: format!("IN: not properly implemented for '{:?}, {:?}'", arg1, arg2)})
     } else {
         Ok(bytes)
     }
@@ -2339,7 +2345,7 @@ fn assemble_out(
     }
 
     if bytes.is_empty() {
-        Err(format!("OUT not properly implemented for '{:?}, {:?}'", arg1, arg2).into())
+        Err(AssemblerError::BugInAssembler{msg: format!("OUT: not properly implemented for '{:?}, {:?}'", arg1, arg2)})
     } else {
         Ok(bytes)
     }
@@ -2358,7 +2364,7 @@ fn assemble_pop(arg1: &DataAccess) -> Result<Bytes, AssemblerError> {
             bytes.push(0xe1);
         }
         _ => {
-            return Err(format!("Pop not implemented for {:?}", arg1).into());
+            return Err( AssemblerError::InvalidArgument{msg:format!("POP: not implemented for {:?}", arg1)});
         }
     }
 
@@ -2378,7 +2384,7 @@ fn assemble_push(arg1: &DataAccess) -> Result<Bytes, AssemblerError> {
             bytes.push(0xe5);
         }
         _ => {
-            return Err(format!("Pop not implemented for {:?}", arg1).into());
+            return Err( AssemblerError::InvalidArgument{msg:format!("PUSH: not implemented for {:?}", arg1)});
         }
     }
 
@@ -2553,7 +2559,9 @@ fn assemble_add_or_adc(
                 DataAccess::IndexRegister16(ref reg2) => {
                     if reg1 != reg2 {
                         return Err(
-                            String::from("Unable to add different indexed registers").into()
+                            AssemblerError::InvalidArgument{
+                                msg: "Unable to add different indexed registers".to_owned()
+                            }
                         );
                     }
 
@@ -2577,7 +2585,7 @@ fn assemble_add_or_adc(
     }
 
     if bytes.is_empty() {
-        Err(format!("{:?} not implemented for {:?} {:?}", mnemonic, arg1, arg2).into())
+        Err(AssemblerError::BugInAssembler{ msg: format!("{:?} not implemented for {:?} {:?}", mnemonic, arg1, arg2)})
     } else {
         Ok(bytes)
     }
@@ -2597,11 +2605,13 @@ fn assemble_bit_res_or_set(
         DataAccess::Expression(ref e) => {
             let bit = (env.resolve_expr_may_fail_in_first_pass(e)? & 0xff) as u8;
             if bit > 7 {
-                return Err(format!("[{}] {}, {} is not possible", mnemonic, bit, arg2).into());
+                return Err(AssemblerError::InvalidArgument {
+                    msg: format!("{}: {} is an invalid value", mnemonic.to_string(), bit)
+                });
             }
             bit
         }
-        _ => return Err("unable to get the number of bits".to_string().into()),
+        _ => unreachable!(),
     };
 
     // Get the code to differentiate the instructions
@@ -2610,7 +2620,7 @@ fn assemble_bit_res_or_set(
         Mnemonic::Res => 0b1000_0000,
         Mnemonic::Set => 0b1100_0000,
         Mnemonic::Bit => 0b0100_0000,
-        _ => return Err("Impossible".to_owned().into()),
+        _ => unreachable!(),
     };
 
     // Apply it to the right thing

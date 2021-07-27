@@ -11,7 +11,7 @@ use crate::AssemblingOptions;
 
 /// Needed methods for the Token defined in cpclib_tokens
 pub trait TokenExt: ListingElement {
-    fn estimated_duration(&self) -> Result<usize, String>;
+    fn estimated_duration(&self) -> Result<usize, AssemblerError>;
     fn number_of_bytes(&self) -> Result<usize, String>;
     fn number_of_bytes_with_context(
         &self,
@@ -146,7 +146,7 @@ impl TokenExt for Token {
     /// Returns an estimation of the duration.
     /// This estimation may be wrong for instruction having several states.
     #[allow(clippy::match_same_arms)]
-    fn estimated_duration(&self) -> Result<usize, String> {
+    fn estimated_duration(&self) -> Result<usize, AssemblerError> {
         let duration = match self {
             Token::Assert(_, _)
             | Token::Breakpoint(_)
@@ -346,7 +346,7 @@ impl TokenExt for Token {
                     ),
                 }
             }
-            _ => return Err(format!("Duration computation for {:?} not yet coded", self)),
+            _ => return Err(AssemblerError::BugInAssembler{msg: format!("Duration computation for {:?} not yet coded", self)}),
         };
         Ok(duration)
     }
