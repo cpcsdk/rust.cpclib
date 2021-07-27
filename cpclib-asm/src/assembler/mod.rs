@@ -6,6 +6,8 @@ use cpclib_basic::*;
 use cpclib_sna::*;
 
 use lazy_static::__Deref;
+use nom::bitvec::bitvec;
+use nom::bitvec::prelude::BitVec;
 use smallvec::SmallVec;
 
 use std::any::Any;
@@ -225,6 +227,8 @@ pub struct Env {
     /// Start adr to use to write binary files. No use when working with snapshots.
     /// When working with binary file only 64K can be generated, not more
     startadr: Option<usize>,
+    /// maximum address reached when working with 64k data
+    maxadr: usize,
 
     /// Current address to write to
     outputadr: usize,
@@ -246,8 +250,9 @@ pub struct Env {
     sna: cpclib_sna::Snapshot,
     sna_version: cpclib_sna::SnapshotVersion,
 
-    iorg: usize,
-    org_zones: Vec<OrgZone>,
+    /// Track where bytes has been written to forbid overriding them when generating data
+    written_bytes: BitVec,
+
     symbols: SymbolsTableCaseDependent,
 
     /// Set only if the run instruction has been used
@@ -271,6 +276,7 @@ impl Default for Env {
             stable_counters: StableTickerCounters::default(),
 
             startadr: None,
+            maxadr: 0,
             outputadr: 0,
             codeadr: 0,
             maxptr: 0xffff,
@@ -280,11 +286,11 @@ impl Default for Env {
             sna: Default::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
 
-            iorg: 0,
-            org_zones: Vec::new(),
+            
 
             symbols: SymbolsTableCaseDependent::default(),
             run_options: None,
+            written_bytes: BitVec::repeat(false, 0x4000*2*4),
         }
     }
 }
@@ -322,10 +328,10 @@ impl Env {
             self.macro_seed = 0;
             self.sna = Default::default();
             self.sna_version = cpclib_sna::SnapshotVersion::V3;
-            self.iorg = 0;
-            self.org_zones = Vec::new();
+
             self.stable_counters = StableTickerCounters::default();
-            self.run_options = None
+            self.run_options = None;
+            self.written_bytes.set_all(false);
         }
     }
 
@@ -355,12 +361,14 @@ impl Env {
         mem
     }
 
-    /// Returns the stream of bytes produces
-    pub fn produced_bytes(&self) -> Vec<u8> {
+    /// Returns the stream of bytes produced for a 64k compilation
+    /// Will fail in other cases
+     pub fn produced_bytes(&self) -> Vec<u8> {
         // assume we start at 0 if never provided
         let startadr = self.startadr.or(Some(0)).unwrap();
-        self.memory(startadr, self.outputadr - startadr)
+        self.memory(startadr, self.maxadr.max(startadr) - startadr)
     }
+
 
     /// Returns the address of the 1st written byte
     pub fn loading_address(&self) -> Option<usize> {
@@ -374,18 +382,39 @@ impl Env {
     }
 
     /// Output one byte
-    /// (RASM ___internal_output)
     /// BUG does not take into account the active bank
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
-        if self.outputadr <= self.maxptr {
-            self.sna
-                .set_byte(self.outputadr as u32 + (0x4000 * self.activepage) as u32, v);
-            self.outputadr += 1; // XXX will fail at 0xffff
-            self.codeadr += 1;
-            Ok(())
-        } else {
-            Err(AssemblerError::OutputExceedsLimits)
+        static mut FAIL_NEXT_WRITE_IF_ZERO: bool = false;
+
+        if self.outputadr > self.maxptr || (unsafe{FAIL_NEXT_WRITE_IF_ZERO} && self.outputadr==0) {
+            return Err(AssemblerError::OutputExceedsLimits);
         }
+
+        // update the maximm 64k position
+        self.maxadr = self.maxadr.max(self.outputadr);
+
+        let abstract_address = self.outputadr as u32 + (0x10000 * self.activepage) as u32;
+        let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
+
+        if already_used {
+              return Err(AssemblerError::OverrideMemory(abstract_address));
+        }
+
+        self.sna.set_byte(abstract_address, v);
+        self.written_bytes.set(abstract_address as _, true);
+
+
+        self.outputadr = (self.outputadr + 1) & 0xffff;
+        self.codeadr =  (self.codeadr + 1) & 0xffff;
+
+        dbg!(&self.outputadr);
+
+        // we have written all memory and are trying to restart
+        if self.outputadr == 0 {
+            unsafe{FAIL_NEXT_WRITE_IF_ZERO = true;}
+        }
+
+        Ok(())
     }
 
     /// TODO test if we will oversize the limit
@@ -714,9 +743,7 @@ impl Env {
                     (caller.token().unwrap(), Some(caller.span()))
                 },
                 (None, Some(caller)) => {
-        panic!();
-
-                    (caller, None)
+                     (caller, None)
                 },
                 _ => unreachable!()
             };
@@ -1471,15 +1498,15 @@ pub fn assemble_opcode(
 }
 
 fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(), AssemblerError> {
+
+    // org $ set org to the output address (cf. rasm)
     let adr = if address2.is_none() && address == &"$".into() {
-        // TODO: add tests
         env.outputadr as i32
     } else {
         env.eval(address)?
     };
 
     let adr2 = if address2.is_some() {
-        // TODO: add tests
         env.resolve_expr_must_never_fail(address2.unwrap())?
     } else {
         adr.clone()
@@ -1490,9 +1517,10 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     env.codeadr = adr as _;
 
     // Specify start address at first use
-    if env.startadr.is_none() {
-        env.startadr = Some(env.outputadr);
-    }
+    env.startadr =  match env.startadr {
+        Some(val) => val.min(env.outputadr),
+        None => env.outputadr
+    }.into();
 
     Ok(())
 }

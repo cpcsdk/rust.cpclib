@@ -151,6 +151,7 @@ pub enum AssemblerError {
     NoActiveCounter,
     OutputExceedsLimits,
 
+    OverrideMemory(u32),
 
     //  #[fail(display = "Unable to resolve expression {}.", expression)]
     ExpressionUnresolvable {
@@ -319,6 +320,9 @@ impl Display for AssemblerError {
 
             }
 
+            AssemblerError::OverrideMemory(address) => {
+                write!(f, "Override memory in 0x{:x}", address)
+            }
             AssemblerError::DisassemblerError{msg} => write!(f, "Disassembler error: {}", msg),
             AssemblerError::ExpressionError{msg} => write!(f, "Expression error: {}", msg),
             AssemblerError::CounterAlreadyExists{symbol} => write!(f, "A counter named `{}` already exists", symbol),
