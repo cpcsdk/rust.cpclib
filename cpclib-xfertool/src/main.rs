@@ -188,9 +188,9 @@ fn main() -> anyhow::Result<()> {
 
         if y_opt.is_present("WATCH") {
             let (tx, rx) = std::sync::mpsc::channel();
-            let mut watcher: RecommendedWatcher =
-                Watcher::new_immediate(move |res| tx.send(res).unwrap())?;
-            watcher.watch(&fname, RecursiveMode::NonRecursive)?;
+            let mut watcher = RecommendedWatcher::new(move |res| tx.send(res).unwrap())?;
+
+            watcher.watch(&std::path::Path::new(&fname), RecursiveMode::NonRecursive)?;
 
             for res in rx {
                 match res {
