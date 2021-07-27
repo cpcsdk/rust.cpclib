@@ -52,7 +52,7 @@ impl Display for BasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Io { io } => write!(f, "IO Error: {}", io),
-            Self::AssemblerError { error } => write!(f, "Assembling error: {}", error),
+            Self::AssemblerError { error } => write!(f, "Assembling error:\n{}", error),
             BasmError::InvalidAmsdosFilename { filename } => {
                 write!(f, "Invalid Amsdos filename: {}", filename)
             }

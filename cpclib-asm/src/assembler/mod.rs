@@ -546,9 +546,9 @@ impl Env {
 
         // A label cannot be defined multiple times
         if self.pass.is_first_pass() && self.symbols().contains_symbol(label) {
-            Err(AlreadyDefinedSymbol {
+            Err(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label.to_owned(),
-                kind: self.symbols().kind(label)
+                kind: self.symbols().kind(label).to_owned()
             })
         } else {
             if !label.starts_with('.') {
@@ -1529,7 +1529,7 @@ fn assemble_inc_dec(mne: Mnemonic, arg1: &DataAccess, env: &Env) -> Result<Bytes
             bytes.push(val);
         }
         _ => {
-            return Err(AssemblerError::BugInAssembler{msg: format!("{}: not implemented for {:?}", mne.to_string().to_owned() arg1)});
+            return Err(AssemblerError::BugInAssembler{msg: format!("{}: not implemented for {:?}", mne.to_string().to_owned(), arg1)});
         }
     }
 
@@ -2302,7 +2302,7 @@ fn assemble_in(
     }
 
     if bytes.is_empty() {
-        Err(Assembler::BugInAssembler{msg: format!("IN: not properly implemented for '{:?}, {:?}'", arg1, arg2)})
+        Err(AssemblerError::BugInAssembler{msg: format!("IN: not properly implemented for '{:?}, {:?}'", arg1, arg2)})
     } else {
         Ok(bytes)
     }
