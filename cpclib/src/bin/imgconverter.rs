@@ -1021,9 +1021,9 @@ fn main() -> anyhow::Result<()> {
         if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
             let (tx, rx) = std::sync::mpsc::channel();
             let mut watcher: RecommendedWatcher =
-                Watcher::new_immediate(move |res| tx.send(res).unwrap())?;
+            RecommendedWatcher::new(move |res| tx.send(res).unwrap())?;
             watcher.watch(
-                matches.value_of("SOURCE").unwrap(),
+                &std::path::Path::new(matches.value_of("SOURCE").unwrap()),
                 RecursiveMode::NonRecursive,
             )?;
 
