@@ -349,7 +349,9 @@ impl Display for AssemblerError {
             AssemblerError::AssemblingError { msg } => todo!(),
             AssemblerError::InvalidArgument { msg } => write!(f, "Invalid argument: {}", msg),
             AssemblerError::AssertionFailed { test, msg, guidance } => todo!(),
-            AssemblerError::UnknownMacro { symbol, closest } => todo!(),
+            AssemblerError::UnknownMacro { symbol, closest } => {
+                write!(f, "MACRO {} does not exist. Try {}" , symbol, closest.as_ref().unwrap_or(&"".to_owned()))
+            },
 
             AssemblerError::WrongNumberOfParameters { symbol, nb_paramers, nb_arguments } => todo!(),
             AssemblerError::MacroError { name, root }  => {
@@ -386,6 +388,27 @@ impl Display for AssemblerError {
         
                         write!(f, "{}",msg)
                     },
+
+                    AssemblerError::UnknownMacro { symbol, closest } => {
+                        let msg =  match closest {
+                            Some(closest) => {
+                                build_simple_error_message_with_notes(
+                                    &format!("Unknown macro: {}", symbol),
+                                    vec![format!("Closest one is: {}", closest)],
+                                    span
+                                )
+                            },
+                            None => {
+                                build_simple_error_message(
+                                &format!("Unknown macro: {}", symbol),
+                                span
+                            )
+                            }
+                        };
+        
+                        write!(f, "{}",msg)
+                    },
+
 
                     AssemblerError::MacroError { name, root } => {
                         let msg =  build_simple_error_message(&format!("Error in macro call: {}", name), span);
