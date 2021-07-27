@@ -347,12 +347,14 @@ impl Display for AssemblerError {
 
             AssemblerError::BasicError { error } => todo!(),
             AssemblerError::AssemblingError { msg } => todo!(),
-            AssemblerError::InvalidArgument { msg } => todo!(),
+            AssemblerError::InvalidArgument { msg } => write!(f, "Invalid argument: {}", msg),
             AssemblerError::AssertionFailed { test, msg, guidance } => todo!(),
             AssemblerError::UnknownMacro { symbol, closest } => todo!(),
-            AssemblerError::MacroError { name, root } => todo!(),
-            AssemblerError::WrongNumberOfParameters { symbol, nb_paramers, nb_arguments } => todo!(),
 
+            AssemblerError::WrongNumberOfParameters { symbol, nb_paramers, nb_arguments } => todo!(),
+            AssemblerError::MacroError { name, root }  => {
+                write!(f, "Error in macro call: {}\n{}", name, root)
+            },
             AssemblerError::WrongSymbolType { symbol, isnot } => todo!(),
             AssemblerError::IOError { msg } => todo!(),
             AssemblerError::UnknownAssemblingAddress => todo!(),
@@ -385,6 +387,11 @@ impl Display for AssemblerError {
                         write!(f, "{}",msg)
                     },
 
+                    AssemblerError::MacroError { name, root } => {
+                        let msg =  build_simple_error_message(&format!("Error in macro call: {}", name), span);
+                        write!(f, "{}\n{}",msg,root)
+                    },
+
                     _ => {
                         let msg =  build_simple_error_message(&format!("{}", error), span);
                         write!(f, "{}",msg)
@@ -399,14 +406,7 @@ impl Display for AssemblerError {
 
 
 fn build_simple_error_message_with_message(title: &str,message: &str,  span: &Z80Span) -> String {
-    let filename = Box::new(
-        span.extra
-            .1
-            .current_filename
-            .as_ref()
-            .map(|p| p.as_os_str().to_str().unwrap().to_owned())
-            .unwrap_or_else(|| "no file".to_owned()),
-    );
+    let filename = build_filename(span);
     let source = span.extra.0.as_ref();
 
     let mut source_files = SimpleFiles::new();
@@ -438,14 +438,7 @@ fn build_simple_error_message_with_message(title: &str,message: &str,  span: &Z8
 
 
 fn build_simple_error_message(title: &str, span: &Z80Span) -> String {
-    let filename = Box::new(
-        span.extra
-            .1
-            .current_filename
-            .as_ref()
-            .map(|p| p.as_os_str().to_str().unwrap().to_owned())
-            .unwrap_or_else(|| "no file".to_owned()),
-    );
+    let filename = build_filename(span);
     let source = span.extra.0.as_ref();
 
     let mut source_files = SimpleFiles::new();
@@ -476,15 +469,25 @@ fn build_simple_error_message(title: &str, span: &Z80Span) -> String {
 }
 
 
+fn build_filename(span: &Z80Span) -> Box<String> {
+    let fname = &span.extra.1.current_filename;
+    let context = &span.extra.1.context_name;
+
+    let name = fname.as_ref()
+        .map(|p|{
+            p.as_os_str().to_str().unwrap()
+        }).unwrap_or_else(||{
+            context.as_ref().map(|s| s.as_ref())
+            .unwrap_or_else(||{
+                "no file specified"
+            })
+    });
+
+    Box::new(name.to_owned())
+}
+
 fn build_simple_error_message_with_notes(title: &str, notes: Vec<String>, span: &Z80Span) -> String {
-    let filename = Box::new(
-        span.extra
-            .1
-            .current_filename
-            .as_ref()
-            .map(|p| p.as_os_str().to_str().unwrap().to_owned())
-            .unwrap_or_else(|| "no file".to_owned()),
-    );
+    let filename = build_filename(span);
     let source = span.extra.0.as_ref();
 
     let mut source_files = SimpleFiles::new();

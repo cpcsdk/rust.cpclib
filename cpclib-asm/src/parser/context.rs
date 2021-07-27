@@ -10,6 +10,7 @@ use super::Z80Span;
 pub struct ParserContext {
     /// Filename that is currently parsed
     pub current_filename: Option<PathBuf>,
+    /// Current context (mainly when playing with macros)
     pub context_name: Option<String>,
     /// Search path to find files
     pub search_path: Vec<PathBuf>,
@@ -38,6 +39,10 @@ impl ParserContext {
     pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
         let file = file.into();
         self.current_filename = Some(file.canonicalize().unwrap_or(file))
+    }
+
+    pub fn remove_filename(&mut self) {
+        self.current_filename = None;
     }
 
     pub fn set_context_name(&mut self, name: &str) {

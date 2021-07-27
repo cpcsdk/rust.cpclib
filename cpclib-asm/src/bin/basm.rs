@@ -50,6 +50,9 @@ enum BasmError {
 
 impl Display for BasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+
+        dbg!(self);
+        
         match self {
             Self::Io { io } => write!(f, "IO Error: {}", io),
             Self::AssemblerError { error } => write!(f, "Assembling error:\n{}", error),

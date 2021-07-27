@@ -792,6 +792,7 @@ impl Token {
     pub fn macro_name(&self) -> Option<&str> {
         match self {
             Self::Macro(name, _args, _content) => Some(name),
+            Self::MacroCall(name, _params) => Some(name),
             _ => None,
         }
     }

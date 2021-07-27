@@ -157,8 +157,11 @@ impl Struct {
 }
 #[derive(Debug, Clone)]
 pub struct Macro {
+    // The name of the macro
     name: String,
+    // The name of its arguments
     args: Vec<String>,
+    // The content
     code: String,
 }
 
