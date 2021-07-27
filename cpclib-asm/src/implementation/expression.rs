@@ -49,16 +49,16 @@ impl ExprEvaluationExt for Expr {
                     Oper::StrictlyGreater => Ok((a > b) as i32),
                 },
                 (Err(a), Ok(_b)) => {
-                    Err(format!("Unable to make the operation {:?}: {:?}", oper, a).into())
+                    Err(AssemblerError::ExpressionError{msg: format!("Unable to make the operation {:?}: error in left operand {:?}", oper, a)})
                 }
                 (Ok(_a), Err(b)) => {
-                    Err(format!("Unable to make the operation {:?}: {:?}", oper, b).into())
+                    Err(AssemblerError::ExpressionError{msg: format!("Unable to make the operation {:?}: error in right operand {:?}", oper, b)})
                 }
-                (Err(a), Err(b)) => Err(format!(
-                    "Unable to make the operation {:?}: {:?} & {:?}",
+                (Err(a), Err(b)) => Err(AssemblerError::ExpressionError{msg: format!(
+                    "Unable to make the operation {:?}: error in both operands {:?} & {:?}",
                     oper, a, b
                 )
-                .into()),
+                }),
             }
         };
 
@@ -95,10 +95,10 @@ impl ExprEvaluationExt for Expr {
             OpCode(ref token) => {
                 let bytes = token.as_ref().to_bytes()?;
                 match bytes.len() {
-                    0 => Err(format!("{} is assembled with 0 bytes", token).into()),
+                    0 => Err(Assembler::ExpressionError{msg:format!("{} is assembled with 0 bytes", token)}),
                     1 => Ok(i32::from(bytes[0])),
                     2 => Ok(i32::from(bytes[0]) * 256 + i32::from(bytes[1])),
-                    val => Err(format!("{} is assembled with {} bytes", token, val).into()),
+                    val => Err(Assembler::ExpressionError{msg:format!("{} is assembled with {} bytes", token, val)}),
                 }
             }
 
@@ -133,7 +133,7 @@ impl ExprEvaluationExt for Expr {
 
             PrefixedLabel(prefix, label) => match sym.prefixed_value(prefix, label) {
                 Some(value) => Ok(value as _),
-                None => Err(format!("Unable to obtain {} of {}", prefix, label).into()),
+                None => Err(Assembler::ExpressionError{msg: format!("Unable to obtain {} of {}", prefix, label)}),
             },
         }
     }

@@ -18,11 +18,13 @@ pub enum BasicProgramLineIdx {
     Number(u16),
 }
 
-#[derive(Debug, Fail, PartialEq, Copy, Clone)]
+#[derive(Debug, Fail, PartialEq, Clone)]
 #[allow(missing_docs)]
 pub enum BasicError {
     #[fail(display = "Line does not exist: {:?}", idx)]
     UnknownLine { idx: BasicProgramLineIdx },
+    #[fail(display = "{}", msg)]
+    ParseError {msg: String}
 }
 
 /// Basic line of code representation
@@ -148,19 +150,20 @@ impl BasicProgram {
     }
 
     /// Create the program from a code to parse
-    pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, String> {
+    pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, BasicError> {
         match parse_basic_program(code.as_ref().into()) {
             Ok((res, prog)) => {
                 if res.trim().is_empty() {
                     Ok(prog)
                 } else {
-                    Err(format!(
+                    Err(BasicError::ParseError{msg:  
+                        format!(
                         "Basic content has not been totally parsed: `{}`",
                         res
-                    ))
+                    )})
                 }
             }
-            Err(e) => Err(format!("Error while parsing the Basic content: {:?}", e)),
+            Err(e) => Err(BasicError::ParseError{msg:format!("Error while parsing the Basic content: {:?}", e)}),
         }
     }
 

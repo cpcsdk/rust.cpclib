@@ -57,7 +57,7 @@ pub enum AssemblerError {
 
     //#[fail(display = "Basic error: {}", error)]
     BasicError {
-        error: String,
+        error: BasicError,
     },
 
     // TODO add more information
@@ -68,12 +68,6 @@ pub enum AssemblerError {
 
     // #[fail(display = "Invalid argument: {}", msg)]
     InvalidArgument {
-        msg: String,
-    },
-
-    // TODO remove this case and dispatch it everywhere else
-    // #[fail(display = "To be sorted error: {}", msg)]
-    GenericError {
         msg: String,
     },
 
@@ -88,6 +82,14 @@ pub enum AssemblerError {
     SymbolAlreadyExists {
         symbol: String,
     },
+
+    CounterAlreadyExists {
+        symbol: String,
+    },
+
+    IncoherentCode {
+        msg: String
+    }
 
     //    #[fail(
     //        display = "There is no macro named `{}`. Closest one is: {:?}",
@@ -126,6 +128,12 @@ pub enum AssemblerError {
         isnot: String,
     },
 
+    // TODO add symbol type
+    AlreadyDefinedSymbol {
+        symbol: String,
+        kind: String
+    },
+
     //   #[fail(display = "IO error: {}", msg)]
     IOError {
         msg: String,
@@ -133,10 +141,18 @@ pub enum AssemblerError {
 
     //  #[fail(display = "Current assembling address is unknown.")]
     UnknownAssemblingAddress,
+    RunAlreadySpecified,
+    NoActiveCounter,
+    OutputExceedsLimits,
+
 
     //  #[fail(display = "Unable to resolve expression {}.", expression)]
     ExpressionUnresolvable {
         expression: tokens::Expr,
+    },
+
+    ExpressionError {
+        msg: String
     },
 
     RelativeAddressUncomputable {
@@ -144,6 +160,13 @@ pub enum AssemblerError {
         pass: AssemblingPass,
         error: Box<AssemblerError>,
     },
+
+    /// Several errors has been generated without span information.
+    /// RelocatedError allows them to be approximately located
+    RelocatedError {
+       error: Box<AssemblerError>,
+       span: Z80Span
+    }
 }
 
 impl From<VerboseError<Z80Span>> for AssemblerError {
@@ -160,34 +183,19 @@ impl From<std::io::Error> for AssemblerError {
     }
 }
 
-impl From<String> for AssemblerError {
-    fn from(msg: String) -> Self {
-        AssemblerError::GenericError { msg }
-    }
-}
-
-impl From<&String> for AssemblerError {
-    fn from(msg: &String) -> Self {
-        AssemblerError::GenericError {
-            msg: msg.to_string(),
-        }
-    }
-}
 
 impl From<BasicError> for AssemblerError {
     fn from(msg: BasicError) -> Self {
         AssemblerError::BasicError {
-            error: msg.to_string(),
+            error: msg,
         }
     }
 }
 
-/// TODO generate a real error
+
 impl From<SymbolError> for AssemblerError {
     fn from(_err: SymbolError) -> Self {
-        AssemblerError::GenericError {
-            msg: "Unknown assembling address".to_string(),
-        }
+        AssemblerError::UnknownAssemblingAddress
     }
 }
 
@@ -297,12 +305,21 @@ impl Display for AssemblerError {
  
 
 
-                
-                write!(f, "{}", build_simple_error_message("Error in imported file", span))?;
+                let msg =  build_simple_error_message("Error in imported file", span);
+                write!(f, "{}",msg)?;
                 error.fmt(f)
+            
             }
+            AssemblerError::ExpressionError{msg} => write!(f, "Expression error: {}", msg),
+            AssemblerError::CounterAlreadyExists{symbol} => write!(f, "A counter named `{}` already exists", symbol),
+            AssemblerError::SymbolAlreadyExists{symbol} => write!(f, "A symbol named `{}` already exists", symbol),
+            AssemblerError::IncoherentCode{msg} => write!(f, "Incoherent code: {}", msg),
+            AssemblerError::NoActiveCounter => write!(f, "No active counter"),
+            AssemblerError::OutputExceedsLimits => write!(f, "Output exceeds limits"),
+            AssemblerError::RelocatedError => write!(f, "RUN has already been specified"),
+            AssemblerError::AlreadyDefinedSymbol{symbol, kind} => write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind),
 
-            _ => unimplemented!("{:?}", self),
+            _ => unimplemented!("{:#?}", self),
         }
     }
 }

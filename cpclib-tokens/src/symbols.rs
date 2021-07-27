@@ -470,6 +470,16 @@ impl SymbolsTable {
             .min()
             .map(|(_distance, symbol2)| symbol2)
     }
+
+
+    pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> &'static str {
+        match self.value(symbol) {
+            Some(Value::Integer(_)) => "integer",
+            Some(Value::Macro(_)) => "macro",
+            Some(Value::Struct(_)) => "struct",
+            _ => panic!()
+        }
+    }
 }
 
 /// Wrapper around the Values table in order to easily manage the fact that the assembler is case dependent or independant
@@ -585,6 +595,9 @@ impl SymbolsTableCaseDependent {
         self.table.contains_symbol(self.normalize_symbol(symbol))
     }
 
+    pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> &'static str {
+        self.table.kind(symbol)
+    }
     delegate! {
         to self.table {
             pub fn current_address(&self) -> Result<u16, SymbolError>;

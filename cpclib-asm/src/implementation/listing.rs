@@ -30,7 +30,7 @@ pub trait ListingExt {
 
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
-    fn estimated_duration(&self) -> Result<usize, String>;
+    fn estimated_duration(&self) -> Result<usize, AssemblerError>;
     /// Save the listing on disc in a string version
     fn save<P: AsRef<std::path::Path>>(&self, path: P) -> ::std::io::Result<()> {
         use std::fs::File;
@@ -75,7 +75,7 @@ impl ListingExt for Listing {
 
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
-    fn estimated_duration(&self) -> Result<usize, String> {
+    fn estimated_duration(&self) -> Result<usize, AssemblerError> {
         if let Some(duration) = self.duration() {
             Ok(duration)
         } else {
