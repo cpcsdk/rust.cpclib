@@ -152,6 +152,14 @@ pub enum FormattedExpr {
     Formatted(ExprFormat, Expr),
 }
 
+impl FormattedExpr {
+    pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+        match self {
+            FormattedExpr::Raw(e) | FormattedExpr::Formatted(_, e) => e.fix_local_macro_labels_with_seed(seed),
+        }
+    }
+}
+
 impl Display for FormattedExpr {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
