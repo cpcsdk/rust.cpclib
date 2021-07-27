@@ -13,6 +13,10 @@ use failure::Fail;
 use itertools::Itertools;
 use nom::error::VerboseError;
 
+use codespan_reporting::files::SimpleFiles;
+use codespan_reporting::term;
+use codespan_reporting::term::termcolor::{ColorChoice, StandardStream, Buffer};
+
 #[derive(Debug)]
 #[allow(missing_docs)]
 pub enum AssemblerError {
@@ -205,9 +209,7 @@ pub(crate) const SNASET_MISSING_COMMA: &'static str = "SNASET: missing comma";
 
 impl Display for AssemblerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use codespan_reporting::files::SimpleFiles;
-        use codespan_reporting::term;
-        use codespan_reporting::term::termcolor::{ColorChoice, StandardStream, Buffer};
+
         use nom::error::ErrorKind;
         use nom::error::VerboseErrorKind;
         use std::ops::Deref;
@@ -294,47 +296,53 @@ impl Display for AssemblerError {
             AssemblerError::IncludedFileError { span, error } => {
  
 
-                let filename = Box::new(
-                    span.extra
-                        .1
-                        .current_filename
-                        .as_ref()
-                        .map(|p| p.as_os_str().to_str().unwrap().to_owned())
-                        .unwrap_or_else(|| "no file".to_owned()),
-                );
-                let source = span.extra.0.as_ref();
 
-                let mut source_files = SimpleFiles::new();
-                let file = source_files.add(filename, source);
-
-                let sample_range = std::ops::Range {
-                    start: span.location_offset(),
-                    end: guess_error_end(
-                        source_files.get(file).unwrap().source(),
-                        span.location_offset(),
-                        JP_WRONG_PARAM, // fake value
-                    ),
-                };
-
-                let mut diagnostic = Diagnostic::error()
-                    .with_message("Error in imported file")
-                    .with_labels(vec![Label::new(
-                        codespan_reporting::diagnostic::LabelStyle::Primary,
-                        file,
-                        sample_range,
-                    )]);
-
-                let mut writer = Buffer::ansi();
-                let config = codespan_reporting::term::Config::default();
-                term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
                 
-                write!(f, "{}", std::str::from_utf8(writer.as_slice()).unwrap())?;
+                write!(f, "{}", build_simple_error_message("Error in imported file", span))?;
                 error.fmt(f)
             }
 
             _ => unimplemented!("{:?}", self),
         }
     }
+}
+
+fn build_simple_error_message(title: &str, span: &Z80Span) -> String {
+    let filename = Box::new(
+        span.extra
+            .1
+            .current_filename
+            .as_ref()
+            .map(|p| p.as_os_str().to_str().unwrap().to_owned())
+            .unwrap_or_else(|| "no file".to_owned()),
+    );
+    let source = span.extra.0.as_ref();
+
+    let mut source_files = SimpleFiles::new();
+    let file = source_files.add(filename, source);
+
+    let sample_range = std::ops::Range {
+        start: span.location_offset(),
+        end: guess_error_end(
+            source_files.get(file).unwrap().source(),
+            span.location_offset(),
+            JP_WRONG_PARAM, // fake value
+        ),
+    };
+
+    let mut diagnostic = Diagnostic::error()
+        .with_message(title)
+        .with_labels(vec![Label::new(
+            codespan_reporting::diagnostic::LabelStyle::Primary,
+            file,
+            sample_range,
+        )]);
+
+    let mut writer = Buffer::ansi();
+    let config = codespan_reporting::term::Config::default();
+    term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
+
+    std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
 }
 
 /// The parser is unable to provide the end of the error.

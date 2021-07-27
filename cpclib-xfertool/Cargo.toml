@@ -47,8 +47,8 @@ time = { version = "0.2.27", optional = false }
 rustyline = { version = "8.2.0", optional = false }
 rustyline-derive = { version = "0.4.0", optional = false }
 subprocess = { version = "0.2.7", optional = false }
-notify = { version = "5.0.0-pre.10", optional = false }
-crossbeam-channel = { version = "0.5.1", optional = false }
+notify = { version = "5.0.0-pre.11", optional = false }
+crossbeam-channel = { version = "0.4.0", optional = false }
 hotwatch = { version = "0.4.5", optional = false }
 
 
