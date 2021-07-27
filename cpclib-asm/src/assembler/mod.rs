@@ -5,6 +5,7 @@ use crate::AssemblingOptions;
 use cpclib_basic::*;
 use cpclib_sna::*;
 
+use itertools::Itertools;
 use lazy_static::__Deref;
 use nom::bitvec::bitvec;
 use nom::bitvec::prelude::BitVec;
@@ -545,21 +546,9 @@ impl Env {
 
 #[allow(missing_docs)]
 impl Env {
-    /// Visit all the tokens of the listing
-    pub fn visit_listing(&mut self, listing: &Listing) -> Result<(), AssemblerError> {
-        for token in listing.listing().iter() {
-            token.visited(self)?;
-        }
-
-        Ok(())
-    }
-
-    /// Visit all the tokens of the located listing
-    pub fn visit_located_listing(
-        &mut self,
-        listing: &LocatedListing,
-    ) -> Result<(), AssemblerError> {
-        for token in listing.listing().iter() {
+    /// Visit all the tokens of the slice of tokens
+    pub fn visit_listing<T:ListingElement+Visited>(&mut self, listing: &[T]) -> Result<(), AssemblerError> {
+        for token in listing.iter() {
             token.visited(self)?;
         }
 
@@ -602,10 +591,10 @@ impl Env {
     }
 
     /// Manage a IF .. XXX ELSEIF YYY ELSE ZZZ structure
-    fn visit_if(
+    fn visit_if<T:ListingElement+Visited> (
         &mut self,
-        cases: &[(TestKind, Listing)],
-        other: Option<&Listing>,
+        cases: &[(&TestKind, &[T])],
+        other: Option<&[T]>,
     ) -> Result<(), AssemblerError> {
         assert!(!cases.is_empty());
 
@@ -802,7 +791,7 @@ impl Env {
         }
 
         // really assemble the produced tokens
-        self.visit_located_listing(&listing).or_else(|e| {
+        self.visit_listing(&listing).or_else(|e| {
             let e = AssemblerError::MacroError {
                 name: name.to_owned(),
                 root: Box::new(e),
@@ -1015,7 +1004,7 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
         LocatedToken::CrunchedSection(_, _, _) => todo!(),
 
         LocatedToken::Include(fname, ref cell, span) => if cell.borrow().is_some() {
-            env.visit_located_listing(cell.borrow().as_ref().unwrap())
+            env.visit_listing(cell.borrow().as_ref().unwrap())
         } else {
             outer_token
                 .read_referenced_file(&outer_token.context().1)
@@ -1026,7 +1015,16 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
             error: Box::new(err),
         }),
 
-        LocatedToken::If(_, _, _) => todo!(),
+        LocatedToken::If(cases, other, span) => {
+            env.visit_if(
+                cases.iter()
+                    .map(|c| {
+                        (&c.0, c.1.as_ref())
+                    }).collect_vec().as_ref(), 
+                other.as_ref()
+                    .map(|o| o.as_ref())
+            )
+        },
         LocatedToken::Repeat(_, _, _, _) => todo!(),
         LocatedToken::RepeatUntil(_, _, _) => todo!(),
         LocatedToken::Rorg(_, _, _) => todo!(),
@@ -1073,7 +1071,16 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             content,
             transformation: _,
         } if content.borrow().is_some() => env.visit_incbin(content.borrow().as_ref().unwrap()),
-        Token::If(ref cases, ref other) => env.visit_if(cases, other.as_ref()),
+        Token::If(ref cases, ref other) => {
+            env.visit_if(
+            cases.iter()
+            .map(|c| {
+                (&c.0, c.1.as_ref())
+            }).collect_vec().as_ref(), 
+        other.as_ref()
+            .map(|o| o.as_ref())
+        )
+        },
         Token::Label(ref label) => env.visit_label(label),
         Token::MultiPush(ref regs) => env.visit_multi_pushes(regs),
         Token::MultiPop(ref regs) => env.visit_multi_pops(regs),
@@ -1499,6 +1506,9 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
 
     // org $ set org to the output address (cf. rasm)
     let adr = if address2.is_none() && address == &"$".into() {
+        if env.startadr.is_none() {
+            return Err(AssemblerError::InvalidArgument{msg: "ORG: $ cannot be used now".into()})
+        }
         env.outputadr as i32
     } else {
         env.eval(address)?
