@@ -407,8 +407,6 @@ impl Env {
         self.outputadr = (self.outputadr + 1) & 0xffff;
         self.codeadr =  (self.codeadr + 1) & 0xffff;
 
-        dbg!(&self.outputadr);
-
         // we have written all memory and are trying to restart
         if self.outputadr == 0 {
             unsafe{FAIL_NEXT_WRITE_IF_ZERO = true;}
