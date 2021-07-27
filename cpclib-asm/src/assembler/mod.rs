@@ -367,7 +367,13 @@ impl Env {
      pub fn produced_bytes(&self) -> Vec<u8> {
         // assume we start at 0 if never provided
         let startadr = self.startadr.or(Some(0)).unwrap();
-        self.memory(startadr, self.maxadr.max(startadr) - startadr + 1)
+        
+        let mut length = self.maxadr.max(startadr) - startadr + 1;
+        if length == 1 && self.startadr.is_none() {
+            length = 0
+        };
+
+        self.memory(startadr, length)
     }
 
 
