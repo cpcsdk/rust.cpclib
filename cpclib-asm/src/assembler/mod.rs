@@ -367,7 +367,7 @@ impl Env {
      pub fn produced_bytes(&self) -> Vec<u8> {
         // assume we start at 0 if never provided
         let startadr = self.startadr.or(Some(0)).unwrap();
-        
+
         let mut length = self.maxadr.max(startadr) - startadr + 1;
         if length == 1 && self.startadr.is_none() {
             length = 0
@@ -996,6 +996,26 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
                 Token::MacroCall(_, _) => {
                     env.visit_call_macro_or_build_struct(outer_token)
                 },
+
+                Token::Incbin {
+                    fname: _,
+                    offset: _,
+                    length: _,
+                    extended_offset: _,
+                    off: _,
+                    content,
+                    transformation: _,
+                } => {
+                    if content.borrow().is_none() {
+                        outer_token.read_referenced_file(&outer_token.context().1).and_then(|_|visit_located_token(outer_token, env))
+                        
+                    } else {
+                        env.visit_incbin(content.borrow().as_ref().unwrap())
+                    }.map_err(|err| AssemblerError::IncludedFileError {
+                        span: span.clone(),
+                        error: Box::new(err),
+                    })
+                }
                 _ => {
                     token.visited(env).map_err(|err| {
                         AssemblerError::RelocatedError{
@@ -1077,7 +1097,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             off: _,
             content,
             transformation: _,
-        } if content.borrow().is_some() => env.visit_incbin(content.borrow().as_ref().unwrap()),
+        } => env.visit_incbin(content.borrow().as_ref().unwrap()),
         Token::If(ref cases, ref other) => {
             env.visit_if(
             cases.iter()
