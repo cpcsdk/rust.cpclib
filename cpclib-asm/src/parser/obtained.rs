@@ -146,10 +146,8 @@ impl LocatedToken {
     /// Modify the few tokens that need to read files
     /// Works in read only tokens thanks to RefCell
     pub fn read_referenced_file(&self, ctx: &ParserContext) -> Result<(), AssemblerError> {
-        dbg!(12);
         match self {
             LocatedToken::Include(ref fname, ref cell, span) => {
-                dbg!(34);
                 match ctx.get_path_for(fname) {
                     Err(e) => {
                         return Err(AssemblerError::IOError {
@@ -187,17 +185,15 @@ impl LocatedToken {
                         };
 
                         let content = Rc::new(content);
-                        dbg!(&content);
                         let new_ctx = {
                             let mut new_ctx = ctx.deref().clone();
                             new_ctx.set_current_filename(fname);
                             Rc::new(new_ctx)
                         };
 
-                        let listing = dbg!(parse_z80_strrc_with_contextrc(content, new_ctx))?;
+                        let listing = parse_z80_strrc_with_contextrc(content, new_ctx)?;
                         cell.replace(Some(listing));
                         assert!(cell.borrow().is_some());
-                        dbg!(self);
                     }
                 }
             }
