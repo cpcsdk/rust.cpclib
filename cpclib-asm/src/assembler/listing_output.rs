@@ -53,7 +53,7 @@ impl ListingOutput {
 		// TODO include the other lines for macros and so on
 
 		// Split the bytes in several lines if any
-		let mut data_representation = self.current_data.iter()
+		let data_representation = self.current_data.iter()
 											.chunks(self.bytes_per_line())
 											.into_iter()
 											.map(|c| {
