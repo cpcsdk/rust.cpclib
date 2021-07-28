@@ -1031,6 +1031,10 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
         }
     }
 
+    if let Some(trigger) = env.output_trigger.as_mut() {
+        trigger.finish()
+    }
+
     Ok(env)
 }
 
