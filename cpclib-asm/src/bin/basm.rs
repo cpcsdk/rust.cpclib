@@ -33,7 +33,7 @@ pub mod built_info {
 #[derive(Debug)]
 enum BasmError {
     //#[fail(display = "IO error: {}", io)]
-    Io { io: io::Error },
+    Io { io: io::Error, ctx: String },
 
     // #[fail(display = "Assembling error: {}", error)]
     AssemblerError { error: AssemblerError },
@@ -52,9 +52,9 @@ impl Display for BasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 
         dbg!(self);
-        
+
         match self {
-            Self::Io { io } => write!(f, "IO Error: {}", io),
+            Self::Io { io, ctx } => write!(f, "IO Error when {}: {}", ctx, io),
             Self::AssemblerError { error } => write!(f, "Assembling error:\n{}", error),
             BasmError::InvalidAmsdosFilename { filename } => {
                 write!(f, "Invalid Amsdos filename: {}", filename)
@@ -67,12 +67,6 @@ impl Display for BasmError {
     }
 }
 
-// XXX I do not understand why I have to do that !!!
-impl From<std::io::Error> for BasmError {
-    fn from(error: std::io::Error) -> Self {
-        BasmError::Io { io: error }
-    }
-}
 
 impl From<AssemblerError> for BasmError {
     fn from(error: AssemblerError) -> Self {
@@ -85,9 +79,42 @@ impl From<AssemblerError> for BasmError {
 fn parse<'arg>(matches: &'arg ArgMatches<'_>) -> Result<LocatedListing, BasmError> {
     let (filename, code) = {
         if let Some(filename) = matches.value_of("INPUT") {
-            let mut f = File::open(filename)?;
-            let mut content = String::new();
-            f.read_to_string(&mut content)?;
+            let mut f = File::open(filename)
+                        .map_err(|e| {
+                            BasmError::Io {
+                                io: e,
+                                ctx: format!("opening \"{}\"", filename)
+                            }
+                        })?;
+
+            // Rust is boring for non utf8? that is why we have to play with that
+            let mut content = Vec::new();
+            f.read_to_end(&mut content).map_err(|e| {
+                BasmError::Io {
+                    io: e,
+                    ctx: format!("reading \"{}\"", filename)
+                }
+            })?;
+
+            let result = chardet::detect(&content);
+            let coder = encoding::label::encoding_from_whatwg_label(
+                chardet::charset2encoding(&result.0),
+            );
+
+            let content = match coder {
+                Some(coder) => {
+                    let utf8reader = coder
+                        .decode(&content, encoding::DecoderTrap::Ignore)
+                        .expect("Error");
+                    utf8reader.to_string()
+                }
+                None => {
+                    return Err(AssemblerError::IOError {
+                        msg: format!("Encoding error for {:?}.", filename),
+                    }.into());
+                }
+            };
+
             (filename, content)
         } else if let Some(code) = matches.value_of("INLINE") {
             ("<inline code>", format!(" {}", code))
@@ -144,7 +171,12 @@ fn assemble<'arg>(
 fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
     if matches.is_present("SNAPSHOT") {
         let pc_filename = matches.value_of("OUTPUT").unwrap();
-        env.save_sna(pc_filename)?;
+        env.save_sna(pc_filename).map_err(|e| {
+            BasmError::Io {
+                io: e,
+                ctx: format!("saving \"{}\"", pc_filename)
+            }
+        })?;
     } else {
         // Collect the produced bytes
         let binary = env.produced_bytes();
@@ -187,11 +219,28 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
             };
 
             // Save file on disc
-            let mut f = File::create(pc_filename)?;
+            let mut f = File::create(pc_filename).map_err(|e| {
+                BasmError::Io {
+                    io: e,
+                    ctx: format!("creating \"{}\"", pc_filename)
+                }
+            })?;
             if !header.is_empty() {
-                f.write_all(&header)?;
+                f.write_all(&header)
+                .map_err(|e| {
+                    BasmError::Io {
+                        io: e,
+                        ctx: format!("saving \"{}\"", pc_filename)
+                    }
+                })?;
             }
-            f.write_all(&binary)?;
+            f.write_all(&binary)
+                .map_err(|e| {
+                    BasmError::Io {
+                        io: e,
+                        ctx: format!("saving \"{}\"", pc_filename)
+                    }
+                })?;
         }
     }
     Ok(())
