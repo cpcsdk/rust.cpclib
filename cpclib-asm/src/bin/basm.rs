@@ -149,7 +149,6 @@ fn assemble<'arg>(
     listing: &LocatedListing,
 ) -> Result<Env, BasmError> {
     let mut options = AssemblingOptions::default();
-
     options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
 
     // TODO add symbols if any
@@ -160,6 +159,17 @@ fn assemble<'arg>(
                     file: file.to_owned(),
                 });
             }
+        }
+    }
+
+    if let Some(dest) = matches.value_of("LISTING_OUTPUT") {
+        if dest == "-" {
+            options.write_listing_output(std::io::stdout());
+        } else {
+            let file = File::create(dest).map_err(|e| {
+                BasmError::Io{io: e, ctx: format!("creating {}", dest)}
+                })?;
+            options.write_listing_output(file);
         }
     }
 
@@ -177,7 +187,7 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
                 ctx: format!("saving \"{}\"", pc_filename)
             }
         })?;
-    } else {
+    } else if matches.is_present("OUTPUT") {
         // Collect the produced bytes
         let binary = env.produced_bytes();
 
@@ -294,10 +304,14 @@ fn main() {
                         .help("Write a db list on screen (usefull to get the value of an opcode)")
                         .long("db")
                     )
+                    .arg(Arg::with_name("LISTING_OUTPUT")
+                        .help("Filename of the listing output.")
+                        .long("lst")
+                        .takes_value(true)
+                    )
                     .group(
                         ArgGroup::with_name("ANY_OUTPUT")
                             .args(&["DB_LIST", "OUTPUT"])
-                            .required(true)
                     )
 					.arg(
 						Arg::with_name("BASIC_HEADER")

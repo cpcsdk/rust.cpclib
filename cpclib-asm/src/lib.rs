@@ -19,17 +19,21 @@ pub mod error;
 
 mod crunchers;
 
+use std::{cell::{Cell, RefCell}, fmt::Debug, io::Write, rc::Rc};
+
 use cpclib_disc::amsdos::*;
 
 use preamble::*;
+use self::listing_output::ListingOutput;
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct AssemblingOptions {
     /// Set to true to consider that the assembler pay attention to the case of the labels
     case_sensitive: bool,
     /// Contains some symbols that could be used during assembling
     symbols: cpclib_tokens::symbols::SymbolsTable,
+    builder: Option<Rc<RefCell<ListingOutput>>>
 }
 
 impl Default for AssemblingOptions {
@@ -37,6 +41,7 @@ impl Default for AssemblingOptions {
         Self {
             case_sensitive: true,
             symbols: cpclib_tokens::symbols::SymbolsTable::default(),
+            builder: None
         }
     }
 }
@@ -83,6 +88,11 @@ impl AssemblingOptions {
     pub fn case_sensitive(&self) -> bool {
         self.case_sensitive
     }
+
+    pub fn write_listing_output<W:'static + Write>(&mut self, writer: W) -> &mut Self {
+        self.builder = Some(Rc::new(RefCell::new(ListingOutput::new(writer))));
+        self
+    }
 }
 
 /// Assemble a piece of code and returns the associated list of bytes.
@@ -98,7 +108,7 @@ pub fn assemble_with_options(
     options: &AssemblingOptions,
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let tokens = parser::parse_z80_str(code)?;
-    assemble_tokens_with_options(&tokens, options)
+    assemble_tokens_with_options(&tokens, &options)
 }
 
 /// Assemble the predifined list of tokens

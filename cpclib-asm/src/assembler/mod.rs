@@ -1,3 +1,6 @@
+pub mod listing_output;
+
+
 use crate::preamble::*;
 
 use crate::AssemblingOptions;
@@ -12,6 +15,7 @@ use nom::bitvec::prelude::BitVec;
 use smallvec::SmallVec;
 
 use std::any::Any;
+use std::cell::RefCell;
 use std::fmt;
 
 use std::convert::TryFrom;
@@ -19,6 +23,9 @@ use std::rc::Rc;
 
 use crate::AmsdosFile;
 use crate::AmsdosFileName;
+
+use self::listing_output::ListingOutput;
+
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -216,6 +223,36 @@ impl Visited for LocatedToken {
     }
 }
 
+/// This structure collects the necessary information to feed the output
+struct ListingOutputTrigger {
+    /// the token read before collecting the bytes
+    token: Option<&'static LocatedToken>,
+    /// the bytes progressively collected
+    bytes: Vec<u8>,
+    start: u32,
+    builder: Rc<RefCell<ListingOutput>>
+}
+
+impl ListingOutputTrigger {
+    fn write_byte(&mut self, b: u8) {
+        self.bytes.push(b);
+    }
+    fn new_token(&mut self, new: &'static LocatedToken, address: u32) {
+        if let Some(token) = self.token {
+            self.builder.borrow_mut().add_token(token, &self.bytes, self.start);
+        }
+
+        self.token.replace(new);
+        self.bytes.clear();
+        self.start = address;
+    }
+    fn finish(&mut self) {
+        if let Some(token) = self.token {
+            self.builder.borrow_mut().add_token(token, &self.bytes, self.start);
+        }
+        self.builder.borrow_mut().finish();       
+    }
+}
 /// Environment of the assembly
 #[allow(missing_docs)]
 pub struct Env {
@@ -258,6 +295,8 @@ pub struct Env {
 
     /// Set only if the run instruction has been used
     run_options: Option<(u16, Option<u16>)>,
+
+    output_trigger: Option<ListingOutputTrigger>
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -292,6 +331,7 @@ impl Default for Env {
             symbols: SymbolsTableCaseDependent::default(),
             run_options: None,
             written_bytes: BitVec::repeat(false, 0x4000*2*4),
+            output_trigger: None
         }
     }
 }
@@ -312,6 +352,15 @@ impl Env {
         env.symbols = symbols.clone();
         env.pass = AssemblingPass::SecondPass;
         env
+    }
+
+    /// Manage the play with data for the output listing
+    fn handle_output_trigger(&mut self, new: &'static LocatedToken) {
+        if self.pass.is_second_pass() && self.output_trigger.is_some() {
+            let addr = self.output_address();
+            let trigg = self.output_trigger.as_mut().unwrap();
+            trigg.new_token(new, addr as _);
+        }
     }
 
     /// Start a new pass by cleaning up datastructures.
@@ -409,6 +458,11 @@ impl Env {
 
         self.sna.set_byte(abstract_address, v);
         self.written_bytes.set(abstract_address as _, true);
+
+        // Add the byte to the listing space
+        if self.pass.is_second_pass() && self.output_trigger.is_some() {
+            self.output_trigger.as_mut().unwrap().write_byte(v);
+        }
 
 
         self.outputadr = (self.outputadr + 1) & 0xffff;
@@ -946,11 +1000,23 @@ pub fn visit_tokens_all_passes<T: Visited>(tokens: &[T]) -> Result<Env, Assemble
 /// Visit the tokens during several passes by providing a specific symbol table.
 pub fn visit_tokens_all_passes_with_options<T: Visited>(
     tokens: &[T],
-    options: &AssemblingOptions,
+    options: &AssemblingOptions
 ) -> Result<Env, AssemblerError> {
     let mut env = Env::default();
     env.symbols =
         SymbolsTableCaseDependent::new(options.symbols().clone(), options.case_sensitive());
+
+        if let Some(builder) = &options.builder {
+            env.output_trigger = ListingOutputTrigger {
+            token: None,
+            bytes: Vec::new(),
+            builder:builder.clone(),
+            start: 0
+        }.into();
+    }
+        
+
+  
 
     loop {
         env.start_new_pass();
@@ -988,6 +1054,13 @@ pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerE
 /// Apply the effect of the localised token. Most of the action is delegated to visit_token.
 /// The difference with the standard token is the ability to embed listing
 pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<(), AssemblerError> {
+
+    // cheat on the lifetime of tokens
+    let outer_token = unsafe{
+        (outer_token as *const LocatedToken).as_ref().unwrap()};
+    env.handle_output_trigger(outer_token);
+
+
     let span = outer_token.span();
     match outer_token {
         LocatedToken::Standard { token, span } => {
