@@ -362,7 +362,9 @@ impl Display for AssemblerError {
                 write!(f, "Error in macro call: {}\n{}", name, root)
             },
             AssemblerError::WrongSymbolType { symbol, isnot } => todo!(),
-            AssemblerError::IOError { msg } => todo!(),
+            AssemblerError::IOError { msg } => {
+                write!(f, "IO Error: {}", msg)
+            },
             AssemblerError::UnknownAssemblingAddress => todo!(),
             AssemblerError::ExpressionUnresolvable { expression } => todo!(),
             AssemblerError::ExpressionError { msg } => todo!(),
