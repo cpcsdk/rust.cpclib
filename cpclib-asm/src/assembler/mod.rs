@@ -1451,12 +1451,25 @@ pub fn assemble_db_or_dw(token: &Token, env: &Env) -> Result<Bytes, AssemblerErr
     };
 
     for exp in exprs.iter() {
-        let val = env.resolve_expr_may_fail_in_first_pass(exp)? & mask;
-        if mask == 0xff {
-            add_byte(&mut bytes, val as u8);
-        } else {
-            add_word(&mut bytes, val as u16);
+        match exp {
+            Expr::String(s) => {
+                if env.pass.is_first_pass() {
+                  eprintln!("[Warning] string are considered as UTF8. Do we need something else ?");
+                }
+                for b in s.bytes() {
+                    add_byte(&mut bytes, b);
+                }            
+            },
+            _ => {
+                let val = env.resolve_expr_may_fail_in_first_pass(exp)? & mask;
+                if mask == 0xff {
+                    add_byte(&mut bytes, val as u8);
+                } else {
+                    add_word(&mut bytes, val as u16);
+                }
+            }
         }
+
     }
 
     Ok(bytes)
