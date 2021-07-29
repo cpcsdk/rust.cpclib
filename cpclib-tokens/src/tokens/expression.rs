@@ -12,6 +12,8 @@ pub enum Expr {
 
     /// 32 bits integer value (should be able to include any integer value manipulated by the assember.
     Value(i32),
+    /// Char
+    Char(char),
     /// String (for db directive)
     String(String),
     /// Label
@@ -348,6 +350,7 @@ impl Display for Expr {
             &RelativeDelta(delta) => write!(format, "$ + {} + 2", delta),
 
             &Value(val) => write!(format, "0x{:x}", val),
+            Char(c) => write!(format, "'{}'", c),
             &String(ref string) => write!(format, "\"{}\"", string),
             &Label(ref label) => write!(format, "{}", label),
             PrefixedLabel(prefix, label) => write!(format, "{}{}", prefix, label),
@@ -438,7 +441,7 @@ impl Expr {
     pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         use Expr::*;
         match self {
-            RelativeDelta(_) | Value(_) | String(_) => {}
+            RelativeDelta(_) | Value(_) | String(_) | Char(_)=> {}
 
             Label(s) | PrefixedLabel(_, s) => {
                 Self::do_apply_macro_labels_modification(s, seed);

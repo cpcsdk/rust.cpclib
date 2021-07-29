@@ -2160,6 +2160,18 @@ pub fn string_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Spa
     })(input)
 }
 
+pub fn char_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+    map(
+        delimited(
+            tag("'"), 
+            nom::character::complete::anychar, 
+            tag("'")
+        ), 
+        |c| {
+        Expr::Char(c)
+    })(input)
+}
+
 /// Parse a label(label: S)
 pub fn parse_label(
     doubledots: bool,
@@ -2265,6 +2277,7 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                     parse_assemble,
                     // manage values
                     alt((positive_number, negative_number)),
+                    char_expr,
                     // manage $
                     map(tag("$"), |_x| Expr::Label(String::from("$"))),
                     prefixed_label_expr,
