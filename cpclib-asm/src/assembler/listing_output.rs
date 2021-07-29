@@ -49,7 +49,8 @@ impl ListingOutput {
 		// rebuild the string
 		let (ptr, len) = self.current_line.take().unwrap();
 		let line_representation = String::from_utf8_lossy(unsafe{std::slice::from_raw_parts(ptr, len)});
-		let mut line_representation = line_representation.split("\n");
+		let mut line_representation = line_representation.split("\n")
+			.map(|l| l.trim_end_matches("\n"));
 		// TODO include the other lines for macros and so on
 
 		// Split the bytes in several lines if any
@@ -62,14 +63,17 @@ impl ListingOutput {
 											}).collect_vec();
 		let mut data_representation = data_representation.iter();
 
-		let loc_representation = if data_representation.is_empty() {
-			"    ".to_owned()
-		} else {
-			format!("{:04X}", self.current_first_address)
-		};
+
 
 		// draw all line
+		let mut first = true;
 		loop {
+
+			let loc_representation = if data_representation.is_empty() || !first{
+				"    ".to_owned()
+			} else {
+				format!("{:04X}", self.current_first_address)
+			};
 
 			let current_line = line_representation.next();
 			let current_data = data_representation.next();
@@ -77,6 +81,7 @@ impl ListingOutput {
 			if current_data.is_none() && current_line.is_none() {
 				break;
 			}
+
 
 			writeln!(
 				self.writer,
@@ -87,8 +92,11 @@ impl ListingOutput {
 				bytes_width = self.bytes_per_line()*3
 			).unwrap();
 		
+			first = false;
+
 
 		}
+
 
 		self.current_data.clear();
 
