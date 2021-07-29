@@ -382,6 +382,7 @@ pub enum BinaryTransformation {
 pub enum Token {
     Align(Expr, Option<Expr>),
     Assert(Expr, Option<String>),
+    Assign(String, Expr),
 
     Bank(Expr),
     Bankset(Expr),
@@ -837,7 +838,7 @@ impl Token {
                     .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
             }
 
-            Self::Equ(a, b) | Self::Let(a, b) => {
+            Self::Assign(a, b)  | Self::Equ(a, b) | Self::Let(a, b) => {
                 Expr::do_apply_macro_labels_modification(a, seed);
                 b.fix_local_macro_labels_with_seed(seed);
             }

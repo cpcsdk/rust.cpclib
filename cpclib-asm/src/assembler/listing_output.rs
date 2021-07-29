@@ -1,5 +1,6 @@
 use std::{fmt::Debug, io::Write};
 
+use cpclib_tokens::Token;
 use itertools::Itertools;
 use lazy_static::__Deref;
 use nom::ExtendInto;
@@ -22,6 +23,7 @@ pub struct ListingOutput {
 	current_data: Vec<u8>,
 	/// The adress of the first token of the line
 	current_first_address: u32,
+	current_address_is_value: bool,
 	/// The name of the file containing the token
 	current_fname: Option<String>
 }	
@@ -42,7 +44,8 @@ impl ListingOutput {
 			current_fname: None,
 			current_line: None,
 			current_data: Vec::new(),
-			current_first_address: 0
+			current_first_address: 0,
+			current_address_is_value: false
 		}
 	}
 
@@ -106,8 +109,9 @@ impl ListingOutput {
 				break;
 			}
 
+			dbg!(self.current_address_is_value, self.current_first_address, data_representation.is_empty());
 
-			let loc_representation = if data_representation.is_empty() || idx!=0{
+			let loc_representation = if (data_representation.is_empty() && !self.current_address_is_value) || idx!=0{
 				"    ".to_owned()
 			} else {
 				format!("{:04X}", self.current_first_address)
@@ -122,11 +126,12 @@ impl ListingOutput {
 
 			writeln!(
 				self.writer,
-				"{} {} {:bytes_width$} {}",
+				"{} {} {:bytes_width$} {} DBG [{}]",
 				line_nb_representation,
 				loc_representation,
 				current_data.unwrap_or(&"".to_owned()),
 				current_line.unwrap_or(""),
+				idx,
 				bytes_width = self.bytes_per_line()*3
 			).unwrap();
 		
@@ -169,6 +174,10 @@ impl ListingOutput {
 			self.current_line = Some(token_line_desc);
 			self.current_data.extend_from_slice(bytes);
 			self.current_first_address = address;
+			self.current_address_is_value = if let LocatedToken::Standard{
+				token: Token::Equ(_, _),
+				..
+			} = token {true} else {false};
 		}
 		else {
 			let (current_line, _, _) = *self.current_line.as_ref().unwrap();
