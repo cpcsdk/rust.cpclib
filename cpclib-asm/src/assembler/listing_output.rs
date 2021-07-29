@@ -22,6 +22,8 @@ pub struct ListingOutput {
 	current_data: Vec<u8>,
 	/// The adress of the first token of the line
 	current_first_address: u32,
+
+	current_fname: Option<String>
 }	
 
 impl Debug for ListingOutput {
@@ -37,6 +39,7 @@ impl ListingOutput {
 		Self {
 			writer: Box::new(writer),
 			current_source: None,
+			current_fname: None,
 			current_line: None,
 			current_data: Vec::new(),
 			current_first_address: 0
@@ -108,6 +111,12 @@ impl ListingOutput {
 
 	/// Add a token for the current line
 	pub fn add_token(&mut self, token: &LocatedToken, bytes: &[u8], address: u32) {
+
+
+		self.manage_fname(token);
+
+
+
 		// pointer slice on the line
 		let token_line = token.span().get_line_beginning();
 		let token_line_len = token_line.len();
@@ -161,6 +170,38 @@ impl ListingOutput {
 		let new_line_length = unsafe{self.current_source.as_ref().unwrap().1 - (self.current_source.as_ref().unwrap().0.offset_from(self.current_line.as_ref().unwrap().0).abs() as usize)};
 		self.current_line.as_mut().unwrap().1 = new_line_length as _;
 		self.process_current_line()
+	}
+
+
+	/// Print filename if needed
+	pub fn manage_fname(&mut self, token: &LocatedToken) {
+
+
+		let ctx = &token.span().extra.1;
+		let mut fname = ctx.current_filename.as_ref()
+			.map(|p| p.as_os_str().to_str().unwrap().to_string());
+
+		fname.or_else(||{
+			ctx.context_name.clone()
+		})
+		.and_then(|fname| {
+
+			let print = match self.current_fname.as_ref() {
+				Some(current_fname) => {
+					*current_fname != fname
+				},
+				None => true
+			};
+
+			if print {
+				writeln!(self.writer, "Context: {}", fname).unwrap();
+				self.current_fname = Some(fname);
+			}
+
+			Some(())
+		});
+
+		
 	}
 
 }

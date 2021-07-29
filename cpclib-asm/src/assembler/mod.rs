@@ -237,12 +237,12 @@ impl ListingOutputTrigger {
     fn write_byte(&mut self, b: u8) {
         self.bytes.push(b);
     }
-    fn new_token(&mut self, new: &'static LocatedToken, address: u32) {
+    fn new_token(&mut self, new: & LocatedToken, address: u32) {
         if let Some(token) = self.token {
             self.builder.borrow_mut().add_token(token, &self.bytes, self.start);
         }
 
-        self.token.replace(new);
+        self.token.replace( unsafe{(new as *const LocatedToken).as_ref().unwrap()} );
         self.bytes.clear();
         self.start = address;
     }
@@ -355,7 +355,8 @@ impl Env {
     }
 
     /// Manage the play with data for the output listing
-    fn handle_output_trigger(&mut self, new: &'static LocatedToken) {
+    fn handle_output_trigger(&mut self, new: & LocatedToken) {
+
         if self.pass.is_second_pass() && self.output_trigger.is_some() {
             let addr = self.output_address();
             let trigg = self.output_trigger.as_mut().unwrap();
@@ -998,8 +999,9 @@ pub fn visit_tokens_all_passes<T: Visited>(tokens: &[T]) -> Result<Env, Assemble
 }
 
 /// Visit the tokens during several passes by providing a specific symbol table.
+/// Warning Listing output is only possible for LocatedToken
 pub fn visit_tokens_all_passes_with_options<T: Visited>(
-    tokens: &[T],
+    tokens: & [T],
     options: &AssemblingOptions
 ) -> Result<Env, AssemblerError> {
     let mut env = Env::default();
@@ -1015,10 +1017,7 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
         }.into();
     }
         
-
-  
-
-    loop {
+     loop {
         env.start_new_pass();
         //println!("[pass] {:?}", env.pass);
 
