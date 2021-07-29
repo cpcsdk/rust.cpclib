@@ -586,7 +586,7 @@ pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
 /// Parse for the various binary include directives
 pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, transformation) = alt((
-        map(tag_no_case("INCBIN"), |_| BinaryTransformation::None),
+        map(alt((tag_no_case("INCBIN"), tag_no_case("BINCLUDE"))), |_| BinaryTransformation::None),
         map(tag_no_case("INCEXO"), |_| BinaryTransformation::Exomizer),
         map(tag_no_case("INCL49"), |_| BinaryTransformation::Lz49),
         map(tag_no_case("INCAPU"), |_| BinaryTransformation::Aplib),
