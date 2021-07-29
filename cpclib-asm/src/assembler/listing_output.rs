@@ -52,8 +52,7 @@ impl ListingOutput {
 		// rebuild the string
 		let (ptr, len, line_number) = self.current_line.take().unwrap();
 		let line_representation = String::from_utf8_lossy(unsafe{std::slice::from_raw_parts(ptr, len)});
-		let mut line_representation = line_representation[..line_representation.len()-1] // remove last \n
-				.split("\n");
+		let mut line_representation = line_representation.split("\n");
 		// TODO include the other lines for macros and so on
 
 		// Split the bytes in several lines if any
@@ -216,6 +215,7 @@ impl ListingOutput {
 	/// Print filename if needed
 	pub fn manage_fname(&mut self, token: &LocatedToken) -> Option<String> {
 
+	//	dbg!(token);
 
 		let ctx = &token.span().extra.1;
 		let mut fname = ctx.current_filename.as_ref()
