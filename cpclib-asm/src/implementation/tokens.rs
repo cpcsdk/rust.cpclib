@@ -1,7 +1,7 @@
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
 
-use crate::assembler::{assemble_align, assemble_db_or_dw, assemble_defs, assemble_opcode, Bytes};
+use crate::assembler::{assemble_align, assemble_defs, assemble_opcode, Bytes};
 use crate::error::*;
 
 use crate::implementation::expression::ExprEvaluationExt;
@@ -101,10 +101,12 @@ impl TokenExt for Token {
 
             Token::Defb(_) | Token::Defw(_) => {
                 use crate::assembler::Env;
+                use crate::assembler::visit_db_or_dw;
 
-                assemble_db_or_dw(self, &Env::default())
-                    .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
-                    .and_then(|b| wrap(&b))
+                let mut env = Env::default();
+                visit_db_or_dw(self, &mut env)
+                    .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
+                wrap(&env.produced_bytes())
             }
 
             _ => {
