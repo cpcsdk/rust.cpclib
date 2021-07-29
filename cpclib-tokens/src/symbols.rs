@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::error::Error;
+use std::fmt::Debug;
 
 use delegate::delegate;
 use itertools::Itertools;
@@ -7,9 +9,10 @@ use crate::tokens::expression::LabelPrefix;
 use crate::{Expr, MacroParam, Token};
 
 use std::ops::Deref;
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum SymbolError {
     UnknownAssemblingAddress,
+    CannotModify(Symbol)
 }
 
 /// Encode the data for the structure directive
@@ -290,6 +293,9 @@ pub struct SymbolsTable {
     map: HashMap<Symbol, Value>,
     dummy: bool,
     current_label: String, //  Value of the current label to allow local labels
+
+    // list of symbols that are assignable (i.e. modified programmatically)
+    assignable: HashSet<Symbol>
 }
 
 impl Default for SymbolsTable {
@@ -300,6 +306,7 @@ impl Default for SymbolsTable {
             dummy: false,
             current_page: 0,
             current_label: "".into(),
+            assignable: Default::default()
         }
     }
 }
@@ -315,6 +322,7 @@ impl SymbolsTable {
             current_page: 0,
             page: Default::default(),
             current_label: "".into(),
+            assignable: HashSet::new()
         }
     }
 
@@ -374,6 +382,24 @@ impl SymbolsTable {
 
         self.map.insert(symbol, value.into())
     }
+
+    pub fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
+        &mut self,
+        symbol: S,
+        value: V,
+    ) -> Result<Option<Value>, SymbolError> {
+        let symbol = self.extend_symbol(symbol);
+
+        if !self.assignable.contains(&symbol) 
+            && self.map.contains_key(&symbol) {
+            return Err(SymbolError::CannotModify(symbol));
+        }
+
+        self.assignable.insert(symbol.clone());
+
+        Ok(self.map.insert(symbol, value.into()))
+    }
+
 
     pub fn update_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(&mut self, symbol: S, value: V) {
         let symbol = self.extend_symbol(symbol);
@@ -565,6 +591,16 @@ impl SymbolsTableCaseDependent {
     ) -> Option<Value> {
         self.table
             .set_symbol_to_value(self.normalize_symbol(symbol), value)
+    }
+
+
+    pub fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
+        &mut self,
+        symbol: S,
+        value: V,
+    ) -> Result<Option<Value>, SymbolError> {
+        self.table
+        .assign_symbol_to_value(self.normalize_symbol(symbol), value)
     }
 
     pub fn update_symbol_to_value<S: Into<Symbol>>(&mut self, symbol: S, value: i32) {

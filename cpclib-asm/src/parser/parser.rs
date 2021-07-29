@@ -538,10 +538,10 @@ pub fn parse_z80_line_label_only(
     // TODO make these stuff alternatives ...
     // Manage Equ
     // BUG Equ and = are supposed to be different
-    let (input, equ) = opt(preceded(
+    let (input, equ_or_assign) = opt(tuple((
         preceded(space1, alt((tag_no_case("EQU"), tag_no_case("=")))),
         preceded(space1, expr),
-    ))(input)?;
+    )))(input)?;
 
     // opt!(char!(':')) >>
 
@@ -551,11 +551,21 @@ pub fn parse_z80_line_label_only(
     {
         let mut tokens = Vec::new();
 
-        if equ.is_some() {
-            tokens.push(Token::Equ(label, equ.unwrap()).locate(before_label));
-        } else {
-            tokens.push(Token::Label(label).locate(before_label));
+        match equ_or_assign {
+            Some(equ_or_assign) => {
+                if equ_or_assign.0.to_ascii_lowercase() == "=" {
+                    tokens.push(Token::Assign(label, equ_or_assign.1).locate(before_label));
+                } else {
+                    tokens.push(Token::Equ(label, equ_or_assign.1).locate(before_label));
+                }
+            },
+            None => {
+                tokens.push(Token::Label(label).locate(before_label));
+            }
+            
+            
         }
+        
         if comment.is_some() {
             tokens.push(comment.unwrap().locate(before_comment));
         }

@@ -7,6 +7,7 @@ use crate::Z80Span;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use cpclib_basic::BasicError;
 use cpclib_disc::amsdos::AmsdosError;
+use cpclib_tokens::symbols::Symbol;
 use cpclib_tokens::symbols::SymbolError;
 use cpclib_tokens::tokens;
 use itertools::Itertools;
@@ -147,6 +148,7 @@ pub enum AssemblerError {
 
     //  #[fail(display = "Current assembling address is unknown.")]
     UnknownAssemblingAddress,
+    ReadOnlySymbol(Symbol),
     RunAlreadySpecified,
     NoActiveCounter,
     OutputExceedsLimits,
@@ -201,8 +203,11 @@ impl From<BasicError> for AssemblerError {
 
 
 impl From<SymbolError> for AssemblerError {
-    fn from(_err: SymbolError) -> Self {
-        AssemblerError::UnknownAssemblingAddress
+    fn from(err: SymbolError) -> Self {
+        match err {
+            SymbolError::UnknownAssemblingAddress => AssemblerError::UnknownAssemblingAddress,
+            SymbolError::CannotModify(symb) => AssemblerError::ReadOnlySymbol(symb)
+        }
     }
 }
 
@@ -352,7 +357,8 @@ impl Display for AssemblerError {
             AssemblerError::BasicError { error } => todo!(),
             AssemblerError::AssemblingError { msg } => todo!(),
             AssemblerError::InvalidArgument { msg } => write!(f, "Invalid argument: {}", msg),
-            AssemblerError::AssertionFailed { test, msg, guidance } => todo!(),
+            AssemblerError::AssertionFailed { test, msg, guidance } => write!(f, "Assert error: {} {} {}", test, msg, guidance),
+
             AssemblerError::UnknownMacro { symbol, closest } => {
                 write!(f, "MACRO {} does not exist. Try {}" , symbol, closest.as_ref().unwrap_or(&"".to_owned()))
             },
@@ -428,6 +434,7 @@ impl Display for AssemblerError {
                 }
 
             },
+            AssemblerError::ReadOnlySymbol(symb) => write!(f, "{} cannot be modified", symb.value())
            
         }
     }

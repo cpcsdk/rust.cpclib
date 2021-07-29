@@ -359,7 +359,15 @@ impl Env {
     fn handle_output_trigger(&mut self, new: & LocatedToken) {
 
         if self.pass.is_second_pass() && self.output_trigger.is_some() {
-            let addr = self.output_address();
+            let addr = match new {
+                LocatedToken::Standard{
+                    token: Token::Equ(label, _),
+                    ..
+                } => {
+                    self.symbols().int_value(label).unwrap() 
+                }
+                _ => self.output_address() as i32
+            };
             let trigg = self.output_trigger.as_mut().unwrap();
             trigg.new_token(new, addr as _);
         }
@@ -1189,6 +1197,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::MultiPush(ref regs) => env.visit_multi_pushes(regs),
         Token::MultiPop(ref regs) => env.visit_multi_pops(regs),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
+        Token::Assign(ref label, ref exp) => visit_assign(label, exp, env),
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
         Token::Repeat(_, _, _) => visit_repeat(token, env),
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
@@ -1313,6 +1322,14 @@ fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerErro
         let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
         env.add_symbol_to_symbol_table(label, value)
     }
+}
+
+fn visit_assign(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
+ 
+    let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
+    env.symbols_mut().assign_symbol_to_value(label, value)?;
+    Ok(())
+ 
 }
 
 fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
