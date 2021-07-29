@@ -226,7 +226,8 @@ impl Visited for LocatedToken {
 /// This structure collects the necessary information to feed the output
 struct ListingOutputTrigger {
     /// the token read before collecting the bytes
-    token: Option<&'static LocatedToken>,
+    /// Because of macros we need to make a copy (TODO find why...)
+    token: Option<LocatedToken>,
     /// the bytes progressively collected
     bytes: Vec<u8>,
     start: u32,
@@ -238,16 +239,16 @@ impl ListingOutputTrigger {
         self.bytes.push(b);
     }
     fn new_token(&mut self, new: & LocatedToken, address: u32) {
-        if let Some(token) = self.token {
+        if let Some(token) = &self.token {
             self.builder.borrow_mut().add_token(token, &self.bytes, self.start);
         }
 
-        self.token.replace( unsafe{(new as *const LocatedToken).as_ref().unwrap()} );
+        self.token.replace( new.clone());
         self.bytes.clear();
         self.start = address;
     }
     fn finish(&mut self) {
-        if let Some(token) = self.token {
+        if let Some(token) = &self.token {
             self.builder.borrow_mut().add_token(token, &self.bytes, self.start);
         }
         self.builder.borrow_mut().finish();       
@@ -779,7 +780,7 @@ impl Env {
         caller: & T,
     ) -> Result<(), AssemblerError> {
 
-        dbg!(caller);
+//        dbg!(caller);
 
         // Get the macro call information
         let (name, parameters, caller_span) = {
