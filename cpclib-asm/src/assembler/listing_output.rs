@@ -22,7 +22,7 @@ pub struct ListingOutput {
 	current_data: Vec<u8>,
 	/// The adress of the first token of the line
 	current_first_address: u32,
-
+	/// The name of the file containing the token
 	current_fname: Option<String>
 }	
 
@@ -67,6 +67,34 @@ impl ListingOutput {
 		let mut data_representation = data_representation.iter();
 
 
+		static mut FIRST_TOKEN_PROCESSED: bool = false;
+		unsafe{ // safe as soon as we have no parallel assembling
+			if ! FIRST_TOKEN_PROCESSED {
+				let file_start = self.current_source.as_ref().unwrap().0;
+				let missing_len = ptr.offset_from(file_start).abs();
+
+				if missing_len > 0 {
+					let missing_content = std::slice::from_raw_parts(file_start, missing_len as _);
+					let missing_content = String::from_utf8_lossy(missing_content);
+					let missing_content = &missing_content[..missing_content.len()-1] ; // remove last \n
+
+					for (idx, line) in missing_content.split('\n').enumerate() {
+						writeln!(
+							self.writer,
+							"{:4} {} {:bytes_width$} {}",
+							idx+1,
+							"    ",
+							"",
+							line,
+							bytes_width = self.bytes_per_line()*3
+						).unwrap();
+					}
+
+				}
+
+				FIRST_TOKEN_PROCESSED = true;
+			}
+		};
 
 		// draw all line
 		let mut idx = 0;
@@ -119,7 +147,7 @@ impl ListingOutput {
 	pub fn add_token(&mut self, token: &LocatedToken, bytes: &[u8], address: u32) {
 
 
-		self.manage_fname(token);
+		let fname_handling = self.manage_fname(token);
 
 
 
@@ -170,6 +198,11 @@ impl ListingOutput {
 				self.add_token(token, bytes, address); // avoid copy paste of similar code
 			}
 		}
+
+
+		if let Some(line) = fname_handling {
+			writeln!(self.writer, "{}", line).unwrap();
+		}
 	}
 
 	pub fn finish(&mut self) {
@@ -181,34 +214,36 @@ impl ListingOutput {
 
 
 	/// Print filename if needed
-	pub fn manage_fname(&mut self, token: &LocatedToken) {
+	pub fn manage_fname(&mut self, token: &LocatedToken) -> Option<String> {
 
 
 		let ctx = &token.span().extra.1;
 		let mut fname = ctx.current_filename.as_ref()
-			.map(|p| p.as_os_str().to_str().unwrap().to_string());
+			.map(|p| p.as_os_str().to_str().unwrap().to_string())
+			.or_else(||{
+				ctx.context_name.clone()
+			});
 
-		fname.or_else(||{
-			ctx.context_name.clone()
-		})
-		.and_then(|fname| {
+		match fname {
+			Some(fname) => {
+				let print = match self.current_fname.as_ref() {
+					Some(current_fname) => {
+						*current_fname != fname
+					},
+					None => true
+				};
+	
+				if print {
+					self.current_fname = Some(fname.clone());
+					 Some(format!("Context: {}", fname))
+				} else {
+					None
+				}
+			},
+			None => None
+		}
 
-			let print = match self.current_fname.as_ref() {
-				Some(current_fname) => {
-					*current_fname != fname
-				},
-				None => true
-			};
 
-			if print {
-				writeln!(self.writer, "Context: {}", fname).unwrap();
-				self.current_fname = Some(fname);
-			}
-
-			Some(())
-		});
-
-		
 	}
 
 }
