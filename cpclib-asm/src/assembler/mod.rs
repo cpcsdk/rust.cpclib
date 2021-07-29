@@ -1325,9 +1325,44 @@ fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 }
 
 // TODO refactor code with assemble_opcode or other functions manipulating bytes
-fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
-    let bytes = assemble_db_or_dw(token, env)?;
-    env.output_bytes(&bytes)
+pub fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
+
+    let (ref exprs, mask) = {
+        match token {
+            Token::Defb(ref exprs) => (exprs, 0xff),
+            Token::Defw(ref exprs) => (exprs, 0xffff),
+            _ => unreachable!(),
+        }
+    };
+
+    for exp in exprs.iter() {
+        match exp {
+            Expr::String(s) => {
+                if env.pass.is_first_pass() {
+                  eprintln!("[Warning] string are considered as UTF8. Do we need something else ?");
+                }
+                for b in s.bytes() {
+                    env.output(b)?;
+                    env.update_dollar();
+                }            
+            },
+            _ => {
+                let val = env.resolve_expr_may_fail_in_first_pass(exp)? & mask;
+                if mask == 0xff {
+                    env.output(val as u8)?;
+                } else {
+                    let high = ((val & 0xff00) >> 8) as u8;
+                    let low = (val & 0xff) as u8;
+                    env.output(low)?;
+                    env.output(high)?;
+                }
+                env.update_dollar();
+            }
+        }
+
+    }
+
+    Ok(())
 }
 
 #[allow(missing_docs)]
@@ -1437,42 +1472,6 @@ pub fn assemble_defs(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Byte
     Ok(bytes)
 }
 
-/// Assemble DB or DW directive
-pub fn assemble_db_or_dw(token: &Token, env: &Env) -> Result<Bytes, AssemblerError> {
-    let mut bytes = Bytes::new();
-
-    let (ref exprs, mask) = {
-        match token {
-            Token::Defb(ref exprs) => (exprs, 0xff),
-            Token::Defw(ref exprs) => (exprs, 0xffff),
-            _ => unreachable!(),
-        }
-    };
-
-    for exp in exprs.iter() {
-        match exp {
-            Expr::String(s) => {
-                if env.pass.is_first_pass() {
-                  eprintln!("[Warning] string are considered as UTF8. Do we need something else ?");
-                }
-                for b in s.bytes() {
-                    add_byte(&mut bytes, b);
-                }            
-            },
-            _ => {
-                let val = env.resolve_expr_may_fail_in_first_pass(exp)? & mask;
-                if mask == 0xff {
-                    add_byte(&mut bytes, val as u8);
-                } else {
-                    add_word(&mut bytes, val as u16);
-                }
-            }
-        }
-
-    }
-
-    Ok(bytes)
-}
 
 /// Assemble align directive. It can only work if current address is known...
 pub fn assemble_align(
