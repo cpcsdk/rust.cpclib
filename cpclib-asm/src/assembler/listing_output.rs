@@ -61,7 +61,7 @@ impl ListingOutput {
 											.chunks(self.bytes_per_line())
 											.into_iter()
 											.map(|c| {
-												c.map(|b| format!("{:X}", b))
+												c.map(|b| format!("{:02X}", b))
 												.join(" ")
 											}).collect_vec();
 		let mut data_representation = data_representation.iter();
