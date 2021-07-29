@@ -16,8 +16,8 @@ pub struct ListingOutput {
 
 	// the complete source
 	current_source: Option<(*const u8, usize)>,
-	/// The line that will be printed when all the tokens will be injected
-	current_line: Option<(*const u8, usize)>,
+	/// The line that will be printed when all the tokens will be injected (ptr, len, line number in source)
+	current_line: Option<(*const u8, usize, u32)>,
 	/// The data generated for the current line
 	current_data: Vec<u8>,
 	/// The adress of the first token of the line
@@ -50,10 +50,10 @@ impl ListingOutput {
 	/// Print the data for the current line
 	fn process_current_line(&mut self) {
 		// rebuild the string
-		let (ptr, len) = self.current_line.take().unwrap();
+		let (ptr, len, line_number) = self.current_line.take().unwrap();
 		let line_representation = String::from_utf8_lossy(unsafe{std::slice::from_raw_parts(ptr, len)});
-		let mut line_representation = line_representation.split("\n")
-			.map(|l| l.trim_end_matches("\n"));
+		let mut line_representation = line_representation[..line_representation.len()-1] // remove last \n
+				.split("\n");
 		// TODO include the other lines for macros and so on
 
 		// Split the bytes in several lines if any
@@ -69,14 +69,8 @@ impl ListingOutput {
 
 
 		// draw all line
-		let mut first = true;
+		let mut idx = 0;
 		loop {
-
-			let loc_representation = if data_representation.is_empty() || !first{
-				"    ".to_owned()
-			} else {
-				format!("{:04X}", self.current_first_address)
-			};
 
 			let current_line = line_representation.next();
 			let current_data = data_representation.next();
@@ -86,18 +80,30 @@ impl ListingOutput {
 			}
 
 
+			let loc_representation = if data_representation.is_empty() || idx!=0{
+				"    ".to_owned()
+			} else {
+				format!("{:04X}", self.current_first_address)
+			};
+
+
+			let line_nb_representation = if current_line.is_none() {
+				"    ".to_owned()
+			} else {
+				format!("{:4}", line_number+idx)
+			};
+
 			writeln!(
 				self.writer,
-				"{} {:bytes_width$} {}",
+				"{} {} {:bytes_width$} {}",
+				line_nb_representation,
 				loc_representation,
 				current_data.unwrap_or(&"".to_owned()),
 				current_line.unwrap_or(""),
 				bytes_width = self.bytes_per_line()*3
 			).unwrap();
 		
-			first = false;
-
-
+			idx += 1;
 		}
 
 
@@ -119,9 +125,10 @@ impl ListingOutput {
 
 		// pointer slice on the line
 		let token_line = token.span().get_line_beginning();
+		let token_line_number = token.span().location_line(); 
 		let token_line_len = token_line.len();
 		let token_line = token_line.as_ptr();
-		let token_line_desc = (token_line, token_line_len);
+		let token_line_desc = (token_line, token_line_len, token_line_number);
 
 		// pointer slice on the code
 		let source = &token.span().extra.0.as_str();
@@ -137,7 +144,7 @@ impl ListingOutput {
 			self.current_first_address = address;
 		}
 		else {
-			let (current_line, _) = *self.current_line.as_ref().unwrap();
+			let (current_line, _, _) = *self.current_line.as_ref().unwrap();
 
 			if std::ptr::eq(current_line, token_line) {
 				// still the same line
