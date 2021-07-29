@@ -173,7 +173,7 @@ fn assemble<'arg>(
         }
     }
 
-    visit_tokens_all_passes_with_options(&listing.listing(), &options).map_err(|e| e.into())
+    visit_tokens_all_passes_with_options(&listing, &options).map_err(|e| e.into())
 }
 
 /// Save the provided result
