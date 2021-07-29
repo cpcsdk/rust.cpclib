@@ -66,6 +66,10 @@ impl ExprEvaluationExt for Expr {
             RelativeDelta(delta) => Ok(Expr::Label("$".into()).resolve(sym)? + *delta as i32),
 
             Value(val) => Ok(*val),
+            Char(c) => {
+                // TODO convert them in another encoding
+                Ok(*c as i32)
+            }
 
             String(ref string) => panic!("String values cannot be converted to i32 {}", string),
 
