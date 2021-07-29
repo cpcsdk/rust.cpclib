@@ -62,16 +62,13 @@ impl ListingOutput {
 											}).collect_vec();
 		let mut data_representation = data_representation.iter();
 
-		// draw the first line
-		writeln!(
-			self.writer,
-			"{:04X} {:bytes_width$} {}",
-			self.current_first_address,
-			data_representation.next().unwrap_or(&"".to_owned()),
-			line_representation.next().unwrap(),
-			bytes_width = self.bytes_per_line()*3
-		).unwrap();
+		let loc_representation = if data_representation.is_empty() {
+			"    ".to_owned()
+		} else {
+			format!("{:04X}", self.current_first_address)
+		};
 
+		// draw all line
 		loop {
 
 			let current_line = line_representation.next();
@@ -83,8 +80,8 @@ impl ListingOutput {
 
 			writeln!(
 				self.writer,
-				"{:04X} {:bytes_width$} {}",
-				self.current_first_address,
+				"{} {:bytes_width$} {}",
+				loc_representation,
 				current_data.unwrap_or(&"".to_owned()),
 				current_line.unwrap_or(""),
 				bytes_width = self.bytes_per_line()*3

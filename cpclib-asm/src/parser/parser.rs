@@ -1247,7 +1247,7 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
             ))),
         ))(input)?;
 
-        dbg!(Ok((input, Token::MacroCall(name, args.unwrap_or_default()))))
+        Ok((input, Token::MacroCall(name, args.unwrap_or_default())))
     }
 }
 
