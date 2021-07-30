@@ -6,6 +6,7 @@ use crate::preamble::*;
 use crate::AssemblingOptions;
 
 use cpclib_basic::*;
+use cpclib_disc::edsk::ExtendedDsk;
 use cpclib_sna::*;
 
 use itertools::Itertools;
@@ -933,7 +934,7 @@ impl Env {
         address: &Expr,
         size: &Expr,
         save_type: Option<&SaveType>,
-        _dsk_filename: Option<&String>,
+        dsk_filename: Option<&String>,
         _side: Option<&Expr>,
     ) -> Result<(), AssemblerError> {
         // No need to do that before the last pass
@@ -975,9 +976,25 @@ impl Env {
 
         // Save at the right place
         match object {
-            either::Right(_amsdos_file) => unimplemented!(
-                "DSK write will be implemented only if needed by someone. I don't need it myself."
-            ),
+            either::Right(amsdos_file) => {
+                if let Some(dsk_filename) = dsk_filename {
+                    let mut dsk = if std::path::Path::new(dsk_filename).exists() {
+                        ExtendedDsk::open(dsk_filename)?
+                    } else {
+                        ExtendedDsk::default()
+                    };
+
+                    dsk.add_amsdos_file(&amsdos_file)?;
+
+                    dsk.save(dsk_filename)?;            
+                } else {
+                    return Err(AssemblerError::InvalidArgument{
+                        msg: "DSK parameter not provided".to_owned()
+                    })
+                }
+
+
+            },
             either::Left(data) => {
                 std::fs::write(filename, &data)?;
             }

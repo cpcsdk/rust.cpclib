@@ -109,14 +109,15 @@ impl ListingOutput {
 				break;
 			}
 
-			dbg!(self.current_address_is_value, self.current_first_address, data_representation.is_empty());
+//			dbg!(self.current_address_is_value, self.current_first_address, data_representation.is_empty());
 
-			let loc_representation = if (data_representation.is_empty() && !self.current_address_is_value) || idx!=0{
+			let loc_representation = if false /*(data_representation.is_empty() && !self.current_address_is_value) || idx!=0 */{
 				"    ".to_owned()
 			} else {
 				format!("{:04X}", self.current_first_address)
 			};
 
+			
 
 			let line_nb_representation = if current_line.is_none() {
 				"    ".to_owned()
