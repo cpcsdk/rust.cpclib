@@ -419,9 +419,9 @@ impl Env {
         let startadr = self.startadr.or(Some(0)).unwrap();
 
         let mut length = self.maxadr.max(startadr) - startadr + 1;
-        if length == 1 && self.startadr.is_none() {
-            length = 0
-        };
+    //    if length == 1 && self.startadr.is_none() {
+     //       length = 0
+     //   };
 
         self.memory(startadr, length)
     }
