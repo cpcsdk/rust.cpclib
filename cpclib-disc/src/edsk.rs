@@ -11,6 +11,8 @@ use bitflags::bitflags;
 use delegate::delegate;
 use getset::Getters;
 
+use crate::amsdos::{AmsdosError, AmsdosFile};
+
 /// Computes the sector size as expected by the FDC from a human readable sector size
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_sign_loss)]
@@ -991,6 +993,12 @@ impl ExtendedDsk {
             disc_information_bloc: disc_info,
             track_list,
         }
+    }
+
+    /// Add the file where it is possible with respect to amsdos format
+    pub fn add_amsdos_file(&mut self, file: &AmsdosFile) -> Result<(), AmsdosError> {
+        eprintln!("{}: ExtedendDsk::add_amsdos_file not implemented. need to do it (but in the amsdos.rs file", file!());
+        Ok(())
     }
 
     /// Add the file in consecutive sectors

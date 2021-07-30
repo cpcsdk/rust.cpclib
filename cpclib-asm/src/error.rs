@@ -351,7 +351,7 @@ impl Display for AssemblerError {
             AssemblerError::AmsdosError { error } => {
                 todo!()
             },
-            AssemblerError::BugInAssembler { msg } => todo!(),
+            AssemblerError::BugInAssembler { msg } => write!(f, "BUG in assembler: {}", msg),
             AssemblerError::BugInParser { error, context } => todo!(),
 
             AssemblerError::BasicError { error } => todo!(),
