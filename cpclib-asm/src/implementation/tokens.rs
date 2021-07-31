@@ -50,7 +50,7 @@ impl TokenExt for Token {
         &self,
         sym: &SymbolsTableCaseDependent,
     ) -> Option<Result<Vec<&Self>, AssemblerError>> {
-        if let Token::Repeat(ref expr, ref tokens, ref _counter_label) = self {
+        if let Token::Repeat(ref expr, ref tokens, ref _counter_label, ref _counter_start) = self {
             let count: Result<i32, AssemblerError> = expr.resolve(sym);
             if count.is_err() {
                 Some(Err(count.err().unwrap()))
