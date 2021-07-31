@@ -173,6 +173,12 @@ pub enum AssemblerError {
     RelocatedError {
        error: Box<AssemblerError>,
        span: Z80Span
+    },
+
+    RepeatIssue {
+        error: Box<AssemblerError>,
+        span: Z80Span,
+        repetition: usize
     }
 }
 
@@ -428,6 +434,10 @@ impl Display for AssemblerError {
                 }
 
             },
+            AssemblerError::RepeatIssue { error, span, repetition } => {
+                let msg =  build_simple_error_message(&format!("REPEAT: error in loop {}", repetition), span);
+                write!(f, "{}\n{}",msg, error)
+            }
            
         }
     }

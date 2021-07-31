@@ -2181,8 +2181,13 @@ pub fn parse_label(
 
         let (input, first) =
             one_of("@abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._")(input)?;
-        let (input, middle) =
-            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")(input)?;
+        let (input, middle) = opt(
+            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")
+        )(input)?;
+
+        if middle.is_none() && first == '@' || first == '.' {
+            return Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)));
+        }
 
         let input = if doubledots {
             let (input, _) = opt(tag_no_case(":"))(input)?;
@@ -2191,7 +2196,12 @@ pub fn parse_label(
             input
         };
 
-        let label = format!("{}{}", first, middle.iter_elements().collect::<String>());
+        let label = format!(
+            "{}{}", 
+            first, 
+            middle.map(|v| v.iter_elements().collect::<String>())
+                .unwrap_or_default()
+        );
 
         let impossible = ["af", "hl", "de", "bc", "ix", "iy", "ixl", "ixh"];
         if impossible.iter().any(|val| val == &label.to_lowercase()) {
