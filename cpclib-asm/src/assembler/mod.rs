@@ -1128,7 +1128,20 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
                     .map(|o| o.as_ref())
             )
         },
-        LocatedToken::Repeat(_, _, _, _) => todo!(),
+        LocatedToken::Repeat(count, code, counter, span) => {
+            let count = env.resolve_expr_must_never_fail(count)?;
+            for i in 0..count {
+                env.visit_listing(code)
+                    .map_err(|e| {
+                        AssemblerError::RepeatIssue {
+                            error: Box::new(e),
+                            span: span.clone(),
+                            repetition: i as usize +1
+                        }
+                    })?;
+            }
+            Ok(())
+        },
         LocatedToken::RepeatUntil(_, _, _) => todo!(),
         LocatedToken::Rorg(_, _, _) => todo!(),
         LocatedToken::Switch(_, _) => todo!(),
@@ -1424,6 +1437,7 @@ impl Env {
 }
 
 /// When visiting a repetition, we unroll the loop and stream the tokens
+/// TODO reimplement it in a similar way that the LocatedToken version that is better
 pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     let tokens = rept.unroll(env.symbols()).unwrap()?;
 
