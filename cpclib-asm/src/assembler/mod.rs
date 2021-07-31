@@ -1131,6 +1131,7 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
         LocatedToken::Repeat(count, code, counter, span) => {
             let count = env.resolve_expr_must_never_fail(count)?;
             for i in 0..count {
+                todo!("assign the counter");
                 env.visit_listing(code)
                     .map_err(|e| {
                         AssemblerError::RepeatIssue {

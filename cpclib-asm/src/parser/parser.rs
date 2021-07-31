@@ -310,10 +310,10 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         )),
     )(input)?;
 
-    eprintln!("rep");
-
     let (input, count) = cut(context("REPEAT: wrong number of iterations", expr))(input)?;
-
+    let (input, counter) = cut(context("REPEAT: issue in the counter", 
+    opt(preceded(parse_comma, parse_label(false)))
+    ))(input)?;
     let (input, inner) = cut(context("REPEAT: issue in the content", inner_code))(input)?;
 
     let (input, _) = cut(context(
@@ -337,7 +337,7 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
             count,
             LocatedListing::try_from(inner)
                 .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
-            None,
+            counter,
             repeat_start,
         ),
     ))
