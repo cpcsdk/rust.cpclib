@@ -178,7 +178,7 @@ pub enum AssemblerError {
     RepeatIssue {
         error: Box<AssemblerError>,
         span: Z80Span,
-        repetition: usize
+        repetition: i32
     }
 }
 

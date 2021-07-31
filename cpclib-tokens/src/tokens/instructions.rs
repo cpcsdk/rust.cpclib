@@ -445,7 +445,16 @@ pub enum Token {
     Protect(Expr, Expr),
 
     /// Duplicate the token stream
-    Repeat(Expr, Listing, Option<String>),
+    Repeat(
+        // number of loops
+        Expr,
+        // code to execute 
+        Listing, 
+        // name of the counter if any
+        Option<String>,
+        // start value
+        Option<Expr>
+    ),
     RepeatUntil(Expr, Listing),
     /// Set the value of $ to Expr
     Rorg(Expr, Listing),
@@ -620,13 +629,17 @@ impl fmt::Display for Token {
             Token::Protect(ref exp1, ref exp2)
                 => write!(f, "PROTECT {}, {}", exp1, exp2),
 
-            Token::Repeat(ref exp, ref code, ref label) => {
+            Token::Repeat(ref exp, ref code, ref label, ref start) => {
+                
+                write!(f, "REPEAT {}", exp)?;
                 if label.is_some() {
-                    writeln!(f, "REPEAT {}, {}", exp, label.as_ref().unwrap())?;
+                    write!(f, " {}", label.as_ref().unwrap())?;
                 }
-                else {
-                    writeln!(f, "REPEAT {}", exp)?;
+                if start.is_some() {
+                    write!(f, ", {}", start.as_ref().unwrap())?;
                 }
+                writeln!(f, "")?;
+
                 for token in code.iter() {
                     writeln!(f, "\t{}", token)?;
                 }
@@ -891,12 +904,19 @@ impl Token {
                 b.as_mut().map(|d| d.fix_local_macro_labels_with_seed(seed));
             }
 
-            Self::Repeat(e, l, _)
-            | Self::RepeatUntil(e, l)
+           
+            Self::RepeatUntil(e, l)
             | Self::Rorg(e, l)
             | Self::While(e, l) => {
                 e.fix_local_macro_labels_with_seed(seed);
                 l.fix_local_macro_labels_with_seed(seed);
+            }
+
+            Self::Repeat(e, l, _, s) => {
+                
+                e.fix_local_macro_labels_with_seed(seed);
+                l.fix_local_macro_labels_with_seed(seed);
+                s.as_mut().map(|e| e.fix_local_macro_labels_with_seed(seed));
             }
 
             Self::Switch(l) => {
@@ -934,7 +954,7 @@ impl Token {
             Self::CrunchedSection(_, _)
             | Self::Include(_, _)
             | Self::If(_, _)
-            | Self::Repeat(_, _, _)
+            | Self::Repeat(_, _, _, _)
             | Self::RepeatUntil(_, _)
             | Self::Rorg(_, _)
             | Self::Switch(_)

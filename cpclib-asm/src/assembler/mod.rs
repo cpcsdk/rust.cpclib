@@ -1128,8 +1128,11 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
                     .map(|o| o.as_ref())
             )
         },
-        LocatedToken::Repeat(count, code, counter, span) => {
+        LocatedToken::Repeat(count, code, counter, counter_start, span) => {
+            // get the number of loops
             let count = env.resolve_expr_must_never_fail(count)?;
+
+            // get the counter name of any
             let counter_name = counter.as_ref().map(|counter| format!("{{{}}}", counter));
             if let Some(counter_name) = &counter_name {
                 if env.symbols().contains_symbol(counter_name) {
@@ -1144,18 +1147,26 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
                     )
                 }
             }
+
+            // get the first value
+            let mut counter_value = counter_start.as_ref().map(|start| {
+                env.resolve_expr_must_never_fail(start)
+            }).unwrap_or(Ok(0))?;
+
             for i in 0..count {
                 if let Some(counter_name) = &counter_name {
-                    env.symbols_mut().set_symbol_to_value(counter_name, i+1);
+                    env.symbols_mut().set_symbol_to_value(counter_name, counter_value);
                 }
                 env.visit_listing(code)
                     .map_err(|e| {
                         AssemblerError::RepeatIssue {
                             error: Box::new(e),
                             span: span.clone(),
-                            repetition: i as usize +1
+                            repetition: counter_value
                         }
                     })?;
+
+                counter_value += 1;
             }
 
             if let Some(counter_name) = &counter_name {
@@ -1223,7 +1234,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::MultiPop(ref regs) => env.visit_multi_pops(regs),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
-        Token::Repeat(_, _, _) => visit_repeat(token, env),
+        Token::Repeat(_, _, _, _) => todo!("Refactor the located version"),
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
         Token::Save {
@@ -3195,6 +3206,7 @@ mod test {
                 10.into(),
                 vec![Token::OpCode(Mnemonic::Nop, None, None, None)].into(),
                 None,
+                NonZeroI16
             ),
         ];
 
@@ -3211,10 +3223,10 @@ mod test {
                 vec![Token::Repeat(
                     10.into(),
                     vec![Token::OpCode(Mnemonic::Nop, None, None, None)].into(),
-                    None,
+                    None, None
                 )]
                 .into(),
-                None,
+                None, None
             ),
         ];
 
