@@ -1130,8 +1130,24 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
         },
         LocatedToken::Repeat(count, code, counter, span) => {
             let count = env.resolve_expr_must_never_fail(count)?;
+            let counter_name = counter.as_ref().map(|counter| format!("{{{}}}", counter));
+            if let Some(counter_name) = &counter_name {
+                if env.symbols().contains_symbol(counter_name) {
+                    return Err(
+                        AssemblerError::RepeatIssue{
+                            error: AssemblerError::ExpressionError {
+                                msg: format!("Counter {} already exists", counter_name)
+                            }.into(),
+                            span: span.clone(),
+                            repetition: 0
+                        }
+                    )
+                }
+            }
             for i in 0..count {
-                todo!("assign the counter");
+                if let Some(counter_name) = &counter_name {
+                    env.symbols_mut().set_symbol_to_value(counter_name, i+1);
+                }
                 env.visit_listing(code)
                     .map_err(|e| {
                         AssemblerError::RepeatIssue {
@@ -1140,6 +1156,10 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
                             repetition: i as usize +1
                         }
                     })?;
+            }
+
+            if let Some(counter_name) = &counter_name {
+                env.symbols_mut().remove_symbol(counter_name);
             }
             Ok(())
         },

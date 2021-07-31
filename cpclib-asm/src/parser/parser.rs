@@ -1266,7 +1266,10 @@ pub fn parse_djnz(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
 
 /// ...
 pub fn expr_list(input: Z80Span) -> IResult<Z80Span, Vec<Expr>, VerboseError<Z80Span>> {
-    separated_list1(tuple((tag(","), space0)), alt((expr, string_expr)))(input)
+    separated_list1(
+        tuple((tag(","), space0)), 
+        cut(context("Error in expression", alt((expr, string_expr))))
+    )(input)
 }
 
 /// ...
@@ -2255,6 +2258,20 @@ pub fn parse_value(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Spa
     Ok((input, Expr::Value(val as i32)))
 }
 
+/// Parse a repetition counter
+pub fn parse_counter(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+    map(
+        delimited(
+            tag("{".into()),
+            parse_label(false), // BUG will accept too many cases
+            tag("}".into())
+        ),
+        |l| {
+            Expr::Label(format!("{{{}}}", l))
+        }
+    )(input)
+}
+
 /// Read a parenthesed expression
 pub fn parens(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     delimited(
@@ -2288,6 +2305,7 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                     // manage values
                     alt((positive_number, negative_number)),
                     char_expr,
+                    parse_counter,
                     // manage $
                     map(tag("$"), |_x| Expr::Label(String::from("$"))),
                     prefixed_label_expr,
