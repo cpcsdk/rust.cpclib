@@ -202,15 +202,27 @@ impl Macro {
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum Value {
+    /// Integer value used in an expression
     Integer(i32),
+    /// Macro information
     Macro(Macro),
+    /// Structure information
     Struct(Struct),
+    /// Counter for a repetition
+    Counter(i32)
 }
 
 impl Value {
     pub fn integer(&self) -> Option<i32> {
         match self {
             Value::Integer(i) => Some(*i),
+            _ => None,
+        }
+    }
+
+    pub fn counter(&self) -> Option<i32> {
+        match self {
+            Value::Counter(i) => Some(*i),
             _ => None,
         }
     }
@@ -385,6 +397,14 @@ impl SymbolsTable {
     pub fn value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Value> {
         let symbol = self.extend_symbol(symbol);
         self.map.get(&symbol)
+    }
+
+    pub fn counter_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32> {
+        let symbol = self.extend_symbol(symbol);
+        self.value(symbol)
+            .map(|v| v.counter())
+            .map(|v| v.unwrap())
+            .or_else(|| if self.dummy { Some(1i32) } else { None })
     }
 
     pub fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32> {
@@ -584,6 +604,11 @@ impl SymbolsTableCaseDependent {
     pub fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32> {
         self.table.int_value(self.normalize_symbol(symbol))
     }
+
+    pub fn counter_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32> {
+        self.table.counter_value(self.normalize_symbol(symbol))
+    }
+
 
     pub fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Macro> {
         self.table.macro_value(self.normalize_symbol(symbol))
