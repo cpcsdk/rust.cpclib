@@ -546,7 +546,7 @@ pub fn parse_z80_line_label_only(
     // Manage Equ
     // BUG Equ and = are supposed to be different
     let (input, equ) = opt(preceded(
-        preceded(space1, alt((tag_no_case("EQU"), tag_no_case("=")))),
+        preceded(space1, alt((tag_no_case("DEFL"), tag_no_case("EQU"), tag_no_case("=")))),
         preceded(space1, expr),
     ))(input)?;
 
