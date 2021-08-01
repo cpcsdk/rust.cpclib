@@ -19,7 +19,7 @@ pub trait TokenExt: ListingElement {
     ) -> Result<usize, String>;
 
     /// Unroll the tokens when it represents a loop
-    fn unroll(&self, sym: &SymbolsTableCaseDependent)
+    fn unroll(&self, env: &crate::Env)
         -> Option<Result<Vec<&Self>, AssemblerError>>;
 
     /// Generate the listing of opcodes for directives that embed bytes
@@ -48,10 +48,10 @@ impl TokenExt for Token {
     /// TODO return an iterator in order to not produce the vector each time
     fn unroll(
         &self,
-        sym: &SymbolsTableCaseDependent,
+        env: &crate::Env,
     ) -> Option<Result<Vec<&Self>, AssemblerError>> {
         if let Token::Repeat(ref expr, ref tokens, ref _counter_label, ref _counter_start) = self {
-            let count: Result<i32, AssemblerError> = expr.resolve(sym);
+            let count: Result<i32, AssemblerError> = expr.resolve(env);
             if count.is_err() {
                 Some(Err(count.err().unwrap()))
             } else {

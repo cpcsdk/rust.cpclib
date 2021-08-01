@@ -45,7 +45,7 @@ pub mod error_code {
     pub const UNABLE_TO_PARSE_INNER_CONTENT: u32 = 130;
 }
 
-const FIRST_DIRECTIVE: &[&str] = &["IF", "IFDEF", "IFNDEF", "REPEAT", "REPT", "REP", "PHASE"];
+const FIRST_DIRECTIVE: &[&str] = &["IF", "IFDEF", "IFNDEF", "REPEAT", "REPT", "REP", "PHASE", "WHILE"];
 
 // This table is supposed to contain the keywords that finish a section
 const FINAL_DIRECTIVE: &[&str] = &[
@@ -57,6 +57,7 @@ const FINAL_DIRECTIVE: &[&str] = &[
     "REND",  // rorg directive
     "ENDIF", // if directive
     "ELSE",
+    "WEND"
 ];
 pub fn parse_z80_strrc_with_contextrc(
     code: Rc<String>,
@@ -193,8 +194,9 @@ pub fn parse_z80_line(
                         ),
                         map(
                             alt((
-                                context("repeat", parse_repeat),
-                                context("rorg", parse_rorg),
+                                context("[DBG] repeat", parse_repeat),
+                                context("[DBG] while", parse_while),
+                                context("[DBG] rorg", parse_rorg),
                                 context("[DBG] condition", parse_conditional),
                             )),
                             |lt| vec![lt],
@@ -297,6 +299,32 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
         ),
     ))
 }
+
+
+/// TODO
+pub fn parse_while(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let while_start = input.clone();
+    let (input, _) = parse_instr("WHILE")(input)?;
+
+    let (input, cond) = cut(context("WHILE: error in condition", expr))(input)?;
+    let (input, inner) = cut(context("WHILE: issue in the content", inner_code))(input)?;
+    let (input, _) = cut(context(
+        "WHILE: not closed",
+        parse_instr("WEND"),
+    ))(input)?;
+
+    Ok((
+        input.clone(),
+        LocatedToken::While(
+            cond,
+            LocatedListing::try_from(inner)
+                .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
+                while_start
+        ),
+    ))
+
+}
+
 
 /// TODO
 pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
@@ -2478,8 +2506,24 @@ pub fn expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
 /// parse functions with one argument
 pub fn parse_unary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     let (input, func) = alt((
-        value(UnaryFunction::High, tag_no_case("HI")),
-        value(UnaryFunction::Low, tag_no_case("LO")),
+        value(
+            UnaryFunction::High, 
+            alt((
+                tag_no_case("HIGH"),
+                tag_no_case("HI")
+            ))
+        ),
+        value(
+            UnaryFunction::Low, 
+            alt((
+                tag_no_case("LOW"),
+                tag_no_case("LO")
+            ))
+        ),
+        value(
+            UnaryFunction::Memory,
+                tag_no_case("MEMORY")
+        )
     ))(input)?;
 
     let (input, _) = tuple((space0, tag("("), space0))(input)?;
