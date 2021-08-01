@@ -264,8 +264,10 @@ pub struct Env {
 
     /// Start adr to use to write binary files. No use when working with snapshots.
     /// When working with binary file only 64K can be generated, not more
+    /// TODO move in the dedicated orgzone
     startadr: Option<usize>,
     /// maximum address reached when working with 64k data
+    /// TODO move in the dedicated orgzone
     maxadr: usize,
 
     /// Current address to write to
@@ -275,7 +277,8 @@ pub struct Env {
     codeadr: usize,
 
     /// Maximum possible address to write to
-    maxptr: usize,
+    /// TODO move in its current orgzone
+    limit: usize,
 
     /// Currently selected bank
     activepage: usize,
@@ -319,7 +322,7 @@ impl Default for Env {
             maxadr: 0,
             outputadr: 0,
             codeadr: 0,
-            maxptr: 0xffff,
+            limit: 0xffff,
             activepage: 0,
             macro_seed: 0,
 
@@ -374,7 +377,7 @@ impl Env {
             self.startadr = None;
             self.outputadr = 0;
             self.codeadr = 0;
-            self.maxptr = 0xffff;
+            self.limit = 0xffff;
             self.activepage = 0;
             self.macro_seed = 0;
             self.sna = Default::default();
@@ -443,8 +446,8 @@ impl Env {
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
         static mut FAIL_NEXT_WRITE_IF_ZERO: bool = false;
 
-        if self.outputadr > self.maxptr || (unsafe{FAIL_NEXT_WRITE_IF_ZERO} && self.outputadr==0) {
-            return Err(AssemblerError::OutputExceedsLimits);
+        if self.outputadr > self.limit || (unsafe{FAIL_NEXT_WRITE_IF_ZERO} && self.outputadr==0) {
+            return Err(AssemblerError::OutputExceedsLimits (self.outputadr));
         }
 
         // update the maximm 64k position
@@ -613,6 +616,17 @@ impl Env {
             token.visited(self)?;
         }
 
+        Ok(())
+    }
+
+    /// TODO set the limit for the current page
+    fn  visit_limit(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+        let value = self.resolve_expr_must_never_fail(exp)?;
+        self.limit = value as usize;
+
+        if self.limit <= self.maxadr {
+            return Err(AssemblerError::OutputExceedsLimits(self.limit));
+        }
         Ok(())
     }
 
@@ -1261,6 +1275,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         )
         },
         Token::Label(ref label) => env.visit_label(label),
+        Token::Limit(ref exp) => env.visit_limit(exp),
         Token::MultiPush(ref regs) => env.visit_multi_pushes(regs),
         Token::MultiPop(ref regs) => env.visit_multi_pops(regs),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
