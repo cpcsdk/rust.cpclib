@@ -73,7 +73,7 @@ impl ExprEvaluationExt for Expr {
 
             String(ref string) => panic!("String values cannot be converted to i32 {}", string),
 
-            Label(ref label) => match sym.value(label) {
+            Label(ref label) => match sym.value(label)? {
                 Some(cpclib_tokens::symbols::Value::Integer(ref val)) => Ok(*val),
                 Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym.as_ref())),
                 Some(_) => Err(AssemblerError::WrongSymbolType {
@@ -82,7 +82,7 @@ impl ExprEvaluationExt for Expr {
                 }),
                 None => Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
-                    closest: sym.closest_symbol(label),
+                    closest: sym.closest_symbol(label)?,
                 }),
             },
 
@@ -135,7 +135,7 @@ impl ExprEvaluationExt for Expr {
                 BinaryFunctionWrapper::new(func, &exp1, &exp2).resolve(sym)
             }
 
-            PrefixedLabel(prefix, label) => match sym.prefixed_value(prefix, label) {
+            PrefixedLabel(prefix, label) => match sym.prefixed_value(prefix, label)? {
                 Some(value) => Ok(value as _),
                 None => Err(AssemblerError::ExpressionError{msg: format!("Unable to obtain {} of {}", prefix, label)}),
             },
