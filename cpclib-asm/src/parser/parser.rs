@@ -1167,8 +1167,8 @@ pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
 /// Parse DB DW directives
 pub fn parse_db_or_dw(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, is_db) = alt((
-        map(alt((parse_instr("DB"), parse_instr("DEFB"))), |_| true),
-        map(alt((parse_instr("DW"), parse_instr("DEFW"))), |_| false),
+        map(alt((parse_instr("BYTE"), parse_instr("DB"), parse_instr("DEFB"))), |_| true),
+        map(alt((parse_instr("WORD"), parse_instr("DW"), parse_instr("DEFW"))), |_| false),
     ))(input)?;
 
     let (input, expr) = expr_list(input)?;
