@@ -582,7 +582,7 @@ pub fn parse_fname(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80
 /// Parser for the include directive
 pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let include_start = input.clone();
-    let (input, fname) = preceded(tuple((tag_no_case("INCLUDE"), space1)), parse_fname)(input)?;
+    let (input, fname) = preceded(alt((parse_instr("INCLUDE"), parse_instr("READ"))), parse_fname)(input)?;
 
     Ok((
         input,
