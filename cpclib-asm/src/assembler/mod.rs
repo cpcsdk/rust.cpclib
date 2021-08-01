@@ -388,7 +388,7 @@ impl Env {
             self.limit = 0xffff;
             self.activepage = 0;
             self.macro_seed = 0;
-            self.sna = Default::default();
+            //self.sna = Default::default(); // We finally keep the snapshot for the memory function
             self.sna_version = cpclib_sna::SnapshotVersion::V3;
 
             self.stable_counters = StableTickerCounters::default();
