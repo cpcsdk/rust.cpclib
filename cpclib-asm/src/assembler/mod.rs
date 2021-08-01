@@ -252,6 +252,14 @@ impl ListingOutputTrigger {
         }
         self.builder.borrow_mut().finish();       
     }
+
+    fn on(&mut self) {
+        self.builder.borrow_mut().on();
+    }
+
+    fn off(&mut self) {
+        self.builder.borrow_mut().off();
+    }
 }
 /// Environment of the assembly
 #[allow(missing_docs)]
@@ -1248,7 +1256,18 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             }
             Ok(())
         }
-        Token::Comment(_) | Token::List | Token::NoList => Ok(()), // Nothing to do for a comment
+        Token::Comment(_) => Ok(()), // Nothing to do for a comment
+        Token::List => {
+            env.output_trigger.as_mut().map(|l| {
+                l.on();
+            });
+            Ok(())
+        }, Token::NoList => {
+            env.output_trigger.as_mut().map(|l| {
+                l.off();
+            });
+            Ok(())
+        }, 
         Token::Include(_, cell) if cell.borrow().is_some() => {
             env.visit_listing(cell.borrow().as_ref().unwrap())
         }
