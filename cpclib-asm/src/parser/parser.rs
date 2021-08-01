@@ -1298,9 +1298,14 @@ pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
 
 /// ...
 pub fn parse_align(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    map(preceded(parse_instr("ALIGN"), expr), |expr| {
-        Token::Align(expr, None)
-    })(input)
+   
+   let (input, boundary) = preceded(parse_instr("ALIGN"), expr)(input)?;
+   let (input, fill) = opt(preceded(parse_comma, expr))(input)?;
+
+   Ok((
+       input,
+       Token::Align(boundary, fill)
+   ))
 }
 
 /// ...
