@@ -756,6 +756,19 @@ impl Env {
         Ok(())
     }
 
+
+    pub fn visit_align(&mut self, boundary: &Expr, fill: Option<&Expr>) -> Result<(), AssemblerError> {
+        let boundary = self.resolve_expr_must_never_fail(boundary)? as u16;
+        let fill = fill.map(|e| self.resolve_expr_may_fail_in_first_pass(e))
+                    .unwrap_or(Ok((0)))? as u8;
+
+        while self.output_address() as u16 % boundary != 0 {
+            self.output(fill)?;
+        }
+        
+        Ok(())
+    }
+
     fn visit_bankset(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
         let value = self.resolve_expr_must_never_fail(exp)?; // This value MUST be interpretable once executed
         if value < 0 || value > 8 {
@@ -1202,6 +1215,7 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
 pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     env.update_dollar();
     match token {
+        Token::Align(ref boundary, ref fill) => env.visit_align(boundary, fill.as_ref()),
         Token::Assert(ref exp, ref txt) => visit_assert(exp, txt.as_ref(), env),
         Token::Basic(ref variables, ref hidden_lines, ref code) => {
             env.visit_basic(variables.as_ref(), hidden_lines.as_ref(), code)
