@@ -149,7 +149,7 @@ pub enum AssemblerError {
     UnknownAssemblingAddress,
     RunAlreadySpecified,
     NoActiveCounter,
-    OutputExceedsLimits,
+    OutputExceedsLimits(usize),
 
     OverrideMemory(u32),
 
@@ -335,7 +335,7 @@ impl Display for AssemblerError {
             AssemblerError::SymbolAlreadyExists{symbol} => write!(f, "A symbol named `{}` already exists", symbol),
             AssemblerError::IncoherentCode{msg} => write!(f, "Incoherent code: {}", msg),
             AssemblerError::NoActiveCounter => write!(f, "No active counter"),
-            AssemblerError::OutputExceedsLimits => write!(f, "Output exceeds limits"),
+            AssemblerError::OutputExceedsLimits(limit) => write!(f, "Output exceeds limits of 0x{:X}", limit),
             AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
             AssemblerError::AlreadyDefinedSymbol{symbol, kind} => write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind),
 

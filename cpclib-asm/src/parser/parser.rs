@@ -774,6 +774,7 @@ pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbose
                 parse_org,
                 parse_defs,
                 parse_incbin,
+                parse_limit,
                 parse_db_or_dw,
                 parse_print,
                 parse_protect,
@@ -933,6 +934,14 @@ pub fn parse_run(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span
 
     Ok((input, Token::Run(exp, ga)))
 }
+
+
+pub fn parse_limit(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, exp) = preceded(parse_instr("LIMIT"), expr)(input)?;
+
+    Ok((input, Token::Limit(exp)))
+}
+
 
 /// Parse tickin directives
 pub fn parse_stable_ticker(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
@@ -1299,7 +1308,8 @@ pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
 /// ...
 pub fn parse_align(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
    
-   let (input, boundary) = preceded(parse_instr("ALIGN"), expr)(input)?;
+   let (input, boundary) = preceded(
+       parse_instr("ALIGN"), expr)(input)?;
    let (input, fill) = opt(preceded(parse_comma, expr))(input)?;
 
    Ok((
@@ -2027,9 +2037,9 @@ pub fn parse_org(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span
 
 /// Parse defs instruction. TODO add optional parameters
 pub fn parse_defs(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = tuple((alt(( parse_instr("FILL"), parse_instr("DS"), parse_instr("DEFS"))), space1))(input)?;
+    let (input, _) = alt(( parse_instr("FILL"), parse_instr("DS"), parse_instr("DEFS")))(input)?;
 
-    let (input, val) = expr(input)?;
+    let (input, val) = cut(context("Wrong argument", expr))(input)?;
 
     Ok((input, Token::Defs(val, None)))
 }
