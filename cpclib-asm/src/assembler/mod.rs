@@ -513,7 +513,7 @@ impl Env {
 
     /// Evaluate the expression according to the current state of the environment
     pub fn eval(&self, expr: &Expr) -> Result<i32, AssemblerError> {
-        expr.resolve(self.symbols())
+        expr.resolve(self)
     }
 
     pub fn symbols(&self) -> &SymbolsTableCaseDependent {
@@ -540,7 +540,7 @@ impl Env {
     /// If the expression is not solvable in first pass, 0 is returned.
     /// If the expression is not solvable in second pass, an error is returned
     fn resolve_expr_may_fail_in_first_pass(&self, exp: &Expr) -> Result<i32, AssemblerError> {
-        match exp.resolve(self.symbols()) {
+        match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
                 if self.pass.is_first_pass() {
@@ -555,7 +555,7 @@ impl Env {
     /// Compute the expression thanks to the symbol table of the environment.
     /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
     fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<i32, AssemblerError> {
-        exp.resolve(self.symbols())
+        exp.resolve(self)
     }
 
     /// Compute the relative address. Is authorized to fail at first pass
@@ -1335,8 +1335,8 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &Env) -> Result<(), Assem
         if value == 0 {
             let symbols = env.symbols();
             let oper = |left: &Expr, right: &Expr, oper: &str| -> String {
-                let res_left = left.resolve(symbols).unwrap();
-                let res_right = right.resolve(symbols).unwrap();
+                let res_left = left.resolve(env).unwrap();
+                let res_right = right.resolve(env).unwrap();
 
                 format!("[{} {} {}] ", res_left, oper, res_right)
                     + &format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right)
@@ -1536,7 +1536,7 @@ impl Env {
 /// When visiting a repetition, we unroll the loop and stream the tokens
 /// TODO reimplement it in a similar way that the LocatedToken version that is better
 pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), AssemblerError> {
-    let tokens = rept.unroll(env.symbols()).unwrap()?;
+    let tokens = rept.unroll(env).unwrap()?;
 
     for token in &tokens {
         visit_token(token, env)?;
@@ -1643,23 +1643,21 @@ pub fn assemble_opcode(
     arg3: &Option<Register8>,
     env: &mut Env,
 ) -> Result<Bytes, AssemblerError> {
-    let sym = env.symbols_mut();
-    // TODO use env instead of the symbol table for each call
     match mnemonic {
         Mnemonic::And | Mnemonic::Or | Mnemonic::Xor => {
-            assemble_logical_operator(mnemonic, arg1.as_ref().unwrap(), sym)
+            assemble_logical_operator(mnemonic, arg1.as_ref().unwrap(), env)
         }
         Mnemonic::Add | Mnemonic::Adc => assemble_add_or_adc(
             mnemonic,
             arg1.as_ref().unwrap(),
             arg2.as_ref().unwrap(),
-            sym,
+            env,
         ),
         Mnemonic::Cp => env.assemble_cp(arg1.as_ref().unwrap()),
         Mnemonic::ExMemSp => assemble_ex_memsp(arg1.as_ref().unwrap()),
         Mnemonic::Dec | Mnemonic::Inc => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap(), env),
         Mnemonic::Djnz => assemble_djnz(arg1.as_ref().unwrap(), env),
-        Mnemonic::In => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
+        Mnemonic::In => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
         Mnemonic::Ld => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
         Mnemonic::Ldi
         | Mnemonic::Ldd
@@ -1698,7 +1696,7 @@ pub fn assemble_opcode(
         | Mnemonic::Rrd => assemble_no_arg(mnemonic),
         Mnemonic::Nop => assemble_nop(),
         Mnemonic::Nops2 => assemble_nops2(),
-        Mnemonic::Out => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
+        Mnemonic::Out => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
         Mnemonic::Jr | Mnemonic::Jp | Mnemonic::Call => {
             assemble_call_jr_or_jp(mnemonic, arg1.as_ref(), arg2.as_ref().unwrap(), env)
         }
@@ -2594,7 +2592,7 @@ fn assemble_nops2() -> Result<Bytes, AssemblerError> {
 fn assemble_in(
     arg1: &DataAccess,
     arg2: &DataAccess,
-    sym: &SymbolsTableCaseDependent,
+    env: &Env,
 ) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
@@ -2614,7 +2612,7 @@ fn assemble_in(
 
             DataAccess::PortN(ref exp) => {
                 if let DataAccess::Register8(Register8::A) = arg1 {
-                    let val = (exp.resolve(sym)? & 0xff) as u8;
+                    let val = (exp.resolve(env)? & 0xff) as u8;
                     bytes.push(0xDB);
                     bytes.push(val);
                 }
@@ -2634,7 +2632,7 @@ fn assemble_in(
 fn assemble_out(
     arg1: &DataAccess,
     arg2: &DataAccess,
-    sym: &SymbolsTableCaseDependent,
+    env: &Env,
 ) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
@@ -2658,7 +2656,7 @@ fn assemble_out(
 
             DataAccess::PortN(ref exp) => {
                 if let DataAccess::Register8(Register8::A) = arg2 {
-                    let val = (exp.resolve(sym)? & 0xff) as u8;
+                    let val = (exp.resolve(env)? & 0xff) as u8;
                     bytes.push(0xD3);
                     bytes.push(val);
                 }
@@ -2717,7 +2715,7 @@ fn assemble_push(arg1: &DataAccess) -> Result<Bytes, AssemblerError> {
 fn assemble_logical_operator(
     mnemonic: Mnemonic,
     arg1: &DataAccess,
-    sym: &SymbolsTableCaseDependent,
+    env: &Env,
 ) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
@@ -2757,7 +2755,7 @@ fn assemble_logical_operator(
                 Mnemonic::Xor => 0xEE,
                 _ => unreachable!(),
             };
-            let value = exp.resolve(sym)? & 0xff;
+            let value = exp.resolve(env)? & 0xff;
             bytes.push(base);
             bytes.push(value as u8);
         }
@@ -2767,7 +2765,7 @@ fn assemble_logical_operator(
         }
 
         DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-            let value = exp.resolve(sym)? & 0xff;
+            let value = exp.resolve(env)? & 0xff;
             bytes.push(indexed_register16_to_code(*reg));
             bytes.push(memory_code());
             bytes.push(value as u8);
@@ -2793,7 +2791,7 @@ fn assemble_add_or_adc(
     mnemonic: Mnemonic,
     arg1: &DataAccess,
     arg2: &DataAccess,
-    sym: &SymbolsTableCaseDependent,
+    env: &Env,
 ) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
     let is_add = match mnemonic {
@@ -2814,7 +2812,7 @@ fn assemble_add_or_adc(
                 }
 
                 DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                    let val = exp.resolve(sym)?;
+                    let val = exp.resolve(env)?;
 
                     // TODO check if the code is ok
                     bytes.push(indexed_register16_to_code(*reg));
@@ -2827,7 +2825,7 @@ fn assemble_add_or_adc(
                 }
 
                 DataAccess::Expression(ref exp) => {
-                    let val = exp.resolve(sym)? as u8;
+                    let val = exp.resolve(env)? as u8;
                     if is_add {
                         bytes.push(0b1100_0110);
                     } else {
