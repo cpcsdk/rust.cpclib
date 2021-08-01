@@ -1167,7 +1167,7 @@ pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
 /// Parse DB DW directives
 pub fn parse_db_or_dw(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, is_db) = alt((
-        map(alt((parse_instr("BYTE"), parse_instr("DB"), parse_instr("DEFB"))), |_| true),
+        map(alt((parse_instr("BYTE"), parse_instr("DB"), parse_instr("DEFB"), parse_instr("DEFM"))), |_| true),
         map(alt((parse_instr("WORD"), parse_instr("DW"), parse_instr("DEFW"))), |_| false),
     ))(input)?;
 
@@ -2027,7 +2027,7 @@ pub fn parse_org(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span
 
 /// Parse defs instruction. TODO add optional parameters
 pub fn parse_defs(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = tuple((tag_no_case("DEFS"), space1))(input)?;
+    let (input, _) = tuple((alt(( parse_instr("FILL"), parse_instr("DEFS"))), space1))(input)?;
 
     let (input, val) = expr(input)?;
 
