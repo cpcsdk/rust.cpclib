@@ -577,7 +577,7 @@ impl Env {
         label: &str,
         value: i32,
     ) -> Result<(), AssemblerError> {
-        let already_present = self.symbols().contains_symbol(&label.to_owned());
+        let already_present = self.symbols().contains_symbol(label)?;
 
         match (already_present, self.pass) {
             (true, AssemblingPass::FirstPass) => Err(AssemblerError::SymbolAlreadyExists {
@@ -589,7 +589,7 @@ impl Env {
             )}),
             (false, AssemblingPass::FirstPass) | (false, AssemblingPass::Uninitialized) => {
                 self.symbols_mut()
-                    .set_symbol_to_value(&label.to_owned(), value);
+                    .set_symbol_to_value(label, value);
                 Ok(())
             }
             (true, AssemblingPass::SecondPass) => {
@@ -624,10 +624,10 @@ impl Env {
         };
 
         // A label cannot be defined multiple times
-        if self.pass.is_first_pass() && self.symbols().contains_symbol(label) {
+        if self.pass.is_first_pass() && self.symbols().contains_symbol(label)? {
             Err(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label.to_owned(),
-                kind: self.symbols().kind(label).to_owned()
+                kind: self.symbols().kind(label)?.to_owned()
             })
         } else {
             if !label.starts_with('.') {
@@ -682,7 +682,7 @@ impl Env {
 
                 // Label must exist
                 (TestKind::LabelExists(ref label), ref listing) => {
-                    if self.symbols().contains_symbol(label) {
+                    if self.symbols().contains_symbol(label)? {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -690,7 +690,7 @@ impl Env {
 
                 // Label must not exist
                 (TestKind::LabelDoesNotExist(ref label), ref listing) => {
-                    if !self.symbols().contains_symbol(label) {
+                    if !self.symbols().contains_symbol(label)? {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -711,7 +711,7 @@ impl Env {
         arguments: &[String],
         code: &str,
     ) -> Result<(), AssemblerError> {
-        if self.pass.is_first_pass() && self.symbols().contains_symbol(name) {
+        if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
                 symbol: name.to_owned(),
             });
@@ -729,7 +729,7 @@ impl Env {
         name: &str,
         content: &[(String, Token)],
     ) -> Result<(), AssemblerError> {
-        if self.pass.is_first_pass() && self.symbols().contains_symbol(name) {
+        if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
                 symbol: name.to_owned(),
             });
@@ -807,13 +807,13 @@ impl Env {
 
 
         // Retreive the macro or structure definition
-        let r#macro = self.symbols().macro_value(name);
-        let r#struct = self.symbols().struct_value(name);
+        let r#macro = self.symbols().macro_value(name)?;
+        let r#struct = self.symbols().struct_value(name)?;
 
         if r#macro.is_none() && r#struct.is_none() {
             let e = AssemblerError::UnknownMacro {
                 symbol: name.to_owned(),
-                closest: self.symbols().closest_symbol(name),
+                closest: self.symbols().closest_symbol(name)?,
             };
             return match caller_span {
                 Some(span) => Err(AssemblerError::RelocatedError{error: e.into(), span: span.clone()}),
@@ -869,12 +869,12 @@ impl Env {
 
     /// Remove the given variable from the table of symbols
     pub fn visit_undef(&mut self, label: &str) -> Result<(), AssemblerError> {
-        match self.symbols_mut().remove_symbol(label) {
+        match self.symbols_mut().remove_symbol(label)? {
             Some(_) => Ok(()),
             None => {
                 Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
-                    closest: self.symbols().closest_symbol(label),
+                    closest: self.symbols().closest_symbol(label)?,
                 })
                 
             },
@@ -1135,7 +1135,7 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
             // get the counter name of any
             let counter_name = counter.as_ref().map(|counter| format!("{{{}}}", counter));
             if let Some(counter_name) = &counter_name {
-                if env.symbols().contains_symbol(counter_name) {
+                if env.symbols().contains_symbol(counter_name)? {
                     return Err(
                         AssemblerError::RepeatIssue{
                             error: AssemblerError::ExpressionError {
@@ -1153,10 +1153,22 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
                 env.resolve_expr_must_never_fail(start)
             }).unwrap_or(Ok(0))?;
 
+
+
             for i in 0..count {
+                // handle symbols unicity
+                {
+                    env.macro_seed += 1;
+                    let seed = env.macro_seed;
+                    env.symbols_mut().push_seed(seed);
+                }
+
+                // handle counter value update
                 if let Some(counter_name) = &counter_name {
                     env.symbols_mut().set_symbol_to_value(counter_name, counter_value);
                 }
+
+                // generate the bytes
                 env.visit_listing(code)
                     .map_err(|e| {
                         AssemblerError::RepeatIssue {
@@ -1166,9 +1178,14 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
                         }
                     })?;
 
+                // handle the counter update
                 counter_value += 1;
+
+                // handle the end of visibility of unique labels
+                env.symbols_mut().pop_seed();
             }
 
+            
             if let Some(counter_name) = &counter_name {
                 env.symbols_mut().remove_symbol(counter_name);
             }
@@ -1346,12 +1363,12 @@ impl Env {
 fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
  
 
-    if env.symbols().contains_symbol(label) && env.pass.is_first_pass() {
+    if env.symbols().contains_symbol(label)? && env.pass.is_first_pass() {
 
 
         Err(AssemblerError::AlreadyDefinedSymbol{
             symbol: label.to_owned(),
-            kind: env.symbols().kind(label).to_owned()
+            kind: env.symbols().kind(label)?.to_owned()
         })
     } else {
         let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
