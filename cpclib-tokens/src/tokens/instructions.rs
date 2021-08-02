@@ -477,7 +477,7 @@ pub enum Token {
         cpclib_sna::flags::FlagValue,
     ),
     StableTicker(StableTickerAction),
-    Str(Vec<u8>),
+    Str(Vec<Expr>),
     Struct(String, Vec<(String, Token)>),
     Switch(Vec<(Expr, Listing)>),
 

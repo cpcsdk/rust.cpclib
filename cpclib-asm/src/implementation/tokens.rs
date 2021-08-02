@@ -110,10 +110,10 @@ impl TokenExt for Token {
 
             Token::Defb(_) | Token::Defw(_) => {
                 use crate::assembler::Env;
-                use crate::assembler::visit_db_or_dw;
+                use crate::assembler::visit_db_or_dw_or_str;
 
                 let mut env = Env::default();
-                visit_db_or_dw(self, &mut env)
+                visit_db_or_dw_or_str(self, &mut env)
                     .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
                 wrap(&env.produced_bytes())
             }

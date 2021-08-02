@@ -171,7 +171,7 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
                     });
                 }
                 else {
-                    Ok(env.byte(arg as usize) as i32)
+                    Ok(env.peek(arg as usize) as i32)
                 }
             }
         }
