@@ -1218,12 +1218,12 @@ INC_H equ opcode(inc h)
     #[test]
     fn test_db() {
         let code = CTX.build_span("db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector");
-        get_val(parse_db_or_dw(code));
+        get_val(parse_db_or_dw_or_str(code));
 
         let code = CTX.build_span(
             "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector and %1111, Gfx1_bin_size",
         );
-        get_val(parse_db_or_dw(code));
+        get_val(parse_db_or_dw_or_str(code));
     }
 
     #[test]

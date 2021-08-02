@@ -399,6 +399,7 @@ pub enum Token {
     Defw(Vec<Expr>),
 
     Equ(String, Expr),
+    Export(Vec<String>),
 
     /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
     If(Vec<(TestKind, Listing)>, Option<Listing>),
@@ -430,6 +431,7 @@ pub enum Token {
     // Fake push directive with several arguments
     MultiPush(Vec<DataAccess>),
 
+    NoExport(Vec<String>),
     NoList,
 
     /// Very last argument concerns only few undocumented instructions that save their results in a register

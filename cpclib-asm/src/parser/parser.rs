@@ -786,8 +786,7 @@ pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z
     ))
 }
 
-/// Parse any directive
-pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+pub fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let dir_start = input.clone();
     alt((
         parse_include,
@@ -801,6 +800,7 @@ pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbose
                 parse_buildsna,
                 parse_org,
                 parse_defs,
+                parse_export,
                 parse_incbin,
                 parse_limit,
                 parse_db_or_dw_or_str,
@@ -808,15 +808,34 @@ pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbose
                 parse_protect,
                 parse_run,
                 parse_snaset,
+            )),
+            move |t| t.locate(dir_start.clone()),
+        )
+    ))(input.clone())
+}
+
+pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let dir_start = input.clone();
+
+        map(
+            alt((
                 parse_save,
                 parse_stable_ticker,
                 parse_struct,
                 parse_undef,
                 parse_noarg_directive,
-                parse_macro_call, // need to be the very last one as it eats everything else
+                parse_macro_call, 
             )),
             move |t| t.locate(dir_start.clone()),
-        ),
+        )(input.clone())
+}
+
+
+/// Parse any directive
+pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    alt((
+                parse_directive1,
+                parse_directive2
     ))(input.clone())
 }
 
@@ -1201,7 +1220,28 @@ pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
     )(input)
 }
 
-/// Parse DB DW directives
+pub fn parse_export(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, code) = alt((
+        map(parse_instr("EXPORT"), |_| 0),
+        map(parse_instr("NOEXPORT"), |_| 1)
+    ))(input)?;
+
+    let (input, labels) = cut(
+        context("Wrong parameters",
+            separated_list0(
+                parse_comma,
+                parse_label(false)
+            )
+        )
+    )(input)?;
+
+    if code == 0 {
+        Ok((input, Token::Export(labels)))
+    } else {
+        Ok((input, Token::NoExport(labels)))
+    }
+}
+    /// Parse DB DW directives
 pub fn parse_db_or_dw_or_str(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, code) = alt((
         map(alt((
