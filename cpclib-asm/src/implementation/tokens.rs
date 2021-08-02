@@ -1,5 +1,7 @@
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
+use itertools::Itertools;
+use smallvec::SmallVec;
 
 use crate::assembler::{assemble_align, assemble_defs, assemble_opcode, Bytes};
 use crate::error::*;
@@ -80,7 +82,7 @@ impl TokenExt for Token {
             let lst = disassemble(&bytes);
             for token in lst.listing() {
                 match token {
-                    Token::Defb(_) | Token::Defw(_) | Token::Defs(_, _) => {
+                    Token::Defb(_) | Token::Defw(_) | Token::Defs(_) => {
                         return Err(format!("{} as not been disassembled", token))
                     }
                     _ => {}
@@ -91,11 +93,18 @@ impl TokenExt for Token {
         };
 
         match self {
-            Token::Defs(ref expr, ref value) => {
+            Token::Defs(ref l) => {
                 use crate::assembler::Env;
 
-                assemble_defs(expr, value.as_ref(), &Env::default())
-                    .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
+                l.iter()
+                    .map(|(e, f)| {
+                        assemble_defs(e, f.as_ref(), &Env::default())
+                        .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
+                    })
+                    .fold_ok(SmallVec::<[u8;4]>::new(), |mut acc, v| {
+                        acc.extend_from_slice(v.as_slice());
+                        acc
+                    })
                     .and_then(|b| wrap(&b))
             }
 
@@ -158,7 +167,7 @@ impl TokenExt for Token {
             | Token::Protect(_, _) => 0,
 
             // Here, there is a strong limitation => it will works only if no symbols are used
-            Token::Defw(_) | Token::Defb(_) | Token::Defs(_, _) => self
+            Token::Defw(_) | Token::Defb(_) | Token::Defs(_) => self
                 .disassemble_data()
                 .map_err(|e| AssemblerError::DisassemblerError{msg:e})
                 .and_then(|lst| lst.estimated_duration())?,
