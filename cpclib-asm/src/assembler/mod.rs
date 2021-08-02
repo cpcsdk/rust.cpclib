@@ -734,6 +734,28 @@ impl Env {
         }
     }
 
+    fn visit_noexport(&mut self, labels: &[String]) -> Result<(), AssemblerError> {
+        if labels.is_empty() {
+            self.symbols_output.forbid_all_symbols();
+        } else {
+            labels.iter()
+                .for_each(|l| self.symbols_output.forbid_symbol(l.clone()));
+        }
+        
+        Ok(())
+    }
+
+    fn visit_export(&mut self, labels: &[String]) -> Result<(), AssemblerError> {
+        if labels.is_empty() {
+            self.symbols_output.allow_all_symbols();
+        } else {
+            labels.iter()
+                .for_each(|l| self.symbols_output.allow_symbol(l.clone()));
+        }
+        
+        Ok(())
+    }
+
     fn visit_multi_pushes(&mut self, regs: &[DataAccess]) -> Result<(), AssemblerError> {
         for reg in regs.iter() {
             assemble_push(reg)?;
@@ -1351,6 +1373,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Limit(ref exp) => env.visit_limit(exp),
         Token::MultiPush(ref regs) => env.visit_multi_pushes(regs),
         Token::MultiPop(ref regs) => env.visit_multi_pops(regs),
+        Token::NoExport(ref labels) => env.visit_noexport(labels.as_slice()),
+        Token::Export(ref labels) => env.visit_export(labels.as_slice()),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Assign(ref label, ref exp) => visit_assign(label, exp, env),
         Token::Protect(ref start, ref end) => env.visit_protect(start, end),
