@@ -25,7 +25,10 @@ pub struct ListingOutput {
 	current_first_address: u32,
 	current_address_is_value: bool,
 	/// The name of the file containing the token
-	current_fname: Option<String>
+	current_fname: Option<String>,
+
+	/// Set to true when listing is properly handled
+	activated: bool
 }	
 
 impl Debug for ListingOutput {
@@ -45,7 +48,8 @@ impl ListingOutput {
 			current_line: None,
 			current_data: Vec::new(),
 			current_first_address: 0,
-			current_address_is_value: false
+			current_address_is_value: false,
+			activated: true
 		}
 	}
 
@@ -150,7 +154,7 @@ impl ListingOutput {
 
 	/// Add a token for the current line
 	pub fn add_token(&mut self, token: &LocatedToken, bytes: &[u8], address: u32) {
-
+		if ! self.activated {return;}
 
 		let fname_handling = self.manage_fname(token);
 
@@ -215,6 +219,8 @@ impl ListingOutput {
 	}
 
 	pub fn finish(&mut self) {
+		if self.current_line.is_none() {return;}
+		 
 		// ensure we display the end of the file
 		let new_line_length = unsafe{self.current_source.as_ref().unwrap().1 - (self.current_source.as_ref().unwrap().0.offset_from(self.current_line.as_ref().unwrap().0).abs() as usize)};
 		self.current_line.as_mut().unwrap().1 = new_line_length as _;
@@ -254,6 +260,15 @@ impl ListingOutput {
 		}
 
 
+	}
+
+	pub fn on(&mut self) {
+		self.activated = true;
+	}
+
+	pub fn off(&mut self) {
+		self.finish();
+		self.activated = false;
 	}
 
 }

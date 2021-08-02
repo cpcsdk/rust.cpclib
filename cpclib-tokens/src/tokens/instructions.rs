@@ -396,10 +396,11 @@ pub enum Token {
     CrunchedBinary(CrunchType, String),
     CrunchedSection(CrunchType, Listing),
     Defb(Vec<Expr>),
-    Defs(Expr, Option<Expr>),
+    Defs(Vec<(Expr, Option<Expr>)>),
     Defw(Vec<Expr>),
 
     Equ(String, Expr),
+    Export(Vec<String>),
 
     /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
     If(Vec<(TestKind, Listing)>, Option<Listing>),
@@ -431,6 +432,7 @@ pub enum Token {
     // Fake push directive with several arguments
     MultiPush(Vec<DataAccess>),
 
+    NoExport(Vec<String>),
     NoList,
 
     /// Very last argument concerns only few undocumented instructions that save their results in a register
@@ -446,7 +448,16 @@ pub enum Token {
     Protect(Expr, Expr),
 
     /// Duplicate the token stream
-    Repeat(Expr, Listing, Option<String>),
+    Repeat(
+        // number of loops
+        Expr,
+        // code to execute 
+        Listing, 
+        // name of the counter if any
+        Option<String>,
+        // start value
+        Option<Expr>
+    ),
     RepeatUntil(Expr, Listing),
     /// Set the value of $ to Expr
     Rorg(Expr, Listing),
@@ -469,7 +480,7 @@ pub enum Token {
         cpclib_sna::flags::FlagValue,
     ),
     StableTicker(StableTickerAction),
-    Str(Vec<u8>),
+    Str(Vec<Expr>),
     Struct(String, Vec<(String, Token)>),
     Switch(Vec<(Expr, Listing)>),
 
@@ -517,12 +528,17 @@ impl fmt::Display for Token {
  
                  Token::Defb(ref exprs)
                  => write!(f, "DB {}", expr_list_to_string(exprs)),
-            Token::Defs(ref expr, None)
-                 => write!(f, "DEFS {}", expr.to_simplified_string()),
-            Token::Defs(ref expr, Some(ref expr2))
-                 => write!(f, "DEFS {}, {}", expr.to_simplified_string(), expr2.to_simplified_string()),
+            Token::Defs(ref vals)
+                 => write!(f, "DEFS {}", vals.iter()
+                    .map(|p| {
+                        match &p.1 {
+                            Some(ref v) => format!("{}, {}", p.0.to_simplified_string(), v.to_simplified_string()),
+                            None => format!("{}", p.0.to_simplified_string())
+                        }
+                    })
+                    .join(", ")
+                ),
 
- 
             Token::Defw(ref exprs)
                  => write!(f, "DW {}", expr_list_to_string(exprs)),
  
@@ -621,13 +637,17 @@ impl fmt::Display for Token {
             Token::Protect(ref exp1, ref exp2)
                 => write!(f, "PROTECT {}, {}", exp1, exp2),
 
-            Token::Repeat(ref exp, ref code, ref label) => {
+            Token::Repeat(ref exp, ref code, ref label, ref start) => {
+                
+                write!(f, "REPEAT {}", exp)?;
                 if label.is_some() {
-                    writeln!(f, "REPEAT {}, {}", exp, label.as_ref().unwrap())?;
+                    write!(f, " {}", label.as_ref().unwrap())?;
                 }
-                else {
-                    writeln!(f, "REPEAT {}", exp)?;
+                if start.is_some() {
+                    write!(f, ", {}", start.as_ref().unwrap())?;
                 }
+                writeln!(f, "")?;
+
                 for token in code.iter() {
                     writeln!(f, "\t{}", token)?;
                 }
@@ -813,9 +833,24 @@ impl Token {
     /// Rename the @labels in macros
     pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         match self {
-            Self::Align(a, b) | Self::Defs(a, b) | Self::Org(a, b) | Self::Run(a, b) => {
+            Self::Align(a, b)  | Self::Org(a, b) | Self::Run(a, b) => {
                 a.fix_local_macro_labels_with_seed(seed);
                 b.as_mut().map(|b| b.fix_local_macro_labels_with_seed(seed));
+            }
+
+            Self::Defs(a) => {
+                a.iter_mut()
+                    .for_each(|p| {
+                        match &mut p.1 {
+                            Some(ref mut v) => {
+                                p.0.fix_local_macro_labels_with_seed(seed);
+                                v.fix_local_macro_labels_with_seed(seed);
+                            },
+                            None => {
+                                p.0.fix_local_macro_labels_with_seed(seed);
+                            }
+                        }
+                    })
             }
 
             Self::Protect(a, b) => {
@@ -892,12 +927,19 @@ impl Token {
                 b.as_mut().map(|d| d.fix_local_macro_labels_with_seed(seed));
             }
 
-            Self::Repeat(e, l, _)
-            | Self::RepeatUntil(e, l)
+           
+            Self::RepeatUntil(e, l)
             | Self::Rorg(e, l)
             | Self::While(e, l) => {
                 e.fix_local_macro_labels_with_seed(seed);
                 l.fix_local_macro_labels_with_seed(seed);
+            }
+
+            Self::Repeat(e, l, _, s) => {
+                
+                e.fix_local_macro_labels_with_seed(seed);
+                l.fix_local_macro_labels_with_seed(seed);
+                s.as_mut().map(|e| e.fix_local_macro_labels_with_seed(seed));
             }
 
             Self::Switch(l) => {
@@ -935,7 +977,7 @@ impl Token {
             Self::CrunchedSection(_, _)
             | Self::Include(_, _)
             | Self::If(_, _)
-            | Self::Repeat(_, _, _)
+            | Self::Repeat(_, _, _, _)
             | Self::RepeatUntil(_, _)
             | Self::Rorg(_, _)
             | Self::Switch(_)

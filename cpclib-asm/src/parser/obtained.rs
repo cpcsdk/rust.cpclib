@@ -41,7 +41,7 @@ pub enum LocatedToken {
         Option<LocatedListing>,
         Z80Span,
     ),
-    Repeat(Expr, LocatedListing, Option<String>, Z80Span),
+    Repeat(Expr, LocatedListing, Option<String>, Option<Expr>, Z80Span),
     RepeatUntil(Expr, LocatedListing, Z80Span),
     Rorg(Expr, LocatedListing, Z80Span),
     Switch(Vec<(Expr, LocatedListing)>, Z80Span),
@@ -76,7 +76,7 @@ impl LocatedToken {
             | Self::CrunchedSection(_, _, span)
             | Self::Include(_, _, span)
             | Self::If(_, _, span)
-            | Self::Repeat(_, _, _, span)
+            | Self::Repeat(_, _, _, _, span)
             | Self::RepeatUntil(_, _, span)
             | Self::Rorg(_, _, span)
             | Self::Switch(_, span)
@@ -106,8 +106,8 @@ impl LocatedToken {
                     .collect_vec(),
                 e.as_ref().map(|l| l.as_listing()),
             ),
-            LocatedToken::Repeat(e, l, s, _span) => {
-                Token::Repeat(e.clone(), l.as_listing(), s.clone())
+            LocatedToken::Repeat(e, l, s, start,  _span) => {
+                Token::Repeat(e.clone(), l.as_listing(), s.clone(), start.clone())
             }
             LocatedToken::RepeatUntil(e, l, _span) => Token::RepeatUntil(e.clone(), l.as_listing()),
             LocatedToken::Rorg(e, l, _span) => Token::Rorg(e.clone(), l.as_listing()),
@@ -313,14 +313,19 @@ impl LocatedToken {
                 });
             }
 
-
-
-            Self::Repeat(e, l, _, _)
-            | Self::RepeatUntil(e, l, _)
+            
+            Self::RepeatUntil(e, l, _)
             | Self::Rorg(e, l, _)
             | Self::While(e, l, _) => {
                 e.fix_local_macro_labels_with_seed(seed);
                 l.fix_local_macro_labels_with_seed(seed);
+            }
+
+            Self::Repeat(e, l, _, s, _) => {
+                
+                e.fix_local_macro_labels_with_seed(seed);
+                l.fix_local_macro_labels_with_seed(seed);
+                s.as_mut().map(|s| s.fix_local_macro_labels_with_seed(seed));
             }
         }
     }

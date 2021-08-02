@@ -24,7 +24,7 @@ impl SymbolOutputGenerator {
 				w,
 				"{} equ 0x{:04X}",
 				k.value(),
-				symbs.int_value(k.clone()).unwrap()
+				symbs.int_value(k.clone()).unwrap().unwrap()
 			)?;
 		}
 

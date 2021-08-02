@@ -151,8 +151,12 @@ pub enum AssemblerError {
     ReadOnlySymbol(Symbol),
     RunAlreadySpecified,
     NoActiveCounter,
-    OutputExceedsLimits,
 
+    OutputExceedsLimits(usize),
+    OutputProtected{
+        area: std::ops::RangeInclusive<u16>,
+        address: u16
+    },
     OverrideMemory(u32),
 
     //  #[fail(display = "Unable to resolve expression {}.", expression)]
@@ -175,6 +179,12 @@ pub enum AssemblerError {
     RelocatedError {
        error: Box<AssemblerError>,
        span: Z80Span
+    },
+
+    RepeatIssue {
+        error: Box<AssemblerError>,
+        span: Option<Z80Span>,
+        repetition: i32
     }
 }
 
@@ -206,7 +216,8 @@ impl From<SymbolError> for AssemblerError {
     fn from(err: SymbolError) -> Self {
         match err {
             SymbolError::UnknownAssemblingAddress => AssemblerError::UnknownAssemblingAddress,
-            SymbolError::CannotModify(symb) => AssemblerError::ReadOnlySymbol(symb)
+            SymbolError::CannotModify(symb) => AssemblerError::ReadOnlySymbol(symb),
+            SymbolError::WrongSymbol(err) => unimplemented!()
         }
     }
 }
@@ -334,7 +345,7 @@ impl Display for AssemblerError {
             AssemblerError::SymbolAlreadyExists{symbol} => write!(f, "A symbol named `{}` already exists", symbol),
             AssemblerError::IncoherentCode{msg} => write!(f, "Incoherent code: {}", msg),
             AssemblerError::NoActiveCounter => write!(f, "No active counter"),
-            AssemblerError::OutputExceedsLimits => write!(f, "Output exceeds limits"),
+            AssemblerError::OutputExceedsLimits(limit) => write!(f, "Output exceeds limits of 0x{:X}", limit),
             AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
             AssemblerError::AlreadyDefinedSymbol{symbol, kind} => write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind),
 
@@ -427,6 +438,15 @@ impl Display for AssemblerError {
                         write!(f, "{}\n{}",msg,root)
                     },
 
+                    AssemblerError::OutputProtected { area, address } => {
+                        let msg = build_simple_error_message_with_message(
+                            "Forbidden output", 
+                            &format!("Tentative to write in 0x{:X} in a protected area [0x{:X}:0x{:X}]",
+                            address, area.start(), area.end()), 
+                            span);
+                            write!(f, "{}",msg)
+                    }
+
                     _ => {
                         let msg =  build_simple_error_message(&format!("{}", error), span);
                         write!(f, "{}",msg)
@@ -434,7 +454,25 @@ impl Display for AssemblerError {
                 }
 
             },
-            AssemblerError::ReadOnlySymbol(symb) => write!(f, "{} cannot be modified", symb.value())
+            AssemblerError::ReadOnlySymbol(symb) => write!(f, "{} cannot be modified", symb.value()),
+
+            AssemblerError::RepeatIssue { error, span, repetition } => {
+                if span.is_some(){
+                    let msg =  build_simple_error_message(&format!("REPEAT: error in loop {}", repetition), span.as_ref().unwrap());
+                    write!(f, "{}\n{}",msg, error)
+                } else {
+                    write!(f, "Repeat issue\n{}", error)
+                }
+            
+            },
+
+            AssemblerError::OutputProtected { area, address } => {
+                write!(
+                    f,
+                    "Tentative to write in 0x{:X} in a protected area [0x{:X}:0x{:X}]",
+                    address, area.start(), area.end()
+                )
+            },
            
         }
     }

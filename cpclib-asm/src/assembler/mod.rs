@@ -199,15 +199,6 @@ impl StableTickerCounters {
     }
 }
 
-#[derive(Default, Debug)]
-#[allow(missing_docs)]
-struct OrgZone {
-    ibank: usize,
-    protect: bool,
-    _memstart: usize,
-    _memend: usize,
-}
-
 /// Trait to implement for each type of token.
 /// it allows to drive the appropriate data vonversion
 pub trait Visited {
@@ -257,7 +248,60 @@ impl ListingOutputTrigger {
         }
         self.builder.borrow_mut().finish();       
     }
+
+    fn on(&mut self) {
+        self.builder.borrow_mut().on();
+    }
+
+    fn off(&mut self) {
+        self.builder.borrow_mut().off();
+    }
 }
+
+type ProtectedArea = std::ops::RangeInclusive<u16>;
+
+/// Store all the compilation information for the currently selected 64kb page
+/// A stock CPC 6128 is composed of two pages
+#[derive(Debug, Clone)]
+pub struct PageInformation {
+    /// Start adr to use to write binary files. No use when working with snapshots.
+    startadr: Option<usize>,
+    /// maximum address reached when working with 64k data
+    maxadr: usize,
+    /// Current address to write to
+    outputadr: usize,
+    /// Current address used by the code
+    codeadr: usize,
+    /// Maximum possible address to write to
+    /// TODO move in its current orgzone
+    limit: usize,
+    /// List of pretected zones
+    protected_areas: Vec<ProtectedArea>,
+}
+
+impl Default for PageInformation {
+    fn default() -> Self {
+        Self {
+            startadr: None,
+            maxadr: 0,
+            outputadr: 0,
+            codeadr: 0,
+            limit: 0xffff,
+            protected_areas: Vec::new(),
+        }
+    }
+}
+
+impl PageInformation {
+    /// Properly set the information for a new pass
+    fn new_pass(&mut self) {
+        self.startadr = None;
+        self.outputadr = 0;
+        self.codeadr = 0;
+        self.limit = 0xffff;
+    }
+}
+
 /// Environment of the assembly
 #[allow(missing_docs)]
 pub struct Env {
@@ -267,23 +311,11 @@ pub struct Env {
     /// Stable counter of nops
     stable_counters: StableTickerCounters,
 
-    /// Start adr to use to write binary files. No use when working with snapshots.
-    /// When working with binary file only 64K can be generated, not more
-    startadr: Option<usize>,
-    /// maximum address reached when working with 64k data
-    maxadr: usize,
 
-    /// Current address to write to
-    outputadr: usize,
-
-    /// Current address used by the code
-    codeadr: usize,
-
-    /// Maximum possible address to write to
-    maxptr: usize,
-
-    /// Currently selected bank
+    /// index of the selected 64k page
     activepage: usize,
+    /// Ensemble of pages (2 for a stock CPC)
+    pages: Vec<PageInformation>,
 
     /// Counter for the unique labels within macros
     macro_seed: usize,
@@ -323,14 +355,10 @@ impl Default for Env {
             pass: AssemblingPass::Uninitialized,
             stable_counters: StableTickerCounters::default(),
 
-            startadr: None,
-            maxadr: 0,
-            outputadr: 0,
-            codeadr: 0,
-            maxptr: 0xffff,
+            pages: vec![Default::default(); 2],
             activepage: 0,
-            macro_seed: 0,
 
+            macro_seed: 0,
             sna: Default::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
 
@@ -372,7 +400,7 @@ impl Env {
                     token: Token::Equ(label, _),
                     ..
                 } => {
-                    self.symbols().int_value(label).unwrap() 
+                    self.symbols().int_value(label).unwrap().unwrap() 
                 }
                 _ => self.output_address() as i32
             };
@@ -388,13 +416,10 @@ impl Env {
 
         if !self.pass.is_finished() {
             // environnement is not reset when assembling is finished
-            self.startadr = None;
-            self.outputadr = 0;
-            self.codeadr = 0;
-            self.maxptr = 0xffff;
+ 
             self.activepage = 0;
             self.macro_seed = 0;
-            self.sna = Default::default();
+            //self.sna = Default::default(); // We finally keep the snapshot for the memory function
             self.sna_version = cpclib_sna::SnapshotVersion::V3;
 
             self.stable_counters = StableTickerCounters::default();
@@ -403,14 +428,35 @@ impl Env {
         }
     }
 
+    fn active_page_info(&self) -> & PageInformation {
+        &self.pages[self.activepage]
+    }
+
+    fn active_page_info_mut(&mut self) -> &mut PageInformation {
+        &mut self.pages[self.activepage]
+    }
+
+
     /// Return the address where the next byte will be written
     pub fn output_address(&self) -> usize {
-        self.outputadr
+        self.active_page_info().outputadr
     }
 
     /// Return the address of dollar
     pub fn code_address(&self) -> usize {
-        self.codeadr
+        self.active_page_info().codeadr
+    }
+
+    pub fn limit_address(&self) -> usize {
+        self.active_page_info().limit
+    }
+
+    pub fn start_address(&self) -> Option<usize> {
+        self.active_page_info().startadr
+    }
+
+    pub fn maximum_address(&self) -> usize {
+        self.active_page_info().maxadr
     }
 
     ///. Update the value of $ in the symbol table in order to take the current  output address
@@ -424,7 +470,7 @@ impl Env {
     pub fn memory(&self, start: usize, size: usize) -> Vec<u8> {
         let mut mem = Vec::new();
         for pos in start..(start + size) {
-            mem.push(self.byte(pos)); // XXX probably buggy later
+            mem.push(self.peek(pos)); // XXX probably buggy later
         }
         mem
     }
@@ -433,12 +479,12 @@ impl Env {
     /// Will fail in other cases
      pub fn produced_bytes(&self) -> Vec<u8> {
         // assume we start at 0 if never provided
-        let startadr = self.startadr.or(Some(0)).unwrap();
+        let startadr = self.start_address().or(Some(0)).unwrap();
 
-        let mut length = self.maxadr.max(startadr) - startadr + 1;
-        if length == 1 && self.startadr.is_none() {
-            length = 0
-        };
+        let mut length = self.maximum_address().max(startadr) - startadr + 1;
+    //    if length == 1 && self.start_address().is_none() {
+     //       length = 0
+     //   };
 
         self.memory(startadr, length)
     }
@@ -446,13 +492,13 @@ impl Env {
 
     /// Returns the address of the 1st written byte
     pub fn loading_address(&self) -> Option<usize> {
-        self.startadr
+        self.start_address()
     }
 
     /// Returns the address from when to start the program
     /// TODO really configure this address
     pub fn execution_address(&self) -> Option<usize> {
-        self.startadr
+        self.start_address()
     }
 
     /// Output one byte
@@ -460,14 +506,25 @@ impl Env {
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
         static mut FAIL_NEXT_WRITE_IF_ZERO: bool = false;
 
-        if self.outputadr > self.maxptr || (unsafe{FAIL_NEXT_WRITE_IF_ZERO} && self.outputadr==0) {
-            return Err(AssemblerError::OutputExceedsLimits);
+        // Check if it is legal to output the value
+        if self.output_address() > self.limit_address() || (unsafe{FAIL_NEXT_WRITE_IF_ZERO} && self.output_address()==0) {
+            return Err(AssemblerError::OutputExceedsLimits (self.output_address()));
+        }
+        for protected_area in &self.active_page_info().protected_areas {
+            if protected_area.contains(& (self.output_address() as u16) ) {
+                return Err(
+                    AssemblerError::OutputProtected{
+                        area: protected_area.clone(),
+                        address: self.output_address() as _
+                    }
+                )
+            }
         }
 
         // update the maximm 64k position
-        self.maxadr = self.maxadr.max(self.outputadr);
+        self.active_page_info_mut().maxadr = self.maximum_address().max(self.output_address());
 
-        let abstract_address = self.outputadr as u32 + (0x10000 * self.activepage) as u32;
+        let abstract_address = self.output_address() as u32 + (0x10000 * self.activepage) as u32;
         let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
 
         if already_used {
@@ -483,11 +540,11 @@ impl Env {
         }
 
 
-        self.outputadr = (self.outputadr + 1) & 0xffff;
-        self.codeadr =  (self.codeadr + 1) & 0xffff;
+        self.active_page_info_mut().outputadr = (self.output_address() + 1) & 0xffff;
+        self.active_page_info_mut().codeadr =  (self.code_address() + 1) & 0xffff;
 
         // we have written all memory and are trying to restart
-        if self.outputadr == 0 {
+        if self.output_address() == 0 {
             unsafe{FAIL_NEXT_WRITE_IF_ZERO = true;}
         }
 
@@ -502,24 +559,29 @@ impl Env {
         Ok(())
     }
 
-    pub fn byte(&self, address: usize) -> u8 {
+    pub fn peek(&self, address: usize) -> u8 {
         self.sna
-            .get_byte(address as u32 + (0x4000 * self.activepage) as u32)
+            .get_byte(address as u32 + (0x10000 * self.activepage) as u32)
+    }
+
+    pub fn poke(&mut self, byte: u8, address: usize) {
+        self.sna
+            .set_byte(address as u32 + (0x10000 * self.activepage) as u32, byte)
     }
 
     /// Get the size of the generated binary.
     /// ATTENTION it can only work when geneating 0x10000 files
     pub fn size(&self) -> u16 {
-        if self.startadr.is_none() {
+        if self.start_address().is_none() {
             panic!("Unable to compute size now");
         } else {
-            (self.outputadr - self.startadr.unwrap()) as u16
+            (self.output_address() - self.start_address().unwrap()) as u16
         }
     }
 
     /// Evaluate the expression according to the current state of the environment
     pub fn eval(&self, expr: &Expr) -> Result<i32, AssemblerError> {
-        expr.resolve(self.symbols())
+        expr.resolve(self)
     }
 
     pub fn symbols(&self) -> &SymbolsTableCaseDependent {
@@ -546,7 +608,7 @@ impl Env {
     /// If the expression is not solvable in first pass, 0 is returned.
     /// If the expression is not solvable in second pass, an error is returned
     fn resolve_expr_may_fail_in_first_pass(&self, exp: &Expr) -> Result<i32, AssemblerError> {
-        match exp.resolve(self.symbols()) {
+        match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
                 if self.pass.is_first_pass() {
@@ -561,7 +623,7 @@ impl Env {
     /// Compute the expression thanks to the symbol table of the environment.
     /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
     fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<i32, AssemblerError> {
-        exp.resolve(self.symbols())
+        exp.resolve(self)
     }
 
     /// Compute the relative address. Is authorized to fail at first pass
@@ -594,7 +656,7 @@ impl Env {
         label: &str,
         value: i32,
     ) -> Result<(), AssemblerError> {
-        let already_present = self.symbols().contains_symbol(&label.to_owned());
+        let already_present = self.symbols().contains_symbol(label)?;
 
         match (already_present, self.pass) {
             (true, AssemblingPass::FirstPass) => Err(AssemblerError::SymbolAlreadyExists {
@@ -606,7 +668,7 @@ impl Env {
             )}),
             (false, AssemblingPass::FirstPass) | (false, AssemblingPass::Uninitialized) => {
                 self.symbols_mut()
-                    .set_symbol_to_value(&label.to_owned(), value);
+                    .set_symbol_to_value(label, value);
                 Ok(())
             }
             (true, AssemblingPass::SecondPass) => {
@@ -640,6 +702,17 @@ impl Env {
         Ok(())
     }
 
+    /// TODO set the limit for the current page
+    fn  visit_limit(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+        let value = self.resolve_expr_must_never_fail(exp)?;
+        self.active_page_info_mut().limit = value as usize;
+
+        if self.limit_address() <= self.maximum_address() {
+            return Err(AssemblerError::OutputExceedsLimits(self.limit_address()));
+        }
+        Ok(())
+    }
+
     fn visit_label(&mut self, label: &str) -> Result<(), AssemblerError> {
         // If the current address is not set up, we force it to be 0
         let value = match self.symbols().current_address() {
@@ -648,10 +721,10 @@ impl Env {
         };
 
         // A label cannot be defined multiple times
-        if self.pass.is_first_pass() && self.symbols().contains_symbol(label) {
+        if self.pass.is_first_pass() && self.symbols().contains_symbol(label)? {
             Err(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label.to_owned(),
-                kind: self.symbols().kind(label).to_owned()
+                kind: self.symbols().kind(label)?.to_owned()
             })
         } else {
             if !label.starts_with('.') {
@@ -706,7 +779,7 @@ impl Env {
 
                 // Label must exist
                 (TestKind::LabelExists(ref label), ref listing) => {
-                    if self.symbols().contains_symbol(label) {
+                    if self.symbols().contains_symbol(label)? {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -714,7 +787,7 @@ impl Env {
 
                 // Label must not exist
                 (TestKind::LabelDoesNotExist(ref label), ref listing) => {
-                    if !self.symbols().contains_symbol(label) {
+                    if !self.symbols().contains_symbol(label)? {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -735,7 +808,7 @@ impl Env {
         arguments: &[String],
         code: &str,
     ) -> Result<(), AssemblerError> {
-        if self.pass.is_first_pass() && self.symbols().contains_symbol(name) {
+        if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
                 symbol: name.to_owned(),
             });
@@ -753,7 +826,7 @@ impl Env {
         name: &str,
         content: &[(String, Token)],
     ) -> Result<(), AssemblerError> {
-        if self.pass.is_first_pass() && self.symbols().contains_symbol(name) {
+        if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
                 symbol: name.to_owned(),
             });
@@ -777,6 +850,19 @@ impl Env {
         version: Option<&SnapshotVersion>,
     ) -> Result<(), AssemblerError> {
         self.sna_version = version.cloned().unwrap_or(SnapshotVersion::V3);
+        Ok(())
+    }
+
+
+    pub fn visit_align(&mut self, boundary: &Expr, fill: Option<&Expr>) -> Result<(), AssemblerError> {
+        let boundary = self.resolve_expr_must_never_fail(boundary)? as u16;
+        let fill = fill.map(|e| self.resolve_expr_may_fail_in_first_pass(e))
+                    .unwrap_or(Ok((0)))? as u8;
+
+        while self.output_address() as u16 % boundary != 0 {
+            self.output(fill)?;
+        }
+        
         Ok(())
     }
 
@@ -831,13 +917,13 @@ impl Env {
 
 
         // Retreive the macro or structure definition
-        let r#macro = self.symbols().macro_value(name);
-        let r#struct = self.symbols().struct_value(name);
+        let r#macro = self.symbols().macro_value(name)?;
+        let r#struct = self.symbols().struct_value(name)?;
 
         if r#macro.is_none() && r#struct.is_none() {
             let e = AssemblerError::UnknownMacro {
                 symbol: name.to_owned(),
-                closest: self.symbols().closest_symbol(name),
+                closest: self.symbols().closest_symbol(name)?,
             };
             return match caller_span {
                 Some(span) => Err(AssemblerError::RelocatedError{error: e.into(), span: span.clone()}),
@@ -893,16 +979,32 @@ impl Env {
 
     /// Remove the given variable from the table of symbols
     pub fn visit_undef(&mut self, label: &str) -> Result<(), AssemblerError> {
-        match self.symbols_mut().remove_symbol(label) {
+        match self.symbols_mut().remove_symbol(label)? {
             Some(_) => Ok(()),
             None => {
                 Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
-                    closest: self.symbols().closest_symbol(label),
+                    closest: self.symbols().closest_symbol(label)?,
                 })
                 
             },
         }
+    }
+
+
+    pub fn visit_protect(&mut self, start: &Expr, stop: &Expr) -> Result<(), AssemblerError> {
+      
+        if self.pass.is_first_pass() {
+            let start = self.resolve_expr_must_never_fail(start)? as u16;
+            let stop = self.resolve_expr_must_never_fail(stop)? as u16;
+
+            self.active_page_info_mut().protected_areas.push(
+                start..=stop
+            );
+        }
+
+        Ok(())
+
     }
 
     /// Print the evaluation of the expression in the 2nd pass
@@ -934,9 +1036,16 @@ impl Env {
 
     /// Continue to assemble at the right place, but change the value of $ to the specified one
     pub fn visit_rorg(&mut self, _exp: &Expr, listing: &Listing) -> Result<(), AssemblerError> {
-        let backup = self.codeadr;
+        let backup_address = self.code_address();
+        let backup_activepage = self.activepage;
+
         self.visit_listing(listing)?;
-        self.codeadr = backup;
+
+        if self.activepage != backup_activepage {
+            eprintln!("[WARNING] active page has changed");
+        }
+
+        self.active_page_info_mut().codeadr = backup_address;
         Ok(())
     }
 
@@ -1168,7 +1277,9 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
                     .map(|o| o.as_ref())
             )
         },
-        LocatedToken::Repeat(_, _, _, _) => todo!(),
+        LocatedToken::Repeat(count, code, counter, counter_start, span) => {
+            env.visit_repeat(count, code, counter.as_ref(), counter_start.as_ref(), Some(span.clone()))
+        },
         LocatedToken::RepeatUntil(_, _, _) => todo!(),
         LocatedToken::Rorg(_, _, _) => todo!(),
         LocatedToken::Switch(_, _) => todo!(),
@@ -1180,6 +1291,7 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
 pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     env.update_dollar();
     match token {
+        Token::Align(ref boundary, ref fill) => env.visit_align(boundary, fill.as_ref()),
         Token::Assert(ref exp, ref txt) => visit_assert(exp, txt.as_ref(), env),
         Token::Basic(ref variables, ref hidden_lines, ref code) => {
             env.visit_basic(variables.as_ref(), hidden_lines.as_ref(), code)
@@ -1187,8 +1299,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::BuildSna(ref v) => env.visit_buildsna(v.as_ref()),
         Token::Bankset(ref v) => env.visit_bankset(v),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
-        Token::Defb(_) | &Token::Defw(_) => visit_db_or_dw(token, env),
-        Token::Defs(_, _) => visit_defs(token, env),
+        Token::Defb(_) | Token::Defw(_) | Token::Str(_)=> visit_db_or_dw_or_str(token, env),
+        Token::Defs(_) => visit_defs(token, env),
         Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
             visit_opcode(*mnemonic, &arg1, &arg2, &arg3, env)?;
             // Compute duration only if it is necessary
@@ -1198,7 +1310,18 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             }
             Ok(())
         }
-        Token::Comment(_) | Token::List | Token::NoList => Ok(()), // Nothing to do for a comment
+        Token::Comment(_) => Ok(()), // Nothing to do for a comment
+        Token::List => {
+            env.output_trigger.as_mut().map(|l| {
+                l.on();
+            });
+            Ok(())
+        }, Token::NoList => {
+            env.output_trigger.as_mut().map(|l| {
+                l.off();
+            });
+            Ok(())
+        }, 
         Token::Include(_, cell) if cell.borrow().is_some() => {
             env.visit_listing(cell.borrow().as_ref().unwrap())
         }
@@ -1225,12 +1348,15 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         )
         },
         Token::Label(ref label) => env.visit_label(label),
+        Token::Limit(ref exp) => env.visit_limit(exp),
         Token::MultiPush(ref regs) => env.visit_multi_pushes(regs),
         Token::MultiPop(ref regs) => env.visit_multi_pops(regs),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Assign(ref label, ref exp) => visit_assign(label, exp, env),
+        Token::Protect(ref start, ref end) => env.visit_protect(start, end),
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
-        Token::Repeat(_, _, _) => visit_repeat(token, env),
+        Token::Repeat(count, code, counter, counter_start) => 
+            env.visit_repeat(count, code, counter.as_ref(), counter_start.as_ref(), None),
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
         Token::Save {
@@ -1266,8 +1392,8 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &Env) -> Result<(), Assem
         if value == 0 {
             let symbols = env.symbols();
             let oper = |left: &Expr, right: &Expr, oper: &str| -> String {
-                let res_left = left.resolve(symbols).unwrap();
-                let res_right = right.resolve(symbols).unwrap();
+                let res_left = left.resolve(env).unwrap();
+                let res_right = right.resolve(env).unwrap();
 
                 format!("[{} {} {}] ", res_left, oper, res_right)
                     + &format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right)
@@ -1293,6 +1419,72 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &Env) -> Result<(), Assem
 }
 
 impl Env {
+
+
+    pub fn visit_repeat<T: ListingElement +  Visited>(&mut self, count: &Expr, code: &[T], counter: Option<&String>, counter_start: Option<&Expr>, span: Option<Z80Span>) -> Result<(), AssemblerError> {
+        // get the number of loops
+        let count = self.resolve_expr_must_never_fail(count)?;
+
+        // get the counter name of any
+        let counter_name = counter.as_ref().map(|counter| format!("{{{}}}", counter));
+        if let Some(counter_name) = &counter_name {
+            if self.symbols().contains_symbol(counter_name)? {
+                return Err(
+                    AssemblerError::RepeatIssue{
+                        error: AssemblerError::ExpressionError {
+                            msg: format!("Counter {} already exists", counter_name)
+                        }.into(),
+                        span: span.clone(),
+                        repetition: 0
+                    }
+                )
+            }
+        }
+
+        // get the first value
+        let mut counter_value = counter_start.as_ref().map(|start| {
+            self.resolve_expr_must_never_fail(start)
+        }).unwrap_or(Ok(0))?;
+
+
+
+        for i in 0..count {
+            // handle symbols unicity
+            {
+                self.macro_seed += 1;
+                let seed = self.macro_seed;
+                self.symbols_mut().push_seed(seed);
+            }
+
+            // handle counter value update
+            if let Some(counter_name) = &counter_name {
+                self.symbols_mut().set_symbol_to_value(counter_name, counter_value);
+            }
+
+            // generate the bytes
+            self.visit_listing(code)
+                .map_err(|e| {
+                    AssemblerError::RepeatIssue {
+                        error: Box::new(e),
+                        span: span.clone(),
+                        repetition: counter_value
+                    }
+                })?;
+
+            // handle the counter update
+            counter_value += 1;
+
+            // handle the end of visibility of unique labels
+            self.symbols_mut().pop_seed();
+        }
+
+        
+        if let Some(counter_name) = &counter_name {
+            self.symbols_mut().remove_symbol(counter_name);
+        }
+        Ok(())
+    }
+
     /// Generate a string that is helpfull for assertion understanding (i.e. show the operation and evaluate the rest)
     /// Crash if expression cannot be computed
     fn to_assert_string(&self, exp: &Expr) -> String {
@@ -1342,12 +1534,12 @@ impl Env {
 fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
  
 
-    if env.symbols().contains_symbol(label) && env.pass.is_first_pass() {
+    if env.symbols().contains_symbol(label)? && env.pass.is_first_pass() {
 
 
         Err(AssemblerError::AlreadyDefinedSymbol{
             symbol: label.to_owned(),
-            kind: env.symbols().kind(label).to_owned()
+            kind: env.symbols().kind(label)?.to_owned()
         })
     } else {
         let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
@@ -1365,24 +1557,29 @@ fn visit_assign(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerE
 
 fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     match token {
-        Token::Defs(expr, fill) => {
-            let bytes = assemble_defs(expr, fill.as_ref(), env)?;
-            env.output_bytes(&bytes)
+        Token::Defs(l) => {
+            for (e, f) in l.iter() {
+                let bytes = assemble_defs(e,f.as_ref(), env)?;
+                env.output_bytes(&bytes)?;
+            }
+            Ok(())
         }
         _ => unreachable!(),
     }
 }
 
 // TODO refactor code with assemble_opcode or other functions manipulating bytes
-pub fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
+pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 
     let (ref exprs, mask) = {
         match token {
-            Token::Defb(ref exprs) => (exprs, 0xff),
+            Token::Defb(ref exprs) | Token::Str(ref exprs)=> (exprs, 0xff),
             Token::Defw(ref exprs) => (exprs, 0xffff),
             _ => unreachable!(),
         }
     };
+
+    let backup_address = env.output_address();
 
     for exp in exprs.iter() {
         match exp {
@@ -1411,6 +1608,13 @@ pub fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), AssemblerError
 
     }
 
+    // Patch the last char of a str
+    if matches!(token, Token::Str(_)) && backup_address < env.output_address() {
+        let last_address = env.output_address()-1;
+        let last_value = env.peek(last_address);
+        env.poke(last_value | 0x80, last_address);
+    }
+
     Ok(())
 }
 
@@ -1426,10 +1630,10 @@ impl Env {
 
         // If the basic directive is the VERY first thing to output,
         // we assume startadr is 0x170 as for any basic program
-        if self.startadr.is_none() {
-            self.outputadr = 0x170;
-            self.codeadr = self.outputadr;
-            self.startadr = Some(self.outputadr);
+        if self.start_address().is_none() {
+            self.active_page_info_mut().outputadr = 0x170;
+            self.active_page_info_mut().codeadr = self.output_address();
+            self.active_page_info_mut().startadr = Some(self.output_address());
         }
 
         self.output_bytes(&bytes)
@@ -1473,8 +1677,9 @@ impl Env {
 }
 
 /// When visiting a repetition, we unroll the loop and stream the tokens
+/// TODO reimplement it in a similar way that the LocatedToken version that is better
 pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), AssemblerError> {
-    let tokens = rept.unroll(env.symbols()).unwrap()?;
+    let tokens = rept.unroll(env).unwrap()?;
 
     for token in &tokens {
         visit_token(token, env)?;
@@ -1581,23 +1786,21 @@ pub fn assemble_opcode(
     arg3: &Option<Register8>,
     env: &mut Env,
 ) -> Result<Bytes, AssemblerError> {
-    let sym = env.symbols_mut();
-    // TODO use env instead of the symbol table for each call
     match mnemonic {
         Mnemonic::And | Mnemonic::Or | Mnemonic::Xor => {
-            assemble_logical_operator(mnemonic, arg1.as_ref().unwrap(), sym)
+            assemble_logical_operator(mnemonic, arg1.as_ref().unwrap(), env)
         }
         Mnemonic::Add | Mnemonic::Adc => assemble_add_or_adc(
             mnemonic,
             arg1.as_ref().unwrap(),
             arg2.as_ref().unwrap(),
-            sym,
+            env,
         ),
         Mnemonic::Cp => env.assemble_cp(arg1.as_ref().unwrap()),
         Mnemonic::ExMemSp => assemble_ex_memsp(arg1.as_ref().unwrap()),
         Mnemonic::Dec | Mnemonic::Inc => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap(), env),
         Mnemonic::Djnz => assemble_djnz(arg1.as_ref().unwrap(), env),
-        Mnemonic::In => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
+        Mnemonic::In => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
         Mnemonic::Ld => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
         Mnemonic::Ldi
         | Mnemonic::Ldd
@@ -1636,7 +1839,7 @@ pub fn assemble_opcode(
         | Mnemonic::Rrd => assemble_no_arg(mnemonic),
         Mnemonic::Nop => assemble_nop(),
         Mnemonic::Nops2 => assemble_nops2(),
-        Mnemonic::Out => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), sym),
+        Mnemonic::Out => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
         Mnemonic::Jr | Mnemonic::Jp | Mnemonic::Call => {
             assemble_call_jr_or_jp(mnemonic, arg1.as_ref(), arg2.as_ref().unwrap(), env)
         }
@@ -1670,10 +1873,10 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
 
     // org $ set org to the output address (cf. rasm)
     let adr = if address2.is_none() && address == &"$".into() {
-        if env.startadr.is_none() {
+        if env.start_address().is_none() {
             return Err(AssemblerError::InvalidArgument{msg: "ORG: $ cannot be used now".into()})
         }
-        env.outputadr as i32
+        env.output_address() as i32
     } else {
         env.eval(address)?
     };
@@ -1685,13 +1888,13 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     };
 
     // TODO Check overlapping region
-    env.outputadr = adr2 as _;
-    env.codeadr = adr as _;
+    env.active_page_info_mut().outputadr = adr2 as _;
+    env.active_page_info_mut().codeadr = adr as _;
 
     // Specify start address at first use
-    env.startadr =  match env.startadr {
-        Some(val) => val.min(env.outputadr),
-        None => env.outputadr
+    env.active_page_info_mut().startadr =  match env.start_address() {
+        Some(val) => val.min(env.output_address()),
+        None => env.output_address()
     }.into();
 
     Ok(())
@@ -2532,7 +2735,7 @@ fn assemble_nops2() -> Result<Bytes, AssemblerError> {
 fn assemble_in(
     arg1: &DataAccess,
     arg2: &DataAccess,
-    sym: &SymbolsTableCaseDependent,
+    env: &Env,
 ) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
@@ -2552,7 +2755,7 @@ fn assemble_in(
 
             DataAccess::PortN(ref exp) => {
                 if let DataAccess::Register8(Register8::A) = arg1 {
-                    let val = (exp.resolve(sym)? & 0xff) as u8;
+                    let val = (exp.resolve(env)? & 0xff) as u8;
                     bytes.push(0xDB);
                     bytes.push(val);
                 }
@@ -2572,7 +2775,7 @@ fn assemble_in(
 fn assemble_out(
     arg1: &DataAccess,
     arg2: &DataAccess,
-    sym: &SymbolsTableCaseDependent,
+    env: &Env,
 ) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
@@ -2596,7 +2799,7 @@ fn assemble_out(
 
             DataAccess::PortN(ref exp) => {
                 if let DataAccess::Register8(Register8::A) = arg2 {
-                    let val = (exp.resolve(sym)? & 0xff) as u8;
+                    let val = (exp.resolve(env)? & 0xff) as u8;
                     bytes.push(0xD3);
                     bytes.push(val);
                 }
@@ -2655,7 +2858,7 @@ fn assemble_push(arg1: &DataAccess) -> Result<Bytes, AssemblerError> {
 fn assemble_logical_operator(
     mnemonic: Mnemonic,
     arg1: &DataAccess,
-    sym: &SymbolsTableCaseDependent,
+    env: &Env,
 ) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
@@ -2695,7 +2898,7 @@ fn assemble_logical_operator(
                 Mnemonic::Xor => 0xEE,
                 _ => unreachable!(),
             };
-            let value = exp.resolve(sym)? & 0xff;
+            let value = exp.resolve(env)? & 0xff;
             bytes.push(base);
             bytes.push(value as u8);
         }
@@ -2705,7 +2908,7 @@ fn assemble_logical_operator(
         }
 
         DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-            let value = exp.resolve(sym)? & 0xff;
+            let value = exp.resolve(env)? & 0xff;
             bytes.push(indexed_register16_to_code(*reg));
             bytes.push(memory_code());
             bytes.push(value as u8);
@@ -2731,7 +2934,7 @@ fn assemble_add_or_adc(
     mnemonic: Mnemonic,
     arg1: &DataAccess,
     arg2: &DataAccess,
-    sym: &SymbolsTableCaseDependent,
+    env: &Env,
 ) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
     let is_add = match mnemonic {
@@ -2752,7 +2955,7 @@ fn assemble_add_or_adc(
                 }
 
                 DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                    let val = exp.resolve(sym)?;
+                    let val = exp.resolve(env)?;
 
                     // TODO check if the code is ok
                     bytes.push(indexed_register16_to_code(*reg));
@@ -2765,7 +2968,7 @@ fn assemble_add_or_adc(
                 }
 
                 DataAccess::Expression(ref exp) => {
-                    let val = exp.resolve(sym)? as u8;
+                    let val = exp.resolve(env)? as u8;
                     if is_add {
                         bytes.push(0b1100_0110);
                     } else {
@@ -3082,9 +3285,9 @@ mod test {
         env.start_new_pass();
 
         env.visit_label("toto").unwrap();
-        assert!(env.symbols().contains_symbol("toto"));
+        assert!(env.symbols().contains_symbol("toto").unwrap());
         env.visit_undef("toto").unwrap();
-        assert!(!env.symbols().contains_symbol("toto"));
+        assert!(!env.symbols().contains_symbol("toto").unwrap());
         assert!(env.visit_undef("toto").is_err());
     }
 
@@ -3209,6 +3412,7 @@ mod test {
                 10.into(),
                 vec![Token::OpCode(Mnemonic::Nop, None, None, None)].into(),
                 None,
+                None
             ),
         ];
 
@@ -3225,10 +3429,10 @@ mod test {
                 vec![Token::Repeat(
                     10.into(),
                     vec![Token::OpCode(Mnemonic::Nop, None, None, None)].into(),
-                    None,
+                    None, None
                 )]
                 .into(),
-                None,
+                None, None
             ),
         ];
 
@@ -3292,8 +3496,7 @@ mod test {
         let env = env.unwrap();
 
         let val = env.symbols().int_value("myticker");
-        assert!(val.is_some());
-        assert_eq!(val.unwrap(), 2);
+        assert_eq!(val.unwrap().unwrap(), 2);
     }
 
     #[test]
@@ -3403,11 +3606,11 @@ mod test {
         let mut env = Env::default();
         let res = visit_token(&Token::Org(0x4000.into(), None), &mut env);
         assert!(res.is_ok());
-        assert!(!env.symbols().contains_symbol("hello"));
+        assert!(!env.symbols().contains_symbol("hello").unwrap());
         let res = visit_token(&Token::Label("hello".into()), &mut env);
         assert!(res.is_ok());
-        assert!(env.symbols().contains_symbol("hello"));
-        assert_eq!(env.symbols().int_value("hello"), 0x4000.into());
+        assert!(env.symbols().contains_symbol("hello").unwrap());
+        assert_eq!(env.symbols().int_value("hello").unwrap(), 0x4000.into());
     }
 
     #[test]
@@ -3477,7 +3680,7 @@ mod test {
         assert_eq!(count, 3);
 
         assert_eq!(
-            env.symbols().int_value(&"test".to_owned()).unwrap(),
+            env.symbols().int_value(&"test".to_owned()).unwrap().unwrap(),
             0x123 + 3
         );
         let buffer = env.memory(0x123, 3);
