@@ -395,7 +395,7 @@ pub enum Token {
     CrunchedBinary(CrunchType, String),
     CrunchedSection(CrunchType, Listing),
     Defb(Vec<Expr>),
-    Defs(Expr, Option<Expr>),
+    Defs(Vec<(Expr, Option<Expr>)>),
     Defw(Vec<Expr>),
 
     Equ(String, Expr),
@@ -525,12 +525,17 @@ impl fmt::Display for Token {
  
                  Token::Defb(ref exprs)
                  => write!(f, "DB {}", expr_list_to_string(exprs)),
-            Token::Defs(ref expr, None)
-                 => write!(f, "DEFS {}", expr.to_simplified_string()),
-            Token::Defs(ref expr, Some(ref expr2))
-                 => write!(f, "DEFS {}, {}", expr.to_simplified_string(), expr2.to_simplified_string()),
+            Token::Defs(ref vals)
+                 => write!(f, "DEFS {}", vals.iter()
+                    .map(|p| {
+                        match &p.1 {
+                            Some(ref v) => format!("{}, {}", p.0.to_simplified_string(), v.to_simplified_string()),
+                            None => format!("{}", p.0.to_simplified_string())
+                        }
+                    })
+                    .join(", ")
+                ),
 
- 
             Token::Defw(ref exprs)
                  => write!(f, "DW {}", expr_list_to_string(exprs)),
  
@@ -825,9 +830,24 @@ impl Token {
     /// Rename the @labels in macros
     pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         match self {
-            Self::Align(a, b) | Self::Defs(a, b) | Self::Org(a, b) | Self::Run(a, b) => {
+            Self::Align(a, b)  | Self::Org(a, b) | Self::Run(a, b) => {
                 a.fix_local_macro_labels_with_seed(seed);
                 b.as_mut().map(|b| b.fix_local_macro_labels_with_seed(seed));
+            }
+
+            Self::Defs(a) => {
+                a.iter_mut()
+                    .for_each(|p| {
+                        match &mut p.1 {
+                            Some(ref mut v) => {
+                                p.0.fix_local_macro_labels_with_seed(seed);
+                                v.fix_local_macro_labels_with_seed(seed);
+                            },
+                            None => {
+                                p.0.fix_local_macro_labels_with_seed(seed);
+                            }
+                        }
+                    })
             }
 
             Self::Protect(a, b) => {

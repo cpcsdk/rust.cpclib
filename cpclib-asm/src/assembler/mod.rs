@@ -1315,7 +1315,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Bankset(ref v) => env.visit_bankset(v),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | &Token::Defw(_) => visit_db_or_dw(token, env),
-        Token::Defs(_, _) => visit_defs(token, env),
+        Token::Defs(_) => visit_defs(token, env),
         Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
             visit_opcode(*mnemonic, &arg1, &arg2, &arg3, env)?;
             // Compute duration only if it is necessary
@@ -1496,9 +1496,12 @@ fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerErro
 
 fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     match token {
-        Token::Defs(expr, fill) => {
-            let bytes = assemble_defs(expr, fill.as_ref(), env)?;
-            env.output_bytes(&bytes)
+        Token::Defs(l) => {
+            for (e, f) in l.iter() {
+                let bytes = assemble_defs(e,f.as_ref(), env)?;
+                env.output_bytes(&bytes)?;
+            }
+            Ok(())
         }
         _ => unreachable!(),
     }

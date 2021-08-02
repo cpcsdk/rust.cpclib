@@ -1205,9 +1205,10 @@ pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
 pub fn parse_db_or_dw(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, is_db) = alt((
         map(alt((
-            parse_instr("BYTE"), parse_instr("DB"), 
-            parse_instr("DEFB"), parse_instr("DEFM"),
-            parse_instr("TEXT")
+            parse_instr("BYTE"),  parse_instr("TEXT"),
+            parse_instr("DB"),  parse_instr("DEFB"), 
+            parse_instr("DM"), parse_instr("DEFM"),
+           
         )), |_| true),
         map(alt((parse_instr("WORD"), parse_instr("DW"), parse_instr("DEFW"))), |_| false),
     ))(input)?;
@@ -2076,9 +2077,23 @@ pub fn parse_defs(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
         parse_instr("RMEM")
     ))(input)?;
 
-    let (input, val) = cut(context("Wrong argument", expr))(input)?;
+    let (input, val) = 
+        separated_list1(
+            parse_comma,  
+            cut(context("Wrong argument", 
+            tuple((
+                expr,
+                opt(
+                    preceded(
+                        parse_comma,
+                        expr
+                    )
+                )
+            ))
+        ))
+    )(input)?;
 
-    Ok((input, Token::Defs(val, None)))
+    Ok((input, Token::Defs(val)))
 }
 
 /// Parse any opcode having no argument
