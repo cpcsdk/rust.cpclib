@@ -803,7 +803,7 @@ pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbose
                 parse_defs,
                 parse_incbin,
                 parse_limit,
-                parse_db_or_dw,
+                parse_db_or_dw_or_str,
                 parse_print,
                 parse_protect,
                 parse_run,
@@ -1202,24 +1202,35 @@ pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
 }
 
 /// Parse DB DW directives
-pub fn parse_db_or_dw(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, is_db) = alt((
+pub fn parse_db_or_dw_or_str(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, code) = alt((
         map(alt((
             parse_instr("BYTE"),  parse_instr("TEXT"),
             parse_instr("DB"),  parse_instr("DEFB"), 
             parse_instr("DM"), parse_instr("DEFM"),
-           
-        )), |_| true),
-        map(alt((parse_instr("WORD"), parse_instr("DW"), parse_instr("DEFW"))), |_| false),
+        )), |_| 0),
+
+        map(alt((
+            parse_instr("WORD"), 
+            parse_instr("DW"), parse_instr("DEFW")
+        )), |_| 1),
+
+        map(
+            parse_instr("STR"),
+            |_| 2
+        )
     ))(input)?;
 
     let (input, expr) = expr_list(input)?;
+
     Ok((
         input,
-        if is_db {
+        if code == 0 {
             Token::Defb(expr)
-        } else {
+        } else if code == 1 {
             Token::Defw(expr)
+        } else /*if code == 2*/ {
+            Token::Str(expr)
         },
     ))
 }
@@ -2178,7 +2189,7 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
             label.to_ascii_lowercase() != "endstruct"
         }),
         cut(terminated(
-            alt((parse_db_or_dw, parse_macro_call)),
+            alt((parse_db_or_dw_or_str, parse_macro_call)),
             pair(space0, line_ending),
         )),
     ))(input)?;

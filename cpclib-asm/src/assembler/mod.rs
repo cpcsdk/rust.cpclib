@@ -453,7 +453,7 @@ impl Env {
     pub fn memory(&self, start: usize, size: usize) -> Vec<u8> {
         let mut mem = Vec::new();
         for pos in start..(start + size) {
-            mem.push(self.byte(pos)); // XXX probably buggy later
+            mem.push(self.peek(pos)); // XXX probably buggy later
         }
         mem
     }
@@ -542,9 +542,14 @@ impl Env {
         Ok(())
     }
 
-    pub fn byte(&self, address: usize) -> u8 {
+    pub fn peek(&self, address: usize) -> u8 {
         self.sna
-            .get_byte(address as u32 + (0x4000 * self.activepage) as u32)
+            .get_byte(address as u32 + (0x10000 * self.activepage) as u32)
+    }
+
+    pub fn poke(&mut self, byte: u8, address: usize) {
+        self.sna
+            .set_byte(address as u32 + (0x10000 * self.activepage) as u32, byte)
     }
 
     /// Get the size of the generated binary.
@@ -1314,7 +1319,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::BuildSna(ref v) => env.visit_buildsna(v.as_ref()),
         Token::Bankset(ref v) => env.visit_bankset(v),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
-        Token::Defb(_) | &Token::Defw(_) => visit_db_or_dw(token, env),
+        Token::Defb(_) | Token::Defw(_) | Token::Str(_)=> visit_db_or_dw_or_str(token, env),
         Token::Defs(_) => visit_defs(token, env),
         Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
             visit_opcode(*mnemonic, &arg1, &arg2, &arg3, env)?;
@@ -1508,15 +1513,17 @@ fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 }
 
 // TODO refactor code with assemble_opcode or other functions manipulating bytes
-pub fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
+pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 
     let (ref exprs, mask) = {
         match token {
-            Token::Defb(ref exprs) => (exprs, 0xff),
+            Token::Defb(ref exprs) | Token::Str(ref exprs)=> (exprs, 0xff),
             Token::Defw(ref exprs) => (exprs, 0xffff),
             _ => unreachable!(),
         }
     };
+
+    let backup_address = env.output_address();
 
     for exp in exprs.iter() {
         match exp {
@@ -1543,6 +1550,13 @@ pub fn visit_db_or_dw(token: &Token, env: &mut Env) -> Result<(), AssemblerError
             }
         }
 
+    }
+
+    // Patch the last char of a str
+    if matches!(token, Token::Str(_)) && backup_address < env.output_address() {
+        let last_address = env.output_address()-1;
+        let last_value = env.peek(last_address);
+        env.poke(last_value | 0x80, last_address);
     }
 
     Ok(())
