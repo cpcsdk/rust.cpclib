@@ -337,7 +337,7 @@ impl SymbolsTable {
 
     // Setup the current label for local to global labels conversions
     pub fn set_current_label<S: Into<Symbol>>(&mut self, symbol: S) -> Result<(), SymbolError> {
-        self.current_label = dbg!(self.extend_symbol(symbol)?.value().to_owned());
+        self.current_label = self.extend_symbol(symbol)?.value().to_owned();
         Ok(())
     }
 
