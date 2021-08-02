@@ -261,6 +261,9 @@ impl ListingOutputTrigger {
         self.builder.borrow_mut().off();
     }
 }
+
+type ProtectedArea = std::ops::RangeInclusive<u16>;
+
 /// Environment of the assembly
 #[allow(missing_docs)]
 pub struct Env {
@@ -287,6 +290,10 @@ pub struct Env {
     /// Maximum possible address to write to
     /// TODO move in its current orgzone
     limit: usize,
+
+    /// List of pretected zones
+    /// TODO move them in their current orgzone
+    protected_areas: Vec<ProtectedArea>,
 
     /// Currently selected bank
     activepage: usize,
@@ -333,7 +340,7 @@ impl Default for Env {
             limit: 0xffff,
             activepage: 0,
             macro_seed: 0,
-
+            protected_areas: Vec::new(),
             sna: Default::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
 
@@ -454,8 +461,19 @@ impl Env {
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
         static mut FAIL_NEXT_WRITE_IF_ZERO: bool = false;
 
+        // Check if it is legal to output the value
         if self.outputadr > self.limit || (unsafe{FAIL_NEXT_WRITE_IF_ZERO} && self.outputadr==0) {
             return Err(AssemblerError::OutputExceedsLimits (self.outputadr));
+        }
+        for protected_area in &self.protected_areas {
+            if protected_area.contains(& (self.outputadr as u16) ) {
+                return Err(
+                    AssemblerError::OutputProtected{
+                        area: protected_area.clone(),
+                        address: self.outputadr as _
+                    }
+                )
+            }
         }
 
         // update the maximm 64k position
@@ -916,6 +934,22 @@ impl Env {
         }
     }
 
+
+    pub fn visit_protect(&mut self, start: &Expr, stop: &Expr) -> Result<(), AssemblerError> {
+      
+        if self.pass.is_first_pass() {
+            let start = self.resolve_expr_must_never_fail(start)? as u16;
+            let stop = self.resolve_expr_must_never_fail(stop)? as u16;
+
+            self.protected_areas.push(
+                start..=stop
+            );
+        }
+
+        Ok(())
+
+    }
+
     /// Print the evaluation of the expression in the 2nd pass
     pub fn visit_print(&self, info: &[FormattedExpr]) -> Result<(), AssemblerError> {
         if self.pass.is_second_pass() {
@@ -1298,6 +1332,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::MultiPush(ref regs) => env.visit_multi_pushes(regs),
         Token::MultiPop(ref regs) => env.visit_multi_pops(regs),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
+        Token::Protect(ref start, ref end) => env.visit_protect(start, end),
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
         Token::Repeat(_, _, _, _) => todo!("Refactor the located version"),
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),

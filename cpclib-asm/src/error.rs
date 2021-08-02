@@ -149,8 +149,12 @@ pub enum AssemblerError {
     UnknownAssemblingAddress,
     RunAlreadySpecified,
     NoActiveCounter,
-    OutputExceedsLimits(usize),
 
+    OutputExceedsLimits(usize),
+    OutputProtected{
+        area: std::ops::RangeInclusive<u16>,
+        address: u16
+    },
     OverrideMemory(u32),
 
     //  #[fail(display = "Unable to resolve expression {}.", expression)]
@@ -427,6 +431,15 @@ impl Display for AssemblerError {
                         write!(f, "{}\n{}",msg,root)
                     },
 
+                    AssemblerError::OutputProtected { area, address } => {
+                        let msg = build_simple_error_message_with_message(
+                            "Forbidden output", 
+                            &format!("Tentative to write in 0x{:X} in a protected area [0x{:X}:0x{:X}]",
+                            address, area.start(), area.end()), 
+                            span);
+                            write!(f, "{}",msg)
+                    }
+
                     _ => {
                         let msg =  build_simple_error_message(&format!("{}", error), span);
                         write!(f, "{}",msg)
@@ -438,6 +451,13 @@ impl Display for AssemblerError {
                 let msg =  build_simple_error_message(&format!("REPEAT: error in loop {}", repetition), span);
                 write!(f, "{}\n{}",msg, error)
             }
+            AssemblerError::OutputProtected { area, address } => {
+                write!(
+                    f,
+                    "Tentative to write in 0x{:X} in a protected area [0x{:X}:0x{:X}]",
+                    address, area.start(), area.end()
+                )
+            },
            
         }
     }
