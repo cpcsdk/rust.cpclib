@@ -46,6 +46,8 @@ enum BasmError {
 
     //  #[fail(display = "{} is not a valid file.", file)]
     NotAValidFile { file: String },
+
+    ListingGeneration { msg: String}
 }
 
 impl Display for BasmError {
@@ -54,8 +56,8 @@ impl Display for BasmError {
         dbg!(self);
 
         match self {
-            Self::Io { io, ctx } => write!(f, "IO Error when {}: {}", ctx, io),
-            Self::AssemblerError { error } => write!(f, "Assembling error:\n{}", error),
+            BasmError::Io { io, ctx } => write!(f, "IO Error when {}: {}", ctx, io),
+            BasmError::AssemblerError { error } => write!(f, "Assembling error:\n{}", error),
             BasmError::InvalidAmsdosFilename { filename } => {
                 write!(f, "Invalid Amsdos filename: {}", filename)
             }
@@ -63,6 +65,10 @@ impl Display for BasmError {
                 write!(f, "{} is not a valid directory.", path)
             }
             BasmError::NotAValidFile { file } => write!(f, "{} is not a valid file.", file),
+
+            BasmError::ListingGeneration { msg } => write!(
+                f, "Error when generating the symbol table: {}", msg
+            ),
         }
     }
 }
@@ -173,7 +179,25 @@ fn assemble<'arg>(
         }
     }
 
-    visit_tokens_all_passes_with_options(&listing, &options).map_err(|e| e.into())
+
+
+    let env = visit_tokens_all_passes_with_options(&listing, &options)
+        .map_err(|e| BasmError::AssemblerError{error: e})?;
+
+    if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
+        if dest == "-" {
+            env.generate_symbols_output(&mut std::io::stdout())
+        } else {
+            let mut f = File::create(dest).map_err(|e| {
+                BasmError::Io{io: e, ctx: format!("creating {}", dest)}
+                })?;
+                env.generate_symbols_output(&mut f)
+        }.map_err(|err| {
+                BasmError::ListingGeneration{msg: err.to_string()}
+            })?;
+    }
+
+    Ok(env)
 }
 
 /// Save the provided result
@@ -307,6 +331,11 @@ fn main() {
                     .arg(Arg::with_name("LISTING_OUTPUT")
                         .help("Filename of the listing output.")
                         .long("lst")
+                        .takes_value(true)
+                    )
+                    .arg(Arg::with_name("SYMBOLS_OUTPUT")
+                        .help("Filename of the output symbols file.")
+                        .long("sym")
                         .takes_value(true)
                     )
                     .group(

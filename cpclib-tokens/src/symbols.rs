@@ -283,6 +283,17 @@ impl Symbol {
     }
 }
 
+/// Public signature of symbols functions
+/// TODO add all the other methods
+pub trait SymbolsTableTrait {
+    /// Return the symbols that correspond to integer values
+    fn integer_symbols(&self) -> Vec<&Symbol>;
+
+    /// Return the integer value corredponding to this symbol (if any)
+    fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32>;
+
+}
+
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct SymbolsTable {
@@ -310,6 +321,33 @@ impl Default for SymbolsTable {
         }
     }
 }
+
+impl SymbolsTableTrait for SymbolsTable {
+    fn integer_symbols(&self) -> Vec<&Symbol> {
+        self.map.iter()
+            .filter(|(k ,v)| {
+                match v {
+                    Value::Integer(_) => true,
+                    _ => false
+                }
+            })
+            .map(|(k, v)| {
+                k
+            })
+            .collect_vec()
+    }
+
+
+
+    fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32> {
+        let symbol = self.extend_symbol(symbol);
+        self.value(symbol)
+            .map(|v| v.integer())
+            .map(|v| v.unwrap())
+            .or_else(|| if self.dummy { Some(1i32) } else { None })
+    }
+}
+
 
 #[allow(missing_docs)]
 impl SymbolsTable {
@@ -412,13 +450,6 @@ impl SymbolsTable {
         self.map.get(&symbol)
     }
 
-    pub fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32> {
-        let symbol = self.extend_symbol(symbol);
-        self.value(symbol)
-            .map(|v| v.integer())
-            .map(|v| v.unwrap())
-            .or_else(|| if self.dummy { Some(1i32) } else { None })
-    }
     pub fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Macro> {
         let symbol = self.extend_symbol(symbol);
         self.value(symbol).map(|v| v.r#macro()).unwrap_or(None)
@@ -616,9 +647,7 @@ impl SymbolsTableCaseDependent {
             .prefixed_value(prefix, self.normalize_symbol(symbol))
     }
 
-    pub fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32> {
-        self.table.int_value(self.normalize_symbol(symbol))
-    }
+
 
     pub fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Option<&Macro> {
         self.table.macro_value(self.normalize_symbol(symbol))
@@ -645,5 +674,16 @@ impl SymbolsTableCaseDependent {
             pub fn set_current_page(&mut self, page: u8);
             pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S) -> Option<String>;
         }
+    }
+}
+
+
+impl SymbolsTableTrait for SymbolsTableCaseDependent {
+    fn integer_symbols(&self) -> Vec<&Symbol> {
+        self.table.integer_symbols()
+    }
+
+    fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Option<i32> {
+        self.table.int_value(self.normalize_symbol(symbol))
     }
 }
