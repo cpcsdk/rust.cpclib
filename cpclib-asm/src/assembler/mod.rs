@@ -1,4 +1,5 @@
 pub mod listing_output;
+pub mod symbols_output;
 
 
 use crate::preamble::*;
@@ -20,12 +21,14 @@ use std::cell::RefCell;
 use std::fmt;
 
 use std::convert::TryFrom;
+use std::io::Write;
 use std::rc::Rc;
 
 use crate::AmsdosFile;
 use crate::AmsdosFileName;
 
 use self::listing_output::ListingOutput;
+use self::symbols_output::SymbolOutputGenerator;
 
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
@@ -298,7 +301,10 @@ pub struct Env {
     /// Set only if the run instruction has been used
     run_options: Option<(u16, Option<u16>)>,
 
-    output_trigger: Option<ListingOutputTrigger>
+    /// optional object that manages the listing output
+    output_trigger: Option<ListingOutputTrigger>,
+    /// Listing of symbols generator
+    symbols_output: SymbolOutputGenerator
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -333,7 +339,8 @@ impl Default for Env {
             symbols: SymbolsTableCaseDependent::default(),
             run_options: None,
             written_bytes: BitVec::repeat(false, 0x4000*2*4),
-            output_trigger: None
+            output_trigger: None,
+            symbols_output: Default::default()
         }
     }
 }
@@ -617,6 +624,13 @@ impl Env {
 
 #[allow(missing_docs)]
 impl Env {
+
+    /// Write in w the list of symbols
+    pub fn generate_symbols_output<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+
+        self.symbols_output.generate(w, self.symbols())
+    }
+
     /// Visit all the tokens of the slice of tokens
     pub fn visit_listing<T:ListingElement+Visited>(&mut self, listing: &[T]) -> Result<(), AssemblerError> {
         for token in listing.iter() {
