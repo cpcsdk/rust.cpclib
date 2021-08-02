@@ -195,15 +195,6 @@ impl StableTickerCounters {
     }
 }
 
-#[derive(Default, Debug)]
-#[allow(missing_docs)]
-struct OrgZone {
-    ibank: usize,
-    protect: bool,
-    _memstart: usize,
-    _memend: usize,
-}
-
 /// Trait to implement for each type of token.
 /// it allows to drive the appropriate data vonversion
 pub trait Visited {
@@ -264,6 +255,48 @@ impl ListingOutputTrigger {
 
 type ProtectedArea = std::ops::RangeInclusive<u16>;
 
+/// Store all the compilation information for the currently selected 64kb page
+/// A stock CPC 6128 is composed of two pages
+#[derive(Debug, Clone)]
+pub struct PageInformation {
+    /// Start adr to use to write binary files. No use when working with snapshots.
+    startadr: Option<usize>,
+    /// maximum address reached when working with 64k data
+    maxadr: usize,
+    /// Current address to write to
+    outputadr: usize,
+    /// Current address used by the code
+    codeadr: usize,
+    /// Maximum possible address to write to
+    /// TODO move in its current orgzone
+    limit: usize,
+    /// List of pretected zones
+    protected_areas: Vec<ProtectedArea>,
+}
+
+impl Default for PageInformation {
+    fn default() -> Self {
+        Self {
+            startadr: None,
+            maxadr: 0,
+            outputadr: 0,
+            codeadr: 0,
+            limit: 0xffff,
+            protected_areas: Vec::new(),
+        }
+    }
+}
+
+impl PageInformation {
+    /// Properly set the information for a new pass
+    fn new_pass(&mut self) {
+        self.startadr = None;
+        self.outputadr = 0;
+        self.codeadr = 0;
+        self.limit = 0xffff;
+    }
+}
+
 /// Environment of the assembly
 #[allow(missing_docs)]
 pub struct Env {
@@ -273,30 +306,11 @@ pub struct Env {
     /// Stable counter of nops
     stable_counters: StableTickerCounters,
 
-    /// Start adr to use to write binary files. No use when working with snapshots.
-    /// When working with binary file only 64K can be generated, not more
-    /// TODO move in the dedicated orgzone
-    startadr: Option<usize>,
-    /// maximum address reached when working with 64k data
-    /// TODO move in the dedicated orgzone
-    maxadr: usize,
 
-    /// Current address to write to
-    outputadr: usize,
-
-    /// Current address used by the code
-    codeadr: usize,
-
-    /// Maximum possible address to write to
-    /// TODO move in its current orgzone
-    limit: usize,
-
-    /// List of pretected zones
-    /// TODO move them in their current orgzone
-    protected_areas: Vec<ProtectedArea>,
-
-    /// Currently selected bank
+    /// index of the selected 64k page
     activepage: usize,
+    /// Ensemble of pages (2 for a stock CPC)
+    pages: Vec<PageInformation>,
 
     /// Counter for the unique labels within macros
     macro_seed: usize,
@@ -333,14 +347,10 @@ impl Default for Env {
             pass: AssemblingPass::Uninitialized,
             stable_counters: StableTickerCounters::default(),
 
-            startadr: None,
-            maxadr: 0,
-            outputadr: 0,
-            codeadr: 0,
-            limit: 0xffff,
+            pages: vec![Default::default(); 2],
             activepage: 0,
+
             macro_seed: 0,
-            protected_areas: Vec::new(),
             sna: Default::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
 
@@ -389,10 +399,7 @@ impl Env {
 
         if !self.pass.is_finished() {
             // environnement is not reset when assembling is finished
-            self.startadr = None;
-            self.outputadr = 0;
-            self.codeadr = 0;
-            self.limit = 0xffff;
+ 
             self.activepage = 0;
             self.macro_seed = 0;
             //self.sna = Default::default(); // We finally keep the snapshot for the memory function
@@ -404,14 +411,35 @@ impl Env {
         }
     }
 
+    fn active_page_info(&self) -> & PageInformation {
+        &self.pages[self.activepage]
+    }
+
+    fn active_page_info_mut(&mut self) -> &mut PageInformation {
+        &mut self.pages[self.activepage]
+    }
+
+
     /// Return the address where the next byte will be written
     pub fn output_address(&self) -> usize {
-        self.outputadr
+        self.active_page_info().outputadr
     }
 
     /// Return the address of dollar
     pub fn code_address(&self) -> usize {
-        self.codeadr
+        self.active_page_info().codeadr
+    }
+
+    pub fn limit_address(&self) -> usize {
+        self.active_page_info().limit
+    }
+
+    pub fn start_address(&self) -> Option<usize> {
+        self.active_page_info().startadr
+    }
+
+    pub fn maximum_address(&self) -> usize {
+        self.active_page_info().maxadr
     }
 
     ///. Update the value of $ in the symbol table in order to take the current  output address
@@ -434,10 +462,10 @@ impl Env {
     /// Will fail in other cases
      pub fn produced_bytes(&self) -> Vec<u8> {
         // assume we start at 0 if never provided
-        let startadr = self.startadr.or(Some(0)).unwrap();
+        let startadr = self.start_address().or(Some(0)).unwrap();
 
-        let mut length = self.maxadr.max(startadr) - startadr + 1;
-    //    if length == 1 && self.startadr.is_none() {
+        let mut length = self.maximum_address().max(startadr) - startadr + 1;
+    //    if length == 1 && self.start_address().is_none() {
      //       length = 0
      //   };
 
@@ -447,13 +475,13 @@ impl Env {
 
     /// Returns the address of the 1st written byte
     pub fn loading_address(&self) -> Option<usize> {
-        self.startadr
+        self.start_address()
     }
 
     /// Returns the address from when to start the program
     /// TODO really configure this address
     pub fn execution_address(&self) -> Option<usize> {
-        self.startadr
+        self.start_address()
     }
 
     /// Output one byte
@@ -462,24 +490,24 @@ impl Env {
         static mut FAIL_NEXT_WRITE_IF_ZERO: bool = false;
 
         // Check if it is legal to output the value
-        if self.outputadr > self.limit || (unsafe{FAIL_NEXT_WRITE_IF_ZERO} && self.outputadr==0) {
-            return Err(AssemblerError::OutputExceedsLimits (self.outputadr));
+        if self.output_address() > self.limit_address() || (unsafe{FAIL_NEXT_WRITE_IF_ZERO} && self.output_address()==0) {
+            return Err(AssemblerError::OutputExceedsLimits (self.output_address()));
         }
-        for protected_area in &self.protected_areas {
-            if protected_area.contains(& (self.outputadr as u16) ) {
+        for protected_area in &self.active_page_info().protected_areas {
+            if protected_area.contains(& (self.output_address() as u16) ) {
                 return Err(
                     AssemblerError::OutputProtected{
                         area: protected_area.clone(),
-                        address: self.outputadr as _
+                        address: self.output_address() as _
                     }
                 )
             }
         }
 
         // update the maximm 64k position
-        self.maxadr = self.maxadr.max(self.outputadr);
+        self.active_page_info_mut().maxadr = self.maximum_address().max(self.output_address());
 
-        let abstract_address = self.outputadr as u32 + (0x10000 * self.activepage) as u32;
+        let abstract_address = self.output_address() as u32 + (0x10000 * self.activepage) as u32;
         let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
 
         if already_used {
@@ -495,11 +523,11 @@ impl Env {
         }
 
 
-        self.outputadr = (self.outputadr + 1) & 0xffff;
-        self.codeadr =  (self.codeadr + 1) & 0xffff;
+        self.active_page_info_mut().outputadr = (self.output_address() + 1) & 0xffff;
+        self.active_page_info_mut().codeadr =  (self.code_address() + 1) & 0xffff;
 
         // we have written all memory and are trying to restart
-        if self.outputadr == 0 {
+        if self.output_address() == 0 {
             unsafe{FAIL_NEXT_WRITE_IF_ZERO = true;}
         }
 
@@ -522,10 +550,10 @@ impl Env {
     /// Get the size of the generated binary.
     /// ATTENTION it can only work when geneating 0x10000 files
     pub fn size(&self) -> u16 {
-        if self.startadr.is_none() {
+        if self.start_address().is_none() {
             panic!("Unable to compute size now");
         } else {
-            (self.outputadr - self.startadr.unwrap()) as u16
+            (self.output_address() - self.start_address().unwrap()) as u16
         }
     }
 
@@ -648,10 +676,10 @@ impl Env {
     /// TODO set the limit for the current page
     fn  visit_limit(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
         let value = self.resolve_expr_must_never_fail(exp)?;
-        self.limit = value as usize;
+        self.active_page_info_mut().limit = value as usize;
 
-        if self.limit <= self.maxadr {
-            return Err(AssemblerError::OutputExceedsLimits(self.limit));
+        if self.limit_address() <= self.maximum_address() {
+            return Err(AssemblerError::OutputExceedsLimits(self.limit_address()));
         }
         Ok(())
     }
@@ -941,7 +969,7 @@ impl Env {
             let start = self.resolve_expr_must_never_fail(start)? as u16;
             let stop = self.resolve_expr_must_never_fail(stop)? as u16;
 
-            self.protected_areas.push(
+            self.active_page_info_mut().protected_areas.push(
                 start..=stop
             );
         }
@@ -979,9 +1007,16 @@ impl Env {
 
     /// Continue to assemble at the right place, but change the value of $ to the specified one
     pub fn visit_rorg(&mut self, _exp: &Expr, listing: &Listing) -> Result<(), AssemblerError> {
-        let backup = self.codeadr;
+        let backup_address = self.code_address();
+        let backup_activepage = self.activepage;
+
         self.visit_listing(listing)?;
-        self.codeadr = backup;
+
+        if self.activepage != backup_activepage {
+            eprintln!("[WARNING] active page has changed");
+        }
+
+        self.active_page_info_mut().codeadr = backup_address;
         Ok(())
     }
 
@@ -1522,10 +1557,10 @@ impl Env {
 
         // If the basic directive is the VERY first thing to output,
         // we assume startadr is 0x170 as for any basic program
-        if self.startadr.is_none() {
-            self.outputadr = 0x170;
-            self.codeadr = self.outputadr;
-            self.startadr = Some(self.outputadr);
+        if self.start_address().is_none() {
+            self.active_page_info_mut().outputadr = 0x170;
+            self.active_page_info_mut().codeadr = self.output_address();
+            self.active_page_info_mut().startadr = Some(self.output_address());
         }
 
         self.output_bytes(&bytes)
@@ -1765,10 +1800,10 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
 
     // org $ set org to the output address (cf. rasm)
     let adr = if address2.is_none() && address == &"$".into() {
-        if env.startadr.is_none() {
+        if env.start_address().is_none() {
             return Err(AssemblerError::InvalidArgument{msg: "ORG: $ cannot be used now".into()})
         }
-        env.outputadr as i32
+        env.output_address() as i32
     } else {
         env.eval(address)?
     };
@@ -1780,13 +1815,13 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     };
 
     // TODO Check overlapping region
-    env.outputadr = adr2 as _;
-    env.codeadr = adr as _;
+    env.active_page_info_mut().outputadr = adr2 as _;
+    env.active_page_info_mut().codeadr = adr as _;
 
     // Specify start address at first use
-    env.startadr =  match env.startadr {
-        Some(val) => val.min(env.outputadr),
-        None => env.outputadr
+    env.active_page_info_mut().startadr =  match env.start_address() {
+        Some(val) => val.min(env.output_address()),
+        None => env.output_address()
     }.into();
 
     Ok(())
