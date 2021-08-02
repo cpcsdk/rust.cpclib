@@ -1,5 +1,7 @@
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
+use itertools::Itertools;
+use smallvec::SmallVec;
 
 use crate::assembler::{assemble_align, assemble_defs, assemble_opcode, Bytes};
 use crate::error::*;
@@ -19,7 +21,7 @@ pub trait TokenExt: ListingElement {
     ) -> Result<usize, String>;
 
     /// Unroll the tokens when it represents a loop
-    fn unroll(&self, sym: &SymbolsTableCaseDependent)
+    fn unroll(&self, env: &crate::Env)
         -> Option<Result<Vec<&Self>, AssemblerError>>;
 
     /// Generate the listing of opcodes for directives that embed bytes
@@ -48,10 +50,10 @@ impl TokenExt for Token {
     /// TODO return an iterator in order to not produce the vector each time
     fn unroll(
         &self,
-        sym: &SymbolsTableCaseDependent,
+        env: &crate::Env,
     ) -> Option<Result<Vec<&Self>, AssemblerError>> {
-        if let Token::Repeat(ref expr, ref tokens, ref _counter_label) = self {
-            let count: Result<i32, AssemblerError> = expr.resolve(sym);
+        if let Token::Repeat(ref expr, ref tokens, ref _counter_label, ref _counter_start) = self {
+            let count: Result<i32, AssemblerError> = expr.resolve(env);
             if count.is_err() {
                 Some(Err(count.err().unwrap()))
             } else {
@@ -80,7 +82,7 @@ impl TokenExt for Token {
             let lst = disassemble(&bytes);
             for token in lst.listing() {
                 match token {
-                    Token::Defb(_) | Token::Defw(_) | Token::Defs(_, _) => {
+                    Token::Defb(_) | Token::Defw(_) | Token::Defs(_) => {
                         return Err(format!("{} as not been disassembled", token))
                     }
                     _ => {}
@@ -91,20 +93,27 @@ impl TokenExt for Token {
         };
 
         match self {
-            Token::Defs(ref expr, ref value) => {
+            Token::Defs(ref l) => {
                 use crate::assembler::Env;
 
-                assemble_defs(expr, value.as_ref(), &Env::default())
-                    .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
+                l.iter()
+                    .map(|(e, f)| {
+                        assemble_defs(e, f.as_ref(), &Env::default())
+                        .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
+                    })
+                    .fold_ok(SmallVec::<[u8;4]>::new(), |mut acc, v| {
+                        acc.extend_from_slice(v.as_slice());
+                        acc
+                    })
                     .and_then(|b| wrap(&b))
             }
 
             Token::Defb(_) | Token::Defw(_) => {
                 use crate::assembler::Env;
-                use crate::assembler::visit_db_or_dw;
+                use crate::assembler::visit_db_or_dw_or_str;
 
                 let mut env = Env::default();
-                visit_db_or_dw(self, &mut env)
+                visit_db_or_dw_or_str(self, &mut env)
                     .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
                 wrap(&env.produced_bytes())
             }
@@ -158,7 +167,7 @@ impl TokenExt for Token {
             | Token::Protect(_, _) => 0,
 
             // Here, there is a strong limitation => it will works only if no symbols are used
-            Token::Defw(_) | Token::Defb(_) | Token::Defs(_, _) => self
+            Token::Defw(_) | Token::Defb(_) | Token::Defs(_) => self
                 .disassemble_data()
                 .map_err(|e| AssemblerError::DisassemblerError{msg:e})
                 .and_then(|lst| lst.estimated_duration())?,

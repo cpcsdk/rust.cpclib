@@ -180,8 +180,12 @@ impl From<Expr> for FormattedExpr {
 /// Represent a function with one argument
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum UnaryFunction {
+    /// High byte of a value
     High,
+    /// Low byte of a value
     Low,
+    /// Memory already assembled
+    Memory
 }
 
 impl Display for UnaryFunction {
@@ -189,6 +193,7 @@ impl Display for UnaryFunction {
         let repr = match self {
             Self::High => "HI",
             Self::Low => "LO",
+            Self::Memory => "memory"
         };
         write!(format, "{}", repr)
     }

@@ -1,3 +1,4 @@
+use crate::assembler::Env;
 use crate::error::*;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
@@ -10,20 +11,21 @@ use crate::implementation::tokens::*;
 pub trait ExprEvaluationExt {
     /// Simple evaluation without context => can only evaluate number based operations.
     fn eval(&self) -> Result<i32, AssemblerError> {
-        let sym = SymbolsTableCaseDependent::default();
-        self.resolve(&sym)
+        let env = Env::default();
+        self.resolve(&env)
     }
 
-    fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError>;
+    fn resolve(&self, sym: &Env) -> Result<i32, AssemblerError>;
 }
 
 impl ExprEvaluationExt for Expr {
-    fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError> {
+    fn resolve(&self, env: &Env) -> Result<i32, AssemblerError> {
+        let sym = env.symbols();
         use self::Expr::*;
 
         let oper = |left: &Self, right: &Self, oper: Oper| -> Result<i32, AssemblerError> {
-            let res_left = left.resolve(sym);
-            let res_right = right.resolve(sym);
+            let res_left = left.resolve(env);
+            let res_right = right.resolve(env);
 
             match (res_left, res_right) {
                 (Ok(a), Ok(b)) => match oper {
@@ -63,7 +65,7 @@ impl ExprEvaluationExt for Expr {
         };
 
         match self {
-            RelativeDelta(delta) => Ok(Expr::Label("$".into()).resolve(sym)? + *delta as i32),
+            RelativeDelta(delta) => Ok(Expr::Label("$".into()).resolve(env)? + *delta as i32),
 
             Value(val) => Ok(*val),
             Char(c) => {
@@ -73,7 +75,7 @@ impl ExprEvaluationExt for Expr {
 
             String(ref string) => panic!("String values cannot be converted to i32 {}", string),
 
-            Label(ref label) => match sym.value(label) {
+            Label(ref label) => match sym.value(label)? {
                 Some(cpclib_tokens::symbols::Value::Integer(ref val)) => Ok(*val),
                 Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym.as_ref())),
                 Some(_) => Err(AssemblerError::WrongSymbolType {
@@ -82,7 +84,7 @@ impl ExprEvaluationExt for Expr {
                 }),
                 None => Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
-                    closest: sym.closest_symbol(label),
+                    closest: sym.closest_symbol(label)?,
                 }),
             },
 
@@ -119,7 +121,7 @@ impl ExprEvaluationExt for Expr {
             BooleanAnd(ref left, ref right) => oper(left, right, Oper::BooleanAnd),
             BooleanOr(ref left, ref right) => oper(left, right, Oper::BooleanOr),
 
-            Neg(ref e) => e.resolve(sym).map(|result| -result),
+            Neg(ref e) => e.resolve(env).map(|result| -result),
 
             Equal(ref left, ref right) => oper(left, right, Oper::Equal),
             Different(ref left, ref right) => oper(left, right, Oper::Different),
@@ -128,14 +130,14 @@ impl ExprEvaluationExt for Expr {
             StrictlyGreater(ref left, ref right) => oper(left, right, Oper::StrictlyGreater),
             StrictlyLower(ref left, ref right) => oper(left, right, Oper::StrictlyLower),
 
-            Paren(ref e) => e.resolve(sym),
+            Paren(ref e) => e.resolve(env),
 
-            UnaryFunction(func, exp) => UnaryFunctionWrapper::new(func, &exp).resolve(sym),
+            UnaryFunction(func, exp) => UnaryFunctionWrapper::new(func, &exp).resolve(env),
             BinaryFunction(func, exp1, exp2) => {
-                BinaryFunctionWrapper::new(func, &exp1, &exp2).resolve(sym)
+                BinaryFunctionWrapper::new(func, &exp1, &exp2).resolve(env)
             }
 
-            PrefixedLabel(prefix, label) => match sym.prefixed_value(prefix, label) {
+            PrefixedLabel(prefix, label) => match sym.prefixed_value(prefix, label)? {
                 Some(value) => Ok(value as _),
                 None => Err(AssemblerError::ExpressionError{msg: format!("Unable to obtain {} of {}", prefix, label)}),
             },
@@ -156,12 +158,22 @@ impl<'a> UnaryFunctionWrapper<'a> {
 }
 
 impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
-    fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError> {
-        let arg = self.arg.resolve(sym)?;
+    fn resolve(&self, env: &Env) -> Result<i32, AssemblerError> {
+        let arg = self.arg.resolve(env)?;
 
         match self.func {
             UnaryFunction::Low => Ok((arg >> 8) & 0xff),
             UnaryFunction::High => Ok(arg & 0xff),
+            UnaryFunction::Memory => {
+                if arg < 0 || arg > 0xffff {
+                    return Err(AssemblerError::ExpressionError{
+                        msg: format!("Impossible to read memory address {}", arg)
+                    });
+                }
+                else {
+                    Ok(env.peek(arg as usize) as i32)
+                }
+            }
         }
     }
 }
@@ -180,9 +192,9 @@ impl<'a> BinaryFunctionWrapper<'a> {
 }
 
 impl<'a> ExprEvaluationExt for BinaryFunctionWrapper<'a> {
-    fn resolve(&self, sym: &SymbolsTableCaseDependent) -> Result<i32, AssemblerError> {
-        let arg1 = self.arg1.resolve(sym)?;
-        let arg2 = self.arg2.resolve(sym)?;
+    fn resolve(&self, env: &Env) -> Result<i32, AssemblerError> {
+        let arg1 = self.arg1.resolve(env)?;
+        let arg2 = self.arg2.resolve(env)?;
 
         match self.func {
             BinaryFunction::Min => Ok(arg1.min(arg2)),
