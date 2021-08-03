@@ -2301,7 +2301,7 @@ fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
 /// Parse a comment that start by `;` and ends at the end of the line.
 pub fn comment(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
-        preceded(tag(";"), take_till(|ch| ch == '\n')),
+        preceded(alt((tag(";"), tag("//"))), take_till(|ch| ch == '\n')),
         |string: Z80Span| Token::Comment(string.to_string()),
     )(input)
 }
