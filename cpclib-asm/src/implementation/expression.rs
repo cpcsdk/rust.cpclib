@@ -31,9 +31,11 @@ impl ExprEvaluationExt for Expr {
                 (Ok(a), Ok(b)) => match oper {
                     Oper::Add => Ok(a + b),
                     Oper::Sub => Ok(a - b),
-                    Oper::Mul => Ok(a * b),
                     Oper::Div => Ok(a / b),
                     Oper::Mod => Ok(a % b),
+                    Oper::Mul => Ok(a * b),
+                    Oper::RightShift => Ok(a >> b),
+                    Oper::LeftShift => Ok(a << b),
 
                     Oper::BinaryAnd => Ok(a & b),
                     Oper::BinaryOr => Ok(a | b),
@@ -108,6 +110,8 @@ impl ExprEvaluationExt for Expr {
                 }
             }
 
+            RightShift(ref left, ref right) => oper(left, right, Oper::RightShift),
+            LeftShift(ref left, ref right) => oper(left, right, Oper::LeftShift),
             Add(ref left, ref right) => oper(left, right, Oper::Add),
             Sub(ref left, ref right) => oper(left, right, Oper::Sub),
             Mul(ref left, ref right) => oper(left, right, Oper::Mul),

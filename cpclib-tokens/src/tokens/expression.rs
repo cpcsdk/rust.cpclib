@@ -26,8 +26,12 @@ pub enum Expr {
     OpCode(Box<Token>), // TODO move in a token general function stuff
 
     // Arithmetic operations
+    RightShift(Box<Expr>, Box<Expr>),
+    LeftShift(Box<Expr>, Box<Expr>),
+
     Add(Box<Expr>, Box<Expr>),
     Sub(Box<Expr>, Box<Expr>),
+
     Mul(Box<Expr>, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),
     Mod(Box<Expr>, Box<Expr>),
@@ -286,6 +290,8 @@ impl Expr {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[allow(missing_docs)]
 pub enum Oper {
+    RightShift,
+    LeftShift,
     Add,
     Sub,
     Mul,
@@ -317,6 +323,8 @@ impl Display for Oper {
             &Mul => write!(format, "*"),
             &Div => write!(format, "/"),
             &Mod => write!(format, "%"),
+            &RightShift => write!(format, ">>"),
+            &LeftShift => write!(format, "<<"),
 
             BinaryAnd => write!(format, "&"),
             BinaryOr => write!(format, "|"),
@@ -367,6 +375,8 @@ impl Display for Expr {
             &Duration(ref token) => write!(format, "DURATION({})", token),
             &OpCode(ref token) => write!(format, "OPCODE({})", token),
 
+            &RightShift(ref left, ref right) => write!(format, "({} >> {})", left, right),
+            &LeftShift(ref left, ref right) => write!(format, "({} << {})", left, right),
             &Add(ref left, ref right) => write!(format, "({} + {})", left, right),
             &Sub(ref left, ref right) => write!(format, "({} - {})", left, right),
             &Mul(ref left, ref right) => write!(format, "({} * {})", left, right),
@@ -460,7 +470,9 @@ impl Expr {
                 b.fix_local_macro_labels_with_seed(seed);
             }
 
-            Add(b1, b2)
+            RightShift(b1, b2)
+            |LeftShift(b1, b2)
+            |Add(b1, b2)
             | Sub(b1, b2)
             | Mul(b1, b2)
             | Div(b1, b2)
