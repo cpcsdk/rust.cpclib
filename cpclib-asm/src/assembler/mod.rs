@@ -937,52 +937,53 @@ impl Env {
 
         };
 
+        let listing = {
+            // Retreive the macro or structure definition
+            let r#macro = self.symbols().macro_value(name)?;
+            let r#struct = self.symbols().struct_value(name)?;
 
-        // Retreive the macro or structure definition
-        let r#macro = self.symbols().macro_value(name)?;
-        let r#struct = self.symbols().struct_value(name)?;
-
-        if r#macro.is_none() && r#struct.is_none() {
-            let e = AssemblerError::UnknownMacro {
-                symbol: name.to_owned(),
-                closest: self.symbols().closest_symbol(name, SymbolFor::Macro)?,
-            };
-            return match caller_span {
-                Some(span) => Err(AssemblerError::RelocatedError{error: e.into(), span: span.clone()}),
-                None => Err(e)
-            };
-        }
-
-        // get the generated code
-        // TODO handle some errors there
-        let code = if r#macro.is_some() {
-            r#macro.unwrap().develop(parameters)
-        } else {
-            let r#struct = r#struct.unwrap();
-            let mut parameters = parameters.to_vec();
-            parameters.resize(r#struct.nb_args(), MacroParam::empty());
-            r#struct.develop(&parameters)
-        };
-
-        // Tokenize with the same parsing  parameters and context when possible
-        let mut listing = match caller_span {
-            Some(span) => {
-                let mut ctx = span.extra.1.deref().clone();
-                ctx.remove_filename();
-                ctx.set_context_name(&format!("MACRO: {}", name));
-                let code = Box::new(code);
-                parse_z80_str_with_context(code.as_ref(), ctx)?
-            },
-            _ => {
-                parse_z80_str(&code)?
+            if r#macro.is_none() && r#struct.is_none() {
+                let e = AssemblerError::UnknownMacro {
+                    symbol: name.to_owned(),
+                    closest: self.symbols().closest_symbol(name, SymbolFor::Macro)?,
+                };
+                return match caller_span {
+                    Some(span) => Err(AssemblerError::RelocatedError{error: e.into(), span: span.clone()}),
+                    None => Err(e)
+                };
             }
+
+            // get the generated code
+            // TODO handle some errors there
+            let code = if r#macro.is_some() {
+                dbg!(r#macro.unwrap().develop(parameters))
+            } else {
+                let r#struct = r#struct.unwrap();
+                let mut parameters = parameters.to_vec();
+                parameters.resize(r#struct.nb_args(), MacroParam::empty());
+                r#struct.develop(&parameters)
+            };
+
+            // Tokenize with the same parsing  parameters and context when possible
+            let listing = match caller_span {
+                Some(span) => {
+                    let mut ctx = span.extra.1.deref().clone();
+                    ctx.remove_filename();
+                    ctx.set_context_name(&format!("MACRO: {}", name));
+                    let code = Box::new(code);
+                    parse_z80_str_with_context(code.as_ref(), ctx)?
+                },
+                _ => {
+                    parse_z80_str(&code)?
+                }
+            };
+            listing
         };
 
-        // For a macro we have to fix label names
-        if r#macro.is_some() {
-            self.macro_seed += 1;
-            listing.fix_local_macro_labels_with_seed(self.macro_seed);
-        }
+    
+        self.macro_seed += 1;
+        let seed = self.macro_seed;
+        self.symbols_mut().push_seed(seed);
 
         // really assemble the produced tokens
         self.visit_listing(&listing).or_else(|e| {
@@ -995,6 +996,10 @@ impl Env {
                 None => Err(e)
             }
         })?;
+
+
+        self.symbols_mut().pop_seed();
+    
 
         Ok(())
     }

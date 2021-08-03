@@ -411,7 +411,13 @@ impl SymbolsTable {
 
     // Setup the current label for local to global labels conversions
     pub fn set_current_label<S: Into<Symbol>>(&mut self, symbol: S) -> Result<(), SymbolError> {
-        self.current_label = self.extend_symbol(symbol)?.value().to_owned();
+        let label = dbg!(symbol.into());
+        
+        if ! label.value().starts_with(".") && !label.value().starts_with("@") {
+            let label = self.extend_symbol(label)?.value().to_owned();
+            self.current_label = label;
+        }
+
         Ok(())
     }
 
@@ -440,7 +446,7 @@ impl SymbolsTable {
             match self.seed_stack.last() {
                 Some(seed) => {
                     // we need to rewrite the symbol name to make it unique
-                    symbol = format!("__hidden__{}__{}", seed, &symbol[1..]);
+                    symbol = format!(".__hidden__{}__{}", seed, &symbol[1..]);
                 }
                 None => {
                     // we cannot have a symbol with @ here

@@ -189,7 +189,8 @@ pub enum UnaryFunction {
     /// Low byte of a value
     Low,
     /// Memory already assembled
-    Memory
+    Memory,
+    Floor
 }
 
 impl Display for UnaryFunction {
@@ -197,7 +198,8 @@ impl Display for UnaryFunction {
         let repr = match self {
             Self::High => "HI",
             Self::Low => "LO",
-            Self::Memory => "memory"
+            Self::Memory => "memory",
+            Self::Floor => "floor"
         };
         write!(format, "{}", repr)
     }

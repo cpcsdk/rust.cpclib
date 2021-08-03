@@ -162,6 +162,7 @@ impl<'a> UnaryFunctionWrapper<'a> {
 }
 
 impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
+    /// TODO handle float numbers
     fn resolve(&self, env: &Env) -> Result<i32, AssemblerError> {
         let arg = self.arg.resolve(env)?;
 
@@ -177,6 +178,9 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
                 else {
                     Ok(env.peek(arg as usize) as i32)
                 }
+            },
+            UnaryFunction::Floor =>  {
+                Ok(arg) // TODO really handle floor
             }
         }
     }
