@@ -86,7 +86,7 @@ impl ExprEvaluationExt for Expr {
                 }),
                 None => Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
-                    closest: sym.closest_symbol(label)?,
+                    closest: sym.closest_symbol(label, SymbolFor::Integer)?,
                 }),
             },
 
