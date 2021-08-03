@@ -607,9 +607,12 @@ pub fn parse_z80_line_label_only(
         Ok((input, tokens))
     }
 }
+pub fn parse_fname(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
+    parse_string(input)
+}
 
 /// Parser for file names in appropriate directives
-pub fn parse_fname(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
+pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
     alt((
         preceded(tag("\""), terminated(take_until("\""), take(1usize))),
         preceded(tag("'"), terminated(take_until("'"), take(1usize))),
@@ -1406,15 +1409,18 @@ pub fn expr_list(input: Z80Span) -> IResult<Z80Span, Vec<Expr>, VerboseError<Z80
 pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = context("assert", preceded(space0, parse_instr("ASSERT")))(input)?;
 
-    let (input, expr) = context("expr", expr)(input)?;
+    let (input, expr) = cut(context("ASSERT: expression error", expr))(input)?;
 
-    let (input, comment) = context(
-        "assert comment",
+    dbg!(&expr);
+    let (input, comment) = cut(context(
+        "ASSERT: comment error",
         opt(preceded(
-            delimited(space0, tag(","), space0),
-            delimited(tag("\""), take_until("\""), tag("\"")),
-        )),
+            parse_comma,
+            parse_string
+        ))),
     )(input)?;
+
+    dbg!(&comment);
 
     Ok((input, Token::Assert(expr, comment.map(|s| s.to_string()))))
 }
