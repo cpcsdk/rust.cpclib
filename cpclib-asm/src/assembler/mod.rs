@@ -945,7 +945,7 @@ impl Env {
         if r#macro.is_none() && r#struct.is_none() {
             let e = AssemblerError::UnknownMacro {
                 symbol: name.to_owned(),
-                closest: self.symbols().closest_symbol(name)?,
+                closest: self.symbols().closest_symbol(name, SymbolFor::Macro)?,
             };
             return match caller_span {
                 Some(span) => Err(AssemblerError::RelocatedError{error: e.into(), span: span.clone()}),
@@ -1006,7 +1006,7 @@ impl Env {
             None => {
                 Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
-                    closest: self.symbols().closest_symbol(label)?,
+                    closest: self.symbols().closest_symbol(label, SymbolFor::Integer)?,
                 })
                 
             },

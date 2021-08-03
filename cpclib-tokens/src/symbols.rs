@@ -215,6 +215,15 @@ pub enum Value {
     Counter(i32)
 }
 
+#[derive(Copy, Clone)]
+pub enum SymbolFor {
+    Integer,
+    Macro,
+    Struct,
+    Counter,
+    Any
+}
+
 impl Value {
     pub fn integer(&self) -> Option<i32> {
         match self {
@@ -572,10 +581,21 @@ impl SymbolsTable {
     }
 
     /// Returns the closest Value
-    pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<String>, SymbolError> {
+    pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<String>, SymbolError> {
         let symbol = self.extend_symbol(symbol)?;
         Ok(self.map
-                    .keys()
+                    .iter()
+                    .filter(|(k,v)| {
+                        match (v, r#for) {
+                            (Value::Integer(_), SymbolFor::Integer) |
+                            (Value::Macro(_), SymbolFor::Macro) |
+                            (Value::Struct(_), SymbolFor::Struct) |
+                            (Value::Counter(_), SymbolFor::Counter) |
+                            (_, SymbolFor::Any)=> true,
+                            _ => false
+                        }
+                    })
+                    .map(|(k,v)| k)
                     .map(move |symbol2| {
                         (
                             strsim::levenshtein(&symbol2.0, &symbol.0),
@@ -585,6 +605,8 @@ impl SymbolsTable {
                     .min()
                     .map(|(_distance, symbol2)| symbol2))
     }
+
+
 
 
     pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> Result<&'static str, SymbolError> {
@@ -726,7 +748,7 @@ impl SymbolsTableCaseDependent {
             pub fn current_address(&self) -> Result<u16, SymbolError>;
             pub fn set_current_address(&mut self, address: u16);
             pub fn set_current_page(&mut self, page: u8);
-            pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<String>, SymbolError>;
+            pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<String>, SymbolError>;
             pub fn push_seed(&mut self, seed: usize);
             pub fn pop_seed(&mut self);
         }
