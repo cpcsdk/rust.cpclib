@@ -568,14 +568,18 @@ pub fn parse_z80_line_label_only(
     input: Z80Span,
 ) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     let before_label = input.clone();
-    let (input, label) = parse_label(true)(input)?;
+    let (input, label) = context("Label issue", parse_label(true))(input)?;
 
     // TODO make these stuff alternatives ...
     // Manage Equ
     // BUG Equ and = are supposed to be different
     let (input, equ_or_assign) = opt(tuple((
-         alt((parse_instr("DEFL"), parse_instr("EQU"), parse_instr("="))),
-         expr
+         alt((
+            preceded(space1, parse_instr("DEFL")), 
+            preceded(space1, parse_instr("EQU")), 
+            delimited(space0, tag("="), space0)
+        )),
+        cut( context("Value error",expr))
     )))(input)?;
 
     // opt!(char!(':')) >>
