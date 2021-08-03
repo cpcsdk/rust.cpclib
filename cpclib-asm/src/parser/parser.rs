@@ -255,21 +255,21 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     let (input, _) = preceded(space0, parse_instr("MACRO"))(input)?;
 
     // macro name
-    let (input, name) = context("MACRO: wrong name", cut(parse_label(false)))(input)?; // TODO use a specific function for that
+    let (input, name) = cut(context("MACRO: wrong name", parse_label(false)))(input)?; // TODO use a specific function for that
 
     // macro arguments
-    let (input, arguments) = opt(preceded(
-        parse_comma, // comma after macro name is not mandatory
-        separated_list1(
+    let (input, arguments) = preceded(
+    opt(parse_comma), // comma after macro name is not mandatory
+        separated_list0(
             parse_comma,
             /*parse_label(false)*/
-            take_till(|c| c == '\n' || c == ':' || c == ',' || c == ' '),
+            delimited(space0, take_till(|c| c == '\n' || c == ':' || c == ',' || c == ' '), space0),
         ),
-    ))(input)?;
+    )(input)?;
 
-    let (input, content) = context(
+    let (input, content) = cut(context(
         "MACRO: issue in the content",
-        cut(preceded(
+        preceded(
             space0,
             many_till(
                 take(1usize),
@@ -282,21 +282,16 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
         input,
         Token::Macro(
             name,
-            if arguments.is_some() {
                 arguments
-                    .unwrap()
                     .iter()
                     .map(|s| s.to_string())
-                    .collect::<Vec<String>>()
-            } else {
-                Vec::new()
-            },
+                    .collect::<Vec<String>>(),
             content
                 .0
                 .iter()
                 .map(|s| -> String { s.to_string() })
                 .collect::<String>(),
-        ),
+    ),
     ))
 }
 
