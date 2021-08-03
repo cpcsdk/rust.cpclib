@@ -251,29 +251,35 @@ impl Display for AssemblerError {
                     .iter()
                     .filter(|e| match e.1 {
                         VerboseErrorKind::Context(ctx) => !ctx.starts_with("[DBG]"),
-                        VerboseErrorKind::Nom(ErrorKind::Eof) => true,
-                        _ => false,
+                      //  VerboseErrorKind::Nom(ErrorKind::Eof) => true,
+                        _ => true,
                     })
                     .map(|e| match e.1 {
-                        VerboseErrorKind::Context(_) | VerboseErrorKind::Nom(ErrorKind::Eof) => {
+                        VerboseErrorKind::Context(_) | VerboseErrorKind::Nom(_) => {
                             // Get the real are build the context
                             let ctx = match e.1 {
                                 VerboseErrorKind::Context(ctx) => ctx,
-                                VerboseErrorKind::Nom(ErrorKind::Eof) => "Unknown error",
+                                VerboseErrorKind::Nom(_) => "Unknown error",
                                 _ => unreachable!(),
                             };
 
                             let span = &e.0;
 
                             // Add filename to database if needed
-                            let filename = Box::new(
+                            let filename = 
                                 e.0.extra
                                     .1
                                     .current_filename
                                     .as_ref()
-                                    .map(|p| p.as_os_str().to_str().unwrap().to_owned())
-                                    .unwrap_or_else(|| "no file".to_owned()),
-                            );
+                                    .map(|p| p.as_os_str().to_str().unwrap().to_owned());
+                            
+                            let filename = filename.unwrap_or_else(||{
+                                e.0.extra.1.context_name.as_ref().cloned().unwrap_or_else(|| {
+                                     "no file".to_owned()
+                                })
+                            });
+                            let filename = Box::new(filename);
+                            
                             let source = e.0.extra.0.as_ref();
                             let file_id = match fname_to_id.get(filename.deref()) {
                                 Some(&id) => id,
