@@ -1376,7 +1376,7 @@ fn parse_instr(
 
 /// ...
 pub fn parse_djnz(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    map(preceded(parse_instr("DJNZ"), parse_expr), |expr| {
+    map(preceded(terminated(parse_instr("DJNZ"), opt(parse_comma)), parse_expr), |expr| {
         Token::new_opcode(Mnemonic::Djnz, Some(expr), None)
     })(input)
 }
