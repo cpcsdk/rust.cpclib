@@ -257,13 +257,17 @@ impl Display for AssemblerError {
                         _ => true,
                     })
                     .map(|e| match e.1 {
-                        VerboseErrorKind::Context(_) | VerboseErrorKind::Nom(_) => {
+                        VerboseErrorKind::Context(_) | 
+                        VerboseErrorKind::Nom(_) |
+                        VerboseErrorKind::Char(_)=> {
                             // Get the real are build the context
-                            let ctx = match e.1 {
-                                VerboseErrorKind::Context(ctx) => ctx,
-                                VerboseErrorKind::Nom(_) => "Unknown error",
+                            let ctx: std::borrow::Cow<str> = match e.1 {
+                                VerboseErrorKind::Context(ctx) => ctx.into(),
+                                VerboseErrorKind::Nom(_) => "Unknown error".into(),
+                                VerboseErrorKind::Char(c) => format!("Error with char '{}'", c).into(), 
                                 _ => unreachable!(),
                             };
+                            let ctx = ctx.deref();
 
                             let span = &e.0;
 
@@ -320,7 +324,7 @@ impl Display for AssemblerError {
                             std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
                         }
 
-                        _ => unreachable!(),
+                        _ => unreachable!("{:?}", e.1),
                     })
                     .join("\n");
                 write!(f, "{}", str)
