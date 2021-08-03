@@ -129,6 +129,8 @@ pub enum AssemblerError {
         closest: Option<String>,
     },
 
+    InvalidSymbol(String),
+    
     //   #[fail(display = "Symbol {} is not a {}", symbol, isnot)]
     WrongSymbolType {
         symbol: String,
@@ -217,7 +219,7 @@ impl From<SymbolError> for AssemblerError {
         match err {
             SymbolError::UnknownAssemblingAddress => AssemblerError::UnknownAssemblingAddress,
             SymbolError::CannotModify(symb) => AssemblerError::ReadOnlySymbol(symb),
-            SymbolError::WrongSymbol(err) => unimplemented!()
+            SymbolError::WrongSymbol(err) => AssemblerError::InvalidSymbol(err)
         }
     }
 }
@@ -478,6 +480,9 @@ impl Display for AssemblerError {
                     "Tentative to write in 0x{:X} in a protected area [0x{:X}:0x{:X}]",
                     address, area.start(), area.end()
                 )
+            },
+            AssemblerError::InvalidSymbol(msg) => {
+                write!(f, "Invalid symbol {}", msg)
             },
            
         }

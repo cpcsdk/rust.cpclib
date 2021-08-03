@@ -1411,7 +1411,6 @@ pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
 
     let (input, expr) = cut(context("ASSERT: expression error", expr))(input)?;
 
-    dbg!(&expr);
     let (input, comment) = cut(context(
         "ASSERT: comment error",
         opt(preceded(
@@ -1419,8 +1418,6 @@ pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
             parse_string
         ))),
     )(input)?;
-
-    dbg!(&comment);
 
     Ok((input, Token::Assert(expr, comment.map(|s| s.to_string()))))
 }
@@ -2630,6 +2627,10 @@ pub fn parse_unary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseEr
         value(
             UnaryFunction::Memory,
                 tag_no_case("MEMORY")
+        ),
+        value(
+            UnaryFunction::Floor,
+                tag_no_case("FLOOR")
         )
     ))(input)?;
 
