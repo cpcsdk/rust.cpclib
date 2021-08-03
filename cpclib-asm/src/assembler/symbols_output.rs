@@ -49,12 +49,16 @@ impl SymbolOutputGenerator {
 
 	/// Returns true if the symbol needs to be printed
 	pub fn keep_symbol(&self, sym: &Symbol) -> bool {
-		sym.value() != "$" && 
-		(
-			(self.all_allowed && !Self::is_included(&self.forbidden, sym)) ||
-			(self.all_forbidden && Self::is_included(&self.allowed, sym)) ||
-			(!self.all_allowed && !self.all_forbidden && Self::is_included(&self.allowed, sym) && !Self::is_included(&self.forbidden, sym))
-		)
+		assert!(self.all_allowed ^ self.all_forbidden);
+		
+		if sym.value() == "$" {return false}
+		else if self.all_allowed {
+			!Self::is_included(&self.forbidden, sym)
+		}
+		else /*if self.all_forbidden*/ {
+			Self::is_included(&self.allowed, sym)
+		}
+
 	}
 
 
