@@ -892,7 +892,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
 
     let (input, _) = alt((line_ending, tag(":")))(input)?;
 
-    let (input, code) = context("main case", cut(inner_code))(input)?;
+    let (input, code) = context("Syntax error in main condition", cut(inner_code))(input)?;
 
     let else_input = input.clone();
     let (input, r#else) = context(
