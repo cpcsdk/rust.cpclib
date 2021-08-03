@@ -2502,6 +2502,8 @@ fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
             Oper::Mul => Expr::Mul(Box::new(acc), Box::new(expr)),
             Oper::Div => Expr::Div(Box::new(acc), Box::new(expr)),
             Oper::Mod => Expr::Mod(Box::new(acc), Box::new(expr)),
+            Oper::RightShift => Expr::RightShift(Box::new(acc), Box::new(expr)),
+            Oper::LeftShift => Expr::LeftShift(Box::new(acc), Box::new(expr)),
 
             Oper::BinaryAnd => Expr::BinaryAnd(Box::new(acc), Box::new(expr)),
             Oper::BinaryOr => Expr::BinaryOr(Box::new(acc), Box::new(expr)),
@@ -2574,16 +2576,16 @@ where
 
 /// Parse an expression
 pub fn expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
-    let (input, initial) = comp(input)?;
+    let (input, initial) = shift(input)?;
     let (input, remainder) = many0(alt((
-        parse_oper(comp, "<=", Oper::LowerOrEqual),
-        parse_oper(comp, "<", Oper::StrictlyLower),
-        parse_oper(comp, ">=", Oper::GreaterOrEqual),
-        parse_oper(comp, ">", Oper::StrictlyGreater),
-        parse_oper(comp, "==", Oper::Equal),
-        parse_oper(comp, "!=", Oper::Different),
-        parse_oper(comp, "&&", Oper::BooleanAnd),
-        parse_oper(comp, "||", Oper::BooleanOr),
+        parse_oper(shift, "<=", Oper::LowerOrEqual),
+        parse_oper(shift, "<", Oper::StrictlyLower),
+        parse_oper(shift, ">=", Oper::GreaterOrEqual),
+        parse_oper(shift, ">", Oper::StrictlyGreater),
+        parse_oper(shift, "==", Oper::Equal),
+        parse_oper(shift, "!=", Oper::Different),
+        parse_oper(shift, "&&", Oper::BooleanAnd),
+        parse_oper(shift, "||", Oper::BooleanOr),
     )))(input)?;
 
     Ok((input, fold_exprs(initial, remainder)))
@@ -2668,6 +2670,15 @@ pub fn parse_duration(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80
 pub fn parse_assemble(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     let (input, token) = token_function("opcode")(input)?;
     Ok((input, Expr::OpCode(Box::new(token))))
+}
+
+pub fn shift(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+    let (input, initial) = comp(input)?;
+    let (input, remainder) = many0(alt((
+        parse_oper(comp, "<<", Oper::LeftShift),
+        parse_oper(comp, ">>", Oper::RightShift),
+    )))(input)?;
+    Ok((input, fold_exprs(initial, remainder)))
 }
 
 /// Parse operation related to + - & |
