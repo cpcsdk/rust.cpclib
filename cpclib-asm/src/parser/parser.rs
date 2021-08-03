@@ -710,6 +710,23 @@ pub fn parse_undef(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     Ok((input, Token::Undef(label)))
 }
 
+pub fn parse_assign(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, (label, value)) = pair(
+        terminated(
+            parse_label(false),
+            delimited(
+                    space0,
+                    tag("="),
+                    space0
+                )
+        ),
+
+        expr
+    )(input)?;
+
+    Ok((input, Token::Assign(label, value)))
+}
+
 /// Parse the opcodes. TODO rename as parse_opcode ...
 pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     alt((
@@ -833,6 +850,7 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
                 parse_struct,
                 parse_undef,
                 parse_noarg_directive,
+                parse_assign,
                 parse_macro_call, 
             )),
             move |t| t.locate(dir_start.clone()),
