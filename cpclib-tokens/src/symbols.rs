@@ -4,6 +4,7 @@ use std::fmt::Debug;
 
 use delegate::delegate;
 use itertools::Itertools;
+use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
 use crate::{Expr, MacroParam, Token};
@@ -456,6 +457,24 @@ impl SymbolsTable {
 
         }
 
+
+        // Get the replacement strings
+        lazy_static::lazy_static! {
+            static ref RE: Regex = Regex::new("\\{[^\\}]+\\}").unwrap();
+        }
+        let mut replace = HashSet::new();
+        for cap in RE.captures_iter(&symbol) {
+            if cap[0] != symbol {
+              replace.insert(dbg!(cap[0].to_owned()));
+            }
+        }
+        // make the replacement
+        for model in replace.iter() {
+            let local_symbol = &model[1..model.len()-1]; // remove {}
+            let local_value = self.int_value(local_symbol)?.unwrap();
+            symbol = symbol.replace(model, &format!("{}", local_value));
+        }
+
         Ok(symbol.into())
     }
 
@@ -622,7 +641,9 @@ impl SymbolsTable {
                     Some(Value::Integer(_)) => "integer",
                     Some(Value::Macro(_)) => "macro",
                     Some(Value::Struct(_)) => "struct",
-                    _ => panic!()
+                    Some(Value::Counter(_)) => "counter",
+                    None => "any",
+
                 })
     }
 }

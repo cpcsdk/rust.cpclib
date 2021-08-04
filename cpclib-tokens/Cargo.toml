@@ -25,7 +25,9 @@ serde = { version = "1.0.126", features = ["derive"] }
 smallvec = "1.6.1"
 strsim = "0.10.0"
 nom = "6.2.1"
+lazy_static = "1.4.0"
 nom_locate = "3.0.1"
+regex = "*"
 
 
 [build-dependencies]
