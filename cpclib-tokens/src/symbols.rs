@@ -412,7 +412,7 @@ impl SymbolsTable {
     // Setup the current label for local to global labels conversions
     pub fn set_current_label<S: Into<Symbol>>(&mut self, symbol: S) -> Result<(), SymbolError> {
         let label = dbg!(symbol.into());
-        
+
         if ! label.value().starts_with(".") && !label.value().starts_with("@") {
             let label = self.extend_symbol(label)?.value().to_owned();
             self.current_label = label;
@@ -604,7 +604,9 @@ impl SymbolsTable {
                     .map(|(k,v)| k)
                     .map(move |symbol2| {
                         (
-                            strsim::levenshtein(&symbol2.0, &symbol.0),
+                            strsim::levenshtein(&symbol2.0, &symbol.0).min(
+                                strsim::levenshtein(&symbol2.0.to_ascii_uppercase(), &symbol.0.to_ascii_uppercase())
+                            ),
                             symbol2.0.clone(),
                         )
                     })
