@@ -53,6 +53,7 @@ enum BasmError {
 impl Display for BasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 
+
         dbg!(self);
 
         match self {

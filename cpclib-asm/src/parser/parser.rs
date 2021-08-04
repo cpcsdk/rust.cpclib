@@ -45,7 +45,16 @@ pub mod error_code {
     pub const UNABLE_TO_PARSE_INNER_CONTENT: u32 = 130;
 }
 
-const FIRST_DIRECTIVE: &[&str] = &["IF", "IFDEF", "IFNDEF", "REPEAT", "REPT", "REP", "PHASE", "WHILE"];
+const FIRST_DIRECTIVE: &[&str] = &[
+    "IF", 
+    "IFDEF", 
+    "IFNDEF", 
+    "REPEAT", 
+    "REPT", 
+    "REP", 
+    "PHASE", 
+    "WHILE"
+    ];
 
 // This table is supposed to contain the keywords that finish a section
 const FINAL_DIRECTIVE: &[&str] = &[
@@ -202,7 +211,16 @@ pub fn parse_z80_line(
                             |lt| vec![lt],
                         ),
                     )),
-                    preceded(space0, alt((line_ending, eof, tag(":")))),
+                    cut(context("Line ending issue", 
+                    preceded(
+                        space0, 
+                        alt((
+                            map(parse_comment, |_| "".into()),
+                            line_ending, 
+                            eof, 
+                            tag(":")
+                        ))
+                    ))),
                 ),
             ),
             context("[DBG] line with label only", parse_z80_line_label_only),
@@ -214,14 +232,35 @@ pub fn parse_z80_line(
 }
 
 /// Workaround because many0 is not used in the main root function
-fn inner_code(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
-    context(
-        "[DBG] inner code",
-        fold_many0(parse_z80_line, Vec::new(), |mut inner, tokens| {
-            inner.extend_from_slice(&tokens);
-            inner
-        }),
-    )(input)
+fn inner_code(mut input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
+
+    let mut tokens = Vec::new();
+    loop {
+        // check if the line need to be parsed (ie there is no end directive)
+        let must_break = {
+            // TODO take into account potential label
+            let maybe_keyword = preceded(space1, parse_label(false))(input.clone());
+            match maybe_keyword {
+                Ok((key_input, key_val)) => {
+                    FINAL_DIRECTIVE.iter()
+                        .find(|&&f| f == key_val.to_ascii_uppercase().as_str()).is_some()
+                },
+                _ => false,
+            }
+        } ;
+        if must_break {
+            dbg!("LEAVE the inner code loop", &input);
+            break
+        };
+
+        // really parse the line
+        let (line_input, mut tok) = cut(context("[DBG] Inner loop", parse_z80_line))(input)?;
+        input = line_input;
+        tokens.append(&mut tok);
+    }
+
+    Ok((input, tokens))
+
 }
 
 /// TODO
@@ -457,7 +496,7 @@ pub fn parse_empty_line(
 ) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     // let (input, _) = opt(line_ending)(input)?;
     let before_comment = input.clone();
-    let (input, comment) = delimited(space0, opt(comment), space0)(input)?;
+    let (input, comment) = delimited(space0, opt(parse_comment), space0)(input)?;
     let (input, _) = alt((line_ending, eof))(input)?;
 
     let mut res = Vec::new();
@@ -484,7 +523,10 @@ fn parse_single_token(
         // Get the token
         let (input, opcode) = context(
             "[DBG] single token",
-            preceded(space0, alt((parse_token, parse_directive))),
+            preceded(space0, alt((
+                context("[DBG] token", parse_token), 
+                context("[DBG] directive", parse_directive)
+            ))),
         )(input)?;
 
         Ok((input, opcode))
@@ -512,6 +554,8 @@ pub fn parse_z80_line_complete(
     let (input, label) = opt(parse_label(true))(input)?;
     let (input, _) = space1(input)?;
 
+
+
     // First directive MUST not be the  a keyword that ends a structure
     let (input, _) = not(parse_forbidden_keyword)(input)?;
 
@@ -534,7 +578,7 @@ pub fn parse_z80_line_complete(
     // Eat final comment
     let (input, _) = space0(input)?;
     let before_comment = input.clone();
-    let (input, comment) = opt(comment)(input)?;
+    let (input, comment) = opt(parse_comment)(input)?;
     let (input, _) = space0(input)?;
 
     // Ensure it is the end of line of file
@@ -580,7 +624,7 @@ pub fn parse_z80_line_label_only(
     // opt!(char!(':')) >>
 
     let before_comment = input.clone();
-    let (input, comment) = delimited(space0, opt(comment), alt((line_ending, eof)))(input)?;
+    let (input, comment) = delimited(space0, opt(parse_comment), alt((line_ending, eof)))(input)?;
 
     {
         let mut tokens = Vec::new();
@@ -818,25 +862,25 @@ pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z
 pub fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let dir_start = input.clone();
     alt((
-        parse_include,
+        context("[DBG] include", parse_include),
         map(
             alt((
-                parse_assert,
-                parse_bankset,
-                parse_bank,
-                parse_align,
-                parse_breakpoint,
-                parse_buildsna,
-                parse_org,
-                parse_defs,
-                parse_export,
-                parse_incbin,
-                parse_limit,
-                parse_db_or_dw_or_str,
-                parse_print,
-                parse_protect,
-                parse_run,
-                parse_snaset,
+                context("[DBG] assert", parse_assert),
+                context("[DBG] bankset", parse_bankset),
+                context("[DBG] bank", parse_bank),
+                context("[DBG] align", parse_align),
+                context("[DBG] breakpoint", parse_breakpoint),
+                context("[DBG] buildsna", parse_buildsna),
+                context("[DBG] org", parse_org),
+                context("[DBG] defs", parse_defs),
+                context("[DBG] export", parse_export),
+                context("[DBG] incbin", parse_incbin),
+                context("[DBG] limit", parse_limit),
+                context("[DBG] db", parse_db_or_dw_or_str),
+                context("[DBG] print", parse_print),
+                context("[DBG] protext", parse_protect),
+                context("[DBG] run", parse_run),
+                context("[DBG] snaset", parse_snaset),
             )),
             move |t| t.locate(dir_start.clone()),
         )
@@ -848,13 +892,13 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
 
         map(
             alt((
-                parse_save,
-                parse_stable_ticker,
-                parse_struct,
-                parse_undef,
-                parse_noarg_directive,
-                parse_assign,
-                parse_macro_call, 
+                context("[DBG] save", parse_save),
+                context("[DBG] ticker", parse_stable_ticker),
+                context("[DBG] struct", parse_struct),
+                context("[DBG] undef", parse_undef),
+                context("[DBG] noargs", parse_noarg_directive),
+                context("[DBG] assign", parse_assign),
+                context("[DBG] macro call", parse_macro_call), 
             )),
             move |t| t.locate(dir_start.clone()),
         )(input.clone())
@@ -897,18 +941,19 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
     ))(input)?;
 
     // Get the corresponding test
-    let (input, cond) = context(
-        "Condition error",
-        cut(delimited(
+    let (input, cond) = cut(context(
+        "Condition: error in the condition",
+        delimited(
             space0,
             parse_conditional_condition(test_kind),
             space0,
         )),
     )(input)?;
 
-    let (input, _) = alt((line_ending, tag(":")))(input)?;
 
-    let (input, code) = context("Syntax error in main condition", cut(inner_code))(input)?;
+    let (input, _) = cut(context("Condition: condition must end by a new line or ':'", alt((map(delimited(space0, parse_comment, line_ending), |_|"".into()),  line_ending, tag(":")))))(input)?;
+
+    let (input, r#if) = cut(context("Condition: syntax error in main condition", inner_code))(input)?;
 
     let else_input = input.clone();
     let (input, r#else) = context(
@@ -917,16 +962,20 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
             delimited(
                 space0,
                 parse_instr("ELSE"),
-                cut(opt(alt((terminated(space0, line_ending), tag(":"))))),
+                cut(opt(alt((map(delimited(space0, parse_comment, line_ending), |_|"".into()), terminated(space0, line_ending), tag(":"))))),
             ),
             context("else code", inner_code),
         )),
     )(input)?;
 
     let (input, _) = context(
-        "end cond",
+        "Condition: issue in end condition",
         tuple((
-            cut(alt((space1, delimited(space0, tag(":"), space0)))),
+            cut(alt((
+                space1, 
+                delimited(space0, tag(":"), space0),
+                map(delimited(space0, parse_comment, line_ending), |_| "".into())
+            ))),
             cut(preceded(space0, parse_instr("ENDIF"))),
         )),
     )(input)?;
@@ -934,7 +983,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
     Ok((
         input,
         LocatedToken::If(
-            vec![(cond, code.try_into().unwrap())],
+            vec![(cond, r#if.try_into().unwrap())],
             r#else.map(|v| {
                 LocatedListing::try_from(v)
                     .unwrap_or_else(|_| LocatedListing::new_empty_span(else_input))
@@ -955,7 +1004,10 @@ fn parse_conditional_condition(
             KindOfConditional::IfNot => map(expr, |e| TestKind::False(e))(input),
 
             KindOfConditional::IfDef => {
-                map(parse_label(false), |l| TestKind::LabelExists(l))(input)
+                map(
+                    preceded(space0, parse_label(false)), 
+                    |l| TestKind::LabelExists(l)
+                )(input)
             }
 
             KindOfConditional::IfNdef => {
@@ -1352,8 +1404,8 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseEr
 /// TODO use parse_forbidden_keyword
 pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     // BUG: added because of parsing issues. Need to find why and remove ot
-    let (input, _) = space0(input)?;
-    let (input, name) = parse_label(false)(input)?;
+    let (input_label, _) = space0(input)?;
+    let (input, name) = parse_label(false)(input_label.clone())?;
 
     // Check if the macro name is allowed
     if FIRST_DIRECTIVE
@@ -1361,9 +1413,14 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
         .chain(FINAL_DIRECTIVE.iter())
         .find(|&&a| a.to_lowercase() == name.to_lowercase())
         .is_some()
-    {
+    { 
         Err(Err::Failure(
-            nom::error::ParseError::<Z80Span>::from_error_kind(input, ErrorKind::AlphaNumeric),
+            nom::error::VerboseError::<Z80Span>::add_context(
+                input_label,
+                "MACRO: forbidden name",
+
+                nom::error::ParseError::<Z80Span>::from_error_kind(input, ErrorKind::AlphaNumeric),
+            )
         ))
     } else {
         let (input, args) = alt((
@@ -2303,7 +2360,7 @@ fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
 }
 
 /// Parse a comment that start by `;` and ends at the end of the line.
-pub fn comment(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+pub fn parse_comment(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
         preceded(alt((tag(";"), tag("//"))), take_till(|ch| ch == '\n')),
         |string: Z80Span| Token::Comment(string.to_string()),

@@ -160,3 +160,100 @@ fn macro_args_list_3() {
         ])
     )
 }
+
+
+#[test]
+fn regression_akm1() {
+
+    let input = "IFDEF PLY_CFG_UseEffect_ArpeggioTable      ;CONFIG SPECIFIC
+    ld de,PLY_AKM_PtArpeggios + PLY_AKM_Offset1b
+    ldi
+    ldi
+                            ELSE
+                            inc hl
+                            inc hl
+                            ENDIF ;PLY_CFG_UseEffect_ArpeggioTable
+                            ";
+    let bin = dbg!(parse_conditional(input.into()));
+    assert!(bin.is_ok());
+    dbg!(bin.unwrap().1.as_token());
+}
+
+#[test]
+fn regression_akm2() {
+
+        let input = "IFDEF PLY_CFG_UseEffect_PitchTable         ;CONFIG SPECIFIC
+    ld de,PLY_AKM_PtPitches + PLY_AKM_Offset1b
+    ldi
+    ldi
+        ELSE
+        inc hl
+        inc hl
+        ENDIF ;PLY_CFG_UseEffect_PitchTable
+";
+    let bin = dbg!(parse_conditional(input.into()));
+    assert!(bin.is_ok());
+    dbg!(bin.unwrap().1.as_token());
+}
+
+#[test]
+fn regression_akm3() {
+
+        let input = "IFDEF PLY_CFG_UseEffects                           ;CONFIG SPECIFIC
+        nop
+    ELSE
+        nop
+    ENDIF ;PLY_CFG_UseEffects
+";
+    let bin = dbg!(parse_conditional(input.into()));
+    assert!(bin.is_ok());
+    dbg!(bin.unwrap().1.as_token());
+}
+
+
+#[test]
+fn regression_akm4() {
+
+        let input = "IFDEF PLY_CFG_UseEffects                           ;CONFIG SPECIFIC
+        nop
+    ELSE
+dknr3:  ld de,4
+    add hl,de
+    ENDIF ;PLY_CFG_UseEffects
+";
+    let bin = dbg!(parse_conditional(input.into()));
+    assert!(bin.is_ok());
+    dbg!(bin.unwrap().1.as_token());
+}
+
+
+#[test]
+fn regression_akm5() {
+
+        let input = "IFDEF PLY_CFG_UseEffects                           ;CONFIG SPECIFIC
+        IFDEF PLY_CFG_UseEffect_ArpeggioTable      ;CONFIG SPECIFIC
+    ld de,PLY_AKM_PtArpeggios + PLY_AKM_Offset1b
+    ldi
+    ldi
+            ELSE
+            inc hl
+            inc hl
+            ENDIF ;PLY_CFG_UseEffect_ArpeggioTable
+            IFDEF PLY_CFG_UseEffect_PitchTable         ;CONFIG SPECIFIC
+    ld de,PLY_AKM_PtPitches + PLY_AKM_Offset1b
+    ldi
+    ldi
+        ELSE
+        inc hl
+        inc hl
+        ENDIF ;PLY_CFG_UseEffect_PitchTable
+    ELSE
+dknr3:  ld de,4
+    add hl,de
+    ENDIF ;PLY_CFG_UseEffects
+
+";
+    let bin = dbg!(parse_conditional(input.into()));
+    assert!(bin.is_ok());
+    dbg!(bin.unwrap().1.as_token());
+}
