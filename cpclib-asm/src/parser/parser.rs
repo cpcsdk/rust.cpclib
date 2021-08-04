@@ -1196,6 +1196,7 @@ fn parse_ld_normal_src(
                 alt((
                     parse_indexregister_with_index,
                     parse_reg_address,
+                    parse_indexregister_address,
                     parse_address,
                     parse_register8,
                     parse_indexregister8,
