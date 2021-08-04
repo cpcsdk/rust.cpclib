@@ -12,6 +12,7 @@ use cpclib_sna::parse::parse_flag;
 use cpclib_sna::parse::parse_flag_value;
 use cpclib_sna::FlagValue;
 use itertools::Itertools;
+use itertools::chain;
 use nom_locate::LocatedSpan;
 
 use nom::branch::*;
@@ -236,16 +237,14 @@ fn inner_code(mut input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, Verbose
 
     let mut tokens = Vec::new();
     loop {
+        dbg!("loop");
         // check if the line need to be parsed (ie there is no end directive)
         let must_break = {
             // TODO take into account potential label
-            let maybe_keyword = preceded(space1, parse_label(false))(input.clone());
-            match maybe_keyword {
-                Ok((key_input, key_val)) => {
-                    FINAL_DIRECTIVE.iter()
-                        .find(|&&f| f == key_val.to_ascii_uppercase().as_str()).is_some()
-                },
-                _ => false,
+            let maybe_keyword = opt(preceded(space1, parse_end_directive))(input.clone());
+            match maybe_keyword{
+                Ok((_, Some(_))) => true,
+                _ => false
             }
         } ;
         if must_break {
@@ -2435,8 +2434,12 @@ pub fn parse_label(
                 .unwrap_or_default()
         );
 
-        let impossible = ["af", "hl", "de", "bc", "ix", "iy", "ixl", "ixh"];
-        if impossible.iter().any(|val| val == &label.to_lowercase()) {
+        let mut impossible = chain!( 
+            &["AF", "HL", "DE", "BC", "IX", "IY", "IXL", "IXH"],
+            FIRST_DIRECTIVE,
+            FINAL_DIRECTIVE
+        );
+        if impossible.any(|val| val == &label.to_uppercase()) {
             Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
         } else {
             Ok((input, label))
@@ -2444,6 +2447,18 @@ pub fn parse_label(
     }
 }
 
+
+pub fn parse_end_directive (input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
+    let (input, keyword) =     is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")(input)?;
+    let keyword = dbg!(keyword.iter_elements().collect::<String>().to_ascii_uppercase());
+
+    if FINAL_DIRECTIVE.iter().any(|&val| val == &keyword) {
+        Ok((input, keyword))
+    } else {
+        Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+    }
+
+}
 pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     let (input, prefix) = alt((
         value(LabelPrefix::Bank, tag_no_case("{bank}")),
@@ -2851,13 +2866,18 @@ mod test {
     };
 
     #[test]
+    fn test_parse_end_directive() {
+        let res = dbg!(parse_end_directive("endif".into()));
+        assert!(res.is_ok());
+    }
+    #[test]
     fn parse_test_cond() {
-        let res = inner_code(Z80Span::new_extra(
+        let res = dbg!(inner_code(Z80Span::new_extra(
             " nop
                 endif"
                 .to_owned(),
             CTX.clone(),
-        ));
+        )));
         assert!(res.is_ok());
         assert_eq!(res.unwrap().1.len(), 1);
 
