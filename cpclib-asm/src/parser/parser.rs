@@ -2151,7 +2151,19 @@ pub fn parse_portnn(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError
 /// Parse an address access `(expression)`
 pub fn parse_address(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
     map(
-        delimited(tag("("), expr, preceded(space0, tag(")"))),
+        delimited(
+            tag("("), 
+            expr, 
+            terminated(
+                preceded(space0, tag(")")),
+                not( // filter expressions ; they are followed by some operators
+                    preceded(
+                        space0,
+                        is_a("/+=-*<>%")
+                    )
+                )
+            )
+        ),
         |address| DataAccess::Memory(address),
     )(input)
 }
