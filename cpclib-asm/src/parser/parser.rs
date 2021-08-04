@@ -194,9 +194,9 @@ pub fn parse_z80_line(
         alt((
             context("[DBG]empty line", parse_empty_line),
             context(
-                "[DBG]macro only",
+                "[DBG] code embeders",
                 delimited(
-                    space1,
+                    space0,
                     alt((
                         map(
                             alt((context("macro", parse_macro), context("basic", parse_basic))),
@@ -241,7 +241,7 @@ fn inner_code(mut input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, Verbose
         // check if the line need to be parsed (ie there is no end directive)
         let must_break = {
             // TODO take into account potential label
-            let maybe_keyword = opt(preceded(space1, parse_end_directive))(input.clone());
+            let maybe_keyword = opt(preceded(space0, parse_end_directive))(input.clone());
             match maybe_keyword{
                 Ok((_, Some(_))) => true,
                 _ => false
@@ -550,13 +550,11 @@ pub fn parse_z80_line_complete(
 
     // Eat optional label
     let before_label = input.clone();
-    let (input, label) = opt(parse_label(true))(input)?;
-    let (input, _) = space1(input)?;
-
+    let (input, label) = opt(terminated(parse_label(true), space1))(input)?;
 
 
     // First directive MUST not be the  a keyword that ends a structure
-    let (input, _) = not(parse_forbidden_keyword)(input)?;
+    let (input, _) = cut(context("Parse issue, no end directive expected here", not(parse_forbidden_keyword)))(input)?;
 
     // Eat first token or directive
     let (input, opcode) = context("[DBG] first token", cut(parse_single_token(true)))(input)?;
@@ -573,6 +571,9 @@ pub fn parse_z80_line_complete(
             },
         )),
     )(input)?;
+
+    // eat extra : as in Targhans code
+    let (input, _) = opt(delimited(space0, tag(":"), space0))(input)?;
 
     // Eat final comment
     let (input, _) = space0(input)?;
@@ -970,8 +971,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
     let (input, _) = context(
         "Condition: issue in end condition",
         tuple((
-            cut(alt((
-                space1, 
+            opt(alt((
                 delimited(space0, tag(":"), space0),
                 map(delimited(space0, parse_comment, line_ending), |_| "".into())
             ))),
@@ -1405,7 +1405,7 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseEr
 pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     // BUG: added because of parsing issues. Need to find why and remove ot
     let (input_label, _) = space0(input)?;
-    let (input, name) = parse_label(false)(input_label.clone())?;
+    let (input, name) = parse_macro_name(input_label.clone())?;
 
     // Check if the macro name is allowed
     if FIRST_DIRECTIVE
@@ -1418,12 +1418,11 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
             nom::error::VerboseError::<Z80Span>::add_context(
                 input_label,
                 "MACRO: forbidden name",
-
                 nom::error::ParseError::<Z80Span>::from_error_kind(input, ErrorKind::AlphaNumeric),
             )
         ))
     } else {
-        let (input, args) = alt((
+        let (input, args) = cut(context("MACRO: error in arguments list", alt((
             value(
                 Default::default(),
                 delimited(space0, tag_no_case("(void)"), space0),
@@ -1433,6 +1432,7 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
                 separated_list1(tuple((tag(","), space0)), parse_macro_arg),
                 map(tag_no_case("(void)"), |_| Vec::new()),
             ))),
+        ))
         ))(input)?;
 
         Ok((input, Token::MacroCall(name, args.unwrap_or_default())))
@@ -2411,10 +2411,22 @@ pub fn parse_label(
         // Get the label
 
         let (input, first) =
-            one_of("@abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._")(input)?;
+            one_of("@abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._{}")(input)?;
         let (input, middle) = opt(
-            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.")
+            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.{}")
         )(input)?;
+
+        // fail to parse a label when it is a macro call
+        let (input, macro_arg) = opt(
+            preceded(
+                space1,
+                tag_no_case("(void)".into())
+            )
+        )(input)?;
+        if macro_arg.is_some() {
+            return Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)));
+        }
+
 
         if middle.is_none() && (first == '@' || first == '.') {
             return Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)));
@@ -2459,6 +2471,21 @@ pub fn parse_end_directive (input: Z80Span) -> IResult<Z80Span, String, VerboseE
     }
 
 }
+
+pub fn parse_macro_name (input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
+    let (input, name) =     is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")(input)?;
+    let keyword = dbg!(name.iter_elements().collect::<String>().to_ascii_uppercase());
+
+    if FINAL_DIRECTIVE.iter().any(|&val| val == &keyword) {
+        Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+
+    } else {
+        Ok((input, keyword))     
+    }
+
+}
+
+
 pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     let (input, prefix) = alt((
         value(LabelPrefix::Bank, tag_no_case("{bank}")),
