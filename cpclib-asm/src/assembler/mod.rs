@@ -2984,8 +2984,8 @@ fn assemble_add_or_adc(
                 }
 
                 DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                    let val = exp.resolve(env)?;
-
+                    let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
+                    
                     // TODO check if the code is ok
                     bytes.push(indexed_register16_to_code(*reg));
                     if is_add {
