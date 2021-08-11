@@ -465,14 +465,14 @@ impl SymbolsTable {
         let mut replace = HashSet::new();
         for cap in RE.captures_iter(&symbol) {
             if cap[0] != symbol {
-              replace.insert(dbg!(cap[0].to_owned()));
+              replace.insert(cap[0].to_owned());
             }
         }
         // make the replacement
         for model in replace.iter() {
             let local_symbol = &model[1..model.len()-1]; // remove {}
             let local_value = self.int_value(local_symbol)?.unwrap();
-            symbol = symbol.replace(model, &format!("{}", local_value));
+            symbol = symbol.replace(model, & local_value.to_string());
         }
 
         Ok(symbol.into())
