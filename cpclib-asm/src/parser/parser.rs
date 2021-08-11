@@ -1394,8 +1394,8 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseEr
                 )
             },
         ),
-        map(many1(none_of(",\r\n][")), |s| {
-            MacroParam::Single(s.iter().collect::<String>())
+        map(many1(none_of(",\r\n][;")), |s| {
+            MacroParam::Single(s.iter().collect::<String>().trim().to_owned())
         }),
     ))(input)
 }
