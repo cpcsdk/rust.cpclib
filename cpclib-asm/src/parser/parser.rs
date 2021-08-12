@@ -54,7 +54,8 @@ const FIRST_DIRECTIVE: &[&str] = &[
     "REPT", 
     "REP", 
     "PHASE", 
-    "WHILE"
+    "WHILE",
+    "LZAPU"
     ];
 
 // This table is supposed to contain the keywords that finish a section
@@ -67,7 +68,8 @@ const FINAL_DIRECTIVE: &[&str] = &[
     "REND",  // rorg directive
     "ENDIF", // if directive
     "ELSE",
-    "WEND"
+    "WEND",
+    "LZCLOSE"
 ];
 pub fn parse_z80_strrc_with_contextrc(
     code: Rc<String>,
@@ -204,6 +206,7 @@ pub fn parse_z80_line(
                         ),
                         map(
                             alt((
+                                context("[DBG] crunched section", parse_crunched_section),
                                 context("[DBG] repeat", parse_repeat),
                                 context("[DBG] while", parse_while),
                                 context("[DBG] rorg", parse_rorg),
@@ -356,6 +359,44 @@ pub fn parse_while(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
         ),
     ))
 
+}
+
+/// Parse a sub-listing part that aims at being crunched after being assembled at first pass
+pub fn parse_crunched_section(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let crunched_start = input.clone();
+    let (input, kind) = preceded(
+        space0,
+        alt((
+            value(CrunchType::LZEXO, parse_instr("LZEXO")),
+            value(CrunchType::LZ4, parse_instr("LZ4")),
+            value(CrunchType::LZ48, parse_instr("LZ48")),
+            value(CrunchType::LZ49, parse_instr("LZ49")),
+            value(CrunchType::LZX7, parse_instr("LZX7")),
+            value(CrunchType::LZAPU, parse_instr("LZAPU")),
+        )),
+    )(input)?;
+
+
+    let (input, inner) = cut(context("CRUNCHED SECTION: issue in the content", inner_code))(input)?;
+
+    let (input, _) = cut(context(
+        "REPEAT: not closed",
+        tuple((
+            space0,
+            parse_instr("LZCLOSE"),
+            space0,
+        )),
+    ))(input)?;
+
+    Ok((
+        input.clone(),
+        LocatedToken::CrunchedSection(
+            kind,
+            LocatedListing::try_from(inner)
+                .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
+            crunched_start,
+        ),
+    ))
 }
 
 

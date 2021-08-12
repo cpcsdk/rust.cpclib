@@ -338,6 +338,7 @@ pub enum CrunchType {
     LZ4,
     LZX7,
     LZEXO,
+    LZAPU
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
