@@ -4,6 +4,7 @@ use cpclib_tokens::symbols::{SymbolsTableTrait, Symbol};
 
 /// Manage the generation of the symbols output.
 /// Could be parametrize by some directives
+#[derive(Clone)]
 pub struct SymbolOutputGenerator {
 	forbidden: Vec<Symbol>,
 	allowed: Vec<Symbol>,

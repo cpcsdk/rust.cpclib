@@ -376,6 +376,17 @@ pub enum BinaryTransformation {
     Aplib,
 }
 
+impl BinaryTransformation {
+    pub fn crunch_type(&self) -> Option<CrunchType> {
+        match self {
+            BinaryTransformation::None => None,
+            BinaryTransformation::Exomizer => Some(CrunchType::LZEXO),
+            BinaryTransformation::Lz49 => Some(CrunchType::LZ49),
+            BinaryTransformation::Aplib => Some(CrunchType::LZAPU),
+        }
+    }
+}
+
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]
 #[derive(Debug, Clone, PartialEq, Eq)]

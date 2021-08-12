@@ -155,7 +155,7 @@ impl AssemblingPass {
 
 /// Manage the stack of stable counters.
 /// They are updated each time an opcode is visited
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct StableTickerCounters {
     counters: Vec<(String, usize)>,
 }
@@ -219,6 +219,7 @@ impl Visited for LocatedToken {
 }
 
 /// This structure collects the necessary information to feed the output
+#[derive(Clone)]
 struct ListingOutputTrigger {
     /// the token read before collecting the bytes
     /// Because of macros we need to make a copy (TODO find why...)
@@ -302,11 +303,30 @@ impl PageInformation {
     }
 }
 
+/// Store all the necessary information when handling a crunched section
+#[derive(Clone)]
+struct CrunchedSectionState {
+    /// Start of the crunched section for code assembled from the sources.
+    /// None for code assembled from tokens
+    crunched_section_start: Option<Z80Span>,
+}
+
+impl CrunchedSectionState {
+    pub fn new(span: Option<Z80Span>) -> Self {
+        CrunchedSectionState {
+            crunched_section_start: span
+        }
+    }
+}
 /// Environment of the assembly
 #[allow(missing_docs)]
+#[derive(Clone)]
 pub struct Env {
     /// Current pass
     pass: AssemblingPass,
+    /// Check if we are assembling a crunched section as there are some limitations
+    /// XXX  we should be able to remove most of these limitations as well as this variable
+    crunched_section_state: Option<CrunchedSectionState>,
 
     /// Stable counter of nops
     stable_counters: StableTickerCounters,
@@ -368,7 +388,9 @@ impl Default for Env {
             run_options: None,
             written_bytes: BitVec::repeat(false, 0x4000*2*4),
             output_trigger: None,
-            symbols_output: Default::default()
+            symbols_output: Default::default(),
+
+            crunched_section_state: None
         }
     }
 }
@@ -607,11 +629,13 @@ impl Env {
     /// Compute the expression thanks to the symbol table of the environment.
     /// If the expression is not solvable in first pass, 0 is returned.
     /// If the expression is not solvable in second pass, an error is returned
+    /// 
+    /// However, when assembling in a crunched section, the expression MUST NOT fail.
     fn resolve_expr_may_fail_in_first_pass(&self, exp: &Expr) -> Result<i32, AssemblerError> {
         match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
-                if self.pass.is_first_pass() {
+                if self.pass.is_first_pass() && self.crunched_section_state.is_none() {
                     Ok(0)
                 } else {
                     Err(e)
@@ -1166,6 +1190,54 @@ impl Env {
     pub fn visit_incbin(&mut self, data: &[u8]) -> Result<(), AssemblerError> {
         self.output_bytes(data)
     }
+
+    /// Handle a crunched section.
+    /// Current limitations (that need to be overcomed later): 
+    ///  - everything inside the crunched section must be assembled during pass1
+    ///  - no crunched section is allowed inside a crunched section
+    pub fn visit_crunched_section<T: Visited + ListingElement>(&mut self, kind: &CrunchType, lst: &[T], span: Option<Z80Span>) -> Result<(), AssemblerError> {
+        /* deactivated because there is no reason to do such thing
+        // crunched section is disabled inside crunched section
+        if let Some(state) = & self.crunched_section_state {
+            let base = AssemblerError::AlreadyInCrunchedSection(state.crunched_section_start);
+            if let Some(span) = span {
+                return Err(AssemblerError::RelocatedError{error:base, span});
+            } else {
+                return Err(base);
+            }
+        }
+    */
+        
+        if self.active_page_info().limit != 0xffff || !self.active_page_info().protected_areas.is_empty() {
+            eprintln!("[WARNING] Memory protection systems are disabled in crunched section. If you want to keep them, explicitely use LIMIT or PROTECT directives in the crunched section.");
+        }
+
+        // from here, the modifications to the memory will be forgotten.
+        // for this reason everything is done in a cloned environnement
+        let mut crunched_env = self.clone();
+        crunched_env.crunched_section_state = CrunchedSectionState::new(
+            span
+        ).into();
+        crunched_env.active_page_info_mut().startadr = None; // reset the counter to obtain the bytes
+        crunched_env.active_page_info_mut().limit = 0xffff; // disable limit (to be redone in the area)
+        crunched_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
+        crunched_env.visit_listing(lst)?;
+
+        // get the new data and crunch it
+        let bytes = crunched_env.produced_bytes();
+        let crunched: Vec<u8> = kind.crunch(&bytes)?;
+
+        // inject the crunched data
+        self.visit_incbin(&crunched)?;
+        
+        // update the symbol table with the new symbols obtained in the crunched section
+        std::mem::swap(
+            self.symbols_mut(),
+            crunched_env.symbols_mut()
+        );
+
+        Ok(())
+    }
 }
 
 /// Visit the tokens during several passes without providing a specific symbol table.
@@ -1280,7 +1352,9 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
 
         },
 
-        LocatedToken::CrunchedSection(_, _, _) => todo!(),
+        LocatedToken::CrunchedSection(kind, lst, span) => {
+            env.visit_crunched_section(kind, lst, Some(span.clone()))
+        },
 
         LocatedToken::Include(fname, ref cell, span) => if cell.borrow().is_some() {
             env.visit_listing(cell.borrow().as_ref().unwrap())
