@@ -196,3 +196,121 @@ my_shape shape	, [ [1,2,3], [1,2,3], [1,2,3] ]
         &[1, 2, 3, 4, 5, 8, 9, 5, 6, 1, 2, 3, 1, 2, 3, 1, 2, 3,]
     )
 }
+
+
+
+#[test]
+fn regression_crunched_section_sokoban() {
+    let code = "
+
+
+ENTITY_EMPTY = 1
+
+ENTITY_FLOOR = 0
+ENTITY_DESTINATION = 2
+DEST_BIT = 1
+ENTITY_BLOC = 4 ; ALWAYS in addition of floor or destination
+BLOC_BIT = 2
+
+ENTITY_VOID = 3
+
+ENTITY_WALL = 8
+WALL_BIT = 3
+ENTITY_PLAYER = 16
+
+
+
+	macro MAP_CHECK_BLOC bloc
+		assert {bloc} == ENTITY_EMPTY || {bloc} == ENTITY_BLOC || {bloc} == ENTITY_DESTINATION || {bloc} == ENTITY_FLOOR || {bloc} == ENTITY_WALL || {bloc} == ENTITY_PLAYER || {bloc} == BD || {bloc} == ENTITY_VOID
+	mend
+	
+	;;
+	; Safely produce the data for a line of the map
+	macro MAP_LINE9 a, b, c, d, e, f, g, h, i
+		MAP_CHECK_BLOC {a}
+		MAP_CHECK_BLOC {b}
+		MAP_CHECK_BLOC {c}
+		MAP_CHECK_BLOC {d}
+		MAP_CHECK_BLOC {e}
+		MAP_CHECK_BLOC {f}
+		MAP_CHECK_BLOC {g}
+		MAP_CHECK_BLOC {h}
+		MAP_CHECK_BLOC {i}
+
+		db E_
+		db E_
+
+		db {a}
+		db {b}
+		db {c}
+		db {d}
+		db {e}
+		db {f}
+		db {g}
+		db {h}
+		db {i}
+
+
+		db E_
+	mend
+
+	macro MAP_LINE12 a, b, c, d, e, f, g, h, i,j,k,l
+		MAP_CHECK_BLOC {a}
+		MAP_CHECK_BLOC {b}
+		MAP_CHECK_BLOC {c}
+		MAP_CHECK_BLOC {d}
+		MAP_CHECK_BLOC {e}
+		MAP_CHECK_BLOC {f}
+		MAP_CHECK_BLOC {g}
+		MAP_CHECK_BLOC {h}
+		MAP_CHECK_BLOC {i}
+
+		db {a}
+		db {b}
+		db {c}
+		db {d}
+		db {e}
+		db {f}
+		db {g}
+		db {h}
+		db {i}
+
+		db {j}
+		db {k}
+		db {l}
+	mend
+
+W_ = ENTITY_WALL
+F_ = ENTITY_FLOOR
+B_ = ENTITY_BLOC
+D_ = ENTITY_DESTINATION
+E_ = ENTITY_EMPTY
+P_ = ENTITY_PLAYER
+
+
+V_ = ENTITY_VOID
+
+BD = B_ + D_
+
+	macro MAP_EMPTY_LINE
+		MAP_LINE9 E_,E_,E_,E_,E_,E_,E_,E_,E_
+	mend
+
+    LZAPU
+.player_y db 5
+.player_x db 6
+        MAP_LINE12 E_,E_,E_,E_,W_,W_,W_,W_,W_,E_,E_,E_
+        MAP_LINE12 E_,E_,W_,W_,W_,F_,F_,F_,W_,E_,E_,E_
+        MAP_LINE12 E_,E_,W_,F_,F_,BD,W_,F_,W_,W_,E_,E_
+        MAP_LINE12 E_,E_,W_,F_,W_,F_,F_,BD,F_,W_,E_,E_
+        MAP_LINE12 E_,E_,W_,F_,BD,F_,F_,W_,F_,W_,E_,E_
+        MAP_LINE12 E_,E_,W_,W_,F_,W_,D_,F_,F_,W_,E_,E_
+        MAP_LINE12 E_,E_,E_,W_,F_,F_,F_,B_,W_,W_,E_,E_
+        MAP_LINE12 E_,E_,E_,W_,W_,W_,F_,F_,W_,E_,E_,E_
+        MAP_LINE12 E_,E_,E_,E_,E_,W_,W_,W_,W_,E_,E_,E_
+        LZCLOSE
+";
+
+let bin = dbg!(assemble(code));
+assert!(bin.is_ok());
+}

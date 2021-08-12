@@ -20,6 +20,7 @@ use crate::{
 
 use super::parse_z80_str_with_context;
 use super::{parse_z80_code, ParserContext, Z80Span};
+use crate::implementation::instructions::Cruncher;
 
 ///! This crate is related to the adaptation of tokens and listing for the case where they are parsed
 
@@ -247,33 +248,20 @@ impl LocatedToken {
                         match transformation {
                             BinaryTransformation::None => {
                                 content.replace(data.into());
-                            }
+                            },
 
-                            BinaryTransformation::Exomizer => {
-                                unimplemented!("Need to implement exomizer crunching")
-                            }
-
-                            BinaryTransformation::Lz49 => {
+                            other => {
                                 if data.len() == 0 {
                                     return Err(AssemblerError::EmptyBinaryFile(
                                         fname.to_string_lossy().to_string(),
                                     ));
                                 }
 
-                                let crunched = crate::crunchers::lz49::lz49_encode_legacy(&data);
+                                let crunch_type = other.crunch_type().unwrap();
+                                let crunched = crunch_type.crunch(&data)?;
                                 content.replace(crunched.into());
                             }
 
-                            BinaryTransformation::Aplib => {
-                                if data.len() == 0 {
-                                    return Err(AssemblerError::EmptyBinaryFile(
-                                        fname.to_string_lossy().to_string(),
-                                    ));
-                                }
-
-                                let crunched = crate::crunchers::apultra::compress(&data);
-                                content.replace(crunched.into());
-                            }
                         }
                     }
                 }
