@@ -278,6 +278,7 @@ pub struct PageInformation {
     limit: usize,
     /// List of pretected zones
     protected_areas: Vec<ProtectedArea>,
+    fail_next_write_if_zero: bool
 }
 
 impl Default for PageInformation {
@@ -289,6 +290,7 @@ impl Default for PageInformation {
             codeadr: 0,
             limit: 0xffff,
             protected_areas: Vec::new(),
+            fail_next_write_if_zero: false
         }
     }
 }
@@ -526,11 +528,14 @@ impl Env {
     /// Output one byte
     /// BUG does not take into account the active bank
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
-        static mut FAIL_NEXT_WRITE_IF_ZERO: bool = false;
+
+        dbg!(self.output_address(), &v);
 
         // Check if it is legal to output the value
-        if self.output_address() > self.limit_address() || (unsafe{FAIL_NEXT_WRITE_IF_ZERO} && self.output_address()==0) {
-            return Err(AssemblerError::OutputExceedsLimits (self.output_address()));
+        if self.output_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.output_address()==0) {
+            dbg!(self.output_address() > self.limit_address(), self.active_page_info().fail_next_write_if_zero && self.output_address()==0);
+
+            return Err(AssemblerError::OutputExceedsLimits (self.limit_address()));
         }
         for protected_area in &self.active_page_info().protected_areas {
             if protected_area.contains(& (self.output_address() as u16) ) {
@@ -567,13 +572,12 @@ impl Env {
 
         // we have written all memory and are trying to restart
         if self.output_address() == 0 {
-            unsafe{FAIL_NEXT_WRITE_IF_ZERO = true;}
+            self.active_page_info_mut().fail_next_write_if_zero = true;
         }
 
         Ok(())
     }
 
-    /// TODO test if we will oversize the limit
     pub fn output_bytes(&mut self, bytes: &[u8]) -> Result<(), AssemblerError> {
         for b in bytes.iter() {
             self.output(*b)?;
@@ -733,6 +737,9 @@ impl Env {
 
         if self.limit_address() <= self.maximum_address() {
             return Err(AssemblerError::OutputExceedsLimits(self.limit_address()));
+        }
+        if self.limit_address() == 0 {
+            eprintln!("[WARNING] Do you really want to set a limit of 0 ?");
         }
         Ok(())
     }
@@ -1195,7 +1202,7 @@ impl Env {
     /// Current limitations (that need to be overcomed later): 
     ///  - everything inside the crunched section must be assembled during pass1
     ///  - no crunched section is allowed inside a crunched section
-    pub fn visit_crunched_section<T: Visited + ListingElement>(&mut self, kind: &CrunchType, lst: &[T], span: Option<Z80Span>) -> Result<(), AssemblerError> {
+    pub fn visit_crunched_section<T: Visited + ListingElement>(&mut self, kind: &CrunchType, lst: &[T], span: Option<&Z80Span>) -> Result<(), AssemblerError> {
         /* deactivated because there is no reason to do such thing
         // crunched section is disabled inside crunched section
         if let Some(state) = & self.crunched_section_state {
@@ -1216,19 +1223,44 @@ impl Env {
         // for this reason everything is done in a cloned environnement
         let mut crunched_env = self.clone();
         crunched_env.crunched_section_state = CrunchedSectionState::new(
-            span
+            span.cloned()
         ).into();
-        crunched_env.active_page_info_mut().startadr = None; // reset the counter to obtain the bytes
+        // codeadr stays the same
+        crunched_env.active_page_info_mut().outputadr = 0; // relocated output at 0 to be sure to have 64kb available
+        // XXX probably a wrong behavior/to see with users
+
+        crunched_env.active_page_info_mut().startadr = Some(0); // reset the counter to obtain the bytes
         crunched_env.active_page_info_mut().limit = 0xffff; // disable limit (to be redone in the area)
         crunched_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
-        crunched_env.visit_listing(lst)?;
+        crunched_env.visit_listing(lst)
+            .map_err(|e| match span {
+                Some(span) => AssemblerError::RelocatedError{
+                    error:e.into(),
+                    span: span.clone()
+                },
+                None => e
+            })
+        ?;
 
         // get the new data and crunch it
         let bytes = crunched_env.produced_bytes();
-        let crunched: Vec<u8> = kind.crunch(&bytes)?;
+        let crunched: Vec<u8> = kind.crunch(&bytes)
+            .map_err(|e| match span {
+                Some(span) => AssemblerError::RelocatedError{
+                    error:e.into(),
+                    span: span.clone()
+                },
+                None => e
+            })?;
 
         // inject the crunched data
-        self.visit_incbin(&crunched)?;
+        self.visit_incbin(&crunched).map_err(|e| match span {
+            Some(span) => AssemblerError::RelocatedError{
+                error:e.into(),
+                span: span.clone()
+            },
+            None => e
+        })?;
         
         // update the symbol table with the new symbols obtained in the crunched section
         std::mem::swap(
@@ -1353,7 +1385,7 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
         },
 
         LocatedToken::CrunchedSection(kind, lst, span) => {
-            env.visit_crunched_section(kind, lst, Some(span.clone()))
+            env.visit_crunched_section(kind, lst, Some(span))
         },
 
         LocatedToken::Include(fname, ref cell, span) => if cell.borrow().is_some() {
@@ -1391,6 +1423,7 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
 /// Apply the effect of the token
 pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     env.update_dollar();
+    dbg!(token, env.active_page_info());
     match token {
         Token::Align(ref boundary, ref fill) => env.visit_align(boundary, fill.as_ref()),
         Token::Assert(ref exp, ref txt) => visit_assert(exp, txt.as_ref(), env),

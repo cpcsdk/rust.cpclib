@@ -240,7 +240,7 @@ fn inner_code(mut input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, Verbose
 
     let mut tokens = Vec::new();
     loop {
-        dbg!("loop");
+       // dbg!("loop");
         // check if the line need to be parsed (ie there is no end directive)
         let must_break = {
             // TODO take into account potential label
@@ -251,7 +251,7 @@ fn inner_code(mut input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, Verbose
             }
         } ;
         if must_break {
-            dbg!("LEAVE the inner code loop", &input);
+         //   dbg!("LEAVE the inner code loop", &input);
             break
         };
 
@@ -2503,7 +2503,7 @@ pub fn parse_label(
 
 pub fn parse_end_directive (input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
     let (input, keyword) =     is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")(input)?;
-    let keyword = dbg!(keyword.iter_elements().collect::<String>().to_ascii_uppercase());
+    let keyword = keyword.iter_elements().collect::<String>().to_ascii_uppercase();
 
     if FINAL_DIRECTIVE.iter().any(|&val| val == &keyword) {
         Ok((input, keyword))
@@ -2515,7 +2515,7 @@ pub fn parse_end_directive (input: Z80Span) -> IResult<Z80Span, String, VerboseE
 
 pub fn parse_macro_name (input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
     let (input, name) =     is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")(input)?;
-    let keyword = dbg!(name.iter_elements().collect::<String>().to_ascii_uppercase());
+    let keyword = name.iter_elements().collect::<String>().to_ascii_uppercase();
 
     if FINAL_DIRECTIVE.iter().any(|&val| val == &keyword) {
         Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
