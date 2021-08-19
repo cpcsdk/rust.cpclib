@@ -188,7 +188,9 @@ pub enum AssemblerError {
         error: Box<AssemblerError>,
         span: Option<Z80Span>,
         repetition: i32
-    }
+    },
+
+
 }
 
 impl From<VerboseError<Z80Span>> for AssemblerError {
