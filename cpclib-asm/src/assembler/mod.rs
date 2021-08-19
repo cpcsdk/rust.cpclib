@@ -647,7 +647,7 @@ impl Env {
     /// Compute the expression thanks to the symbol table of the environment.
     /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
     fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<i32, AssemblerError> {
-        exp.resolve(self)
+        dbg!(exp).resolve(self)
     }
 
     /// Compute the relative address. Is authorized to fail at first pass

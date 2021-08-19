@@ -2745,7 +2745,7 @@ where
 }
 
 /// Parse an expression
-pub fn expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn expr2(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     let (input, initial) = shift(input)?;
     let (input, remainder) = many0(alt((
         parse_oper(shift, "<=", Oper::LowerOrEqual),
@@ -2754,10 +2754,18 @@ pub fn expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         parse_oper(shift, ">", Oper::StrictlyGreater),
         parse_oper(shift, "==", Oper::Equal),
         parse_oper(shift, "!=", Oper::Different),
-        parse_oper(shift, "&&", Oper::BooleanAnd),
-        parse_oper(shift, "||", Oper::BooleanOr),
+
     )))(input)?;
 
+    Ok((input, fold_exprs(initial, remainder)))
+}
+
+pub fn expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+    let (input, initial) = expr2(input)?;
+    let (input, remainder) = many0(alt((
+        parse_oper(expr2, "&&", Oper::BooleanAnd),
+        parse_oper(expr2, "||", Oper::BooleanOr),
+    )))(input)?;
     Ok((input, fold_exprs(initial, remainder)))
 }
 
