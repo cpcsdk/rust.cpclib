@@ -412,7 +412,7 @@ impl SymbolsTable {
 
     // Setup the current label for local to global labels conversions
     pub fn set_current_label<S: Into<Symbol>>(&mut self, symbol: S) -> Result<(), SymbolError> {
-        let label = dbg!(symbol.into());
+        let label = symbol.into();
 
         if ! label.value().starts_with(".") && !label.value().starts_with("@") {
             let label = self.extend_symbol(label)?.value().to_owned();
