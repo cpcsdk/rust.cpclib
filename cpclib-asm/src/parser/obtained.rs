@@ -279,6 +279,7 @@ impl LocatedToken {
         Ok(())
     }
 
+    /*
     fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         match self {
             LocatedToken::Standard { token, span } => {
@@ -317,6 +318,7 @@ impl LocatedToken {
             }
         }
     }
+    */
 }
 /// Implement this trait for type previousy defined without source location.
 
@@ -413,10 +415,12 @@ impl LocatedListing {
         Z80Span::new_extra_from_rc(Rc::clone(&self.src), Rc::clone(&self.ctx))
     }
 
+    /*
     pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         self.iter_mut()
             .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
     }
+    */
 }
 
 impl Deref for LocatedListing {

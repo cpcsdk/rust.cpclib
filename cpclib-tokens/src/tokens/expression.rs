@@ -159,11 +159,13 @@ pub enum FormattedExpr {
 }
 
 impl FormattedExpr {
+    /*
     pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         match self {
             FormattedExpr::Raw(e) | FormattedExpr::Formatted(_, e) => e.fix_local_macro_labels_with_seed(seed),
         }
     }
+    */
 }
 
 impl Display for FormattedExpr {
@@ -455,6 +457,7 @@ impl Debug for Expr {
 }
 */
 impl Expr {
+    /*
     pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         use Expr::*;
         match self {
@@ -495,7 +498,7 @@ impl Expr {
                 b2.fix_local_macro_labels_with_seed(seed);
             }
         }
-    }
+    }*/
 
     pub fn do_apply_macro_labels_modification(s: &mut std::string::String, seed: usize) {
         assert!(!s.is_empty());

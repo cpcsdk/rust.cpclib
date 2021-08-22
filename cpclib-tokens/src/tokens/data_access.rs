@@ -111,6 +111,7 @@ impl fmt::Display for DataAccess {
 }
 
 impl DataAccess {
+    /*
     /// Rename the local labels used in macros (with @)
     pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         match self {
@@ -125,6 +126,7 @@ impl DataAccess {
             }
         }
     }
+    */
 }
 
 #[allow(missing_docs)]

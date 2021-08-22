@@ -759,27 +759,52 @@ pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
     ))
 }
 
+
+
 pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, filename) = preceded(tuple((tag_no_case("SAVE"), space1)), parse_fname)(input)?;
+    #[derive(PartialEq)]
+    enum SaveKind {
+        Save,
+        WriteDirect
+    };
 
-    let (input, address) = preceded(parse_comma, expr)(input)?;
-    let (input, size) = preceded(parse_comma, expr)(input)?;
-
-    let (input, save_type) = opt(preceded(
-        parse_comma,
+    let (input, (save_kind, filename)) = pair(
         alt((
-            value(SaveType::Amsdos, tag_no_case("AMSDOS")),
-            value(SaveType::Dsk, tag_no_case("DSK")),
-        )),
-    ))(input)?;
+            map(tuple((tag_no_case("SAVE"), space1)), |_| SaveKind::Save),
+            map(tuple((tag_no_case("WRITE"), space1, tag_no_case("DIRECT"), space1)), |_| SaveKind::WriteDirect),
+        )), 
+        parse_fname)(input)?;
 
-    let (input, dsk_filename) = if save_type.is_some() {
+    let (input, address) = opt(preceded(parse_comma, expr))(input)?;
+    let (input, size) = if address.is_some() {
+        opt(preceded(parse_comma, expr))(input)?
+    } else {
+        (input, None)
+    };
+
+    let (input, save_type) = if size.is_some() && save_kind == SaveKind::Save {
+        opt(preceded(
+            parse_comma,
+            alt((
+                value(SaveType::Amsdos, tag_no_case("AMSDOS")),
+                value(SaveType::Dsk, tag_no_case("DSK")),
+            )),
+        ))(input)?
+    } else {
+        if  save_kind == SaveKind::WriteDirect {
+            (input, Some(SaveType::Amsdos))
+        } else {
+            (input, None)
+        }
+    };
+
+    let (input, dsk_filename) = if save_type.is_some()  && save_kind == SaveKind::Save {
         opt(preceded(parse_comma, parse_fname))(input)?
     } else {
         (input, None)
     };
 
-    let (input, side) = if dsk_filename.is_some() {
+    let (input, side) = if dsk_filename.is_some()  && save_kind == SaveKind::Save {
         opt(preceded(parse_comma, expr))(input)?
     } else {
         (input, None)

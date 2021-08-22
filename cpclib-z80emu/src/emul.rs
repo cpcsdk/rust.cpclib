@@ -371,7 +371,7 @@ impl Z80 {
 
     #[allow(clippy::cast_sign_loss)]
     fn eval_expr(&self, expr: &Expr) -> Option<u16> {
-        match expr.resolve(&self.context.symbols) {
+        match expr.resolve(&self.context.env) {
             Ok(val) => Some(val.abs() as u16),
             Err(_) => None,
         }
@@ -379,7 +379,7 @@ impl Z80 {
 
     /// Replace the current symbol table by a copy of the one in argument
     pub fn setup_symbol_table(&mut self, symbols: &SymbolsTableCaseDependent) {
-        self.context.symbols = symbols.clone();
+        todo!()
     }
 
     /// Execute the RET instruction

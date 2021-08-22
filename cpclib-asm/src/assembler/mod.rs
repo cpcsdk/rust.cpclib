@@ -278,7 +278,96 @@ pub struct PageInformation {
     limit: usize,
     /// List of pretected zones
     protected_areas: Vec<ProtectedArea>,
-    fail_next_write_if_zero: bool
+    fail_next_write_if_zero: bool,
+
+    /// List of save directives that will be executed ONLY after full assembling
+    save_commands: Vec<SaveCommand>
+}
+
+/// Save command information
+#[derive(Debug, Clone)]
+pub struct SaveCommand {
+    from: Option<i32>,
+    size: Option<i32>,
+    filename: String,
+    save_type: Option<SaveType>,
+    dsk_filename: Option<String>,
+}
+
+
+impl SaveCommand {
+    /// Really make the save - Prerequisit : the page is properly selected
+    pub fn execute_on(&self, env: &Env) -> Result<(), AssemblerError> {
+        
+        let from = match self.from {
+            Some(from) => from,
+            None => env.start_address().unwrap() as _
+        };
+
+        let size = match self.size {
+            Some(size) => size,
+            None => {
+                let stop = env.maximum_address();
+                (stop - from as usize ) as _
+            }
+        };
+
+        let data = env.memory(from as _, size as _);
+
+        // Add the header if any
+        let object: either::Either<Vec<u8>, AmsdosFile> = match self.save_type {
+            Some(r#type) => {
+                let loading_address = from as u16;
+                let execution_address = match env.run_options {
+                    Some((exec_address, _)) => exec_address,
+                    None => loading_address,
+                };
+
+                let amsdos_file = AmsdosFile::binary_file_from_buffer(
+                    &AmsdosFileName::try_from(self.filename.as_str())?,
+                    loading_address,
+                    execution_address,
+                    &data,
+                )?;
+
+                match r#type {
+                    SaveType::Amsdos => {
+                        either::Left(amsdos_file.full_content().copied().collect::<Vec<u8>>())
+                    }
+                    SaveType::Dsk => either::Right(amsdos_file),
+                }
+            }
+            None => either::Left(data),
+        };
+
+        // Save at the right place
+        match object {
+            either::Right(amsdos_file) => {
+                if let Some(dsk_filename) = &self.dsk_filename {
+                    let mut dsk = if std::path::Path::new(dsk_filename.as_str()).exists() {
+                        ExtendedDsk::open(dsk_filename)?
+                    } else {
+                        ExtendedDsk::default()
+                    };
+
+                    dsk.add_amsdos_file(&amsdos_file)?;
+
+                    dsk.save(dsk_filename)?;            
+                } else {
+                    return Err(AssemblerError::InvalidArgument{
+                        msg: "DSK parameter not provided".to_owned()
+                    })
+                }
+
+
+            },
+            either::Left(data) => {
+                std::fs::write(&self.filename, &data)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for PageInformation {
@@ -290,7 +379,8 @@ impl Default for PageInformation {
             codeadr: 0,
             limit: 0xffff,
             protected_areas: Vec::new(),
-            fail_next_write_if_zero: false
+            fail_next_write_if_zero: false,
+            save_commands: Vec::new()
         }
     }
 }
@@ -302,6 +392,18 @@ impl PageInformation {
         self.outputadr = 0;
         self.codeadr = 0;
         self.limit = 0xffff;
+    }
+
+    fn add_save_command(&mut self, command: SaveCommand) {
+        self.save_commands.push(command);
+    }
+
+    fn execute_save(&self, env: & Env) -> Result<(), AssemblerError> {
+        let res  = self.save_commands.iter()
+            .map(|cmd| cmd.execute_on(env))
+            .collect::<Result<Vec<_>, AssemblerError>>()?;
+
+        Ok(())
     }
 }
 
@@ -450,6 +552,17 @@ impl Env {
             self.run_options = None;
             self.written_bytes.set_all(false);
         }
+    }
+
+    /// Handle the actions to do after assembling.
+    /// ATM it is only the save of data
+    fn handle_post_actions(&mut self) -> Result<(), AssemblerError> {
+        for page in 0..self.pages.len() {
+            self.activepage = page;
+            self.pages[self.activepage].execute_save(self)?;
+        }
+
+        Ok(())
     }
 
     fn active_page_info(&self) -> & PageInformation {
@@ -1110,10 +1223,10 @@ impl Env {
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
     // TODO delay the save but retreive the data now
     pub fn visit_save(
-        &self,
+        &mut self,
         filename: &str,
-        address: &Expr,
-        size: &Expr,
+        address: Option<&Expr>,
+        size: Option<&Expr>,
         save_type: Option<&SaveType>,
         dsk_filename: Option<&String>,
         _side: Option<&Expr>,
@@ -1123,63 +1236,23 @@ impl Env {
             return Ok(());
         }
 
-        // retreive the memory
-        // TODO check that bank stuff is properly taken into account
-        let address = self.resolve_expr_must_never_fail(address)?;
-        let size = self.resolve_expr_must_never_fail(size)?;
-        let data = self.memory(address as _, size as _);
-
-        // Add the header if any
-        let object: either::Either<Vec<u8>, AmsdosFile> = match save_type {
-            Some(r#type) => {
-                let loading_address = address as u16;
-                let execution_address = match self.run_options {
-                    Some((exec_address, _)) => exec_address,
-                    None => loading_address,
-                };
-
-                let amsdos_file = AmsdosFile::binary_file_from_buffer(
-                    &AmsdosFileName::try_from(filename)?,
-                    loading_address,
-                    execution_address,
-                    &data,
-                )?;
-
-                match r#type {
-                    SaveType::Amsdos => {
-                        either::Left(amsdos_file.full_content().copied().collect::<Vec<u8>>())
-                    }
-                    SaveType::Dsk => either::Right(amsdos_file),
-                }
-            }
-            None => either::Left(data),
+        let from = match address {
+            Some(address) => Some(self.resolve_expr_must_never_fail(address)?),
+            None => None
+        };
+        let size = match size {
+            Some(size) => Some(self.resolve_expr_must_never_fail(size)?),
+            None => None
         };
 
-        // Save at the right place
-        match object {
-            either::Right(amsdos_file) => {
-                if let Some(dsk_filename) = dsk_filename {
-                    let mut dsk = if std::path::Path::new(dsk_filename).exists() {
-                        ExtendedDsk::open(dsk_filename)?
-                    } else {
-                        ExtendedDsk::default()
-                    };
-
-                    dsk.add_amsdos_file(&amsdos_file)?;
-
-                    dsk.save(dsk_filename)?;            
-                } else {
-                    return Err(AssemblerError::InvalidArgument{
-                        msg: "DSK parameter not provided".to_owned()
-                    })
-                }
-
-
-            },
-            either::Left(data) => {
-                std::fs::write(filename, &data)?;
-            }
-        }
+        let mut page_info = self.active_page_info_mut();
+        page_info.add_save_command(SaveCommand {
+            from,
+            size,
+            filename: filename.to_owned(),
+            save_type: save_type.cloned(),
+            dsk_filename: dsk_filename.cloned()
+        });
 
         Ok(())
     }
@@ -1506,8 +1579,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             side,
         } => env.visit_save(
             filename,
-            address,
-            size,
+            address.as_ref(),
+            size.as_ref(),
             save_type.as_ref(),
             dsk_filename.as_ref(),
             side.as_ref(),
