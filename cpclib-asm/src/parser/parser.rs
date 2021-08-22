@@ -1951,7 +1951,7 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
     ))(input)?;
 
 
-    let (input, dst) = dbg!(cut(context(
+    let (input, dst) = cut(context(
         match call_jp_or_jr {
             Mnemonic::Jp => JP_WRONG_PARAM,
             Mnemonic::Jr => JR_WRONG_PARAM,
@@ -1970,7 +1970,7 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
             ), // not possible for call and for jp/jr when there is flag
             parse_expr,
         )),
-    ))(input)?);
+    ))(input)?;
 
 
     // Allow to parse JP HL as to be JP (HL) original notation is misleading
@@ -2525,12 +2525,12 @@ pub fn parse_label(
             input
         };
 
-        let label = dbg!(format!(
+        let label = format!(
             "{}{}", 
             first, 
             middle.map(|v| v.iter_elements().collect::<String>())
                 .unwrap_or_default()
-        ));
+        );
 
         let mut impossible = chain!( 
             &["AF", "HL", "DE", "BC", "IX", "IY", "IXL", "IXH", "LET"],
