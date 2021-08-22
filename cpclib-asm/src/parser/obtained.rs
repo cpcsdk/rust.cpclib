@@ -7,6 +7,7 @@ use std::{
     thread::LocalKey,
 };
 
+use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::{
     BaseListing, BinaryTransformation, CrunchType, Expr, Listing, ListingElement, TestKind, Token,
 };
@@ -224,30 +225,47 @@ impl LocatedToken {
                             msg: format!("Unable to open {:?}", fname),
                         })?;
 
-                        use std::io::{Seek, SeekFrom};
-                        if offset.is_some() {
-                            f.seek(SeekFrom::Start(offset.as_ref().unwrap().eval()? as _));
-                            // TODO use the symbol table for that
+                        /// DOING rewriting to remove amsdos header
+                        let mut data = Vec::new();
+                        f.read_to_end(&mut data).map_err(|e| AssemblerError::IOError {
+                            msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
+                        })?;
+
+
+                        let mut data = &data[..];
+
+                        if data.len() >= 128 {
+                            let header = AmsdosHeader::from_buffer(&data);
+                            if header.is_checksum_valid() {
+                                eprintln!("[Warning] {:?} is a valid Amsdos file. It is included without its header.", fname);
+                                data = &data[128..];
+                            }
                         }
 
-                        let mut data = Vec::new();
+                        if offset.is_some() {
+                            let offset = offset.as_ref().unwrap().eval()? as usize;
+                            if offset >= data.len() {
+                                return Err(AssemblerError::AssemblingError {
+                                    msg: format!("Unable to read {:?}. Only {} are available", fname, data.len())
+                                });
+                            }
+                            data = &data[offset..];
+                        }
+
 
                         if length.is_some() {
-                            let mut f = f.take(length.as_ref().unwrap().eval()? as _);
-                            f.read_to_end(&mut data)
-                                .map_err(|e| AssemblerError::IOError {
-                                    msg: format!("Unable to read {:?}. {}", fname, e),
-                                })?;
-                        } else {
-                            f.read_to_end(&mut data)
-                                .map_err(|e| AssemblerError::IOError {
-                                    msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
-                                })?;
-                        };
+                            let length = length.as_ref().unwrap().eval()? as usize;
+                            data = &data[..length];
+                            if data.len() != length {
+                                return Err(AssemblerError::AssemblingError {
+                                    msg: format!("Unable to read {:?}. Only {} are available", fname, data.len())
+                                });
+                            }
+                        }
 
                         match transformation {
                             BinaryTransformation::None => {
-                                content.replace(data.into());
+                                content.replace(data.to_vec().into());
                             },
 
                             other => {
