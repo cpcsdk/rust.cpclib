@@ -2400,7 +2400,7 @@ fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> 
         let relative = if expr.is_relative() {
             address as u8
         } else {
-            env.absolute_to_relative_may_fail_in_first_pass(address, 1)? as u8
+            env.absolute_to_relative_may_fail_in_first_pass(address, 1+1)? as u8
         };
         bytes.push(0x10);
         bytes.push(relative);
