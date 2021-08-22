@@ -2966,7 +2966,7 @@ fn assemble_in(
 
             DataAccess::PortN(ref exp) => {
                 if let DataAccess::Register8(Register8::A) = arg1 {
-                    let val = (exp.resolve(env)? & 0xff) as u8;
+                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
                     bytes.push(0xDB);
                     bytes.push(val);
                 }
@@ -3010,7 +3010,7 @@ fn assemble_out(
 
             DataAccess::PortN(ref exp) => {
                 if let DataAccess::Register8(Register8::A) = arg2 {
-                    let val = (exp.resolve(env)? & 0xff) as u8;
+                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
                     bytes.push(0xD3);
                     bytes.push(val);
                 }
@@ -3109,7 +3109,7 @@ fn assemble_logical_operator(
                 Mnemonic::Xor => 0xEE,
                 _ => unreachable!(),
             };
-            let value = exp.resolve(env)? & 0xff;
+            let value = env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff;
             bytes.push(base);
             bytes.push(value as u8);
         }
@@ -3119,7 +3119,7 @@ fn assemble_logical_operator(
         }
 
         DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-            let value = exp.resolve(env)? & 0xff;
+            let value = env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff;
             bytes.push(indexed_register16_to_code(*reg));
             bytes.push(memory_code());
             bytes.push(value as u8);

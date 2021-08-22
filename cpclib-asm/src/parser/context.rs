@@ -141,7 +141,7 @@ impl ParserContext {
                         .build().unwrap();
                     let matcher = glob.compile_matcher();
                 
-                    for entry in std::fs::read_dir(dbg!(search)).unwrap() {
+                    for entry in std::fs::read_dir(search).unwrap() {
                         let entry = entry.unwrap();
                         let path = entry.path();
                         if matcher.is_match(&path) {
