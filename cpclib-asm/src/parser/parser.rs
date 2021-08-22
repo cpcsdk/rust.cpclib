@@ -1799,7 +1799,7 @@ pub fn parse_push_n_pop(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
 /// ...
 pub fn parse_ret(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
-        preceded(tag_no_case("RET"), opt(preceded(space1, parse_flag_test))),
+        preceded(parse_instr("RET"), opt(parse_flag_test)),
         |cond| {
             Token::new_opcode(
                 Mnemonic::Ret,
@@ -1946,11 +1946,12 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
     ))(input)?;
 
     let (input, flag_test) = opt(terminated(
-        parse_flag_test,
+         parse_flag_test,
         parse_comma,
     ))(input)?;
 
-    let (input, dst) = cut(context(
+
+    let (input, dst) = dbg!(cut(context(
         match call_jp_or_jr {
             Mnemonic::Jp => JP_WRONG_PARAM,
             Mnemonic::Jr => JR_WRONG_PARAM,
@@ -1969,7 +1970,8 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
             ), // not possible for call and for jp/jr when there is flag
             parse_expr,
         )),
-    ))(input)?;
+    ))(input)?);
+
 
     // Allow to parse JP HL as to be JP (HL) original notation is misleading
     let dst = match dst {
@@ -1993,14 +1995,14 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
 /// ...
 pub fn parse_flag_test(input: Z80Span) -> IResult<Z80Span, FlagTest, VerboseError<Z80Span>> {
     alt((
-        value(FlagTest::NZ, tag_no_case("NZ")),
-        value(FlagTest::Z, tag_no_case("Z")),
-        value(FlagTest::NC, tag_no_case("NC")),
-        value(FlagTest::C, tag_no_case("C")),
-        value(FlagTest::PO, tag_no_case("PO")),
-        value(FlagTest::PE, tag_no_case("PE")),
-        value(FlagTest::P, tag_no_case("P")),
-        value(FlagTest::M, tag_no_case("M")),
+        value(FlagTest::NZ, parse_instr("NZ")),
+        value(FlagTest::Z, parse_instr("Z")),
+        value(FlagTest::NC, parse_instr("NC")),
+        value(FlagTest::C, parse_instr("C")),
+        value(FlagTest::PO, parse_instr("PO")),
+        value(FlagTest::PE, parse_instr("PE")),
+        value(FlagTest::P, parse_instr("P")),
+        value(FlagTest::M, parse_instr("M")),
     ))(input)
 }
 
@@ -2497,7 +2499,7 @@ pub fn parse_label(
         let (input, first) =
             one_of("@abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._{}")(input)?;
         let (input, middle) = opt(
-            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.{}")
+            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789__.{}")
         )(input)?;
 
         // fail to parse a label when it is a macro call
@@ -2523,12 +2525,12 @@ pub fn parse_label(
             input
         };
 
-        let label = format!(
+        let label = dbg!(format!(
             "{}{}", 
             first, 
             middle.map(|v| v.iter_elements().collect::<String>())
                 .unwrap_or_default()
-        );
+        ));
 
         let mut impossible = chain!( 
             &["AF", "HL", "DE", "BC", "IX", "IY", "IXL", "IXH", "LET"],
@@ -2693,7 +2695,10 @@ pub fn negative_number(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z8
 
 pub fn positive_number(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     map(
-        alt((hex_number_inner, bin_number_inner, dec_number_inner)),
+        terminated(
+            alt((hex_number_inner, bin_number_inner, dec_number_inner)),
+            not(one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@_"))
+        ),
         |d: u32| Expr::Value(d as i32),
     )(input)
 }
