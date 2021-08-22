@@ -15,7 +15,7 @@ pub struct ParserContext {
     /// Search path to find files
     pub search_path: Vec<PathBuf>,
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
-    pub read_referenced_files: bool,
+    pub read_referenced_files: bool
 }
 
 impl Default for ParserContext {
@@ -107,9 +107,13 @@ impl ParserContext {
         }
     }
 
-    /// Return the real path name that correspond to the requested file
+    /// Return the real path name that correspond to the requested file.
+    /// Do it in a case insensitive way (for compatibility reasons)
     pub fn get_path_for<P: Into<PathBuf>>(&self, fname: P) -> Result<PathBuf, Vec<String>> {
+        use globset::*;
+        use itertools::Itertools;
         let mut does_not_exists = Vec::new();
+
         let fname = fname.into();
 
         // We expect the file to exists if no search_path is provided
@@ -117,7 +121,9 @@ impl ParserContext {
             if fname.is_file() {
                 return Ok(fname);
             } else {
+
                 does_not_exists.push(fname.to_str().unwrap().to_owned());
+
             }
         } else {
             // loop over all possibilities
@@ -128,7 +134,23 @@ impl ParserContext {
                 if current_path.is_file() {
                     return Ok(current_path);
                 } else {
-                    does_not_exists.push(current_path.to_str().unwrap().to_owned())
+                    let glob = GlobBuilder::new(
+                        current_path.as_path().display().to_string().as_str())
+                        .case_insensitive(true)
+                        .literal_separator(true)
+                        .build().unwrap();
+                    let matcher = glob.compile_matcher();
+                
+                    for entry in std::fs::read_dir(dbg!(search)).unwrap() {
+                        let entry = entry.unwrap();
+                        let path = entry.path();
+                        if matcher.is_match(&path) {
+                            return Ok(path);
+                        }
+                    }
+
+                    does_not_exists.push(current_path.to_str().unwrap().to_owned());
+
                 }
             }
         }
