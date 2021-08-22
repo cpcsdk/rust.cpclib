@@ -3179,7 +3179,7 @@ fn assemble_add_or_adc(
                 }
 
                 DataAccess::Expression(ref exp) => {
-                    let val = exp.resolve(env)? as u8;
+                    let val = env.resolve_expr_may_fail_in_first_pass(exp)? as u8;
                     if is_add {
                         bytes.push(0b1100_0110);
                     } else {
