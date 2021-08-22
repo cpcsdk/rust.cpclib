@@ -9,7 +9,7 @@ impl Z80 {
     /// Returns the number of noprs
     pub fn execute(&mut self, opcode: &Token) -> usize {
         self.context
-            .symbols
+            .symbols_mut()
             .set_symbol_to_value("$", self.pc().value() as i32);
 
         match opcode {
@@ -20,7 +20,7 @@ impl Z80 {
             // Transform the raw data as real opcodes
             // and indiivudally execute them
             // crash when it is not possible to disassemble
-            Token::Defs(_, _) | Token::Defb(_) | Token::Defw(_) => {
+            Token::Defs(_) | Token::Defb(_) | Token::Defw(_) => {
                 let lst = opcode.disassemble_data().unwrap();
                 lst.listing().iter().map(|token| self.execute(token)).sum()
             }

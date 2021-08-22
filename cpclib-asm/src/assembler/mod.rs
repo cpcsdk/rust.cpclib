@@ -529,7 +529,7 @@ impl Env {
     /// BUG does not take into account the active bank
     pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
 
-        dbg!(self.output_address(), &v);
+       // dbg!(self.output_address(), &v);
 
         // Check if it is legal to output the value
         if self.output_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.output_address()==0) {
@@ -1253,6 +1253,8 @@ impl Env {
                 None => e
             })?;
 
+        eprintln!("Crunched from {} to {} bytes", bytes.len(), crunched.len());
+
         // inject the crunched data
         self.visit_incbin(&crunched).map_err(|e| match span {
             Some(span) => AssemblerError::RelocatedError{
@@ -1423,7 +1425,7 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
 /// Apply the effect of the token
 pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     env.update_dollar();
-    dbg!(token, env.active_page_info());
+   // dbg!(token, env.active_page_info());
     match token {
         Token::Align(ref boundary, ref fill) => env.visit_align(boundary, fill.as_ref()),
         Token::Assert(ref exp, ref txt) => visit_assert(exp, txt.as_ref(), env),

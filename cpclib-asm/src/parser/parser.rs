@@ -648,6 +648,10 @@ pub fn parse_z80_line_label_only(
     input: Z80Span,
 ) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     let before_label = input.clone();
+
+    
+    let (input, r#let) = opt(delimited(space0, parse_instr("LET"), space0))(input)?;
+    let after_let = input.clone();
     let (input, label) = context("Label issue", parse_label(true))(input)?;
 
     // TODO make these stuff alternatives ...
@@ -661,6 +665,13 @@ pub fn parse_z80_line_label_only(
         )),
         cut( context("Value error",expr))
     )))(input)?;
+
+    if let Some(equ_or_assign) = &equ_or_assign {
+        if r#let.is_some() && equ_or_assign.0.to_ascii_lowercase() != "=" {
+            return Err(nom::Err::Failure(VerboseError::from_error_kind(
+                before_label,ErrorKind::Char)));
+        }
+    }
 
     // opt!(char!(':')) >>
 
@@ -2434,11 +2445,18 @@ pub fn string_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Spa
 
 pub fn char_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     map(
-        delimited(
-            tag("'"), 
-            nom::character::complete::anychar, 
-            tag("'")
-        ), 
+        alt((
+            delimited(
+                tag("\""), 
+                nom::character::complete::anychar, 
+                tag("\"")
+            ), 
+            delimited(
+                tag("'"), 
+                nom::character::complete::anychar, 
+                tag("'")
+            ), 
+        )),
         |c| {
         Expr::Char(c)
     })(input)
@@ -2488,7 +2506,7 @@ pub fn parse_label(
         );
 
         let mut impossible = chain!( 
-            &["AF", "HL", "DE", "BC", "IX", "IY", "IXL", "IXH"],
+            &["AF", "HL", "DE", "BC", "IX", "IY", "IXL", "IXH", "LET"],
             FIRST_DIRECTIVE,
             FINAL_DIRECTIVE
         );

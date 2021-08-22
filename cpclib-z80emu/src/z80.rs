@@ -1,6 +1,7 @@
 // trick to not be distirb by Register8/16
 use crate::preamble::*;
 
+use cpclib_asm::assembler::Env;
 use num::integer::Integer;
 use num::traits::{WrappingAdd, WrappingSub};
 use num::One;
@@ -146,7 +147,13 @@ impl Register16 {
 #[derive(Default, Debug, Clone)]
 pub struct EmulationContext {
     /// The symbol table that can be used when ev
-    pub(crate) symbols: tokens::SymbolsTableCaseDependent,
+    pub(crate) env: Env,
+}
+
+impl EmulationContext {
+    fn symbols_mut(&mut self) -> &mut SymbolsTableCaseDependent {
+        self.env.symbols_mut()
+    }
 }
 
 /// Highly simplify z80 model.
