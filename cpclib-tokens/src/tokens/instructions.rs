@@ -477,9 +477,8 @@ pub enum Token {
 
     Save {
         filename: String,
-        address: Expr,
-
-        size: Expr,
+        address: Option<Expr>,
+        size: Option<Expr>,
         save_type: Option<SaveType>,
         dsk_filename: Option<String>,
         side: Option<Expr>,
@@ -843,6 +842,8 @@ impl Token {
     }
 
     /// Rename the @labels in macros
+    /// XXX no more needed - to remove later
+    /*
     pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
         match self {
             Self::Align(a, b)  | Self::Org(a, b) | Self::Run(a, b) => {
@@ -967,6 +968,7 @@ impl Token {
             _ => unimplemented!("{:?}", self),
         }
     }
+    */
 
     #[deprecated(
         since = "0.1.1",
