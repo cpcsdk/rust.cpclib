@@ -460,7 +460,9 @@ pub struct Env {
     /// optional object that manages the listing output
     output_trigger: Option<ListingOutputTrigger>,
     /// Listing of symbols generator
-    symbols_output: SymbolOutputGenerator
+    symbols_output: SymbolOutputGenerator,
+
+    string_warning_done: bool
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -494,7 +496,9 @@ impl Default for Env {
             output_trigger: None,
             symbols_output: Default::default(),
 
-            crunched_section_state: None
+            crunched_section_state: None,
+
+            string_warning_done: false
         }
     }
 }
@@ -1389,6 +1393,8 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
         trigger.finish()
     }
 
+    env.handle_post_actions();
+
     Ok(env)
 }
 
@@ -1795,8 +1801,9 @@ pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), Assembl
     for exp in exprs.iter() {
         match exp {
             Expr::String(s) => {
-                if env.pass.is_first_pass() {
+                if env.pass.is_first_pass() && !env.string_warning_done {
                   eprintln!("[Warning] string are considered as UTF8. Do we need something else ?");
+                  env.string_warning_done = true;
                 }
                 for b in s.bytes() {
                     env.output(b)?;
