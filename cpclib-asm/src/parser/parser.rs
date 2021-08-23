@@ -2533,7 +2533,40 @@ pub fn parse_label(
         );
 
         let mut impossible = chain!( 
-            &["AF", "HL", "DE", "BC", "IX", "IY", "IXL", "IXH", "LET"],
+            &[
+                //Registers
+                "AF", "HL", "DE", "BC", "IX", "IY", "IXL", "IXH", "LET",
+                //Instructions
+                "ADC",  "ADD",  "AND",  "BIT",  "CALL", "CCF",  "CP",   "CPD", 
+                "CPDR", "CPI",  "CPIR", "CPL",  "DAA",  "DEC",  "DI",   "DJNZ",
+                "EI",   "EX",   "EXX",  "HALT", "IM",   "IN",   "INC",  "IND", 
+                "INDR", "INI",  "INIR", "JP",   "JR",   "LD",   "LDD",  "LDDR",
+                "LDI",  "LDIR", "NEG",  "NOP",  "OR",   "OTDR", "OTIR", "OUT", 
+                "OUTD", "OUTI", "POP",  "PUSH", "RES",  "RET",  "RETI", "RETN",
+                "RL",   "RLA",  "RLC",  "RLCA", "RLD",  "RR",   "RRA",  "RRCA",
+                "RRD",  "RST",  "SBC",  "SCF",  "SET",  "SLA",  "SRA",  "SRL", 
+                "SUB",  "XOR",
+                "SL1", "SLL",
+                // Directives
+                "ALIGN", "ASSERT", "BANK", "BANKSET", "BUILDSNA",
+                "INCBIN", "LZEXO",
+                "DEFB", "DB", "BYTE",
+                "DEFW", "DW", "WORD",
+                "DEFS",
+                "EXPORT", "NOEXPORT",
+                "IF", "ELSE", "ENDIF",
+                "INCLUDE",
+                "LIMIT",
+                "LIST", "NOLIST",
+                "ORG",
+                "PRINT", "PROTECT", "REPEAT", "REND", "RORG",
+                "MACRO", "ENDM",
+                "RUN",
+                "SAVE",
+                "SNASET", "STRUCT", "SWITCH",
+                "UNDEF",
+                "WHILE"
+            ],
             FIRST_DIRECTIVE,
             FINAL_DIRECTIVE
         );
