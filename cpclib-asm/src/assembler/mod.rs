@@ -561,11 +561,14 @@ impl Env {
     /// Handle the actions to do after assembling.
     /// ATM it is only the save of data
     fn handle_post_actions(&mut self) -> Result<(), AssemblerError> {
+        let backup = self.activepage;
+
         for page in 0..self.pages.len() {
             self.activepage = page;
             self.pages[self.activepage].execute_save(self)?;
         }
 
+        self.activepage = backup;
         Ok(())
     }
 
