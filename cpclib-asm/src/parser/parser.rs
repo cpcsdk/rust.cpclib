@@ -777,6 +777,12 @@ pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Verb
 
 
     let (input, bank) = expr(input)?;
+
+    // TODO really handle some warning processing
+    eprintln!("[Warning] {:?}:{} Prefer BANK directive to write direct -1 -1", 
+        input.extra.1.current_filename,
+        input.location_line()
+    );
     Ok((
         input,
         Token::Bank(bank)
