@@ -52,7 +52,7 @@ const FIRST_DIRECTIVE: &[&str] = &[
     "IFNDEF", 
     "REPEAT", 
     "REPT", 
-    "REP", 
+ //   "REP", 
     "PHASE", 
     "WHILE",
     "LZAPU"
@@ -408,7 +408,7 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         alt((
             parse_instr("REPEAT"),
             parse_instr("REPT"),
-            parse_instr("REP"),
+  //          parse_instr("REP"),
         )),
     )(input)?;
 
@@ -759,8 +759,32 @@ pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
     ))
 }
 
+/// parse write direct in memory / converted to a bank directive
+/// we do not care of the parameters for roms as we are not working in an emulator
+pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+
+    // filter all the stuff before
+    let (input, _) = tuple((
+        tag_no_case("WRITE"),
+        space1,
+        tag_no_case("DIRECT"),
+        space1,
+        tag_no_case("-1"),
+        parse_comma,
+        tag_no_case("-1"),
+        parse_comma
+    ))(input)?;
 
 
+    let (input, bank) = expr(input)?;
+    Ok((
+        input,
+        Token::Bank(bank)
+    ))
+}
+
+
+/// Parse both save directive and write direct in a file
 pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     #[derive(PartialEq)]
     enum SaveKind {
@@ -969,6 +993,7 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
 
         map(
             alt((
+                context("[DBG] write direct memory", parse_write_direct_memory),
                 context("[DBG] save", parse_save),
                 context("[DBG] ticker", parse_stable_ticker),
                 context("[DBG] struct", parse_struct),
@@ -2555,14 +2580,15 @@ pub fn parse_label(
                 "DEFS",
                 "EXPORT", "NOEXPORT",
                 "IF", "ELSE", "ENDIF",
-                "INCLUDE",
+                "INCLUDE", "READ",
                 "LIMIT",
                 "LIST", "NOLIST",
                 "ORG",
-                "PRINT", "PROTECT", "REPEAT", "REND", "RORG",
+                "PRINT", "PROTECT", 
+                "REPEAT", "REND", "RORG",
                 "MACRO", "ENDM",
                 "RUN",
-                "SAVE",
+                "SAVE", "WRITE", "WRITE DIRECT",
                 "SNASET", "STRUCT", "SWITCH",
                 "UNDEF",
                 "WHILE"
