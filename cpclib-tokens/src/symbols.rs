@@ -327,7 +327,7 @@ pub struct SymbolsTable {
     /// The page of each symbol
     page: HashMap<Symbol, u8>,
     /// The current page. it is automatically set to a symbol when the symbol is added
-    current_page: u8,
+    current_rmr: u8,
     map: HashMap<Symbol, Value>,
     dummy: bool,
     current_label: String, //  Value of the current label to allow local labels
@@ -343,7 +343,7 @@ impl Default for SymbolsTable {
             map: HashMap::new(),
             page: HashMap::new(),
             dummy: false,
-            current_page: 0,
+            current_rmr: 0,
             current_label: "".into(),
             assignable: Default::default(),
             seed_stack: Vec::new()
@@ -402,7 +402,7 @@ impl SymbolsTable {
         Self {
             map,
             dummy: true,
-            current_page: 0,
+            current_rmr: 0,
             page: Default::default(),
             current_label: "".into(),
             assignable: HashSet::new(),
@@ -492,8 +492,8 @@ impl SymbolsTable {
             .insert("$".into(), Value::Integer(i32::from(address)));
     }
 
-    pub fn set_current_page(&mut self, page: u8) {
-        self.current_page = page;
+    pub fn set_current_mmr(&mut self, rmr: u8) {
+        self.current_rmr = rmr;
     }
 
     /// Set the given symbol to $ value
@@ -568,7 +568,7 @@ impl SymbolsTable {
         let page = *self
             .page
             .get(&key)
-            .or_else(|| Some(&self.current_page))
+            .or_else(|| Some(&self.current_rmr))
             .unwrap() as u16;
         let value = self.value(key)?.unwrap().integer().unwrap() as u16;
         let bank = value / 0x4000;
@@ -776,7 +776,7 @@ impl SymbolsTableCaseDependent {
         to self.table {
             pub fn current_address(&self) -> Result<u16, SymbolError>;
             pub fn set_current_address(&mut self, address: u16);
-            pub fn set_current_page(&mut self, page: u8);
+            pub fn set_current_mmr(&mut self, page: u8);
             pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<String>, SymbolError>;
             pub fn push_seed(&mut self, seed: usize);
             pub fn pop_seed(&mut self);
