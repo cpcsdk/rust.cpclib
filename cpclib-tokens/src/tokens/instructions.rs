@@ -396,6 +396,8 @@ pub enum Token {
     Assert(Expr, Option<String>),
     Assign(String, Expr),
 
+    /// Configure the bank - completely incompatible with rasm behavior
+    /// The expression corresponds to the GATE ARRAY value to select the banke of interest
     Bank(Expr),
     Bankset(Expr),
     /// Basic code which tokens will be included in the code (imported variables, lines to hide,  code)

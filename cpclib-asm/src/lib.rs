@@ -2,6 +2,7 @@
 #![feature(in_band_lifetimes)]
 #![feature(specialization)]
 #![feature(exact_size_is_empty)]
+#![feature(exclusive_range_pattern)]
 /// Implementation of various behvior for the tokens of cpclib_tokens
 pub mod implementation;
 

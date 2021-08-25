@@ -176,7 +176,7 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
                     });
                 }
                 else {
-                    Ok(env.peek(arg as usize) as i32)
+                    Ok(env.peek(&env.logical_to_physical_address(arg as _)) as i32)
                 }
             },
             UnaryFunction::Floor =>  {

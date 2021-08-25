@@ -22,6 +22,7 @@ use std::fmt;
 
 use std::convert::TryFrom;
 use std::io::Write;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::AmsdosFile;
@@ -270,9 +271,9 @@ pub struct PageInformation {
     /// maximum address reached when working with 64k data
     maxadr: usize,
     /// Current address to write to
-    outputadr: usize,
+    logical_outputadr: usize,
     /// Current address used by the code
-    codeadr: usize,
+    logical_codeadr: usize,
     /// Maximum possible address to write to
     /// TODO move in its current orgzone
     limit: usize,
@@ -375,8 +376,8 @@ impl Default for PageInformation {
         Self {
             startadr: None,
             maxadr: 0,
-            outputadr: 0,
-            codeadr: 0,
+            logical_outputadr: 0,
+            logical_codeadr: 0,
             limit: 0xffff,
             protected_areas: Vec::new(),
             fail_next_write_if_zero: false,
@@ -389,8 +390,8 @@ impl PageInformation {
     /// Properly set the information for a new pass
     fn new_pass(&mut self) {
         self.startadr = None;
-        self.outputadr = 0;
-        self.codeadr = 0;
+        self.logical_outputadr = 0;
+        self.logical_codeadr = 0;
         self.limit = 0xffff;
     }
 
@@ -422,6 +423,75 @@ impl CrunchedSectionState {
         }
     }
 }
+
+
+    /// Structure that ease the addresses manipulation to read/write at the right place
+    pub struct PhysicalAddress {
+        /// Page number (0 for base, 1 for first page, 2 ...)
+        page: u8,
+        /// Bank number in the page: 0 to 3
+        bank: u8,
+        /// Address manipulate by CPU 0x0000 to 0xffff
+        address: u16,
+    }
+
+    impl PhysicalAddress {
+        fn new(address: u16, mmr: u8) -> Self {
+            let possible_page = ((mmr >> 3) & 0b111) + 1 ;
+            let possible_bank = mmr & 0b11;
+            let standard_bank = match address {
+                0x0000..0x4000 => 0,
+                0x4000..0x8000 => 1,
+                0x8000..0xc000 => 2,
+                0xc000.. => 3,
+            };
+            let is_4000 = address >= 0x4000 && address < 0x8000;
+            let is_c000 = address >= 0xc000;
+    
+            let (page, bank) = if (mmr & 0b100) != 0 {
+                if is_4000 {
+                    (possible_page, possible_bank)
+                } else {
+                    (0, possible_bank)
+                }
+            } else {
+                match mmr & 0b11 {
+                    0b000 => { (0, standard_bank) },
+                    0b001 => { if is_c000 {
+                        (possible_page, standard_bank)
+                    } else {
+                        (0, standard_bank)
+                    }},
+                    0b010 => { (possible_page, standard_bank)},
+                    0b011 => { if is_4000 {
+                        (0, 3)
+                    } else if is_c000 {
+                        (possible_page, 3)
+                    } else {
+                        (0, standard_bank)
+                    }},
+                    _ => unreachable!()
+                }
+            };
+
+            Self {
+                address,
+                bank,
+                page
+            }
+        }
+
+        fn offset_in_bank(&self) -> u16 {
+            self.address % 0x4000
+        }
+        fn offset_in_page(&self) -> u16 {
+            self.offset_in_bank() + self.bank as u16 * 0x4000
+        }
+        fn offset_in_cpc(&self) -> u32 {
+            self.offset_in_page() as u32 + self.page as u32 * 0x1_0000
+        }
+    }
+
 /// Environment of the assembly
 #[allow(missing_docs)]
 #[derive(Clone)]
@@ -436,10 +506,11 @@ pub struct Env {
     stable_counters: StableTickerCounters,
 
 
-    /// index of the selected 64k page
-    activepage: usize,
+    /// gate array configuration
+    ga_mmr: u8,
+
     /// Ensemble of pages (2 for a stock CPC)
-    pages: Vec<PageInformation>,
+    pages_info: Vec<PageInformation>,
 
     /// Counter for the unique labels within macros
     macro_seed: usize,
@@ -481,8 +552,8 @@ impl Default for Env {
             pass: AssemblingPass::Uninitialized,
             stable_counters: StableTickerCounters::default(),
 
-            pages: vec![Default::default(); 2],
-            activepage: 0,
+            pages_info: vec![Default::default(); 2],
+            ga_mmr: 0xc0, // standard memory configuration
 
             macro_seed: 0,
             sna: Default::default(),
@@ -532,7 +603,7 @@ impl Env {
                 } => {
                     self.symbols().int_value(label).unwrap().unwrap() 
                 }
-                _ => self.output_address() as i32
+                _ => self.logical_output_address() as i32
             };
             let trigg = self.output_trigger.as_mut().unwrap();
             trigg.new_token(new, addr as _);
@@ -547,7 +618,7 @@ impl Env {
         if !self.pass.is_finished() {
             // environnement is not reset when assembling is finished
  
-            self.activepage = 0;
+            self.ga_mmr = 0xc0;
             self.macro_seed = 0;
             //self.sna = Default::default(); // We finally keep the snapshot for the memory function
             self.sna_version = cpclib_sna::SnapshotVersion::V3;
@@ -559,36 +630,53 @@ impl Env {
     }
 
     /// Handle the actions to do after assembling.
-    /// ATM it is only the save of data
+    /// ATM it is only the save of data for each page
     fn handle_post_actions(&mut self) -> Result<(), AssemblerError> {
-        let backup = self.activepage;
+        let backup = self.ga_mmr;
 
-        for page in 0..self.pages.len() {
-            self.activepage = page;
-            self.pages[self.activepage].execute_save(self)?;
+        // ga values to properly switch the pages
+        let pages_mmr = [
+            0xc0, 
+            0b11_000_0_01,
+            0b11_001_0_01,
+            0b11_010_0_01,
+            0b11_011_0_01,
+            0b11_100_0_01,
+            0b11_101_0_01,
+            0b11_110_0_01,
+            0b11_111_0_01,
+        ];
+
+        for (activepage, page) in pages_mmr[0..self.pages_info.len()].iter().enumerate() {
+            self.ga_mmr = *page;
+            self.pages_info[activepage].execute_save(self)?;
         }
 
-        self.activepage = backup;
+        self.ga_mmr = backup;
         Ok(())
     }
 
+    /// TODO remove this method and its calls as its behavior is innapropriate for some configurations
     fn active_page_info(&self) -> & PageInformation {
-        &self.pages[self.activepage]
+        let active_page = self.logical_to_physical_address(0x0000).page as usize;
+        &self.pages_info[active_page]
     }
 
+    /// TODO remove this method and its calls
     fn active_page_info_mut(&mut self) -> &mut PageInformation {
-        &mut self.pages[self.activepage]
+        let active_page = self.logical_to_physical_address(0x0000).page as usize;
+        &mut self.pages_info[active_page]
     }
 
 
     /// Return the address where the next byte will be written
-    pub fn output_address(&self) -> usize {
-        self.active_page_info().outputadr
+    pub fn logical_output_address(&self) -> usize {
+        self.active_page_info().logical_outputadr
     }
 
     /// Return the address of dollar
-    pub fn code_address(&self) -> usize {
-        self.active_page_info().codeadr
+    pub fn logical_code_address(&self) -> usize {
+        self.active_page_info().logical_codeadr
     }
 
     pub fn limit_address(&self) -> usize {
@@ -605,7 +693,7 @@ impl Env {
 
     ///. Update the value of $ in the symbol table in order to take the current  output address
     pub fn update_dollar(&mut self) {
-        self.symbols.set_current_address(self.code_address() as _);
+        self.symbols.set_current_address(self.logical_code_address() as _);
     }
 
     /// Produce the memory for the required limits
@@ -614,7 +702,8 @@ impl Env {
     pub fn memory(&self, start: usize, size: usize) -> Vec<u8> {
         let mut mem = Vec::new();
         for pos in start..(start + size) {
-            mem.push(self.peek(pos)); // XXX probably buggy later
+            let address = self.logical_to_physical_address(pos as _);
+            mem.push(self.peek(&address)); 
         }
         mem
     }
@@ -652,26 +741,27 @@ impl Env {
        // dbg!(self.output_address(), &v);
 
         // Check if it is legal to output the value
-        if self.output_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.output_address()==0) {
-            dbg!(self.output_address() > self.limit_address(), self.active_page_info().fail_next_write_if_zero && self.output_address()==0);
+        if self.logical_output_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.logical_output_address()==0) {
+            dbg!(self.logical_output_address() > self.limit_address(), self.active_page_info().fail_next_write_if_zero && self.logical_output_address()==0);
 
             return Err(AssemblerError::OutputExceedsLimits (self.limit_address()));
         }
         for protected_area in &self.active_page_info().protected_areas {
-            if protected_area.contains(& (self.output_address() as u16) ) {
+            if protected_area.contains(& (self.logical_output_address() as u16) ) {
                 return Err(
                     AssemblerError::OutputProtected{
                         area: protected_area.clone(),
-                        address: self.output_address() as _
+                        address: self.logical_output_address() as _
                     }
                 )
             }
         }
 
         // update the maximm 64k position
-        self.active_page_info_mut().maxadr = self.maximum_address().max(self.output_address());
+        self.active_page_info_mut().maxadr = self.maximum_address().max(self.logical_output_address());
 
-        let abstract_address = self.output_address() as u32 + (0x10000 * self.activepage) as u32;
+        let physical_address = self.logical_to_physical_address(self.logical_output_address() as u16);
+        let abstract_address = physical_address.offset_in_cpc();
         let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
 
         if already_used {
@@ -687,11 +777,11 @@ impl Env {
         }
 
 
-        self.active_page_info_mut().outputadr = (self.output_address() + 1) & 0xffff;
-        self.active_page_info_mut().codeadr =  (self.code_address() + 1) & 0xffff;
+        self.active_page_info_mut().logical_outputadr = (self.logical_output_address() + 1) & 0xffff;
+        self.active_page_info_mut().logical_codeadr =  (self.logical_code_address() + 1) & 0xffff;
 
         // we have written all memory and are trying to restart
-        if self.output_address() == 0 {
+        if self.logical_output_address() == 0 {
             self.active_page_info_mut().fail_next_write_if_zero = true;
         }
 
@@ -705,14 +795,14 @@ impl Env {
         Ok(())
     }
 
-    pub fn peek(&self, address: usize) -> u8 {
+    pub fn peek(&self, address: &PhysicalAddress) -> u8 {
         self.sna
-            .get_byte(address as u32 + (0x10000 * self.activepage) as u32)
+            .get_byte(address.offset_in_cpc())
     }
 
-    pub fn poke(&mut self, byte: u8, address: usize) {
+    pub fn poke(&mut self, byte: u8, address: &PhysicalAddress) {
         self.sna
-            .set_byte(address as u32 + (0x10000 * self.activepage) as u32, byte)
+            .set_byte(address.offset_in_cpc(), byte)
     }
 
     /// Get the size of the generated binary.
@@ -721,7 +811,7 @@ impl Env {
         if self.start_address().is_none() {
             panic!("Unable to compute size now");
         } else {
-            (self.output_address() - self.start_address().unwrap()) as u16
+            (self.logical_output_address() - self.start_address().unwrap()) as u16
         }
     }
 
@@ -1032,29 +1122,58 @@ impl Env {
         let fill = fill.map(|e| self.resolve_expr_may_fail_in_first_pass(e))
                     .unwrap_or(Ok((0)))? as u8;
 
-        while self.output_address() as u16 % boundary != 0 {
+        while self.logical_output_address() as u16 % boundary != 0 {
             self.output(fill)?;
         }
         
         Ok(())
     }
 
+
+
+    /// return the page and bank configuration for the given address at the current mmr configuration
+    /// https://grimware.org/doku.php/documentations/devices/gatearray#mmr
+    pub fn logical_to_physical_address(&self, address: u16) -> PhysicalAddress {
+        PhysicalAddress::new(address, self.ga_mmr)
+    }
+
+    fn visit_bank(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+        let mmr = self.resolve_expr_must_never_fail(exp)?;
+        if mmr < 0xc0 || mmr > 0xc7 {
+            return Err(AssemblerError::MMRError {
+                value: mmr
+            });
+        }
+
+        let mmr = mmr as u8;
+        self.ga_mmr = mmr;
+        self.symbols_mut().set_current_mmr(mmr); // TODO set the real value
+
+        Ok(())
+    }
+
+    // total switch of page
     fn visit_bankset(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
-        let value = self.resolve_expr_must_never_fail(exp)?; // This value MUST be interpretable once executed
-        if value < 0 || value > 8 {
+        let page = self.resolve_expr_must_never_fail(exp)? as u8; // This value MUST be interpretable once executed
+
+
+        eprintln!("Warning need to code sna memory extension if needed");
+        self.select_page(page)?;
+        Ok(())
+    }
+
+    fn select_page(&mut self, page: u8) -> Result<(), AssemblerError> {
+        if page < 0 || page >= 8 {
             return Err(AssemblerError::InvalidArgument {
                 msg: format!(
-                    "{} is invalid. BANKSET only accept values from 0 to 8",
-                    value
+                    "{} is invalid. BANKSET only accept values from 0 to 7",
+                    page
                 )
                 .into(),
             });
         }
 
-        self.activepage = value as _;
-        eprintln!("Warning need to code sna memory extension if needed");
-        self.symbols_mut().set_current_page(value as _);
-        Ok(())
+        self.visit_bank(&(0b11_000_0_10 + ((page as u8) << 3)).into())
     }
 
     pub fn visit_call_macro_or_build_struct<T:ListingElement + core::fmt::Debug +  'static>(
@@ -1214,16 +1333,16 @@ impl Env {
 
     /// Continue to assemble at the right place, but change the value of $ to the specified one
     pub fn visit_rorg(&mut self, _exp: &Expr, listing: &Listing) -> Result<(), AssemblerError> {
-        let backup_address = self.code_address();
-        let backup_activepage = self.activepage;
+        let backup_address = self.logical_code_address();
+        let backup_mmr = self.ga_mmr;
 
         self.visit_listing(listing)?;
 
-        if self.activepage != backup_activepage {
-            eprintln!("[WARNING] active page has changed");
+        if self.ga_mmr != backup_mmr {
+            eprintln!("[WARNING] Gate array configuration has changed and is restored to its initial value");
         }
 
-        self.active_page_info_mut().codeadr = backup_address;
+        self.active_page_info_mut().logical_codeadr = backup_address;
         Ok(())
     }
 
@@ -1306,7 +1425,7 @@ impl Env {
             span.cloned()
         ).into();
         // codeadr stays the same
-        crunched_env.active_page_info_mut().outputadr = 0; // relocated output at 0 to be sure to have 64kb available
+        crunched_env.active_page_info_mut().logical_outputadr = 0; // relocated output at 0 to be sure to have 64kb available
         // XXX probably a wrong behavior/to see with users
 
         crunched_env.active_page_info_mut().startadr = Some(0); // reset the counter to obtain the bytes
@@ -1515,6 +1634,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             env.visit_basic(variables.as_ref(), hidden_lines.as_ref(), code)
         }
         Token::BuildSna(ref v) => env.visit_buildsna(v.as_ref()),
+        Token::Bank(ref exp) => env.visit_bank(exp),
         Token::Bankset(ref v) => env.visit_bankset(v),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | Token::Defw(_) | Token::Str(_)=> visit_db_or_dw_or_str(token, env),
@@ -1799,7 +1919,7 @@ pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), Assembl
         }
     };
 
-    let backup_address = env.output_address();
+    let backup_address = env.logical_output_address();
 
     for exp in exprs.iter() {
         match exp {
@@ -1830,10 +1950,11 @@ pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), Assembl
     }
 
     // Patch the last char of a str
-    if matches!(token, Token::Str(_)) && backup_address < env.output_address() {
-        let last_address = env.output_address()-1;
-        let last_value = env.peek(last_address);
-        env.poke(last_value | 0x80, last_address);
+    if matches!(token, Token::Str(_)) && backup_address < env.logical_output_address() {
+        let last_address = env.logical_output_address()-1;
+        let last_address = env.logical_to_physical_address(last_address as _);
+        let last_value = env.peek(&last_address);
+        env.poke(last_value | 0x80, &last_address);
     }
 
     Ok(())
@@ -1852,9 +1973,9 @@ impl Env {
         // If the basic directive is the VERY first thing to output,
         // we assume startadr is 0x170 as for any basic program
         if self.start_address().is_none() {
-            self.active_page_info_mut().outputadr = 0x170;
-            self.active_page_info_mut().codeadr = self.output_address();
-            self.active_page_info_mut().startadr = Some(self.output_address());
+            self.active_page_info_mut().logical_outputadr = 0x170;
+            self.active_page_info_mut().logical_codeadr = self.logical_output_address();
+            self.active_page_info_mut().startadr = Some(self.logical_output_address());
         }
 
         self.output_bytes(&bytes)
@@ -2097,7 +2218,7 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
         if env.start_address().is_none() {
             return Err(AssemblerError::InvalidArgument{msg: "ORG: $ cannot be used now".into()})
         }
-        env.output_address() as i32
+        env.logical_output_address() as i32
     } else {
         env.eval(address)?
     };
@@ -2109,13 +2230,13 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     };
 
     // TODO Check overlapping region
-    env.active_page_info_mut().outputadr = adr2 as _;
-    env.active_page_info_mut().codeadr = adr as _;
+    env.active_page_info_mut().logical_outputadr = adr2 as _;
+    env.active_page_info_mut().logical_codeadr = adr as _;
 
     // Specify start address at first use
     env.active_page_info_mut().startadr =  match env.start_address() {
-        Some(val) => val.min(env.output_address()),
-        None => env.output_address()
+        Some(val) => val.min(env.logical_output_address()),
+        None => env.logical_output_address()
     }.into();
 
     Ok(())

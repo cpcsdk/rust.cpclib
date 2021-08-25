@@ -190,6 +190,9 @@ pub enum AssemblerError {
         repetition: i32
     },
 
+    MMRError {
+        value: i32
+    }
 
 }
 
@@ -493,6 +496,9 @@ impl Display for AssemblerError {
             },
             AssemblerError::NoDataToCrunch => {
                 write!(f, "There is no bytes to crunch")
+            }
+            AssemblerError::MMRError { value } => {
+                write!(f, "{} is invalid. We expect values from 0xC0 to 0xc7.", value)            
             }
            
         }
