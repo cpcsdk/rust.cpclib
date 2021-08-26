@@ -2,6 +2,7 @@ pub mod listing_output;
 pub mod symbols_output;
 
 
+use crate::PhysicalAddress;
 use crate::preamble::*;
 
 use crate::AssemblingOptions;
@@ -425,72 +426,6 @@ impl CrunchedSectionState {
 }
 
 
-    /// Structure that ease the addresses manipulation to read/write at the right place
-    pub struct PhysicalAddress {
-        /// Page number (0 for base, 1 for first page, 2 ...)
-        page: u8,
-        /// Bank number in the page: 0 to 3
-        bank: u8,
-        /// Address manipulate by CPU 0x0000 to 0xffff
-        address: u16,
-    }
-
-    impl PhysicalAddress {
-        fn new(address: u16, mmr: u8) -> Self {
-            let possible_page = ((mmr >> 3) & 0b111) + 1 ;
-            let possible_bank = mmr & 0b11;
-            let standard_bank = match address {
-                0x0000..0x4000 => 0,
-                0x4000..0x8000 => 1,
-                0x8000..0xc000 => 2,
-                0xc000.. => 3,
-            };
-            let is_4000 = address >= 0x4000 && address < 0x8000;
-            let is_c000 = address >= 0xc000;
-    
-            let (page, bank) = if (mmr & 0b100) != 0 {
-                if is_4000 {
-                    (possible_page, possible_bank)
-                } else {
-                    (0, possible_bank)
-                }
-            } else {
-                match mmr & 0b11 {
-                    0b000 => { (0, standard_bank) },
-                    0b001 => { if is_c000 {
-                        (possible_page, standard_bank)
-                    } else {
-                        (0, standard_bank)
-                    }},
-                    0b010 => { (possible_page, standard_bank)},
-                    0b011 => { if is_4000 {
-                        (0, 3)
-                    } else if is_c000 {
-                        (possible_page, 3)
-                    } else {
-                        (0, standard_bank)
-                    }},
-                    _ => unreachable!()
-                }
-            };
-
-            Self {
-                address,
-                bank,
-                page
-            }
-        }
-
-        fn offset_in_bank(&self) -> u16 {
-            self.address % 0x4000
-        }
-        fn offset_in_page(&self) -> u16 {
-            self.offset_in_bank() + self.bank as u16 * 0x4000
-        }
-        fn offset_in_cpc(&self) -> u32 {
-            self.offset_in_page() as u32 + self.page as u32 * 0x1_0000
-        }
-    }
 
 /// Environment of the assembly
 #[allow(missing_docs)]
@@ -765,7 +700,7 @@ impl Env {
         let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
 
         if already_used {
-              return Err(AssemblerError::OverrideMemory(abstract_address));
+              return Err(AssemblerError::OverrideMemory(physical_address));
         }
 
         self.sna.set_byte(abstract_address, v);

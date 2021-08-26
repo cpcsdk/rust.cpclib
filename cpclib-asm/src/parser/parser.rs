@@ -29,6 +29,8 @@ use nom::sequence::*;
 #[allow(missing_docs)]
 use nom::*;
 
+use self::error_code::INVALID_ARGUMENT;
+
 use super::*;
 use crate::preamble::*;
 use cpclib_sna::SnapshotVersion;
@@ -2326,7 +2328,7 @@ pub fn parse_expr(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z
 pub fn parse_org(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = tuple((tag_no_case("ORG"), space1))(input)?;
 
-    let (input, val1) = expr(input)?;
+    let (input, val1) = cut(context("Invalid argument", expr))(input)?;
     let (input, val2) = opt(preceded(parse_comma, expr))(input)?;
 
     Ok((input, Token::Org(val1, val2)))
