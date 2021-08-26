@@ -356,7 +356,7 @@ impl Display for AssemblerError {
             }
 
             AssemblerError::OverrideMemory(address) => {
-                write!(f, "Override memory at 0x{:x} (x0x{:x} in page {})", address.address, address.offset_in_page(), address.page)
+                write!(f, "Override memory at 0x{:x} (0x{:x} in page {})", address.address, address.offset_in_page(), address.page)
             }
             AssemblerError::DisassemblerError{msg} => write!(f, "Disassembler error: {}", msg),
             AssemblerError::ExpressionError{msg} => write!(f, "Expression error: {}", msg),
