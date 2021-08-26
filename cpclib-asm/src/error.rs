@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
+use crate::PhysicalAddress;
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
 use crate::Z80Span;
@@ -160,7 +161,7 @@ pub enum AssemblerError {
         area: std::ops::RangeInclusive<u16>,
         address: u16
     },
-    OverrideMemory(u32),
+    OverrideMemory(PhysicalAddress),
 
     //  #[fail(display = "Unable to resolve expression {}.", expression)]
     ExpressionUnresolvable {
@@ -355,7 +356,7 @@ impl Display for AssemblerError {
             }
 
             AssemblerError::OverrideMemory(address) => {
-                write!(f, "Override memory in 0x{:x}", address)
+                write!(f, "Override memory at 0x{:x} (x0x{:x} in page {})", address.address, address.offset_in_page(), address.page)
             }
             AssemblerError::DisassemblerError{msg} => write!(f, "Disassembler error: {}", msg),
             AssemblerError::ExpressionError{msg} => write!(f, "Expression error: {}", msg),
