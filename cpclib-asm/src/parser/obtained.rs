@@ -224,21 +224,23 @@ impl LocatedToken {
                         let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
                             msg: format!("Unable to open {:?}", fname),
                         })?;
-
-                        /// DOING rewriting to remove amsdos header
+   
+                        // load the full file
                         let mut data = Vec::new();
                         f.read_to_end(&mut data).map_err(|e| AssemblerError::IOError {
                             msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
                         })?;
 
-
+                        // get a slice on the data to ease its cut
                         let mut data = &data[..];
 
                         if data.len() >= 128 {
                             let header = AmsdosHeader::from_buffer(&data);
                             if header.is_checksum_valid() {
-                                eprintln!("[Warning] {:?} is a valid Amsdos file. It is included without its header.", fname);
+                                eprintln!("[Info] {:?} is a valid Amsdos file. It is included without its header.", fname);
                                 data = &data[128..];
+                            } else {
+                                eprintln!("[Info] {:?} does not contain a valid Amsdos file. It is fully included", fname);
                             }
                         }
 
