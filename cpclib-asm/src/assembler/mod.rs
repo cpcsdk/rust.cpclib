@@ -568,6 +568,9 @@ impl Env {
             self.stable_counters = StableTickerCounters::default();
             self.run_options = None;
             self.written_bytes.set_all(false);
+            self.warnings.retain(|elem|{
+                !elem.is_override_memory()
+            });
         }
     }
 

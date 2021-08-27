@@ -251,6 +251,14 @@ impl AssemblerError {
             _ => false
         }
     }
+
+    pub fn is_override_memory(&self) -> bool {
+        match self {
+            AssemblerError::OverrideMemory(_, _) => true,
+            AssemblerError::RelocatedError{error, ..} | AssemblerError::RelocatedWarning{error, ..}=> error.is_override_memory(),
+            _ => false
+        }
+    }
 }
 
 pub(crate) const LD_WRONG_SOURCE: &'static str = "LD: error in the source";
