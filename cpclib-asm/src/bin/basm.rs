@@ -286,6 +286,15 @@ fn process(matches: &ArgMatches<'_>) -> Result<(), BasmError> {
     // standard assembling
     let listing = parse(matches)?;
     let env = assemble(matches, &listing)?;
+
+    let warnings = env.warnings();
+    if !warnings.is_empty() {
+        eprintln!("TODO dispaly warning differently");
+        for warning in warnings {
+            eprintln!("{}", warning);
+        }
+        eprintln!("end warning");
+    }
     save(matches, &env)
 }
 
@@ -396,9 +405,12 @@ fn main() {
 					.get_matches();
 
     match process(&matches) {
-        Ok(_) => {}
+        Ok(_) => {
+            std::process::exit(0);
+        }
         Err(e) => {
             eprintln!("Error while assembling.\n{}", e);
+            std::process::exit(-1);
         }
     }
 }

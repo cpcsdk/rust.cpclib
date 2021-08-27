@@ -17,7 +17,7 @@ use std::convert::TryInto;
 
 use failure::Fail;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Fail, Clone)]
 #[allow(missing_docs)]
 pub enum AmsdosError {
     #[fail(display = "No more entries available.")]
@@ -33,7 +33,7 @@ pub enum AmsdosError {
     InvalidHeader,
 
     #[fail(display = "IO error")]
-    IO(std::io::Error),
+    IO(String),
 
     #[fail(display = "Various error")]
     Various(String),
@@ -44,7 +44,7 @@ pub enum AmsdosError {
 
 impl From<std::io::Error> for AmsdosError {
     fn from(err: std::io::Error) -> Self {
-        AmsdosError::IO(err)
+        AmsdosError::IO(err.to_string())
     }
 }
 

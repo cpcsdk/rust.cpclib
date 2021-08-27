@@ -21,7 +21,7 @@ use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream, Buffer};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum AssemblerError {
     //#[fail(display = "Several errors arised: {:?}", errors)]
@@ -161,7 +161,7 @@ pub enum AssemblerError {
         area: std::ops::RangeInclusive<u16>,
         address: u16
     },
-    OverrideMemory(PhysicalAddress),
+    OverrideMemory(PhysicalAddress, usize),
 
     //  #[fail(display = "Unable to resolve expression {}.", expression)]
     ExpressionUnresolvable {
@@ -355,8 +355,8 @@ impl Display for AssemblerError {
 
             }
 
-            AssemblerError::OverrideMemory(address) => {
-                write!(f, "Override memory at 0x{:x} (0x{:x} in page {})", address.address, address.offset_in_page(), address.page)
+            AssemblerError::OverrideMemory(address, count) => {
+                write!(f, "Override {} bytes at 0x{:x} (0x{:x} in page {})", *count, address.address, address.offset_in_page(), address.page)
             }
             AssemblerError::DisassemblerError{msg} => write!(f, "Disassembler error: {}", msg),
             AssemblerError::ExpressionError{msg} => write!(f, "Expression error: {}", msg),

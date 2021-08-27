@@ -148,7 +148,7 @@ pub fn assemble_to_amsdos_file(
 
 
 /// Structure that ease the addresses manipulation to read/write at the right place
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PhysicalAddress {
     /// Page number (0 for base, 1 for first page, 2 ...)
     page: u8,

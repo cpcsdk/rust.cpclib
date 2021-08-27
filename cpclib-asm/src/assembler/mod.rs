@@ -262,6 +262,7 @@ impl ListingOutputTrigger {
 }
 
 type ProtectedArea = std::ops::RangeInclusive<u16>;
+type AssemblerWarning = AssemblerError;
 
 /// Store all the compilation information for the currently selected 64kb page
 /// A stock CPC 6128 is composed of two pages
@@ -468,7 +469,8 @@ pub struct Env {
     /// Listing of symbols generator
     symbols_output: SymbolOutputGenerator,
 
-    string_warning_done: bool
+    string_warning_done: bool,
+    warnings: Vec<AssemblerWarning>
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -504,7 +506,8 @@ impl Default for Env {
 
             crunched_section_state: None,
 
-            string_warning_done: false
+            string_warning_done: false,
+            warnings: Vec::new(),
         }
     }
 }
@@ -525,6 +528,10 @@ impl Env {
         env.symbols = symbols.clone();
         env.pass = AssemblingPass::SecondPass;
         env
+    }
+
+    pub fn warnings(&self) -> &[AssemblerWarning] {
+        &self.warnings
     }
 
     /// Manage the play with data for the output listing
@@ -671,7 +678,8 @@ impl Env {
 
     /// Output one byte
     /// BUG does not take into account the active bank
-    pub fn output(&mut self, v: u8) -> Result<(), AssemblerError> {
+    /// return true if it raised an override warning
+    pub fn output(&mut self, v: u8) -> Result<bool, AssemblerError> {
 
        // dbg!(self.output_address(), &v);
 
@@ -699,9 +707,17 @@ impl Env {
         let abstract_address = physical_address.offset_in_cpc();
         let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
 
-        if already_used {
-              return Err(AssemblerError::OverrideMemory(physical_address));
-        }
+        let r#override = if already_used {
+            let r#override = AssemblerError::OverrideMemory(physical_address, 1);
+            if self.allow_memory_override() {
+                self.warnings.push(r#override);
+               true
+            } else {
+                return Err(r#override);
+            }
+        } else {
+            false
+        };
 
         self.sna.set_byte(abstract_address, v);
         self.written_bytes.set(abstract_address as _, true);
@@ -720,13 +736,49 @@ impl Env {
             self.active_page_info_mut().fail_next_write_if_zero = true;
         }
 
-        Ok(())
+        Ok(r#override)
     }
 
+    pub fn allow_memory_override(&self) -> bool {
+        true // TODO parametrize it in the options (and set false by default)
+    }
+
+
+    /// Write consecutives bytes
     pub fn output_bytes(&mut self, bytes: &[u8]) -> Result<(), AssemblerError> {
+        let mut previously_overrided = false;
         for b in bytes.iter() {
-            self.output(*b)?;
+            let currently_overrided = self.output(*b)?;
+            
+            match (previously_overrided, currently_overrided) {
+                (true, true) => {
+                    // get the last override warning
+                    let r#override = self.warnings.iter_mut().rev().find(|w|{
+                        if let AssemblerError::OverrideMemory(_, _) = w {
+                            true
+                        } else {
+                            false
+                        }
+                    }).unwrap(); // cannot fail by construction
+
+                    // increase its size
+                    match r#override {
+                        AssemblerError::OverrideMemory(_, ref mut size) => {
+                            *size += 1;
+                        },
+                        _ => unreachable!()
+                    };
+
+                },
+                _ => {
+                    //nothing to do
+                }
+            }
+
+            previously_overrided = currently_overrided;
+           
         }
+
         Ok(())
     }
 
