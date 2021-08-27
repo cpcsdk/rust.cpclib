@@ -752,7 +752,17 @@ impl Env {
             
             match (previously_overrided, currently_overrided) {
                 (true, true) => {
-                    // get the last override warning
+                    // remove the latestwarning as it is a duplicate
+                    let extra_override_idx = self.warnings.iter_mut().rev().position(|w|{
+                        if let AssemblerError::OverrideMemory(_, _) = w {
+                            true
+                        } else {
+                            false
+                        }
+                    }).unwrap();// cannot fail by construction
+                    self.warnings.remove(self.warnings.len()-1 - extra_override_idx); // rev impose to change index order
+
+                    // get the last override warning and update it
                     let r#override = self.warnings.iter_mut().rev().find(|w|{
                         if let AssemblerError::OverrideMemory(_, _) = w {
                             true
