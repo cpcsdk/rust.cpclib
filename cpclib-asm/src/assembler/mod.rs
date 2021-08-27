@@ -1528,6 +1528,8 @@ pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerE
 /// The difference with the standard token is the ability to embed listing
 pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<(), AssemblerError> {
 
+    let nb_warnings = env.warnings.len();
+
     // cheat on the lifetime of tokens
     let outer_token = unsafe{
         (outer_token as *const LocatedToken).as_ref().unwrap()};
@@ -1607,7 +1609,21 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
         LocatedToken::Rorg(_, _, _) => todo!(),
         LocatedToken::Switch(_, _) => todo!(),
         LocatedToken::While(_, _, _) => todo!(),
+    }?;
+
+    // Patch the warnings to inject them a location
+    let nb_additional_warnings = env.warnings.len() - nb_warnings;
+    for i in 0..nb_additional_warnings {
+        let warning = &mut env.warnings[i + nb_warnings];
+        if !warning.is_located() {
+            *warning = AssemblerError::RelocatedWarning {
+                error: Box::new(warning.clone()),
+                span: span.clone()
+            };
+        }
     }
+
+    Ok(())
 }
 
 /// Apply the effect of the token
