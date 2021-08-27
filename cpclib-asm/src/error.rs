@@ -184,6 +184,10 @@ pub enum AssemblerError {
        error: Box<AssemblerError>,
        span: Z80Span
     },
+    RelocatedWarning {
+        error: Box<AssemblerError>,
+        span: Z80Span
+     },
 
     RepeatIssue {
         error: Box<AssemblerError>,
@@ -234,6 +238,18 @@ impl From<SymbolError> for AssemblerError {
 impl From<AmsdosError> for AssemblerError {
     fn from(err: AmsdosError) -> Self {
         AssemblerError::AmsdosError { error: err }
+    }
+}
+
+
+impl AssemblerError {
+    /// Returns true only for errors already located
+    pub fn is_located(&self) -> bool {
+        match self {
+            AssemblerError::RelocatedError{..} => true,
+            AssemblerError::RelocatedWarning{..} => true,
+            _ => false
+        }
     }
 }
 
@@ -347,7 +363,7 @@ impl Display for AssemblerError {
                         write!(f, "{}",msg)
                     }
                     _ => {
-                        let msg =  build_simple_error_message("Error in imported file", span);
+                        let msg =  build_simple_error_message("Error in imported file", span, true);
                         write!(f, "{}",msg)?;
                         error.fmt(f)
                     }
@@ -423,7 +439,8 @@ impl Display for AssemblerError {
                             None => {
                                   build_simple_error_message(
                                 &format!("Unknown symbol: {}", symbol),
-                                span
+                                span,
+                                true
                               )
                             }
                         };
@@ -443,7 +460,8 @@ impl Display for AssemblerError {
                             None => {
                                 build_simple_error_message(
                                 &format!("Unknown macro: {}", symbol),
-                                span
+                                span,
+                                true
                             )
                             }
                         };
@@ -453,7 +471,7 @@ impl Display for AssemblerError {
 
 
                     AssemblerError::MacroError { name, root } => {
-                        let msg =  build_simple_error_message(&format!("Error in macro call: {}", name), span);
+                        let msg =  build_simple_error_message(&format!("Error in macro call: {}", name), span, true);
                         write!(f, "{}\n{}",msg,root)
                     },
 
@@ -467,7 +485,7 @@ impl Display for AssemblerError {
                     }
 
                     _ => {
-                        let msg =  build_simple_error_message(&format!("{}", error), span);
+                        let msg =  build_simple_error_message(&format!("{}", error), span, true);
                         write!(f, "{}",msg)
                     }
                 }
@@ -477,7 +495,7 @@ impl Display for AssemblerError {
 
             AssemblerError::RepeatIssue { error, span, repetition } => {
                 if span.is_some(){
-                    let msg =  build_simple_error_message(&format!("REPEAT: error in loop {}", repetition), span.as_ref().unwrap());
+                    let msg =  build_simple_error_message(&format!("REPEAT: error in loop {}", repetition), span.as_ref().unwrap(), true);
                     write!(f, "{}\n{}",msg, error)
                 } else {
                     write!(f, "Repeat issue\n{}", error)
@@ -501,6 +519,10 @@ impl Display for AssemblerError {
             AssemblerError::MMRError { value } => {
                 write!(f, "{} is invalid. We expect values from 0xC0 to 0xc7.", value)            
             }
+            AssemblerError::RelocatedWarning { error, span } => {
+                let msg =  build_simple_error_message(&format!("{}", error), span, false);
+                write!(f, "{}",msg)
+            },
            
         }
     }
@@ -539,7 +561,7 @@ fn build_simple_error_message_with_message(title: &str,message: &str,  span: &Z8
 }
 
 
-fn build_simple_error_message(title: &str, span: &Z80Span) -> String {
+fn build_simple_error_message(title: &str, span: &Z80Span, is_error: bool) -> String {
     let filename = build_filename(span);
     let source = span.extra.0.as_ref();
 
@@ -555,7 +577,12 @@ fn build_simple_error_message(title: &str, span: &Z80Span) -> String {
         ),
     };
 
-    let mut diagnostic = Diagnostic::error()
+    let mut diagnostic = if is_error {
+        Diagnostic::error()
+    } else {
+        Diagnostic::warning()
+    };
+    diagnostic = diagnostic
         .with_message(title)
         .with_labels(vec![Label::new(
             codespan_reporting::diagnostic::LabelStyle::Primary,

@@ -289,11 +289,9 @@ fn process(matches: &ArgMatches<'_>) -> Result<(), BasmError> {
 
     let warnings = env.warnings();
     if !warnings.is_empty() {
-        eprintln!("TODO dispaly warning differently");
         for warning in warnings {
             eprintln!("{}", warning);
         }
-        eprintln!("end warning");
     }
     save(matches, &env)
 }
