@@ -298,6 +298,11 @@ fn process(matches: &ArgMatches<'_>) -> Result<(), BasmError> {
         for warning in chain!(parser_warnings.iter(), assembler_warnings.iter()){
             eprintln!("{}", warning);
         }
+
+        if matches.is_present("WERROR") {
+            eprintln!("Assembling failed due to unwanted warnings");
+            std::process::exit(-1);
+        }
     }
     save(matches, &env)
 }
@@ -397,6 +402,12 @@ fn main() {
                             .takes_value(true)
                             .multiple(true)
                             .number_of_values(1)
+                    )
+                    .arg(
+                        Arg::with_name("WERROR")
+                        .help("Warning are considered to be errors")
+                        .long("Werror")
+                        .takes_value(false)
                     )
 					.group( // only one type of header can be provided
 						ArgGroup::with_name("HEADER")
