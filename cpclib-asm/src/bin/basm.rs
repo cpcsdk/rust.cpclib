@@ -55,8 +55,6 @@ impl Display for BasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 
 
-        dbg!(self);
-
         match self {
             BasmError::Io { io, ctx } => write!(f, "IO Error when {}: {}", ctx, io),
             BasmError::AssemblerError { error } => write!(f, "Assembling error:\n{}", error),
