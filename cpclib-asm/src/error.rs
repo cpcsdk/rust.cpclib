@@ -5,6 +5,7 @@ use crate::PhysicalAddress;
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
 use crate::Z80Span;
+use codespan_reporting::diagnostic::Severity;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use cpclib_basic::BasicError;
 use cpclib_disc::amsdos::AmsdosError;
@@ -371,7 +372,7 @@ impl Display for AssemblerError {
                         write!(f, "{}",msg)
                     }
                     _ => {
-                        let msg =  build_simple_error_message("Error in imported file", span, true);
+                        let msg =  build_simple_error_message("Error in imported file", span, Severity::Error);
                         write!(f, "{}",msg)?;
                         error.fmt(f)
                     }
@@ -448,7 +449,7 @@ impl Display for AssemblerError {
                                   build_simple_error_message(
                                 &format!("Unknown symbol: {}", symbol),
                                 span,
-                                true
+                                Severity::Error
                               )
                             }
                         };
@@ -469,7 +470,7 @@ impl Display for AssemblerError {
                                 build_simple_error_message(
                                 &format!("Unknown macro: {}", symbol),
                                 span,
-                                true
+                                Severity::Error
                             )
                             }
                         };
@@ -479,7 +480,7 @@ impl Display for AssemblerError {
 
 
                     AssemblerError::MacroError { name, root } => {
-                        let msg =  build_simple_error_message(&format!("Error in macro call: {}", name), span, true);
+                        let msg =  build_simple_error_message(&format!("Error in macro call: {}", name), span, Severity::Error);
                         write!(f, "{}\n{}",msg,root)
                     },
 
@@ -493,7 +494,7 @@ impl Display for AssemblerError {
                     }
 
                     _ => {
-                        let msg =  build_simple_error_message(&format!("{}", error), span, true);
+                        let msg =  build_simple_error_message(&format!("{}", error), span, Severity::Error);
                         write!(f, "{}",msg)
                     }
                 }
@@ -503,7 +504,7 @@ impl Display for AssemblerError {
 
             AssemblerError::RepeatIssue { error, span, repetition } => {
                 if span.is_some(){
-                    let msg =  build_simple_error_message(&format!("REPEAT: error in loop {}", repetition), span.as_ref().unwrap(), true);
+                    let msg =  build_simple_error_message(&format!("REPEAT: error in loop {}", repetition), span.as_ref().unwrap(),  Severity::Error);
                     write!(f, "{}\n{}",msg, error)
                 } else {
                     write!(f, "Repeat issue\n{}", error)
@@ -528,7 +529,7 @@ impl Display for AssemblerError {
                 write!(f, "{} is invalid. We expect values from 0xC0 to 0xc7.", value)            
             }
             AssemblerError::RelocatedWarning { error, span } => {
-                let msg =  build_simple_error_message(&format!("{}", error), span, false);
+                let msg =  build_simple_error_message(&format!("{}", error), span,  Severity::Warning);
                 write!(f, "{}",msg)
             },
            
@@ -569,7 +570,7 @@ fn build_simple_error_message_with_message(title: &str,message: &str,  span: &Z8
 }
 
 
-fn build_simple_error_message(title: &str, span: &Z80Span, is_error: bool) -> String {
+fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
     let filename = build_filename(span);
     let source = span.extra.0.as_ref();
 
@@ -585,12 +586,7 @@ fn build_simple_error_message(title: &str, span: &Z80Span, is_error: bool) -> St
         ),
     };
 
-    let mut diagnostic = if is_error {
-        Diagnostic::error()
-    } else {
-        Diagnostic::warning()
-    };
-    diagnostic = diagnostic
+    let mut diagnostic = Diagnostic::new(severity)
         .with_message(title)
         .with_labels(vec![Label::new(
             codespan_reporting::diagnostic::LabelStyle::Primary,
