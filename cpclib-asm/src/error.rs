@@ -186,7 +186,11 @@ pub enum AssemblerError {
        span: Z80Span
     },
     RelocatedWarning {
-        error: Box<AssemblerError>,
+        warning: Box<AssemblerError>,
+        span: Z80Span
+     },
+     RelocatedInfo {
+        info: Box<AssemblerError>,
         span: Z80Span
      },
 
@@ -256,7 +260,7 @@ impl AssemblerError {
     pub fn is_override_memory(&self) -> bool {
         match self {
             AssemblerError::OverrideMemory(_, _) => true,
-            AssemblerError::RelocatedError{error, ..} | AssemblerError::RelocatedWarning{error, ..}=> error.is_override_memory(),
+            AssemblerError::RelocatedError{error, ..} | AssemblerError::RelocatedWarning{warning: error, ..}=> error.is_override_memory(),
             _ => false
         }
     }
@@ -410,7 +414,7 @@ impl Display for AssemblerError {
             AssemblerError::BugInParser { error, context } => todo!(),
 
             AssemblerError::BasicError { error } => todo!(),
-            AssemblerError::AssemblingError { msg } => todo!(),
+            AssemblerError::AssemblingError { msg } => write!(f, "{}", msg),
             AssemblerError::InvalidArgument { msg } => write!(f, "Invalid argument: {}", msg),
             AssemblerError::AssertionFailed { test, msg, guidance } => write!(f, "Assert error: {} {} {}", test, msg, guidance),
 
@@ -528,8 +532,12 @@ impl Display for AssemblerError {
             AssemblerError::MMRError { value } => {
                 write!(f, "{} is invalid. We expect values from 0xC0 to 0xc7.", value)            
             }
-            AssemblerError::RelocatedWarning { error, span } => {
-                let msg =  build_simple_error_message(&format!("{}", error), span,  Severity::Warning);
+            AssemblerError::RelocatedWarning { warning, span } => {
+                let msg =  build_simple_error_message(&format!("{}", warning), span,  Severity::Warning);
+                write!(f, "{}",msg)
+            },
+            AssemblerError::RelocatedInfo { info, span } => {
+                let msg =  build_simple_error_message(&format!("{}", info), span,  Severity::Note);
                 write!(f, "{}",msg)
             },
            
