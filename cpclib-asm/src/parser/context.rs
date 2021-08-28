@@ -15,7 +15,9 @@ pub struct ParserContext {
     /// Search path to find files
     pub search_path: Vec<PathBuf>,
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
-    pub read_referenced_files: bool
+    pub read_referenced_files: bool,
+
+    parse_warning: Vec<AssemblerError>
 }
 
 impl Default for ParserContext {
@@ -25,6 +27,7 @@ impl Default for ParserContext {
             context_name: None,
             search_path: Default::default(),
             read_referenced_files: false,
+            parse_warning: Default::default()
         }
     }
 }
@@ -158,6 +161,14 @@ impl ParserContext {
         // No file found
         return Err(does_not_exists);
     }
+
+    pub fn add_warning(&mut self, warning: AssemblerError) {
+        self.parse_warning.push(warning)
+    }
+
+    pub fn warnings(&self) -> &[AssemblerError] {
+        &self.parse_warning
+    }
 }
 
 pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
@@ -165,4 +176,5 @@ pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
     current_filename: None,
     read_referenced_files: false,
     search_path: Vec::new(),
+    parse_warning: Vec::new()
 };

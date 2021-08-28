@@ -765,6 +765,8 @@ pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
 /// we do not care of the parameters for roms as we are not working in an emulator
 pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
 
+    let input_start = input.clone();
+
     // filter all the stuff before
     let (input, _) = tuple((
         tag_no_case("WRITE"),
@@ -780,11 +782,15 @@ pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Verb
 
     let (input, bank) = expr(input)?;
 
-    // TODO really handle some warning processing
-    eprintln!("[Warning] {:?}:{} Prefer PAGE directive to write direct -1 -1", 
-        input.extra.1.current_filename,
-        input.location_line()
-    );
+    let warning = AssemblerError::RelocatedWarning {
+        warning: Box::new(AssemblerError::AssemblingError{
+            msg: "Prefer BANK or PAGE directives to write direct -1, -1, XX".to_owned()
+        }),
+        span: input_start.clone()
+    };
+    use std::borrow::BorrowMut;
+    input.extra.1.borrow_mut().add_warning(warning);
+
     Ok((
         input,
         Token::Bank(bank)
