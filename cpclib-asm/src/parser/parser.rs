@@ -2738,6 +2738,7 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                     // manage values
                     alt((positive_number, negative_number)),
                     char_expr,
+                    map(parse_string, |s| Expr::String(s.to_string())),
                     parse_counter,
                     // manage $
                     map(tag("$"), |_x| Expr::Label(String::from("$"))),
