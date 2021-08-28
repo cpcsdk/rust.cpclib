@@ -782,6 +782,7 @@ pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Verb
 
     let ( input, bank) = expr(input)?;
 
+    // TODO add an additional note that 
     let warning = AssemblerError::RelocatedWarning {
         warning: Box::new(AssemblerError::AssemblingError{
             msg: "Prefer BANK or PAGE directives to write direct -1, -1, XX".to_owned()
@@ -812,9 +813,9 @@ pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
         )), 
         parse_fname)(input)?;
 
-    let (input, address) = opt(preceded(parse_comma, expr))(input)?;
+    let (input, address) = opt(preceded(parse_comma, opt(expr)))(input)?;
     let (input, size) = if address.is_some() {
-        opt(preceded(parse_comma, expr))(input)?
+        opt(preceded(parse_comma, opt(expr)))(input)?
     } else {
         (input, None)
     };
@@ -854,8 +855,8 @@ pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
         input,
         Token::Save {
             filename,
-            address,
-            size,
+            address: address.unwrap_or(None),
+            size: size.unwrap_or(None),
             save_type,
             dsk_filename,
             side,
