@@ -139,7 +139,7 @@ pub fn parse_z80_str_with_context<S: Into<String>>(
 
 /// Parse a string and return the corresponding listing
 pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, AssemblerError> {
-    parse_z80_str_with_context(code, DEFAULT_CTX.clone())
+    parse_z80_str_with_context(code, Default::default())
 }
 
 /// nom many0 does not seem to fit our parser requirements
@@ -780,7 +780,7 @@ pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Verb
     ))(input)?;
 
 
-    let (input, bank) = expr(input)?;
+    let ( input, bank) = expr(input)?;
 
     let warning = AssemblerError::RelocatedWarning {
         warning: Box::new(AssemblerError::AssemblingError{
@@ -788,8 +788,7 @@ pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Verb
         }),
         span: input_start.clone()
     };
-    use std::borrow::BorrowMut;
-    input.extra.1.borrow_mut().add_warning(warning);
+    input.extra.1.add_warning(warning);
 
     Ok((
         input,

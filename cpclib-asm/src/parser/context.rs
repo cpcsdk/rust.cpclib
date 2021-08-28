@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
+
+use lazy_static::__Deref;
 
 use crate::error::AssemblerError;
 
@@ -17,7 +19,7 @@ pub struct ParserContext {
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
     pub read_referenced_files: bool,
 
-    parse_warning: Vec<AssemblerError>
+    parse_warning: RefCell<Vec<AssemblerError>>
 }
 
 impl Default for ParserContext {
@@ -162,19 +164,20 @@ impl ParserContext {
         return Err(does_not_exists);
     }
 
-    pub fn add_warning(&mut self, warning: AssemblerError) {
-        self.parse_warning.push(warning)
+    pub fn add_warning(& self, warning: AssemblerError) {
+        self.parse_warning.borrow_mut().push(warning)
     }
 
-    pub fn warnings(&self) -> &[AssemblerError] {
-        &self.parse_warning
+    pub fn warnings(&self) -> Vec<AssemblerError> {
+        self.parse_warning.borrow().clone() // TODO investigate why I cannot return a reference
     }
 }
-
+/*
 pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
     context_name: None,
     current_filename: None,
     read_referenced_files: false,
     search_path: Vec::new(),
-    parse_warning: Vec::new()
+    parse_warning: Default::default()
 };
+*/

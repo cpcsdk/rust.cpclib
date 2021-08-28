@@ -25,6 +25,7 @@ use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 use clap;
 use clap::{App, Arg, ArgGroup, ArgMatches};
+use itertools::chain;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -83,7 +84,7 @@ impl From<AssemblerError> for BasmError {
 
 /// Parse the given code.
 /// TODO read options to configure the search path
-fn parse<'arg>(matches: &'arg ArgMatches<'_>) -> Result<LocatedListing, BasmError> {
+fn parse<'arg>(matches: &'arg ArgMatches<'_>) -> Result<(LocatedListing, Vec<AssemblerError>), BasmError> {
     let (filename, code) = {
         if let Some(filename) = matches.value_of("INPUT") {
             let mut f = File::open(filename)
@@ -146,14 +147,19 @@ fn parse<'arg>(matches: &'arg ArgMatches<'_>) -> Result<LocatedListing, BasmErro
 
     let code = Rc::new(code);
     let context = Rc::new(context);
-    parse_z80_strrc_with_contextrc(code, context).map_err(|e| e.into())
+
+    let res = parse_z80_strrc_with_contextrc(code, Rc::clone(&context))
+    .map_err(|e| BasmError::from(e))?;
+
+    let warnings = context.warnings();
+    Ok((res, warnings))
 }
 
 /// Assemble the given code
 /// TODO use options to configure the base symbole table
 fn assemble<'arg>(
     matches: &'arg ArgMatches<'_>,
-    listing: &LocatedListing,
+    listing: &LocatedListing
 ) -> Result<Env, BasmError> {
     let mut options = AssemblingOptions::default();
     options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
@@ -284,12 +290,12 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
 /// Launch the assembling of everythin
 fn process(matches: &ArgMatches<'_>) -> Result<(), BasmError> {
     // standard assembling
-    let listing = parse(matches)?;
+    let (listing, parser_warnings) = parse(matches)?;
     let env = assemble(matches, &listing)?;
 
-    let warnings = env.warnings();
-    if !warnings.is_empty() {
-        for warning in warnings {
+    let assembler_warnings = env.warnings();
+    if !assembler_warnings.is_empty() || !parser_warnings.is_empty() {
+        for warning in chain!(parser_warnings.iter(), assembler_warnings.iter()){
             eprintln!("{}", warning);
         }
     }
