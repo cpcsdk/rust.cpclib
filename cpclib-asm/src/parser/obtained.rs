@@ -236,13 +236,32 @@ impl LocatedToken {
 
                         if data.len() >= 128 {
                             let header = AmsdosHeader::from_buffer(&data);
-                            if header.is_checksum_valid() {
-                                eprintln!("[Info] {:?} is a valid Amsdos file. It is included without its header.", fname);
+                            let info = if header.is_checksum_valid() {
                                 data = &data[128..];
+
+                                AssemblerError::RelocatedInfo{
+                                    info: Box::new(
+                                        AssemblerError::AssemblingError{
+                                            msg: format!("{:?} is a valid Amsdos file. It is included without its header.", fname)
+                                        }
+                                    ),
+                                    span: span.clone()
+                                }
+
                             } else {
-                                eprintln!("[Info] {:?} does not contain a valid Amsdos file. It is fully included", fname);
-                            }
+                                AssemblerError::RelocatedInfo{
+                                    info: Box::new(
+                                        AssemblerError::AssemblingError{
+                                            msg: format!("{:?} does not contain a valid Amsdos file. It is fully included.", fname)
+                                        }
+                                    ),
+                                    span: span.clone()
+                                }
+                            };
+
+                            eprintln!("{}", info);
                         }
+
 
                         if offset.is_some() {
                             let offset = offset.as_ref().unwrap().eval()? as usize;

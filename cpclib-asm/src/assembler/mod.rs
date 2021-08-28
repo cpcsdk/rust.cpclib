@@ -1630,7 +1630,7 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
         let warning = &mut env.warnings[i + nb_warnings];
         if !warning.is_located() {
             *warning = AssemblerError::RelocatedWarning {
-                error: Box::new(warning.clone()),
+                warning: Box::new(warning.clone()),
                 span: span.clone()
             };
         }
