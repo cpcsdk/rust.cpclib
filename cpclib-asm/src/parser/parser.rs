@@ -1521,7 +1521,7 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseEr
 }
 
 /// Manage the call of a macro.
-/// TODO use parse_forbidden_keyword
+/// When ambiguou may return a label
 pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     // BUG: added because of parsing issues. Need to find why and remove ot
     let (input_label, _) = space0(input)?;
@@ -1542,7 +1542,15 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
             )
         ))
     } else {
-        cut(context("Ambiguous code. Use (void) for macro with no args,r avoid label at the end of a line, or use a comment if this label is never used.", not(pair(space0, opt(parse_comment)))))(input.clone())?; // ensure empty macro calls are forbidden
+        if not(pair(space0, opt(parse_comment)))(input.clone()).is_err() {
+            input.extra.1.add_warning(AssemblerError::RelocatedWarning{
+                warning: Box::new(AssemblerError::AssemblingError{
+                    msg: "Ambiguous code. Use (void) for macro with no args,r avoid label at the end of a line, or use a comment if this label is never used.".to_owned()
+                }),
+                span: input.clone()
+            });
+            return map(parse_label(false), |s| Token::Label(s))(input)
+        }
         let (input, args) = cut(context("MACRO: error in arguments list", alt((
             value(
                 Default::default(),
