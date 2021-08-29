@@ -749,6 +749,19 @@ pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z8
     ))(input)
 }
 
+pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, _) = parse_word("CHARSET")(input)?;
+
+    // manage the string format - TODO manage the others too
+    let (input, chars) = context("Invalid string", parse_string)(input)?;
+    let (input, start) = context("Missing start value", preceded(parse_comma,expr))(input)?;
+    let format = CharsetFormat::CharsList(chars.chars().collect_vec(), start);
+
+    let charset = Token::Charset(format);
+
+    Ok((input, charset))
+}
+
 /// Parser for the include directive
 pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let include_start = input.clone();
@@ -1015,6 +1028,7 @@ pub fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
                 context("[DBG] assert", parse_assert),
                 context("[DBG] bankset", parse_bankset),
                 context("[DBG] bank", parse_bank),
+                context("[DBG] charset", parse_charset),
                 context("[DBG] align", parse_align),
                 context("[DBG] breakpoint", parse_breakpoint),
                 context("[DBG] buildsna", parse_buildsna),

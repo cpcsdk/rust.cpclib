@@ -9,6 +9,7 @@ use codespan_reporting::diagnostic::Severity;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use cpclib_basic::BasicError;
 use cpclib_disc::amsdos::AmsdosError;
+use cpclib_sna::SnapshotError;
 use cpclib_tokens::symbols::Symbol;
 use cpclib_tokens::symbols::SymbolError;
 use cpclib_tokens::tokens;
@@ -203,6 +204,10 @@ pub enum AssemblerError {
 
     MMRError {
         value: i32
+    },
+
+    SnapshotError{
+        error: SnapshotError
     }
 
 }
@@ -225,6 +230,15 @@ impl From<std::io::Error> for AssemblerError {
 impl From<BasicError> for AssemblerError {
     fn from(msg: BasicError) -> Self {
         AssemblerError::BasicError {
+            error: msg,
+        }
+    }
+}
+
+
+impl From<SnapshotError> for AssemblerError {
+    fn from(msg: SnapshotError) -> Self {
+        AssemblerError::SnapshotError {
             error: msg,
         }
     }
@@ -542,6 +556,7 @@ impl Display for AssemblerError {
                 let msg =  build_simple_error_message(&format!("{}", info), span,  Severity::Note);
                 write!(f, "{}",msg)
             },
+            AssemblerError::SnapshotError { error } =>  write!(f, "Snapshot error. {:#?}", error),
            
         }
     }
@@ -721,7 +736,6 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
     let mut end = guesser.guess(code, offset);
     // remove whitespace from selection
     for previous in code[offset..end].chars().rev() {
-        previous;
         if previous.is_whitespace() {
             end -= 1;
         } else {

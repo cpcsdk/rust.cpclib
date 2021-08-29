@@ -387,6 +387,21 @@ impl BinaryTransformation {
     }
 }
 
+/// Define characeters encoding
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CharsetFormat {
+    /// Reset the encoding knowledge
+    Reset,
+    /// Specify all chars in a row
+    CharsList(Vec<char>, Expr),
+    /// Attribute the code to a single char
+    Char(char, Expr),
+    /// Specify for a given interval
+    Interval(char, char, Expr)
+
+
+}
+
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -406,6 +421,7 @@ pub enum Token {
     Breakpoint(Option<Expr>),
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),
+    Charset(CharsetFormat),
     Comment(String),
     CrunchedBinary(CrunchType, String),
     CrunchedSection(CrunchType, Listing),
