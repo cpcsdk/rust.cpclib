@@ -427,6 +427,61 @@ impl CrunchedSectionState {
 }
 
 
+#[derive(Clone)]
+pub struct CharsetEncoding {
+    lut: std::collections::HashMap<char, i32>
+}
+
+impl CharsetEncoding {
+    pub fn new() -> Self {
+        let mut enc = Self {
+            lut: Default::default()
+        };
+        enc.reset();
+        enc
+    }
+
+    pub fn reset(&mut self) {
+        self.lut.clear()
+    }
+
+    pub fn update(&mut self, spec: &CharsetFormat, env: &Env) -> Result<(), AssemblerError> {
+        match spec {
+            CharsetFormat::Reset => self.reset(),
+            CharsetFormat::CharsList(l, s) => {
+                let mut s = env.resolve_expr_must_never_fail(s)?;
+                for c in l.iter() {
+                    self.lut.insert(*c, s);
+                    s += 1;
+                }
+            },
+            CharsetFormat::Char(c, i) => {
+                let i = env.resolve_expr_must_never_fail(i)?;
+                self.lut.insert(*c, i);
+            },
+            CharsetFormat::Interval(a, b, s) => {
+                let mut s = env.resolve_expr_must_never_fail(s)?;
+                for c in *a..=*b {
+                    self.lut.insert(c, s);
+                    s += 1;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn transform_char(&self, c: char) -> u8 {
+        self.lut.get(&c).cloned()
+        .unwrap_or(c as i32) as _
+    }
+
+    pub fn transform_string(&self, s: &str) -> Vec<u8> {
+        s.chars().map(|c| self.transform_char(c))
+        .collect_vec()
+    }
+}
+
 
 /// Environment of the assembly
 #[allow(missing_docs)]
@@ -450,6 +505,8 @@ pub struct Env {
 
     /// Counter for the unique labels within macros
     macro_seed: usize,
+
+    charset_encoding: CharsetEncoding,
 
     /// Memory configuration is controlled by the underlying snapshot.
     /// It will ease the generation of snapshots but may complexify the generation of files
@@ -493,6 +550,7 @@ impl Default for Env {
             ga_mmr: 0xc0, // standard memory configuration
 
             macro_seed: 0,
+            charset_encoding: CharsetEncoding::new(),
             sna: Default::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
 
@@ -562,6 +620,7 @@ impl Env {
  
             self.ga_mmr = 0xc0;
             self.macro_seed = 0;
+            self.charset_encoding.reset();
             //self.sna = Default::default(); // We finally keep the snapshot for the memory function
             self.sna_version = cpclib_sna::SnapshotVersion::V3;
 
@@ -1400,14 +1459,24 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
         Ok(())
     }
 
+    pub fn visit_charset(
+        &mut self,
+        format: &CharsetFormat
+    )-> Result<(), AssemblerError> {
+        let mut new_charset = CharsetEncoding::new();
+        std::mem::swap(&mut new_charset, &mut self.charset_encoding);
+        new_charset.update(format, self)?; 
+        std::mem::swap(&mut new_charset, &mut self.charset_encoding); //XXX lost in case of error
+        Ok(())
+    }
+
     pub fn visit_snaset(
         &mut self,
         flag: &cpclib_sna::SnapshotFlag,
         value: &cpclib_sna::FlagValue,
     ) -> Result<(), AssemblerError> {
-        self.sna.set_value(*flag, value.as_u16().unwrap());
-
-        Ok(())
+        self.sna.set_value(*flag, value.as_u16().unwrap())
+        .map_err(|e| e.into())
     }
 
     pub fn visit_incbin(&mut self, data: &[u8]) -> Result<(), AssemblerError> {
@@ -1786,6 +1855,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             dsk_filename.as_ref(),
             side.as_ref(),
         ),
+        Token::Charset(format) => env.visit_charset(format),
         Token::SnaSet(flag, value) => env.visit_snaset(flag, value),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
@@ -1996,14 +2066,14 @@ pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), Assembl
     for exp in exprs.iter() {
         match exp {
             Expr::String(s) => {
-                if env.pass.is_first_pass() && !env.string_warning_done {
-                  eprintln!("[Warning] string are considered as UTF8. Do we need something else ?");
-                  env.string_warning_done = true;
-                }
-                for b in s.bytes() {
-                    env.output(b)?;
-                    env.update_dollar();
-                }            
+                let bytes = env.charset_encoding.transform_string(s);
+                env.output_bytes(&bytes)?;
+                env.update_dollar(); 
+            },
+            Expr::Char(c) => {
+                let b = env.charset_encoding.transform_char(*c);
+                env.output(b)?;
+                env.update_dollar();
             },
             _ => {
                 let val = env.resolve_expr_may_fail_in_first_pass(exp)? & mask;

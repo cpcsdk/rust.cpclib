@@ -756,6 +756,15 @@ pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
     // manage the string format - TODO manage the others too
     let (input, chars) = context("Invalid string", parse_string)(input)?;
     let (input, start) = context("Missing start value", preceded(parse_comma,expr))(input)?;
+    let chars = chars.to_string()
+    .replace("\\\\", "\\")
+    .replace("\\a", &char::from(7).to_string())
+    .replace("\\b", &char::from(8).to_string())
+    .replace("\\t", "\t")
+    .replace("\\r", "\r")
+    .replace("\\v", &char::from(11).to_string())
+    .replace("\\f", &char::from(12).to_string())
+    ;
     let format = CharsetFormat::CharsList(chars.chars().collect_vec(), start);
 
     let charset = Token::Charset(format);
@@ -2871,7 +2880,14 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                     // manage values
                     alt((positive_number, negative_number)),
                     char_expr,
-                    map(parse_string, |s| Expr::String(s.to_string())),
+                    map(parse_string, |s| Expr::String( s
+                    .replace("\\\\", "\\")
+                    .replace("\\a", &char::from(7).to_string())
+                    .replace("\\b", &char::from(8).to_string())
+                    .replace("\\t", "\t")
+                    .replace("\\r", "\r")
+                    .replace("\\v", &char::from(11).to_string())
+                    .replace("\\f", &char::from(12).to_string()))),
                     parse_counter,
                     // manage $
                     map(tag("$"), |_x| Expr::Label(String::from("$"))),
