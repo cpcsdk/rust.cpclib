@@ -2828,6 +2828,10 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             DataAccess::MemoryRegister16(Register16::Hl) => {
                 add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
             }
+            DataAccess::MemoryIndexRegister16(reg) => {
+                add_index_register_code(&mut bytes, *reg);
+                add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
+            }
 
             DataAccess::MemoryRegister16(ref memreg) if arg1.is_register_a() => {
                 let byte = match memreg {
@@ -3008,6 +3012,24 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             _ => {}
         }
     }
+
+    else if let DataAccess::MemoryIndexRegister16(ref dst) = arg1 {
+        add_index_register_code(&mut bytes, *dst);
+        add_byte(&mut bytes, indexed_register16_to_code(*dst));
+
+
+                if let DataAccess::Register8(ref src) = arg2 {
+                    let src = register8_to_code(*src);
+                    let code = 0b0111_0000 | src;
+                    bytes.push(code);
+                } else if let DataAccess::Expression(ref exp) = arg2 {
+                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)? & 0xff) as u8;
+                    bytes.push(0x36);
+                    bytes.push(val);
+                }
+
+    }
+
     // Destination is memory form ix/iy + n
     else if let DataAccess::IndexRegister16WithIndex(ref reg, ref exp) = arg1 {
         add_byte(&mut bytes, indexed_register16_to_code(*reg));
