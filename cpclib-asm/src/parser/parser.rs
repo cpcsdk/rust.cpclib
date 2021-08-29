@@ -1301,17 +1301,33 @@ pub fn parse_ld_fake(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
     let input_start = input.clone();
     let (input, _) = tuple((tag_no_case("LD"), space1))(input)?;
 
-    let (input, dst) = terminated(
-        parse_register16,
+    let (input, dst) = alt((
+        terminated(
+            alt((parse_register16, parse_indexregister16)),
         not(alt((tag_no_case(".low"), tag_no_case(".high")))),
-    )(input)?;
+    ),
+    parse_hl_address,
+    parse_indexregister_with_index,   
+))(input)?;
 
-    let (input, _) = tuple((space0, tag(","), space0))(input)?;
+    let (input, _) = parse_comma(input)?;
 
-    let (input, src) = alt((
+    // TODO - add https://z00m128.github.io/sjasmplus/documentation.html#s_fake_instructions
+    let (input, src) = if dst.is_register16() {alt((
+        terminated(
+            alt((parse_register16, parse_indexregister16)),
+            not(alt((tag_no_case(".low"), tag_no_case(".high"))))
+        ),
+        parse_hl_address,
+        parse_indexregister_with_index,
+    ))(input)?
+} else /* mem-like */ {
+    
+    terminated(
         parse_register16,
-        parse_indexregister_with_index
-    ))(input)?;
+        not(alt((tag_no_case(".low"), tag_no_case(".high"))))
+    )(input)?
+};
 
     let warning = AssemblerError::RelocatedWarning {
         warning: Box::new(AssemblerError::AssemblingError{

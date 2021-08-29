@@ -3099,7 +3099,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 add_byte(&mut bytes, 0x70 + register8_to_code(*src));
                 add_byte(&mut bytes, delta);
             }
-            _ => unreachable!(),
+            _ => {/*possible fake instruction*/ bytes.clear();},
         }
     }
     // Destination is memory
@@ -3146,6 +3146,59 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             bytes.push(0x4f)
         } else {
             unreachable!();
+        }
+    }
+
+    // handle fake instructions
+    if bytes.is_empty() {
+        match (arg1, arg2) {
+
+            (DataAccess::Register16(dst), DataAccess::Register16(src)) => {
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.low().unwrap()), 
+                    &DataAccess::Register8(src.low().unwrap()),
+                    env
+                )?.iter().cloned());
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.high().unwrap()), 
+                    &DataAccess::Register8(src.high().unwrap()),
+                    env
+                )?.iter().cloned());
+            },
+
+            (DataAccess::Register16(dst), DataAccess::IndexRegister16WithIndex(src, index)) => {
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.low().unwrap()), 
+                    &DataAccess::IndexRegister16WithIndex(src.clone(), index.clone()),
+                    env
+                )?.iter().cloned());
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.high().unwrap()), 
+                    &DataAccess::IndexRegister16WithIndex(src.clone(), index.add(1)),
+                    env
+                )?.iter().cloned());
+            },
+
+            (DataAccess::Register16(dst), DataAccess::MemoryRegister16(Register16::Hl)) => {
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.low().unwrap()), 
+                    &DataAccess::MemoryRegister16(Register16::Hl),
+                    env
+                )?.iter().cloned());
+                bytes.extend(assemble_inc_dec(Mnemonic::Inc, &DataAccess
+                ::Register16(Register16::Hl), env)?);
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.high().unwrap()), 
+                    &DataAccess::MemoryRegister16(Register16::Hl),
+                    env
+                )?.iter().cloned());
+                bytes.extend(assemble_inc_dec(Mnemonic::Dec, &DataAccess
+                    ::Register16(Register16::Hl), env)?);
+
+            },
+
+            _ => {}
+
         }
     }
 

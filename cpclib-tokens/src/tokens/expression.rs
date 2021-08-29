@@ -294,6 +294,13 @@ impl Expr {
         Expr::Neg(Box::new(self.clone()))
     }
 
+    pub fn add<E:Into<Expr>>(&self, v: E) -> Self {
+        Expr::Add(
+            Box::new(self.clone()),
+            v.into().into()
+        )
+    }
+
     /// Check if it is necessary to read within a symbol table
     pub fn is_context_independant(&self) -> bool {
         use self::Expr::*;
