@@ -1807,6 +1807,7 @@ pub fn parse_add_or_adc_shorten(input: Z80Span) -> IResult<Z80Span, Token, Verbo
 
     let (input, second) = alt((
         parse_register8,
+        parse_indexregister8,
         parse_hl_address,
         parse_indexregister_with_index,
         parse_expr,
