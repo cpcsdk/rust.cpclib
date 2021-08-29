@@ -192,16 +192,37 @@ pub enum UnaryFunction {
     Low,
     /// Memory already assembled
     Memory,
-    Floor
+
+    Floor, Ceil, Frac, Int,
+    Sin, Cos,
+    ASin, ACos,
+    Abs,
+    Ln, Log10,
+    Exp,
+    Rnd,
+    Sqrt
 }
 
 impl Display for UnaryFunction {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         let repr = match self {
-            Self::High => "HI",
-            Self::Low => "LO",
-            Self::Memory => "memory",
-            Self::Floor => "floor"
+            UnaryFunction::High => "HI",
+            UnaryFunction::Low => "LO",
+            UnaryFunction::Memory => "memory",
+            UnaryFunction::Floor => "floor",
+            UnaryFunction::Ceil => "ceil",
+            UnaryFunction::Frac => "frac",
+            UnaryFunction::Int => "int",
+            UnaryFunction::Sin => "sin",
+            UnaryFunction::Cos => "cos",
+            UnaryFunction::ASin => "asin",
+            UnaryFunction::ACos => "acos",
+            UnaryFunction::Abs => "abs",
+            UnaryFunction::Ln => "ln",
+            UnaryFunction::Log10 => "log10",
+            UnaryFunction::Exp => "exp",
+            UnaryFunction::Rnd => "rnd",
+            UnaryFunction::Sqrt => "sqrt",
         };
         write!(format, "{}", repr)
     }

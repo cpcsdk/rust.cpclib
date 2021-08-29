@@ -2991,25 +2991,81 @@ pub fn parse_unary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseEr
         value(
             UnaryFunction::High, 
             alt((
-                tag_no_case("HIGH"),
-                tag_no_case("HI")
+                parse_word("HIGH"),
+                parse_word("HI")
             ))
         ),
         value(
             UnaryFunction::Low, 
             alt((
-                tag_no_case("LOW"),
-                tag_no_case("LO")
+                parse_word("LOW"),
+                parse_word("LO")
             ))
         ),
         value(
             UnaryFunction::Memory,
-                tag_no_case("MEMORY")
+            parse_word("MEMORY")
         ),
         value(
             UnaryFunction::Floor,
-                tag_no_case("FLOOR")
-        )
+            parse_word("FLOOR")
+        ),
+        value(
+        UnaryFunction::Ceil,
+        parse_word("CEIL")
+        ),
+        value(
+        UnaryFunction::Frac,
+        parse_word("FRAC")
+        ),
+        value(
+        UnaryFunction::Int,
+        parse_word("INT")
+        ),
+        value(
+        UnaryFunction::Sin,
+        parse_word("SIN")
+        ),
+        value(
+        UnaryFunction::Cos,
+        parse_word("COS")
+        ),
+        value(
+        UnaryFunction::ASin,
+        parse_word("ASIN")
+        ),
+        value(
+        UnaryFunction::ACos,
+        parse_word("ACOS")
+        ),
+        value(
+        UnaryFunction::Abs,
+        parse_word("ABS")
+        ),
+        value(
+        UnaryFunction::Ln,
+        parse_word("LN")
+        ),
+        value(
+        UnaryFunction::Log10,
+        parse_word("LOG10")
+        ),
+        value(
+        UnaryFunction::Exp,
+        parse_word("EXP")
+        ),
+        
+        value(
+            UnaryFunction::Rnd,
+            parse_word("RND")
+        ),
+        
+            value(
+                UnaryFunction::Sqrt,
+                parse_word("SQRT")
+                ),
+                    
+
     ))(input)?;
 
     let (input, _) = tuple((space0, tag("("), space0))(input)?;
