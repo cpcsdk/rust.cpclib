@@ -594,7 +594,15 @@ pub fn parse_z80_line_complete(
 
     // Eat optional label
     let before_label = input.clone();
-    let (input, label) = opt(delimited(space0, parse_label(true), space1))(input)?;
+    let (input, label) = opt(preceded(space0, parse_label(false)))(input)?;
+    let input = if label.is_some() {
+        alt((
+            value((), tuple((space0, char(':'), space0))),
+            value((),space1)
+        ))(input)?.0
+    } else {
+        input
+    };
 
 
     // First directive MUST not be the  a keyword that ends a structure
@@ -1545,7 +1553,7 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
         if pair(space0, opt(parse_comment))(input.clone()).is_ok() {
             input.extra.1.add_warning(AssemblerError::RelocatedWarning{
                 warning: Box::new(AssemblerError::AssemblingError{
-                    msg: "Ambiguous code. Use (void) for macro with no args,r avoid label at the end of a line, or use a comment if this label is never used.".to_owned()
+                    msg: format!("Ambiguous code. Use (void) for macro with no args,r avoid label at the end of a line, or use a comment if this label is never used. {} is considered to be a label.", name)
                 }),
                 span: input.clone()
             });
