@@ -585,23 +585,7 @@ fn eof(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
     }
 }
 
-/// Left. label | Right: macro
-pub fn parse_label_or_macro_call(input: Z80Span,
-) -> IResult<Z80Span, either::Either<Token, Token>, VerboseError<Z80Span>> {
 
-    if let Ok((input, macro_call)) = parse_macro_call(input.clone()) {
-        return Ok((
-            input, 
-            Either::Right(macro_call)
-        ))
-    } else {
-        let (input, label) = parse_label(true)(input)?;
-        return Ok((
-            input,
-            Either::Left(Token::Label(label))
-        ))
-    }
-}
 
 /// Parse a line
 /// TODO add an argument o manage cases like '... : ENDIF'
@@ -613,7 +597,7 @@ pub fn parse_z80_line_complete(
 
     // Eat optional label (or macro)
     let before_label = input.clone();
-    let (input, label) = opt(parse_label(false))(input)?; // label must start at the beginning of the line to avoid ambiguitiy with macro call
+    let (input, mut label) = opt(parse_label(false))(input)?; // label must start at the beginning of the line to avoid ambiguitiy with macro call
     let input = if label.is_some() {
         alt((
             value((), tuple((space0, char(':'), space0))),
@@ -627,8 +611,28 @@ pub fn parse_z80_line_complete(
     // First directive MUST not be the  a keyword that ends a structure
     let (input, _) = cut(context("Parse issue, no end directive expected here", not(parse_forbidden_keyword)))(input)?;
 
-    // Eat first token or directive
-    let (input, opcode) = context("[DBG] first token", cut(parse_single_token(true)))(input)?;
+// try to parse a token. if it fails, fall back to the macro parser
+let (input, opcode) = match parse_single_token(true)(input) {
+    Ok((input, opcode)) => {
+        (input, opcode)
+    },
+    Err(e) => {
+        // label + instruction failed, so we try to use a macro call instead
+        match preceded(space0, parse_macro_call(false))(before_label.clone()) {
+            Ok((input, macro_call)) => {
+                // remove previously build structures and return the macro one
+                label = None; // remove label if any
+
+                (input, LocatedToken::Standard{token: macro_call, span: before_label.clone()})
+            },
+            Err(_) => {
+                // fallback failed too, so return the original error
+                return Err(e)
+            },
+        }
+    },
+};
+
 
     // Eat the additional opcodes
     let (input, additional_opcodes) = context(
@@ -1042,7 +1046,7 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
                 context("[DBG] undef", parse_undef),
                 context("[DBG] noargs", parse_noarg_directive),
                 context("[DBG] assign", parse_assign),
-                context("[DBG] macro call", parse_macro_call), 
+                context("[DBG] macro call", parse_macro_call(true)), 
             )),
             move |t| t.locate(dir_start.clone()),
         )(input.clone())
@@ -1549,7 +1553,10 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseEr
 
 /// Manage the call of a macro.
 /// When ambiguou may return a label
-pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+pub fn parse_macro_call(can_return_label: bool)
+ -> impl Fn(Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+
+    move |input| {
     // BUG: added because of parsing issues. Need to find why and remove ot
     let (input_label, _) = space0(input)?;
     let (input, name) = parse_macro_name(input_label.clone())?;
@@ -1570,7 +1577,7 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
         ))
     } else {
         
-        if pair(space0, opt(parse_comment))(input.clone()).is_ok() {
+        if can_return_label && pair(space0, opt(parse_comment))(input.clone()).is_ok() {
             input.extra.1.add_warning(AssemblerError::RelocatedWarning{
                 warning: Box::new(AssemblerError::AssemblingError{
                     msg: format!("Ambiguous code. Use (void) for macro with no args, avoid labels that do not start at beginning of a line. {} is considered to be a label, not a macro.", name)
@@ -1602,6 +1609,7 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
 
         Ok((input, Token::MacroCall(name, args)))
     }
+}
 }
 
 fn parse_instr(
@@ -2500,7 +2508,7 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
             label.to_ascii_lowercase() != "endstruct"
         }),
         cut(terminated(
-            alt((parse_db_or_dw_or_str, parse_macro_call)),
+            alt((parse_db_or_dw_or_str, parse_macro_call(false))),
             pair(space0, line_ending),
         )),
     ))(input)?;
@@ -2591,7 +2599,7 @@ pub fn parse_label(
             is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789__.{}")
         )(input)?;
 
-        // fail to parse a label when it is a macro call
+        // fail to parse a label when it is 100% sure it corresponds to  a macro call
         let (input, macro_arg) = opt(
             preceded(
                 space1,
@@ -2682,8 +2690,10 @@ pub fn parse_end_directive (input: Z80Span) -> IResult<Z80Span, String, VerboseE
 }
 
 pub fn parse_macro_name (input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
+    let (input, first) =     one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_")(input)?;
     let (input, name) =     is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")(input)?;
-    let keyword = name.iter_elements().collect::<String>().to_ascii_uppercase();
+    let first = [first];
+    let keyword = chain!(first.iter().cloned(), name.iter_elements()).collect::<String>().to_ascii_uppercase();
 
     if FINAL_DIRECTIVE.iter().any(|&val| val == &keyword) {
         Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
