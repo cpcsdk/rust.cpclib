@@ -11,6 +11,7 @@ use cpclib_sna::parse::hex_number;
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::parse::parse_flag_value;
 use cpclib_sna::FlagValue;
+use either::Either;
 use itertools::Itertools;
 use itertools::chain;
 use nom_locate::LocatedSpan;
@@ -584,6 +585,24 @@ fn eof(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
     }
 }
 
+/// Left. label | Right: macro
+pub fn parse_label_or_macro_call(input: Z80Span,
+) -> IResult<Z80Span, either::Either<Token, Token>, VerboseError<Z80Span>> {
+
+    if let Ok((input, macro_call)) = parse_macro_call(input.clone()) {
+        return Ok((
+            input, 
+            Either::Right(macro_call)
+        ))
+    } else {
+        let (input, label) = parse_label(true)(input)?;
+        return Ok((
+            input,
+            Either::Left(Token::Label(label))
+        ))
+    }
+}
+
 /// Parse a line
 /// TODO add an argument o manage cases like '... : ENDIF'
 pub fn parse_z80_line_complete(
@@ -592,9 +611,9 @@ pub fn parse_z80_line_complete(
     // Eat previous line ending
     let (input, _) = opt(line_ending)(input)?;
 
-    // Eat optional label
+    // Eat optional label (or macro)
     let before_label = input.clone();
-    let (input, label) = opt(preceded(space0, parse_label(false)))(input)?;
+    let (input, label) = opt(parse_label(false))(input)?; // label must start at the beginning of the line to avoid ambiguitiy with macro call
     let input = if label.is_some() {
         alt((
             value((), tuple((space0, char(':'), space0))),
@@ -1550,15 +1569,18 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
             )
         ))
     } else {
+        
         if pair(space0, opt(parse_comment))(input.clone()).is_ok() {
             input.extra.1.add_warning(AssemblerError::RelocatedWarning{
                 warning: Box::new(AssemblerError::AssemblingError{
-                    msg: format!("Ambiguous code. Use (void) for macro with no args,r avoid label at the end of a line, or use a comment if this label is never used. {} is considered to be a label.", name)
+                    msg: format!("Ambiguous code. Use (void) for macro with no args, avoid labels that do not start at beginning of a line. {} is considered to be a label, not a macro.", name)
                 }),
                 span: input.clone()
             });
             return Ok((input, Token::Label(name)));
         }
+            
+       // not(pair(space0, opt(parse_comment)))(input.clone())?; // force failure to use a label instead
         let (input, args) = cut(context("MACRO: error in arguments list", alt((
             value(
                 Default::default(),
