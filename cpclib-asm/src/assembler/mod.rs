@@ -1487,8 +1487,36 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
 
         Ok(())
     }
+
+
 }
 
+
+impl Env {
+    fn assemble_nop(&self, kind: Mnemonic, count: Option<&Expr>) -> Result<Bytes, AssemblerError> {
+        let count = match count {
+            Some(count) => self.resolve_expr_must_never_fail(count)?,
+            None => 1
+        };
+        let mut bytes = Bytes::new();
+        for i in 0..count {
+            match kind {
+                Mnemonic::Nop => {
+                    bytes.push(0);
+                },
+                Mnemonic::Nop2 => {
+                    bytes.push(0xed);
+                    bytes.push(0xff);                   
+                },
+                _ => unreachable!()
+            }
+        }
+        Ok(bytes)
+    }
+    
+
+    
+}
 /// Visit the tokens during several passes without providing a specific symbol table.
 pub fn visit_tokens_all_passes<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerError> {
     let options = AssemblingOptions::default();
@@ -2211,8 +2239,6 @@ pub fn assemble_opcode(
         | Mnemonic::Otir
         | Mnemonic::Rld
         | Mnemonic::Rrd => assemble_no_arg(mnemonic),
-        Mnemonic::Nop => assemble_nop(),
-        Mnemonic::Nops2 => assemble_nops2(),
         Mnemonic::Out => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
         Mnemonic::Jr | Mnemonic::Jp | Mnemonic::Call => {
             assemble_call_jr_or_jp(mnemonic, arg1.as_ref(), arg2.as_ref().unwrap(), env)
@@ -2229,6 +2255,9 @@ pub fn assemble_opcode(
         Mnemonic::Ret => assemble_ret(arg1),
         Mnemonic::Rst => assemble_rst(arg1.as_ref().unwrap(), env),
         Mnemonic::Im => assemble_im(arg1.as_ref().unwrap(), env),
+        Mnemonic::Nop => env.assemble_nop(Mnemonic::Nop, arg1.as_ref().unwrap().expr()),
+        Mnemonic::Nop2 => env.assemble_nop(Mnemonic::Nop2, None),
+
 
         Mnemonic::Sub => env.assemble_sub(arg1.as_ref().unwrap()),
         Mnemonic::Sbc => env.assemble_sbc(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
@@ -3118,18 +3147,6 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
     }
 }
 
-fn assemble_nop() -> Result<Bytes, AssemblerError> {
-    let mut bytes = Bytes::new();
-    bytes.push(0);
-    Ok(bytes)
-}
-
-fn assemble_nops2() -> Result<Bytes, AssemblerError> {
-    let mut bytes = Bytes::new();
-    bytes.push(0xed);
-    bytes.push(0xff);
-    Ok(bytes)
-}
 
 fn assemble_in(
     arg1: &DataAccess,
