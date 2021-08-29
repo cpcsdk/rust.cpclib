@@ -3166,6 +3166,38 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 )?.iter().cloned());
             },
 
+            (DataAccess::Register16(Register16::Hl), DataAccess::IndexRegister16(_)) |  (DataAccess::IndexRegister16(_), DataAccess::Register16(Register16::Hl))  |  (DataAccess::IndexRegister16(_), DataAccess::IndexRegister16(_)) => {
+                bytes.extend(assemble_push(arg2)?);
+                bytes.extend(assemble_pop(arg1)?);
+            }
+
+            // general registers from indexed
+            (DataAccess::Register16(dst), DataAccess::IndexRegister16(src)) => {
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.low().unwrap()), 
+                    &DataAccess::IndexRegister8(src.low()),
+                    env
+                )?.iter().cloned());
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.high().unwrap()), 
+                    &DataAccess::IndexRegister8(src.high()),
+                    env
+                )?.iter().cloned());            
+            },
+            // general > indexed
+            (DataAccess::IndexRegister16(dst), DataAccess::Register16(src)) => {
+                bytes.extend(assemble_ld(
+                    &DataAccess::IndexRegister8(dst.low()), 
+                    &DataAccess::Register8(src.low().unwrap()),
+                    env
+                )?.iter().cloned());
+                bytes.extend(assemble_ld(
+                    &DataAccess::IndexRegister8(dst.high()), 
+                    &DataAccess::Register8(src.high().unwrap()),
+                    env
+                )?.iter().cloned());
+            },
+
             (DataAccess::Register16(dst), DataAccess::IndexRegister16WithIndex(src, index)) => {
                 bytes.extend(assemble_ld(
                     &DataAccess::Register8(dst.low().unwrap()), 
