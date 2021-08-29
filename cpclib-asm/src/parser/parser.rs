@@ -1298,6 +1298,7 @@ pub fn parse_ld(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
 
 /// Parse artifical LD instruction (would be replaced by several real instructions)
 pub fn parse_ld_fake(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let input_start = input.clone();
     let (input, _) = tuple((tag_no_case("LD"), space1))(input)?;
 
     let (input, dst) = terminated(
@@ -1307,7 +1308,19 @@ pub fn parse_ld_fake(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
 
     let (input, _) = tuple((space0, tag(","), space0))(input)?;
 
-    let (input, src) = parse_register16(input)?;
+    let (input, src) = alt((
+        parse_register16,
+        parse_indexregister_with_index
+    ))(input)?;
+
+    let warning = AssemblerError::RelocatedWarning {
+        warning: Box::new(AssemblerError::AssemblingError{
+            msg: "Fake instruction assembled using several opcodes".to_owned()
+        }),
+        span: input_start.clone()
+    };
+    input.extra.1.add_warning(warning);
+
 
     Ok((input, Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src))))
 }
