@@ -660,7 +660,7 @@ fn build_simple_error_message_with_notes(title: &str, notes: Vec<String>, span: 
         ),
     };
 
-    let mut diagnostic = Diagnostic::error()
+    let diagnostic = Diagnostic::error()
         .with_message(title)
         .with_labels(vec![Label::new(
             codespan_reporting::diagnostic::LabelStyle::Primary,
