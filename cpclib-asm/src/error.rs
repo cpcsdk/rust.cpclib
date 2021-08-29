@@ -181,6 +181,10 @@ pub enum AssemblerError {
         error: Box<AssemblerError>,
     },
 
+    CrunchedSectionError {
+        error: Box<AssemblerError>
+    },
+    
     /// Several errors has been generated without span information.
     /// RelocatedError allows them to be approximately located
     RelocatedError {
@@ -456,6 +460,10 @@ impl Display for AssemblerError {
 
                 // Relocated error format may vary among errors
                 match error.deref() {
+                    AssemblerError::RelocatedError { error, span } => {
+                        write!(f, "{}", error)
+                    }
+
                     AssemblerError::UnknownSymbol { symbol, closest } => {
                         let msg =  match closest {
                             Some(closest) => {
@@ -511,7 +519,14 @@ impl Display for AssemblerError {
                             address, area.start(), area.end()), 
                             span);
                             write!(f, "{}",msg)
-                    }
+                    },
+
+                    AssemblerError::CrunchedSectionError { error } => {
+                        let msg = build_simple_error_message("Impossible to crunch section", span, Severity::Error);
+                        write!(f, "{}",msg);
+
+                        write!(f, "{}",error)
+                    },
 
                     _ => {
                         let msg =  build_simple_error_message(&format!("{}", error), span, Severity::Error);
@@ -557,6 +572,7 @@ impl Display for AssemblerError {
                 write!(f, "{}",msg)
             },
             AssemblerError::SnapshotError { error } =>  write!(f, "Snapshot error. {:#?}", error),
+            AssemblerError::CrunchedSectionError { error } => write!(f, "Error when crunching code {}", error),
            
         }
     }
