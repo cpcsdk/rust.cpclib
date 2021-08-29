@@ -1923,7 +1923,7 @@ impl Env {
             }
             Some(ga_expr) => {
                 let ga_expr = self.resolve_expr_may_fail_in_first_pass(ga_expr)?;
-                self.sna.set_value(SnapshotFlag::GA_RAMCFG, address as _);
+                self.sna.set_value(SnapshotFlag::GA_RAMCFG, address as _)?;
                 self.run_options = Some((address as _, Some(ga_expr as _)));
             }
         }
