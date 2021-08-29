@@ -2237,7 +2237,7 @@ pub fn parse_register_iy(input: Z80Span) -> IResult<Z80Span, DataAccess, Verbose
 
 // TODO find a way to not use that
 macro_rules! parse_any_indexregister8 {
-    ($($reg:ident, $alias:ident)*) => {$(
+    ($($reg:ident, $alias1:ident, $alias2:ident)*) => {$(
         paste::paste! {
             /// Parse register $reg
             pub fn [<parse_register_ $reg:lower>] (input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
@@ -2245,8 +2245,9 @@ macro_rules! parse_any_indexregister8 {
                     DataAccess::IndexRegister8(IndexRegister8::$reg),
                     tuple((
                         alt((
-                            tag_no_case( stringify!($reg)),
-                            tag_no_case( stringify!($alias))
+                            parse_instr( stringify!($reg)),
+                            parse_instr( stringify!($alias1)),
+                            parse_instr( stringify!($alias2)),
                         ))
                         , not(alphanumeric1)))
                     )(input)
@@ -2254,7 +2255,12 @@ macro_rules! parse_any_indexregister8 {
             }
         )*}
     }
-parse_any_indexregister8!(Ixh,hx Ixl,lx Iyh,hy Iyl,ly);
+parse_any_indexregister8!(
+    Ixh,hx,xh 
+    Ixl,lx,xl
+    Iyh,hy,yh
+    Iyl,ly,yl
+);
 
 /// Parse and indexed register in 8bits
 pub fn parse_indexregister8(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z80Span>> {
