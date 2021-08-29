@@ -173,7 +173,8 @@ pub fn parse_z80_code<'src, 'ctx, 'a>(
     input: Z80Span,
 ) -> IResult<Z80Span, LocatedListing, VerboseError<Z80Span>> {
     let (input, tokens) = many0(parse_z80_line)(input)?; // here it is my_many0 supposed to be used
-    if input.is_empty() {
+
+    if input.trim().is_empty() {
         let tokens = tokens.iter().flatten().cloned().collect_vec();
         Ok((
             input.clone(),
@@ -1632,7 +1633,7 @@ fn parse_word(
     name: &'static str,
 ) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> + 'static {
     move |input: Z80Span| map(
-        tuple((tag_no_case(name), not(alphanumeric1), space0)), 
+        tuple((tag_no_case(name), not(one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")), space0)), 
         |v| v.0
     )(input)
 }
