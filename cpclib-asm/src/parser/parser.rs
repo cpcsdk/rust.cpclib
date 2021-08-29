@@ -966,16 +966,23 @@ pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
 
 /// Parse ex af, af' instruction
 pub fn parse_ex_af(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    alt((
     value(
         Token::new_opcode(Mnemonic::ExAf, None, None),
         tuple((
-            tag_no_case("EX"),
-            space1,
+            parse_word("EX"),
             parse_register_af,
             parse_comma,
-            tag_no_case("AF'"),
+            parse_word("AF'"),
         )),
-    )(input)
+    ),
+    
+    value(
+        Token::new_opcode(Mnemonic::ExAf, None, None),
+        parse_word("exa"),
+    )
+))
+    (input)
 }
 
 /// Parse ex hl, de instruction
@@ -2679,6 +2686,7 @@ pub fn parse_label(
                 "RRD",  "RST",  "SBC",  "SCF",  "SET",  "SLA",  "SRA",  "SRL", 
                 "SUB",  "XOR",
                 "SL1", "SLL",
+                "EXA",
                 // Directives
                 "ALIGN", "ASSERT", "BANK", "BANKSET", "BUILDSNA",
                 "INCBIN", "LZEXO",
