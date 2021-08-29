@@ -302,7 +302,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     let (input, name) = cut(context("MACRO: wrong name", parse_label(false)))(input)?; // TODO use a specific function for that
 
     // macro arguments
-    let (input, mut arguments) = preceded(
+    let (input, arguments) = preceded(
     opt(parse_comma), // comma after macro name is not mandatory
         separated_list0(
             parse_comma,
@@ -853,8 +853,8 @@ pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
 
     let (input, (save_kind, filename)) = pair(
         alt((
-            map(tuple((tag_no_case("SAVE"), space1)), |_| SaveKind::Save),
-            map(tuple((tag_no_case("WRITE"), space1, tag_no_case("DIRECT"), space1)), |_| SaveKind::WriteDirect),
+            map(parse_word("SAVE"), |_| SaveKind::Save),
+            map(tuple((parse_word("WRITE"), parse_word("DIRECT"))), |_| SaveKind::WriteDirect),
         )), 
         parse_fname)(input)?;
 
@@ -869,8 +869,9 @@ pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
         opt(preceded(
             parse_comma,
             alt((
-                value(SaveType::Amsdos, tag_no_case("AMSDOS")),
-                value(SaveType::Dsk, tag_no_case("DSK")),
+                value(SaveType::Amsdos, parse_word("AMSDOS")),
+                value(SaveType::Dsk, parse_word("DSK")),
+                value(SaveType::Tape, parse_word("TAPE")),
             )),
         ))(input)?
     } else {

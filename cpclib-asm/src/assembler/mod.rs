@@ -336,7 +336,7 @@ impl SaveCommand {
                     SaveType::Amsdos => {
                         either::Left(amsdos_file.full_content().copied().collect::<Vec<u8>>())
                     }
-                    SaveType::Dsk => either::Right(amsdos_file),
+                    SaveType::Dsk | SaveType::Tape => either::Right(amsdos_file),
                 }
             }
             None => either::Left(data),
@@ -1387,7 +1387,7 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
             None => None
         };
 
-        let mut page_info = self.active_page_info_mut();
+        let page_info = self.active_page_info_mut();
         page_info.add_save_command(SaveCommand {
             from,
             size,
@@ -3496,7 +3496,7 @@ fn assemble_bit_res_or_set(
 
     // Get the code to differentiate the instructions
     // the value can be modified by some hidden instructions
-    let mut code = match mnemonic {
+    let code = match mnemonic {
         Mnemonic::Res => 0b1000_0000,
         Mnemonic::Set => 0b1100_0000,
         Mnemonic::Bit => 0b0100_0000,

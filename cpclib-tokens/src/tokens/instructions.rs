@@ -346,6 +346,7 @@ pub enum CrunchType {
 pub enum SaveType {
     Amsdos,
     Dsk,
+    Tape
 }
 
 /// Encode the kind of test done in if/elif/else cases

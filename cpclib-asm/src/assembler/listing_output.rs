@@ -234,7 +234,7 @@ impl ListingOutput {
 	//	dbg!(token);
 
 		let ctx = &token.span().extra.1;
-		let mut fname = ctx.current_filename.as_ref()
+		let fname = ctx.current_filename.as_ref()
 			.map(|p| p.as_os_str().to_str().unwrap().to_string())
 			.or_else(||{
 				ctx.context_name.clone()
