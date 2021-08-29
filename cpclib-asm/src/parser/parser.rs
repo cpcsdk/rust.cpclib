@@ -301,7 +301,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     let (input, name) = cut(context("MACRO: wrong name", parse_label(false)))(input)?; // TODO use a specific function for that
 
     // macro arguments
-    let (input, arguments) = preceded(
+    let (input, mut arguments) = preceded(
     opt(parse_comma), // comma after macro name is not mandatory
         separated_list0(
             parse_comma,
@@ -309,6 +309,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
             delimited(space0, take_till(|c| c == '\n' || c == ':' || c == ',' || c == ' '), space0),
         ),
     )(input)?;
+
 
     let (input, content) = cut(context(
         "MACRO: issue in the content",
@@ -593,7 +594,7 @@ pub fn parse_z80_line_complete(
 
     // Eat optional label
     let before_label = input.clone();
-    let (input, label) = opt(terminated(parse_label(true), space1))(input)?;
+    let (input, label) = opt(delimited(space0, parse_label(true), space1))(input)?;
 
 
     // First directive MUST not be the  a keyword that ends a structure
@@ -1541,6 +1542,7 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
             )
         ))
     } else {
+        cut(context("Ambiguous code. Use (void) for macro with no args,r avoid label at the end of a line, or use a comment if this label is never used.", not(pair(space0, opt(parse_comment)))))(input.clone())?; // ensure empty macro calls are forbidden
         let (input, args) = cut(context("MACRO: error in arguments list", alt((
             value(
                 Default::default(),
@@ -1554,7 +1556,13 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
         ))
         ))(input)?;
 
-        Ok((input, Token::MacroCall(name, args.unwrap_or_default())))
+        // fix case when there is no argument but a 
+        let mut args = args.unwrap_or_default();
+        if args.len() == 1 && args.first().unwrap().is_empty() {
+            panic!();
+        }
+
+        Ok((input, Token::MacroCall(name, args)))
     }
 }
 

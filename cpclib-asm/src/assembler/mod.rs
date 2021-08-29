@@ -1183,6 +1183,8 @@ impl Env {
         caller: & T,
     ) -> Result<(), AssemblerError> {
 
+
+
 //        dbg!(caller);
 
         // Get the macro call information
@@ -1208,7 +1210,19 @@ impl Env {
             }
 
         };
+/*
+        dbg!(parameters);
+// fallback to label definition
+if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symbols().struct_value(name), parameters.is_empty() ) {
+    self.warnings.push(
+        AssemblerError::AssemblingError{
+                msg: format!("Macro {} not found. We try to use a label instead", name)
+            }
+    );
 
+    return self.visit_label(name);
+}
+*/
         let listing = {
             // Retreive the macro or structure definition
             let r#macro = self.symbols().macro_value(name)?;
