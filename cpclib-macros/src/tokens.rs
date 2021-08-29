@@ -224,7 +224,7 @@ impl MyToTokens for Mnemonic {
             Mnemonic::ExAf => "ExAf".to_owned(),
             Mnemonic::ExHlDe => "ExHlDe".to_owned(),
             Mnemonic::ExMemSp => "ExMemSp".to_owned(),
-            Mnemonic::Nops2 => "Nops2".to_owned(),
+            Mnemonic::Nop2 => "Nops2".to_owned(),
             _ => upper_first(&self.to_string()),
         };
 

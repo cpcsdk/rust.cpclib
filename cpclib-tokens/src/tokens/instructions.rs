@@ -118,7 +118,7 @@ pub enum Mnemonic {
     Ldir,
     Neg,
     Nop,
-    Nops2, // Fake instruction that generate a breakpoint on winape
+    Nop2, // Fake instruction that generate a breakpoint on winape
     Or,
     Otdr,
     Otir,
@@ -195,7 +195,7 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Ldir => write!(f, "LDIR"),
             Mnemonic::Neg => write!(f, "NEG"),
             Mnemonic::Nop => write!(f, "NOP"),
-            Mnemonic::Nops2 => write!(f, "DB 0xed, 0xff ; Winape Breakpoint"),
+            Mnemonic::Nop2 => write!(f, "DB 0xed, 0xff ; Winape Breakpoint"),
             Mnemonic::Or => write!(f, "OR"),
             Mnemonic::Otdr => write!(f, "OTDR"),
             Mnemonic::Otir => write!(f, "OTIR"),
@@ -286,7 +286,7 @@ is_mnemonic!(
     Ldir
     Neg
     Nop
-    Nops2
+    Nop2
     Or
     Otdr
     Otir
