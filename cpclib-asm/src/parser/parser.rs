@@ -1542,14 +1542,14 @@ pub fn parse_macro_call(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
             )
         ))
     } else {
-        if not(pair(space0, opt(parse_comment)))(input.clone()).is_err() {
+        if pair(space0, opt(parse_comment))(input.clone()).is_ok() {
             input.extra.1.add_warning(AssemblerError::RelocatedWarning{
                 warning: Box::new(AssemblerError::AssemblingError{
                     msg: "Ambiguous code. Use (void) for macro with no args,r avoid label at the end of a line, or use a comment if this label is never used.".to_owned()
                 }),
                 span: input.clone()
             });
-            return map(parse_label(false), |s| Token::Label(s))(input)
+            return Ok((input, Token::Label(name)));
         }
         let (input, args) = cut(context("MACRO: error in arguments list", alt((
             value(
