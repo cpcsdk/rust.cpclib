@@ -207,7 +207,12 @@ impl DataAccess {
             _ => false,
         }
     }
-
+    pub fn is_address_in_indexregister16(&self) -> bool {
+        match self {
+            DataAccess::MemoryIndexRegister16(_) => true,
+            _ => false,
+        }
+    }
     pub fn get_register16(&self) -> Option<Register16> {
         match self {
             DataAccess::Register16(ref reg) => Some(*reg),

@@ -1264,6 +1264,7 @@ pub fn parse_ld_normal(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z
         LD_WRONG_DESTINATION,
         alt((
             parse_reg_address,
+            parse_indexregister_address,
             parse_indexregister_with_index,
             parse_register_sp,
             terminated(
@@ -1300,8 +1301,8 @@ fn parse_ld_normal_src(
                 parse_address,
                 parse_expr,
             ))(input)
-        } else if dst.is_address_in_register16() {
-            // by construction is IS HL
+        } else if dst.is_address_in_register16() || dst.is_address_in_indexregister16(){
+            // by construction is t is HL/IX/IY
             alt((parse_register8, parse_expr))(input)
         } else if dst.is_register16() | dst.is_indexregister16() {
             alt((parse_address, parse_expr))(input)
@@ -1321,6 +1322,7 @@ fn parse_ld_normal_src(
                 ))(input)
             } else {
                 alt((
+                    parse_indexregister_address,
                     parse_indexregister_with_index,
                     parse_hl_address,
                     parse_address,
@@ -1331,6 +1333,7 @@ fn parse_ld_normal_src(
             }
         } else if dst.is_indexregister8() {
             alt((
+                parse_indexregister_address,
                 parse_indexregister_with_index,
                 parse_hl_address,
                 parse_address,
