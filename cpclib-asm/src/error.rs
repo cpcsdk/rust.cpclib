@@ -157,7 +157,8 @@ pub enum AssemblerError {
     NoActiveCounter,
     NoDataToCrunch,
 
-    OutputExceedsLimits(usize),
+    OutputExceedsLimits(PhysicalAddress, usize),
+    OutputAlreadyExceedsLimits(usize),
     OutputProtected{
         area: std::ops::RangeInclusive<u16>,
         address: u16
@@ -385,7 +386,7 @@ impl Display for AssemblerError {
             }
 
             AssemblerError::OverrideMemory(address, count) => {
-                write!(f, "Override {} bytes at 0x{:x} (0x{:x} in page {})", *count, address.address, address.offset_in_page(), address.page)
+                write!(f, "Override {} bytes at 0x{:X} (0x{:X} in page {})", *count, address.address, address.offset_in_page(), address.page)
             }
             AssemblerError::DisassemblerError{msg} => write!(f, "Disassembler error: {}", msg),
             AssemblerError::ExpressionError{msg} => write!(f, "Expression error: {}", msg),
@@ -393,7 +394,8 @@ impl Display for AssemblerError {
             AssemblerError::SymbolAlreadyExists{symbol} => write!(f, "A symbol named `{}` already exists", symbol),
             AssemblerError::IncoherentCode{msg} => write!(f, "Incoherent code: {}", msg),
             AssemblerError::NoActiveCounter => write!(f, "No active counter"),
-            AssemblerError::OutputExceedsLimits(limit) => write!(f, "Output exceeds limits of 0x{:X}", limit),
+            AssemblerError::OutputExceedsLimits(address, limit) => write!(f, "Output  at 0x{:X} (0x{:X} in page {}) exceeds limits of 0x{:X}", address.address, address.offset_in_page(), address.page, limit),
+            AssemblerError::OutputAlreadyExceedsLimits(limit) => write!(f, "Output  already exceeds limits of 0x{:X}", limit),
             AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
             AssemblerError::AlreadyDefinedSymbol{symbol, kind} => write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind),
 

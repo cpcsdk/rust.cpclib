@@ -654,7 +654,7 @@ pub fn parse_z80_line_label_only(
     
     let (input, r#let) = opt(delimited(space0, parse_instr("LET"), space0))(input)?;
     let after_let = input.clone();
-    let (input, label) = context("Label issue", parse_label(true))(input)?;
+    let (input, label) = context("Label issue", preceded(space0, parse_label(true)))(input)?;
 
     // TODO make these stuff alternatives ...
     // Manage Equ

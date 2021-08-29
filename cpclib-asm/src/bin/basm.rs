@@ -243,8 +243,8 @@ fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
             let header = if matches.is_present("BINARY_HEADER") {
                 AmsdosManager::compute_binary_header(
                     &amsdos_filename.unwrap(),
-                    env.loading_address().unwrap() as u16,
-                    env.execution_address().unwrap() as u16,
+                    env.loading_address().unwrap(),
+                    env.execution_address().unwrap(),
                     &binary,
                 )
                 .as_bytes()
