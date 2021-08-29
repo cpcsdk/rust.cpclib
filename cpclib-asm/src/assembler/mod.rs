@@ -3178,6 +3178,18 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                     env
                 )?.iter().cloned());
             },
+            (DataAccess::IndexRegister16WithIndex(dst, index), DataAccess::Register16(src)) => {
+                bytes.extend(assemble_ld(
+                    &DataAccess::IndexRegister16WithIndex(dst.clone(), index.clone()),
+                    &DataAccess::Register8(src.low().unwrap()), 
+                    env
+                )?.iter().cloned());
+                bytes.extend(assemble_ld(
+                    &DataAccess::IndexRegister16WithIndex(dst.clone(), index.add(1)),
+                    &DataAccess::Register8(src.high().unwrap()), 
+                    env
+                )?.iter().cloned());
+            },
 
             (DataAccess::Register16(dst), DataAccess::MemoryRegister16(Register16::Hl)) => {
                 bytes.extend(assemble_ld(
@@ -3194,7 +3206,22 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                 )?.iter().cloned());
                 bytes.extend(assemble_inc_dec(Mnemonic::Dec, &DataAccess
                     ::Register16(Register16::Hl), env)?);
-
+            },
+            (DataAccess::MemoryRegister16(Register16::Hl), DataAccess::Register16(src)) => {
+                bytes.extend(assemble_ld(
+                    &DataAccess::MemoryRegister16(Register16::Hl),
+                    &DataAccess::Register8(src.low().unwrap()), 
+                    env
+                )?.iter().cloned());
+                bytes.extend(assemble_inc_dec(Mnemonic::Inc, &DataAccess
+                ::Register16(Register16::Hl), env)?);
+                bytes.extend(assemble_ld(
+                    &DataAccess::MemoryRegister16(Register16::Hl),
+                    &DataAccess::Register8(src.high().unwrap()), 
+                    env
+                )?.iter().cloned());
+                bytes.extend(assemble_inc_dec(Mnemonic::Dec, &DataAccess
+                    ::Register16(Register16::Hl), env)?);
             },
 
             _ => {}
