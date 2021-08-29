@@ -1666,7 +1666,10 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
                     }).collect_vec().as_ref(), 
                 other.as_ref()
                     .map(|o| o.as_ref())
-            )
+            ).map_err(|err| AssemblerError::RelocatedError {
+                span: span.clone(),
+                error: Box::new(err),
+            })
         },
         LocatedToken::Repeat(count, code, counter, counter_start, span) => {
             env.visit_repeat(count, code, counter.as_ref(), counter_start.as_ref(), Some(span.clone()))
@@ -1867,7 +1870,7 @@ impl Env {
 
             // handle counter value update
             if let Some(counter_name) = &counter_name {
-                self.symbols_mut().set_symbol_to_value(counter_name, counter_value);
+                self.symbols_mut().set_symbol_to_value(counter_name, counter_value)?;
             }
 
             // generate the bytes
@@ -1889,7 +1892,7 @@ impl Env {
 
         
         if let Some(counter_name) = &counter_name {
-            self.symbols_mut().remove_symbol(counter_name);
+            self.symbols_mut().remove_symbol(counter_name)?;
         }
         Ok(())
     }
