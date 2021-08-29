@@ -1431,7 +1431,11 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
     */
         
         if self.active_page_info().limit != 0xffff || !self.active_page_info().protected_areas.is_empty() {
-            eprintln!("[WARNING] Memory protection systems are disabled in crunched section. If you want to keep them, explicitely use LIMIT or PROTECT directives in the crunched section.");
+            self.warnings.push(
+                AssemblerWarning::AssemblingError{
+                    msg: "Memory protection systems are disabled in crunched section. If you want to keep them, explicitely use LIMIT or PROTECT directives in the crunched section.".to_owned()
+                }
+            );
         }
 
         // from here, the modifications to the memory will be forgotten.
@@ -1448,12 +1452,16 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
         crunched_env.active_page_info_mut().limit = 0xffff; // disable limit (to be redone in the area)
         crunched_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
         crunched_env.visit_listing(lst)
-            .map_err(|e| match span {
+            .map_err(|e| {
+                
+                let e = AssemblerError::CrunchedSectionError{error:e.into()};
+                match span {
                 Some(span) => AssemblerError::RelocatedError{
                     error:e.into(),
                     span: span.clone()
                 },
                 None => e
+            }
             })
         ?;
 
