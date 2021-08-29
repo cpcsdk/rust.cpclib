@@ -2594,7 +2594,7 @@ pub fn parse_label(
                 "INCBIN", "LZEXO",
                 "DEFB", "DB", "BYTE",
                 "DEFW", "DW", "WORD",
-                "DEFS",
+                "DEFS", "DS",
                 "EXPORT", "NOEXPORT",
                 "IF", "ELSE", "ENDIF",
                 "INCLUDE", "READ",
