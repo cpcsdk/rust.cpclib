@@ -846,12 +846,12 @@ impl Env {
     /// If the expression is not solvable in first pass, 0 is returned.
     /// If the expression is not solvable in second pass, an error is returned
     /// 
-    /// However, when assembling in a crunched section, the expression MUST NOT fail.
+    /// However, when assembling in a crunched section, the expression MUST NOT fail. edit: why ? I do not get it now and I have removed this limitation
     fn resolve_expr_may_fail_in_first_pass(&self, exp: &Expr) -> Result<i32, AssemblerError> {
         match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
-                if self.pass.is_first_pass() && self.crunched_section_state.is_none() {
+                if self.pass.is_first_pass() /*&& self.crunched_section_state.is_none()*/ {
                     Ok(0)
                 } else {
                     Err(e)
@@ -973,6 +973,7 @@ impl Env {
             if !label.starts_with('.') {
                 self.symbols_mut().set_current_label(label);
             }
+
             self.add_symbol_to_symbol_table(label, i32::from(value))
         }
     }
