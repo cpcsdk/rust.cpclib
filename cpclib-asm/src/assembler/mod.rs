@@ -269,16 +269,15 @@ type AssemblerWarning = AssemblerError;
 #[derive(Debug, Clone)]
 pub struct PageInformation {
     /// Start adr to use to write binary files. No use when working with snapshots.
-    startadr: Option<usize>,
+    startadr: Option<u16>,
     /// maximum address reached when working with 64k data
-    maxadr: usize,
+    maxadr: u16,
     /// Current address to write to
-    logical_outputadr: usize,
+    logical_outputadr: u16,
     /// Current address used by the code
-    logical_codeadr: usize,
+    logical_codeadr: u16,
     /// Maximum possible address to write to
-    /// TODO move in its current orgzone
-    limit: usize,
+    limit: u16,
     /// List of pretected zones
     protected_areas: Vec<ProtectedArea>,
     fail_next_write_if_zero: bool,
@@ -311,7 +310,7 @@ impl SaveCommand {
             Some(size) => size,
             None => {
                 let stop = env.maximum_address();
-                (stop - from as usize ) as _
+                (stop - from as u16 ) as _
             }
         };
 
@@ -395,6 +394,7 @@ impl PageInformation {
         self.logical_outputadr = 0;
         self.logical_codeadr = 0;
         self.limit = 0xffff;
+        self.fail_next_write_if_zero = false;
     }
 
     fn add_save_command(&mut self, command: SaveCommand) {
@@ -615,24 +615,24 @@ impl Env {
 
 
     /// Return the address where the next byte will be written
-    pub fn logical_output_address(&self) -> usize {
+    pub fn logical_output_address(&self) -> u16 {
         self.active_page_info().logical_outputadr
     }
 
     /// Return the address of dollar
-    pub fn logical_code_address(&self) -> usize {
+    pub fn logical_code_address(&self) -> u16 {
         self.active_page_info().logical_codeadr
     }
 
-    pub fn limit_address(&self) -> usize {
+    pub fn limit_address(&self) -> u16 {
         self.active_page_info().limit
     }
 
-    pub fn start_address(&self) -> Option<usize> {
+    pub fn start_address(&self) -> Option<u16> {
         self.active_page_info().startadr
     }
 
-    pub fn maximum_address(&self) -> usize {
+    pub fn maximum_address(&self) -> u16 {
         self.active_page_info().maxadr
     }
 
@@ -658,24 +658,25 @@ impl Env {
      pub fn produced_bytes(&self) -> Vec<u8> {
         // assume we start at 0 if never provided
         let startadr = self.start_address().or(Some(0)).unwrap();
+        let physical = self.logical_to_physical_address(startadr);
 
         let mut length = self.maximum_address().max(startadr) - startadr + 1;
     //    if length == 1 && self.start_address().is_none() {
      //       length = 0
      //   };
 
-        self.memory(startadr, length)
+        self.memory(physical.offset_in_cpc() as _, length as _)
     }
 
 
     /// Returns the address of the 1st written byte
-    pub fn loading_address(&self) -> Option<usize> {
+    pub fn loading_address(&self) -> Option<u16> {
         self.start_address()
     }
 
     /// Returns the address from when to start the program
     /// TODO really configure this address
-    pub fn execution_address(&self) -> Option<usize> {
+    pub fn execution_address(&self) -> Option<u16> {
         self.start_address()
     }
 
@@ -685,12 +686,14 @@ impl Env {
     pub fn output(&mut self, v: u8) -> Result<bool, AssemblerError> {
 
        // dbg!(self.output_address(), &v);
+       let physical_address = self.logical_to_physical_address(self.logical_output_address() as u16);
+
 
         // Check if it is legal to output the value
         if self.logical_output_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.logical_output_address()==0) {
             dbg!(self.logical_output_address() > self.limit_address(), self.active_page_info().fail_next_write_if_zero && self.logical_output_address()==0);
 
-            return Err(AssemblerError::OutputExceedsLimits (self.limit_address()));
+            return Err(AssemblerError::OutputExceedsLimits (physical_address, self.limit_address() as _));
         }
         for protected_area in &self.active_page_info().protected_areas {
             if protected_area.contains(& (self.logical_output_address() as u16) ) {
@@ -706,7 +709,6 @@ impl Env {
         // update the maximm 64k position
         self.active_page_info_mut().maxadr = self.maximum_address().max(self.logical_output_address());
 
-        let physical_address = self.logical_to_physical_address(self.logical_output_address() as u16);
         let abstract_address = physical_address.offset_in_cpc();
         let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
 
@@ -731,8 +733,8 @@ impl Env {
         }
 
 
-        self.active_page_info_mut().logical_outputadr = (self.logical_output_address() + 1) & 0xffff;
-        self.active_page_info_mut().logical_codeadr =  (self.logical_code_address() + 1) & 0xffff;
+        self.active_page_info_mut().logical_outputadr = self.logical_output_address().wrapping_add(1);
+        self.active_page_info_mut().logical_codeadr =  self.logical_code_address().wrapping_add(1);
 
         // we have written all memory and are trying to restart
         if self.logical_output_address() == 0 {
@@ -943,10 +945,10 @@ impl Env {
     /// TODO set the limit for the current page
     fn  visit_limit(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
         let value = self.resolve_expr_must_never_fail(exp)?;
-        self.active_page_info_mut().limit = value as usize;
+        self.active_page_info_mut().limit = value as _;
 
         if self.limit_address() <= self.maximum_address() {
-            return Err(AssemblerError::OutputExceedsLimits(self.limit_address()));
+            return Err(AssemblerError::OutputAlreadyExceedsLimits(self.limit_address() as _));
         }
         if self.limit_address() == 0 {
             eprintln!("[WARNING] Do you really want to set a limit of 0 ?");
@@ -2246,8 +2248,11 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     };
 
     // TODO Check overlapping region
-    env.active_page_info_mut().logical_outputadr = adr2 as _;
-    env.active_page_info_mut().logical_codeadr = adr as _;
+    let page_info = env.active_page_info_mut();
+    page_info.logical_outputadr = adr2 as _;
+    page_info.logical_codeadr = adr as _;
+    page_info.fail_next_write_if_zero = false;
+
 
     // Specify start address at first use
     env.active_page_info_mut().startadr =  match env.start_address() {
