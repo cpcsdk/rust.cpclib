@@ -63,6 +63,8 @@ pub enum Expr {
     UnaryFunction(UnaryFunction, Box<Expr>),
     // Function with two arguments
     BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
+
+    Rnd
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -202,7 +204,6 @@ pub enum UnaryFunction {
     Abs,
     Ln, Log10,
     Exp,
-    Rnd,
     Sqrt
 }
 
@@ -224,7 +225,6 @@ impl Display for UnaryFunction {
             UnaryFunction::Ln => "ln",
             UnaryFunction::Log10 => "log10",
             UnaryFunction::Exp => "exp",
-            UnaryFunction::Rnd => "rnd",
             UnaryFunction::Sqrt => "sqrt",
         };
         write!(format, "{}", repr)
@@ -635,6 +635,61 @@ impl ExprResult {
             ExprResult::Float(f) => f.into_inner(),
             ExprResult::Value(i) => *i as f64,
         }
+    }
+}
+
+
+impl ExprResult {
+    pub fn floor(&self) -> Self {
+        match self {
+            ExprResult::Float(f) => f.floor().into(),
+            ExprResult::Value(v) => v.clone().into(),
+        }
+    }
+    pub fn ceil(&self) -> Self {
+        match self {
+            ExprResult::Float(f) => f.ceil().into(),
+            ExprResult::Value(v) => v.clone().into(),
+        }
+    }
+    pub fn frac(&self) -> Self {
+        match self {
+            ExprResult::Float(f) => f.fract().into(),
+            ExprResult::Value(v) => 0.into(),
+        }
+    }
+    pub fn sin(&self) -> Self {
+        (self.float()*3.1415926545/180.0).sin().into()
+    }
+    pub fn cos(&self) -> Self {
+        (self.float()*3.1415926545/180.0).cos().into()
+    }
+    pub fn asin(&self) -> Self {
+        (self.float()*180.0/3.1415926545).asin().into()
+    }
+    pub fn acos(&self) -> Self {
+        (self.float()*180.0/3.1415926545).acos().into()
+    }
+    pub fn atan(&self) -> Self {
+        (self.float()*180.0/3.1415926545).atan().into()
+    }
+    pub fn abs(&self) -> Self {
+        match self {
+            ExprResult::Float(f) => f.abs().into(),
+            ExprResult::Value(v) => v.abs().into(),
+        }
+    }
+    pub fn ln(&self) -> Self {
+        self.float().ln().into()
+    }
+    pub fn log10(&self) -> Self {
+        self.float().log10().into()
+    }
+    pub fn exp(&self) -> Self {
+        self.float().exp().into()
+    }
+    pub fn sqrt(&self) -> Self {
+        self.float().sqrt().into()
     }
 }
 
