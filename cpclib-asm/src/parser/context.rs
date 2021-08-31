@@ -116,7 +116,6 @@ impl ParserContext {
     /// Do it in a case insensitive way (for compatibility reasons)
     pub fn get_path_for<P: Into<PathBuf>>(&self, fname: P) -> Result<PathBuf, Vec<String>> {
         use globset::*;
-        use itertools::Itertools;
         let mut does_not_exists = Vec::new();
 
         let fname = fname.into();

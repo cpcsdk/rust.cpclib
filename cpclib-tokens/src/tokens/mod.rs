@@ -11,5 +11,8 @@ pub use instructions::*;
 pub use listing::*;
 pub use registers::*;
 pub use tokens::*;
+
+pub use ordered_float;
+
 #[cfg(test)]
 mod test {}

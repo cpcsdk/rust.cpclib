@@ -3,13 +3,14 @@ use cpclib_tokens::tokens::*;
 use itertools::Itertools;
 use smallvec::SmallVec;
 
-use crate::assembler::{assemble_align, assemble_defs, assemble_opcode, Bytes};
+use crate::assembler::{assemble_defs};
 use crate::error::*;
 
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
 
 use crate::AssemblingOptions;
+
 
 /// Needed methods for the Token defined in cpclib_tokens
 pub trait TokenExt: ListingElement {
@@ -53,13 +54,13 @@ impl TokenExt for Token {
         env: &crate::Env,
     ) -> Option<Result<Vec<&Self>, AssemblerError>> {
         if let Token::Repeat(ref expr, ref tokens, ref _counter_label, ref _counter_start) = self {
-            let count: Result<i32, AssemblerError> = expr.resolve(env);
+            let count: Result<ExprResult, AssemblerError> = expr.resolve(env);
             if count.is_err() {
                 Some(Err(count.err().unwrap()))
             } else {
                 let count = count.unwrap();
-                let mut res = Vec::with_capacity(count as usize * tokens.len());
-                for _i in 0..count {
+                let mut res = Vec::with_capacity(count.int() as usize * tokens.len());
+                for _i in 0..count.int() {
                     // TODO add a specific token to control the loop counter (and change the return type)
                     for t in tokens.iter() {
                         res.push(t);

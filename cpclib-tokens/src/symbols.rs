@@ -7,7 +7,7 @@ use itertools::Itertools;
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{Expr, MacroParam, Token};
+use crate::{Expr, ExprResult, MacroParam, Token};
 
 use std::ops::Deref;
 #[derive(Debug, Clone)]
@@ -207,7 +207,7 @@ impl Macro {
 #[allow(missing_docs)]
 pub enum Value {
     /// Integer value used in an expression
-    Integer(i32),
+    Number(ExprResult),
     /// Macro information
     Macro(Macro),
     /// Structure information
@@ -228,7 +228,7 @@ pub enum SymbolFor {
 impl Value {
     pub fn integer(&self) -> Option<i32> {
         match self {
-            Value::Integer(i) => Some(*i),
+            Value::Number(ExprResult::Value(i)) => Some(*i),
             _ => None,
         }
     }
@@ -265,9 +265,9 @@ impl From<Macro> for Value {
     }
 }
 
-impl From<i32> for Value {
-    fn from(i: i32) -> Self {
-        Self::Integer(i)
+impl<I:Into<ExprResult>> From<I> for Value {
+    fn from(i: I) -> Self {
+        Self::Number(i.into())
     }
 }
 
@@ -356,7 +356,7 @@ impl SymbolsTableTrait for SymbolsTable {
         self.map.iter()
             .filter(|(k ,v)| {
                 match v {
-                    Value::Integer(_) => true,
+                    Value::Number(_) => true,
                     _ => false
                 }
             })
@@ -398,7 +398,7 @@ impl SymbolsTableTrait for SymbolsTable {
 impl SymbolsTable {
     pub fn laxist() -> Self {
         let mut map = HashMap::new();
-        map.insert(Symbol::from("$"), Value::Integer(0));
+        map.insert(Symbol::from("$"), Value::Number(0.into()));
         Self {
             map,
             dummy: true,
@@ -489,7 +489,7 @@ impl SymbolsTable {
     /// Update `$` value
     pub fn set_current_address(&mut self, address: u16) {
         self.map
-            .insert("$".into(), Value::Integer(i32::from(address)));
+            .insert("$".into(), Value::Number(address.into()));
     }
 
     pub fn set_current_mmr(&mut self, rmr: u8) {
@@ -503,7 +503,7 @@ impl SymbolsTable {
     ) -> Result<(), SymbolError> {
         let symbol = self.extend_symbol(symbol)?;
         self.current_address().map(|val| {
-            self.map.insert(symbol, Value::Integer(i32::from(val)));
+            self.map.insert(symbol, Value::Number(val.into()));
         })
     }
 
@@ -612,7 +612,7 @@ impl SymbolsTable {
                     .iter()
                     .filter(|(k,v)| {
                         match (v, r#for) {
-                            (Value::Integer(_), SymbolFor::Integer) |
+                            (Value::Number(_), SymbolFor::Integer) |
                             (Value::Macro(_), SymbolFor::Macro) |
                             (Value::Struct(_), SymbolFor::Struct) |
                             (Value::Counter(_), SymbolFor::Counter) |
@@ -638,7 +638,7 @@ impl SymbolsTable {
 
     pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> Result<&'static str, SymbolError> {
         Ok(match self.value(symbol)? {
-                    Some(Value::Integer(_)) => "integer",
+                    Some(Value::Number(_)) => "integer",
                     Some(Value::Macro(_)) => "macro",
                     Some(Value::Struct(_)) => "struct",
                     Some(Value::Counter(_)) => "counter",
@@ -731,9 +731,9 @@ impl SymbolsTableCaseDependent {
 
 
 
-    pub fn update_symbol_to_value<S: Into<Symbol>>(&mut self, symbol: S, value: i32) -> Result<(), SymbolError> {
+    pub fn update_symbol_to_value<S: Into<Symbol>, E:Into<ExprResult>>(&mut self, symbol: S, value: E) -> Result<(), SymbolError> {
         self.table
-            .update_symbol_to_value(self.normalize_symbol(symbol), value)
+            .update_symbol_to_value(self.normalize_symbol(symbol), value.into())
     }
 
     pub fn value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Value>, SymbolError> {
