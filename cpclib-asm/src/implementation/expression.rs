@@ -184,21 +184,44 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
                 }
             },
             UnaryFunction::Floor =>  {
-                Ok(arg) // TODO really handle floor
+                Ok(arg.floor())
             }
-            UnaryFunction::Ceil => todo!(),
-            UnaryFunction::Frac => todo!(),
-            UnaryFunction::Int => todo!(),
-            UnaryFunction::Sin => todo!(),
-            UnaryFunction::Cos => todo!(),
-            UnaryFunction::ASin => todo!(),
-            UnaryFunction::ACos => todo!(),
-            UnaryFunction::Abs => todo!(),
-            UnaryFunction::Ln => todo!(),
-            UnaryFunction::Log10 => todo!(),
-            UnaryFunction::Exp => todo!(),
-            UnaryFunction::Rnd => todo!(),
-            UnaryFunction::Sqrt => todo!(),
+            UnaryFunction::Ceil => {
+                Ok(arg.ceil())
+            },
+            UnaryFunction::Frac => {
+                Ok(arg.frac())
+            },
+            UnaryFunction::Int => {
+                Ok(arg.int().into())
+            },
+            UnaryFunction::Sin => {
+                Ok(arg.sin())
+            },
+            UnaryFunction::Cos => {
+                Ok(arg.cos())
+            },
+            UnaryFunction::ASin => {
+                Ok(arg.asin())
+            },
+            UnaryFunction::ACos => {
+                Ok(arg.acos())
+            },
+            UnaryFunction::Abs => {
+                Ok(arg.abs())
+            },
+            UnaryFunction::Ln => {
+                Ok(arg.ln())
+            },
+            UnaryFunction::Log10 => {
+                Ok(arg.log10())
+            },
+            UnaryFunction::Exp => {
+                Ok(arg.exp())
+            },
+            UnaryFunction::Sqrt => {
+                Ok(arg.sqrt())
+            },
         }
     }
 }
