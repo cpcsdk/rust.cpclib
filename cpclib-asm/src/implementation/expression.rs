@@ -171,6 +171,7 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
         let arg = self.arg.resolve(env)?;
 
         match self.func {
+
             UnaryFunction::Low => Ok((arg >> 8.into()) & 0xff.into()),
             UnaryFunction::High => Ok(arg & 0xff.into()),
             UnaryFunction::Memory => {
