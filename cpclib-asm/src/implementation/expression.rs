@@ -2,28 +2,31 @@ use crate::assembler::Env;
 use crate::error::*;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
+use cpclib_tokens::ordered_float::OrderedFloat;
 
 use crate::implementation::tokens::*;
 
 ///! Add all important methods to expresison-like structure sthat are not availalbe in the cpclib_tokens crate.
 
+/// The result of expression (without taking into account the strings) is either a int (no complex mathematical expression) or a float (division/sinus and so on)
+
 /// Evaluate an aexpression
 pub trait ExprEvaluationExt {
     /// Simple evaluation without context => can only evaluate number based operations.
-    fn eval(&self) -> Result<i32, AssemblerError> {
+    fn eval(&self) -> Result<ExprResult, AssemblerError> {
         let env = Env::default();
         self.resolve(&env)
     }
 
-    fn resolve(&self, sym: &Env) -> Result<i32, AssemblerError>;
+    fn resolve(&self, sym: &Env) -> Result<ExprResult, AssemblerError>;
 }
 
 impl ExprEvaluationExt for Expr {
-    fn resolve(&self, env: &Env) -> Result<i32, AssemblerError> {
+    fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
         let sym = env.symbols();
         use self::Expr::*;
 
-        let oper = |left: &Self, right: &Self, oper: Oper| -> Result<i32, AssemblerError> {
+        let oper = |left: &Self, right: &Self, oper: Oper| -> Result<ExprResult, AssemblerError> {
             let res_left = left.resolve(env);
             let res_right = right.resolve(env);
 
@@ -41,16 +44,16 @@ impl ExprEvaluationExt for Expr {
                     Oper::BinaryOr => Ok(a | b),
                     Oper::BinaryXor => Ok(a ^ b),
 
-                    Oper::BooleanAnd => Ok(((a != 0) && (b != 0)) as _),
-                    Oper::BooleanOr => Ok(((a != 0) || (b != 0)) as _),
+                    Oper::BooleanAnd => Ok(((a != 0.into()) && (b != 0.into())).into()),
+                    Oper::BooleanOr => Ok(((a != 0.into()) || (b != 0.into())).into()),
 
-                    Oper::Equal => Ok((a == b) as i32),
-                    Oper::Different => Ok((a != b) as i32),
+                    Oper::Equal => Ok((a == b).into()),
+                    Oper::Different => Ok((a != b).into()),
 
-                    Oper::LowerOrEqual => Ok((a <= b) as i32),
-                    Oper::StrictlyLower => Ok((a < b) as i32),
-                    Oper::GreaterOrEqual => Ok((a >= b) as i32),
-                    Oper::StrictlyGreater => Ok((a > b) as i32),
+                    Oper::LowerOrEqual => Ok((a <= b).into()),
+                    Oper::StrictlyLower => Ok((a < b).into()),
+                    Oper::GreaterOrEqual => Ok((a >= b).into()),
+                    Oper::StrictlyGreater => Ok((a > b).into()),
                 },
                 (Err(a), Ok(_b)) => {
                     Err(AssemblerError::ExpressionError{msg: format!("Unable to make the operation {:?}: error in left operand {:?}", oper, a)})
@@ -67,19 +70,19 @@ impl ExprEvaluationExt for Expr {
         };
 
         match self {
-            RelativeDelta(delta) => Ok(Expr::Label("$".into()).resolve(env)? + *delta as i32),
+            RelativeDelta(delta) => Ok((Expr::Label("$".into()).resolve(env)? + delta.clone().into()).into()),
 
-            Value(val) => Ok(*val),
+            Value(val) => Ok(val.clone().into()),
             Char(c) => {
                 // TODO convert them in another encoding
-                Ok(*c as i32)
+                Ok(c.clone().into())
             }
 
             String(ref string) => panic!("String values cannot be converted to i32 {}", string),
 
             Label(ref label) => match sym.value(label)? {
-                Some(cpclib_tokens::symbols::Value::Integer(ref val)) => Ok(*val),
-                Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym.as_ref())),
+                Some(cpclib_tokens::symbols::Value::Number(ref val)) => Ok(val.clone().into()),
+                Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym.as_ref()).into()),
                 Some(_) => Err(AssemblerError::WrongSymbolType {
                     symbol: label.to_owned(),
                     isnot: "a value".to_owned(),
@@ -97,15 +100,15 @@ impl ExprEvaluationExt for Expr {
             Duration(ref token) => {
                 let duration = token.estimated_duration()?;
                 let duration = duration as i32;
-                Ok(duration)
+                Ok(duration.into())
             }
 
             OpCode(ref token) => {
                 let bytes = token.as_ref().to_bytes()?;
                 match bytes.len() {
                     0 => Err(AssemblerError::ExpressionError{msg:format!("{} is assembled with 0 bytes", token)}),
-                    1 => Ok(i32::from(bytes[0])),
-                    2 => Ok(i32::from(bytes[0]) * 256 + i32::from(bytes[1])),
+                    1 => Ok(i32::from(bytes[0]).into()),
+                    2 => Ok((i32::from(bytes[0]) * 256 + i32::from(bytes[1])).into()),
                     val => Err(AssemblerError::ExpressionError{msg:format!("{} is assembled with {} bytes", token, val)}),
                 }
             }
@@ -142,9 +145,10 @@ impl ExprEvaluationExt for Expr {
             }
 
             PrefixedLabel(prefix, label) => match sym.prefixed_value(prefix, label)? {
-                Some(value) => Ok(value as _),
+                Some(value) => Ok(value.into()),
                 None => Err(AssemblerError::ExpressionError{msg: format!("Unable to obtain {} of {}", prefix, label)}),
             },
+            Float(f) => Ok(f.into_inner().into()),
         }
     }
 }
@@ -163,20 +167,20 @@ impl<'a> UnaryFunctionWrapper<'a> {
 
 impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
     /// TODO handle float numbers
-    fn resolve(&self, env: &Env) -> Result<i32, AssemblerError> {
+    fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
         let arg = self.arg.resolve(env)?;
 
         match self.func {
-            UnaryFunction::Low => Ok((arg >> 8) & 0xff),
-            UnaryFunction::High => Ok(arg & 0xff),
+            UnaryFunction::Low => Ok((arg >> 8.into()) & 0xff.into()),
+            UnaryFunction::High => Ok(arg & 0xff.into()),
             UnaryFunction::Memory => {
-                if arg < 0 || arg > 0xffff {
+                if arg < 0.into() || arg > 0xffff.into() {
                     return Err(AssemblerError::ExpressionError{
                         msg: format!("Impossible to read memory address {}", arg)
                     });
                 }
                 else {
-                    Ok(env.peek(&env.logical_to_physical_address(arg as _)) as i32)
+                    Ok(env.peek(&env.logical_to_physical_address(arg.int() as _)).into())
                 }
             },
             UnaryFunction::Floor =>  {
@@ -213,13 +217,14 @@ impl<'a> BinaryFunctionWrapper<'a> {
 }
 
 impl<'a> ExprEvaluationExt for BinaryFunctionWrapper<'a> {
-    fn resolve(&self, env: &Env) -> Result<i32, AssemblerError> {
+    fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
         let arg1 = self.arg1.resolve(env)?;
         let arg2 = self.arg2.resolve(env)?;
 
         match self.func {
             BinaryFunction::Min => Ok(arg1.min(arg2)),
-            BinaryFunction::Max => Ok(arg2.max(arg2)),
+            BinaryFunction::Max => Ok(arg1.max(arg2)),
         }
     }
+
 }

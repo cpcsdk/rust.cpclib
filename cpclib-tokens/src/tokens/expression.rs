@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
-
+use std::ops::{Add, Sub};
+use ordered_float::OrderedFloat;
 use crate::tokens::Token;
 
 /// Expression nodes.
@@ -12,6 +13,8 @@ pub enum Expr {
 
     /// 32 bits integer value (should be able to include any integer value manipulated by the assember.
     Value(i32),
+    // 64bits float for all the mathematical operations,
+    Float(OrderedFloat<f64>),
     /// Char
     Char(char),
     /// String (for db directive)
@@ -395,6 +398,7 @@ impl Display for Expr {
             &RelativeDelta(delta) => write!(format, "$ + {} + 2", delta),
 
             &Value(val) => write!(format, "0x{:x}", val),
+            &Float(val) => write!(format, "{}", val),
             Char(c) => write!(format, "'{}'", c),
             &String(ref string) => write!(format, "\"{}\"", string),
             &Label(ref label) => write!(format, "{}", label),
@@ -534,5 +538,277 @@ impl Expr {
             let mut new = format!("__macro__{}__{}", seed, s);
             std::mem::swap(&mut new, s);
         }
+    }
+}
+
+/// The successful result of an evaluation.
+/// Embeds eiterh a real or an integer
+#[derive(Eq,Ord, Debug, Clone)]
+pub enum ExprResult {
+    Float(OrderedFloat<f64>),
+    Value(i32)
+}
+
+impl From<f64> for ExprResult {
+    fn from(f: f64) -> Self {
+        ExprResult::Float(f.into())
+    }
+}
+
+impl From<OrderedFloat<f64>> for ExprResult {
+    fn from(f: OrderedFloat<f64>) -> Self {
+        ExprResult::Float(f)
+    }
+}
+
+impl From<usize> for ExprResult {
+    fn from(i: usize) -> Self {
+        ExprResult::Value(i as _)
+    }
+}
+
+impl From<i32> for ExprResult {
+    fn from(i: i32) -> Self {
+        ExprResult::Value(i)
+    }
+}
+
+impl From<u16> for ExprResult {
+    fn from(i: u16) -> Self {
+        ExprResult::Value(i as _)
+    }
+}
+
+
+impl From<u8> for ExprResult {
+    fn from(i: u8) -> Self {
+        ExprResult::Value(i as _)
+    }
+}
+
+impl From<i8> for ExprResult {
+    fn from(i: i8) -> Self {
+        ExprResult::Value(i as _)
+    }
+}
+impl From<char> for ExprResult {
+    fn from(i: char) -> Self {
+        ExprResult::Value(i as _)
+    }
+}
+
+
+impl From<bool> for ExprResult {
+    fn from(b: bool) -> Self {
+        if b {
+            1.into()
+        } else {
+            0.into()
+        }
+    }
+}
+
+impl ExprResult {
+    pub fn is_float(&self) -> bool {
+        match self {
+            Self::Float(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_int(&self) -> bool {
+        match self {
+            Self::Value(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn int(&self) -> i32 {
+        match self {
+            ExprResult::Float(f) => f.into_inner() as _,
+            ExprResult::Value(i) => *i,
+        }
+    }
+
+    pub fn float(&self) -> f64 {
+        match self {
+            ExprResult::Float(f) => f.into_inner(),
+            ExprResult::Value(i) => *i as f64,
+        }
+    }
+}
+
+
+impl std::ops::Neg for ExprResult {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            ExprResult::Float(f) => f.neg().into(),
+            ExprResult::Value(i) => i.neg().into(),
+        }
+    }
+}
+
+
+impl std::ops::Add for ExprResult {
+    type Output = ExprResult;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        match (&self, &rhs) {
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1+f2).into(),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1 + rhs.float()).into(),
+            (ExprResult::Value(_), ExprResult::Float(f2)) => (self.float() + f2.into_inner()).into(),
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1+v2).into(),
+        }
+    }
+}
+
+impl std::ops::Sub for ExprResult {
+    type Output = ExprResult;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (&self, &rhs) {
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1-f2).into(),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner() - rhs.float()).into(),
+            (ExprResult::Value(_), ExprResult::Float(f2)) => (self.float() - f2.into_inner()).into(),
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1-v2).into(),
+        }
+    }
+}
+
+impl std::ops::Mul for ExprResult {
+    type Output = ExprResult;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        match (&self, &rhs) {
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1*f2).into(),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner() * rhs.float()).into(),
+            (ExprResult::Value(_), ExprResult::Float(f2)) => (self.float() * f2.into_inner()).into(),
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1*v2).into(),
+        }
+    }
+}
+
+
+impl std::ops::Div for ExprResult {
+    type Output = ExprResult;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        match (&self, &rhs) {
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1/f2).into(),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner()/rhs.float()).into(),
+            (ExprResult::Value(_), ExprResult::Float(f2)) => (self.float()/f2.into_inner()).into(),
+            (ExprResult::Value(_), ExprResult::Value(_)) => (self.float()/rhs.float()).into(),
+        }
+    }
+}
+
+impl std::ops::Rem for ExprResult {
+    type Output = ExprResult;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        match (&self, &rhs) {
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1%f2).into(),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner()%rhs.float()).into(),
+            (ExprResult::Value(_), ExprResult::Float(f2)) => (self.float()%f2.into_inner()).into(),
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1%v2).into(),
+        }
+    }
+}
+
+
+impl std::ops::Shr for ExprResult {
+    type Output = ExprResult;
+    fn shr(self, rhs: Self) -> Self::Output {
+       (self.int() >> rhs.int()).into()
+    }
+}
+
+impl std::ops::Shl for ExprResult {
+    type Output = ExprResult;
+    fn shl(self, rhs: Self) -> Self::Output {
+       (self.int() << rhs.int()).into()
+    }
+}
+
+impl std::ops::BitAnd for ExprResult {
+    type Output = ExprResult;
+    fn bitand(self, rhs: Self) -> Self::Output {
+       (self.int() & rhs.int()).into()
+    }
+}
+
+impl std::ops::BitOr for ExprResult {
+    type Output = ExprResult;
+    fn bitor(self, rhs: Self) -> Self::Output {
+       (self.int() | rhs.int()).into()
+    }
+}
+
+impl std::ops::BitXor for ExprResult {
+    type Output = ExprResult;
+    fn bitxor(self, rhs: Self) -> Self::Output {
+       (self.int() ^ rhs.int()).into()
+    }
+}
+
+impl std::cmp::PartialEq for ExprResult {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Float(l0), Self::Float(r0)) => l0 == r0,
+            (Self::Value(l0), Self::Value(r0)) => l0 == r0,
+            _ => self.float() == other.float()
+        }
+    }
+}
+
+
+impl std::cmp::PartialOrd for ExprResult {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Self::Float(l0), Self::Float(r0)) => l0.partial_cmp(r0),
+            (Self::Value(l0), Self::Value(r0)) => l0.partial_cmp(r0),
+            _ => self.float().partial_cmp(&other.float())
+        }
+    }
+}
+
+impl std::fmt::Display for ExprResult  {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExprResult::Float(f2) => write!(f, "{}", f2.into_inner()),
+            ExprResult::Value(v) => write!(f, "{}", v),
+        }
+    }
+}
+
+impl std::fmt::LowerHex for ExprResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+       match self {
+        ExprResult::Float(f2) => write!(f, "????"),
+        ExprResult::Value(v) => write!(f, "{:x}", v),
+    }
+    }
+}
+
+impl std::fmt::UpperHex for ExprResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+       match self {
+        ExprResult::Float(f2) => write!(f, "????"),
+        ExprResult::Value(v) => write!(f, "{:X}", v),
+    }
+    }
+}
+
+impl std::ops::AddAssign for ExprResult {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = self.clone().add(rhs) // todo implement in a faster way
+    }
+}
+
+impl std::ops::SubAssign for ExprResult {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = self.clone().sub(rhs) // todo implement in a faster way
     }
 }

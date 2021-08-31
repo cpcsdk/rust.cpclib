@@ -1664,7 +1664,7 @@ pub fn parse_macro_call(can_return_label: bool)
         ))(input)?;
 
         // fix case when there is no argument but a 
-        let mut args = args.unwrap_or_default();
+        let  args = args.unwrap_or_default();
         if args.len() == 1 && args.first().unwrap().is_empty() {
             panic!();
         }
