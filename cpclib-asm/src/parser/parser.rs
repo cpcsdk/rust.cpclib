@@ -2873,6 +2873,7 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                 "[DBG]alt",
                 alt((
                     // Manage functions
+                    map(parse_word("RND()"), |_| Expr::Rnd),
                     parse_unary_functions,
                     parse_binary_functions,
                     parse_duration,
@@ -3108,13 +3109,7 @@ pub fn parse_unary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseEr
         value(
         UnaryFunction::Exp,
         parse_word("EXP")
-        ),
-        
-        value(
-            UnaryFunction::Rnd,
-            parse_word("RND")
-        ),
-        
+        ),      
             value(
                 UnaryFunction::Sqrt,
                 parse_word("SQRT")

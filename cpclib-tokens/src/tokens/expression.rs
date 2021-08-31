@@ -394,6 +394,7 @@ impl Display for Expr {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         use self::Expr::*;
         match self {
+            Rnd => write!(format, "RND()"),
             // Should not be displayed often
             &RelativeDelta(delta) => write!(format, "$ + {} + 2", delta),
 
