@@ -149,6 +149,7 @@ impl ExprEvaluationExt for Expr {
                 None => Err(AssemblerError::ExpressionError{msg: format!("Unable to obtain {} of {}", prefix, label)}),
             },
             Float(f) => Ok(f.into_inner().into()),
+            Rnd =>  unimplemented!("Env need to maintain a counter of call with its value to ensure a consistant generation among the passes")
         }
     }
 }
