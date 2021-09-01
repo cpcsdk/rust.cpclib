@@ -131,12 +131,12 @@ impl ListingOutput {
 
 			writeln!(
 				self.writer,
-				"{} {} {:bytes_width$} {} DBG [{}]",
+				"{} {} {:bytes_width$} {} ",
 				line_nb_representation,
 				loc_representation,
 				current_data.unwrap_or(&"".to_owned()),
 				current_line.unwrap_or(""),
-				idx,
+				
 				bytes_width = self.bytes_per_line()*3
 			).unwrap();
 		
