@@ -17,7 +17,7 @@ impl Cruncher for CrunchType {
 		}
 		match self {
 			CrunchType::LZ48 => {
-				Err(AssemblerError::AssemblingError{msg:"LZ48 compression not implemented".to_owned()})
+				Ok(crunchers::lz48::lz48_encode_legacy(raw))
 			}
 			CrunchType::LZ49 => {
 				Ok(crunchers::lz49::lz49_encode_legacy(raw))
