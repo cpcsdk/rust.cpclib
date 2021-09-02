@@ -2339,7 +2339,7 @@ pub fn assemble_opcode(
         Mnemonic::Ret => assemble_ret(arg1),
         Mnemonic::Rst => assemble_rst(arg1.as_ref().unwrap(), env),
         Mnemonic::Im => assemble_im(arg1.as_ref().unwrap(), env),
-        Mnemonic::Nop => env.assemble_nop(Mnemonic::Nop, arg1.as_ref().unwrap().expr()),
+        Mnemonic::Nop => env.assemble_nop(Mnemonic::Nop, arg1.as_ref().map(|v|v.expr().unwrap())),
         Mnemonic::Nop2 => env.assemble_nop(Mnemonic::Nop2, None),
 
 
