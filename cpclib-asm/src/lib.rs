@@ -262,6 +262,12 @@ Truc
 
     #[test]
     fn test_size() {
+        let mut env = Default::default();
+        dbg!(assemble_call_jr_or_jp(Mnemonic::Jp,
+            None,
+            &DataAccess::Expression(Expr::Value(0)),
+            &env
+        ));
         assert_eq!(
             Token::OpCode(
                 Mnemonic::Jp,
