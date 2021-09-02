@@ -1244,7 +1244,14 @@ impl Env {
         else {
             self.ga_mmr = 0b11_000_0_10 + ((page - 1) << 3);
         }
-        dbg!(page, format!("{:X}", self.ga_mmr));
+
+        let page = page as usize;
+        let nb_pages = self.pages_info.len();
+        let expected_nb = nb_pages.max(page+1);
+        if expected_nb  > nb_pages {
+            self.pages_info.resize(expected_nb, Default::default());
+            self.written_bytes.resize(expected_nb*0x1_0000, false);
+        }
         Ok(())
     }
 
