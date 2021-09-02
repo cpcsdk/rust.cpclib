@@ -1579,7 +1579,7 @@ impl Env {
             None => 1
         };
         let mut bytes = Bytes::new();
-        for i in 0..count {
+        for _i in 0..count {
             match kind {
                 Mnemonic::Nop => {
                     bytes.push(0);
