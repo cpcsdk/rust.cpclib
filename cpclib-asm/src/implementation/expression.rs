@@ -89,13 +89,19 @@ impl ExprEvaluationExt for Expr {
                 }),
                 None => Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
-                    closest: sym.closest_symbol(label, SymbolFor::Integer)?,
+                    closest: sym.closest_symbol(label, SymbolFor::Number)?,
                 }),
             },
 
-            PrefixedLabel(_prefix, _label) => unimplemented!(
-                "Need to add management of the prefix. Not sur the symbol table fits this purpose"
-            ),
+            PrefixedLabel(prefix, label) => {
+                let val = env.symbols().prefixed_value(prefix, label)?;
+                match  val  {
+                    Some(val) => Ok(val.into()),
+                    None => Err(AssemblerError::AssemblingError {
+                        msg: format!("Unable to use prefix {} for {}", prefix, label)
+                    })
+                }
+            },
 
             Duration(ref token) => {
                 let duration = token.estimated_duration()?;

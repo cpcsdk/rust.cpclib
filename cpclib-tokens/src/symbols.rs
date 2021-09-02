@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
 use std::fmt::Debug;
 
 use delegate::delegate;
@@ -10,6 +9,88 @@ use crate::tokens::expression::LabelPrefix;
 use crate::{Expr, ExprResult, MacroParam, Token};
 
 use std::ops::Deref;
+
+
+
+/// Structure that ease the addresses manipulation to read/write at the right place
+#[derive(Debug, Clone)]
+pub struct PhysicalAddress {
+    /// Page number (0 for base, 1 for first page, 2 ...)
+    page: u8,
+    /// Bank number in the page: 0 to 3
+    bank: u8,
+    /// Address manipulate by CPU 0x0000 to 0xffff
+    address: u16,
+}
+
+impl PhysicalAddress {
+    pub fn new(address: u16, mmr: u8) -> Self {
+        let possible_page = ((mmr >> 3) & 0b111) + 1 ;
+        let possible_bank = mmr & 0b11;
+        let standard_bank = match address {
+            0x0000..0x4000 => 0,
+            0x4000..0x8000 => 1,
+            0x8000..0xc000 => 2,
+            0xc000.. => 3,
+        };
+        let is_4000 = address >= 0x4000 && address < 0x8000;
+        let is_c000 = address >= 0xc000;
+
+        let (page, bank) = if (mmr & 0b100) != 0 {
+            if is_4000 {
+                (possible_page, possible_bank)
+            } else {
+                (0, possible_bank)
+            }
+        } else {
+            match mmr & 0b11 {
+                0b000 => { (0, standard_bank) },
+                0b001 => { if is_c000 {
+                    (possible_page, standard_bank)
+                } else {
+                    (0, standard_bank)
+                }},
+                0b010 => { (possible_page, standard_bank)},
+                0b011 => { if is_4000 {
+                    (0, 3)
+                } else if is_c000 {
+                    (possible_page, 3)
+                } else {
+                    (0, standard_bank)
+                }},
+                _ => unreachable!()
+            }
+        };
+
+        Self {
+            address,
+            bank,
+            page
+        }
+    }
+
+    pub fn offset_in_bank(&self) -> u16 {
+        self.address % 0x4000
+    }
+    pub fn offset_in_page(&self) -> u16 {
+        self.offset_in_bank() + self.bank as u16 * 0x4000
+    }
+    pub fn offset_in_cpc(&self) -> u32 {
+        self.offset_in_page() as u32 + self.page as u32 * 0x1_0000
+    }
+    pub fn address(&self) -> u16 {
+        self.address
+    }
+    pub fn bank(&self) -> u8 {
+        self.bank
+    }
+    pub fn page(&self) -> u8 {
+        self.page
+    }
+
+}
+
+
 #[derive(Debug, Clone)]
 pub enum SymbolError {
     UnknownAssemblingAddress,
@@ -208,6 +289,8 @@ impl Macro {
 pub enum Value {
     /// Integer value used in an expression
     Number(ExprResult),
+    /// Address (use in physical way to ensure all bank/page info are available)
+    Address(PhysicalAddress),
     /// Macro information
     Macro(Macro),
     /// Structure information
@@ -218,7 +301,8 @@ pub enum Value {
 
 #[derive(Copy, Clone)]
 pub enum SymbolFor {
-    Integer,
+    Number,
+    Address,
     Macro,
     Struct,
     Counter,
@@ -229,6 +313,14 @@ impl Value {
     pub fn integer(&self) -> Option<i32> {
         match self {
             Value::Number(ExprResult::Value(i)) => Some(*i),
+            Value::Address(addr) => Some(addr.address as _),
+            _ => None,
+        }
+    }
+
+    pub fn address(&self) -> Option<&PhysicalAddress> {
+        match self {
+            Value::Address(addr) => Some(addr),
             _ => None,
         }
     }
@@ -253,6 +345,13 @@ impl Value {
         }
     }
 }
+
+impl From<PhysicalAddress> for Value {
+    fn from(a: PhysicalAddress) -> Self {
+        Self::Address(a)
+    }
+}
+
 impl From<Struct> for Value {
     fn from(m: Struct) -> Self {
         Self::Struct(m)
@@ -324,10 +423,6 @@ pub trait SymbolsTableTrait {
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct SymbolsTable {
-    /// The page of each symbol
-    page: HashMap<Symbol, u8>,
-    /// The current page. it is automatically set to a symbol when the symbol is added
-    current_rmr: u8,
     map: HashMap<Symbol, Value>,
     dummy: bool,
     current_label: String, //  Value of the current label to allow local labels
@@ -341,9 +436,7 @@ impl Default for SymbolsTable {
     fn default() -> Self {
         Self {
             map: HashMap::new(),
-            page: HashMap::new(),
             dummy: false,
-            current_rmr: 0,
             current_label: "".into(),
             assignable: Default::default(),
             seed_stack: Vec::new()
@@ -402,8 +495,6 @@ impl SymbolsTable {
         Self {
             map,
             dummy: true,
-            current_rmr: 0,
-            page: Default::default(),
             current_label: "".into(),
             assignable: HashSet::new(),
             seed_stack: Vec::new()
@@ -487,15 +578,12 @@ impl SymbolsTable {
     }
 
     /// Update `$` value
-    pub fn set_current_address(&mut self, address: u16) {
+    pub fn set_current_address(&mut self, address: PhysicalAddress) {
         self.map
-            .insert("$".into(), Value::Number(address.into()));
+            .insert("$".into(), Value::Address(address));
     }
 
-    pub fn set_current_mmr(&mut self, rmr: u8) {
-        self.current_rmr = rmr;
-    }
-
+   
     /// Set the given symbol to $ value
     pub fn set_symbol_to_current_address<S: Into<Symbol>>(
         &mut self,
@@ -546,33 +634,25 @@ impl SymbolsTable {
     pub fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError> {
         Ok(self.value(symbol)?.map(|v| v.r#struct()).unwrap_or(None))
     }
+    pub fn address_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&PhysicalAddress>, SymbolError> {
+        Ok(self.value(symbol)?.map(|v| v.address()).unwrap_or(None))
+    }
 
     /// Instead of returning the value, return the bank information
     /// logic stolen to rasm
     pub fn prefixed_value<S: Into<Symbol>>(&self, prefix: &LabelPrefix, key: S) -> Result< Option<u16>, SymbolError> {
-        /* rasm code
-               for (i=0;i<4;i++) {
-                   ae->bankgate[i]=0x7FC0; /* video memory has no paging */
-                   ae->setgate[i]=0x7FC0; /* video memory has no paging */
-               }
-               for (i=0;i<256;i++) {
-                   /* 4M expansion support on lower gate array port */
-                   ae->bankgate[i+4]=0x7FC4+(i&3)+((i&31)>>2)*8-0x100*(i>>5);
-                   ae->setgate[i+4] =0x7FC2      +((i&31)>>2)*8-0x100*(i>>5);
-                   //printf("%04X %04X\n",ae->bankgate[i+4],ae->setgate[i+4]);
-               }
-        */
 
         let key = key.into();
+        let addr = self.address_value(key.clone())?;
+        Ok(addr.map(|v| {
+                    match prefix {
+                        LabelPrefix::Bank => v.bank(),
+                        LabelPrefix::Page => v.page(),
+                        LabelPrefix::Pageset => todo!(),
+                    }
+                } as _))
 
-        let page = *self
-            .page
-            .get(&key)
-            .or_else(|| Some(&self.current_rmr))
-            .unwrap() as u16;
-        let value = self.value(key)?.unwrap().integer().unwrap() as u16;
-        let bank = value / 0x4000;
-
+/*
         Ok(match prefix {
                     LabelPrefix::Bank => Some(bank as _),
         
@@ -592,6 +672,7 @@ impl SymbolsTable {
                         }
                     }
                 })
+                */
     }
 
     /// Remove the given symbol name from the table. (used by undef)
@@ -612,7 +693,9 @@ impl SymbolsTable {
                     .iter()
                     .filter(|(k,v)| {
                         match (v, r#for) {
-                            (Value::Number(_), SymbolFor::Integer) |
+                            (Value::Number(_), SymbolFor::Number) |
+                            (Value::Number(_), SymbolFor::Address) |
+                            (Value::Address(_), SymbolFor::Address) |
                             (Value::Macro(_), SymbolFor::Macro) |
                             (Value::Struct(_), SymbolFor::Struct) |
                             (Value::Counter(_), SymbolFor::Counter) |
@@ -638,7 +721,8 @@ impl SymbolsTable {
 
     pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> Result<&'static str, SymbolError> {
         Ok(match self.value(symbol)? {
-                    Some(Value::Number(_)) => "integer",
+                    Some(Value::Number(_)) => "number",
+                    Some(Value::Address(_)) => "address",
                     Some(Value::Macro(_)) => "macro",
                     Some(Value::Struct(_)) => "struct",
                     Some(Value::Counter(_)) => "counter",
@@ -731,7 +815,7 @@ impl SymbolsTableCaseDependent {
 
 
 
-    pub fn update_symbol_to_value<S: Into<Symbol>, E:Into<ExprResult>>(&mut self, symbol: S, value: E) -> Result<(), SymbolError> {
+    pub fn update_symbol_to_value<S: Into<Symbol>, E:Into<Value>>(&mut self, symbol: S, value: E) -> Result<(), SymbolError> {
         self.table
             .update_symbol_to_value(self.normalize_symbol(symbol), value.into())
     }
@@ -775,8 +859,7 @@ impl SymbolsTableCaseDependent {
     delegate! {
         to self.table {
             pub fn current_address(&self) -> Result<u16, SymbolError>;
-            pub fn set_current_address(&mut self, address: u16);
-            pub fn set_current_mmr(&mut self, page: u8);
+            pub fn set_current_address(&mut self, addr: PhysicalAddress);
             pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<String>, SymbolError>;
             pub fn push_seed(&mut self, seed: usize);
             pub fn pop_seed(&mut self);

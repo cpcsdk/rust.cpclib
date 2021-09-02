@@ -618,6 +618,7 @@ impl Env {
 
         if !self.pass.is_finished() {
             // environnement is not reset when assembling is finished
+            self.symbols.set_current_address(PhysicalAddress::new(0, 0xc0));
  
             self.ga_mmr = 0xc0;
             self.macro_seed = 0;
@@ -664,13 +665,13 @@ impl Env {
 
     /// TODO remove this method and its calls as its behavior is innapropriate for some configurations
     fn active_page_info(&self) -> & PageInformation {
-        let active_page = self.logical_to_physical_address(0x0000).page as usize;
+        let active_page = self.logical_to_physical_address(0x0000).page() as usize;
         &self.pages_info[active_page]
     }
 
     /// TODO remove this method and its calls
     fn active_page_info_mut(&mut self) -> &mut PageInformation {
-        let active_page = self.logical_to_physical_address(0x0000).page as usize;
+        let active_page = self.logical_to_physical_address(0x0000).page() as usize;
         &mut self.pages_info[active_page]
     }
 
@@ -699,7 +700,8 @@ impl Env {
 
     ///. Update the value of $ in the symbol table in order to take the current  output address
     pub fn update_dollar(&mut self) {
-        self.symbols.set_current_address(self.logical_code_address() as _);
+        let addr = self.logical_to_physical_address(self.logical_code_address());
+        self.symbols.set_current_address(addr);
     }
 
     /// Produce the memory for the required limits
@@ -740,9 +742,6 @@ impl Env {
     /// BUG does not take into account the active bank
     /// return true if it raised an override warning
     pub fn output(&mut self, v: u8) -> Result<bool, AssemblerError> {
-
-        dbg!(self.logical_output_address(), v, self.pass);
-
        // dbg!(self.output_address(), &v);
        let physical_address = self.logical_to_physical_address(self.logical_output_address() as u16);
 
@@ -952,13 +951,13 @@ impl Env {
     /// Add a symbol to the symbol table.
     /// In pass 1: the label MUST be absent
     /// In pass 2: the label MUST be present and of the same value
-    fn add_symbol_to_symbol_table<E:Into<ExprResult>>(
+    fn add_symbol_to_symbol_table<E:Into<Value>>(
         &mut self,
         label: &str,
         value: E,
     ) -> Result<(), AssemblerError> {
         let already_present = self.symbols().contains_symbol(label)?;
-        let value: ExprResult = value.into();
+        let value  = value.into();
 
         match (already_present, self.pass) {
             (true, AssemblingPass::FirstPass) => Err(AssemblerError::SymbolAlreadyExists {
@@ -979,7 +978,7 @@ impl Env {
                 Ok(())
             }
             (_, _) => panic!(
-                "add_symbol_to_symbol_table / unmanaged case {}, {}, {} {}",
+                "add_symbol_to_symbol_table / unmanaged case {}, {}, {} {:#?}",
                 self.pass, label, already_present, value
             ),
         }
@@ -1024,6 +1023,7 @@ impl Env {
             Ok(address) => address,
             Err(_) => 0,
         };
+        let addr = self.logical_to_physical_address(value);
 
         // A label cannot be defined multiple times
         if self.pass.is_first_pass() && self.symbols().contains_symbol(label)? {
@@ -1213,7 +1213,6 @@ impl Env {
 
         let mmr = mmr as u8;
         self.ga_mmr = mmr;
-        self.symbols_mut().set_current_mmr(mmr); // TODO set the real value
 
         Ok(())
     }
@@ -1361,7 +1360,7 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
             None => {
                 Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
-                    closest: self.symbols().closest_symbol(label, SymbolFor::Integer)?,
+                    closest: self.symbols().closest_symbol(label, SymbolFor::Number)?,
                 })
                 
             },
