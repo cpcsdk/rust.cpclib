@@ -1238,7 +1238,14 @@ impl Env {
             });
         }
 
-        self.visit_bank(&(0b11_000_0_10 + ((page as u8) << 3)).into())
+        if page == 0 {
+            self.ga_mmr = 0b11_000_0_00;
+        }
+        else {
+            self.ga_mmr = 0b11_000_0_10 + ((page - 1) << 3);
+        }
+        dbg!(page, format!("{:X}", self.ga_mmr));
+        Ok(())
     }
 
     pub fn visit_call_macro_or_build_struct<T:ListingElement + core::fmt::Debug +  'static>(
