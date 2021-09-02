@@ -1,10 +1,9 @@
 use cpclib_asm::preamble::*;
-static CTX: ParserContext = ParserContext {
-    context_name: None,
-    current_filename: None,
-    read_referenced_files: false,
-    search_path: Vec::new(),
-};
+use cpclib_asm::parser::ParserContext;
+
+fn ctx() -> ParserContext {
+    ParserContext::default()
+}
 #[test]
 fn test_regression1() {
     let mut listing = Listing::new();
@@ -44,12 +43,12 @@ fn test_regression1() {
 #[test]
 fn expr_negative_regression() {
     assert_eq!(
-        expr(CTX.build_span("18".to_owned())).unwrap().1,
+        expr(ctx().build_span("18".to_owned())).unwrap().1,
         Expr::Value(18)
     );
 
     assert_eq!(
-        expr(CTX.build_span("-18".to_owned())).unwrap().1,
+        expr(ctx().build_span("-18".to_owned())).unwrap().1,
         Expr::Value(-18)
     );
 }
@@ -116,7 +115,7 @@ fn macro_args1() {
 #[test]
 fn macro_args_single() {
     let code = "1".to_owned();
-    let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
+    let arg = dbg!(parse_macro_arg(ctx().build_span(code))).unwrap().1;
 
     assert_eq!(arg, MacroParam::Single("1".to_string()))
 }
@@ -124,7 +123,7 @@ fn macro_args_single() {
 #[test]
 fn macro_args_list_1() {
     let code = "[1]".to_owned();
-    let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
+    let arg = dbg!(parse_macro_arg(ctx().build_span(code))).unwrap().1;
 
     assert_eq!(
         arg,
@@ -135,7 +134,7 @@ fn macro_args_list_1() {
 #[test]
 fn macro_args_list_2() {
     let code = "[1, 3]".to_owned();
-    let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
+    let arg = dbg!(parse_macro_arg(ctx().build_span(code))).unwrap().1;
 
     assert_eq!(
         arg,
@@ -149,7 +148,7 @@ fn macro_args_list_2() {
 #[test]
 fn macro_args_list_3() {
     let code = "[1, ,3]".to_owned();
-    let arg = dbg!(parse_macro_arg(CTX.build_span(code))).unwrap().1;
+    let arg = dbg!(parse_macro_arg(ctx().build_span(code))).unwrap().1;
 
     assert_eq!(
         arg,
