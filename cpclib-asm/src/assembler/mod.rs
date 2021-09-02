@@ -4228,7 +4228,7 @@ mod test {
 
     #[test]
     pub fn test_jr() {
-        let res = visit_tokens_all_passes(&[
+        let res = dbg!(visit_tokens_all_passes(&[
             Token::Org(0x4000.into(), None),
             Token::OpCode(
                 Mnemonic::Jr,
@@ -4236,7 +4236,7 @@ mod test {
                 Some(DataAccess::Expression(Expr::Label("$".into()))),
                 None,
             ),
-        ]);
+        ]));
 
         assert!(res.is_ok());
         let env = res.unwrap();

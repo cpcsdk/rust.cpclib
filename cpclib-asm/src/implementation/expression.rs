@@ -82,6 +82,7 @@ impl ExprEvaluationExt for Expr {
 
             Label(ref label) => match sym.value(label)? {
                 Some(cpclib_tokens::symbols::Value::Number(ref val)) => Ok(val.clone().into()),
+                Some(cpclib_tokens::symbols::Value::Address(ref val)) => Ok(val.address().into()),
                 Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym.as_ref()).into()),
                 Some(_) => Err(AssemblerError::WrongSymbolType {
                     symbol: label.to_owned(),
