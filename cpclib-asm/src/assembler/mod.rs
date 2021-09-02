@@ -391,6 +391,7 @@ impl PageInformation {
     /// Properly set the information for a new pass
     fn new_pass(&mut self) {
         self.startadr = None;
+        self.maxadr = 0;
         self.logical_outputadr = 0;
         self.logical_codeadr = 0;
         self.limit = 0xffff;
@@ -630,6 +631,7 @@ impl Env {
             self.warnings.retain(|elem|{
                 !elem.is_override_memory()
             });
+            self.pages_info.iter_mut().for_each(|p| p.new_pass());
         }
     }
 
@@ -703,7 +705,7 @@ impl Env {
     /// Produce the memory for the required limits
     /// TODO check that the implementation is still correct with snapshot inclusion
     /// BUG  does not take into account extra bank configuration
-    pub fn memory(&self, start: usize, size: usize) -> Vec<u8> {
+    pub fn memory(&self, start: u16, size: u16) -> Vec<u8> {
         let mut mem = Vec::new();
         for pos in start..(start + size) {
             let address = self.logical_to_physical_address(pos as _);
@@ -716,15 +718,10 @@ impl Env {
     /// Will fail in other cases
      pub fn produced_bytes(&self) -> Vec<u8> {
         // assume we start at 0 if never provided
-        let startadr = self.start_address().or(Some(0)).unwrap();
-        let physical = self.logical_to_physical_address(startadr);
+        let start = self.start_address().or(Some(0)).unwrap();
+        let length = self.maximum_address() - start + 1;
 
-        let mut length = self.maximum_address().max(startadr) - startadr + 1;
-    //    if length == 1 && self.start_address().is_none() {
-     //       length = 0
-     //   };
-
-        self.memory(physical.offset_in_cpc() as _, length as _)
+        self.memory(start, length as _)
     }
 
 
@@ -743,6 +740,8 @@ impl Env {
     /// BUG does not take into account the active bank
     /// return true if it raised an override warning
     pub fn output(&mut self, v: u8) -> Result<bool, AssemblerError> {
+
+        dbg!(self.logical_output_address(), v, self.pass);
 
        // dbg!(self.output_address(), &v);
        let physical_address = self.logical_to_physical_address(self.logical_output_address() as u16);
@@ -810,6 +809,9 @@ impl Env {
 
     /// Write consecutives bytes
     pub fn output_bytes(&mut self, bytes: &[u8]) -> Result<(), AssemblerError> {
+
+        dbg!(self.logical_output_address(), bytes);
+
         let mut previously_overrided = false;
         for b in bytes.iter() {
             let currently_overrided = self.output(*b)?;
@@ -2585,7 +2587,7 @@ fn assemble_im(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> {
 
 /// arg1 contains the tests
 /// arg2 contains the information
-fn assemble_call_jr_or_jp(
+pub fn assemble_call_jr_or_jp(
     mne: Mnemonic,
     arg1: Option<&DataAccess>,
     arg2: &DataAccess,
