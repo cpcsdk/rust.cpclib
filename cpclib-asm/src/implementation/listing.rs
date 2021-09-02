@@ -1,6 +1,7 @@
 use crate::error::*;
 use crate::preamble::parse_z80_str;
 use crate::AssemblingOptions;
+use cpclib_tokens::symbols::PhysicalAddress;
 use cpclib_tokens::tokens::*;
 use std::fmt;
 
@@ -107,7 +108,8 @@ impl ListingExt for Listing {
             match current_address.as_ref() {
                 Some(address) => {
                     res += &format!("{:4x} ", address);
-                    options.symbols_mut().set_current_address(*address);
+                    options.symbols_mut()
+                        .set_current_address(PhysicalAddress::new(*address, 0xc0));
                 }
                 None => {
                     res += "???? ";
