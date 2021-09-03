@@ -3545,13 +3545,14 @@ mod test {
 
         let code = " nop
                     nop
+                    endm
                     "
         .replace("\u{C2}\u{A0}", " ");
-        let res = std::dbg!(inner_code(Z80Span::new_extra(
+        let res =  inner_code(Z80Span::new_extra(
             &code.to_owned(),
             ctx()
-        )));
-        assert!(res.is_ok(), "{:?}", &res);
+        ));
+        assert!(res.is_ok(), "{}", &res.err().unwrap().to_string());
         assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
 
         let res = std::dbg!(parse_z80_str(
