@@ -88,6 +88,26 @@ impl PhysicalAddress {
         self.page
     }
 
+    pub fn ga_bank(&self) -> u16 {
+        dbg!(&self);
+        let low = if self.page() == 0 {
+            0b11_000_0_00
+        } else {
+            0b11_000_1_00 + ( (self.page()-1)<<3) + self.bank
+        } as u16;
+        low + 0x7f00
+    }
+
+    pub fn ga_page(&self) -> u16 {
+        dbg!(&self);
+        let low = if self.page() == 0 {
+            0b11_000_0_00
+        } else {
+            0b11_000_0_10 + ( (self.page()-1)<<3)
+        } as u16;
+        low + 0x7f00
+    }
+
 }
 
 
@@ -647,9 +667,9 @@ impl SymbolsTable {
         let addr = self.address_value(key.clone())?;
         Ok(addr.map(|v| {
                     match prefix {
-                        LabelPrefix::Bank => v.bank(),
-                        LabelPrefix::Page => v.page(),
-                        LabelPrefix::Pageset => todo!(),
+                        LabelPrefix::Bank => v.bank() as u16,
+                        LabelPrefix::Page => v.ga_bank(),
+                        LabelPrefix::Pageset => v.ga_page(),
                     }
                 } as _))
 
