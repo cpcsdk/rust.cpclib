@@ -643,6 +643,7 @@ impl SymbolsTable {
     pub fn prefixed_value<S: Into<Symbol>>(&self, prefix: &LabelPrefix, key: S) -> Result< Option<u16>, SymbolError> {
 
         let key = key.into();
+        dbg!(&self.map);
         let addr = self.address_value(key.clone())?;
         Ok(addr.map(|v| {
                     match prefix {

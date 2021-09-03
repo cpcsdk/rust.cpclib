@@ -1033,10 +1033,10 @@ impl Env {
             })
         } else {
             if !label.starts_with('.') {
-                self.symbols_mut().set_current_label(label);
+                self.symbols_mut().set_current_label(label)?;
             }
 
-            self.add_symbol_to_symbol_table(label, i32::from(value))
+            self.add_symbol_to_symbol_table(label, addr)
         }
     }
 
