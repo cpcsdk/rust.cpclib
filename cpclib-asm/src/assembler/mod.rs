@@ -552,7 +552,7 @@ impl Default for Env {
 
             macro_seed: 0,
             charset_encoding: CharsetEncoding::new(),
-            sna: Default::default(),
+            sna: Snapshot::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
 
             
