@@ -373,6 +373,7 @@ pub enum BinaryTransformation {
     Exomizer,
     // Compression with lz49
     Lz49,
+    Lz48,
     // compression with aplib
     Aplib,
 }
@@ -384,6 +385,7 @@ impl BinaryTransformation {
             BinaryTransformation::Exomizer => Some(CrunchType::LZEXO),
             BinaryTransformation::Lz49 => Some(CrunchType::LZ49),
             BinaryTransformation::Aplib => Some(CrunchType::LZAPU),
+            BinaryTransformation::Lz48 => Some(CrunchType::LZ48),
         }
     }
 }
@@ -593,6 +595,7 @@ impl fmt::Display for Token {
                         BinaryTransformation::Exomizer => "INCEXO",
                         BinaryTransformation::Lz49 => "INCL49",
                         BinaryTransformation::Aplib => "INCAPU",
+                        BinaryTransformation::Lz48 =>"INCL48",
                     };
 
                      write!(f, "{} \"{}\"", directive, fname)?;

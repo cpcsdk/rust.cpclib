@@ -170,6 +170,10 @@ impl ParserContext {
     pub fn warnings(&self) -> Vec<AssemblerError> {
         self.parse_warning.borrow().clone() // TODO investigate why I cannot return a reference
     }
+
+    pub fn pop_warning(&self) -> Option<AssemblerError> {
+        self.parse_warning.borrow_mut().pop() // TODO investigate why I cannot return a reference
+    }
 }
 /*
 pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {

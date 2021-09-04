@@ -609,15 +609,22 @@ pub fn parse_z80_line_complete(
     };
 
 
-    // First directive MUST not be the  a keyword that ends a structure
+    // First directive MUST not be the  a keyword that ends a structure (it should have been eaten before)
     let (input, _) = cut(context("Parse issue, no end directive expected here", not(parse_forbidden_keyword)))(input)?;
 
+
+    let nb_warnings = input.extra.1.warnings().len();
 // try to parse a token. if it fails, fall back to the macro parser
 let (input, opcode) = match parse_single_token(true)(input) {
-    Ok((input, opcode)) => {
-        (input, opcode)
+    Ok((input, LocatedToken::Standard{token: Token::Label(_), ..})) => {
+        while nb_warnings < input.extra.1.warnings().len() {
+            input.extra.1.pop_warning();
+        }
+        let (input, macro_call) = preceded(space0, parse_macro_call(false))(before_label.clone())?;
+        (input, LocatedToken::Standard{token: macro_call, span: before_label.clone()})
     },
     Err(e) => {
+        dbg!(&e);
         // label + instruction failed, so we try to use a macro call instead
         match preceded(space0, parse_macro_call(false))(before_label.clone()) {
             Ok((input, macro_call)) => {
@@ -631,6 +638,11 @@ let (input, opcode) = match parse_single_token(true)(input) {
                 return Err(e)
             },
         }
+    },
+
+    Ok((input, opcode)) => {
+        dbg!(opcode.as_token());
+        (input, opcode)
     },
 };
 
