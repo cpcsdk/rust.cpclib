@@ -246,7 +246,7 @@ fn inner_code(mut input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, Verbose
     loop {
        // dbg!("loop");
         // check if the line need to be parsed (ie there is no end directive)
-        let must_break = {
+        let must_break =  input.is_empty() || {
             // TODO take into account potential label
             let maybe_keyword = opt(preceded(space0, parse_end_directive))(input.clone());
             match maybe_keyword{
@@ -3511,7 +3511,9 @@ mod test {
             ctx()
         )));
         assert!(res.is_ok(), "{:?}", res);
-
+    }
+    #[test]
+    fn parser_regression_1a() {
         let code = " nop
                     "
         .replace("\u{C2}\u{A0}", " ");
@@ -3521,7 +3523,9 @@ mod test {
         )));
         assert!(res.is_ok(), "{:?}", &res);
         assert!(res.unwrap().0.trim().is_empty());
-
+    }
+    #[test]
+    fn parser_regression_1b() {
         let code = " nop
                     "
         .replace("\u{C2}\u{A0}", " ");
@@ -3531,7 +3535,9 @@ mod test {
         )));
         assert!(res.is_ok(), "{:?}", &res);
         assert!(res.unwrap().0.trim().is_empty());
-
+    }
+    #[test]
+    fn parser_regression_1c() {
         let code = " nop
                     nop
                     "
@@ -3542,10 +3548,11 @@ mod test {
         )));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
-
+    }
+    #[test]
+    fn parser_regression_1d() {
         let code = " nop
                     nop
-                    endm
                     "
         .replace("\u{C2}\u{A0}", " ");
         let res =  inner_code(Z80Span::new_extra(
@@ -3554,7 +3561,9 @@ mod test {
         ));
         assert!(res.is_ok(), "{}", &res.err().unwrap().to_string());
         assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
-
+    }
+    #[test]
+    fn parser_regression_1e() {
         let res = std::dbg!(parse_z80_str(
             "
                         ld a, chessboard_file
@@ -3564,7 +3573,9 @@ mod test {
  
         assert!(res.is_ok(), "{:?}", &res);
      //   assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
-
+    }
+    #[test]
+    fn parser_regression_1f() {
         let res = std::dbg!(inner_code(Z80Span::new_extra(
             "
                         .load_chessboard
@@ -3582,7 +3593,9 @@ mod test {
         )));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
-
+    }
+    #[test]
+    fn parser_regression_1g() {
         let res = std::dbg!(parse_conditional(Z80Span::new_extra(
             "if 0
                         .load_chessboard
