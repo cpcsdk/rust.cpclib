@@ -10,7 +10,8 @@ members = [
     "cpclib-xfertool",
   #  "cpclib-xferfs",
     "cpclib-z80emu",
-    "cpclib"
+    "cpclib",
+    "visual-basm"
 ]
 
 [patch.crates-io]
