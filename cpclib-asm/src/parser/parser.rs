@@ -58,7 +58,7 @@ const FIRST_DIRECTIVE: &[&str] = &[
  //   "REP", 
     "PHASE", 
     "WHILE",
-    "LZAPU"
+    "LZAPU", "LZEXO", "LZ4", "LZ48", "LZ49", "LZX7"
     ];
 
 // This table is supposed to contain the keywords that finish a section
@@ -788,6 +788,7 @@ pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
     let (input, transformation) = alt((
         map(alt((tag_no_case("INCBIN"), tag_no_case("BINCLUDE"))), |_| BinaryTransformation::None),
         map(tag_no_case("INCEXO"), |_| BinaryTransformation::Exomizer),
+        map(tag_no_case("INCL48"), |_| BinaryTransformation::Lz48),
         map(tag_no_case("INCL49"), |_| BinaryTransformation::Lz49),
         map(tag_no_case("INCAPU"), |_| BinaryTransformation::Aplib),
     ))(input)?;
