@@ -602,6 +602,10 @@ impl SymbolsTable {
         self.map
             .insert("$".into(), Value::Address(address));
     }
+    pub fn set_current_output_address(&mut self, address: PhysicalAddress) {
+        self.map
+            .insert("$$".into(), Value::Address(address));
+    }
 
    
     /// Set the given symbol to $ value
@@ -881,6 +885,7 @@ impl SymbolsTableCaseDependent {
         to self.table {
             pub fn current_address(&self) -> Result<u16, SymbolError>;
             pub fn set_current_address(&mut self, addr: PhysicalAddress);
+            pub fn set_current_output_address(&mut self, addr: PhysicalAddress);
             pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<String>, SymbolError>;
             pub fn push_seed(&mut self, seed: usize);
             pub fn pop_seed(&mut self);
