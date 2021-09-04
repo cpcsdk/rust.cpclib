@@ -8,7 +8,7 @@ use std::rc::Rc;
 use crate::preamble::*;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
-use clap;
+pub use clap;
 use clap::{App, Arg, ArgGroup, ArgMatches};
 use itertools::chain;
 
@@ -268,21 +268,130 @@ pub fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
 }
 
 /// Launch the assembling of everythin
-pub fn process(matches: &ArgMatches<'_>) -> Result<(), BasmError> {
+pub fn process(matches: &ArgMatches<'_>) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     // standard assembling
-    let (listing, parser_warnings) = parse(matches)?;
+    let (listing, mut warnings) = parse(matches)?;
     let env = assemble(matches, &listing)?;
 
-    let assembler_warnings = env.warnings();
-    if !assembler_warnings.is_empty() || !parser_warnings.is_empty() {
-        for warning in chain!(parser_warnings.iter(), assembler_warnings.iter()){
-            eprintln!("{}", warning);
-        }
+    warnings.extend_from_slice(env.warnings());
 
-        if matches.is_present("WERROR") {
-            eprintln!("Assembling failed due to unwanted warnings");
-            std::process::exit(-1);
-        }
+    if matches.is_present("WERROR") && !warnings.is_empty() {
+        return Err(AssemblerError::MultipleErrors {
+            errors: warnings
+        }.into())
     }
-    save(matches, &env)
+    else {
+        save(matches, &env)?;
+        return Ok((env, warnings))
+    }
+
+
+}
+
+
+
+pub fn build_args_parser() -> clap::App<'static, 'static> {
+
+    App::new("basm")
+					.author("Krusty/Benediction")
+					.about("Benediction ASM -- z80 assembler that taylor Amstrad CPC")
+                    .after_help("Work In Progress")
+                    .arg(
+                        Arg::with_name("INLINE")
+                            .help("Z80 code is provided inline")
+                            .long("inline")
+                            .takes_value(true)
+                    )
+                    .arg(
+						Arg::with_name("INPUT")
+							.help("Input file to read.")
+							.takes_value(true)
+                    )
+                    .group(
+                        ArgGroup::with_name("ANY_INPUT")
+                            .args(&["INLINE", "INPUT"])
+                            .required(true)
+                    )
+					.arg(
+						Arg::with_name("OUTPUT")
+							.help("Filename of the output.")
+							.short("o")
+							.long("output")
+							.takes_value(true)
+					)
+					.arg(
+                        Arg::with_name("DB_LIST")
+                        .help("Write a db list on screen (usefull to get the value of an opcode)")
+                        .long("db")
+                    )
+                    .arg(Arg::with_name("LISTING_OUTPUT")
+                        .help("Filename of the listing output.")
+                        .long("lst")
+                        .takes_value(true)
+                    )
+                    .arg(Arg::with_name("SYMBOLS_OUTPUT")
+                        .help("Filename of the output symbols file.")
+                        .long("sym")
+                        .takes_value(true)
+                    )
+                    .group(
+                        ArgGroup::with_name("ANY_OUTPUT")
+                            .args(&["DB_LIST", "OUTPUT"])
+                    )
+					.arg(
+						Arg::with_name("BASIC_HEADER")
+							.help("Request a Basic header (the very first instruction has to be the LOCOMOTIVE directive.")
+							.long("basic")
+							.alias("basicheader")
+					)
+					.arg(
+						Arg::with_name("BINARY_HEADER")
+							.help("Request a binary header")
+							.long("binary")
+							.alias("header")
+							.alias("binaryheader")
+                    )
+                    .arg(
+                        Arg::with_name("SNAPSHOT")
+                            .help("Generate a snapshot")
+                            .long("snapshot")
+                            .alias("sna")
+                    )
+					.arg(
+						Arg::with_name("CASE_INSENSITIVE")
+							.help("Configure the assembler to be case insensitive.")
+							.long("case-insensitive")
+							.short("i") 
+					)
+                    .arg(
+                        Arg::with_name("INCLUDE_DIRECTORIES")
+                            .help("Provide additional directories used to search files.")
+                            .long("include")
+                            .short("I")
+                            .takes_value(true)
+                            .multiple(true)
+                            .number_of_values(1)
+                    )
+                    .arg(
+                        Arg::with_name("LOAD_SYMBOLS")
+                            .help("Load symbols from the given file")
+                            .short("-l")
+                            .takes_value(true)
+                            .multiple(true)
+                            .number_of_values(1)
+                    )
+                    .arg(
+                        Arg::with_name("WERROR")
+                        .help("Warning are considered to be errors")
+                        .long("Werror")
+                        .takes_value(false)
+                    )
+					.group( // only one type of header can be provided
+						ArgGroup::with_name("HEADER")
+							.args(&["BINARY_HEADER", "BASIC_HEADER"])
+                    )
+                    .group( // only one type of output can be provided
+                        ArgGroup::with_name("ARTEFACT_TYPE")
+                        .args(&["BINARY_HEADER", "BASIC_HEADER", "SNAPSHOT"])
+                    )
 }

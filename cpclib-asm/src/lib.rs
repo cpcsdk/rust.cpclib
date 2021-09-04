@@ -20,6 +20,12 @@ pub mod error;
 
 mod crunchers;
 
+#[cfg(feature="basm")]
+pub mod basm_utils;
+
+
+
+
 use std::{cell::{Cell, RefCell}, fmt::Debug, io::Write, rc::Rc};
 
 use cpclib_disc::amsdos::*;

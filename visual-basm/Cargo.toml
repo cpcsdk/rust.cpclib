@@ -1,0 +1,12 @@
+[package]
+name = "visual-basm"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+eframe = "0.14.0"
+cpclib-asm = {version="0.5.0", features=["basm"]}
+strip-ansi-escapes = "0.1.1"
+temp-file = "0.1.6"
