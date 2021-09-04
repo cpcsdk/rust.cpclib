@@ -702,6 +702,9 @@ impl Env {
     pub fn update_dollar(&mut self) {
         let addr = self.logical_to_physical_address(self.logical_code_address());
         self.symbols.set_current_address(addr);
+
+        let addr = self.logical_to_physical_address(self.logical_output_address());
+        self.symbols.set_current_output_address(addr);
     }
 
     /// Produce the memory for the required limits

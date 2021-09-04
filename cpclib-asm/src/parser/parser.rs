@@ -2891,6 +2891,7 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                     .replace("\\f", &char::from(12).to_string()))),
                     parse_counter,
                     // manage $
+                    map(tag("$$"), |_x| Expr::Label(String::from("$$"))),
                     map(tag("$"), |_x| Expr::Label(String::from("$"))),
                     prefixed_label_expr,
                     // manage labels
