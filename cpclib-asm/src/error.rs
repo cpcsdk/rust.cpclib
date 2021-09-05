@@ -206,6 +206,11 @@ pub enum AssemblerError {
         repetition: i32
     },
 
+    WhileIssue {
+        error: Box<AssemblerError>,
+        span: Option<Z80Span>
+    },
+
     MMRError {
         value: i32
     },
@@ -543,6 +548,16 @@ impl Display for AssemblerError {
                     write!(f, "{}\n{}",msg, error)
                 } else {
                     write!(f, "Repeat issue\n{}", error)
+                }
+            
+            },
+
+            AssemblerError::WhileIssue { error, span } => {
+                if span.is_some(){
+                    let msg =  build_simple_error_message(&format!("WHILE: error in loop"), span.as_ref().unwrap(),  Severity::Error);
+                    write!(f, "{}\n{}",msg, error)
+                } else {
+                    write!(f, "WHILE issue\n{}", error)
                 }
             
             },
