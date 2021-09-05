@@ -822,7 +822,7 @@ impl std::cmp::PartialEq for ExprResult {
         match (self, other) {
             (Self::Float(l0), Self::Float(r0)) => l0 == r0,
             (Self::Value(l0), Self::Value(r0)) => l0 == r0,
-            _ => self.float() == other.float()
+            _ => self.int() == other.int()
         }
     }
 }

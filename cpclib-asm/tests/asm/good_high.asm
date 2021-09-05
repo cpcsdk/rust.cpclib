@@ -3,7 +3,7 @@
 
 VAR1 equ 0x1234
 VAR2 equ VAR1/256
-VAR3 equ >VAR1
+VAR3 equ high(VAR1)
 VAR4 equ VAR2*256
 VAR5 equ VAR3*256
 VAR6 equ VAR3*256 + 0x20
@@ -17,7 +17,7 @@ VAR6 equ VAR3*256 + 0x20
 
 DICO100                         ; must be 0x1234
 PFO100_try1 equ DICO100/256     ; must be 0x12
-PFO100_try2 equ >DICO100        ; must be 0x12
+PFO100_try2 equ high(DICO100)        ; must be 0x12
 PFO100_try3 equ 0x12            ; must be 0x12
 NBR_REG equ 13                  ; must be 13
 
