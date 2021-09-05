@@ -2886,6 +2886,12 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
         tag("!"),
         space0
     ))(input)?;
+
+    let (input, not) = opt(delimited(
+        space0,
+        tag("~"),
+        space0
+    ))(input)?;
     
     let (input, factor) = 
     context(
@@ -2928,6 +2934,11 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
 
     let factor = match neg {
         Some(_) => Expr::Neg(factor.into()),
+        None => factor
+    };
+
+    let factor = match not {
+        Some(_) => Expr::BinaryNot(factor.into()),
         None => factor
     };
 

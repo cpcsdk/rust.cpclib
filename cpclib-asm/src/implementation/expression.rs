@@ -131,6 +131,12 @@ impl ExprEvaluationExt for Expr {
             BinaryAnd(ref left, ref right) => oper(left, right, Oper::BinaryAnd),
             BinaryOr(ref left, ref right) => oper(left, right, Oper::BinaryOr),
             BinaryXor(ref left, ref right) => oper(left, right, Oper::BinaryXor),
+            BinaryNot(ref e) => {
+                e.resolve(env)?
+                 .binary_not()
+                 .map_err(|e| AssemblerError::ExpressionError{msg: e})
+            },
+
 
             BooleanAnd(ref left, ref right) => oper(left, right, Oper::BooleanAnd),
             BooleanOr(ref left, ref right) => oper(left, right, Oper::BooleanOr),
