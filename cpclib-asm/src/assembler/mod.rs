@@ -772,6 +772,9 @@ impl Env {
 
         // update the maximm 64k position
         self.active_page_info_mut().maxadr = self.maximum_address().max(self.logical_output_address());
+        if self.active_page_info().startadr.is_none() {
+            self.active_page_info_mut().startadr = Some(self.logical_output_address());
+        }
 
         let abstract_address = physical_address.offset_in_cpc();
         let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
