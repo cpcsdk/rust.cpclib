@@ -718,11 +718,17 @@ impl Env {
     }
 
     /// Returns the stream of bytes produced for a 64k compilation
-    /// Will fail in other cases
      pub fn produced_bytes(&self) -> Vec<u8> {
-        // assume we start at 0 if never provided
-        let start = self.start_address().or(Some(0)).unwrap();
-        let length = self.maximum_address() - start + 1;
+        let (start, length) = match self.start_address() {
+            Some(start) => if start > self.maximum_address() {
+                (0,0)
+            }
+            else {
+                (start, self.maximum_address() as usize - start as usize + 1)
+            }
+        ,
+            None => (0,0),
+        };
 
         self.memory(start, length as _)
     }
