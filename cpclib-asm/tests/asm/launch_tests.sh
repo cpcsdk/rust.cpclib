@@ -1,8 +1,12 @@
 #!/bin/bash
 
 
+OUTPUT="/tmp/basm.o"
+
+declare -a wrong_files
+
 function build(){
-	../../../target/debug/basm -i "$1" >/dev/null 2>/dev/null
+	../../../target/debug/basm -i "$1" -o "$OUTPUT" >/dev/null 2>/dev/null
 }
 
 function ok_result() {
@@ -12,34 +16,50 @@ function ok_result() {
 
 function err_result() {
 	err=$((err+1))
-	echo "[ERR] $1"
+	echo "[ERR] $1 ($2)"
+	wrong_files=( "${wrong_files[@]}" $1)
 }
 
 ok=0
 err=0
 
-for fname in good_*
+for fname in good_*.asm
 do
 	if build "$fname"
 	then
-		ok_result  "$fname"
+		binary="${fname%.*}.bin"
+		# assemble ok
+		if test -e "$binary"
+		then
+			# binary comparison
+			if diff "$OUTPUT" "$fname" > /dev/null 2>/dev/null
+			then
+				ok_result  "$fname"
+			else
+				err_result "$fname" content
+			fi
+		else
+			# no need to compare binary
+			ok_result  "$fname"
+		fi
 	else
-		err_result "$fname"
+		# assemble error
+		err_result "$fname" assemble
 	fi
 done
 
-for fname in bad_*
+for fname in bad_*.asm
 do
 	if ! build "$fname"
 	then
 		ok_result  "$fname"
 	else
-		err_result "$fname"
+		err_result "$fname" assemble
 	fi
 done
 
 echo
 echo "$ok successes"
-echo "$err failures"
+echo "$err failures:"  ${wrong_files[@]}
 
 test $err -eq 0

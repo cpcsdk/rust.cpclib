@@ -16,9 +16,6 @@
 
 use cpclib_asm::basm_utils::*;
 
-use clap;
-use clap::{App, Arg, ArgGroup};
-use itertools::chain;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -38,7 +35,7 @@ fn main() {
     .get_matches();
     
     match process(&matches) {
-        Ok((env, warnings)) => {
+        Ok((_env, warnings)) => {
             for warning in warnings {
                 eprintln!("{}", warning);
             }
