@@ -5,8 +5,8 @@
 
 
 DICO100                         ; must be 0x1234
-PFO100_try1 equ DICO100/256     ; must be 0x12
-PFO100_try2 equ >DICO100        ; must be 0x12
+PFO100_try1 equ int(DICO100/256)     ; must be 0x12
+PFO100_try2 equ high(DICO100)        ; must be 0x12
 PFO100_try3 equ 0x12            ; must be 0x12
 NBR_REG equ 13                  ; must be 13
 
