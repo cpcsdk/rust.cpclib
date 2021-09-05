@@ -32,7 +32,7 @@ do
 		if test -e "$binary"
 		then
 			# binary comparison
-			if diff "$OUTPUT" "$fname" > /dev/null 2>/dev/null
+			if diff "$OUTPUT" "$binary" > /dev/null 2>/dev/null
 			then
 				ok_result  "$fname"
 			else
