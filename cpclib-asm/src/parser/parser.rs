@@ -2035,14 +2035,15 @@ pub fn parse_out(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span
 /// Parse all the in flavors
 pub fn parse_in(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_word("IN")(input)?;
+    let zero = DataAccess::from(Expr::from(0));
 
     // get the port proposal
-    let (input, destination) = cut(alt((
+    let (input, destination) = opt(terminated(alt((
         parse_register8,
-        value(DataAccess::from(Expr::from(0)), tag("0")),
-    )))(input)?;
-    // TODO portc only if first arg is not 0
-    let (input, _) = cut(parse_comma)(input)?;
+        value(zero.clone(), alt(( tag_no_case("f"), tag("0")))),
+    )), parse_comma))(input)?;
+    let destination = destination.unwrap_or(zero);
+
     let (input, port) = cut(alt((
         parse_portc,
         verify(parse_portnn, |_| {
