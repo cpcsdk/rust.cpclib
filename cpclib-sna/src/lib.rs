@@ -774,6 +774,6 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_increase2() {
-        SnapshotMemory::default_128().increased_size();
+        SnapshotMemory::default_576().increased_size();
     }
 }
