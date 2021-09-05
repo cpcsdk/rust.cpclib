@@ -20,7 +20,7 @@ use nom::error::VerboseErrorKind;
 use std::ops::Deref;
 
 use codespan_reporting::files::SimpleFiles;
-use codespan_reporting::term;
+use codespan_reporting::term::{self, Chars};
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream, Buffer};
 
 #[derive(Debug, Clone)]
@@ -377,8 +377,8 @@ impl Display for AssemblerError {
                                 diagnostic = diagnostic.with_notes(notes);
                             }
 
-                            let mut writer = Buffer::ansi();
-                            let config = codespan_reporting::term::Config::default();
+                            let mut writer = buffer();
+                            let config = config();
                             term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
                             
                             std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
@@ -618,8 +618,8 @@ fn build_simple_error_message_with_message(title: &str,message: &str,  span: &Z8
             sample_range,
         ).with_message(message)]);
 
-    let mut writer = Buffer::ansi();
-    let config = codespan_reporting::term::Config::default();
+    let mut writer = buffer();
+    let config = config();
     term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
 
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
@@ -650,8 +650,8 @@ fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -
             sample_range,
         )]);
 
-    let mut writer = Buffer::ansi();
-    let config = codespan_reporting::term::Config::default();
+    let mut writer = buffer();
+    let config = config();
     term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
 
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
@@ -700,8 +700,8 @@ fn build_simple_error_message_with_notes(title: &str, notes: Vec<String>, span: 
         )])
         .with_notes(notes);
 
-    let mut writer = Buffer::ansi();
-    let config = codespan_reporting::term::Config::default();
+    let mut writer = buffer();
+    let config = config();
     term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
 
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
@@ -794,4 +794,28 @@ fn get_additional_notes(ctx: &str) -> Option<Vec<String>> {
     }
 
     NOTES_LUT.get(ctx).cloned()
+}
+
+
+fn buffer()-> Buffer {
+    if cfg!(nocolor){
+        println!("no color");
+        Buffer::no_color()
+    }
+    else {
+        Buffer::ansi()
+    }
+}
+
+fn config() -> codespan_reporting::term::Config {
+    if cfg!(nocolor){
+
+        let mut conf = codespan_reporting::term::Config::default();
+        conf.chars = Chars::ascii();
+        conf
+    }
+    else {
+        codespan_reporting::term::Config::default()
+
+    }
 }

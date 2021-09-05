@@ -71,8 +71,8 @@ impl BasmApp {
 				self.error = None;
 				self.warnings = warnings.iter()
 					.map(|w| {
-						String::from_utf8_lossy(&strip_ansi_escapes::strip(format!("{}", w)).unwrap()).to_string()
-					}).collect::<Vec<_>>();
+						format!("{}", w)			
+					} ).collect::<Vec<_>>();
 				self.lst_content.clear();
 				let mut lst = std::fs::read_to_string(self.lst_file.path()).unwrap_or_default();
 				std::mem::swap(&mut lst, &mut self.lst_content);
@@ -80,7 +80,7 @@ impl BasmApp {
 				
 			}
 			Err(e) => {
-				self.error = Some(String::from_utf8_lossy(&strip_ansi_escapes::strip(format!("{}", e)).unwrap()).to_string());
+				self.error = Some(format!("{}", e));
 				self.warnings.clear();
 				self.lst_content.clear();
 				self.assemble_state = AssembleState::Error;
