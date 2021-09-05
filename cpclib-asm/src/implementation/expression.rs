@@ -180,8 +180,8 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
 
         match self.func {
 
-            UnaryFunction::Low => Ok((arg >> 8.into()) & 0xff.into()),
-            UnaryFunction::High => Ok(arg & 0xff.into()),
+            UnaryFunction::High => Ok((arg >> 8.into()) & 0xff.into()),
+            UnaryFunction::Low => Ok(arg & 0xff.into()),
             UnaryFunction::Memory => {
                 if arg < 0.into() || arg > 0xffff.into() {
                     return Err(AssemblerError::ExpressionError{
