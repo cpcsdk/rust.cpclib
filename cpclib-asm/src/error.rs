@@ -412,8 +412,8 @@ impl Display for AssemblerError {
             AssemblerError::SymbolAlreadyExists{symbol} => write!(f, "A symbol named `{}` already exists", symbol),
             AssemblerError::IncoherentCode{msg} => write!(f, "Incoherent code: {}", msg),
             AssemblerError::NoActiveCounter => write!(f, "No active counter"),
-            AssemblerError::OutputExceedsLimits(address, limit) => write!(f, "Output  at 0x{:X} (0x{:X} in page {}) exceeds limits of 0x{:X}", address.address(), address.offset_in_page(), address.page(), limit),
-            AssemblerError::OutputAlreadyExceedsLimits(limit) => write!(f, "Output  already exceeds limits of 0x{:X}", limit),
+            AssemblerError::OutputExceedsLimits(address, limit) => write!(f, "Code  at 0x{:X} (0x{:X} in page {}) exceeds limits of 0x{:X}", address.address(), address.offset_in_page(), address.page(), limit),
+            AssemblerError::OutputAlreadyExceedsLimits(limit) => write!(f, "Code  already exceeds limits of 0x{:X}", limit),
             AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
             AssemblerError::AlreadyDefinedSymbol{symbol, kind} => write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind),
 

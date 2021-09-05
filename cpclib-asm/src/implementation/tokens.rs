@@ -3,7 +3,7 @@ use cpclib_tokens::tokens::*;
 use itertools::Itertools;
 use smallvec::SmallVec;
 
-use crate::assembler::{assemble_defs};
+use crate::assembler::{assemble_defs_item};
 use crate::error::*;
 
 use crate::implementation::expression::ExprEvaluationExt;
@@ -99,7 +99,7 @@ impl TokenExt for Token {
 
                 l.iter()
                     .map(|(e, f)| {
-                        assemble_defs(e, f.as_ref(), &Env::default())
+                        assemble_defs_item(e, f.as_ref(), &Env::default())
                         .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
                     })
                     .fold_ok(SmallVec::<[u8;4]>::new(), |mut acc, v| {

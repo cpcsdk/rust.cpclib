@@ -4,9 +4,11 @@
 
 	org 0x100
 
-	limit 0x1e0
+	limit 0x1e0 ; limit not taken into account in the crunched section
 
 	LZAPU
-	limit 0x1e0
-	defs 0x100
+		assert $ == 0x100
+		limit 0x1e0 ; limit taken into account in the crunched section
+		defs 0x100 ; write over the limit => must fail
+		assert $ == 0x200
 	LZCLOSE
