@@ -2,7 +2,7 @@
   org 0x1234
 
 VAR1 equ 0x1234
-VAR2 equ VAR1/256
+VAR2 equ int(VAR1/256) ; treated as a float without the int
 VAR3 equ high(VAR1)
 VAR4 equ VAR2*256
 VAR5 equ VAR3*256
