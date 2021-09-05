@@ -17,9 +17,9 @@ VAR2 = VAR1*3
 	endm
 
 
-	stuff (void)
+	stuff
 
 VAR1 = 4
 
-	stuff (void)
+	stuff
 
