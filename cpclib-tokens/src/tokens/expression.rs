@@ -637,6 +637,14 @@ impl ExprResult {
             ExprResult::Value(i) => *i as f64,
         }
     }
+
+    pub fn bool(&self) -> bool {
+        match self {
+            ExprResult::Float(f) => *f!=0.,
+            ExprResult::Value(i) => *i!=0,
+        }
+    }
+
 }
 
 

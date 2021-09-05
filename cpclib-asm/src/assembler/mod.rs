@@ -1772,7 +1772,9 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
         LocatedToken::RepeatUntil(_, _, _) => todo!(),
         LocatedToken::Rorg(_, _, _) => todo!(),
         LocatedToken::Switch(_, _) => todo!(),
-        LocatedToken::While(_, _, _) => todo!(),
+        LocatedToken::While(cond, inner, span) => {
+            env.visit_while(cond, inner, Some(span.clone()))
+        },
     }?;
 
     // Patch the warnings to inject them a location
@@ -1927,6 +1929,23 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &Env) -> Result<(), Assem
 }
 
 impl Env {
+
+    pub fn visit_while<T: ListingElement +  Visited>(&mut self, cond: &Expr, code: &[T], span: Option<Z80Span>) -> Result<(), AssemblerError> {
+        while self.resolve_expr_must_never_fail(cond)?.bool() {
+
+            // generate the bytes
+            self.visit_listing(code)
+                .map_err(|e| {
+                    AssemblerError::WhileIssue {
+                        error: Box::new(e),
+                        span: span.clone()
+                    }
+                })?;
+
+        }
+
+        Ok(())
+    }
 
 
     pub fn visit_repeat<T: ListingElement +  Visited>(&mut self, count: &Expr, code: &[T], counter: Option<&String>, counter_start: Option<&Expr>, span: Option<Z80Span>) -> Result<(), AssemblerError> {
