@@ -84,7 +84,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
                 "SAVE", "WRITE", "WRITE DIRECT",
                 "SNASET", "STRUCT", "SWITCH",
                 "UNDEF",
-                "WHILE"
+                "WHILE", "WEND"
             ];
 
 const FIRST_DIRECTIVE: &[&str] = &[
@@ -391,7 +391,7 @@ pub fn parse_while(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
     let (input, inner) = cut(context("WHILE: issue in the content", inner_code))(input)?;
     let (input, _) = cut(context(
         "WHILE: not closed",
-        parse_word("WEND"),
+        preceded(space0, parse_word("WEND")),
     ))(input)?;
 
     Ok((
