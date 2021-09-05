@@ -43,6 +43,7 @@ pub enum Expr {
     BinaryAnd(Box<Expr>, Box<Expr>),
     BinaryOr(Box<Expr>, Box<Expr>),
     BinaryXor(Box<Expr>, Box<Expr>),
+    BinaryNot(Box<Expr>),
 
     // Boolean operations
     BooleanAnd(Box<Expr>, Box<Expr>),
@@ -429,6 +430,8 @@ impl Display for Expr {
             BinaryXor(ref left, ref right) => {
                 write!(format, "{} {} {}", left, Oper::BinaryXor, right)
             }
+            BinaryNot(ref e) => write!(format, "~({})", e),
+
 
             BooleanAnd(ref left, ref right) => {
                 write!(format, "{} {} {}", left, Oper::BooleanAnd, right)
@@ -699,6 +702,13 @@ impl ExprResult {
     }
     pub fn sqrt(&self) -> Self {
         self.float().sqrt().into()
+    }
+
+    pub fn binary_not(&self) -> Result<Self, String> {
+        match self {
+            ExprResult::Float(_) => return Err("Float are not compatible with ~ operator".to_owned()),
+            ExprResult::Value(i) => Ok((!*i).into()),
+        }
     }
 }
 
