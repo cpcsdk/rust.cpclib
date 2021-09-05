@@ -2013,18 +2013,17 @@ pub fn parse_out(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span
     // get the port proposal
     let (input, port) = alt((parse_portc, parse_portnn))(input)?;
 
-    let (input, _) = parse_comma(input)?;
-
     // the vlaue depends on the port
     let (input, value) = if port.is_portc() {
         // reg c
-        alt((
+        opt(preceded(parse_comma, alt((
             parse_register8,
-            value(DataAccess::from(Expr::from(0)), tag("0")),
-        ))(input)?
+            value(DataAccess::from(Expr::from(0)), alt(( parse_word("f"), tag("0")))),
+        ))))(input)?
     } else {
-        parse_register_a(input)?
+        map(preceded(parse_comma, parse_register_a), |reg| Some(reg))(input)?
     };
+    let value = value.unwrap_or(DataAccess::from(Expr::from(0)));
 
     Ok((
         input,
