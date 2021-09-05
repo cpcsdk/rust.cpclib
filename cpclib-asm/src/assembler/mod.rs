@@ -13,7 +13,6 @@ use cpclib_sna::*;
 
 use itertools::Itertools;
 use lazy_static::__Deref;
-use nom::bitvec::bitvec;
 use nom::bitvec::prelude::BitVec;
 use smallvec::SmallVec;
 
@@ -23,7 +22,6 @@ use std::fmt;
 
 use std::convert::TryFrom;
 use std::io::Write;
-use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::AmsdosFile;
@@ -416,6 +414,7 @@ impl PageInformation {
 struct CrunchedSectionState {
     /// Start of the crunched section for code assembled from the sources.
     /// None for code assembled from tokens
+    // mainly usefull for error messages; nothing more
     crunched_section_start: Option<Z80Span>,
 }
 
@@ -491,7 +490,6 @@ pub struct Env {
     /// Current pass
     pass: AssemblingPass,
     /// Check if we are assembling a crunched section as there are some limitations
-    /// XXX  we should be able to remove most of these limitations as well as this variable
     crunched_section_state: Option<CrunchedSectionState>,
 
     /// Stable counter of nops
@@ -750,17 +748,17 @@ impl Env {
 
 
         // Check if it is legal to output the value
-        if self.logical_output_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.logical_output_address()==0) {
-            dbg!(self.logical_output_address() > self.limit_address(), self.active_page_info().fail_next_write_if_zero && self.logical_output_address()==0);
+        if self.logical_code_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address()==0) {
+           // dbg!(self.logical_output_address() > self.limit_address(), self.active_page_info().fail_next_write_if_zero && self.logical_output_address()==0);
 
             return Err(AssemblerError::OutputExceedsLimits (physical_address, self.limit_address() as _));
         }
         for protected_area in &self.active_page_info().protected_areas {
-            if protected_area.contains(& (self.logical_output_address() as u16) ) {
+            if protected_area.contains(& (self.logical_code_address() as u16) ) {
                 return Err(
                     AssemblerError::OutputProtected{
                         area: protected_area.clone(),
-                        address: self.logical_output_address() as _
+                        address: self.logical_code_address() as _
                     }
                 )
             }
@@ -812,7 +810,7 @@ impl Env {
     /// Write consecutives bytes
     pub fn output_bytes(&mut self, bytes: &[u8]) -> Result<(), AssemblerError> {
 
-        dbg!(self.logical_output_address(), bytes);
+//        dbg!(self.logical_output_address(), bytes);
 
         let mut previously_overrided = false;
         for b in bytes.iter() {
@@ -1506,7 +1504,6 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
     /// Handle a crunched section.
     /// Current limitations (that need to be overcomed later): 
     ///  - everything inside the crunched section must be assembled during pass1
-    ///  - no crunched section is allowed inside a crunched section
     pub fn visit_crunched_section<T: Visited + ListingElement>(&mut self, kind: &CrunchType, lst: &[T], span: Option<&Z80Span>) -> Result<(), AssemblerError> {
         /* deactivated because there is no reason to do such thing
         // crunched section is disabled inside crunched section
@@ -1520,16 +1517,13 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
         }
     */
         
-        if self.active_page_info().limit != 0xffff || !self.active_page_info().protected_areas.is_empty() {
-            self.warnings.push(
-                AssemblerWarning::AssemblingError{
-                    msg: "Memory protection systems are disabled in crunched section. If you want to keep them, explicitely use LIMIT or PROTECT directives in the crunched section.".to_owned()
-                }
-            );
-        }
+        let could_display_warning_message = self.active_page_info().limit != 0xffff || !self.active_page_info().protected_areas.is_empty();
 
-        // from here, the modifications to the memory will be forgotten.
+
+        // from here, the modifications to the memory will be forgotten afterwise.
         // for this reason everything is done in a cloned environnement
+        // TODO to have a more stable memory function, see if we can keep some steps between the passes
+        // TODO OR play all the passes directly now
         let mut crunched_env = self.clone();
         crunched_env.crunched_section_state = CrunchedSectionState::new(
             span.cloned()
@@ -1582,6 +1576,18 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
             self.symbols_mut(),
             crunched_env.symbols_mut()
         );
+
+
+        // TODO display ONLY if:
+        // - no LIMIT/PROTECT has been used in the crunched area
+        // - a possible forbidden write has been done (maybe too complex to implement)
+        if could_display_warning_message {
+            self.warnings.push(
+                AssemblerWarning::AssemblingError{
+                    msg: "Memory protection systems are disabled in crunched section. If you want to keep them, explicitely use LIMIT or PROTECT directives in the crunched section.".to_owned()
+                }
+            );
+        }
 
         Ok(())
     }
@@ -2061,7 +2067,7 @@ fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     match token {
         Token::Defs(l) => {
             for (e, f) in l.iter() {
-                let bytes = assemble_defs(e,f.as_ref(), env)?;
+                let bytes = assemble_defs_item(e,f.as_ref(), env)?;
                 env.output_bytes(&bytes)?;
             }
             Ok(())
@@ -2213,9 +2219,8 @@ pub fn visit_stableticker(
 }
 
 /// Assemble DEFS directive
-pub fn assemble_defs(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Bytes, AssemblerError> {
+pub fn assemble_defs_item(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Bytes, AssemblerError> {
     let count = env.resolve_expr_must_never_fail(expr)?.int();
-    let mut bytes = Bytes::with_capacity(count as usize);
     let value = if fill.is_none() {
         0
     } else {
@@ -2223,9 +2228,8 @@ pub fn assemble_defs(expr: &Expr, fill: Option<&Expr>, env: &Env) -> Result<Byte
         (value & 0xff) as u8
     };
 
-    for _i in 0..count {
-        bytes.push(value);
-    }
+    let mut bytes = Bytes::with_capacity(count as usize);
+    bytes.resize_with(count as _, || value);
 
     Ok(bytes)
 }

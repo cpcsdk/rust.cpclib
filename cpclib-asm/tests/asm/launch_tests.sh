@@ -2,11 +2,12 @@
 
 
 OUTPUT="/tmp/basm.o"
+ERR="/tmp/basm_err.o"
 
 declare -a wrong_files
 
 function build(){
-	../../../target/debug/basm -i "$1" -o "$OUTPUT" >/dev/null 2>/dev/null
+	../../../target/debug/basm -i "$1" -o "$OUTPUT" >/dev/null 2>"$ERR"
 }
 
 function ok_result() {
@@ -17,6 +18,7 @@ function ok_result() {
 function err_result() {
 	err=$((err+1))
 	echo "[ERR] $1 ($2)"
+	cat "$ERR"
 	wrong_files=( "${wrong_files[@]}" $1)
 }
 

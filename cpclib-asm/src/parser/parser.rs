@@ -49,6 +49,44 @@ pub mod error_code {
     pub const UNABLE_TO_PARSE_INNER_CONTENT: u32 = 130;
 }
 
+const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
+                //Registers
+                "AF", "HL", "DE", "BC", "IX", "IY", "IXL", "IXH", "LET",
+                //Instructions
+                "ADC",  "ADD",  "AND",  "BIT",  "CALL", "CCF",  "CP",   "CPD", 
+                "CPDR", "CPI",  "CPIR", "CPL",  "DAA",  "DEC",  "DI",   "DJNZ",
+                "EI",   "EX",   "EXX",  "HALT", "IM",   "IN",   "INC",  "IND", 
+                "INDR", "INI",  "INIR", "JP",   "JR",   "LD",   "LDD",  "LDDR",
+                "LDI",  "LDIR", "NEG",  "NOP",  "OR",   "OTDR", "OTIR", "OUT", 
+                "OUTD", "OUTI", "POP",  "PUSH", "RES",  "RET",  "RETI", "RETN",
+                "RL",   "RLA",  "RLC",  "RLCA", "RLD",  "RR",   "RRA",  "RRCA",
+                "RRD",  "RST",  "SBC",  "SCF",  "SET",  "SLA",  "SRA",  "SRL", 
+                "SUB",  "XOR",
+                "SL1", "SLL",
+                "EXA",
+                // Directives
+                "ALIGN", "ASSERT", "BANK", "BANKSET", "BUILDSNA",
+                "INCBIN", "LZEXO",
+                "DEFB", "DB", "BYTE",
+                "DEFW", "DW", "WORD",
+                "DEFS", "DS",
+                "NOP",
+                "EXPORT", "NOEXPORT",
+                "IF", "ELSE", "ENDIF",
+                "INCLUDE", "READ",
+                "LIMIT",
+                "LIST", "NOLIST",
+                "ORG",
+                "PRINT", "PROTECT", 
+                "REPEAT", "REND", "RORG",
+                "MACRO", "ENDM",
+                "RUN",
+                "SAVE", "WRITE", "WRITE DIRECT",
+                "SNASET", "STRUCT", "SWITCH",
+                "UNDEF",
+                "WHILE"
+            ];
+
 const FIRST_DIRECTIVE: &[&str] = &[
     "IF", 
     "IFDEF", 
@@ -300,7 +338,9 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     let (input, _) = preceded(space0, parse_word("MACRO"))(input)?;
 
     // macro name
-    let (input, name) = cut(context("MACRO: wrong name", parse_label(false)))(input)?; // TODO use a specific function for that
+    let (input, name) = cut(context("MACRO: wrong name", 
+    parse_label(false)
+    ))(input)?; // TODO use a specific function for that
 
     // macro arguments
     let (input, arguments) = preceded(
@@ -624,7 +664,12 @@ let (input, opcode) = match parse_single_token(true)(input) {
         (input, LocatedToken::Standard{token: macro_call, span: before_label.clone()})
     },
     Err(e) => {
-        dbg!(&e);
+        if IMPOSSIBLE_LABEL_NAME.iter().find(|label2| match &label {
+            Some(label) => label.as_str() == **label2,
+            None => false,
+        }).is_some() {
+            return Err(e); // we forbid labels with instruction name
+        }
         // label + instruction failed, so we try to use a macro call instead
         match preceded(space0, parse_macro_call(false))(before_label.clone()) {
             Ok((input, macro_call)) => {
@@ -641,7 +686,7 @@ let (input, opcode) = match parse_single_token(true)(input) {
     },
 
     Ok((input, opcode)) => {
-        dbg!(opcode.as_token());
+//        dbg!(opcode.as_token());
         (input, opcode)
     },
 };
@@ -1391,7 +1436,7 @@ pub fn parse_ld_normal(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z
     let (input, _) = context("LD: missing comma", cut(parse_comma))(input)?;
 
     // src possibilities depend on dst
-    let (input, src) = context(LD_WRONG_SOURCE, cut(parse_ld_normal_src(&dst)))(input)?;
+    let (input, src) = cut(context(LD_WRONG_SOURCE, cut(parse_ld_normal_src(&dst))))(input)?;
 
     Ok((input, Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src))))
 }
@@ -2724,43 +2769,7 @@ pub fn parse_label(
         );
 
         let mut impossible = chain!( 
-            &[
-                //Registers
-                "AF", "HL", "DE", "BC", "IX", "IY", "IXL", "IXH", "LET",
-                //Instructions
-                "ADC",  "ADD",  "AND",  "BIT",  "CALL", "CCF",  "CP",   "CPD", 
-                "CPDR", "CPI",  "CPIR", "CPL",  "DAA",  "DEC",  "DI",   "DJNZ",
-                "EI",   "EX",   "EXX",  "HALT", "IM",   "IN",   "INC",  "IND", 
-                "INDR", "INI",  "INIR", "JP",   "JR",   "LD",   "LDD",  "LDDR",
-                "LDI",  "LDIR", "NEG",  "NOP",  "OR",   "OTDR", "OTIR", "OUT", 
-                "OUTD", "OUTI", "POP",  "PUSH", "RES",  "RET",  "RETI", "RETN",
-                "RL",   "RLA",  "RLC",  "RLCA", "RLD",  "RR",   "RRA",  "RRCA",
-                "RRD",  "RST",  "SBC",  "SCF",  "SET",  "SLA",  "SRA",  "SRL", 
-                "SUB",  "XOR",
-                "SL1", "SLL",
-                "EXA",
-                // Directives
-                "ALIGN", "ASSERT", "BANK", "BANKSET", "BUILDSNA",
-                "INCBIN", "LZEXO",
-                "DEFB", "DB", "BYTE",
-                "DEFW", "DW", "WORD",
-                "DEFS", "DS",
-                "NOP",
-                "EXPORT", "NOEXPORT",
-                "IF", "ELSE", "ENDIF",
-                "INCLUDE", "READ",
-                "LIMIT",
-                "LIST", "NOLIST",
-                "ORG",
-                "PRINT", "PROTECT", 
-                "REPEAT", "REND", "RORG",
-                "MACRO", "ENDM",
-                "RUN",
-                "SAVE", "WRITE", "WRITE DIRECT",
-                "SNASET", "STRUCT", "SWITCH",
-                "UNDEF",
-                "WHILE"
-            ],
+            IMPOSSIBLE_LABEL_NAME,
             FIRST_DIRECTIVE,
             FINAL_DIRECTIVE
         );
@@ -2791,7 +2800,7 @@ pub fn parse_macro_name (input: Z80Span) -> IResult<Z80Span, String, VerboseErro
     let first = [first];
     let keyword = chain!(first.iter().cloned(), name.iter_elements()).collect::<String>().to_ascii_uppercase();
 
-    if FINAL_DIRECTIVE.iter().any(|&val| val == &keyword) {
+    if chain!(FINAL_DIRECTIVE, IMPOSSIBLE_LABEL_NAME).any(|&val| val == &keyword) {
         Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
 
     } else {
