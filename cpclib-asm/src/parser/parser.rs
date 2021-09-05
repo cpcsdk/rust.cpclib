@@ -2095,6 +2095,7 @@ pub fn parse_shifts_and_rotations(
         value(Mnemonic::Sra, parse_word("SRA")),
         value(Mnemonic::Srl, parse_word("SRL")),
         value(Mnemonic::Sl1, parse_word("SL1")),
+        value(Mnemonic::Sl1, parse_word("SLL")),
     ))(input)?;
 
     let (input, arg) = alt((
