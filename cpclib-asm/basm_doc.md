@@ -27,11 +27,12 @@ title: BASM documentation - WIP
 
 ### LIMIT
 
-On the code space, not physical space
+On the code space ($), not physical space ($$)
 
 ### PROTECT
 
-On the code space, not physical space
+On the code space ($), not physical space ($$)
+
 
 
 ## Labels related
