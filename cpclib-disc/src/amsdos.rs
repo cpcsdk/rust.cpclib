@@ -299,7 +299,7 @@ impl TryFrom<&str> for AmsdosFileName {
         let (user, rest) = match content.find(':') {
             None => (0, content),
             Some(1) => (
-                u8::from_str_radix(&content[..1], 10).unwrap(),
+                u8::from_str_radix(&content[..1], 10).unwrap_or_default(),
                 &content[2..],
             ),
             _ => unreachable!(),
