@@ -54,6 +54,15 @@ fn main() {
 						.number_of_values(1)
 						.multiple(true)
 					)
+                    .arg(
+                        Arg::with_name("SKIP")
+                        .help("Skip the first <SKIP> bytes")
+                        .short("s")
+                        .long("SKIP")
+                        .takes_value(true)
+                        .number_of_values(1)
+                        .multiple(false)
+                    )
 					.get_matches();
 
     // Get the bytes to disassemble
@@ -76,8 +85,17 @@ fn main() {
         (input_bytes.as_ref(), None)
     };
 
+    // check if first bytes need to be removed
+    let input_bytes = if let Some(skip) = matches.value_of("SKIP") {
+        let skip = skip.parse::<usize>().expect("Unable to convert SKIP value");
+        eprintln!("; Skip {} bytes", skip);
+        &input_bytes[skip..]
+    } else {
+        input_bytes
+    };
+
     // Disassemble
-    eprintln!("0x{:x} bytes to disassemble", input_bytes.len());
+    eprintln!("; 0x{:x} bytes to disassemble", input_bytes.len());
 
     // Retreive the listing
     // TODO move that in its own function
