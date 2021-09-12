@@ -11,10 +11,10 @@ use cpclib_basic::*;
 use cpclib_disc::edsk::ExtendedDsk;
 use cpclib_sna::*;
 
-use itertools::Itertools;
-use lazy_static::__Deref;
-use nom::bitvec::prelude::BitVec;
-use smallvec::SmallVec;
+use cpclib_common::itertools::Itertools;
+use cpclib_common::lazy_static::__Deref;
+use cpclib_common::bitvec::prelude::BitVec;
+use cpclib_common::smallvec::SmallVec;
 
 use std::any::Any;
 use std::cell::RefCell;

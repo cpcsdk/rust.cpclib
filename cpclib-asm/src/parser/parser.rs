@@ -12,30 +12,30 @@ use cpclib_sna::parse::parse_flag;
 use cpclib_sna::parse::parse_flag_value;
 use cpclib_sna::FlagValue;
 use either::Either;
-use itertools::Itertools;
-use itertools::chain;
-use nom_locate::LocatedSpan;
+use cpclib_common::itertools::Itertools;
+use cpclib_common::itertools::chain;
+use cpclib_common::nom_locate::LocatedSpan;
 
-use nom::branch::*;
-use nom::bytes::complete::tag;
-use nom::bytes::complete::tag_no_case;
-use nom::bytes::complete::*;
-use nom::character::complete::*;
-use nom::combinator::*;
-use nom::error::*;
-use nom::multi::separated_list1;
-use nom::multi::*;
-use nom::sequence::*;
+use cpclib_common::nom::branch::*;
+use cpclib_common::nom::bytes::complete::tag;
+use cpclib_common::nom::bytes::complete::tag_no_case;
+use cpclib_common::nom::bytes::complete::*;
+use cpclib_common::nom::character::complete::*;
+use cpclib_common::nom::combinator::*;
+use cpclib_common::nom::error::*;
+use cpclib_common::nom::multi::separated_list1;
+use cpclib_common::nom::multi::*;
+use cpclib_common::nom::sequence::*;
 
 #[allow(missing_docs)]
-use nom::*;
+use cpclib_common::nom::*;
 
 use self::error_code::INVALID_ARGUMENT;
 
 use super::*;
 use crate::preamble::*;
 use cpclib_sna::SnapshotVersion;
-use nom::lib::std::convert::Into;
+use cpclib_common::nom::lib::std::convert::Into;
 
 use super::obtained::Locate;
 
@@ -121,10 +121,10 @@ pub fn parse_z80_strrc_with_contextrc(
     let ctx = listing.ctx();
     match parse_z80_code(listing.span()) {
         Err(e) => match e {
-            nom::Err::Error(e) | Err::Failure(e) => {
+            cpclib_common::nom::Err::Error(e) | Err::Failure(e) => {
                 return Err(AssemblerError::SyntaxError { error: e });
             }
-            nom::Err::Incomplete(_) => {
+            cpclib_common::nom::Err::Incomplete(_) => {
                 return Err(AssemblerError::BugInParser {
                     error: "Bug in the parser".to_owned(),
                     context: ctx.deref().clone(),
@@ -223,7 +223,7 @@ pub fn parse_z80_code<'src, 'ctx, 'a>(
     } else {
         // Everything should have been consumed
         return Err(Err::Error(
-            nom::error::ParseError::<Z80Span>::from_error_kind(input, ErrorKind::Many0),
+            cpclib_common::nom::error::ParseError::<Z80Span>::from_error_kind(input, ErrorKind::Many0),
         ));
     }
 }
@@ -529,7 +529,7 @@ pub fn parse_basic_hide_lines(input: Z80Span) -> IResult<Z80Span, Vec<u16>, Verb
 pub fn dec_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z80Span>> {
     let input_inner = input.deref().clone();
     let (input, number) = dec_number(input_inner).map_err(|err| {
-        nom::Err::Error(VerboseError::from_error_kind(
+        cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
             input,
             ErrorKind::AlphaNumeric,
         ))
@@ -540,7 +540,7 @@ pub fn dec_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z8
 pub fn bin_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z80Span>> {
     let input_inner = input.deref().clone();
     let (input, number) = bin_number(input_inner).map_err(|err| {
-        nom::Err::Error(VerboseError::from_error_kind(
+        cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
             input,
             ErrorKind::AlphaNumeric,
         ))
@@ -551,7 +551,7 @@ pub fn bin_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z8
 pub fn hex_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z80Span>> {
     let input_inner = input.deref().clone();
     let (input, number) = hex_number(input_inner).map_err(|err| {
-        nom::Err::Error(VerboseError::from_error_kind(
+        cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
             input,
             ErrorKind::AlphaNumeric,
         ))
@@ -566,7 +566,7 @@ pub fn parse_flag_value_inner(
     let inner_input = input.deref().clone();
 
     let (input, number) = parse_flag_value(inner_input).map_err(|err| {
-        nom::Err::Error(VerboseError::from_error_kind(
+        cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
             input,
             ErrorKind::AlphaNumeric,
         ))
@@ -697,7 +697,7 @@ let (input, opcode) = match parse_single_token(true)(input) {
         "[DBG] other tokens",
         cut(fold_many0(
             parse_single_token(false),
-            Vec::new(),
+            || Vec::new(),
             |mut acc: Vec<_>, item| {
                 acc.push(item);
                 acc
@@ -760,7 +760,7 @@ pub fn parse_z80_line_label_only(
 
     if let Some(equ_or_assign) = &equ_or_assign {
         if r#let.is_some() && equ_or_assign.0.to_ascii_lowercase() != "=" {
-            return Err(nom::Err::Failure(VerboseError::from_error_kind(
+            return Err(cpclib_common::nom::Err::Failure(VerboseError::from_error_kind(
                 before_label,ErrorKind::Char)));
         }
     }
@@ -1512,7 +1512,7 @@ fn parse_ld_normal_src(
         } else if dst.is_register_i() || dst.is_register_r() {
             parse_register_a(input)
         } else {
-            Err(nom::Err::Error(VerboseError::from_error_kind(
+            Err(cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
                 input,
                 ErrorKind::Alt,
             )))
@@ -1689,10 +1689,10 @@ pub fn parse_macro_call(can_return_label: bool)
         .is_some()
     { 
         Err(Err::Failure(
-            nom::error::VerboseError::<Z80Span>::add_context(
+            cpclib_common::nom::error::VerboseError::<Z80Span>::add_context(
                 input_label,
                 "MACRO: forbidden name",
-                nom::error::ParseError::<Z80Span>::from_error_kind(input, ErrorKind::AlphaNumeric),
+                cpclib_common::nom::error::ParseError::<Z80Span>::from_error_kind(input, ErrorKind::AlphaNumeric),
             )
         ))
     } else {
@@ -1952,7 +1952,7 @@ pub fn parse_add_or_adc_complete(input: Z80Span) -> IResult<Z80Span, Token, Verb
             verify(parse_register_iy, |_| first.is_register_iy()),
         ))(input)
     } else {
-        return Err(nom::Err::Error(VerboseError::from_error_kind(
+        return Err(cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
             input,
             ErrorKind::Alt,
         )));
@@ -2678,7 +2678,7 @@ fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
     };
 
     let (_, flag) = (parse_flag(LocatedSpan::new(&flagname))).map_err(|_e| {
-        nom::Err::Error(VerboseError::from_error_kind(
+        cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
             input.clone(),
             ErrorKind::AlphaNumeric,
         ))
@@ -2711,12 +2711,12 @@ pub fn char_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>
         alt((
             delimited(
                 tag("\""), 
-                nom::character::complete::anychar, 
+                cpclib_common::nom::character::complete::anychar, 
                 tag("\"")
             ), 
             delimited(
                 tag("'"), 
-                nom::character::complete::anychar, 
+                cpclib_common::nom::character::complete::anychar, 
                 tag("'")
             ), 
         )),
@@ -2746,12 +2746,12 @@ pub fn parse_label(
             )
         )(input)?;
         if macro_arg.is_some() {
-            return Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)));
+            return Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf)));
         }
 
 
         if middle.is_none() && (first == '@' || first == '.') {
-            return Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)));
+            return Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf)));
         }
 
         let input = if doubledots {
@@ -2774,7 +2774,7 @@ pub fn parse_label(
             FINAL_DIRECTIVE
         );
         if impossible.any(|val| val == &label.to_uppercase()) {
-            Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+            Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
         } else {
             Ok((input, label))
         }
@@ -2789,7 +2789,7 @@ pub fn parse_end_directive (input: Z80Span) -> IResult<Z80Span, String, VerboseE
     if FINAL_DIRECTIVE.iter().any(|&val| val == &keyword) {
         Ok((input, keyword))
     } else {
-        Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+        Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
     }
 
 }
@@ -2801,7 +2801,7 @@ pub fn parse_macro_name (input: Z80Span) -> IResult<Z80Span, String, VerboseErro
     let keyword = chain!(first.iter().cloned(), name.iter_elements()).collect::<String>().to_ascii_uppercase();
 
     if chain!(FINAL_DIRECTIVE, IMPOSSIBLE_LABEL_NAME).any(|&val| val == &keyword) {
-        Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+        Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
 
     } else {
         Ok((input, keyword))     
@@ -2846,7 +2846,7 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 pub fn parse_value(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     let extra = input.extra.clone();
     let (input, val) = alt((hex_number, dec_number, bin_number))(input.clone().into())
-        .map_err(|op| nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::ParseTo)))?;
+        .map_err(|op| cpclib_common::nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::Verify)))?;
 
     // rebuild the rightly typed span
     let input = Z80Span::from_standard_span(input, extra);
@@ -3238,7 +3238,7 @@ pub fn comp(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
 
 /// Generate a string from a parsing error. Probably deprecated
 #[allow(clippy::needless_pass_by_value)]
-pub fn decode_parsing_error(_orig: &str, _e: ::nom::Err<&str>) -> String {
+pub fn decode_parsing_error(_orig: &str, _e: cpclib_common::nom::Err<&str>) -> String {
     unimplemented!("pub fn decode_parsing_error(orig: &str, e: ::nom::Err<&str>) -> String")
     /*
     let error_string;

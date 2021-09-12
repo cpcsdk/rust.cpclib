@@ -3,12 +3,12 @@ use std::{
     rc::Rc,
 };
 
-use nom::{
+use cpclib_common::nom::{
     error::{ErrorKind, ParseError},
     Compare, CompareResult, Err, FindSubstring, IResult, InputIter, InputLength, InputTake, Needed,
     Slice,
 };
-use nom_locate::LocatedSpan;
+use cpclib_common::nom_locate::LocatedSpan;
 
 use super::context::ParserContext;
 
@@ -103,15 +103,15 @@ impl Compare<&'static str> for Z80Span {
         self.deref().compare_no_case(t)
     }
 }
-impl nom::InputIter for Z80Span {
+impl cpclib_common::nom::InputIter for Z80Span {
     type Item =
-        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as nom::InputIter>::Item;
+        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as cpclib_common::nom::InputIter>::Item;
 
     type Iter =
-        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as nom::InputIter>::Iter;
+        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as cpclib_common::nom::InputIter>::Iter;
 
     type IterElem =
-        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as nom::InputIter>::IterElem;
+        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as cpclib_common::nom::InputIter>::IterElem;
 
     fn iter_indices(&self) -> Self::Iter {
         self.deref().iter_indices()
@@ -133,13 +133,13 @@ impl nom::InputIter for Z80Span {
     }
 }
 
-impl nom::InputLength for Z80Span {
+impl cpclib_common::nom::InputLength for Z80Span {
     fn input_len(&self) -> usize {
         self.deref().input_len()
     }
 }
 
-impl nom::InputTake for Z80Span {
+impl cpclib_common::nom::InputTake for Z80Span {
     fn take(&self, count: usize) -> Self {
         Self(self.deref().take(count))
     }
@@ -150,9 +150,9 @@ impl nom::InputTake for Z80Span {
     }
 }
 
-impl nom::InputTakeAtPosition for Z80Span {
+impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
     type Item =
-        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as nom::InputIter>::Item;
+        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as cpclib_common::nom::InputIter>::Item;
 
     fn split_at_position<P, E: ParseError<Self>>(&self, predicate: P) -> IResult<Self, Self, E>
     where
@@ -160,7 +160,7 @@ impl nom::InputTakeAtPosition for Z80Span {
     {
         match self.deref().position(predicate) {
             Some(n) => Ok(self.take_split(n)),
-            None => Err(Err::Incomplete(nom::Needed::new(1))),
+            None => Err(Err::Incomplete(cpclib_common::nom::Needed::new(1))),
         }
     }
 
@@ -175,7 +175,7 @@ impl nom::InputTakeAtPosition for Z80Span {
         match self.deref().position(predicate) {
             Some(0) => Err(Err::Error(E::from_error_kind(self.clone(), e))),
             Some(n) => Ok(self.take_split(n)),
-            None => Err(Err::Incomplete(nom::Needed::new(1))),
+            None => Err(Err::Incomplete(cpclib_common::nom::Needed::new(1))),
         }
     }
 

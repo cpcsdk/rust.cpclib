@@ -7,7 +7,7 @@ use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::Register8;
 
-use itertools::Itertools;
+use cpclib_common::itertools::Itertools;
 
 use cpclib_sna::SnapshotVersion;
 
@@ -628,7 +628,7 @@ impl fmt::Display for Token {
 
 
             Token::MacroCall(ref name, ref args)
-                => {use itertools::Itertools;
+                => {use cpclib_common::itertools::Itertools;
                     write!(f, "{} {}", name, args.clone()
                                                 .iter()
                                                 .map(|a|{a.to_string()})

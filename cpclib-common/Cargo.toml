@@ -1,0 +1,22 @@
+[package]
+name = "cpclib-common"
+version = "0.5.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bitfield = "0.13.2"
+bitflags = "1.2.1"
+bitsets = "0.1.1"
+bitvec = "0.20" # version limited by nom
+
+itertools= "0.10.1"
+lazy_static = "1.4.0"
+nom = "7.0.0"
+nom_locate = "4.0.0"
+num= "0.4.0"
+num-bigint = "0.4.2" # To remove later when num will be updated
+smallvec = "1.6.1"
+strsim = "0.10.0"
+
