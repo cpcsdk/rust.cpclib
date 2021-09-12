@@ -243,11 +243,12 @@ pub fn parse_z80_line(
                     space0,
                     alt((
                         map(
-                            alt((context("macro", parse_macro), context("basic", parse_basic))),
+                            context("basic", parse_basic),
                             |t| vec![t.locate(before_elem.clone())],
                         ),
                         map(
                             alt((
+                                context("macro", parse_macro),
                                 context("[DBG] crunched section", parse_crunched_section),
                                 context("[DBG] repeat", parse_repeat),
                                 context("[DBG] while", parse_while),
@@ -334,7 +335,8 @@ pub fn parse_rorg(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError
 }
 
 /// TODO
-pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let dir_start = input.clone();
     let (input, _) = preceded(space0, parse_word("MACRO"))(input)?;
 
     // macro name
@@ -365,7 +367,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     )(input)?;
 
     Ok((
-        input,
+        input.clone(),
         Token::Macro(
             name,
                 arguments
@@ -377,7 +379,14 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
                 .iter()
                 .map(|s| -> String { s.to_string() })
                 .collect::<String>(),
-    ),
+    ).locate(Z80Span(unsafe{
+        LocatedSpan::new_from_raw_offset(
+            dir_start.location_offset(), 
+            dir_start.location_line(),
+            &dir_start[..dir_start.len()-input.len()],
+             dir_start.extra.clone()
+            )   
+    }))
     ))
 }
 
@@ -1028,7 +1037,8 @@ pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
         parse_rst,
         parse_im,
     ))(input.clone())
-    .map(|(i, r)| (i, r.locate(input)))
+    .map(|(i, r)| 
+    (i, r.locate(input)))
 }
 
 /// Parse ex af, af' instruction
@@ -1128,7 +1138,7 @@ pub fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
 pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let dir_start = input.clone();
 
-        map(
+    let (input2, directive)  = 
             alt((
                 context("[DBG] write direct memory", parse_write_direct_memory),
                 context("[DBG] save", parse_save),
@@ -1138,9 +1148,19 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
                 context("[DBG] noargs", parse_noarg_directive),
                 context("[DBG] assign", parse_assign),
                 context("[DBG] macro call", parse_macro_call(true)), 
-            )),
-            move |t| t.locate(dir_start.clone()),
-        )(input.clone())
+            ))(input.clone())?;
+
+    // XXX Do we keep that
+    let directive = directive.locate(Z80Span(unsafe{
+        LocatedSpan::new_from_raw_offset(
+            dir_start.location_offset(), 
+            dir_start.location_line(),
+            &dir_start[..dir_start.len()-input2.len()],
+             dir_start.extra.clone()
+            )   
+    }));
+    Ok((input2, directive))
+
 }
 
 

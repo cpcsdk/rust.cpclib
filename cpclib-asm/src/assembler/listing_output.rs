@@ -23,7 +23,7 @@ pub struct ListingOutput {
 	/// Complete source
 	current_source: Option<Rc<String>>,
 	/// Line number and line content. 
-	current_line: Option<(u32, String)>, // clone view of the line XXX avoid this clone
+	current_line_group: Option<(u32, String)>, // clone view of the line XXX avoid this clone
 	current_first_address: u32
 
 }	
@@ -43,7 +43,7 @@ impl ListingOutput {
 			current_fname: None,
 			activated: false,
 			current_line_bytes: Default::default(),
-			current_line: None,
+			current_line_group: None,
 			current_source: None,
 			current_first_address: 0
 		}
@@ -69,7 +69,7 @@ impl ListingOutput {
 
 	/// Check if the token is for the same line than the previous token
 	fn token_is_on_same_line(&self, token: &LocatedToken) -> bool {
-		match &self.current_line {
+		match &self.current_line_group {
 			Some( (current_location, current_line)) => {
 				self.token_is_on_same_source(token) &&
 					*current_location == token.span().location_line()
@@ -78,25 +78,45 @@ impl ListingOutput {
 		}
 	}
 
+	fn extract_code(token: &LocatedToken) -> String {
+		match token {
+			LocatedToken::Standard{
+				token: Token::Macro(..),
+				span
+			} => {
+		//		self.need_to_cut = true;
+				dbg!(span.fragment().to_string())
+			},
+
+			_ => {
+	//			self.need_to_cut = false;
+				unsafe{
+					std::str::from_utf8_unchecked(
+						token.span().get_line_beginning()
+					)
+				}.to_owned()
+			}
+		}
+	}
+
 	/// Add a token for the current line
 	pub fn add_token(&mut self, token: &LocatedToken, bytes: &[u8], address: u32) {
 		if ! self.activated {return;}
+
+		let fname_handling = self.manage_fname(token);
+
 
 		if !self.token_is_on_same_line(token) {
 			self.process_current_line(); // request a display
 
 			// replace the objects of interest
 			self.current_source = Some(token.context().0.clone());
-			let current_line  = unsafe{
-				std::str::from_utf8_unchecked(
-					token.span().get_line_beginning()
-				)
-			}.to_owned();
+
 			// TODO manage differently for macros and so on
 			//let current_line = current_line.split("\n").next().unwrap_or(current_line);
-			self.current_line = Some((
+			self.current_line_group = Some((
 				token.span().location_line(),
-				current_line
+				Self::extract_code(token)
 			));
 			self.current_first_address = address;
 			self.manage_fname(token);
@@ -105,12 +125,15 @@ impl ListingOutput {
 		self.current_line_bytes.extend_from_slice(bytes);
 
 
+		if let Some(line) = fname_handling {
+			writeln!(self.writer, "{}", line).unwrap();
+		}
 	}
 
 	pub fn process_current_line(&mut self) {
 
 		// retrieve the line
-		let (line_number, line) = match &self.current_line {
+		let (line_number, line) = match &self.current_line_group {
 			Some((idx, line)) => (idx, line),
 			None => return
 		};
@@ -170,14 +193,14 @@ impl ListingOutput {
 				
 
 		// cleanup all the fields of the current line
-		self.current_line = None;
+		self.current_line_group = None;
 		self.current_source = None;
 		self.current_line_bytes.clear();
 	}
 
 
 	pub fn finish(&mut self) {
-	
+		self.process_current_line()
 	}
 
 
