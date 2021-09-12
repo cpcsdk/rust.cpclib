@@ -1,11 +1,11 @@
-use std::{fmt::Debug, io::Write};
+use std::{fmt::Debug, io::Write, ops::Index};
 
 use cpclib_tokens::Token;
-use itertools::Itertools;
-use lazy_static::__Deref;
-use nom::ExtendInto;
-
-
+use cpclib_common::itertools::Itertools;
+use cpclib_common::nom::ExtendInto;
+use cpclib_common::smallvec::SmallVec;
+use std::rc::Rc;
+use std::ops::Deref;
 use crate::preamble::LocatedToken;
 
 /// Generate an output listing.
@@ -14,21 +14,18 @@ pub struct ListingOutput {
 	/// Writer that will contains the listing/
 	/// The listing is produced line by line and not token per token
 	writer: Box<dyn Write>,
-
-	// the complete source
-	current_source: Option<(*const u8, usize)>,
-	/// The line that will be printed when all the tokens will be injected (ptr, len, line number in source)
-	current_line: Option<(*const u8, usize, u32)>,
-	/// The data generated for the current line
-	current_data: Vec<u8>,
-	/// The adress of the first token of the line
-	current_first_address: u32,
-	current_address_is_value: bool,
-	/// The name of the file containing the token
+	/// Filename of the current line
 	current_fname: Option<String>,
+	activated: bool,
 
-	/// Set to true when listing is properly handled
-	activated: bool
+	/// Bytes collected at the current line
+	current_line_bytes: SmallVec<[u8; 4]>,
+	/// Complete source
+	current_source: Option<Rc<String>>,
+	/// Line number and line content. 
+	current_line: Option<(u32, String)>, // clone view of the line XXX avoid this clone
+	current_first_address: u32
+
 }	
 
 impl Debug for ListingOutput {
@@ -43,77 +40,104 @@ impl ListingOutput {
 	pub fn new<W:'static + Write>(writer: W) -> Self {
 		Self {
 			writer: Box::new(writer),
-			current_source: None,
 			current_fname: None,
+			activated: false,
+			current_line_bytes: Default::default(),
 			current_line: None,
-			current_data: Vec::new(),
-			current_first_address: 0,
-			current_address_is_value: false,
-			activated: true
+			current_source: None,
+			current_first_address: 0
 		}
 	}
 
 
-	/// Print the data for the current line
-	fn process_current_line(&mut self) {
-		// rebuild the string
-		let (ptr, len, line_number) = self.current_line.take().unwrap();
-		let line_representation = String::from_utf8_lossy(unsafe{std::slice::from_raw_parts(ptr, len)});
-		let mut line_representation = line_representation.split("\n");
-		// TODO include the other lines for macros and so on
+	fn bytes_per_line(&self) -> usize {
+		8
+	}
 
-		// Split the bytes in several lines if any
-		let data_representation = self.current_data.iter()
-											.chunks(self.bytes_per_line())
-											.into_iter()
-											.map(|c| {
-												c.map(|b| format!("{:02X}", b))
-												.join(" ")
-											}).collect_vec();
+	/// Check if the token is for the same source
+	fn token_is_on_same_source(&self, token: &LocatedToken) -> bool {
+		match &self.current_source {
+			Some(current_source) => {
+				std::ptr::eq(
+					token.context().0.deref().as_ptr(), 
+					current_source.as_str().as_ptr()
+				)
+			},
+			None => false
+		}
+	}
+
+	/// Check if the token is for the same line than the previous token
+	fn token_is_on_same_line(&self, token: &LocatedToken) -> bool {
+		match &self.current_line {
+			Some( (current_location, current_line)) => {
+				self.token_is_on_same_source(token) &&
+					*current_location == token.span().location_line()
+			},
+			None => false
+		}
+	}
+
+	/// Add a token for the current line
+	pub fn add_token(&mut self, token: &LocatedToken, bytes: &[u8], address: u32) {
+		if ! self.activated {return;}
+
+		if !self.token_is_on_same_line(token) {
+			self.process_current_line(); // request a display
+
+			// replace the objects of interest
+			self.current_source = Some(token.context().0.clone());
+			let current_line  = unsafe{
+				std::str::from_utf8_unchecked(
+					token.span().get_line_beginning()
+				)
+			}.to_owned();
+			// TODO manage differently for macros and so on
+			//let current_line = current_line.split("\n").next().unwrap_or(current_line);
+			self.current_line = Some((
+				token.span().location_line(),
+				current_line
+			));
+			self.current_first_address = address;
+			self.manage_fname(token);
+		}
+
+		self.current_line_bytes.extend_from_slice(bytes);
+
+
+	}
+
+	pub fn process_current_line(&mut self) {
+
+		// retrieve the line
+		let (line_number, line) = match &self.current_line {
+			Some((idx, line)) => (idx, line),
+			None => return
+		};
+
+		// build the iterators over the line representation of source code and data
+		let mut line_representation = line.split("\n");
+		let data_representation = self.current_line_bytes.iter()
+				.chunks(self.bytes_per_line())
+				.into_iter()
+				.map(|c| {
+					c.map(|b| format!("{:02X}", b))
+					.join(" ")
+				}).collect_vec();
 		let mut data_representation = data_representation.iter();
 
-
-		static mut FIRST_TOKEN_PROCESSED: bool = false;
-		unsafe{ // safe as soon as we have no parallel assembling
-			if ! FIRST_TOKEN_PROCESSED {
-				let file_start = self.current_source.as_ref().unwrap().0;
-				let missing_len = ptr.offset_from(file_start).abs();
-
-				if missing_len > 0 {
-					let missing_content = std::slice::from_raw_parts(file_start, missing_len as _);
-					let missing_content = String::from_utf8_lossy(missing_content);
-					let missing_content = &missing_content[..missing_content.len()-1] ; // remove last \n
-
-					for (idx, line) in missing_content.split('\n').enumerate() {
-						writeln!(
-							self.writer,
-							"{:4} {} {:bytes_width$} {}",
-							idx+1,
-							"    ",
-							"",
-							line,
-							bytes_width = self.bytes_per_line()*3
-						).unwrap();
-					}
-
-				}
-
-				FIRST_TOKEN_PROCESSED = true;
-			}
-		};
+		// TODO manage missing end of files/blocks if needed
 
 		// draw all line
 		let mut idx = 0;
 		loop {
 
-			let current_line = line_representation.next();
-			let current_data = data_representation.next();
+			let current_inner_line = line_representation.next();
+			let current_inner_data = data_representation.next();
 
-			if current_data.is_none() && current_line.is_none() {
+			if current_inner_data.is_none() && current_inner_line.is_none() {
 				break;
 			}
-
-//			dbg!(self.current_address_is_value, self.current_first_address, data_representation.is_empty());
 
 			let loc_representation = if false /*(data_representation.is_empty() && !self.current_address_is_value) || idx!=0 */{
 				"    ".to_owned()
@@ -123,7 +147,7 @@ impl ListingOutput {
 
 			
 
-			let line_nb_representation = if current_line.is_none() {
+			let line_nb_representation = if current_inner_line.is_none() {
 				"    ".to_owned()
 			} else {
 				format!("{:4}", line_number+idx)
@@ -134,8 +158,8 @@ impl ListingOutput {
 				"{} {} {:bytes_width$} {} ",
 				line_nb_representation,
 				loc_representation,
-				current_data.unwrap_or(&"".to_owned()),
-				current_line.unwrap_or(""),
+				current_inner_data.unwrap_or(&"".to_owned()),
+				current_inner_line.unwrap_or(""),
 				
 				bytes_width = self.bytes_per_line()*3
 			).unwrap();
@@ -143,88 +167,17 @@ impl ListingOutput {
 			idx += 1;
 		}
 
+				
 
-		self.current_data.clear();
-
+		// cleanup all the fields of the current line
+		self.current_line = None;
+		self.current_source = None;
+		self.current_line_bytes.clear();
 	}
 
-	fn bytes_per_line(&self) -> usize {
-		8
-	}
-
-	/// Add a token for the current line
-	pub fn add_token(&mut self, token: &LocatedToken, bytes: &[u8], address: u32) {
-		if ! self.activated {return;}
-
-		let fname_handling = self.manage_fname(token);
-
-
-
-		// pointer slice on the line
-		let token_line = token.span().get_line_beginning();
-		let token_line_number = token.span().location_line(); 
-		let token_line_len = token_line.len();
-		let token_line = token_line.as_ptr();
-		let token_line_desc = (token_line, token_line_len, token_line_number);
-
-		// pointer slice on the code
-		let source = &token.span().extra.0.as_str();
-		let source_len = source.len();
-		let source = source.as_ptr();
-		let source_desc = (source, source_len);
-
-		if self.current_line.is_none() {
-			// first call, we add the info
-			self.current_source = Some(source_desc);
-			self.current_line = Some(token_line_desc);
-			self.current_data.extend_from_slice(bytes);
-			self.current_first_address = address;
-			self.current_address_is_value = if let LocatedToken::Standard{
-				token: Token::Equ(_, _),
-				..
-			} = token {true} else {false};
-		}
-		else {
-			let (current_line, _, _) = *self.current_line.as_ref().unwrap();
-
-			if std::ptr::eq(current_line, token_line) {
-				// still the same line
-				self.current_data.extend_from_slice(bytes);
-			}
-			else {
-				// enlarge if needed the first line
-				if source_desc == *self.current_source.as_ref().unwrap() {
-					// update the texte length to allow multilines directives to be properly handled
-					let new_line_length = unsafe{token_line_desc.0.offset_from( self.current_line.as_ref().unwrap().0)};
-
-
-					self.current_line.as_mut().unwrap().1 = new_line_length as _;
-
-
-				}
-
-
-				// display previous
-				self.process_current_line();
-
-				// add new token
-				self.add_token(token, bytes, address); // avoid copy paste of similar code
-			}
-		}
-
-
-		if let Some(line) = fname_handling {
-			writeln!(self.writer, "{}", line).unwrap();
-		}
-	}
 
 	pub fn finish(&mut self) {
-		if self.current_line.is_none() {return;}
-		 
-		// ensure we display the end of the file
-		let new_line_length = unsafe{self.current_source.as_ref().unwrap().1 - (self.current_source.as_ref().unwrap().0.offset_from(self.current_line.as_ref().unwrap().0).abs() as usize)};
-		self.current_line.as_mut().unwrap().1 = new_line_length as _;
-		self.process_current_line()
+	
 	}
 
 

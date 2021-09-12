@@ -1,14 +1,14 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 
+use cpclib_common::itertools::Itertools;
+use cpclib_common::{lazy_static, strsim};
 use delegate::delegate;
-use itertools::Itertools;
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{Expr, ExprResult, MacroParam, Token};
+use crate::{ExprResult, MacroParam, Token};
 
-use std::ops::Deref;
 
 
 

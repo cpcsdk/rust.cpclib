@@ -1,4 +1,4 @@
-use bitsets;
+
 
 use std::fs::File;
 
@@ -7,6 +7,7 @@ use std::io::prelude::*;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
+use cpclib_common::bitsets;
 use num_enum::TryFromPrimitive;
 
 mod chunks;

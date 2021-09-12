@@ -369,9 +369,6 @@ impl Display for Oper {
             BooleanAnd => write!(format, "&&"),
             BooleanOr => write!(format, "||"),
 
-            BooleanAnd => write!(format, "&&"),
-            BooleanOr => write!(format, "||"),
-
             &Equal => write!(format, "=="),
             &Different => write!(format, "!="),
             &LowerOrEqual => write!(format, "<="),

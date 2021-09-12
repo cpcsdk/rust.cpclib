@@ -10,7 +10,7 @@ use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 pub use clap;
 use clap::{App, Arg, ArgGroup, ArgMatches};
-use itertools::chain;
+use cpclib_common::itertools::chain;
 
 
 #[derive(Debug)]

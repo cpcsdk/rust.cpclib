@@ -2,6 +2,7 @@
 members = [
     "cpclib-asm",
     "cpclib-basic",
+    "cpclib-common",
     "cpclib-disc",
     "cpclib-macros",
     "cpclib-sna",
@@ -18,6 +19,7 @@ members = [
 cpclib = {path = "./cpclib/"}
 cpclib-asm = {path = "./cpclib-asm/"}
 cpclib-basic = {path = "./cpclib-basic/"}
+cpclib-common = {path = "./cpclib-common/"}
 cpclib-disc = {path = "./cpclib-disc/"}
 cpclib-macros = {path = "./cpclib-macros/"}
 cpclib-sna = {path = "./cpclib-sna/"}#

@@ -1,7 +1,7 @@
 use crate::edsk::ExtendedDsk;
 use crate::edsk::Head;
 
-use bitfield::Bit;
+use cpclib_common::bitfield::Bit;
 
 use std::fs::File;
 use std::io::Read;
