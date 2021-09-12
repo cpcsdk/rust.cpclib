@@ -98,6 +98,7 @@ impl AssemblingOptions {
 
     pub fn write_listing_output<W:'static + Write>(&mut self, writer: W) -> &mut Self {
         self.builder = Some(Rc::new(RefCell::new(ListingOutput::new(writer))));
+        self.builder.as_mut().map(|b| b.borrow_mut().on());
         self
     }
 }

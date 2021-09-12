@@ -1646,7 +1646,7 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
     env.symbols =
         SymbolsTableCaseDependent::new(options.symbols().clone(), options.case_sensitive());
 
-        if let Some(builder) = &options.builder {
+    if let Some(builder) = &options.builder {
             env.output_trigger = ListingOutputTrigger {
             token: None,
             bytes: Vec::new(),
