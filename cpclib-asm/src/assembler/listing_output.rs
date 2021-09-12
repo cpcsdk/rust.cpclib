@@ -1,3 +1,5 @@
+use std::fmt::Display;
+use std::thread::LocalKey;
 use std::{fmt::Debug, io::Write, ops::Index};
 
 use cpclib_tokens::Token;
@@ -5,7 +7,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::ExtendInto;
 use cpclib_common::smallvec::SmallVec;
 use std::rc::Rc;
-use std::ops::Deref;
+use std::ops::{Add, Deref};
 use crate::preamble::LocatedToken;
 
 /// Generate an output listing.
@@ -24,9 +26,31 @@ pub struct ListingOutput {
 	current_source: Option<Rc<String>>,
 	/// Line number and line content. 
 	current_line_group: Option<(u32, String)>, // clone view of the line XXX avoid this clone
-	current_first_address: u32
+
+	current_first_address: u32,
+	current_address_kind: AddressKind,
+	crunched_section_counter: usize
 
 }	
+#[derive(PartialEq)]
+pub enum AddressKind {
+	Address,
+	CrunchedArea,
+	Mixed,
+	None
+}
+
+impl Display for AddressKind {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", match self {
+			AddressKind::Address => ' ',
+			AddressKind::CrunchedArea => 'C',
+			AddressKind::Mixed => 'M',
+			AddressKind::None => 'N',
+		}
+		)
+	}
+}
 
 impl Debug for ListingOutput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -45,7 +69,9 @@ impl ListingOutput {
 			current_line_bytes: Default::default(),
 			current_line_group: None,
 			current_source: None,
-			current_first_address: 0
+			current_first_address: 0,
+			current_address_kind: AddressKind::None,
+			crunched_section_counter: 0
 		}
 	}
 
@@ -100,7 +126,7 @@ impl ListingOutput {
 	}
 
 	/// Add a token for the current line
-	pub fn add_token(&mut self, token: &LocatedToken, bytes: &[u8], address: u32) {
+	pub fn add_token(&mut self, token: &LocatedToken, bytes: &[u8], address: u32, address_kind: AddressKind) {
 		if ! self.activated {return;}
 
 		let fname_handling = self.manage_fname(token);
@@ -119,16 +145,24 @@ impl ListingOutput {
 				Self::extract_code(token)
 			));
 			self.current_first_address = address;
+			self.current_address_kind = AddressKind::None;
 			self.manage_fname(token);
 		}
 
 		self.current_line_bytes.extend_from_slice(bytes);
-
+		self.current_address_kind = if self.current_address_kind == AddressKind::None {
+			 address_kind
+		} else if self.current_address_kind != address_kind {
+			AddressKind::Mixed
+		} else {
+			address_kind
+		};
 
 		if let Some(line) = fname_handling {
 			writeln!(self.writer, "{}", line).unwrap();
 		}
 	}
+
 
 	pub fn process_current_line(&mut self) {
 
@@ -165,7 +199,7 @@ impl ListingOutput {
 			let loc_representation = if false /*(data_representation.is_empty() && !self.current_address_is_value) || idx!=0 */{
 				"    ".to_owned()
 			} else {
-				format!("{:04X}", self.current_first_address)
+				format!("{:04X}{} ", self.current_first_address, self.current_address_kind)
 			};
 
 			
@@ -246,5 +280,14 @@ impl ListingOutput {
 		self.finish();
 		self.activated = false;
 	}
+
+	pub fn enter_crunched_section(&mut self) {
+		self.crunched_section_counter += 1;
+	}
+
+	pub fn leave_crunched_section(&mut self) {
+		self.crunched_section_counter -= 1;
+	}
+
 
 }

@@ -28,7 +28,9 @@ use crate::AmsdosFile;
 use crate::AmsdosFileName;
 
 use self::listing_output::ListingOutput;
+use self::listing_output::AddressKind;
 use self::symbols_output::SymbolOutputGenerator;
+
 
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
@@ -234,9 +236,9 @@ impl ListingOutputTrigger {
     fn write_byte(&mut self, b: u8) {
         self.bytes.push(b);
     }
-    fn new_token(&mut self, new: & LocatedToken, address: u32) {
+    fn new_token(&mut self, new: & LocatedToken, address: u32, kind: AddressKind) {
         if let Some(token) = &self.token {
-            self.builder.borrow_mut().add_token(token, &self.bytes, self.start);
+            self.builder.borrow_mut().add_token(token, &self.bytes, self.start, kind);
         }
 
         self.token.replace( new.clone());
@@ -245,10 +247,11 @@ impl ListingOutputTrigger {
     }
     fn finish(&mut self) {
         if let Some(token) = &self.token {
-            self.builder.borrow_mut().add_token(token, &self.bytes, self.start);
+            self.builder.borrow_mut().add_token(token, &self.bytes, self.start,AddressKind::Address);
         }
         self.builder.borrow_mut().finish();       
     }
+    
 
     fn on(&mut self) {
         self.builder.borrow_mut().on();
@@ -256,6 +259,14 @@ impl ListingOutputTrigger {
 
     fn off(&mut self) {
         self.builder.borrow_mut().off();
+    }
+
+    fn enter_crunched_section(&mut self) {
+        self.builder.borrow_mut().enter_crunched_section();
+    }
+
+    fn leave_crunched_section(&mut self) {
+        self.builder.borrow_mut().leave_crunched_section();
     }
 }
 
@@ -605,7 +616,11 @@ impl Env {
                 _ => self.logical_output_address() as i32
             };
             let trigg = self.output_trigger.as_mut().unwrap();
-            trigg.new_token(new, addr as _);
+            trigg.new_token(
+                new, 
+                addr as _, 
+                if self.crunched_section_state.is_some() {AddressKind::CrunchedArea} else {AddressKind::Address}
+            );
         }
     }
 
@@ -1544,6 +1559,8 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
         crunched_env.active_page_info_mut().startadr = Some(0); // reset the counter to obtain the bytes
         crunched_env.active_page_info_mut().limit = 0xffff; // disable limit (to be redone in the area)
         crunched_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
+
+        self.output_trigger.as_mut().map(|t| t.enter_crunched_section());
         crunched_env.visit_listing(lst)
             .map_err(|e| {
                 
@@ -1557,6 +1574,8 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
             }
             })
         ?;
+        self.output_trigger.as_mut().map(|t| t.leave_crunched_section());
+
 
         // get the new data and crunch it
         let bytes = crunched_env.produced_bytes();
