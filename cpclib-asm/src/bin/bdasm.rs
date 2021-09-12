@@ -63,6 +63,12 @@ fn main() {
                         .number_of_values(1)
                         .multiple(false)
                     )
+                    .arg(
+                        Arg::with_name("COMPRESS")
+                        .help("Output a simple listing that only contains the opcodes")
+                        .short("c")
+                        .long("compressed")
+                    )
 					.get_matches();
 
     // Get the bytes to disassemble
@@ -184,5 +190,9 @@ fn main() {
         listing.inject_labels(&labels);
     }
 
-    println!("{}", listing.to_enhanced_string());
+    if matches.is_present("COMPRESS") {
+        println!("{}", listing.to_string());
+    } else {
+        println!("{}", listing.to_enhanced_string());
+    }
 }
