@@ -466,6 +466,7 @@ pub enum Token {
     // Fake push directive with several arguments
     MultiPush(Vec<DataAccess>),
 
+    Next(String, String, Option<Expr>),
     NoExport(Vec<String>),
     NoList,
 
@@ -507,6 +508,7 @@ pub enum Token {
     },
     SetCPC(Expr),
     SetCrtc(Expr),
+    SetN(String, String, Option<Expr>),
     /// This directive setup a value for a given flag of the snapshot
     SnaSet(
         cpclib_sna::flags::SnapshotFlag,

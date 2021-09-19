@@ -22,6 +22,7 @@ use std::fmt;
 
 use std::convert::TryFrom;
 use std::io::Write;
+use std::ops::Add;
 use std::rc::Rc;
 
 use crate::AmsdosFile;
@@ -1235,6 +1236,42 @@ impl Env {
     }
 
 
+    fn visit_next_and_co(&mut self, destination: &str, source: &str, delta: Option<&Expr>, can_override: bool) -> Result<(), AssemblerError> {
+
+        if !can_override && self.symbols.contains_symbol(destination)? && self.pass.is_first_pass() {
+
+            let kind = self.symbols().kind(Symbol::from(destination))?;
+            return Err(AssemblerError::AlreadyDefinedSymbol{
+                symbol: destination.to_owned(),
+                kind: kind.to_string()
+            });
+        } 
+ 
+        // setup the value
+        let value = self.resolve_expr_must_never_fail(&source.into())?;
+        if can_override {
+            self.symbols_mut().assign_symbol_to_value(destination, value)?;
+        } else {
+            
+            self.add_symbol_to_symbol_table(destination, value)?;
+        }
+        
+
+        // increase next one
+        let delta = match delta {
+            Some(delta) =>  self.resolve_expr_must_never_fail(delta)?,
+            None => 1.into()
+        };
+        let value = value + delta;
+        self.symbols_mut().assign_symbol_to_value(source, value)?;
+
+
+        Ok(())
+     
+    }
+
+    
+
 
     /// return the page and bank configuration for the given address at the current mmr configuration
     /// https://grimware.org/doku.php/documentations/devices/gatearray#mmr
@@ -1938,7 +1975,9 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         }
         Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice()),
         Token::WaitNops(count) => env.visit_waitnops(count),
-        _ => panic!("Not treated {:?}", token),
+        Token::Next(label, source, delta) =>  env.visit_next_and_co(label, source, delta.as_ref(), false),
+        Token::SetN(label, source, delta) => env.visit_next_and_co(label, source, delta.as_ref(), true),
+        _ => unimplemented!("{:?}", token)
     }
 }
 
@@ -2184,6 +2223,8 @@ fn visit_assign(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerE
     Ok(())
  
 }
+
+
 
 fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     match token {
