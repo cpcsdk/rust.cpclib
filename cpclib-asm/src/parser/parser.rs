@@ -821,6 +821,7 @@ pub fn parse_z80_line_label_only(
          alt((
             preceded(space1, parse_word("DEFL")), 
             preceded(space1, parse_word("EQU")), 
+            delimited(space1, parse_word("SET"), not(tuple((space0, expr, parse_comma)))),
             delimited(space0, tag("="), space0)
         )),
         cut( context("Value error",expr))

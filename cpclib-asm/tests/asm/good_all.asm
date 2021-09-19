@@ -712,7 +712,7 @@ l1  djnz l1
     scf
 
 ;   SET
-    set 0,(hl)
+label    set 0,(hl)
     set 0,(ix + des)
     set 0,(iy + des)
     set 0,a
