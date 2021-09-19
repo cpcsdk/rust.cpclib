@@ -120,6 +120,7 @@ do_stuff
 ### WAITNOPS
 
 Generate a list of instructions that do not modify any registers or memory but is executed with the expected amount of nops.
+(Currently it is synonym of NOP, but as soon as someone wants to provide clever rules to use less bytes, I'll implement them)
 
 ### LOCOMOTIVEBASIC
 

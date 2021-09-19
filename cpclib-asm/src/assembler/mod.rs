@@ -1174,6 +1174,20 @@ impl Env {
         Ok(())
     }
 
+    pub fn visit_waitnops(
+        &mut self,
+        count: &Expr
+    ) -> Result<(), AssemblerError> {
+
+        // TODO really use a clever way
+        let bytes = self.assemble_nop(Mnemonic::Nop, Some(count))?;
+        self.output_bytes(&bytes)?;
+        
+
+        self.stable_counters.update_counters(self.resolve_expr_may_fail_in_first_pass(count)?.int() as _);
+        Ok(())
+    }
+
     pub fn visit_struct_definition(
         &mut self,
         name: &str,
@@ -1923,6 +1937,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             env.visit_call_macro_or_build_struct(token)
         }
         Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice()),
+        Token::WaitNops(count) => env.visit_waitnops(count),
         _ => panic!("Not treated {:?}", token),
     }
 }
@@ -2012,7 +2027,7 @@ impl Env {
                 span.clone()
             )?;
         }
-        
+
         self.symbols_mut().remove_symbol(counter_name)?;
 
         Ok(())
