@@ -31,7 +31,7 @@ use crate::AmsdosFileName;
 use self::listing_output::ListingOutput;
 use self::listing_output::AddressKind;
 use self::symbols_output::SymbolOutputGenerator;
-
+use std::collections::HashMap;
 
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
@@ -494,6 +494,38 @@ impl CharsetEncoding {
     }
 }
 
+#[derive(Clone, Debug)]
+struct Section {
+    /// Name of the section
+    name: String,
+    /// Start address of the section
+    start: u16,
+    /// Last (included) address of the section
+    stop: u16,
+    /// Expected mmr configuration
+    mmr: u8,
+
+    output_adr: u16,
+    code_adr: u16
+}
+
+
+impl Section {
+    fn new(name: &str, start: u16, stop: u16, mmr: u8) -> Self {
+        Section {
+            mmr,
+            name: name.to_owned(),
+            start,
+            stop,
+
+            output_adr: start,
+            code_adr: start
+        }     
+    }
+    fn contains(&self, addr: u16) -> bool {
+        addr >= self.start && addr <= self.stop
+    }
+}
 
 /// Environment of the assembly
 #[allow(missing_docs)]
@@ -541,7 +573,12 @@ pub struct Env {
     warnings: Vec<AssemblerWarning>,
 
     /// Counter to disable some instruction in rorg stuff
-    nested_rorg: usize
+    nested_rorg: usize,
+
+    /// List of all sections
+    sections: HashMap<String, Rc<RefCell<Section>>>,
+    /// Current section if any
+    current_section: Option<Rc<RefCell<Section>>>
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -580,7 +617,10 @@ impl Default for Env {
 
             string_warning_done: false,
             warnings: Vec::new(),
-            nested_rorg: 0
+            nested_rorg: 0,
+
+            sections: HashMap::default(),
+            current_section: None
         }
     }
 }
@@ -651,6 +691,9 @@ impl Env {
                 !elem.is_override_memory()
             });
             self.pages_info.iter_mut().for_each(|p| p.new_pass());
+        
+
+            self.current_section = None;
         }
     }
 
@@ -790,6 +833,8 @@ impl Env {
             }
         }
 
+
+
         // update the maximm 64k position
         self.active_page_info_mut().maxadr = self.maximum_address().max(self.logical_output_address());
         if self.active_page_info().startadr.is_none() {
@@ -800,7 +845,7 @@ impl Env {
         let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
 
         let r#override = if already_used {
-            let r#override = AssemblerError::OverrideMemory(physical_address, 1);
+            let r#override = AssemblerError::OverrideMemory(physical_address.clone(), 1);
             if self.allow_memory_override() {
                 self.warnings.push(r#override);
                true
@@ -811,6 +856,19 @@ impl Env {
             false
         };
 
+        if let Some (section) = &self.current_section {
+            let section = section.borrow();
+            if !section.contains(physical_address.address()) {
+                return Err(AssemblerError::AssemblingError {
+                    msg: format!("SECTION error: write address 0x{:x} out of range [Ox{:}-Ox{:}]",
+                    physical_address.address(),
+                    section.start,
+                    section.stop
+                )
+                });
+            }
+        } 
+            
         self.sna.set_byte(abstract_address, v);
         self.written_bytes.set(abstract_address as _, true);
 
@@ -826,6 +884,18 @@ impl Env {
         // we have written all memory and are trying to restart
         if self.logical_output_address() == 0 {
             self.active_page_info_mut().fail_next_write_if_zero = true;
+        }
+
+        {
+            let (output, code) = (
+                self.active_page_info().logical_outputadr,
+                self.active_page_info().logical_codeadr
+            );
+
+            if let Some (section) = &mut self.current_section {
+                section.borrow_mut().output_adr = output;
+                section.borrow_mut().code_adr = code;
+            } 
         }
 
         Ok(r#override)
@@ -1236,6 +1306,69 @@ impl Env {
             self.output(fill)?;
         }
         
+        Ok(())
+    }
+
+    fn visit_section(&mut self, name: &str) -> Result<(), AssemblerError> {
+
+        let section = match self.sections.get(name) {
+            Some(section) => section,
+            None => {
+                return Err(AssemblerError::AssemblingError {
+                    msg: format!("Section '{}' does not exists", name)
+                });
+            }
+        };
+
+        {
+            let section = section.borrow();
+
+            if section.mmr != self.ga_mmr {
+                self.warnings.push(AssemblerError::AssemblingError{
+                    msg: format!("Gate Array configuration is not coherent with the section. We  manually set it (0x{:x} expected instead of 0x{:x})", section.mmr, self.ga_mmr)
+                });
+
+                self.ga_mmr = section.mmr;
+            }
+        }
+
+
+        let section = Rc::clone(section);
+        
+        self.active_page_info_mut().logical_outputadr = section.borrow().output_adr;
+        self.active_page_info_mut().logical_codeadr = section.borrow().code_adr;
+
+        self.current_section = Some(section);   
+
+        Ok(())
+    }
+
+    fn visit_range(&mut self, name: &str, start: &Expr, stop: &Expr)-> Result<(), AssemblerError> {
+        if self.pass.is_first_pass() {
+            if self.sections.contains_key(name) {
+                return Err(AssemblerError::AssemblingError {
+                    msg: format!("Section '{}' is already defined", name)
+                });
+            }
+        }
+
+        let start = self.resolve_expr_must_never_fail(start)?;
+        let stop = self.resolve_expr_must_never_fail(stop)?;
+
+        let section = Rc::new(RefCell::new(
+            Section::new(
+                name,
+                start.int() as _,
+                stop.int() as _,
+                self.ga_mmr
+            ))
+        );
+
+        self.sections.insert(
+            name.to_owned(),
+            section
+        );
+
         Ok(())
     }
 
@@ -1983,6 +2116,9 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::WaitNops(count) => env.visit_waitnops(count),
         Token::Next(label, source, delta) =>  env.visit_next_and_co(label, source, delta.as_ref(), false),
         Token::SetN(label, source, delta) => env.visit_next_and_co(label, source, delta.as_ref(), true),
+        Token::Range(name, start, stop) => env.visit_range(name, start, stop),
+        Token::Section(name) => env.visit_section(name),
+       
         _ => unimplemented!("{:?}", token)
     }
 }
