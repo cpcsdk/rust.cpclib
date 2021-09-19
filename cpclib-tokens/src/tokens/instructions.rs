@@ -481,7 +481,8 @@ pub enum Token {
 
     Print(Vec<FormattedExpr>),
     Protect(Expr, Expr),
-
+    /// Define a named section in the current page
+    Range(String, Expr, Expr),
     /// Duplicate the token stream
     Repeat(
         // number of loops
@@ -506,6 +507,7 @@ pub enum Token {
         dsk_filename: Option<String>,
         side: Option<Expr>,
     },
+    Section(String),
     SetCPC(Expr),
     SetCrtc(Expr),
     SetN(String, String, Option<Expr>),

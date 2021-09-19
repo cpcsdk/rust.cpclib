@@ -81,9 +81,11 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
                 "PRINT", "PROTECT", 
                 "REPEAT", "REND", "RORG",
                 "MACRO", "ENDM",
+                "RANGE",
                 "RUN",
                 "SAVE", "WRITE", "WRITE DIRECT",
                 "SNASET", "STRUCT", "SWITCH",
+                "SECTION",
                 "UNDEF",
                 "WAITNOPS",
                 "WHILE", "WEND"
@@ -1099,6 +1101,34 @@ pub fn parse_undef(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     Ok((input, Token::Undef(label)))
 }
 
+pub fn parse_section(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, _) = parse_word("SECTION")(input)?;
+    let (input, name) = preceded(space0, parse_label(false))(input)?;
+
+    Ok((
+        input,
+        Token::Section(name.to_string())
+    ))
+}
+
+pub fn parse_range(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, _) = parse_word("RANGE")(input)?;
+
+    let (input, (label, start, stop)) = cut(context(
+        "Wrong parameter for RANGE", 
+        tuple((
+            delimited(space0, parse_label(false), space0),
+            preceded(parse_comma, expr),
+            preceded(parse_comma, expr)
+        ))
+    ))(input)?;
+
+    Ok((
+        input,
+        Token::Range(label.into(), start, stop)
+    ))
+}
+
 pub fn parse_assign(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, (label, value)) = pair(
         terminated(
@@ -1252,6 +1282,8 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
                 context("[DBG] undef", parse_undef),
                 context("[DBG] noargs", parse_noarg_directive),
                 context("[DBG] assign", parse_assign),
+                context("[DBG] range", parse_range),
+                context("[DBG] section", parse_section),
                 context("[DBG] macro call", parse_macro_call(true)), 
             ))(input.clone())?;
 
