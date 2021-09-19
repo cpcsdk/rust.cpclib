@@ -1,6 +1,6 @@
 use crate::preamble::*;
 
-use lazy_static;
+use cpclib_common::lazy_static;
 
 // Tables stolen from https://github.com/jeromelesaux/dsk/blob/master/desassembly.go
 // Note that these table do not all contain 256 values; I have added missing ones without checking if they are at the right place

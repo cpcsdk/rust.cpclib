@@ -1,13 +1,13 @@
 // http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
 
-use itertools::zip;
+use cpclib_common::bitflags::bitflags;
+use cpclib_common::itertools::zip;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
 use std::string::ToString;
 
-use bitflags::bitflags;
 use delegate::delegate;
 use getset::Getters;
 

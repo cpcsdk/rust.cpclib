@@ -11,10 +11,10 @@ use cpclib_basic::*;
 use cpclib_disc::edsk::ExtendedDsk;
 use cpclib_sna::*;
 
-use itertools::Itertools;
-use lazy_static::__Deref;
-use nom::bitvec::prelude::BitVec;
-use smallvec::SmallVec;
+use cpclib_common::itertools::Itertools;
+use cpclib_common::lazy_static::__Deref;
+use cpclib_common::bitvec::prelude::BitVec;
+use cpclib_common::smallvec::SmallVec;
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -28,7 +28,9 @@ use crate::AmsdosFile;
 use crate::AmsdosFileName;
 
 use self::listing_output::ListingOutput;
+use self::listing_output::AddressKind;
 use self::symbols_output::SymbolOutputGenerator;
+
 
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
@@ -234,9 +236,9 @@ impl ListingOutputTrigger {
     fn write_byte(&mut self, b: u8) {
         self.bytes.push(b);
     }
-    fn new_token(&mut self, new: & LocatedToken, address: u32) {
+    fn new_token(&mut self, new: & LocatedToken, address: u32, kind: AddressKind) {
         if let Some(token) = &self.token {
-            self.builder.borrow_mut().add_token(token, &self.bytes, self.start);
+            self.builder.borrow_mut().add_token(token, &self.bytes, self.start, kind);
         }
 
         self.token.replace( new.clone());
@@ -245,10 +247,11 @@ impl ListingOutputTrigger {
     }
     fn finish(&mut self) {
         if let Some(token) = &self.token {
-            self.builder.borrow_mut().add_token(token, &self.bytes, self.start);
+            self.builder.borrow_mut().add_token(token, &self.bytes, self.start,AddressKind::Address);
         }
         self.builder.borrow_mut().finish();       
     }
+    
 
     fn on(&mut self) {
         self.builder.borrow_mut().on();
@@ -256,6 +259,14 @@ impl ListingOutputTrigger {
 
     fn off(&mut self) {
         self.builder.borrow_mut().off();
+    }
+
+    fn enter_crunched_section(&mut self) {
+        self.builder.borrow_mut().enter_crunched_section();
+    }
+
+    fn leave_crunched_section(&mut self) {
+        self.builder.borrow_mut().leave_crunched_section();
     }
 }
 
@@ -605,7 +616,11 @@ impl Env {
                 _ => self.logical_output_address() as i32
             };
             let trigg = self.output_trigger.as_mut().unwrap();
-            trigg.new_token(new, addr as _);
+            trigg.new_token(
+                new, 
+                addr as _, 
+                if self.crunched_section_state.is_some() {AddressKind::CrunchedArea} else {AddressKind::Address}
+            );
         }
     }
 
@@ -1544,6 +1559,8 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
         crunched_env.active_page_info_mut().startadr = Some(0); // reset the counter to obtain the bytes
         crunched_env.active_page_info_mut().limit = 0xffff; // disable limit (to be redone in the area)
         crunched_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
+
+        self.output_trigger.as_mut().map(|t| t.enter_crunched_section());
         crunched_env.visit_listing(lst)
             .map_err(|e| {
                 
@@ -1557,6 +1574,8 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
             }
             })
         ?;
+        self.output_trigger.as_mut().map(|t| t.leave_crunched_section());
+
 
         // get the new data and crunch it
         let bytes = crunched_env.produced_bytes();
@@ -1646,7 +1665,7 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
     env.symbols =
         SymbolsTableCaseDependent::new(options.symbols().clone(), options.case_sensitive());
 
-        if let Some(builder) = &options.builder {
+    if let Some(builder) = &options.builder {
             env.output_trigger = ListingOutputTrigger {
             token: None,
             bytes: Vec::new(),
@@ -1776,13 +1795,16 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
             })
         },
         LocatedToken::Repeat(count, code, counter, counter_start, span) => {
-            env.visit_repeat(count, code, counter.as_ref(), counter_start.as_ref(), Some(span.clone()))
+            env.visit_repeat(count, code, counter.as_ref().map(|s| s.as_str()), counter_start.as_ref(), Some(span.clone()))
         },
         LocatedToken::RepeatUntil(_, _, _) => todo!(),
         LocatedToken::Rorg(_, _, _) => todo!(),
         LocatedToken::Switch(_, _) => todo!(),
         LocatedToken::While(cond, inner, span) => {
             env.visit_while(cond, inner, Some(span.clone()))
+        },
+        LocatedToken::Iterate(name, values, code, span) => {
+            env.visit_iterate(name.as_str(), values, code, Some(span.clone()))
         },
     }?;
 
@@ -1874,7 +1896,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Protect(ref start, ref end) => env.visit_protect(start, end),
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
         Token::Repeat(count, code, counter, counter_start) => 
-            env.visit_repeat(count, code, counter.as_ref(), counter_start.as_ref(), None),
+            env.visit_repeat(count, code, counter.as_ref().map(|s| s.as_str()), counter_start.as_ref(), None),
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
         Token::Save {
@@ -1956,14 +1978,55 @@ impl Env {
         Ok(())
     }
 
+    /// Handle the iterate repetition directive
+    pub fn visit_iterate<T: ListingElement+Visited>(&mut self, counter_name: &str, values: &[Expr], code: &[T], span: Option<Z80Span>) -> Result<(), AssemblerError> {
 
-    pub fn visit_repeat<T: ListingElement +  Visited>(&mut self, count: &Expr, code: &[T], counter: Option<&String>, counter_start: Option<&Expr>, span: Option<Z80Span>) -> Result<(), AssemblerError> {
+        let counter_name = format!("{{{}}}", counter_name);
+        let counter_name = counter_name.as_str();
+        if self.symbols().contains_symbol(counter_name)? {
+            return Err(
+                AssemblerError::RepeatIssue{
+                    error: AssemblerError::ExpressionError {
+                        msg: format!("Counter {} already exists", counter_name)
+                    }.into(),
+                    span: span.clone(),
+                    repetition: 0
+                }
+            )
+        }
+
+        for (i,value) in values.iter().enumerate() {
+            let counter_value = self.resolve_expr_must_never_fail(value)            
+                .map_err(|e| {
+                    AssemblerError::RepeatIssue {
+                        error: Box::new(e),
+                        span: span.clone(),
+                        repetition: i as _
+                    }
+                })?;
+            self.inner_visit_repeat(
+                Some(counter_name),
+                counter_value,
+                i as _,
+                code,
+                span.clone()
+            )?;
+        }
+        
+        self.symbols_mut().remove_symbol(counter_name)?;
+
+        Ok(())
+    }
+
+    /// Handle the statndard repetition directive
+    pub fn visit_repeat<T: ListingElement +  Visited>(&mut self, count: &Expr, code: &[T], counter: Option<&str>, counter_start: Option<&Expr>, span: Option<Z80Span>) -> Result<(), AssemblerError> {
         // get the number of loops
         let count = self.resolve_expr_must_never_fail(count)?.int();
 
         // get the counter name of any
         let counter_name = counter.as_ref().map(|counter| format!("{{{}}}", counter));
-        if let Some(counter_name) = &counter_name {
+        let counter_name = counter_name.as_ref().map(|s| s.as_str());
+        if let Some(counter_name) = counter_name {
             if self.symbols().contains_symbol(counter_name)? {
                 return Err(
                     AssemblerError::RepeatIssue{
@@ -1985,39 +2048,55 @@ impl Env {
 
 
         for i in 0..count {
-            // handle symbols unicity
-            {
-                self.macro_seed += 1;
-                let seed = self.macro_seed;
-                self.symbols_mut().push_seed(seed);
-            }
-
-            // handle counter value update
-            if let Some(counter_name) = &counter_name {
-                self.symbols_mut().set_symbol_to_value(counter_name, counter_value.clone())?;
-            }
-
-            // generate the bytes
-            self.visit_listing(code)
-                .map_err(|e| {
-                    AssemblerError::RepeatIssue {
-                        error: Box::new(e),
-                        span: span.clone(),
-                        repetition: counter_value.int()
-                    }
-                })?;
-
+            self.inner_visit_repeat(
+                counter_name,
+                counter_value,
+                i as _,
+                code,
+                span.clone()
+            )?;
             // handle the counter update
             counter_value += 1.into();
-
-            // handle the end of visibility of unique labels
-            self.symbols_mut().pop_seed();
         }
 
         
-        if let Some(counter_name) = &counter_name {
+        if let Some(counter_name) = counter_name {
             self.symbols_mut().remove_symbol(counter_name)?;
         }
+        Ok(())
+    }
+
+    /// Handle the code generation for all the repetition variants
+    fn inner_visit_repeat<T: ListingElement +  Visited>(&mut self, counter_name: Option<&str>, counter_value: ExprResult, iteration: i32, code:&[T], span: Option<Z80Span>) -> Result<(), AssemblerError> {
+        // handle symbols unicity
+        {
+            self.macro_seed += 1;
+            let seed = self.macro_seed;
+            self.symbols_mut().push_seed(seed);
+        }
+
+        // handle counter value update
+        if let Some(counter_name) = counter_name {
+            self.symbols_mut()
+                .set_symbol_to_value(
+                    counter_name, 
+                    counter_value.clone()
+                )?;
+        }
+
+        // generate the bytes
+        self.visit_listing(code)
+            .map_err(|e| {
+                AssemblerError::RepeatIssue {
+                    error: Box::new(e),
+                    span: span.clone(),
+                    repetition: iteration as _
+                }
+            })?;
+
+        // handle the end of visibility of unique labels
+        self.symbols_mut().pop_seed();
+
         Ok(())
     }
 

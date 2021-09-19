@@ -1,14 +1,14 @@
 use std::str::FromStr;
 
-use nom::branch::*;
-use nom::bytes::complete::*;
-use nom::character::complete::*;
-use nom::combinator::*;
-use nom::error::*;
-use nom::multi::*;
-use nom::sequence::*;
-use nom::*;
-use nom_locate::LocatedSpan;
+use cpclib_common::nom::branch::*;
+use cpclib_common::nom::bytes::complete::*;
+use cpclib_common::nom::character::complete::*;
+use cpclib_common::nom::combinator::*;
+use cpclib_common::nom::error::*;
+use cpclib_common::nom::multi::*;
+use cpclib_common::nom::sequence::*;
+use cpclib_common::nom::*;
+use cpclib_common::nom_locate::LocatedSpan;
 
 use crate::flags::{FlagValue, SnapshotFlag};
 
@@ -25,7 +25,7 @@ where
 
     match SnapshotFlag::from_str(&word.to_string().to_uppercase()) {
         Ok(flag) => Ok((input, flag)),
-        Err(_e) => Err(::nom::Err::Error(error_position!(input, ErrorKind::OneOf))),
+        Err(_e) => Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf))),
     }
 }
 
@@ -150,7 +150,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use nom_locate::LocatedSpan;
+    use cpclib_common::nom_locate::LocatedSpan;
 
     use super::*;
 

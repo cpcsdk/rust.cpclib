@@ -11,7 +11,7 @@ use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::{
     BaseListing, BinaryTransformation, CrunchType, Expr, Listing, ListingElement, TestKind, Token,
 };
-use itertools::Itertools;
+use cpclib_common::itertools::Itertools;
 
 use crate::{
     error::AssemblerError,

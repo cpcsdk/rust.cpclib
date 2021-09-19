@@ -4,10 +4,17 @@
 OUTPUT="/tmp/basm.o"
 ERR="/tmp/basm_err.o"
 
+#export RUSTFLAGS=-Awarnings
+
+# ensure assmebler exists
+cargo build --bin basm --features basm || exit -1
+
+BASM="$(git rev-parse --show-toplevel)/target/debug/basm"
+
 declare -a wrong_files
 
 function build(){
-	cargo run --bin basm --features basm -- -i "$1" -o "$OUTPUT" >/dev/null 2>"$ERR"
+	"${BASM}" -i "$1" -o "$OUTPUT" >/dev/null 2>"$ERR"
 }
 
 function ok_result() {

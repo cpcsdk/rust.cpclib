@@ -1,7 +1,5 @@
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
-use lazy_static::__Deref;
-
 use crate::error::AssemblerError;
 
 use super::Z80Span;
