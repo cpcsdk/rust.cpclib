@@ -1766,7 +1766,7 @@ pub fn parse_macro_call(can_return_label: bool)
     move |input| {
     // BUG: added because of parsing issues. Need to find why and remove ot
     let (input_label, _) = space0(input)?;
-    let (input, name) = dbg!(parse_macro_name(input_label.clone()))?;
+    let (input, name) = parse_macro_name(input_label.clone())?;
 
     // Check if the macro name is allowed
     if FIRST_DIRECTIVE
