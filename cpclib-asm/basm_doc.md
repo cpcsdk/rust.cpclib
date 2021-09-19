@@ -96,6 +96,10 @@ On the code space ($), not physical space ($$)
 
 ### TICKERSTART
 
+### WAITNOPS
+
+Generate a list of instructions that do not modify any registers or memory but is executed with the expected amount of nops.
+
 ### LOCOMOTIVEBASIC
 
 ### SNASET

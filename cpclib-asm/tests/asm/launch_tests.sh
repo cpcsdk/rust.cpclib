@@ -7,7 +7,7 @@ ERR="/tmp/basm_err.o"
 declare -a wrong_files
 
 function build(){
-	../../../target/debug/basm -i "$1" -o "$OUTPUT" >/dev/null 2>"$ERR"
+	cargo run --bin basm --features basm -- -i "$1" -o "$OUTPUT" >/dev/null 2>"$ERR"
 }
 
 function ok_result() {
@@ -27,6 +27,12 @@ err=0
 
 for fname in good_*.asm
 do
+	# skip tests when argument provided
+	if test $# -eq 1 && [[ ! "$fname" == *"$1"* ]]
+	then
+		continue
+	fi
+
 	if build "$fname"
 	then
 		binary="${fname%.*}.bin"
@@ -52,6 +58,12 @@ done
 
 for fname in bad_*.asm
 do
+	# skip tests when argument provided
+	if test $# -eq 1 && [[ ! "$fname" == *"$1"* ]]
+	then
+		continue
+	fi
+
 	if ! build "$fname"
 	then
 		ok_result  "$fname"
