@@ -1,14 +1,14 @@
 use custom_error::custom_error;
-use itertools;
+use cpclib_common::itertools;
 use itertools::Itertools;
-use nom::branch::*;
-use nom::bytes::complete::*;
-use nom::character::complete::*;
-use nom::combinator::*;
-use nom::multi::*;
-use nom::sequence::*;
+use cpclib_common::nom::branch::*;
+use cpclib_common::nom::bytes::complete::*;
+use cpclib_common::nom::character::complete::*;
+use cpclib_common::nom::combinator::*;
+use cpclib_common::nom::multi::*;
+use cpclib_common::nom::sequence::*;
 /// Parser of the disc configuraiton used by the Arkos Loader
-use nom::*;
+use cpclib_common::nom::*;
 use std::iter::Iterator;
 
 use crate::edsk::*;
@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use nom::lib::std::convert::Into;
+use cpclib_common::nom::lib::std::convert::Into;
 use std::str::FromStr;
 
 const DATA_FORMAT_CFG: &str = "
@@ -477,7 +477,7 @@ pub fn parse_config(input: &str) -> IResult<&str, DiscConfig> {
 
     let (input, track_groups) = fold_many1(
         preceded(many0(empty_line), track_group_head),
-        Vec::new(),
+        || Vec::new(),
         |mut acc: Vec<_>, item| {
             acc.push(item);
             acc

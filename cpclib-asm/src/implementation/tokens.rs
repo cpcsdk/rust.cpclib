@@ -1,7 +1,7 @@
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
-use itertools::Itertools;
-use smallvec::SmallVec;
+use cpclib_common::itertools::Itertools;
+use cpclib_common::smallvec::SmallVec;
 
 use crate::assembler::{assemble_defs_item};
 use crate::error::*;

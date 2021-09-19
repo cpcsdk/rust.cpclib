@@ -369,9 +369,6 @@ impl Display for Oper {
             BooleanAnd => write!(format, "&&"),
             BooleanOr => write!(format, "||"),
 
-            BooleanAnd => write!(format, "&&"),
-            BooleanOr => write!(format, "||"),
-
             &Equal => write!(format, "=="),
             &Different => write!(format, "!="),
             &LowerOrEqual => write!(format, "<="),
@@ -547,7 +544,7 @@ impl Expr {
 
 /// The successful result of an evaluation.
 /// Embeds eiterh a real or an integer
-#[derive(Eq,Ord, Debug, Clone)]
+#[derive(Eq,Ord, Debug, Clone, Copy)]
 pub enum ExprResult {
     Float(OrderedFloat<f64>),
     Value(i32)

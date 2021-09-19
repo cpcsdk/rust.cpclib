@@ -13,10 +13,10 @@ use cpclib_sna::SnapshotError;
 use cpclib_tokens::symbols::Symbol;
 use cpclib_tokens::symbols::SymbolError;
 use cpclib_tokens::tokens;
-use itertools::Itertools;
-use nom::error::VerboseError;
-use nom::error::ErrorKind;
-use nom::error::VerboseErrorKind;
+use cpclib_common::itertools::Itertools;
+use cpclib_common::nom::error::VerboseError;
+use cpclib_common::nom::error::ErrorKind;
+use cpclib_common::nom::error::VerboseErrorKind;
 use std::ops::Deref;
 
 use codespan_reporting::files::SimpleFiles;
@@ -752,7 +752,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
             }
         }
     }
-    lazy_static::lazy_static! {
+    cpclib_common::lazy_static::lazy_static! {
         static ref GUESSER_LUT: HashMap<&'static str, EndKind> = {
             let mut hash = HashMap::new();
 
@@ -778,7 +778,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
 
 fn get_additional_notes(ctx: &str) -> Option<Vec<String>> {
     // phf is not currently usable
-    lazy_static::lazy_static! {
+    cpclib_common::lazy_static::lazy_static! {
         static ref NOTES_LUT: HashMap<&'static str, Vec<String>> = {
             let mut hash = HashMap::new();
 
@@ -798,7 +798,7 @@ fn get_additional_notes(ctx: &str) -> Option<Vec<String>> {
 
 
 fn buffer()-> Buffer {
-    if cfg!(nocolor){
+    if cfg!(feature="nocolor"){
         println!("no color");
         Buffer::no_color()
     }
@@ -808,7 +808,7 @@ fn buffer()-> Buffer {
 }
 
 fn config() -> codespan_reporting::term::Config {
-    if cfg!(nocolor){
+    if cfg!(feature="nocolor"){
 
         let mut conf = codespan_reporting::term::Config::default();
         conf.chars = Chars::ascii();

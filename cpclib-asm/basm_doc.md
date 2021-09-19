@@ -64,6 +64,27 @@ On the code space ($), not physical space ($$)
 
 ### REPEAT
 
+REPEAT AMOUNT [, COUNTER [, START]]
+	INNER LISTING
+REND
+### ITERATE
+
+ITERATE COUNTER, EXPR...
+	INNER LISTING
+IEND
+
+The expression $i$ is evaluated after having generated the code of expression $i-1$. Take that into account if expressions use $.
+
+    iterate value, 1, 2, 10
+        add {value}
+        jr nz, @no_inc
+            inc c
+@no_inc
+		call do_stuff
+    iend
+
+do_stuff
+	ret
 
 ## Code and data generation directives
 
