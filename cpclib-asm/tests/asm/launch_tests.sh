@@ -107,6 +107,9 @@ done
 
 echo
 echo "$ok successes"
-echo "$err failures:"  ${wrong_files[@]}
+if ! test $err -eq 0
+then
+	echo "$err failures:"  ${wrong_files[@]}
+fi
 
 test $err -eq 0

@@ -5,3 +5,9 @@
     TICKER STOP
 
     assert count == 3
+
+    TICKER START count2
+        nop
+    TICKER STOP
+
+    assert count2 == 1
