@@ -814,25 +814,71 @@ pub fn parse_z80_line_label_only(
     let after_let = input.clone();
     let (input, label) = context("Label issue", preceded(space0, parse_label(true)))(input)?;
 
+    #[derive(Clone, Copy)]
+    enum LabelModifier {
+        Equ,
+        Set, Equal,
+        SetN,
+        Next,
+    };
+
     // TODO make these stuff alternatives ...
     // Manage Equ
     // BUG Equ and = are supposed to be different
-    let (input, equ_or_assign) = opt(tuple((
-         alt((
-            preceded(space1, parse_word("DEFL")), 
-            preceded(space1, parse_word("EQU")), 
-            delimited(space1, parse_word("SET"), not(tuple((space0, expr, parse_comma)))),
-            delimited(space0, tag("="), space0)
-        )),
-        cut( context("Value error",expr))
-    )))(input)?;
+    let (input, label_modifier) = opt(alt((
+            value(
+                LabelModifier::Equ, 
+                preceded(space1, parse_word("DEFL"))
+            ), 
+            value(
+                LabelModifier::Equ, 
+                preceded(space1, parse_word("EQU"))
+            ), 
+            value(
+                LabelModifier::SetN, 
+                preceded(space1, parse_word("SETN"))
+            ), 
+            value(
+                LabelModifier::Next, 
+                preceded(space1, parse_word("NEXT"))
+            ), 
+            value(
+                LabelModifier::Set, 
+                delimited(space1, parse_word("SET"), not(tuple((space0, expr, parse_comma))))
+            ),
+            value(
+                LabelModifier::Equal,
+                delimited(space0, tag("="), space0)
+            )
+        )))(input)?;
 
-    if let Some(equ_or_assign) = &equ_or_assign {
-        if r#let.is_some() && equ_or_assign.0.to_ascii_lowercase() != "=" {
+ 
+
+    // ensure let uses =
+    if r#let.is_some() {
+        if let Some(LabelModifier::Equal) = &label_modifier {
+            // ok
+        } else {
             return Err(cpclib_common::nom::Err::Failure(VerboseError::from_error_kind(
                 before_label,ErrorKind::Char)));
         }
     }
+    
+    let (input, expr_arg) = match &label_modifier {
+        Some(LabelModifier::Equ | LabelModifier::Equal | LabelModifier::Set ) => cut( context("Value error", map(expr, |e| Some(e))))(input)?,
+        _ => (input, None),
+    };
+
+    let (input, source_label) = match &label_modifier {
+        Some(LabelModifier::Next | LabelModifier::SetN) => cut( context("Label expected", map(parse_label(false), |l| Some(l))))(input)?,
+        _ => (input, None),
+    };
+
+    // optional expression to control the displacement
+    let (input, additional_arg) = match &label_modifier {
+        Some(LabelModifier::Next | LabelModifier::SetN) => opt(preceded(parse_comma, expr))(input)?,
+        _ => (input, None)
+    };
 
     // opt!(char!(':')) >>
 
@@ -842,20 +888,18 @@ pub fn parse_z80_line_label_only(
     {
         let mut tokens = Vec::new();
 
-        match equ_or_assign {
-            Some(equ_or_assign) => {
-                if equ_or_assign.0.to_ascii_lowercase() == "=" {
-                    tokens.push(Token::Assign(label, equ_or_assign.1).locate(before_label));
-                } else {
-                    tokens.push(Token::Equ(label, equ_or_assign.1).locate(before_label));
-                }
-            },
-            None => {
-                tokens.push(Token::Label(label).locate(before_label));
-            }
-            
-            
-        }
+        // Build the needed token for the label of interest
+        let token = match label_modifier {
+            Some(LabelModifier::Equ) => Token::Equ(label, expr_arg.unwrap()),
+            Some(LabelModifier::Equal | LabelModifier::Set) => Token::Assign(label, expr_arg.unwrap()),
+            Some(LabelModifier::SetN) => Token::SetN(label, source_label.unwrap(), additional_arg),
+            Some(LabelModifier::Next) => Token::Next(label, source_label.unwrap(), additional_arg),
+            None => Token::Label(label)
+        };
+
+        // add it to the list
+        tokens.push(token.locate(before_label));
+
         
         if comment.is_some() {
             tokens.push(comment.unwrap().locate(before_comment));
