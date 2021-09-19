@@ -7,6 +7,7 @@ use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::Register8;
 
+use itertools::Iterate;
 use itertools::Itertools;
 
 use cpclib_sna::SnapshotVersion;
@@ -450,6 +451,7 @@ pub enum Token {
     },
     // file may or may not be read during parse. If not, it is read on demand when assembling
     Include(String, RefCell<Option<Listing>>),
+    Iterate(String, Vec<Expr>, Listing),
 
     Label(String),
     Let(String, Expr),
@@ -517,7 +519,7 @@ pub enum Token {
     Switch(Vec<(Expr, Listing)>),
 
     Undef(String),
-
+    WaitNops(Expr),
     While(Expr, Listing),
 }
 

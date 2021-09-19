@@ -74,6 +74,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
                 "EXPORT", "NOEXPORT",
                 "IF", "ELSE", "ENDIF",
                 "INCLUDE", "READ",
+                "ITERATE", "IEND",
                 "LIMIT",
                 "LIST", "NOLIST",
                 "ORG",
@@ -84,6 +85,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
                 "SAVE", "WRITE", "WRITE DIRECT",
                 "SNASET", "STRUCT", "SWITCH",
                 "UNDEF",
+                "WAITNOPS",
                 "WHILE", "WEND"
             ];
 
@@ -91,6 +93,8 @@ const FIRST_DIRECTIVE: &[&str] = &[
     "IF", 
     "IFDEF", 
     "IFNDEF", 
+    "ITERATE",
+    "ITER",
     "REPEAT", 
     "REPT", 
  //   "REP", 
@@ -250,6 +254,7 @@ pub fn parse_z80_line(
                             alt((
                                 context("[DBG] crunched section", parse_crunched_section),
                                 context("[DBG] repeat", parse_repeat),
+                                context("[DBG] iterate", parse_iterate),
                                 context("[DBG] while", parse_while),
                                 context("[DBG] rorg", parse_rorg),
                                 context("[DBG] condition", parse_conditional),
@@ -496,6 +501,56 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         ),
     ))
 }
+
+
+
+pub fn parse_iterate(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let iterate_start = input.clone();
+    let (input, _) = preceded(
+        space0,
+        alt((
+            parse_word("ITERATE"),
+            parse_word("ITER"),
+        )),
+    )(input)?;
+
+    let (input, counter) = cut(context("ITERATE: issue in the counter", 
+    preceded(space0, parse_label(false))
+    ))(input)?;
+
+    let (input, values) = cut(context("ITERATE: values issue", 
+    expr_list
+    ))(input)?;
+
+
+    let (input, inner) = cut(context("ITERATE: issue in the content", inner_code))(input)?;
+
+    let (input, _) = cut(context(
+        "ITERATE: not closed",
+        tuple((
+            space0,
+            alt((
+                parse_word("ENDITERATE"),
+                parse_word("ENDITER"),
+                parse_word("ENDI"),
+                parse_word("IEND"),
+            )),
+            space0,
+        )),
+    ))(input)?;
+
+    Ok((
+        input.clone(),
+        LocatedToken::Iterate(
+            counter,
+            values,
+            LocatedListing::try_from(inner)
+                .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
+        ),
+        iterate_start
+    ))
+}
+
 
 /// TODO
 pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
@@ -1133,6 +1188,7 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
                 context("[DBG] write direct memory", parse_write_direct_memory),
                 context("[DBG] save", parse_save),
                 context("[DBG] ticker", parse_stable_ticker),
+                context("[DBG] waitnops", parse_waitnops),
                 context("[DBG] struct", parse_struct),
                 context("[DBG] undef", parse_undef),
                 context("[DBG] noargs", parse_noarg_directive),
@@ -1307,6 +1363,13 @@ pub fn parse_limit(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     let (input, exp) = preceded(parse_word("LIMIT"), expr)(input)?;
 
     Ok((input, Token::Limit(exp)))
+}
+
+pub fn parse_waitnops(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, exp) = preceded(parse_word("WAITNOPS"), expr)(input)?;
+
+
+    Ok((input, Token::WaitNops(exp)))
 }
 
 
@@ -1679,7 +1742,7 @@ pub fn parse_macro_call(can_return_label: bool)
     move |input| {
     // BUG: added because of parsing issues. Need to find why and remove ot
     let (input_label, _) = space0(input)?;
-    let (input, name) = parse_macro_name(input_label.clone())?;
+    let (input, name) = dbg!(parse_macro_name(input_label.clone()))?;
 
     // Check if the macro name is allowed
     if FIRST_DIRECTIVE

@@ -44,6 +44,7 @@ pub enum LocatedToken {
         Z80Span,
     ),
     Repeat(Expr, LocatedListing, Option<String>, Option<Expr>, Z80Span),
+    Iterate(String, Vec<Expr>, LocatedListing, Z80Span),
     RepeatUntil(Expr, LocatedListing, Z80Span),
     Rorg(Expr, LocatedListing, Z80Span),
     Switch(Vec<(Expr, LocatedListing)>, Z80Span),
@@ -78,6 +79,7 @@ impl LocatedToken {
             | Self::CrunchedSection(_, _, span)
             | Self::Include(_, _, span)
             | Self::If(_, _, span)
+            | Self::Iterate(_,_, _, span)
             | Self::Repeat(_, _, _, _, span)
             | Self::RepeatUntil(_, _, span)
             | Self::Rorg(_, _, span)
@@ -119,6 +121,7 @@ impl LocatedToken {
                     .collect_vec(),
             ),
             LocatedToken::While(e, l, _span) => Token::While(e.clone(), l.as_listing()),
+            LocatedToken::Iterate(name, values, code, _span) => todo!(),
         }
     }
 
