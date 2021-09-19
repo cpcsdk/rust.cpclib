@@ -538,7 +538,10 @@ pub struct Env {
     symbols_output: SymbolOutputGenerator,
 
     string_warning_done: bool,
-    warnings: Vec<AssemblerWarning>
+    warnings: Vec<AssemblerWarning>,
+
+    /// Counter to disable some instruction in rorg stuff
+    nested_rorg: usize
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -577,6 +580,7 @@ impl Default for Env {
 
             string_warning_done: false,
             warnings: Vec::new(),
+            nested_rorg: 0
         }
     }
 }
@@ -1280,6 +1284,10 @@ impl Env {
     }
 
     fn visit_bank(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+        if self.nested_rorg > 0 {
+            return Err(AssemblerError::NotAllowed);
+        }
+
         let mmr = self.resolve_expr_must_never_fail(exp)?.int();
         if mmr < 0xc0 || mmr > 0xc7 {
             return Err(AssemblerError::MMRError {
@@ -1295,6 +1303,11 @@ impl Env {
 
     // total switch of page
     fn visit_bankset(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+        
+        if self.nested_rorg > 0 {
+            return Err(AssemblerError::NotAllowed);
+        }
+
         let page = self.resolve_expr_must_never_fail(exp)?.int() as u8; // This value MUST be interpretable once executed
 
 
@@ -1304,6 +1317,10 @@ impl Env {
     }
 
     fn select_page(&mut self, page: u8) -> Result<(), AssemblerError> {
+        if self.nested_rorg > 0 {
+            return Err(AssemblerError::NotAllowed);
+        }
+
         if page < 0 || page >= 8 {
             return Err(AssemblerError::InvalidArgument {
                 msg: format!(
@@ -1500,20 +1517,7 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
         Ok(())
     }
 
-    /// Continue to assemble at the right place, but change the value of $ to the specified one
-    pub fn visit_rorg(&mut self, _exp: &Expr, listing: &Listing) -> Result<(), AssemblerError> {
-        let backup_address = self.logical_code_address();
-        let backup_mmr = self.ga_mmr;
-
-        self.visit_listing(listing)?;
-
-        if self.ga_mmr != backup_mmr {
-            eprintln!("[WARNING] Gate array configuration has changed and is restored to its initial value");
-        }
-
-        self.active_page_info_mut().logical_codeadr = backup_address;
-        Ok(())
-    }
+   
 
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
     // TODO delay the save but retreive the data now
@@ -1849,7 +1853,9 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
             env.visit_repeat(count, code, counter.as_ref().map(|s| s.as_str()), counter_start.as_ref(), Some(span.clone()))
         },
         LocatedToken::RepeatUntil(_, _, _) => todo!(),
-        LocatedToken::Rorg(_, _, _) => todo!(),
+        LocatedToken::Rorg(address, code, span) => {
+            env.visit_rorg(address, code, Some(span.clone()))
+        },
         LocatedToken::Switch(_, _) => todo!(),
         LocatedToken::While(cond, inner, span) => {
             env.visit_while(cond, inner, Some(span.clone()))
@@ -1949,7 +1955,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Repeat(count, code, counter, counter_start) => 
             env.visit_repeat(count, code, counter.as_ref().map(|s| s.as_str()), counter_start.as_ref(), None),
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
-        Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
+        Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code, None),
         Token::Save {
             filename,
             address,
@@ -2070,6 +2076,38 @@ impl Env {
         self.symbols_mut().remove_symbol(counter_name)?;
 
         Ok(())
+    }
+
+    pub fn visit_rorg<T: ListingElement +  Visited>(&mut self, address: &Expr, code: &[T], span: Option<Z80Span>) -> Result<(), AssemblerError> {
+        // Get the next code address
+        let address = self.resolve_expr_must_never_fail(address)
+                .map_err(|error| match span {
+                    Some(span) => 
+                    AssemblerError::RelocatedError {
+                        error: Box::new(error),
+                        span
+                    },
+                    None => error
+                })
+                ?.int();
+
+        {
+            let page_info = self.active_page_info_mut();
+            page_info.logical_codeadr = address as _;;
+        }
+
+
+        // execute the listing
+        self.nested_rorg += 1; // used to disable page functionalities
+        self.visit_listing(code)?;
+        self.nested_rorg -= 1;
+
+        // restore the appropriate  address
+        let page_info = self.active_page_info_mut();
+        page_info.logical_codeadr = page_info.logical_outputadr;
+
+        Ok(())
+        
     }
 
     /// Handle the statndard repetition directive

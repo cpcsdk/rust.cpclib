@@ -157,6 +157,7 @@ pub enum AssemblerError {
     RunAlreadySpecified,
     NoActiveCounter,
     NoDataToCrunch,
+    NotAllowed,
 
     OutputExceedsLimits(PhysicalAddress, usize),
     OutputAlreadyExceedsLimits(usize),
@@ -588,6 +589,7 @@ impl Display for AssemblerError {
             },
             AssemblerError::SnapshotError { error } =>  write!(f, "Snapshot error. {:#?}", error),
             AssemblerError::CrunchedSectionError { error } => write!(f, "Error when crunching code {}", error),
+            AssemblerError::NotAllowed => write!(f, "Instruction not allowed in this context."),
            
         }
     }
