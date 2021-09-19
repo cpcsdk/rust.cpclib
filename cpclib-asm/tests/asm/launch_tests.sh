@@ -1,7 +1,8 @@
 #!/bin/bash
 
 
-OUTPUT="/tmp/basm.o"
+OUTPUT="/tmp/basm1.o"
+OUTPUT2="/tmp/basm2.o"
 ERR="/tmp/basm_err.o"
 
 #export RUSTFLAGS=-Awarnings
@@ -27,6 +28,8 @@ function err_result() {
 	echo "[ERR] $1 ($2)"
 	cat "$ERR"
 	wrong_files=( "${wrong_files[@]}" $1)
+	current_error=1
+
 }
 
 ok=0
@@ -40,21 +43,44 @@ do
 		continue
 	fi
 
+	current_error=0
+
 	if build "$fname"
-	then
+	then		
+
+		# compare to a binary file
 		binary="${fname%.*}.bin"
-		# assemble ok
 		if test -e "$binary"
 		then
 			# binary comparison
-			if diff "$OUTPUT" "$binary" > /dev/null 2>/dev/null
+			if ! diff "$OUTPUT" "$binary" > /dev/null 2>/dev/null
 			then
-				ok_result  "$fname"
-			else
 				err_result "$fname" content
 			fi
-		else
-			# no need to compare binary
+		fi
+
+		# vompare to a similar asm file
+		equiv="${fname%.*}.equiv"
+		if test -e "$equiv"
+		then
+			mv "$OUTPUT" "$OUTPUT2"
+			if ! build "$equiv"
+			then
+				echo "** ERROR IN TEST PROCEDURE EQUIV FILE NOT ASSEMBLED **" >&2
+				err_result "$equiv" content
+				exit -1
+			fi
+
+			# check if file is assembled as its equivalent
+			if ! diff "$OUTPUT2" "$OUTPUT" > /dev/null 2>/dev/null
+			then
+				err_result "$fname" equiv
+			fi
+		fi
+
+		# no failure
+		if test $current_error -eq 0
+		then
 			ok_result  "$fname"
 		fi
 	else
