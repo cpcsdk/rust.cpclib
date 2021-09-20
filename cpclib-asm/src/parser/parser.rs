@@ -74,16 +74,20 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
                 "EXPORT", "NOEXPORT",
                 "IF", "ELSE", "ENDIF",
                 "INCLUDE", "READ",
+                "ITERATE", "IEND",
                 "LIMIT",
                 "LIST", "NOLIST",
                 "ORG",
                 "PRINT", "PROTECT", 
                 "REPEAT", "REND", "RORG",
                 "MACRO", "ENDM",
+                "RANGE",
                 "RUN",
                 "SAVE", "WRITE", "WRITE DIRECT",
                 "SNASET", "STRUCT", "SWITCH",
+                "SECTION",
                 "UNDEF",
+                "WAITNOPS",
                 "WHILE", "WEND"
             ];
 
@@ -91,6 +95,8 @@ const FIRST_DIRECTIVE: &[&str] = &[
     "IF", 
     "IFDEF", 
     "IFNDEF", 
+    "ITERATE",
+    "ITER",
     "REPEAT", 
     "REPT", 
  //   "REP", 
@@ -104,6 +110,10 @@ const FINAL_DIRECTIVE: &[&str] = &[
     "REND",
     "ENDR",
     "ENDREPEAT",
+    "IEND",
+    "ENDI",
+    "ENDITERATE",
+    "ENDITER",
     "ENDREP", // repeat directive
     "DEPHASE",
     "REND",  // rorg directive
@@ -251,6 +261,7 @@ pub fn parse_z80_line(
                                 context("macro", parse_macro),
                                 context("[DBG] crunched section", parse_crunched_section),
                                 context("[DBG] repeat", parse_repeat),
+                                context("[DBG] iterate", parse_iterate),
                                 context("[DBG] while", parse_while),
                                 context("[DBG] rorg", parse_rorg),
                                 context("[DBG] condition", parse_conditional),
@@ -506,6 +517,56 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
     ))
 }
 
+
+
+pub fn parse_iterate(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let iterate_start = input.clone();
+    let (input, _) = preceded(
+        space0,
+        alt((
+            parse_word("ITERATE"),
+            parse_word("ITER"),
+        )),
+    )(input)?;
+
+    let (input, counter) = cut(context("ITERATE: issue in the counter", 
+    delimited(space0, parse_label(false), parse_comma)
+    ))(input)?;
+
+    let (input, values) = cut(context("ITERATE: values issue", 
+    expr_list
+    ))(input)?;
+
+
+    let (input, inner) = cut(context("ITERATE: issue in the content", inner_code))(input)?;
+
+    let (input, _) = cut(context(
+        "ITERATE: not closed",
+        tuple((
+            space0,
+            alt((
+                parse_word("ENDITERATE"),
+                parse_word("ENDITER"),
+                parse_word("ENDI"),
+                parse_word("IEND"),
+            )),
+            space0,
+        )),
+    ))(input)?;
+
+    Ok((
+        input.clone(),
+        LocatedToken::Iterate(
+            counter,
+            values,
+            LocatedListing::try_from(inner)
+                .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
+            iterate_start
+        )
+    ))
+}
+
+
 /// TODO
 pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = tuple((space0, tag_no_case("LOCOMOTIVE"), space0))(input)?;
@@ -755,24 +816,71 @@ pub fn parse_z80_line_label_only(
     let after_let = input.clone();
     let (input, label) = context("Label issue", preceded(space0, parse_label(true)))(input)?;
 
+    #[derive(Clone, Copy)]
+    enum LabelModifier {
+        Equ,
+        Set, Equal,
+        SetN,
+        Next,
+    };
+
     // TODO make these stuff alternatives ...
     // Manage Equ
     // BUG Equ and = are supposed to be different
-    let (input, equ_or_assign) = opt(tuple((
-         alt((
-            preceded(space1, parse_word("DEFL")), 
-            preceded(space1, parse_word("EQU")), 
-            delimited(space0, tag("="), space0)
-        )),
-        cut( context("Value error",expr))
-    )))(input)?;
+    let (input, label_modifier) = opt(alt((
+            value(
+                LabelModifier::Equ, 
+                preceded(space1, parse_word("DEFL"))
+            ), 
+            value(
+                LabelModifier::Equ, 
+                preceded(space1, parse_word("EQU"))
+            ), 
+            value(
+                LabelModifier::SetN, 
+                preceded(space1, parse_word("SETN"))
+            ), 
+            value(
+                LabelModifier::Next, 
+                preceded(space1, parse_word("NEXT"))
+            ), 
+            value(
+                LabelModifier::Set, 
+                delimited(space1, parse_word("SET"), not(tuple((space0, expr, parse_comma))))
+            ),
+            value(
+                LabelModifier::Equal,
+                delimited(space0, tag("="), space0)
+            )
+        )))(input)?;
 
-    if let Some(equ_or_assign) = &equ_or_assign {
-        if r#let.is_some() && equ_or_assign.0.to_ascii_lowercase() != "=" {
+ 
+
+    // ensure let uses =
+    if r#let.is_some() {
+        if let Some(LabelModifier::Equal) = &label_modifier {
+            // ok
+        } else {
             return Err(cpclib_common::nom::Err::Failure(VerboseError::from_error_kind(
                 before_label,ErrorKind::Char)));
         }
     }
+    
+    let (input, expr_arg) = match &label_modifier {
+        Some(LabelModifier::Equ | LabelModifier::Equal | LabelModifier::Set ) => cut( context("Value error", map(expr, |e| Some(e))))(input)?,
+        _ => (input, None),
+    };
+
+    let (input, source_label) = match &label_modifier {
+        Some(LabelModifier::Next | LabelModifier::SetN) => cut( context("Label expected", map(parse_label(false), |l| Some(l))))(input)?,
+        _ => (input, None),
+    };
+
+    // optional expression to control the displacement
+    let (input, additional_arg) = match &label_modifier {
+        Some(LabelModifier::Next | LabelModifier::SetN) => opt(preceded(parse_comma, expr))(input)?,
+        _ => (input, None)
+    };
 
     // opt!(char!(':')) >>
 
@@ -782,20 +890,18 @@ pub fn parse_z80_line_label_only(
     {
         let mut tokens = Vec::new();
 
-        match equ_or_assign {
-            Some(equ_or_assign) => {
-                if equ_or_assign.0.to_ascii_lowercase() == "=" {
-                    tokens.push(Token::Assign(label, equ_or_assign.1).locate(before_label));
-                } else {
-                    tokens.push(Token::Equ(label, equ_or_assign.1).locate(before_label));
-                }
-            },
-            None => {
-                tokens.push(Token::Label(label).locate(before_label));
-            }
-            
-            
-        }
+        // Build the needed token for the label of interest
+        let token = match label_modifier {
+            Some(LabelModifier::Equ) => Token::Equ(label, expr_arg.unwrap()),
+            Some(LabelModifier::Equal | LabelModifier::Set) => Token::Assign(label, expr_arg.unwrap()),
+            Some(LabelModifier::SetN) => Token::SetN(label, source_label.unwrap(), additional_arg),
+            Some(LabelModifier::Next) => Token::Next(label, source_label.unwrap(), additional_arg),
+            None => Token::Label(label)
+        };
+
+        // add it to the list
+        tokens.push(token.locate(before_label));
+
         
         if comment.is_some() {
             tokens.push(comment.unwrap().locate(before_comment));
@@ -995,6 +1101,34 @@ pub fn parse_undef(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     Ok((input, Token::Undef(label)))
 }
 
+pub fn parse_section(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, _) = parse_word("SECTION")(input)?;
+    let (input, name) = preceded(space0, parse_label(false))(input)?;
+
+    Ok((
+        input,
+        Token::Section(name.to_string())
+    ))
+}
+
+pub fn parse_range(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, _) = parse_word("RANGE")(input)?;
+
+    let (input, (label, start, stop)) = cut(context(
+        "Wrong parameter for RANGE", 
+        tuple((
+            delimited(space0, parse_label(false), space0),
+            preceded(parse_comma, expr),
+            preceded(parse_comma, expr)
+        ))
+    ))(input)?;
+
+    Ok((
+        input,
+        Token::Range(label.into(), start, stop)
+    ))
+}
+
 pub fn parse_assign(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, (label, value)) = pair(
         terminated(
@@ -1143,10 +1277,13 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
                 context("[DBG] write direct memory", parse_write_direct_memory),
                 context("[DBG] save", parse_save),
                 context("[DBG] ticker", parse_stable_ticker),
+                context("[DBG] waitnops", parse_waitnops),
                 context("[DBG] struct", parse_struct),
                 context("[DBG] undef", parse_undef),
                 context("[DBG] noargs", parse_noarg_directive),
                 context("[DBG] assign", parse_assign),
+                context("[DBG] range", parse_range),
+                context("[DBG] section", parse_section),
                 context("[DBG] macro call", parse_macro_call(true)), 
             ))(input.clone())?;
 
@@ -1327,6 +1464,13 @@ pub fn parse_limit(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     let (input, exp) = preceded(parse_word("LIMIT"), expr)(input)?;
 
     Ok((input, Token::Limit(exp)))
+}
+
+pub fn parse_waitnops(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, exp) = preceded(parse_word("WAITNOPS"), expr)(input)?;
+
+
+    Ok((input, Token::WaitNops(exp)))
 }
 
 

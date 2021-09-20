@@ -22,6 +22,7 @@ use std::fmt;
 
 use std::convert::TryFrom;
 use std::io::Write;
+use std::ops::Add;
 use std::rc::Rc;
 
 use crate::AmsdosFile;
@@ -30,7 +31,7 @@ use crate::AmsdosFileName;
 use self::listing_output::ListingOutput;
 use self::listing_output::AddressKind;
 use self::symbols_output::SymbolOutputGenerator;
-
+use std::collections::HashMap;
 
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
@@ -493,6 +494,38 @@ impl CharsetEncoding {
     }
 }
 
+#[derive(Clone, Debug)]
+struct Section {
+    /// Name of the section
+    name: String,
+    /// Start address of the section
+    start: u16,
+    /// Last (included) address of the section
+    stop: u16,
+    /// Expected mmr configuration
+    mmr: u8,
+
+    output_adr: u16,
+    code_adr: u16
+}
+
+
+impl Section {
+    fn new(name: &str, start: u16, stop: u16, mmr: u8) -> Self {
+        Section {
+            mmr,
+            name: name.to_owned(),
+            start,
+            stop,
+
+            output_adr: start,
+            code_adr: start
+        }     
+    }
+    fn contains(&self, addr: u16) -> bool {
+        addr >= self.start && addr <= self.stop
+    }
+}
 
 /// Environment of the assembly
 #[allow(missing_docs)]
@@ -537,7 +570,15 @@ pub struct Env {
     symbols_output: SymbolOutputGenerator,
 
     string_warning_done: bool,
-    warnings: Vec<AssemblerWarning>
+    warnings: Vec<AssemblerWarning>,
+
+    /// Counter to disable some instruction in rorg stuff
+    nested_rorg: usize,
+
+    /// List of all sections
+    sections: HashMap<String, Rc<RefCell<Section>>>,
+    /// Current section if any
+    current_section: Option<Rc<RefCell<Section>>>
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -576,6 +617,10 @@ impl Default for Env {
 
             string_warning_done: false,
             warnings: Vec::new(),
+            nested_rorg: 0,
+
+            sections: HashMap::default(),
+            current_section: None
         }
     }
 }
@@ -646,6 +691,9 @@ impl Env {
                 !elem.is_override_memory()
             });
             self.pages_info.iter_mut().for_each(|p| p.new_pass());
+        
+
+            self.current_section = None;
         }
     }
 
@@ -785,6 +833,8 @@ impl Env {
             }
         }
 
+
+
         // update the maximm 64k position
         self.active_page_info_mut().maxadr = self.maximum_address().max(self.logical_output_address());
         if self.active_page_info().startadr.is_none() {
@@ -795,7 +845,7 @@ impl Env {
         let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
 
         let r#override = if already_used {
-            let r#override = AssemblerError::OverrideMemory(physical_address, 1);
+            let r#override = AssemblerError::OverrideMemory(physical_address.clone(), 1);
             if self.allow_memory_override() {
                 self.warnings.push(r#override);
                true
@@ -806,6 +856,19 @@ impl Env {
             false
         };
 
+        if let Some (section) = &self.current_section {
+            let section = section.borrow();
+            if !section.contains(physical_address.address()) {
+                return Err(AssemblerError::AssemblingError {
+                    msg: format!("SECTION error: write address 0x{:x} out of range [Ox{:}-Ox{:}]",
+                    physical_address.address(),
+                    section.start,
+                    section.stop
+                )
+                });
+            }
+        } 
+            
         self.sna.set_byte(abstract_address, v);
         self.written_bytes.set(abstract_address as _, true);
 
@@ -821,6 +884,18 @@ impl Env {
         // we have written all memory and are trying to restart
         if self.logical_output_address() == 0 {
             self.active_page_info_mut().fail_next_write_if_zero = true;
+        }
+
+        {
+            let (output, code) = (
+                self.active_page_info().logical_outputadr,
+                self.active_page_info().logical_codeadr
+            );
+
+            if let Some (section) = &mut self.current_section {
+                section.borrow_mut().output_adr = output;
+                section.borrow_mut().code_adr = code;
+            } 
         }
 
         Ok(r#override)
@@ -1174,6 +1249,20 @@ impl Env {
         Ok(())
     }
 
+    pub fn visit_waitnops(
+        &mut self,
+        count: &Expr
+    ) -> Result<(), AssemblerError> {
+
+        // TODO really use a clever way
+        let bytes = self.assemble_nop(Mnemonic::Nop, Some(count))?;
+        self.output_bytes(&bytes)?;
+        
+
+        self.stable_counters.update_counters(self.resolve_expr_may_fail_in_first_pass(count)?.int() as _);
+        Ok(())
+    }
+
     pub fn visit_struct_definition(
         &mut self,
         name: &str,
@@ -1220,6 +1309,105 @@ impl Env {
         Ok(())
     }
 
+    fn visit_section(&mut self, name: &str) -> Result<(), AssemblerError> {
+
+        let section = match self.sections.get(name) {
+            Some(section) => section,
+            None => {
+                return Err(AssemblerError::AssemblingError {
+                    msg: format!("Section '{}' does not exists", name)
+                });
+            }
+        };
+
+        {
+            let section = section.borrow();
+
+            if section.mmr != self.ga_mmr {
+                self.warnings.push(AssemblerError::AssemblingError{
+                    msg: format!("Gate Array configuration is not coherent with the section. We  manually set it (0x{:x} expected instead of 0x{:x})", section.mmr, self.ga_mmr)
+                });
+
+                self.ga_mmr = section.mmr;
+            }
+        }
+
+
+        let section = Rc::clone(section);
+        
+        self.active_page_info_mut().logical_outputadr = section.borrow().output_adr;
+        self.active_page_info_mut().logical_codeadr = section.borrow().code_adr;
+
+        self.current_section = Some(section);   
+
+        Ok(())
+    }
+
+    fn visit_range(&mut self, name: &str, start: &Expr, stop: &Expr)-> Result<(), AssemblerError> {
+        if self.pass.is_first_pass() {
+            if self.sections.contains_key(name) {
+                return Err(AssemblerError::AssemblingError {
+                    msg: format!("Section '{}' is already defined", name)
+                });
+            }
+        }
+
+        let start = self.resolve_expr_must_never_fail(start)?;
+        let stop = self.resolve_expr_must_never_fail(stop)?;
+
+        let section = Rc::new(RefCell::new(
+            Section::new(
+                name,
+                start.int() as _,
+                stop.int() as _,
+                self.ga_mmr
+            ))
+        );
+
+        self.sections.insert(
+            name.to_owned(),
+            section
+        );
+
+        Ok(())
+    }
+
+
+    fn visit_next_and_co(&mut self, destination: &str, source: &str, delta: Option<&Expr>, can_override: bool) -> Result<(), AssemblerError> {
+
+        if !can_override && self.symbols.contains_symbol(destination)? && self.pass.is_first_pass() {
+
+            let kind = self.symbols().kind(Symbol::from(destination))?;
+            return Err(AssemblerError::AlreadyDefinedSymbol{
+                symbol: destination.to_owned(),
+                kind: kind.to_string()
+            });
+        } 
+ 
+        // setup the value
+        let value = self.resolve_expr_must_never_fail(&source.into())?;
+        if can_override {
+            self.symbols_mut().assign_symbol_to_value(destination, value)?;
+        } else {
+            
+            self.add_symbol_to_symbol_table(destination, value)?;
+        }
+        
+
+        // increase next one
+        let delta = match delta {
+            Some(delta) =>  self.resolve_expr_must_never_fail(delta)?,
+            None => 1.into()
+        };
+        let value = value + delta;
+        self.symbols_mut().assign_symbol_to_value(source, value)?;
+
+
+        Ok(())
+     
+    }
+
+    
 
 
     /// return the page and bank configuration for the given address at the current mmr configuration
@@ -1229,6 +1417,10 @@ impl Env {
     }
 
     fn visit_bank(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+        if self.nested_rorg > 0 {
+            return Err(AssemblerError::NotAllowed);
+        }
+
         let mmr = self.resolve_expr_must_never_fail(exp)?.int();
         if mmr < 0xc0 || mmr > 0xc7 {
             return Err(AssemblerError::MMRError {
@@ -1244,6 +1436,11 @@ impl Env {
 
     // total switch of page
     fn visit_bankset(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+        
+        if self.nested_rorg > 0 {
+            return Err(AssemblerError::NotAllowed);
+        }
+
         let page = self.resolve_expr_must_never_fail(exp)?.int() as u8; // This value MUST be interpretable once executed
 
 
@@ -1253,6 +1450,10 @@ impl Env {
     }
 
     fn select_page(&mut self, page: u8) -> Result<(), AssemblerError> {
+        if self.nested_rorg > 0 {
+            return Err(AssemblerError::NotAllowed);
+        }
+
         if page < 0 || page >= 8 {
             return Err(AssemblerError::InvalidArgument {
                 msg: format!(
@@ -1449,20 +1650,7 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
         Ok(())
     }
 
-    /// Continue to assemble at the right place, but change the value of $ to the specified one
-    pub fn visit_rorg(&mut self, _exp: &Expr, listing: &Listing) -> Result<(), AssemblerError> {
-        let backup_address = self.logical_code_address();
-        let backup_mmr = self.ga_mmr;
-
-        self.visit_listing(listing)?;
-
-        if self.ga_mmr != backup_mmr {
-            eprintln!("[WARNING] Gate array configuration has changed and is restored to its initial value");
-        }
-
-        self.active_page_info_mut().logical_codeadr = backup_address;
-        Ok(())
-    }
+   
 
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
     // TODO delay the save but retreive the data now
@@ -1795,13 +1983,18 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
             })
         },
         LocatedToken::Repeat(count, code, counter, counter_start, span) => {
-            env.visit_repeat(count, code, counter.as_ref(), counter_start.as_ref(), Some(span.clone()))
+            env.visit_repeat(count, code, counter.as_ref().map(|s| s.as_str()), counter_start.as_ref(), Some(span.clone()))
         },
         LocatedToken::RepeatUntil(_, _, _) => todo!(),
-        LocatedToken::Rorg(_, _, _) => todo!(),
+        LocatedToken::Rorg(address, code, span) => {
+            env.visit_rorg(address, code, Some(span.clone()))
+        },
         LocatedToken::Switch(_, _) => todo!(),
         LocatedToken::While(cond, inner, span) => {
             env.visit_while(cond, inner, Some(span.clone()))
+        },
+        LocatedToken::Iterate(name, values, code, span) => {
+            env.visit_iterate(name.as_str(), values, code, Some(span.clone()))
         },
     }?;
 
@@ -1893,9 +2086,9 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Protect(ref start, ref end) => env.visit_protect(start, end),
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
         Token::Repeat(count, code, counter, counter_start) => 
-            env.visit_repeat(count, code, counter.as_ref(), counter_start.as_ref(), None),
+            env.visit_repeat(count, code, counter.as_ref().map(|s| s.as_str()), counter_start.as_ref(), None),
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
-        Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code),
+        Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code, None),
         Token::Save {
             filename,
             address,
@@ -1920,7 +2113,13 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             env.visit_call_macro_or_build_struct(token)
         }
         Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice()),
-        _ => panic!("Not treated {:?}", token),
+        Token::WaitNops(count) => env.visit_waitnops(count),
+        Token::Next(label, source, delta) =>  env.visit_next_and_co(label, source, delta.as_ref(), false),
+        Token::SetN(label, source, delta) => env.visit_next_and_co(label, source, delta.as_ref(), true),
+        Token::Range(name, start, stop) => env.visit_range(name, start, stop),
+        Token::Section(name) => env.visit_section(name),
+       
+        _ => unimplemented!("{:?}", token)
     }
 }
 
@@ -1975,14 +2174,87 @@ impl Env {
         Ok(())
     }
 
+    /// Handle the iterate repetition directive
+    pub fn visit_iterate<T: ListingElement+Visited>(&mut self, counter_name: &str, values: &[Expr], code: &[T], span: Option<Z80Span>) -> Result<(), AssemblerError> {
 
-    pub fn visit_repeat<T: ListingElement +  Visited>(&mut self, count: &Expr, code: &[T], counter: Option<&String>, counter_start: Option<&Expr>, span: Option<Z80Span>) -> Result<(), AssemblerError> {
+        let counter_name = format!("{{{}}}", counter_name);
+        let counter_name = counter_name.as_str();
+        if self.symbols().contains_symbol(counter_name)? {
+            return Err(
+                AssemblerError::RepeatIssue{
+                    error: AssemblerError::ExpressionError {
+                        msg: format!("Counter {} already exists", counter_name)
+                    }.into(),
+                    span: span.clone(),
+                    repetition: 0
+                }
+            )
+        }
+
+        for (i,value) in values.iter().enumerate() {
+            let counter_value = self.resolve_expr_must_never_fail(value)            
+                .map_err(|e| {
+                    AssemblerError::RepeatIssue {
+                        error: Box::new(e),
+                        span: span.clone(),
+                        repetition: i as _
+                    }
+                })?;
+            self.inner_visit_repeat(
+                Some(counter_name),
+                counter_value,
+                i as _,
+                code,
+                span.clone()
+            )?;
+        }
+
+        self.symbols_mut().remove_symbol(counter_name)?;
+
+        Ok(())
+    }
+
+    pub fn visit_rorg<T: ListingElement +  Visited>(&mut self, address: &Expr, code: &[T], span: Option<Z80Span>) -> Result<(), AssemblerError> {
+        // Get the next code address
+        let address = self.resolve_expr_must_never_fail(address)
+                .map_err(|error| match span {
+                    Some(span) => 
+                    AssemblerError::RelocatedError {
+                        error: Box::new(error),
+                        span
+                    },
+                    None => error
+                })
+                ?.int();
+
+        {
+            let page_info = self.active_page_info_mut();
+            page_info.logical_codeadr = address as _;;
+        }
+
+
+        // execute the listing
+        self.nested_rorg += 1; // used to disable page functionalities
+        self.visit_listing(code)?;
+        self.nested_rorg -= 1;
+
+        // restore the appropriate  address
+        let page_info = self.active_page_info_mut();
+        page_info.logical_codeadr = page_info.logical_outputadr;
+
+        Ok(())
+        
+    }
+
+    /// Handle the statndard repetition directive
+    pub fn visit_repeat<T: ListingElement +  Visited>(&mut self, count: &Expr, code: &[T], counter: Option<&str>, counter_start: Option<&Expr>, span: Option<Z80Span>) -> Result<(), AssemblerError> {
         // get the number of loops
         let count = self.resolve_expr_must_never_fail(count)?.int();
 
         // get the counter name of any
         let counter_name = counter.as_ref().map(|counter| format!("{{{}}}", counter));
-        if let Some(counter_name) = &counter_name {
+        let counter_name = counter_name.as_ref().map(|s| s.as_str());
+        if let Some(counter_name) = counter_name {
             if self.symbols().contains_symbol(counter_name)? {
                 return Err(
                     AssemblerError::RepeatIssue{
@@ -2004,39 +2276,55 @@ impl Env {
 
 
         for i in 0..count {
-            // handle symbols unicity
-            {
-                self.macro_seed += 1;
-                let seed = self.macro_seed;
-                self.symbols_mut().push_seed(seed);
-            }
-
-            // handle counter value update
-            if let Some(counter_name) = &counter_name {
-                self.symbols_mut().set_symbol_to_value(counter_name, counter_value.clone())?;
-            }
-
-            // generate the bytes
-            self.visit_listing(code)
-                .map_err(|e| {
-                    AssemblerError::RepeatIssue {
-                        error: Box::new(e),
-                        span: span.clone(),
-                        repetition: counter_value.int()
-                    }
-                })?;
-
+            self.inner_visit_repeat(
+                counter_name,
+                counter_value,
+                i as _,
+                code,
+                span.clone()
+            )?;
             // handle the counter update
             counter_value += 1.into();
-
-            // handle the end of visibility of unique labels
-            self.symbols_mut().pop_seed();
         }
 
         
-        if let Some(counter_name) = &counter_name {
+        if let Some(counter_name) = counter_name {
             self.symbols_mut().remove_symbol(counter_name)?;
         }
+        Ok(())
+    }
+
+    /// Handle the code generation for all the repetition variants
+    fn inner_visit_repeat<T: ListingElement +  Visited>(&mut self, counter_name: Option<&str>, counter_value: ExprResult, iteration: i32, code:&[T], span: Option<Z80Span>) -> Result<(), AssemblerError> {
+        // handle symbols unicity
+        {
+            self.macro_seed += 1;
+            let seed = self.macro_seed;
+            self.symbols_mut().push_seed(seed);
+        }
+
+        // handle counter value update
+        if let Some(counter_name) = counter_name {
+            self.symbols_mut()
+                .set_symbol_to_value(
+                    counter_name, 
+                    counter_value.clone()
+                )?;
+        }
+
+        // generate the bytes
+        self.visit_listing(code)
+            .map_err(|e| {
+                AssemblerError::RepeatIssue {
+                    error: Box::new(e),
+                    span: span.clone(),
+                    repetition: iteration as _
+                }
+            })?;
+
+        // handle the end of visibility of unique labels
+        self.symbols_mut().pop_seed();
+
         Ok(())
     }
 
@@ -2109,6 +2397,8 @@ fn visit_assign(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerE
     Ok(())
  
 }
+
+
 
 fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     match token {

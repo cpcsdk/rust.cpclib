@@ -7,8 +7,8 @@ use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::Register8;
 
-use cpclib_common::itertools::Itertools;
 
+use cpclib_common::itertools::Itertools;
 use cpclib_sna::SnapshotVersion;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -450,6 +450,7 @@ pub enum Token {
     },
     // file may or may not be read during parse. If not, it is read on demand when assembling
     Include(String, RefCell<Option<Listing>>),
+    Iterate(String, Vec<Expr>, Listing),
 
     Label(String),
     Let(String, Expr),
@@ -465,6 +466,7 @@ pub enum Token {
     // Fake push directive with several arguments
     MultiPush(Vec<DataAccess>),
 
+    Next(String, String, Option<Expr>),
     NoExport(Vec<String>),
     NoList,
 
@@ -479,7 +481,8 @@ pub enum Token {
 
     Print(Vec<FormattedExpr>),
     Protect(Expr, Expr),
-
+    /// Define a named section in the current page
+    Range(String, Expr, Expr),
     /// Duplicate the token stream
     Repeat(
         // number of loops
@@ -504,8 +507,10 @@ pub enum Token {
         dsk_filename: Option<String>,
         side: Option<Expr>,
     },
+    Section(String),
     SetCPC(Expr),
     SetCrtc(Expr),
+    SetN(String, String, Option<Expr>),
     /// This directive setup a value for a given flag of the snapshot
     SnaSet(
         cpclib_sna::flags::SnapshotFlag,
@@ -517,7 +522,7 @@ pub enum Token {
     Switch(Vec<(Expr, Listing)>),
 
     Undef(String),
-
+    WaitNops(Expr),
     While(Expr, Listing),
 }
 
