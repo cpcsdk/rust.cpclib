@@ -64,6 +64,27 @@ On the code space ($), not physical space ($$)
 
 ### REPEAT
 
+REPEAT AMOUNT [, COUNTER [, START]]
+	INNER LISTING
+REND
+### ITERATE
+
+ITERATE COUNTER, EXPR...
+	INNER LISTING
+IEND
+
+The expression $i$ is evaluated after having generated the code of expression $i-1$. Take that into account if expressions use $.
+
+    iterate value, 1, 2, 10
+        add {value}
+        jr nz, @no_inc
+            inc c
+@no_inc
+		call do_stuff
+    iend
+
+do_stuff
+	ret
 
 ## Code and data generation directives
 
@@ -95,6 +116,11 @@ On the code space ($), not physical space ($$)
 ## Amstrad CPC related directives
 
 ### TICKERSTART
+
+### WAITNOPS
+
+Generate a list of instructions that do not modify any registers or memory but is executed with the expected amount of nops.
+(Currently it is synonym of NOP, but as soon as someone wants to provide clever rules to use less bytes, I'll implement them)
 
 ### LOCOMOTIVEBASIC
 
