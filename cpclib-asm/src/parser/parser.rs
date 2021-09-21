@@ -29,7 +29,6 @@ use cpclib_common::nom::sequence::*;
 
 #[allow(missing_docs)]
 use cpclib_common::nom::*;
-
 use self::error_code::INVALID_ARGUMENT;
 
 use super::*;
@@ -70,6 +69,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
                 "DEFB", "DB", "BYTE",
                 "DEFW", "DW", "WORD",
                 "DEFS", "DS",
+                "FAIL",
                 "NOP",
                 "EXPORT", "NOEXPORT",
                 "IF", "ELSE", "ENDIF",
@@ -77,6 +77,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
                 "ITERATE", "IEND",
                 "LIMIT",
                 "LIST", "NOLIST",
+                "MODULE",
                 "ORG",
                 "PRINT", "PROTECT", 
                 "REPEAT", "REND", "RORG",
@@ -101,6 +102,7 @@ const FIRST_DIRECTIVE: &[&str] = &[
     "REPT", 
  //   "REP", 
     "PHASE", 
+    "MODULE",
     "WHILE",
     "LZAPU", "LZEXO", "LZ4", "LZ48", "LZ49", "LZX7"
     ];
@@ -120,7 +122,8 @@ const FINAL_DIRECTIVE: &[&str] = &[
     "ENDIF", // if directive
     "ELSE",
     "WEND",
-    "LZCLOSE"
+    "LZCLOSE",
+    "ENDMODULE"
 ];
 pub fn parse_z80_strrc_with_contextrc(
     code: Rc<String>,
@@ -260,6 +263,7 @@ pub fn parse_z80_line(
                             alt((
                                 context("macro", parse_macro),
                                 context("[DBG] crunched section", parse_crunched_section),
+                                context("[DBG] module", parse_module),
                                 context("[DBG] repeat", parse_repeat),
                                 context("[DBG] iterate", parse_iterate),
                                 context("[DBG] while", parse_while),
@@ -421,6 +425,30 @@ pub fn parse_while(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
             LocatedListing::try_from(inner)
                 .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
                 while_start
+        ),
+    ))
+
+}
+
+
+pub fn parse_module(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let module_start = input.clone();
+    let (input, _) = parse_word("MODULE")(input)?;
+
+    let (input, name) = cut(context("MODULE: error in naming", parse_label(false)))(input)?;
+    let (input, inner) = cut(context("MODULE: issue in the content", inner_code))(input)?;
+    let (input, _) = cut(context(
+        "MODULE: not closed",
+        preceded(space0, parse_word("ENDMODULE")),
+    ))(input)?;
+
+    Ok((
+        input.clone(),
+        LocatedToken::Module(
+            name,
+            LocatedListing::try_from(inner)
+                .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
+                module_start
         ),
     ))
 
@@ -949,9 +977,25 @@ pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
     let include_start = input.clone();
     let (input, fname) = preceded(alt((parse_word("INCLUDE"), parse_word("READ"))), parse_fname)(input)?;
 
+    let (input, namespace) = opt(
+        preceded(
+            delimited(space0, alt((tag_no_case("namespace"), tag_no_case("module"))),space0),
+            delimited(
+                tag("\""),
+                parse_label(false),
+                tag("\"") // TODO modify to accept only labels without dot
+            )
+        )
+    )(input)?;
+
     Ok((
         input,
-        LocatedToken::Include(fname.to_string(), RefCell::new(None), include_start),
+        LocatedToken::Include(
+            fname.to_string(),
+            RefCell::new(None),
+            namespace,
+            include_start
+        ),
     ))
 }
 
@@ -1260,6 +1304,7 @@ pub fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
                 context("[DBG] limit", parse_limit),
                 context("[DBG] db", parse_db_or_dw_or_str),
                 context("[DBG] print", parse_print),
+                context("[DBG] fail", parse_fail),
                 context("[DBG] protext", parse_protect),
                 context("[DBG] run", parse_run),
                 context("[DBG] snaset", parse_snaset),
@@ -1967,6 +2012,25 @@ pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
             )),
         ),
         |exps| Token::Print(exps),
+    )(input)
+}
+
+pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    map(
+        preceded(
+            parse_word("FAIL"),
+            cut(separated_list1(
+                delimited(space0, tag(","), space0),
+                alt((
+                    formatted_expr,
+                    map(expr, FormattedExpr::from),
+                    map(string_between_quotes, {
+                        |s: Z80Span| FormattedExpr::from(Expr::String(s.to_string()))
+                    }),
+                )),
+            )),
+        ),
+        |exps| Token::Fail(exps),
     )(input)
 }
 

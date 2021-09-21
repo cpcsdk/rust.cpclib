@@ -37,7 +37,7 @@ pub enum LocatedToken {
         span: Z80Span,
     },
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
-    Include(String, std::cell::RefCell<Option<LocatedListing>>, Z80Span),
+    Include(String, std::cell::RefCell<Option<LocatedListing>>, Option<String>, Z80Span),
     If(
         Vec<(TestKind, LocatedListing)>,
         Option<LocatedListing>,
@@ -49,6 +49,7 @@ pub enum LocatedToken {
     Rorg(Expr, LocatedListing, Z80Span),
     Switch(Vec<(Expr, LocatedListing)>, Z80Span),
     While(Expr, LocatedListing, Z80Span),
+    Module(String, LocatedListing, Z80Span),
 }
 
 impl Deref for LocatedToken {
@@ -77,8 +78,9 @@ impl LocatedToken {
         match self {
             Self::Standard { span, .. }
             | Self::CrunchedSection(_, _, span)
-            | Self::Include(_, _, span)
+            | Self::Include(_, _, _, span)
             | Self::If(_, _, span)
+            | Self::Module(_, _, span)
             | Self::Iterate(_,_, _, span)
             | Self::Repeat(_, _, _, _, span)
             | Self::RepeatUntil(_, _, span)
@@ -100,9 +102,10 @@ impl LocatedToken {
             LocatedToken::CrunchedSection(c, l, _span) => {
                 Token::CrunchedSection(*c, l.as_listing())
             }
-            LocatedToken::Include(s, l, _span) => Token::Include(
+            LocatedToken::Include(s, l, module,_span) => Token::Include(
                 s.clone(),
                 l.borrow().as_ref().map(|l| l.as_listing()).into(),
+                module.clone()
             ),
             LocatedToken::If(v, e, _span) => Token::If(
                 v.iter()
@@ -122,6 +125,7 @@ impl LocatedToken {
             ),
             LocatedToken::While(e, l, _span) => Token::While(e.clone(), l.as_listing()),
             LocatedToken::Iterate(name, values, code, _span) => todo!(),
+            LocatedToken::Module(_, _, _) => todo!(),
         }
     }
 
@@ -152,7 +156,7 @@ impl LocatedToken {
     /// Works in read only tokens thanks to RefCell
     pub fn read_referenced_file(&self, ctx: &ParserContext) -> Result<(), AssemblerError> {
         match self {
-            LocatedToken::Include(ref fname, ref cell, span) => {
+            LocatedToken::Include(ref fname, ref cell, _namespace, span) => {
                 match ctx.get_path_for(fname) {
                     Err(e) => {
                         return Err(AssemblerError::IOError {

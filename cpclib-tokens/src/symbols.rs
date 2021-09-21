@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 
 use cpclib_common::itertools::Itertools;
+use cpclib_common::smallvec::{SmallVec, smallvec};
 use cpclib_common::{lazy_static, strsim};
 use delegate::delegate;
 use regex::Regex;
@@ -116,6 +117,7 @@ pub enum SymbolError {
     UnknownAssemblingAddress,
     CannotModify(Symbol),
     WrongSymbol(String),
+    NoNamespaceActive
 }
 
 /// Encode the data for the structure directive
@@ -438,6 +440,9 @@ pub trait SymbolsTableTrait {
         symbol: S,
         value: V,
     ) -> Result<Option<Value>, SymbolError>;
+
+    fn enter_namespace(&mut self, namespace: &str);
+    fn leave_namespace(&mut self) -> Result<String, SymbolError>;
 }
 
 #[derive(Debug, Clone)]
@@ -446,6 +451,8 @@ pub struct SymbolsTable {
     map: HashMap<Symbol, Value>,
     dummy: bool,
     current_label: String, //  Value of the current label to allow local labels
+    // Stack of namespaces
+    namespace_stack: Vec<String>,
 
     // list of symbols that are assignable (i.e. modified programmatically)
     assignable: HashSet<Symbol>,
@@ -459,7 +466,8 @@ impl Default for SymbolsTable {
             dummy: false,
             current_label: "".into(),
             assignable: Default::default(),
-            seed_stack: Vec::new()
+            seed_stack: Vec::new(),
+            namespace_stack: Vec::new()
         }
     }
 }
@@ -492,7 +500,7 @@ impl SymbolsTableTrait for SymbolsTable {
         symbol: S,
         value: V,
     ) -> Result<Option<Value>, SymbolError> {
-        let symbol = self.extend_symbol(symbol)?;
+        let symbol = self.extend_readable_symbol(symbol)?;
 
         if !self.assignable.contains(&symbol) 
             && self.map.contains_key(&symbol) {
@@ -502,6 +510,17 @@ impl SymbolsTableTrait for SymbolsTable {
         self.assignable.insert(symbol.clone());
 
         Ok(self.map.insert(symbol, value.into()))
+    }
+
+    fn enter_namespace(&mut self, namespace: &str) {
+        self.namespace_stack.push(namespace.into())
+    }
+
+    fn leave_namespace(&mut self) -> Result<String, SymbolError> {
+        match self.namespace_stack.pop() {
+            Some(s) => Ok(s),
+            None => Err(SymbolError::NoNamespaceActive)
+        }
     }
 
 }
@@ -517,7 +536,8 @@ impl SymbolsTable {
             dummy: true,
             current_label: "".into(),
             assignable: HashSet::new(),
-            seed_stack: Vec::new()
+            seed_stack: Vec::new(),
+            namespace_stack: Vec::new(),
         }
     }
 
@@ -526,7 +546,7 @@ impl SymbolsTable {
         let label = symbol.into();
 
         if ! label.value().starts_with(".") && !label.value().starts_with("@") {
-            let label = self.extend_symbol(label)?.value().to_owned();
+            let label = self.extend_writable_symbol(label)?.value().to_owned();
             self.current_label = label;
         }
 
@@ -543,12 +563,55 @@ impl SymbolsTable {
         self.seed_stack.pop();
     }
 
+    /// Symbol is either :
+    /// - a global symbol from the current module
+    /// - or a fully qualified that represents a module from the start
+    pub fn get_potential_candidates(&self, symbol: Symbol) -> SmallVec<[Symbol;2]> {
+        if self.namespace_stack.is_empty() {
+            smallvec![symbol]
+        } else {
+            let full = symbol.clone();
+
+            let mut global = self.namespace_stack.clone();
+            global.push(symbol.value().to_owned());
+            let global = global.iter()
+                                    .join(".")
+                                    .into();
+
+            smallvec![global, full]
+        }
+    }
+
+    fn extend_readable_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
+        let symbol = self.extend_symbol__(symbol)?;
+        let candidates = self.get_potential_candidates(symbol);
+
+        if candidates.len() == 1 {
+            Ok(candidates[0].clone())
+        } else {
+            if self.map.contains_key(&candidates[0]) {
+                Ok(candidates[0].clone())
+            } else {
+                Ok(candidates[1].clone())
+            }
+        }
+    }
+
+    fn extend_writable_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
+        let symbol = self.extend_symbol__(symbol)?;
+        let candidates = self.get_potential_candidates(symbol);
+
+
+        Ok(candidates[0].clone())
+
+    }
 
     /// Some symbols are local and need to be converted to their global value.
-    pub fn extend_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
+    fn extend_symbol__<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
         let symbol = symbol.into();
         let mut symbol = symbol.value().to_owned();
 
+        // Local symbols are expensed with their global symbol
          if symbol.starts_with('.') {
              symbol = self.current_label.clone() + &symbol ;
         }
@@ -569,6 +632,7 @@ impl SymbolsTable {
         }
 
 
+        // handle the labels build with patterns 
         // Get the replacement strings
         lazy_static::lazy_static! {
             static ref RE: Regex = Regex::new("\\{[^\\}]+\\}").unwrap();
@@ -613,7 +677,7 @@ impl SymbolsTable {
         &mut self,
         symbol: S,
     ) -> Result<(), SymbolError> {
-        let symbol = self.extend_symbol(symbol)?;
+        let symbol = self.extend_readable_symbol(symbol)?;
         self.current_address().map(|val| {
             self.map.insert(symbol, Value::Number(val.into()));
         })
@@ -626,21 +690,21 @@ impl SymbolsTable {
         symbol: S,
         value: V,
     ) -> Result<Option<Value>, SymbolError> {
-        let symbol = self.extend_symbol(symbol)?;
+        let symbol = self.extend_readable_symbol(symbol)?;
 
         Ok(self.map.insert(symbol, value.into()))
     }
 
 
     pub fn update_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(&mut self, symbol: S, value: V) -> Result<(), SymbolError>{
-        let symbol = self.extend_symbol(symbol)?;
+        let symbol = self.extend_readable_symbol(symbol)?;
         *(self.map.get_mut(&symbol).unwrap()) = value.into();
         Ok(())
     }
 
     /// Returns the Value at the given key
     pub fn value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Value>, SymbolError> {
-        let symbol = self.extend_symbol(symbol)?;
+        let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self.map.get(&symbol))
     }
 
@@ -702,18 +766,18 @@ impl SymbolsTable {
 
     /// Remove the given symbol name from the table. (used by undef)
     pub fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError> {
-        let symbol = self.extend_symbol(symbol)?;
+        let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self.map.remove(&symbol))
     }
 
     pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
-        let symbol = self.extend_symbol(symbol)?;
+        let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self.map.contains_key(&symbol))
     }
 
     /// Returns the closest Value
     pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<String>, SymbolError> {
-        let symbol = self.extend_symbol(symbol)?;
+        let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self.map
                     .iter()
                     .filter(|(k,v)| {
@@ -911,5 +975,12 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
         self.table
         .assign_symbol_to_value(self.normalize_symbol(symbol), value)
     }
+    
+    fn enter_namespace(&mut self, namespace: &str) {
+        self.table.enter_namespace(self.normalize_symbol(namespace).value())
+    }
 
+    fn leave_namespace(&mut self) -> Result<String, SymbolError> {
+        self.table.leave_namespace()
+    }
 }

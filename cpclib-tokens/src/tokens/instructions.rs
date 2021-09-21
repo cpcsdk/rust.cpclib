@@ -434,6 +434,8 @@ pub enum Token {
 
     Equ(String, Expr),
     Export(Vec<String>),
+    
+    Fail(Vec<FormattedExpr>),
 
     /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
     If(Vec<(TestKind, Listing)>, Option<Listing>),
@@ -449,7 +451,7 @@ pub enum Token {
         transformation: BinaryTransformation,
     },
     // file may or may not be read during parse. If not, it is read on demand when assembling
-    Include(String, RefCell<Option<Listing>>),
+    Include(String, RefCell<Option<Listing>>, Option<String>),
     Iterate(String, Vec<Expr>, Listing),
 
     Label(String),
@@ -625,7 +627,10 @@ impl fmt::Display for Token {
                  }
  
 
-                 Token::Include(ref fname, _)
+                 Token::Include(ref fname, _, Some(module))
+                 => write!(f, "INCLUDE \"{}\" namespace {}", fname, module.as_str()),
+
+                 Token::Include(ref fname, _, None)
                  => write!(f, "INCLUDE \"{}\"", fname),
  
             Token::Label(ref string)
@@ -1016,7 +1021,7 @@ impl Token {
     pub fn has_at_least_one_listing(&self) -> bool {
         match self {
             Self::CrunchedSection(_, _)
-            | Self::Include(_, _)
+            | Self::Include(_, _, _)
             | Self::If(_, _)
             | Self::Repeat(_, _, _, _)
             | Self::RepeatUntil(_, _)

@@ -81,6 +81,10 @@ pub enum AssemblerError {
         msg: String,
     },
 
+    Fail {
+        msg: String,
+    },
+
     //  #[fail(display = "Assertion failed -- {} [{}]: {}", test, guidance, msg)]
     AssertionFailed {
         test: String,
@@ -260,7 +264,10 @@ impl From<SymbolError> for AssemblerError {
         match err {
             SymbolError::UnknownAssemblingAddress => AssemblerError::UnknownAssemblingAddress,
             SymbolError::CannotModify(symb) => AssemblerError::ReadOnlySymbol(symb),
-            SymbolError::WrongSymbol(err) => AssemblerError::InvalidSymbol(err)
+            SymbolError::WrongSymbol(err) => AssemblerError::InvalidSymbol(err),
+            SymbolError::NoNamespaceActive => AssemblerError::AssemblingError {
+                msg: "There is no namespace active".to_owned()
+            },
         }
     }
 }
@@ -287,6 +294,18 @@ impl AssemblerError {
             AssemblerError::OverrideMemory(_, _) => true,
             AssemblerError::RelocatedError{error, ..} | AssemblerError::RelocatedWarning{warning: error, ..}=> error.is_override_memory(),
             _ => false
+        }
+    }
+
+    pub fn locate(self, span: Z80Span) -> Self {
+        if self.is_located() {
+            self
+        } else {
+            AssemblerError::RelocatedError {
+                span: span,
+                error: Box::new(self),
+            
+            }
         }
     }
 }
@@ -590,6 +609,7 @@ impl Display for AssemblerError {
             AssemblerError::SnapshotError { error } =>  write!(f, "Snapshot error. {:#?}", error),
             AssemblerError::CrunchedSectionError { error } => write!(f, "Error when crunching code {}", error),
             AssemblerError::NotAllowed => write!(f, "Instruction not allowed in this context."),
+            AssemblerError::Fail { msg } => write!(f, "FAIL: {}", msg)
            
         }
     }
