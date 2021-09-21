@@ -8,6 +8,7 @@ use crate::preamble::*;
 use crate::AssemblingOptions;
 
 use cpclib_basic::*;
+use cpclib_disc::amsdos::AmsdosError;
 use cpclib_disc::edsk::ExtendedDsk;
 use cpclib_sna::*;
 
@@ -622,6 +623,27 @@ impl Default for Env {
             sections: HashMap::default(),
             current_section: None
         }
+    }
+}
+
+
+/// Namespace handling 
+impl Env {
+    fn enter_namespace(&mut self, namespace: &str) -> Result<(), AssemblerError> {
+        if namespace.contains(".") {
+            return Err(AssemblerError::AssemblingError {
+                msg: format!("Invalid namespace \"{}\"", namespace)
+            });
+        }
+        self.symbols_mut()
+            .enter_namespace(namespace);
+        Ok(())
+    }
+
+    fn leave_namespace(&mut self) -> Result<String, AssemblerError> {
+        self.symbols_mut()
+            .leave_namespace()
+            .map_err(|e| e.into())
     }
 }
 
@@ -1623,33 +1645,42 @@ if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symb
 
     }
 
+    fn build_string_from_formatted_expression(&self, info: &[FormattedExpr]) -> Result<String, AssemblerError> {
+        let mut repr = String::default();
+        for (idx, current) in info.iter().enumerate() {
+            if idx != 0 {
+                repr += " ";
+            }
+            match current {
+                FormattedExpr::Raw(Expr::String(string)) => {
+                    repr += string;
+                }
+                FormattedExpr::Raw(expr) => {
+                    let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int() as f32;
+                    repr += &value.to_string();
+                }
+                FormattedExpr::Formatted(format, expr) => {
+                    let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int() as i32;
+                    repr += &format.string_representation(value);
+                }
+            }
+        }
+
+        Ok(repr)
+    }
     /// Print the evaluation of the expression in the 2nd pass
     pub fn visit_print(&self, info: &[FormattedExpr]) -> Result<(), AssemblerError> {
         if self.pass.is_second_pass() {
-            let mut repr = String::default();
-            for (idx, current) in info.iter().enumerate() {
-                if idx != 0 {
-                    repr += " ";
-                }
-                match current {
-                    FormattedExpr::Raw(Expr::String(string)) => {
-                        repr += string;
-                    }
-                    FormattedExpr::Raw(expr) => {
-                        let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int() as f32;
-                        repr += &value.to_string();
-                    }
-                    FormattedExpr::Formatted(format, expr) => {
-                        let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int() as i32;
-                        repr += &format.string_representation(value);
-                    }
-                }
-            }
+            let repr = self.build_string_from_formatted_expression(info)?;
             println!("{}", repr);
         }
         Ok(())
     }
 
+    pub fn visit_fail(&self, info: &[FormattedExpr]) -> Result<(), AssemblerError> {
+        let repr = self.build_string_from_formatted_expression(info)?;
+        Err(AssemblerError::Fail{msg:repr})
+    }
    
 
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
@@ -1957,8 +1988,17 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
             env.visit_crunched_section(kind, lst, Some(span))
         },
 
-        LocatedToken::Include(fname, ref cell, span) => if cell.borrow().is_some() {
-            env.visit_listing(cell.borrow().as_ref().unwrap())
+        LocatedToken::Include(fname, ref cell, namespace, span) => if cell.borrow().is_some() {
+            if let Some(namespace) = namespace {
+                env.enter_namespace(namespace)
+                .map_err(|e| e.locate(span.clone()))?;
+            }
+            env.visit_listing(cell.borrow().as_ref().unwrap())?;
+            if namespace.is_some() {
+                env.leave_namespace()
+                .map_err(|e| e.locate(span.clone()))?;
+            }
+            Ok(())
         } else {
             outer_token
                 .read_referenced_file(&outer_token.context().1)
@@ -1977,11 +2017,19 @@ pub fn visit_located_token(outer_token: &LocatedToken, env: &mut Env) -> Result<
                     }).collect_vec().as_ref(), 
                 other.as_ref()
                     .map(|o| o.as_ref())
-            ).map_err(|err| AssemblerError::RelocatedError {
-                span: span.clone(),
-                error: Box::new(err),
-            })
+            ).map_err(|err| err.locate(span.clone()))
         },
+
+        LocatedToken::Module(name, code, span) => {
+            env.enter_namespace(name)
+                .map_err(|e| e.locate(span.clone()))?;
+            env.visit_listing(code)?;
+            env.leave_namespace()
+                .map_err(|e| e.locate(span.clone()))?;
+                Ok(())
+        }
+
+
         LocatedToken::Repeat(count, code, counter, counter_start, span) => {
             env.visit_repeat(count, code, counter.as_ref().map(|s| s.as_str()), counter_start.as_ref(), Some(span.clone()))
         },
@@ -2050,10 +2098,17 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             });
             Ok(())
         }, 
-        Token::Include(_, cell) if cell.borrow().is_some() => {
-            env.visit_listing(cell.borrow().as_ref().unwrap())
+        Token::Include(_, cell, namespace) if cell.borrow().is_some() => {
+            if let Some(namespace) = namespace.as_ref() {
+                env.enter_namespace(namespace)?;
+            }
+            env.visit_listing(cell.borrow().as_ref().unwrap())?;
+            if namespace.is_some() {
+                env.leave_namespace()?;
+            }
+            Ok(())
         }
-        Token::Include(fname, cell) if cell.borrow().is_none() => {
+        Token::Include(fname, cell, namespace) if cell.borrow().is_none() => {
             todo!("Read the file (without being able to specify parser options)")
         }
         Token::Incbin {
@@ -2085,6 +2140,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Assign(ref label, ref exp) => visit_assign(label, exp, env),
         Token::Protect(ref start, ref end) => env.visit_protect(start, end),
         Token::Print(ref exp) => env.visit_print(exp.as_ref()),
+        Token::Fail(ref exp) => env.visit_fail(exp.as_ref()),
         Token::Repeat(count, code, counter, counter_start) => 
             env.visit_repeat(count, code, counter.as_ref().map(|s| s.as_str()), counter_start.as_ref(), None),
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
