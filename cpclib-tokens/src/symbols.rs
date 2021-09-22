@@ -591,7 +591,7 @@ impl SymbolsTable {
     }
 
     fn extend_readable_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
-        let symbol = self.extend_symbol__(symbol)?;
+        let symbol = self.extend_local_symbol(symbol)?;
         let candidates = self.get_potential_candidates(symbol);
 
         if candidates.len() == 1 {
@@ -606,7 +606,7 @@ impl SymbolsTable {
     }
 
     fn extend_writable_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
-        let symbol = self.extend_symbol__(symbol)?;
+        let symbol = self.extend_local_symbol(symbol)?;
         let candidates = self.get_potential_candidates(symbol);
 
 
@@ -615,7 +615,7 @@ impl SymbolsTable {
     }
 
     /// Some symbols are local and need to be converted to their global value.
-    fn extend_symbol__<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
+    fn extend_local_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
         let symbol = symbol.into();
         let mut symbol = symbol.value().to_owned();
 
@@ -685,6 +685,7 @@ impl SymbolsTable {
         &mut self,
         symbol: S,
     ) -> Result<(), SymbolError> {
+        let symbol = self.extend_local_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
         self.current_address().map(|val| {
             self.map.insert(symbol, Value::Number(val.into()));
@@ -698,6 +699,7 @@ impl SymbolsTable {
         symbol: S,
         value: V,
     ) -> Result<Option<Value>, SymbolError> {
+        let symbol = self.extend_local_symbol(symbol)?;
         let symbol = self.inject_current_namespace(symbol);
 
         Ok(self.map.insert(symbol, value.into()))
@@ -783,7 +785,8 @@ impl SymbolsTable {
     }
 
     pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
-        let symbols = self.get_potential_candidates(symbol.into());
+        let symbol = self.extend_local_symbol(symbol)?;
+        let symbols = self.get_potential_candidates(symbol);
         Ok(
             symbols.iter()
             .any(|symbol| self.map.contains_key(&symbol))
@@ -792,6 +795,7 @@ impl SymbolsTable {
 
     /// Returns the closest Value
     pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<String>, SymbolError> {
+        let symbol = self.extend_local_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self.map
                     .iter()
