@@ -1,4 +1,5 @@
 #![allow(clippy::cast_lossless)]
+
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -734,9 +735,9 @@ pub fn parse_z80_line_complete(
     // Eat previous line ending
     let (input, _) = opt(line_ending)(input)?;
 
-    // Eat optional label (or macro)
+    // Eat optional label (or macro call)
     let before_label = input.clone();
-    let (input, mut label) = opt(parse_label(false))(input)?; // label must start at the beginning of the line to avoid ambiguitiy with macro call
+    let (input, mut label) = opt(parse_label(false))(input)?; 
     let input = if label.is_some() {
         alt((
             value((), tuple((space0, char(':'), space0))),
@@ -750,44 +751,64 @@ pub fn parse_z80_line_complete(
     // First directive MUST not be the  a keyword that ends a structure (it should have been eaten before)
     let (input, _) = cut(context("Parse issue, no end directive expected here", not(parse_forbidden_keyword)))(input)?;
 
+    // potential label2
+    let before_label2 = input.clone();
+    let (input, mut label2) = opt(parse_label(false))(input)?; 
 
-    let nb_warnings = input.extra.1.warnings().len();
-// try to parse a token. if it fails, fall back to the macro parser
-let (input, opcode) = match parse_single_token(true)(input) {
-    Ok((input, LocatedToken::Standard{token: Token::Label(_), ..})) => {
-        while nb_warnings < input.extra.1.warnings().len() {
-            input.extra.1.pop_warning();
-        }
-        let (input, macro_call) = preceded(space0, parse_macro_call(false))(before_label.clone())?;
-        (input, LocatedToken::Standard{token: macro_call, span: before_label.clone()})
-    },
-    Err(e) => {
-        if IMPOSSIBLE_LABEL_NAME.iter().find(|label2| match &label {
-            Some(label) => label.as_str() == **label2,
-            None => false,
-        }).is_some() {
-            return Err(e); // we forbid labels with instruction name
-        }
-        // label + instruction failed, so we try to use a macro call instead
-        match preceded(space0, parse_macro_call(false))(before_label.clone()) {
-            Ok((input, macro_call)) => {
-                // remove previously build structures and return the macro one
-                label = None; // remove label if any
+    let (input, opcode) = match (label.is_some(), label2.is_some()) {
+        (true, true) => {
+            // label macro
+            let (input, macro_call) = cut(context("MACRO call", preceded(space0, parse_macro_call(false))))(before_label2.clone())?;
+            (
+                input, 
+                LocatedToken::Standard{token: macro_call, span: before_label.clone()}
+            )
+        },
+        (true, false) => {
+            // label/macro instruction?
+            let nb_warnings = input.extra.1.warnings().len();
+    // try to parse a token. if it fails, fall back to the macro call parser
+        match parse_single_token(true)(input) {
+        Ok((input, LocatedToken::Standard{token: Token::Label(_), ..})) => {
+            // we cannot have a label; it corresponds to a macro call
+            while nb_warnings < input.extra.1.warnings().len() {
+                input.extra.1.pop_warning();
+            }
+            let (input, macro_call) = context("MACRO call", preceded(space0, parse_macro_call(false)))(before_label.clone())?;
+            (input, LocatedToken::Standard{token: macro_call, span: before_label.clone()})
+        },
 
-                (input, LocatedToken::Standard{token: macro_call, span: before_label.clone()})
-            },
-            Err(_) => {
-                // fallback failed too, so return the original error
-                return Err(e)
-            },
-        }
-    },
+        Ok((input, opcode)) => {
+            // any other token is a normal token
+            (input, opcode)
+        },
 
-    Ok((input, opcode)) => {
-//        dbg!(opcode.as_token());
-        (input, opcode)
-    },
-};
+        Err(e) => {
+            // any error means we have to cancel the parsing
+            if IMPOSSIBLE_LABEL_NAME.iter().find(|label2| match &label {
+                Some(label) => label.as_str() == **label2,
+                None => false,
+            }).is_some() {
+                return Err(e); // we forbid labels with instruction name
+            }
+            // label + instruction failed, so we try to use a macro call instead
+            let (input, macro_call) = context("MACRO call", preceded(space0, parse_macro_call(false)))(before_label.clone())?;
+            (input, LocatedToken::Standard{token: macro_call, span: before_label.clone()})
+            }
+        }
+        },
+        (false, false) => {
+            // instruction
+            parse_single_token(true)(input)?
+        },
+        (false, true) => {
+            // unimplemented
+            todo!()
+        }
+
+    };
+    
+
 
 
     // Eat the additional opcodes
@@ -1888,7 +1909,7 @@ pub fn parse_macro_call(can_return_label: bool)
     move |input| {
     // BUG: added because of parsing issues. Need to find why and remove ot
     let (input_label, _) = space0(input)?;
-    let (input, name) = parse_macro_name(input_label.clone())?;
+    let (input, name) = dbg!(parse_macro_name(input_label.clone())?);
 
     // Check if the macro name is allowed
     if FIRST_DIRECTIVE
@@ -1931,7 +1952,7 @@ pub fn parse_macro_call(can_return_label: bool)
         ))(input)?;
 
         // fix case when there is no argument but a 
-        let  args = args.unwrap_or_default();
+        let  args = dbg!(args.unwrap_or_default());
         if args.len() == 1 && args.first().unwrap().is_empty() {
             panic!();
         }

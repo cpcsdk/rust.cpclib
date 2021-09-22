@@ -938,7 +938,6 @@ impl SymbolsTable {
     pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbols = dbg!(self.get_potential_candidates(symbol));
-        dbg!(&self.map);
         Ok(
             symbols.iter()
             .any(|symbol| self.map.contains_key(&symbol))
