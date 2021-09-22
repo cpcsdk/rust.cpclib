@@ -34,7 +34,7 @@ impl SymbolOutputGenerator {
 
 		for &k in symbs.integer_symbols()
 					.iter()
-					.filter(|s| self.keep_symbol(s)) {
+					.filter(|s| self.keep_symbol(s))  {
 			
 			// TODO add some filtering stuffs based on the directives
 			writeln!(
@@ -53,6 +53,7 @@ impl SymbolOutputGenerator {
 		assert!(self.all_allowed ^ self.all_forbidden);
 		
 		if sym.value() == "$" {return false}
+		if sym.value() == "$$" {return false}
 		else if self.all_allowed {
 			!Self::is_included(&self.forbidden, sym)
 		}
