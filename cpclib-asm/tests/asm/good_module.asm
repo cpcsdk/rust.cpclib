@@ -14,7 +14,7 @@ label1
 	module module3
 		module module31
 label1
-		jp module1.label1
+		jp ::label1
 		endmodule
 	endmodule
 label1

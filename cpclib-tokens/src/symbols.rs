@@ -567,7 +567,10 @@ impl SymbolsTable {
     /// - a global symbol from the current module
     /// - or a fully qualified that represents a module from the start
     pub fn get_potential_candidates(&self, symbol: Symbol) -> SmallVec<[Symbol;2]> {
-        if self.namespace_stack.is_empty() {
+        if symbol.value().starts_with("::") {
+            smallvec![symbol.value()[2..].to_owned().into()]
+        }
+        else if self.namespace_stack.is_empty() {
             smallvec![symbol]
         } else {
             let full = symbol.clone();
