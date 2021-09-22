@@ -2960,6 +2960,8 @@ pub fn parse_label(
     move |input: Z80Span| {
         // Get the label
 
+        let (input, prefix) = opt(tag("::"))(input)?;
+        let has_prefix = prefix.is_some();
         let (input, first) =
             one_of("@abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._{}")(input)?;
         let (input, middle) = opt(
@@ -2978,7 +2980,10 @@ pub fn parse_label(
         }
 
 
-        if middle.is_none() && (first == '@' || first == '.') {
+
+        if (middle.is_none() && (first == '@' || first == '.' || has_prefix))
+            || (has_prefix && (first == '@' || first == '.' ))
+        {
             return Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf)));
         }
 
@@ -2990,7 +2995,8 @@ pub fn parse_label(
         };
 
         let label = format!(
-            "{}{}", 
+            "{}{}{}", 
+            if has_prefix {"::"} else {""},
             first, 
             middle.map(|v| v.iter_elements().collect::<String>())
                 .unwrap_or_default()
