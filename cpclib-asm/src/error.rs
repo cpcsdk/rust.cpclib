@@ -264,7 +264,7 @@ impl From<SymbolError> for AssemblerError {
         match err {
             SymbolError::UnknownAssemblingAddress => AssemblerError::UnknownAssemblingAddress,
             SymbolError::CannotModify(symb) => AssemblerError::ReadOnlySymbol(symb),
-            SymbolError::WrongSymbol(err) => AssemblerError::InvalidSymbol(err),
+            SymbolError::WrongSymbol(err) => AssemblerError::InvalidSymbol(err.value().to_owned()),
             SymbolError::NoNamespaceActive => AssemblerError::AssemblingError {
                 msg: "There is no namespace active".to_owned()
             },

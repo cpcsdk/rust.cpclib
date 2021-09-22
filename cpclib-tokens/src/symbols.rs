@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{SmallVec, smallvec};
@@ -11,7 +11,8 @@ use crate::tokens::expression::LabelPrefix;
 use crate::{ExprResult, MacroParam, Token};
 
 
-
+use std::ops::Deref;
+use std::ops::DerefMut;
 
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone)]
@@ -116,7 +117,7 @@ impl PhysicalAddress {
 pub enum SymbolError {
     UnknownAssemblingAddress,
     CannotModify(Symbol),
-    WrongSymbol(String),
+    WrongSymbol(Symbol),
     NoNamespaceActive
 }
 
@@ -395,6 +396,11 @@ impl<I:Into<ExprResult>> From<I> for Value {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Symbol(String);
 
+impl Display for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",&self.0)
+    }
+}
 impl From<&str> for Symbol {
     fn from(s: &str) -> Symbol {
         s.to_owned().into()
@@ -442,33 +448,234 @@ pub trait SymbolsTableTrait {
     ) -> Result<Option<Value>, SymbolError>;
 
     fn enter_namespace(&mut self, namespace: &str);
-    fn leave_namespace(&mut self) -> Result<String, SymbolError>;
+    fn leave_namespace(&mut self) -> Result<Symbol, SymbolError>;
+}
+
+/// Handle Tree like maps. 
+#[derive(Debug, Clone, Default)]
+struct ModuleSymbolTable{
+    current: HashMap<Symbol, Value>,
+    children: HashMap<Symbol, ModuleSymbolTable>
+}
+
+impl Deref for ModuleSymbolTable {
+    type Target = HashMap<Symbol, Value>;
+    fn deref(&self) -> &Self::Target {
+        &self.current
+    }
+}
+
+impl DerefMut for ModuleSymbolTable {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.current
+    }
+}
+
+impl ModuleSymbolTable {
+    /// Add a new branch in the module tree
+    fn add_children(&mut self, new: Symbol) {
+        self.children.insert(new, ModuleSymbolTable::default());
+    }
+
+    /// Check if the current module has this children
+    fn has_children(&self, children: &Symbol) -> bool {
+        self.children.contains_key(children)
+    }
+
+    fn children(&self, children: &Symbol) -> Option<&ModuleSymbolTable> {
+        self.children.get(children)
+    }
+
+    fn children_mut(&mut self, children: &Symbol) -> Option<&mut ModuleSymbolTable> {
+        self.children.get_mut(children)
+    }
+
+    fn iter(&self) ->  ModuleSymbolTableIterator {
+        ModuleSymbolTableIterator::new(self)
+    }
+}
+
+struct ModuleSymbolTableIterator<'t> {
+    others: Vec<&'t ModuleSymbolTable>,
+    current: std::collections::hash_map::Iter<'t, Symbol, Value>
+}
+
+impl<'t> ModuleSymbolTableIterator<'t> {
+    fn new(table: &'t ModuleSymbolTable) -> Self {
+        Self {
+            others: table.children.values().collect_vec(),
+            current: table.current.iter()
+        }
+    }
+}
+impl<'t> Iterator for  ModuleSymbolTableIterator<'t> {
+    type Item = (&'t Symbol, &'t Value);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.current.next();
+        if current.is_some() {
+            return current;
+        } else {
+            if let Some(next) = self.others.pop() {
+                let current = next.current.iter();
+                self.others.extend(next.children.values());
+                self.current = current;
+                return self.current.next();
+            }
+            else {
+                return None;
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct SymbolsTable {
-    map: HashMap<Symbol, Value>,
+    // Tree of symbols. The default one is the root
+    map: ModuleSymbolTable,
     dummy: bool,
-    current_label: String, //  Value of the current label to allow local labels
+    current_global_label: Symbol, //  Value of the current label to allow local labels
     // Stack of namespaces
-    namespace_stack: Vec<String>,
+    namespace_stack: Vec<Symbol>,
 
     // list of symbols that are assignable (i.e. modified programmatically)
     assignable: HashSet<Symbol>,
     seed_stack: Vec<usize> // stack of seeds for nested repeat to properly interpret the @ symbol
 }
 
+
 impl Default for SymbolsTable {
     fn default() -> Self {
+
+        let mut map = ModuleSymbolTable::default();
+        map.add_children("".to_owned().into());
         Self {
-            map: HashMap::new(),
+            map,
             dummy: false,
-            current_label: "".into(),
+            current_global_label: "".into(),
             assignable: Default::default(),
             seed_stack: Vec::new(),
             namespace_stack: Vec::new()
         }
+    }
+}
+
+/// Local/global label handling code
+impl SymbolsTable {
+
+    /// Setup the current label for local to global labels conversions
+    pub fn set_current_global_label<S: Into<Symbol>>(&mut self, symbol: S) -> Result<(), SymbolError> {
+        let label = symbol.into();
+
+        if !label.value().starts_with(".") 
+            && !label.value().starts_with("@") {
+
+                if label.value().contains(".") {
+                    return Err(SymbolError::WrongSymbol(label));
+                }
+                self.current_global_label = self.extend_local_and_patterns_for_symbol(label)?;
+        }
+
+        Ok(())
+    }
+
+
+    /// Some symbols are local and need to be converted to their global value.
+    fn extend_local_and_patterns_for_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
+            let symbol = symbol.into();
+            let mut symbol = symbol.value().to_owned();
+    
+            // Local symbols are expensed with their global symbol
+             if symbol.starts_with('.') {
+                symbol = self.current_global_label.clone().value().to_owned() + &symbol ;
+            }
+    
+            // handle the hidden labels from repeats
+            if symbol.starts_with("@") {
+                match self.seed_stack.last() {
+                    Some(seed) => {
+                        // we need to rewrite the symbol name to make it unique
+                        symbol = format!(".__hidden__{}__{}", seed, &symbol[1..]);
+                    }
+                    None => {
+                        // we cannot have a symbol with @ here
+                        return Err(SymbolError::WrongSymbol(symbol.into()));
+                    }
+                }
+    
+            }
+    
+    
+            // handle the labels build with patterns 
+            // Get the replacement strings
+            lazy_static::lazy_static! {
+                static ref RE: Regex = Regex::new("\\{[^\\}]+\\}").unwrap();
+            }
+            let mut replace = HashSet::new();
+            for cap in RE.captures_iter(&symbol) {
+                if cap[0] != symbol {
+                  replace.insert(cap[0].to_owned());
+                }
+            }
+            // make the replacement
+            for model in replace.iter() {
+                let local_symbol = &model[1..model.len()-1]; // remove {}
+                let local_value = self.int_value(local_symbol)?.unwrap();
+                symbol = symbol.replace(model, & local_value.to_string());
+            }
+    
+            Ok(symbol.into())
+        }
+}
+
+
+/// Module handling code
+impl SymbolsTable {
+    /// Retrieve the map for the currently selected module
+    fn current_module_map(&self) -> &ModuleSymbolTable {
+        if self.namespace_stack.is_empty() {
+            &self.map
+        } else {
+            self.module_map(&self.namespace_stack)
+        }
+    }
+    
+    /// Retrieve the mutable map for the currently selected module
+    fn current_module_map_mut(&mut self) -> &mut ModuleSymbolTable {
+        if self.namespace_stack.is_empty() {
+            &mut self.map
+        }else {
+            let stack = self.namespace_stack.clone();
+            self.module_map_mut(&stack)
+        }
+    }
+
+    /// Retreive the map for the requested module
+    fn module_map(&self, namespace: &[Symbol]) -> &ModuleSymbolTable {
+        let mut current_map = &self.map;
+        for current_namespace in namespace.iter() {
+            current_map = current_map.children(current_namespace).unwrap();
+        }
+        current_map
+    }
+
+    fn module_map_mut(&mut self, namespace: &[Symbol]) -> &mut ModuleSymbolTable {
+        let mut current_map = &mut self.map;
+        for current_namespace in namespace.iter() {
+            current_map = current_map.children_mut(current_namespace).unwrap();
+        }
+        current_map
+    }
+
+
+    /// Split the namespaces of the symbol
+    fn split_namespaces(symbol: &Symbol) -> Vec<Symbol> {
+        symbol.value()
+            .split(":")
+            .map(|s| s.to_owned())
+            .map(|s| s.into())
+            .collect_vec()
     }
 }
 
@@ -516,7 +723,7 @@ impl SymbolsTableTrait for SymbolsTable {
         self.namespace_stack.push(namespace.into())
     }
 
-    fn leave_namespace(&mut self) -> Result<String, SymbolError> {
+    fn leave_namespace(&mut self) -> Result<Symbol, SymbolError> {
         match self.namespace_stack.pop() {
             Some(s) => Ok(s),
             None => Err(SymbolError::NoNamespaceActive)
@@ -529,29 +736,18 @@ impl SymbolsTableTrait for SymbolsTable {
 #[allow(missing_docs)]
 impl SymbolsTable {
     pub fn laxist() -> Self {
-        let mut map = HashMap::new();
+        let mut map = ModuleSymbolTable::default();
         map.insert(Symbol::from("$"), Value::Number(0.into()));
         Self {
             map,
             dummy: true,
-            current_label: "".into(),
+            current_global_label: "".into(),
             assignable: HashSet::new(),
             seed_stack: Vec::new(),
             namespace_stack: Vec::new(),
         }
     }
 
-    // Setup the current label for local to global labels conversions
-    pub fn set_current_label<S: Into<Symbol>>(&mut self, symbol: S) -> Result<(), SymbolError> {
-        let label = symbol.into();
-
-        if ! label.value().starts_with(".") && !label.value().starts_with("@") {
-            let label = self.extend_writable_symbol(label)?.value().to_owned();
-            self.current_label = label;
-        }
-
-        Ok(())
-    }
 
     /// Add a new seed for the @ symbol name resolution (we enter in a repeat)
     pub fn push_seed(&mut self, seed: usize) {
@@ -584,14 +780,14 @@ impl SymbolsTable {
 
     fn inject_current_namespace<S: Into<Symbol>>(&self, symbol: S) -> Symbol {
         let mut global = self.namespace_stack.clone();
-        global.push(symbol.into().value().to_owned());
+        global.push(symbol.into());
         global.iter()
                                 .join(".")
                                 .into()    
     }
 
     fn extend_readable_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
-        let symbol = self.extend_local_symbol(symbol)?;
+        let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let candidates = self.get_potential_candidates(symbol);
 
         if candidates.len() == 1 {
@@ -606,7 +802,7 @@ impl SymbolsTable {
     }
 
     fn extend_writable_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
-        let symbol = self.extend_local_symbol(symbol)?;
+        let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let candidates = self.get_potential_candidates(symbol);
 
 
@@ -614,52 +810,7 @@ impl SymbolsTable {
 
     }
 
-    /// Some symbols are local and need to be converted to their global value.
-    fn extend_local_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
-        let symbol = symbol.into();
-        let mut symbol = symbol.value().to_owned();
 
-        // Local symbols are expensed with their global symbol
-         if symbol.starts_with('.') {
-             symbol = self.current_label.clone() + &symbol ;
-        }
-
-        // handle the hidden labels from repeats
-        if symbol.starts_with("@") {
-            match self.seed_stack.last() {
-                Some(seed) => {
-                    // we need to rewrite the symbol name to make it unique
-                    symbol = format!(".__hidden__{}__{}", seed, &symbol[1..]);
-                }
-                None => {
-                    // we cannot have a symbol with @ here
-                    return Err(SymbolError::WrongSymbol(symbol));
-                }
-            }
-
-        }
-
-
-        // handle the labels build with patterns 
-        // Get the replacement strings
-        lazy_static::lazy_static! {
-            static ref RE: Regex = Regex::new("\\{[^\\}]+\\}").unwrap();
-        }
-        let mut replace = HashSet::new();
-        for cap in RE.captures_iter(&symbol) {
-            if cap[0] != symbol {
-              replace.insert(cap[0].to_owned());
-            }
-        }
-        // make the replacement
-        for model in replace.iter() {
-            let local_symbol = &model[1..model.len()-1]; // remove {}
-            let local_value = self.int_value(local_symbol)?.unwrap();
-            symbol = symbol.replace(model, & local_value.to_string());
-        }
-
-        Ok(symbol.into())
-    }
 
     /// Return the current addres if it is known or return an error
     pub fn current_address(&self) -> Result<u16, SymbolError> {
@@ -685,7 +836,7 @@ impl SymbolsTable {
         &mut self,
         symbol: S,
     ) -> Result<(), SymbolError> {
-        let symbol = self.extend_local_symbol(symbol)?;
+        let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
         self.current_address().map(|val| {
             self.map.insert(symbol, Value::Number(val.into()));
@@ -699,7 +850,7 @@ impl SymbolsTable {
         symbol: S,
         value: V,
     ) -> Result<Option<Value>, SymbolError> {
-        let symbol = self.extend_local_symbol(symbol)?;
+        let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.inject_current_namespace(symbol);
 
         Ok(self.map.insert(symbol, value.into()))
@@ -785,8 +936,9 @@ impl SymbolsTable {
     }
 
     pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
-        let symbol = self.extend_local_symbol(symbol)?;
-        let symbols = self.get_potential_candidates(symbol);
+        let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
+        let symbols = dbg!(self.get_potential_candidates(symbol));
+        dbg!(&self.map);
         Ok(
             symbols.iter()
             .any(|symbol| self.map.contains_key(&symbol))
@@ -795,7 +947,7 @@ impl SymbolsTable {
 
     /// Returns the closest Value
     pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<String>, SymbolError> {
-        let symbol = self.extend_local_symbol(symbol)?;
+        let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self.map
                     .iter()
@@ -901,7 +1053,7 @@ impl SymbolsTableCaseDependent {
 
     // Setup the current label for local to global labels conversions
     pub fn set_current_label<S: Into<Symbol>>(&mut self, symbol: S) -> Result<(), SymbolError> {
-        self.table.set_current_label(self.normalize_symbol(symbol))
+        self.table.set_current_global_label(self.normalize_symbol(symbol))
     }
 
     pub fn set_symbol_to_current_address<S: Into<Symbol>>(
@@ -999,7 +1151,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
         self.table.enter_namespace(self.normalize_symbol(namespace).value())
     }
 
-    fn leave_namespace(&mut self) -> Result<String, SymbolError> {
+    fn leave_namespace(&mut self) -> Result<Symbol, SymbolError> {
         self.table.leave_namespace()
     }
 }

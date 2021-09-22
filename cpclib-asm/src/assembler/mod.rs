@@ -640,7 +640,7 @@ impl Env {
         Ok(())
     }
 
-    fn leave_namespace(&mut self) -> Result<String, AssemblerError> {
+    fn leave_namespace(&mut self) -> Result<Symbol, AssemblerError> {
         self.symbols_mut()
             .leave_namespace()
             .map_err(|e| e.into())
@@ -1078,7 +1078,7 @@ impl Env {
         label: &str,
         value: E,
     ) -> Result<(), AssemblerError> {
-        
+
         let already_present = self.symbols().contains_symbol(label)?;
         let value  = value.into();
 
