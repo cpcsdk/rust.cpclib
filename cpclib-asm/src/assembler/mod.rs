@@ -1078,6 +1078,7 @@ impl Env {
         label: &str,
         value: E,
     ) -> Result<(), AssemblerError> {
+        
         let already_present = self.symbols().contains_symbol(label)?;
         let value  = value.into();
 
@@ -1140,12 +1141,6 @@ impl Env {
     }
 
     fn visit_label(&mut self, label: &str) -> Result<(), AssemblerError> {
-        // If the current address is not set up, we force it to be 0
-        let value = match self.symbols().current_address() {
-            Ok(address) => address,
-            Err(_) => 0,
-        };
-        let addr = self.logical_to_physical_address(value);
 
         // A label cannot be defined multiple times
         if self.pass.is_first_pass() && self.symbols().contains_symbol(label)? {
@@ -1157,6 +1152,14 @@ impl Env {
             if !label.starts_with('.') {
                 self.symbols_mut().set_current_label(label)?;
             }
+
+            // If the current address is not set up, we force it to be 0
+            let value = match self.symbols().current_address() {
+                Ok(address) => address,
+                Err(_) => 0,
+            };
+            let addr = self.logical_to_physical_address(value);
+
 
             self.add_symbol_to_symbol_table(label, addr)
         }

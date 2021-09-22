@@ -477,7 +477,7 @@ impl SymbolsTableTrait for SymbolsTable {
         self.map.iter()
             .filter(|(k ,v)| {
                 match v {
-                    Value::Number(_) => true,
+                    Value::Number(_) | Value::Address(_) => true,
                     _ => false
                 }
             })
@@ -573,13 +573,18 @@ impl SymbolsTable {
             let full = symbol.clone();
 
             let mut global = self.namespace_stack.clone();
-            global.push(symbol.value().to_owned());
-            let global = global.iter()
-                                    .join(".")
-                                    .into();
+            let global = self.inject_current_namespace(symbol);
 
             smallvec![global, full]
         }
+    }
+
+    fn inject_current_namespace<S: Into<Symbol>>(&self, symbol: S) -> Symbol {
+        let mut global = self.namespace_stack.clone();
+        global.push(symbol.into().value().to_owned());
+        global.iter()
+                                .join(".")
+                                .into()    
     }
 
     fn extend_readable_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
@@ -690,7 +695,7 @@ impl SymbolsTable {
         symbol: S,
         value: V,
     ) -> Result<Option<Value>, SymbolError> {
-        let symbol = self.extend_readable_symbol(symbol)?;
+        let symbol = self.inject_current_namespace(symbol);
 
         Ok(self.map.insert(symbol, value.into()))
     }
@@ -698,6 +703,10 @@ impl SymbolsTable {
 
     pub fn update_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(&mut self, symbol: S, value: V) -> Result<(), SymbolError>{
         let symbol = self.extend_readable_symbol(symbol)?;
+        let symbols = self.get_potential_candidates(symbol);
+        let symbol = symbols.iter()
+                                .find(|symbol| self.map.contains_key(symbol)).unwrap();
+
         *(self.map.get_mut(&symbol).unwrap()) = value.into();
         Ok(())
     }
@@ -771,8 +780,11 @@ impl SymbolsTable {
     }
 
     pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
-        let symbol = self.extend_readable_symbol(symbol)?;
-        Ok(self.map.contains_key(&symbol))
+        let symbols = self.get_potential_candidates(symbol.into());
+        Ok(
+            symbols.iter()
+            .any(|symbol| self.map.contains_key(&symbol))
+        )
     }
 
     /// Returns the closest Value

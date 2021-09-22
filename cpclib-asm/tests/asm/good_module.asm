@@ -6,9 +6,15 @@ label1
 
 
 
-	module module1
+	module module2
 label1 
-	jp module1.label1
+	jp module3.module31.label1
 	endmodule
 	
+	module module3
+		module module31
+label1
+		jp module1.label1
+		endmodule
+	endmodule
 label1
