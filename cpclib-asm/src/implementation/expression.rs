@@ -2,7 +2,6 @@ use crate::assembler::Env;
 use crate::error::*;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
-use cpclib_tokens::ordered_float::OrderedFloat;
 
 use crate::implementation::tokens::*;
 
@@ -83,7 +82,7 @@ impl ExprEvaluationExt for Expr {
             Label(ref label) => match sym.value(label)? {
                 Some(cpclib_tokens::symbols::Value::Number(ref val)) => Ok(val.clone().into()),
                 Some(cpclib_tokens::symbols::Value::Address(ref val)) => Ok(val.address().into()),
-                Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym.as_ref()).into()),
+                Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym).into()),
                 Some(_) => Err(AssemblerError::WrongSymbolType {
                     symbol: label.to_owned(),
                     isnot: "a value".to_owned(),

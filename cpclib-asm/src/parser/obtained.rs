@@ -3,8 +3,7 @@ use std::{
     fs::File,
     io::Read,
     ops::{Deref, DerefMut},
-    rc::Rc,
-    thread::LocalKey,
+    rc::Rc
 };
 
 use cpclib_disc::amsdos::AmsdosHeader;
@@ -19,8 +18,7 @@ use crate::{
     preamble::{parse_z80_str, parse_z80_strrc_with_contextrc},
 };
 
-use super::parse_z80_str_with_context;
-use super::{parse_z80_code, ParserContext, Z80Span};
+use super::{ParserContext, Z80Span};
 use crate::implementation::instructions::Cruncher;
 
 ///! This crate is related to the adaptation of tokens and listing for the case where they are parsed

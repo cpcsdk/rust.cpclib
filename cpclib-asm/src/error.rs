@@ -15,13 +15,12 @@ use cpclib_tokens::symbols::SymbolError;
 use cpclib_tokens::tokens;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::error::VerboseError;
-use cpclib_common::nom::error::ErrorKind;
 use cpclib_common::nom::error::VerboseErrorKind;
 use std::ops::Deref;
 
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::{self, Chars};
-use codespan_reporting::term::termcolor::{ColorChoice, StandardStream, Buffer};
+use codespan_reporting::term::termcolor::{Buffer};
 
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
@@ -283,8 +282,9 @@ impl AssemblerError {
     /// Returns true only for errors already located
     pub fn is_located(&self) -> bool {
         match self {
-            AssemblerError::RelocatedError{..} => true,
-            AssemblerError::RelocatedWarning{..} => true,
+            AssemblerError::RelocatedError{..} |
+            AssemblerError::RelocatedWarning{..} /*|
+            AssemblerError::SyntaxError{..} */ => true, // we need to exclude syntax error to add the location from the assembler when using macros
             _ => false
         }
     }

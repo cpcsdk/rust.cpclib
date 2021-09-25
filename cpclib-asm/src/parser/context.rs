@@ -1,4 +1,4 @@
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, path::PathBuf};
 
 use crate::error::AssemblerError;
 
@@ -16,6 +16,7 @@ pub struct ParserContext {
     pub search_path: Vec<PathBuf>,
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
     pub read_referenced_files: bool,
+    /// indicate we are parsing a listing generating by a struct
 
     parse_warning: RefCell<Vec<AssemblerError>>
 }
@@ -27,7 +28,7 @@ impl Default for ParserContext {
             context_name: None,
             search_path: Default::default(),
             read_referenced_files: false,
-            parse_warning: Default::default()
+            parse_warning: Default::default(),
         }
     }
 }
@@ -55,6 +56,7 @@ impl ParserContext {
     pub fn set_read_referenced_files(&mut self, tag: bool) {
         self.read_referenced_files = true;
     }
+
 
     /// Add a search path and ensure it is ABSOLUTE
     /// Method crashes if the search path does not exist

@@ -10,8 +10,6 @@ use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 pub use clap;
 use clap::{App, Arg, ArgGroup, ArgMatches};
-use cpclib_common::itertools::chain;
-
 
 #[derive(Debug)]
 pub enum BasmError {
@@ -272,6 +270,7 @@ pub fn process(matches: &ArgMatches<'_>) -> Result<(Env, Vec<AssemblerError>), B
     // standard assembling
     let (listing, mut warnings) = parse(matches)?;
     let env = assemble(matches, &listing)?;
+
 
     warnings.extend_from_slice(env.warnings());
 
