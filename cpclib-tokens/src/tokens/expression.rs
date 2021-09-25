@@ -1,8 +1,8 @@
+use crate::tokens::Token;
+use ordered_float::OrderedFloat;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, Sub};
-use ordered_float::OrderedFloat;
-use crate::tokens::Token;
 
 /// Expression nodes.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -65,7 +65,7 @@ pub enum Expr {
     // Function with two arguments
     BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
 
-    Rnd
+    Rnd,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -199,13 +199,19 @@ pub enum UnaryFunction {
     /// Memory already assembled
     Memory,
 
-    Floor, Ceil, Frac, Int,
-    Sin, Cos,
-    ASin, ACos,
+    Floor,
+    Ceil,
+    Frac,
+    Int,
+    Sin,
+    Cos,
+    ASin,
+    ACos,
     Abs,
-    Ln, Log10,
+    Ln,
+    Log10,
     Exp,
-    Sqrt
+    Sqrt,
 }
 
 impl Display for UnaryFunction {
@@ -298,11 +304,8 @@ impl Expr {
         Expr::Neg(Box::new(self.clone()))
     }
 
-    pub fn add<E:Into<Expr>>(&self, v: E) -> Self {
-        Expr::Add(
-            Box::new(self.clone()),
-            v.into().into()
-        )
+    pub fn add<E: Into<Expr>>(&self, v: E) -> Self {
+        Expr::Add(Box::new(self.clone()), v.into().into())
     }
 
     /// Check if it is necessary to read within a symbol table
@@ -429,7 +432,6 @@ impl Display for Expr {
             }
             BinaryNot(ref e) => write!(format, "~({})", e),
 
-
             BooleanAnd(ref left, ref right) => {
                 write!(format, "{} {} {}", left, Oper::BooleanAnd, right)
             }
@@ -544,10 +546,10 @@ impl Expr {
 
 /// The successful result of an evaluation.
 /// Embeds eiterh a real or an integer
-#[derive(Eq,Ord, Debug, Clone, Copy)]
+#[derive(Eq, Ord, Debug, Clone, Copy)]
 pub enum ExprResult {
     Float(OrderedFloat<f64>),
-    Value(i32)
+    Value(i32),
 }
 
 impl From<f64> for ExprResult {
@@ -580,7 +582,6 @@ impl From<u16> for ExprResult {
     }
 }
 
-
 impl From<u8> for ExprResult {
     fn from(i: u8) -> Self {
         ExprResult::Value(i as _)
@@ -598,7 +599,6 @@ impl From<char> for ExprResult {
     }
 }
 
-
 impl From<bool> for ExprResult {
     fn from(b: bool) -> Self {
         if b {
@@ -613,14 +613,14 @@ impl ExprResult {
     pub fn is_float(&self) -> bool {
         match self {
             Self::Float(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_int(&self) -> bool {
         match self {
             Self::Value(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -640,13 +640,11 @@ impl ExprResult {
 
     pub fn bool(&self) -> bool {
         match self {
-            ExprResult::Float(f) => *f!=0.,
-            ExprResult::Value(i) => *i!=0,
+            ExprResult::Float(f) => *f != 0.,
+            ExprResult::Value(i) => *i != 0,
         }
     }
-
 }
-
 
 impl ExprResult {
     pub fn floor(&self) -> Self {
@@ -668,19 +666,19 @@ impl ExprResult {
         }
     }
     pub fn sin(&self) -> Self {
-        (self.float()*3.1415926545/180.0).sin().into()
+        (self.float() * 3.1415926545 / 180.0).sin().into()
     }
     pub fn cos(&self) -> Self {
-        (self.float()*3.1415926545/180.0).cos().into()
+        (self.float() * 3.1415926545 / 180.0).cos().into()
     }
     pub fn asin(&self) -> Self {
-        (self.float()*180.0/3.1415926545).asin().into()
+        (self.float() * 180.0 / 3.1415926545).asin().into()
     }
     pub fn acos(&self) -> Self {
-        (self.float()*180.0/3.1415926545).acos().into()
+        (self.float() * 180.0 / 3.1415926545).acos().into()
     }
     pub fn atan(&self) -> Self {
-        (self.float()*180.0/3.1415926545).atan().into()
+        (self.float() * 180.0 / 3.1415926545).atan().into()
     }
     pub fn abs(&self) -> Self {
         match self {
@@ -703,12 +701,13 @@ impl ExprResult {
 
     pub fn binary_not(&self) -> Result<Self, String> {
         match self {
-            ExprResult::Float(_) => return Err("Float are not compatible with ~ operator".to_owned()),
+            ExprResult::Float(_) => {
+                return Err("Float are not compatible with ~ operator".to_owned())
+            }
             ExprResult::Value(i) => Ok((!*i).into()),
         }
     }
 }
-
 
 impl std::ops::Neg for ExprResult {
     type Output = Self;
@@ -721,16 +720,17 @@ impl std::ops::Neg for ExprResult {
     }
 }
 
-
 impl std::ops::Add for ExprResult {
     type Output = ExprResult;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1+f2).into(),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1 + f2).into(),
             (ExprResult::Float(f1), ExprResult::Value(_)) => (f1 + rhs.float()).into(),
-            (ExprResult::Value(_), ExprResult::Float(f2)) => (self.float() + f2.into_inner()).into(),
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1+v2).into(),
+            (ExprResult::Value(_), ExprResult::Float(f2)) => {
+                (self.float() + f2.into_inner()).into()
+            }
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1 + v2).into(),
         }
     }
 }
@@ -740,10 +740,12 @@ impl std::ops::Sub for ExprResult {
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1-f2).into(),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1 - f2).into(),
             (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner() - rhs.float()).into(),
-            (ExprResult::Value(_), ExprResult::Float(f2)) => (self.float() - f2.into_inner()).into(),
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1-v2).into(),
+            (ExprResult::Value(_), ExprResult::Float(f2)) => {
+                (self.float() - f2.into_inner()).into()
+            }
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1 - v2).into(),
         }
     }
 }
@@ -753,24 +755,27 @@ impl std::ops::Mul for ExprResult {
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1*f2).into(),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1 * f2).into(),
             (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner() * rhs.float()).into(),
-            (ExprResult::Value(_), ExprResult::Float(f2)) => (self.float() * f2.into_inner()).into(),
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1*v2).into(),
+            (ExprResult::Value(_), ExprResult::Float(f2)) => {
+                (self.float() * f2.into_inner()).into()
+            }
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1 * v2).into(),
         }
     }
 }
-
 
 impl std::ops::Div for ExprResult {
     type Output = ExprResult;
 
     fn div(self, rhs: Self) -> Self::Output {
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1/f2).into(),
-            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner()/rhs.float()).into(),
-            (ExprResult::Value(_), ExprResult::Float(f2)) => (self.float()/f2.into_inner()).into(),
-            (ExprResult::Value(_), ExprResult::Value(_)) => (self.float()/rhs.float()).into(),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1 / f2).into(),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner() / rhs.float()).into(),
+            (ExprResult::Value(_), ExprResult::Float(f2)) => {
+                (self.float() / f2.into_inner()).into()
+            }
+            (ExprResult::Value(_), ExprResult::Value(_)) => (self.float() / rhs.float()).into(),
         }
     }
 }
@@ -780,47 +785,48 @@ impl std::ops::Rem for ExprResult {
 
     fn rem(self, rhs: Self) -> Self::Output {
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1%f2).into(),
-            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner()%rhs.float()).into(),
-            (ExprResult::Value(_), ExprResult::Float(f2)) => (self.float()%f2.into_inner()).into(),
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1%v2).into(),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1 % f2).into(),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner() % rhs.float()).into(),
+            (ExprResult::Value(_), ExprResult::Float(f2)) => {
+                (self.float() % f2.into_inner()).into()
+            }
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1 % v2).into(),
         }
     }
 }
 
-
 impl std::ops::Shr for ExprResult {
     type Output = ExprResult;
     fn shr(self, rhs: Self) -> Self::Output {
-       (self.int() >> rhs.int()).into()
+        (self.int() >> rhs.int()).into()
     }
 }
 
 impl std::ops::Shl for ExprResult {
     type Output = ExprResult;
     fn shl(self, rhs: Self) -> Self::Output {
-       (self.int() << rhs.int()).into()
+        (self.int() << rhs.int()).into()
     }
 }
 
 impl std::ops::BitAnd for ExprResult {
     type Output = ExprResult;
     fn bitand(self, rhs: Self) -> Self::Output {
-       (self.int() & rhs.int()).into()
+        (self.int() & rhs.int()).into()
     }
 }
 
 impl std::ops::BitOr for ExprResult {
     type Output = ExprResult;
     fn bitor(self, rhs: Self) -> Self::Output {
-       (self.int() | rhs.int()).into()
+        (self.int() | rhs.int()).into()
     }
 }
 
 impl std::ops::BitXor for ExprResult {
     type Output = ExprResult;
     fn bitxor(self, rhs: Self) -> Self::Output {
-       (self.int() ^ rhs.int()).into()
+        (self.int() ^ rhs.int()).into()
     }
 }
 
@@ -829,23 +835,22 @@ impl std::cmp::PartialEq for ExprResult {
         match (self, other) {
             (Self::Float(l0), Self::Float(r0)) => l0 == r0,
             (Self::Value(l0), Self::Value(r0)) => l0 == r0,
-            _ => self.int() == other.int()
+            _ => self.int() == other.int(),
         }
     }
 }
-
 
 impl std::cmp::PartialOrd for ExprResult {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Self::Float(l0), Self::Float(r0)) => l0.partial_cmp(r0),
             (Self::Value(l0), Self::Value(r0)) => l0.partial_cmp(r0),
-            _ => self.float().partial_cmp(&other.float())
+            _ => self.float().partial_cmp(&other.float()),
         }
     }
 }
 
-impl std::fmt::Display for ExprResult  {
+impl std::fmt::Display for ExprResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExprResult::Float(f2) => write!(f, "{}", f2.into_inner()),
@@ -856,19 +861,19 @@ impl std::fmt::Display for ExprResult  {
 
 impl std::fmt::LowerHex for ExprResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-       match self {
-        ExprResult::Float(f2) => write!(f, "????"),
-        ExprResult::Value(v) => write!(f, "{:x}", v),
-    }
+        match self {
+            ExprResult::Float(f2) => write!(f, "????"),
+            ExprResult::Value(v) => write!(f, "{:x}", v),
+        }
     }
 }
 
 impl std::fmt::UpperHex for ExprResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-       match self {
-        ExprResult::Float(f2) => write!(f, "????"),
-        ExprResult::Value(v) => write!(f, "{:X}", v),
-    }
+        match self {
+            ExprResult::Float(f2) => write!(f, "????"),
+            ExprResult::Value(v) => write!(f, "{:X}", v),
+        }
     }
 }
 

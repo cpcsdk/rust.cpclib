@@ -3,14 +3,14 @@ use std::{
     fs::File,
     io::Read,
     ops::{Deref, DerefMut},
-    rc::Rc
+    rc::Rc,
 };
 
+use cpclib_common::itertools::Itertools;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::{
     BaseListing, BinaryTransformation, CrunchType, Expr, Listing, ListingElement, TestKind, Token,
 };
-use cpclib_common::itertools::Itertools;
 
 use crate::{
     error::AssemblerError,
@@ -35,7 +35,12 @@ pub enum LocatedToken {
         span: Z80Span,
     },
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
-    Include(String, std::cell::RefCell<Option<LocatedListing>>, Option<String>, Z80Span),
+    Include(
+        String,
+        std::cell::RefCell<Option<LocatedListing>>,
+        Option<String>,
+        Z80Span,
+    ),
     If(
         Vec<(TestKind, LocatedListing)>,
         Option<LocatedListing>,
@@ -79,7 +84,7 @@ impl LocatedToken {
             | Self::Include(_, _, _, span)
             | Self::If(_, _, span)
             | Self::Module(_, _, span)
-            | Self::Iterate(_,_, _, span)
+            | Self::Iterate(_, _, _, span)
             | Self::Repeat(_, _, _, _, span)
             | Self::RepeatUntil(_, _, span)
             | Self::Rorg(_, _, span)
@@ -100,10 +105,10 @@ impl LocatedToken {
             LocatedToken::CrunchedSection(c, l, _span) => {
                 Token::CrunchedSection(*c, l.as_listing())
             }
-            LocatedToken::Include(s, l, module,_span) => Token::Include(
+            LocatedToken::Include(s, l, module, _span) => Token::Include(
                 s.clone(),
                 l.borrow().as_ref().map(|l| l.as_listing()).into(),
-                module.clone()
+                module.clone(),
             ),
             LocatedToken::If(v, e, _span) => Token::If(
                 v.iter()
@@ -111,7 +116,7 @@ impl LocatedToken {
                     .collect_vec(),
                 e.as_ref().map(|l| l.as_listing()),
             ),
-            LocatedToken::Repeat(e, l, s, start,  _span) => {
+            LocatedToken::Repeat(e, l, s, start, _span) => {
                 Token::Repeat(e.clone(), l.as_listing(), s.clone(), start.clone())
             }
             LocatedToken::RepeatUntil(e, l, _span) => Token::RepeatUntil(e.clone(), l.as_listing()),
@@ -229,12 +234,13 @@ impl LocatedToken {
                         let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
                             msg: format!("Unable to open {:?}", fname),
                         })?;
-   
+
                         // load the full file
                         let mut data = Vec::new();
-                        f.read_to_end(&mut data).map_err(|e| AssemblerError::IOError {
-                            msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
-                        })?;
+                        f.read_to_end(&mut data)
+                            .map_err(|e| AssemblerError::IOError {
+                                msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
+                            })?;
 
                         // get a slice on the data to ease its cut
                         let mut data = &data[..];
@@ -252,7 +258,6 @@ impl LocatedToken {
                                     ),
                                     span: span.clone()
                                 }
-
                             } else {
                                 AssemblerError::RelocatedInfo{
                                     info: Box::new(
@@ -267,24 +272,30 @@ impl LocatedToken {
                             eprintln!("{}", info);
                         }
 
-
                         if offset.is_some() {
                             let offset = offset.as_ref().unwrap().eval()?.int() as usize;
                             if offset >= data.len() {
                                 return Err(AssemblerError::AssemblingError {
-                                    msg: format!("Unable to read {:?}. Only {} are available", fname, data.len())
+                                    msg: format!(
+                                        "Unable to read {:?}. Only {} are available",
+                                        fname,
+                                        data.len()
+                                    ),
                                 });
                             }
                             data = &data[offset..];
                         }
-
 
                         if length.is_some() {
                             let length = length.as_ref().unwrap().eval()?.int() as usize;
                             data = &data[..length];
                             if data.len() != length {
                                 return Err(AssemblerError::AssemblingError {
-                                    msg: format!("Unable to read {:?}. Only {} are available", fname, data.len())
+                                    msg: format!(
+                                        "Unable to read {:?}. Only {} are available",
+                                        fname,
+                                        data.len()
+                                    ),
                                 });
                             }
                         }
@@ -292,7 +303,7 @@ impl LocatedToken {
                         match transformation {
                             BinaryTransformation::None => {
                                 content.replace(data.to_vec().into());
-                            },
+                            }
 
                             other => {
                                 if data.len() == 0 {
@@ -305,7 +316,6 @@ impl LocatedToken {
                                 let crunched = crunch_type.crunch(&data)?;
                                 content.replace(crunched.into());
                             }
-
                         }
                     }
                 }
@@ -331,7 +341,7 @@ impl LocatedToken {
             },
             LocatedToken::CrunchedSection(_, _, _) => todo!(),
             LocatedToken::Include(_, _, _) => todo!(),
-           
+
             Self::If(v, o, _) => {
                 v.iter_mut()
                     .map(|(t, l)| l)
@@ -346,7 +356,7 @@ impl LocatedToken {
                 });
             }
 
-            
+
             Self::RepeatUntil(e, l, _)
             | Self::Rorg(e, l, _)
             | Self::While(e, l, _) => {
@@ -355,7 +365,7 @@ impl LocatedToken {
             }
 
             Self::Repeat(e, l, _, s, _) => {
-                
+
                 e.fix_local_macro_labels_with_seed(seed);
                 l.fix_local_macro_labels_with_seed(seed);
                 s.as_mut().map(|s| s.fix_local_macro_labels_with_seed(seed));

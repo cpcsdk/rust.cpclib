@@ -39,7 +39,7 @@ pub enum AmsdosError {
     Various(String),
 
     #[fail(display = "File name error: {}", msg)]
-    WrongFileName{msg: String},
+    WrongFileName { msg: String },
 }
 
 impl From<std::io::Error> for AmsdosError {
@@ -232,7 +232,11 @@ impl AmsdosFileName {
     }
 
     // Build a AmsdosFileName ensuring the case is correct
-    pub fn new_correct_case<S1, S2>(user: u8, filename: S1, extension: S2) -> Result<Self, AmsdosError>
+    pub fn new_correct_case<S1, S2>(
+        user: u8,
+        filename: S1,
+        extension: S2,
+    ) -> Result<Self, AmsdosError>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -245,25 +249,37 @@ impl AmsdosFileName {
     }
 
     // Build a AmsdosFileName without checking case
-    pub fn new_incorrect_case(user: u8, filename: &str, extension: &str) -> Result<Self, AmsdosError> {
+    pub fn new_incorrect_case(
+        user: u8,
+        filename: &str,
+        extension: &str,
+    ) -> Result<Self, AmsdosError> {
         let filename = filename.trim();
         let extension = extension.trim();
 
         // TODO check the user validity
         if filename.len() > 8 {
-            return Err(AmsdosError::WrongFileName{msg: format!("{} should use at most 8 chars", filename)});
+            return Err(AmsdosError::WrongFileName {
+                msg: format!("{} should use at most 8 chars", filename),
+            });
         }
 
         if extension.len() > 3 {
-            return Err(AmsdosError::WrongFileName{msg: format!("{} should use at most 3 chars", extension)});
+            return Err(AmsdosError::WrongFileName {
+                msg: format!("{} should use at most 3 chars", extension),
+            });
         }
 
         if filename.to_ascii_uppercase() != filename.to_ascii_uppercase() {
-            return Err(AmsdosError::WrongFileName{msg: format!("{} contains non ascii characters", filename)});
+            return Err(AmsdosError::WrongFileName {
+                msg: format!("{} contains non ascii characters", filename),
+            });
         }
 
         if extension.to_ascii_uppercase() != extension.to_ascii_uppercase() {
-            return Err(AmsdosError::WrongFileName{msg: format!("{} contains non ascii characters", extension)});
+            return Err(AmsdosError::WrongFileName {
+                msg: format!("{} contains non ascii characters", extension),
+            });
         }
 
         let name = {

@@ -1,5 +1,5 @@
-use cpclib_asm::preamble::*;
 use cpclib_asm::parser::ParserContext;
+use cpclib_asm::preamble::*;
 
 fn ctx() -> ParserContext {
     ParserContext::default()
@@ -160,10 +160,8 @@ fn macro_args_list_3() {
     )
 }
 
-
 #[test]
 fn regression_akm1() {
-
     let input = "IFDEF PLY_CFG_UseEffect_ArpeggioTable      ;CONFIG SPECIFIC
     ld de,PLY_AKM_PtArpeggios + PLY_AKM_Offset1b
     ldi
@@ -180,8 +178,7 @@ fn regression_akm1() {
 
 #[test]
 fn regression_akm2() {
-
-        let input = "IFDEF PLY_CFG_UseEffect_PitchTable         ;CONFIG SPECIFIC
+    let input = "IFDEF PLY_CFG_UseEffect_PitchTable         ;CONFIG SPECIFIC
     ld de,PLY_AKM_PtPitches + PLY_AKM_Offset1b
     ldi
     ldi
@@ -197,8 +194,7 @@ fn regression_akm2() {
 
 #[test]
 fn regression_akm3() {
-
-        let input = "IFDEF PLY_CFG_UseEffects                           ;CONFIG SPECIFIC
+    let input = "IFDEF PLY_CFG_UseEffects                           ;CONFIG SPECIFIC
         nop
     ELSE
         nop
@@ -209,11 +205,9 @@ fn regression_akm3() {
     dbg!(bin.unwrap().1.as_token());
 }
 
-
 #[test]
 fn regression_akm4() {
-
-        let input = "IFDEF PLY_CFG_UseEffects                           ;CONFIG SPECIFIC
+    let input = "IFDEF PLY_CFG_UseEffects                           ;CONFIG SPECIFIC
         nop
     ELSE
 dknr3:  ld de,4
@@ -225,11 +219,9 @@ dknr3:  ld de,4
     dbg!(bin.unwrap().1.as_token());
 }
 
-
 #[test]
 fn regression_akm5() {
-
-        let input = "IFDEF PLY_CFG_UseEffects                           ;CONFIG SPECIFIC
+    let input = "IFDEF PLY_CFG_UseEffects                           ;CONFIG SPECIFIC
         IFDEF PLY_CFG_UseEffect_ArpeggioTable      ;CONFIG SPECIFIC
     ld de,PLY_AKM_PtArpeggios + PLY_AKM_Offset1b
     ldi
@@ -369,6 +361,6 @@ BD = B_ + D_
         LZCLOSE
 ";
 
-let bin = dbg!(parse_z80_str(code));
-assert!(bin.is_ok());
+    let bin = dbg!(parse_z80_str(code));
+    assert!(bin.is_ok());
 }

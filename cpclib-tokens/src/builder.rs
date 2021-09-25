@@ -39,12 +39,12 @@ pub fn comment<S: AsRef<str>>(label: S) -> Token {
 
 /// Generate defs directive
 pub fn defs_expr<E: Into<Expr>>(expr: E) -> Token {
-    Token::Defs( vec![ (expr.into(), None)])
+    Token::Defs(vec![(expr.into(), None)])
 }
 
 /// Generate defs directive
 pub fn defs_expr_expr<E1: Into<Expr>, E2: Into<Expr>>(count: E1, value: E2) -> Token {
-    Token::Defs( vec![ (count.into(), value.into().into()) ])
+    Token::Defs(vec![(count.into(), value.into().into())])
 }
 
 /// Generate defw directive with one argument

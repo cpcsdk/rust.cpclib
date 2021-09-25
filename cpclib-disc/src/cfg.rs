@@ -1,6 +1,4 @@
-use custom_error::custom_error;
 use cpclib_common::itertools;
-use itertools::Itertools;
 use cpclib_common::nom::branch::*;
 use cpclib_common::nom::bytes::complete::*;
 use cpclib_common::nom::character::complete::*;
@@ -9,6 +7,8 @@ use cpclib_common::nom::multi::*;
 use cpclib_common::nom::sequence::*;
 /// Parser of the disc configuraiton used by the Arkos Loader
 use cpclib_common::nom::*;
+use custom_error::custom_error;
+use itertools::Itertools;
 use std::iter::Iterator;
 
 use crate::edsk::*;
