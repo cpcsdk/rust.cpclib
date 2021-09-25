@@ -1,13 +1,11 @@
 use std::fmt::Display;
-use std::thread::LocalKey;
-use std::{fmt::Debug, io::Write, ops::Index};
+use std::{fmt::Debug, io::Write};
 
 use cpclib_tokens::Token;
 use cpclib_common::itertools::Itertools;
-use cpclib_common::nom::ExtendInto;
 use cpclib_common::smallvec::SmallVec;
 use std::rc::Rc;
-use std::ops::{Add, Deref};
+use std::ops::{Deref};
 use crate::preamble::LocatedToken;
 
 /// Generate an output listing.

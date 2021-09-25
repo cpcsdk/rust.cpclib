@@ -139,7 +139,8 @@ impl Struct {
         }
     }
 
-    pub fn fields_size(&self, table: &SymbolsTable) -> Vec<(&str, i32)> {
+    /// Get the size of each field
+    pub fn fields_size<T: SymbolsTableTrait>(&self, table:  &T) -> Vec<(&str, i32)> {
         self.content
             .iter()
             .map(|(n, t)| (n.as_ref(), Self::field_size(t, table)))
@@ -147,12 +148,13 @@ impl Struct {
     }
 
     /// Get the len of any field
-    pub fn field_size(token: &Token, table: &SymbolsTable) -> i32 {
+    pub fn field_size<T: SymbolsTableTrait>(token: &Token, table: &T) -> i32 {
         match token {
             Token::Defb(c) => c.len() as i32,
             Token::Defw(c) => 2 * c.len() as i32,
             Token::MacroCall(n, _) => {
-                let s = table.struct_value(n).ok().unwrap().unwrap(); // TODO handle error here
+                dbg!(n);
+                let s = dbg!(table.struct_value(n)).ok().unwrap().unwrap(); // TODO handle error here
                 s.len(table)
             }
             _ => unreachable!("{:?}", token),
@@ -160,7 +162,7 @@ impl Struct {
     }
 
     /// Get the len of the structure
-    pub fn len(&self, table: &SymbolsTable) -> i32 {
+    pub fn len<T: SymbolsTableTrait>(&self, table: &T) -> i32 {
         self.fields_size(table).iter().map(|(_, s)| *s).sum()
     }
 
@@ -173,7 +175,10 @@ impl Struct {
     pub fn develop(&self, args: &[MacroParam]) -> String {
         assert_eq!(args.len(), self.content.len());
 
-        self.content
+        dbg!(args);
+        dbg!(&self.content);
+
+        let mut developped = self.content
             .iter()
             .zip(args.iter())
             .enumerate()
@@ -261,7 +266,14 @@ impl Struct {
                     _ => unreachable!("{:?}", token),
                 }
             })
-            .join("\n")
+            .join("\n");
+
+        let last = developped.pop().unwrap();
+        developped.push(last);
+        if last != 'n' {
+            developped.push('\n');
+        }
+        developped
     }
 }
 #[derive(Debug, Clone)]
@@ -441,6 +453,17 @@ pub trait SymbolsTableTrait {
 
     /// Return the integer value corredponding to this symbol (if any)
     fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError>;
+
+    fn value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Value>, SymbolError>;
+    fn counter_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> ;
+    fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>;
+    fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError>;
+    fn address_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&PhysicalAddress>, SymbolError>;
+
+    fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>;
+
+
+    
     fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
         &mut self,
         symbol: S,
@@ -730,6 +753,37 @@ impl SymbolsTableTrait for SymbolsTable {
         }
     }
 
+
+        /// Returns the Value at the given key
+        fn value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Value>, SymbolError> {
+            let symbol = self.extend_readable_symbol(symbol)?;
+            Ok(self.map.get(&symbol))
+        }
+    
+        fn counter_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
+            Ok(self.value(symbol.into())?
+                        .map(|v| v.counter())
+                        .map(|v| v.unwrap())
+                        .or_else(|| if self.dummy { Some(1i32) } else { None }))
+        }
+    
+    
+        fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError> {
+            Ok(self.value(symbol)?.map(|v| v.r#macro()).unwrap_or(None))
+        }
+        fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError> {
+            Ok(self.value(symbol)?.map(|v| v.r#struct()).unwrap_or(None))
+        }
+     fn address_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&PhysicalAddress>, SymbolError> {
+            Ok(self.value(symbol)?.map(|v| v.address()).unwrap_or(None))
+        }
+
+            /// Remove the given symbol name from the table. (used by undef)
+    fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError> {
+        let symbol = self.extend_readable_symbol(symbol)?;
+        Ok(self.map.remove(&symbol))
+    }
+
 }
 
 
@@ -771,7 +825,7 @@ impl SymbolsTable {
         } else {
             let full = symbol.clone();
 
-            let mut global = self.namespace_stack.clone();
+            let global = self.namespace_stack.clone();
             let global = self.inject_current_namespace(symbol);
 
             smallvec![global, full]
@@ -867,29 +921,7 @@ impl SymbolsTable {
         Ok(())
     }
 
-    /// Returns the Value at the given key
-    pub fn value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Value>, SymbolError> {
-        let symbol = self.extend_readable_symbol(symbol)?;
-        Ok(self.map.get(&symbol))
-    }
 
-    pub fn counter_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
-        Ok(self.value(symbol.into())?
-                    .map(|v| v.counter())
-                    .map(|v| v.unwrap())
-                    .or_else(|| if self.dummy { Some(1i32) } else { None }))
-    }
-
-
-    pub fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError> {
-        Ok(self.value(symbol)?.map(|v| v.r#macro()).unwrap_or(None))
-    }
-    pub fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError> {
-        Ok(self.value(symbol)?.map(|v| v.r#struct()).unwrap_or(None))
-    }
-    pub fn address_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&PhysicalAddress>, SymbolError> {
-        Ok(self.value(symbol)?.map(|v| v.address()).unwrap_or(None))
-    }
 
     /// Instead of returning the value, return the bank information
     /// logic stolen to rasm
@@ -929,15 +961,11 @@ impl SymbolsTable {
                 */
     }
 
-    /// Remove the given symbol name from the table. (used by undef)
-    pub fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError> {
-        let symbol = self.extend_readable_symbol(symbol)?;
-        Ok(self.map.remove(&symbol))
-    }
+
 
     pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
-        let symbols = dbg!(self.get_potential_candidates(symbol));
+        let symbols = self.get_potential_candidates(symbol);
         Ok(
             symbols.iter()
             .any(|symbol| self.map.contains_key(&symbol))
@@ -1079,34 +1107,12 @@ impl SymbolsTableCaseDependent {
             .update_symbol_to_value(self.normalize_symbol(symbol), value.into())
     }
 
-    pub fn value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Value>, SymbolError> {
-        self.table.value(self.normalize_symbol(symbol))
-    }
+
     pub fn prefixed_value<S: Into<Symbol>>(&self, prefix: &LabelPrefix, symbol: S) -> Result<Option<u16>, SymbolError> {
         self.table
             .prefixed_value(prefix, self.normalize_symbol(symbol))
     }
 
-
-    pub fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
-        self.table.int_value(self.normalize_symbol(symbol))
-    }
-
-    pub fn counter_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
-        self.table.counter_value(self.normalize_symbol(symbol))
-    }
-
-
-    pub fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>  {
-        self.table.macro_value(self.normalize_symbol(symbol))
-    }
-    pub fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError>  {
-        self.table.struct_value(self.normalize_symbol(symbol))
-    }
-
-    pub fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>  {
-        self.table.remove_symbol(self.normalize_symbol(symbol))
-    }
 
     pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError>  {
         self.table.contains_symbol(self.normalize_symbol(symbol))
@@ -1136,6 +1142,32 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
         self.table.int_value(self.normalize_symbol(symbol))
     }
+
+    fn counter_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
+        self.table.counter_value(self.normalize_symbol(symbol))
+    }
+
+
+    fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>  {
+        self.table.macro_value(self.normalize_symbol(symbol))
+    }
+    fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError>  {
+        self.table.struct_value(self.normalize_symbol(symbol))
+    }
+
+    fn value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Value>, SymbolError> {
+        self.table.value(self.normalize_symbol(symbol))
+    }
+
+    fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>  {
+        self.table.remove_symbol(self.normalize_symbol(symbol))
+    }
+
+    fn address_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&PhysicalAddress>, SymbolError> {
+        self.table.address_value(self.normalize_symbol(symbol))
+    }
+
+
 
     fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
         &mut self,

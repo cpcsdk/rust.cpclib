@@ -7,3 +7,4 @@
 
 	magic xor, (hl)
 	magic add, b
+	; empty line added to not break parser ...

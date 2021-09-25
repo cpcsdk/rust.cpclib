@@ -26,7 +26,7 @@ pub mod basm_utils;
 
 
 
-use std::{cell::{Cell, RefCell}, fmt::Debug, io::Write, rc::Rc};
+use std::{cell::{RefCell}, fmt::Debug, io::Write, rc::Rc};
 
 use cpclib_disc::amsdos::*;
 

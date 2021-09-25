@@ -12,5 +12,5 @@ y db 0
 
 	struct colored_point
 col		color 1, 2, 3
-pt		 point 1, 2
+pt		point 1, 2
 	endstruct
