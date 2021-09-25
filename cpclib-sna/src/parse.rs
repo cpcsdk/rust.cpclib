@@ -25,7 +25,10 @@ where
 
     match SnapshotFlag::from_str(&word.to_string().to_uppercase()) {
         Ok(flag) => Ok((input, flag)),
-        Err(_e) => Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf))),
+        Err(_e) => Err(cpclib_common::nom::Err::Error(error_position!(
+            input,
+            ErrorKind::OneOf
+        ))),
     }
 }
 
@@ -115,14 +118,7 @@ pub fn hex_number2<'src, T>(
 where
     T: Clone,
 {
-    let (input, digits) =
-        terminated( 
-            hex_digit1, 
-            terminated(
-                tag_no_case("h"),
-                not(alpha1)
-            )
-        )(input)?;
+    let (input, digits) = terminated(hex_digit1, terminated(tag_no_case("h"), not(alpha1)))(input)?;
     let number = digits
         .chars()
         .map(|c| c.to_digit(16).unwrap())

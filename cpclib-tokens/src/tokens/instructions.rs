@@ -7,7 +7,6 @@ use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::Register8;
 
-
 use cpclib_common::itertools::Itertools;
 use cpclib_sna::SnapshotVersion;
 
@@ -338,7 +337,7 @@ pub enum CrunchType {
     LZ4,
     LZX7,
     LZEXO,
-    LZAPU
+    LZAPU,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -346,7 +345,7 @@ pub enum CrunchType {
 pub enum SaveType {
     Amsdos,
     Dsk,
-    Tape
+    Tape,
 }
 
 /// Encode the kind of test done in if/elif/else cases
@@ -400,9 +399,7 @@ pub enum CharsetFormat {
     /// Attribute the code to a single char
     Char(char, Expr),
     /// Specify for a given interval
-    Interval(char, char, Expr)
-
-
+    Interval(char, char, Expr),
 }
 
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
@@ -434,7 +431,7 @@ pub enum Token {
 
     Equ(String, Expr),
     Export(Vec<String>),
-    
+
     Fail(Vec<FormattedExpr>),
 
     /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
@@ -489,12 +486,12 @@ pub enum Token {
     Repeat(
         // number of loops
         Expr,
-        // code to execute 
-        Listing, 
+        // code to execute
+        Listing,
         // name of the counter if any
         Option<String>,
         // start value
-        Option<Expr>
+        Option<Expr>,
     ),
     RepeatUntil(Expr, Listing),
     /// Set the value of $ to Expr
@@ -972,7 +969,7 @@ impl Token {
                 b.as_mut().map(|d| d.fix_local_macro_labels_with_seed(seed));
             }
 
-           
+
             Self::RepeatUntil(e, l)
             | Self::Rorg(e, l)
             | Self::While(e, l) => {
@@ -981,7 +978,7 @@ impl Token {
             }
 
             Self::Repeat(e, l, _, s) => {
-                
+
                 e.fix_local_macro_labels_with_seed(seed);
                 l.fix_local_macro_labels_with_seed(seed);
                 s.as_mut().map(|e| e.fix_local_macro_labels_with_seed(seed));

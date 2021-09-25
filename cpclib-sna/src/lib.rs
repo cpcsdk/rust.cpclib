@@ -1,5 +1,3 @@
-
-
 use std::fs::File;
 
 use std::io::prelude::*;
@@ -80,21 +78,20 @@ pub enum SnapshotMemory {
     SixtyFourKb(Box<[u8; PAGE_SIZE * 4]>),
     /// A 128kb page is stored within the snapshot
     OneHundredTwentyHeightKb(Box<[u8; PAGE_SIZE * 8]>),
-   // 192
-   OneHundredNinetyTwoKb(Box<[u8; PAGE_SIZE * 12]>),
-   // 256
-   TwoHundredFiftySixKb(Box<[u8; PAGE_SIZE*16]>),
-  //  320
-  ThreeHundredTwentyKb(Box<[u8; PAGE_SIZE*20]>),
-   // 384
-  ThreeHundredHeightyFourKb(Box<[u8; PAGE_SIZE*24]>),
-   // 448
-  FourHundredFortyHeightKb(Box<[u8; PAGE_SIZE*28]>),
-  //  512
-  FiveHundredTwelveKb(Box<[u8; PAGE_SIZE*32]>),
-  //  576
-  FiveHundredSeventySixKb(Box<[u8; PAGE_SIZE*36]>),
-
+    // 192
+    OneHundredNinetyTwoKb(Box<[u8; PAGE_SIZE * 12]>),
+    // 256
+    TwoHundredFiftySixKb(Box<[u8; PAGE_SIZE * 16]>),
+    //  320
+    ThreeHundredTwentyKb(Box<[u8; PAGE_SIZE * 20]>),
+    // 384
+    ThreeHundredHeightyFourKb(Box<[u8; PAGE_SIZE * 24]>),
+    // 448
+    FourHundredFortyHeightKb(Box<[u8; PAGE_SIZE * 28]>),
+    //  512
+    FiveHundredTwelveKb(Box<[u8; PAGE_SIZE * 32]>),
+    //  576
+    FiveHundredSeventySixKb(Box<[u8; PAGE_SIZE * 36]>),
 }
 
 impl Default for SnapshotMemory {
@@ -151,7 +148,7 @@ impl SnapshotMemory {
             SnapshotMemory::SixtyFourKb(ref mem) => mem.deref(),
             SnapshotMemory::OneHundredTwentyHeightKb(ref mem) => mem.deref(),
             SnapshotMemory::OneHundredNinetyTwoKb(ref mem) => mem.deref(),
-            SnapshotMemory::TwoHundredFiftySixKb(ref mem)=> mem.deref(),
+            SnapshotMemory::TwoHundredFiftySixKb(ref mem) => mem.deref(),
             SnapshotMemory::ThreeHundredTwentyKb(ref mem) => mem.deref(),
             SnapshotMemory::ThreeHundredHeightyFourKb(ref mem) => mem.deref(),
             SnapshotMemory::FourHundredFortyHeightKb(ref mem) => mem.deref(),
@@ -167,7 +164,7 @@ impl SnapshotMemory {
             SnapshotMemory::SixtyFourKb(ref mut mem) => mem.deref_mut(),
             SnapshotMemory::OneHundredTwentyHeightKb(ref mut mem) => mem.deref_mut(),
             SnapshotMemory::OneHundredNinetyTwoKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::TwoHundredFiftySixKb(ref mut mem)=> mem.deref_mut(),
+            SnapshotMemory::TwoHundredFiftySixKb(ref mut mem) => mem.deref_mut(),
             SnapshotMemory::ThreeHundredTwentyKb(ref mut mem) => mem.deref_mut(),
             SnapshotMemory::ThreeHundredHeightyFourKb(ref mut mem) => mem.deref_mut(),
             SnapshotMemory::FourHundredFortyHeightKb(ref mut mem) => mem.deref_mut(),
@@ -204,12 +201,12 @@ impl SnapshotMemory {
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
             }
-            SnapshotMemory::ThreeHundredTwentyKb(ref mem) =>{
+            SnapshotMemory::ThreeHundredTwentyKb(ref mem) => {
                 let mut new = Self::default_384();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
             }
-            SnapshotMemory::ThreeHundredHeightyFourKb(ref mem) =>{
+            SnapshotMemory::ThreeHundredHeightyFourKb(ref mem) => {
                 let mut new = Self::default_448();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
@@ -284,7 +281,7 @@ impl SnapshotMemory {
     fn default_256() -> Self {
         Self::TwoHundredFiftySixKb(Box::new([0; PAGE_SIZE * 16]))
     }
-    
+
     fn default_320() -> Self {
         Self::ThreeHundredTwentyKb(Box::new([0; PAGE_SIZE * 20]))
     }
@@ -300,7 +297,6 @@ impl SnapshotMemory {
     fn default_576() -> Self {
         Self::FiveHundredSeventySixKb(Box::new([0; PAGE_SIZE * 36]))
     }
-
 }
 
 /// Snapshot V3 representation. Can be saved in snapshot V1 or v2.
@@ -674,7 +670,7 @@ impl Snapshot {
         }
 
         // resize if needed
-        while self.memory.len()-1 < address {
+        while self.memory.len() - 1 < address {
             self.memory = self.memory.increased_size();
         }
 

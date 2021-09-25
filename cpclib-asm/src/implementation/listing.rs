@@ -108,7 +108,8 @@ impl ListingExt for Listing {
             match current_address.as_ref() {
                 Some(address) => {
                     res += &format!("{:4x} ", address);
-                    options.symbols_mut()
+                    options
+                        .symbols_mut()
                         .set_current_address(PhysicalAddress::new(*address, 0xc0));
                 }
                 None => {

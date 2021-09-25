@@ -24,7 +24,7 @@ pub enum BasicError {
     #[fail(display = "Line does not exist: {:?}", idx)]
     UnknownLine { idx: BasicProgramLineIdx },
     #[fail(display = "{}", msg)]
-    ParseError {msg: String}
+    ParseError { msg: String },
 }
 
 /// Basic line of code representation
@@ -156,14 +156,14 @@ impl BasicProgram {
                 if res.trim().is_empty() {
                     Ok(prog)
                 } else {
-                    Err(BasicError::ParseError{msg:  
-                        format!(
-                        "Basic content has not been totally parsed: `{}`",
-                        res
-                    )})
+                    Err(BasicError::ParseError {
+                        msg: format!("Basic content has not been totally parsed: `{}`", res),
+                    })
                 }
             }
-            Err(e) => Err(BasicError::ParseError{msg:format!("Error while parsing the Basic content: {:?}", e)}),
+            Err(e) => Err(BasicError::ParseError {
+                msg: format!("Error while parsing the Basic content: {:?}", e),
+            }),
         }
     }
 

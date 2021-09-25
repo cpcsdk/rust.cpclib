@@ -17,8 +17,7 @@ pub struct ParserContext {
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
     pub read_referenced_files: bool,
     /// indicate we are parsing a listing generating by a struct
-
-    parse_warning: RefCell<Vec<AssemblerError>>
+    parse_warning: RefCell<Vec<AssemblerError>>,
 }
 
 impl Default for ParserContext {
@@ -56,7 +55,6 @@ impl ParserContext {
     pub fn set_read_referenced_files(&mut self, tag: bool) {
         self.read_referenced_files = true;
     }
-
 
     /// Add a search path and ensure it is ABSOLUTE
     /// Method crashes if the search path does not exist
@@ -125,9 +123,7 @@ impl ParserContext {
             if fname.is_file() {
                 return Ok(fname);
             } else {
-
                 does_not_exists.push(fname.to_str().unwrap().to_owned());
-
             }
         } else {
             // loop over all possibilities
@@ -138,13 +134,14 @@ impl ParserContext {
                 if current_path.is_file() {
                     return Ok(current_path);
                 } else {
-                    let glob = GlobBuilder::new(
-                        current_path.as_path().display().to_string().as_str())
-                        .case_insensitive(true)
-                        .literal_separator(true)
-                        .build().unwrap();
+                    let glob =
+                        GlobBuilder::new(current_path.as_path().display().to_string().as_str())
+                            .case_insensitive(true)
+                            .literal_separator(true)
+                            .build()
+                            .unwrap();
                     let matcher = glob.compile_matcher();
-                
+
                     for entry in std::fs::read_dir(search).unwrap() {
                         let entry = entry.unwrap();
                         let path = entry.path();
@@ -154,7 +151,6 @@ impl ParserContext {
                     }
 
                     does_not_exists.push(current_path.to_str().unwrap().to_owned());
-
                 }
             }
         }
@@ -163,7 +159,7 @@ impl ParserContext {
         return Err(does_not_exists);
     }
 
-    pub fn add_warning(& self, warning: AssemblerError) {
+    pub fn add_warning(&self, warning: AssemblerError) {
         self.parse_warning.borrow_mut().push(warning)
     }
 

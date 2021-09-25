@@ -137,7 +137,8 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "BANK",
     "BANKSET",
     "BUILDSNA",
-    "INCBIN", "BINCLUDE",
+    "INCBIN",
+    "BINCLUDE",
     "LZEXO",
     "DEFB",
     "DB",
@@ -827,19 +828,13 @@ pub fn parse_z80_line_complete(
     let r#macro = if label_or_macro.is_some() && !know_it_is_label {
         match context(
             "MACRO or struct call",
-            preceded(
-                space0,
-                parse_macro_or_struct_call(false, false)
-            ),
+            preceded(space0, parse_macro_or_struct_call(false, false)),
         )(before_label.clone())
         {
             Ok((input2, r#macro)) => {
                 // check if there is nothing usefull after
-                let res : IResult<Z80Span, _, VerboseError<Z80Span>> = preceded(space0, alt((
-                    line_ending, 
-                    tag(":"),
-                    tag(";")
-                )))(input2.clone());
+                let res: IResult<Z80Span, _, VerboseError<Z80Span>> =
+                    preceded(space0, alt((line_ending, tag(":"), tag(";"))))(input2.clone());
                 if res.is_ok() {
                     know_it_is_macro = true;
                     input = input2;
@@ -852,8 +847,6 @@ pub fn parse_z80_line_complete(
                     know_it_is_label = true;
                     None
                 }
-
-
             }
             Err(_) => {
                 // no change of input that is still after the label
@@ -865,7 +858,8 @@ pub fn parse_z80_line_complete(
         None
     };
 
-    if   know_it_is_label {              // remove the unwanted  warnings
+    if know_it_is_label {
+        // remove the unwanted  warnings
         while nb_warnings < input.extra.1.warnings().len() {
             input.extra.1.pop_warning();
         }
@@ -926,9 +920,7 @@ pub fn parse_z80_line_complete(
                 (input2, opcode)
             }
 
-            Err(e) => {
-               return Err(e)
-            }
+            Err(e) => return Err(e),
         };
 
         tokens.push(opcode);
@@ -1998,11 +1990,11 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseEr
         map(
             delimited(
                 space0,
-                 many0(none_of(" ,\r\n\t][;")), // TODO find a way to give arguments with space
-                 alt((space0, eof))),
-            |s| {
-            MacroParam::Single(s.iter().collect::<String>().trim().to_owned())
-        }),
+                many0(none_of(" ,\r\n\t][;")), // TODO find a way to give arguments with space
+                alt((space0, eof)),
+            ),
+            |s| MacroParam::Single(s.iter().collect::<String>().trim().to_owned()),
+        ),
     ))(input)
 }
 
@@ -3021,12 +3013,7 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
                     parse_db_or_dw_or_str,
                     parse_macro_or_struct_call(false, true),
                 )),
-                tuple((
-                    space0, 
-                    opt(parse_comment),
-                    space0,
-                    alt((line_ending, eof))
-                ))
+                tuple((space0, opt(parse_comment), space0, alt((line_ending, eof)))),
             )),
         )),
     ))(input)?;

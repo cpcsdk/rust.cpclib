@@ -15,7 +15,7 @@ use crate::{BasicLine, BasicProgram};
 pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram> {
     let (input, lines) = fold_many0(
         parse_basic_inner_line,
-        ||Vec::new(),
+        || Vec::new(),
         |mut acc: Vec<_>, item| {
             acc.push(item);
             acc
@@ -38,10 +38,14 @@ pub fn parse_basic_line(input: &str) -> IResult<&str, BasicLine> {
 
     let (input, _) = char(' ')(input)?;
 
-    let (input, tokens) = fold_many0(parse_token, ||Vec::new(), |mut acc: Vec<_>, item| {
-        acc.push(item);
-        acc
-    })(input)?;
+    let (input, tokens) = fold_many0(
+        parse_token,
+        || Vec::new(),
+        |mut acc: Vec<_>, item| {
+            acc.push(item);
+            acc
+        },
+    )(input)?;
 
     Ok((input, BasicLine::new(line_number, &tokens)))
 }
@@ -203,7 +207,10 @@ pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
         Ok((remaining, parsed)) => {
             // Do not parse more than  characters for a u16
             if parsed.input_len() > 4 {
-                Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+                Err(cpclib_common::nom::Err::Error(error_position!(
+                    input,
+                    ErrorKind::OneOf
+                )))
             } else {
                 let mut res = 0_u32;
                 for e in parsed.iter_elements() {
@@ -212,7 +219,10 @@ pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
                     res = value + (res * 16);
                 }
                 if res > u32::from(u16::max_value()) {
-                    Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+                    Err(cpclib_common::nom::Err::Error(error_position!(
+                        input,
+                        ErrorKind::OneOf
+                    )))
                 } else {
                     Ok((remaining, res as u16))
                 }
@@ -229,7 +239,10 @@ pub fn dec_u16_inner(input: &str) -> IResult<&str, u16> {
         Ok((remaining, parsed)) => {
             // Do not parse more than 5 characters for a u16
             if parsed.input_len() > 5 {
-                Err(cpclib_common::nom::Err::Error(error_position!(input, ErrorKind::OneOf)))
+                Err(cpclib_common::nom::Err::Error(error_position!(
+                    input,
+                    ErrorKind::OneOf
+                )))
             } else {
                 let mut res = 0_u32;
                 for e in parsed.iter_elements() {

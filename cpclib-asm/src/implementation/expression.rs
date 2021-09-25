@@ -54,16 +54,23 @@ impl ExprEvaluationExt for Expr {
                     Oper::GreaterOrEqual => Ok((a >= b).into()),
                     Oper::StrictlyGreater => Ok((a > b).into()),
                 },
-                (Err(a), Ok(_b)) => {
-                    Err(AssemblerError::ExpressionError{msg: format!("Unable to make the operation {:?}: error in left operand {:?}", oper, a)})
-                }
-                (Ok(_a), Err(b)) => {
-                    Err(AssemblerError::ExpressionError{msg: format!("Unable to make the operation {:?}: error in right operand {:?}", oper, b)})
-                }
-                (Err(a), Err(b)) => Err(AssemblerError::ExpressionError{msg: format!(
-                    "Unable to make the operation {:?}: error in both operands {:?} & {:?}",
-                    oper, a, b
-                )
+                (Err(a), Ok(_b)) => Err(AssemblerError::ExpressionError {
+                    msg: format!(
+                        "Unable to make the operation {:?}: error in left operand {:?}",
+                        oper, a
+                    ),
+                }),
+                (Ok(_a), Err(b)) => Err(AssemblerError::ExpressionError {
+                    msg: format!(
+                        "Unable to make the operation {:?}: error in right operand {:?}",
+                        oper, b
+                    ),
+                }),
+                (Err(a), Err(b)) => Err(AssemblerError::ExpressionError {
+                    msg: format!(
+                        "Unable to make the operation {:?}: error in both operands {:?} & {:?}",
+                        oper, a, b
+                    ),
                 }),
             }
         };
@@ -184,58 +191,32 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
         let arg = self.arg.resolve(env)?;
 
         match self.func {
-
             UnaryFunction::High => Ok((arg >> 8.into()) & 0xff.into()),
             UnaryFunction::Low => Ok(arg & 0xff.into()),
             UnaryFunction::Memory => {
                 if arg < 0.into() || arg > 0xffff.into() {
-                    return Err(AssemblerError::ExpressionError{
-                        msg: format!("Impossible to read memory address {}", arg)
+                    return Err(AssemblerError::ExpressionError {
+                        msg: format!("Impossible to read memory address {}", arg),
                     });
+                } else {
+                    Ok(env
+                        .peek(&env.logical_to_physical_address(arg.int() as _))
+                        .into())
                 }
-                else {
-                    Ok(env.peek(&env.logical_to_physical_address(arg.int() as _)).into())
-                }
-            },
-            UnaryFunction::Floor =>  {
-                Ok(arg.floor())
             }
-            UnaryFunction::Ceil => {
-                Ok(arg.ceil())
-            },
-            UnaryFunction::Frac => {
-                Ok(arg.frac())
-            },
-            UnaryFunction::Int => {
-                Ok(arg.int().into())
-            },
-            UnaryFunction::Sin => {
-                Ok(arg.sin())
-            },
-            UnaryFunction::Cos => {
-                Ok(arg.cos())
-            },
-            UnaryFunction::ASin => {
-                Ok(arg.asin())
-            },
-            UnaryFunction::ACos => {
-                Ok(arg.acos())
-            },
-            UnaryFunction::Abs => {
-                Ok(arg.abs())
-            },
-            UnaryFunction::Ln => {
-                Ok(arg.ln())
-            },
-            UnaryFunction::Log10 => {
-                Ok(arg.log10())
-            },
-            UnaryFunction::Exp => {
-                Ok(arg.exp())
-            },
-            UnaryFunction::Sqrt => {
-                Ok(arg.sqrt())
-            },
+            UnaryFunction::Floor => Ok(arg.floor()),
+            UnaryFunction::Ceil => Ok(arg.ceil()),
+            UnaryFunction::Frac => Ok(arg.frac()),
+            UnaryFunction::Int => Ok(arg.int().into()),
+            UnaryFunction::Sin => Ok(arg.sin()),
+            UnaryFunction::Cos => Ok(arg.cos()),
+            UnaryFunction::ASin => Ok(arg.asin()),
+            UnaryFunction::ACos => Ok(arg.acos()),
+            UnaryFunction::Abs => Ok(arg.abs()),
+            UnaryFunction::Ln => Ok(arg.ln()),
+            UnaryFunction::Log10 => Ok(arg.log10()),
+            UnaryFunction::Exp => Ok(arg.exp()),
+            UnaryFunction::Sqrt => Ok(arg.sqrt()),
         }
     }
 }
@@ -263,5 +244,4 @@ impl<'a> ExprEvaluationExt for BinaryFunctionWrapper<'a> {
             BinaryFunction::Max => Ok(arg1.max(arg2)),
         }
     }
-
 }

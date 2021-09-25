@@ -20,18 +20,15 @@ pub mod error;
 
 mod crunchers;
 
-#[cfg(feature="basm")]
+#[cfg(feature = "basm")]
 pub mod basm_utils;
 
-
-
-
-use std::{cell::{RefCell}, fmt::Debug, io::Write, rc::Rc};
+use std::{cell::RefCell, fmt::Debug, io::Write, rc::Rc};
 
 use cpclib_disc::amsdos::*;
 
-use preamble::*;
 use self::listing_output::ListingOutput;
+use preamble::*;
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
 #[derive(Debug)]
@@ -40,7 +37,7 @@ pub struct AssemblingOptions {
     case_sensitive: bool,
     /// Contains some symbols that could be used during assembling
     symbols: cpclib_tokens::symbols::SymbolsTable,
-    builder: Option<Rc<RefCell<ListingOutput>>>
+    builder: Option<Rc<RefCell<ListingOutput>>>,
 }
 
 impl Default for AssemblingOptions {
@@ -48,7 +45,7 @@ impl Default for AssemblingOptions {
         Self {
             case_sensitive: true,
             symbols: cpclib_tokens::symbols::SymbolsTable::default(),
-            builder: None
+            builder: None,
         }
     }
 }
@@ -96,7 +93,7 @@ impl AssemblingOptions {
         self.case_sensitive
     }
 
-    pub fn write_listing_output<W:'static + Write>(&mut self, writer: W) -> &mut Self {
+    pub fn write_listing_output<W: 'static + Write>(&mut self, writer: W) -> &mut Self {
         self.builder = Some(Rc::new(RefCell::new(ListingOutput::new(writer))));
         self.builder.as_mut().map(|b| b.borrow_mut().on());
         self
@@ -151,9 +148,6 @@ pub fn assemble_to_amsdos_file(
     )?)
 }
 
-
-
-
 #[cfg(test)]
 mod test_super {
     use super::*;
@@ -202,7 +196,8 @@ Truc
     #[test]
     fn test_size() {
         let mut env = Default::default();
-        dbg!(assemble_call_jr_or_jp(Mnemonic::Jp,
+        dbg!(assemble_call_jr_or_jp(
+            Mnemonic::Jp,
             None,
             &DataAccess::Expression(Expr::Value(0)),
             &env

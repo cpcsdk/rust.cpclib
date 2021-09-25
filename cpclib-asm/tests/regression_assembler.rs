@@ -197,8 +197,6 @@ my_shape shape	, [ [1,2,3], [1,2,3], [1,2,3] ]
     )
 }
 
-
-
 #[test]
 fn regression_crunched_section_sokoban() {
     let code = "
@@ -311,6 +309,6 @@ BD = B_ + D_
         LZCLOSE
 ";
 
-let bin = dbg!(assemble(code));
-assert!(bin.is_ok());
+    let bin = dbg!(assemble(code));
+    assert!(bin.is_ok());
 }
