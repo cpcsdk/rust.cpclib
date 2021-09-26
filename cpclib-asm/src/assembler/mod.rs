@@ -373,7 +373,16 @@ impl SaveCommand {
                 }
             }
             either::Left(data) => {
-                std::fs::write(&self.filename, &data)?;
+                std::fs::write(&self.filename, &data)
+                    .map_err(|e| {
+                        AssemblerError::AssemblingError{
+                            msg: format!(
+                                "Error while saving \"{}\". {}",
+                                &self.filename,
+                                e.to_string()
+                            )
+                        }
+                    })?;
             }
         }
 
@@ -538,19 +547,26 @@ pub struct Env {
 
     /// gate array configuration
     ga_mmr: u8,
+    /// duplicate of the output address to be sure to select the appropriate page info
+    output_address: u16,
 
-    /// Ensemble of pages (2 for a stock CPC)
-    pages_info: Vec<PageInformation>,
-
-    /// Counter for the unique labels within macros
-    macro_seed: usize,
-
-    charset_encoding: CharsetEncoding,
+    /// Ensemble of pages (2 for a stock CPC) for the snapshot
+    pages_info_sna: Vec<PageInformation>,
 
     /// Memory configuration is controlled by the underlying snapshot.
     /// It will ease the generation of snapshots but may complexify the generation of files
     sna: cpclib_sna::Snapshot,
     sna_version: cpclib_sna::SnapshotVersion,
+
+    /// List of banks (temporary memory)
+    banks: Vec<(Bank, PageInformation, BitVec)>,
+    /// Some functionalities may be disabled once assembler is in a bank (TODO determine which ones)
+    selected_bank: Option<usize>,
+
+    /// Counter for the unique labels within macros
+    macro_seed: usize,
+
+    charset_encoding: CharsetEncoding,
 
     /// Track where bytes has been written to forbid overriding them when generating data
     written_bytes: BitVec,
@@ -593,7 +609,7 @@ impl Default for Env {
             pass: AssemblingPass::Uninitialized,
             stable_counters: StableTickerCounters::default(),
 
-            pages_info: vec![Default::default(); 2],
+            pages_info_sna: vec![Default::default(); 2],
             ga_mmr: 0xc0, // standard memory configuration
 
             macro_seed: 0,
@@ -615,6 +631,9 @@ impl Default for Env {
 
             sections: HashMap::default(),
             current_section: None,
+            output_address: 0,
+            banks: Vec::new(),
+            selected_bank: None,
         }
     }
 }
@@ -699,11 +718,19 @@ impl Env {
 
             self.stable_counters = StableTickerCounters::default();
             self.run_options = None;
-            self.written_bytes.set_all(false);
+            self.written_bytes().set_all(false);
             self.warnings.retain(|elem| !elem.is_override_memory());
-            self.pages_info.iter_mut().for_each(|p| p.new_pass());
+            self.pages_info_sna.iter_mut().for_each(|p| p.new_pass());
 
             self.current_section = None;
+
+            self.banks.iter_mut()
+                .for_each(|bank| {
+                    bank.1.new_pass();
+                    bank.2.set_all(false);
+                });
+            self.selected_bank = None;
+            self.output_address = 0;
         }
     }
 
@@ -725,25 +752,62 @@ impl Env {
             0b11_111_0_01,
         ];
 
-        for (activepage, page) in pages_mmr[0..self.pages_info.len()].iter().enumerate() {
+        // save from snapshot
+        for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
             self.ga_mmr = *page;
-            self.pages_info[activepage].execute_save(self)?;
+            self.pages_info_sna[activepage].execute_save(self)?;
         }
 
+        // save from extra memory / can be done in parallal
+        self.ga_mmr = 0xc0;
+        let _ : Vec<()> = self.banks.iter()
+            .map(|bank| {
+            bank.1.execute_save(self)
+            })
+            .collect::<Result<Vec<_>, AssemblerError>>()?;
+
+        // restor memory conf
         self.ga_mmr = backup;
         Ok(())
     }
 
-    /// TODO remove this method and its calls as its behavior is innapropriate for some configurations
+    /// TODO
     fn active_page_info(&self) -> &PageInformation {
-        let active_page = self.logical_to_physical_address(0x0000).page() as usize;
-        &self.pages_info[active_page]
+        match &self.selected_bank {
+            Some(idx) => {
+                &self.banks[*idx].1
+            }
+            None => {
+                let active_page =
+                    self.logical_to_physical_address(self.output_address).page() as usize;
+                &self.pages_info_sna[active_page]
+            }
+        }
     }
 
     /// TODO remove this method and its calls
     fn active_page_info_mut(&mut self) -> &mut PageInformation {
-        let active_page = self.logical_to_physical_address(0x0000).page() as usize;
-        &mut self.pages_info[active_page]
+        match &self.selected_bank {
+            Some(idx) => {
+                &mut self.banks[*idx].1
+            }
+            None => {
+                let active_page =
+                    self.logical_to_physical_address(self.output_address).page() as usize;
+                &mut self.pages_info_sna[active_page]
+            }
+        }
+    }
+
+    fn written_bytes(&mut self) -> &mut BitVec {
+        match &self.selected_bank {
+            Some(idx) => {
+                &mut self.banks[*idx].2
+            } ,
+            None => {
+                &mut self.written_bytes
+            }
+        }
     }
 
     /// Return the address where the next byte will be written
@@ -816,10 +880,23 @@ impl Env {
         self.start_address()
     }
 
-    /// Output one byte
-    /// BUG does not take into account the active bank
+    /// Output one byte either in the appropriate bank of the snapshot or in the termporary bank
     /// return true if it raised an override warning
     pub fn output(&mut self, v: u8) -> Result<bool, AssemblerError> {
+        if  self.logical_output_address() != self.output_address {
+            return Err(
+                AssemblerError::BugInAssembler {
+                    msg: format!(
+                        "Sync issue with output address (0x{:x} != 0x{:x})",
+                        self.logical_output_address(),
+                        self.output_address
+                    )
+                }
+            );
+        }
+
+        
+        
         // dbg!(self.output_address(), &v);
         let physical_address =
             self.logical_to_physical_address(self.logical_output_address() as u16);
@@ -852,7 +929,7 @@ impl Env {
         }
 
         let abstract_address = physical_address.offset_in_cpc();
-        let already_used = *self.written_bytes.get(abstract_address as usize).unwrap();
+        let already_used = *self.written_bytes().get(abstract_address as usize).unwrap();
 
         let r#override = if already_used {
             let r#override = AssemblerError::OverrideMemory(physical_address.clone(), 1);
@@ -866,22 +943,31 @@ impl Env {
             false
         };
 
-        if let Some(section) = &self.current_section {
-            let section = section.borrow();
-            if !section.contains(physical_address.address()) {
-                return Err(AssemblerError::AssemblingError {
-                    msg: format!(
-                        "SECTION error: write address 0x{:x} out of range [Ox{:}-Ox{:}]",
-                        physical_address.address(),
-                        section.start,
-                        section.stop
-                    ),
-                });
+        if self.selected_bank.is_none(){
+            if let Some(section) = &self.current_section {
+                let section = section.borrow();
+                if !section.contains(physical_address.address()) {
+                    return Err(AssemblerError::AssemblingError {
+                        msg: format!(
+                            "SECTION error: write address 0x{:x} out of range [Ox{:}-Ox{:}]",
+                            physical_address.address(),
+                            section.start,
+                            section.stop
+                        ),
+                    });
+                }
             }
         }
 
-        self.sna.set_byte(abstract_address, v);
-        self.written_bytes.set(abstract_address as _, true);
+        match &self.selected_bank {
+            Some(idx) => {
+                self.banks[*idx].0[self.output_address as usize] = v;
+            },
+            None => {
+                self.sna.set_byte(abstract_address, v);
+            }
+        }
+        self.written_bytes().set(abstract_address as _, true);
 
         // Add the byte to the listing space
         if self.pass.is_second_pass() && self.output_trigger.is_some() {
@@ -890,6 +976,7 @@ impl Env {
 
         self.active_page_info_mut().logical_outputadr =
             self.logical_output_address().wrapping_add(1);
+        self.output_address = self.logical_output_address();
         self.active_page_info_mut().logical_codeadr = self.logical_code_address().wrapping_add(1);
 
         // we have written all memory and are trying to restart
@@ -976,11 +1063,27 @@ impl Env {
     }
 
     pub fn peek(&self, address: &PhysicalAddress) -> u8 {
-        self.sna.get_byte(address.offset_in_cpc())
+        let address = address.offset_in_cpc();
+        match &self.selected_bank {
+            Some(idx) => {
+                self.banks[*idx].0[address as usize]
+            },
+            None => {
+                self.sna.get_byte(address)
+            }
+        }
     }
 
     pub fn poke(&mut self, byte: u8, address: &PhysicalAddress) {
-        self.sna.set_byte(address.offset_in_cpc(), byte)
+        let address = address.offset_in_cpc();
+        match &self.selected_bank {
+            Some(idx) => {
+                self.banks[*idx].0[address as usize] = byte;
+            },
+            None => {
+                self.sna.set_byte(address, byte);
+            }
+        }
     }
 
     /// Get the size of the generated binary.
@@ -1361,7 +1464,7 @@ impl Env {
 
         self.active_page_info_mut().logical_outputadr = section.borrow().output_adr;
         self.active_page_info_mut().logical_codeadr = section.borrow().code_adr;
-
+        self.output_address = section.borrow().output_adr;
         self.current_section = Some(section);
 
         Ok(())
@@ -1433,18 +1536,50 @@ impl Env {
         PhysicalAddress::new(address, self.ga_mmr)
     }
 
-    fn visit_bank(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
+    fn visit_bank(&mut self, exp: Option<&Expr>) -> Result<(), AssemblerError> {
         if self.nested_rorg > 0 {
             return Err(AssemblerError::NotAllowed);
         }
 
-        let mmr = self.resolve_expr_must_never_fail(exp)?.int();
-        if mmr < 0xc0 || mmr > 0xc7 {
-            return Err(AssemblerError::MMRError { value: mmr });
-        }
+        match exp {
+            Some(exp) => {
+                // prefix provided, we explicitely want one configuration
+                let mmr = self.resolve_expr_must_never_fail(exp)?.int();
+                if mmr < 0xc0 || mmr > 0xc7 {
+                    return Err(AssemblerError::MMRError { value: mmr });
+                }
 
-        let mmr = mmr as u8;
-        self.ga_mmr = mmr;
+                let mmr = mmr as u8;
+                self.ga_mmr = mmr;
+            }
+            None => {
+                // nothing provided, we write in a temporary area
+                if self.pass.is_first_pass() {
+                    self.selected_bank = Some(self.banks.len());
+                    self.banks
+                        .push((
+                            Bank::default(), 
+                            PageInformation::default(),
+                            BitVec::repeat(false, 0x4000 * 4)
+                        ));
+                } else {
+                        self.selected_bank = self.selected_bank
+                                            .map(|v| v + 1)
+                                            .or(Some(0));
+                    if *self.selected_bank.as_ref().unwrap() >= self.banks.len() {
+                        return Err(AssemblerError::AssemblingError {
+                            msg: "There were less banks in previous pass".to_owned(),
+                        });
+                    }
+                }
+
+                self.ga_mmr = 0xc0;
+                self.output_address = 0;
+                let page_info = self.active_page_info_mut();
+                page_info.logical_outputadr = 0;
+                page_info.logical_codeadr = 0;
+            }
+        }
 
         Ok(())
     }
@@ -1484,11 +1619,11 @@ impl Env {
         }
 
         let page = page as usize;
-        let nb_pages = self.pages_info.len();
+        let nb_pages = self.pages_info_sna.len();
         let expected_nb = nb_pages.max(page + 1);
         if expected_nb > nb_pages {
-            self.pages_info.resize(expected_nb, Default::default());
-            self.written_bytes.resize(expected_nb * 0x1_0000, false);
+            self.pages_info_sna.resize(expected_nb, Default::default());
+            self.written_bytes().resize(expected_nb * 0x1_0000, false);
         }
         Ok(())
     }
@@ -1766,6 +1901,7 @@ impl Env {
         crunched_env.active_page_info_mut().startadr = Some(0); // reset the counter to obtain the bytes
         crunched_env.active_page_info_mut().limit = 0xffff; // disable limit (to be redone in the area)
         crunched_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
+        crunched_env.output_address = 0;
 
         self.output_trigger
             .as_mut()
@@ -1888,7 +2024,7 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
         trigger.finish()
     }
 
-    env.handle_post_actions();
+    env.handle_post_actions()?;
 
     Ok(env)
 }
@@ -2043,7 +2179,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             env.visit_basic(variables.as_ref(), hidden_lines.as_ref(), code)
         }
         Token::BuildSna(ref v) => env.visit_buildsna(v.as_ref()),
-        Token::Bank(ref exp) => env.visit_bank(exp),
+        Token::Bank(ref exp) => env.visit_bank(exp.as_ref()),
         Token::Bankset(ref v) => env.visit_bankset(v),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | Token::Defw(_) | Token::Str(_) => visit_db_or_dw_or_str(token, env),
@@ -2781,6 +2917,8 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
         None => env.logical_output_address(),
     }
     .into();
+
+    env.output_address = adr2 as _;
 
     Ok(())
 }

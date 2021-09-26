@@ -805,8 +805,6 @@ pub fn parse_z80_line_complete(
     // Eat previous line ending
     let (input, _) = opt(line_ending)(input)?;
 
-    dbg!(input.split("\n").next());
-
     // Eat optional label (or macro call)
     let before_label = input.clone();
     let (input, mut label_or_macro) = opt(preceded(space0, parse_label(false)))(input)?;
@@ -820,7 +818,6 @@ pub fn parse_z80_line_complete(
     };
 
     let mut tokens = Vec::new();
-    dbg!(&label_or_macro);
     // Try to parse a macro if it is not a label
     let mut know_it_is_macro = false;
     let nb_warnings = input.extra.1.warnings().len();
@@ -867,13 +864,10 @@ pub fn parse_z80_line_complete(
 
     // We add first token as a label or macro
     if label_or_macro.is_some() && know_it_is_label {
-        dbg!("Add label {:?}", &label_or_macro);
         tokens.push(Token::Label(label_or_macro.clone().unwrap()).locate(before_label.clone()));
     } else if r#macro.is_some() {
-        dbg!("Add macro {:?}", &r#macro);
         tokens.push(r#macro.unwrap());
     } else {
-        dbg!("no macro or label");
         assert!(label_or_macro.is_none())
     }
 
@@ -897,7 +891,6 @@ pub fn parse_z80_line_complete(
                     ..
                 },
             )) => {
-                dbg!("Label parsed; it is impossible we fallback to a macro parse");
                 // we cannot have a label; it corresponds to a macro call
                 while nb_warnings < input2.extra.1.warnings().len() {
                     input2.extra.1.pop_warning();
@@ -1196,7 +1189,7 @@ pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Verb
     };
     input.extra.1.add_warning(warning);
 
-    Ok((input, Token::Bank(bank)))
+    Ok((input, Token::Bank(Some(bank))))
 }
 
 /// Parse both save directive and write direct in a file
@@ -1671,9 +1664,9 @@ pub fn parse_stable_ticker_stop(input: Z80Span) -> IResult<Z80Span, Token, Verbo
 
 pub fn parse_bank(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_word("bank")(input)?;
-    let (input, count) = expr(input)?;
+    let (input, count) = opt(expr)(input)?;
 
-    Ok((input, Token::Bankset(count)))
+    Ok((input, Token::Bank(count)))
 }
 
 /// Parse fake and real LD instructions
