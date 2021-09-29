@@ -53,7 +53,7 @@ pub enum LocatedToken {
 impl Clone for LocatedToken {
     fn clone(&self) -> Self {
         match self {
-            LocatedToken::Standard { token, span } => todo!(),
+            LocatedToken::Standard { token, span } => LocatedToken::Standard { token: token.clone(), span: span.clone()},
             LocatedToken::CrunchedSection(_, _, _) => todo!(),
             LocatedToken::Include(filename, listing, namespace, span) => {
                 Self::Include(
