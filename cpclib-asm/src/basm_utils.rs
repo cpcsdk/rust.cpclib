@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::preamble::*;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
@@ -117,10 +117,10 @@ pub fn parse<'arg>(
         }
     }
 
-    let code = Rc::new(code);
-    let context = Rc::new(context);
+    let code = Arc::new(code);
+    let context = Arc::new(context);
 
-    let res = parse_z80_strrc_with_contextrc(code, Rc::clone(&context))
+    let res = parse_z80_strrc_with_contextrc(code, Arc::clone(&context))
         .map_err(|e| BasmError::from(e))?;
 
     let warnings = context.warnings();

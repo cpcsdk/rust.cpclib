@@ -1,8 +1,7 @@
 use std::{
     ops::{Deref, DerefMut},
-    rc::Rc,
 };
-
+use std::sync::Arc;
 use cpclib_common::nom::{
     error::{ErrorKind, ParseError},
     Compare, CompareResult, Err, FindSubstring, IResult, InputIter, InputLength, InputTake, Needed,
@@ -19,17 +18,17 @@ pub struct Z80Span(
         &'static str,
         (
             // The full source (same as the &str)
-            Rc<String>,
+            Arc<String>,
             // The parsing context
-            Rc<ParserContext>,
+            Arc<ParserContext>,
         ),
     >,
 );
 
 impl From<&'src str> for Z80Span {
     fn from(s: &'src str) -> Self {
-        let src = Rc::new(s.to_owned());
-        let ctx = Rc::default();
+        let src = Arc::new(s.to_owned());
+        let ctx = Arc::default();
 
         Self(LocatedSpan::new_extra(
             // The string is safe on the heap
@@ -42,7 +41,7 @@ impl From<&'src str> for Z80Span {
 impl Z80Span {
     pub fn from_standard_span(
         span: LocatedSpan<&'static str, ()>,
-        extra: (Rc<String>, Rc<ParserContext>),
+        extra: (Arc<String>, Arc<ParserContext>),
     ) -> Self {
         {
             let span_addr = *span.fragment() as *const str;
@@ -75,7 +74,7 @@ impl<'a> Into<LocatedSpan<&'a str>> for Z80Span {
 }
 
 impl Deref for Z80Span {
-    type Target = LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)>;
+    type Target = LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -85,8 +84,8 @@ impl DerefMut for Z80Span {
         &mut self.0
     }
 }
-impl AsRef<LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)>> for Z80Span {
-    fn as_ref(&self) -> &LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> {
+impl AsRef<LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)>> for Z80Span {
+    fn as_ref(&self) -> &LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> {
         self.deref()
     }
 }
@@ -105,13 +104,13 @@ impl Compare<&'static str> for Z80Span {
 }
 impl cpclib_common::nom::InputIter for Z80Span {
     type Item =
-        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as cpclib_common::nom::InputIter>::Item;
+        <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::Item;
 
     type Iter =
-        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as cpclib_common::nom::InputIter>::Iter;
+        <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::Iter;
 
     type IterElem =
-        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as cpclib_common::nom::InputIter>::IterElem;
+        <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::IterElem;
 
     fn iter_indices(&self) -> Self::Iter {
         self.deref().iter_indices()
@@ -152,7 +151,7 @@ impl cpclib_common::nom::InputTake for Z80Span {
 
 impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
     type Item =
-        <LocatedSpan<&'static str, (Rc<String>, Rc<ParserContext>)> as cpclib_common::nom::InputIter>::Item;
+        <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::Item;
 
     fn split_at_position<P, E: ParseError<Self>>(&self, predicate: P) -> IResult<Self, Self, E>
     where
@@ -241,17 +240,17 @@ impl Slice<std::ops::RangeTo<usize>> for Z80Span {
 
 impl Z80Span {
     pub fn new_extra<S: Into<String>>(src: S, ctx: ParserContext) -> Self {
-        let src = Rc::new(src.into());
-        let ctx = Rc::new(ctx);
+        let src = Arc::new(src.into());
+        let ctx = Arc::new(ctx);
 
         Self::new_extra_from_rc(src, ctx)
     }
 
-    pub fn new_extra_from_rc(src: Rc<String>, ctx: Rc<ParserContext>) -> Self {
+    pub fn new_extra_from_rc(src: Arc<String>, ctx: Arc<ParserContext>) -> Self {
         Self(LocatedSpan::new_extra(
-            // pointer is always good as source is store in a Rc
+            // pointer is always good as source is store in a Arc
             unsafe { &*(src.as_str() as *const str) as &'static str },
-            (Rc::clone(&src), Rc::clone(&ctx)),
+            (Arc::clone(&src), Arc::clone(&ctx)),
         ))
     }
 }

@@ -1,5 +1,7 @@
 use std::cell::RefCell;
+use std::clone;
 use std::fmt;
+use std::sync::RwLock;
 
 use crate::Listing;
 
@@ -404,7 +406,7 @@ pub enum CharsetFormat {
 
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 #[allow(missing_docs)]
 pub enum Token {
     Align(Expr, Option<Expr>),
@@ -444,11 +446,11 @@ pub enum Token {
         length: Option<Expr>,
         extended_offset: Option<Expr>,
         off: bool,
-        content: RefCell<Option<Vec<u8>>>,
+        content: RwLock<Option<Vec<u8>>>,
         transformation: BinaryTransformation,
     },
     // file may or may not be read during parse. If not, it is read on demand when assembling
-    Include(String, RefCell<Option<Listing>>, Option<String>),
+    Include(String, RwLock<Option<Listing>>, Option<String>),
     Iterate(String, Vec<Expr>, Listing),
 
     Label(String),
@@ -523,6 +525,80 @@ pub enum Token {
     Undef(String),
     WaitNops(Expr),
     While(Expr, Listing),
+}
+
+impl Clone for Token {
+    fn clone(&self) -> Self {
+        match self {
+            Token::Align(_, _) => todo!(),
+            Token::Assert(_, _) => todo!(),
+            Token::Assign(_, _) => todo!(),
+            Token::Bank(_) => todo!(),
+            Token::Bankset(_) => todo!(),
+            Token::Basic(_, _, _) => todo!(),
+            Token::Break => todo!(),
+            Token::Breakpoint(_) => todo!(),
+            Token::BuildCpr => todo!(),
+            Token::BuildSna(_) => todo!(),
+            Token::Charset(_) => todo!(),
+            Token::Comment(_) => todo!(),
+            Token::CrunchedBinary(_, _) => todo!(),
+            Token::CrunchedSection(_, _) => todo!(),
+            Token::Defb(l) => Token::Defb(l.clone()),
+            Token::Defs(l) => Token::Defs(l.clone()),
+            Token::Defw(l) => Token::Defw(l.clone()),
+            Token::Equ(_, _) => todo!(),
+            Token::Export(_) => todo!(),
+            Token::Fail(_) => todo!(),
+            Token::If(_, _) => todo!(),
+            Token::Incbin { fname, offset, length, extended_offset, off, content, transformation } => todo!(),
+            Token::Include(_, _, _) => todo!(),
+            Token::Iterate(_, _, _) => todo!(),
+            Token::Label(_) => todo!(),
+            Token::Let(_, _) => todo!(),
+            Token::Limit(_) => todo!(),
+            Token::List => todo!(),
+            Token::Macro(_, _, _) => todo!(),
+            Token::MacroCall(n, p) => Token::MacroCall(n.clone(), p.clone()),
+            Token::MultiPop(_) => todo!(),
+            Token::MultiPush(_) => todo!(),
+            Token::Next(_, _, _) => todo!(),
+            Token::NoExport(_) => todo!(),
+            Token::NoList => todo!(),
+            Token::OpCode(_, _, _, _) => todo!(),
+            Token::Org(_, _) => todo!(),
+            Token::Print(_) => todo!(),
+            Token::Protect(_, _) => todo!(),
+            Token::Range(_, _, _) => todo!(),
+            Token::Repeat(_, _, _, _) => todo!(),
+            Token::RepeatUntil(_, _) => todo!(),
+            Token::Rorg(_, _) => todo!(),
+            Token::Run(_, _) => todo!(),
+            Token::Save { filename, address, size, save_type, dsk_filename, side } => todo!(),
+            Token::Section(_) => todo!(),
+            Token::SetCPC(_) => todo!(),
+            Token::SetCrtc(_) => todo!(),
+            Token::SetN(_, _, _) => todo!(),
+            Token::SnaSet(_, _) => todo!(),
+            Token::StableTicker(_) => todo!(),
+            Token::Str(_) => todo!(),
+            Token::Struct(_, _) => todo!(),
+            Token::Switch(_) => todo!(),
+            Token::Undef(_) => todo!(),
+            Token::WaitNops(_) => todo!(),
+            Token::While(_, _) => todo!(),
+        }
+    }
+}
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        todo!()
+    }
+}
+
+impl Eq for Token {
+
 }
 
 impl fmt::Display for Token {

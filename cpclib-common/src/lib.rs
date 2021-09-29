@@ -7,6 +7,6 @@ pub use lazy_static;
 pub use nom;
 pub use nom_locate;
 pub use num;
-
+pub use rayon;
 pub use smallvec;
 pub use strsim;
