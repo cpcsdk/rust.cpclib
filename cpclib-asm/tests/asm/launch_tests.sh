@@ -56,6 +56,8 @@ do
 			if ! diff "$OUTPUT" "$binary" > /dev/null 2>/dev/null
 			then
 				err_result "$fname" content
+
+				#hexdiff "$OUTPUT" "$binary"
 			fi
 		fi
 

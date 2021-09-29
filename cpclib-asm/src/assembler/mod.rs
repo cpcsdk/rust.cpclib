@@ -14,17 +14,18 @@ use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static::__Deref;
 use cpclib_common::smallvec::SmallVec;
-
+use cpclib_common::rayon::prelude::*;
 use std::any::Any;
 use std::cell::RefCell;
 use std::fmt;
 
 use std::convert::TryFrom;
 use std::io::Write;
-use std::rc::Rc;
-
+use std::sync::RwLock;
+use std::sync::Arc;
 use crate::AmsdosFile;
 use crate::AmsdosFileName;
+use cpclib_common::rayon::prelude::*;
 
 use self::listing_output::AddressKind;
 use self::listing_output::ListingOutput;
@@ -227,7 +228,7 @@ struct ListingOutputTrigger {
     /// the bytes progressively collected
     bytes: Vec<u8>,
     start: u32,
-    builder: Rc<RefCell<ListingOutput>>,
+    builder: Arc<RwLock<ListingOutput>>,
 }
 
 impl ListingOutputTrigger {
@@ -237,7 +238,7 @@ impl ListingOutputTrigger {
     fn new_token(&mut self, new: &LocatedToken, address: u32, kind: AddressKind) {
         if let Some(token) = &self.token {
             self.builder
-                .borrow_mut()
+                .write().unwrap()
                 .add_token(token, &self.bytes, self.start, kind);
         }
 
@@ -247,30 +248,30 @@ impl ListingOutputTrigger {
     }
     fn finish(&mut self) {
         if let Some(token) = &self.token {
-            self.builder.borrow_mut().add_token(
+            self.builder.write().unwrap().add_token(
                 token,
                 &self.bytes,
                 self.start,
                 AddressKind::Address,
             );
         }
-        self.builder.borrow_mut().finish();
+        self.builder.write().unwrap().finish();
     }
 
     fn on(&mut self) {
-        self.builder.borrow_mut().on();
+        self.builder.write().unwrap().on();
     }
 
     fn off(&mut self) {
-        self.builder.borrow_mut().off();
+        self.builder.write().unwrap().off();
     }
 
     fn enter_crunched_section(&mut self) {
-        self.builder.borrow_mut().enter_crunched_section();
+        self.builder.write().unwrap().enter_crunched_section();
     }
 
     fn leave_crunched_section(&mut self) {
-        self.builder.borrow_mut().leave_crunched_section();
+        self.builder.write().unwrap().leave_crunched_section();
     }
 }
 
@@ -588,9 +589,9 @@ pub struct Env {
     nested_rorg: usize,
 
     /// List of all sections
-    sections: HashMap<String, Rc<RefCell<Section>>>,
+    sections: HashMap<String, Arc<RwLock<Section>>>,
     /// Current section if any
-    current_section: Option<Rc<RefCell<Section>>>,
+    current_section: Option<Arc<RwLock<Section>>>,
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -629,7 +630,7 @@ impl Default for Env {
             warnings: Vec::new(),
             nested_rorg: 0,
 
-            sections: HashMap::default(),
+            sections: HashMap::<String, Arc<RwLock<Section>>>::default(),
             current_section: None,
             output_address: 0,
             banks: Vec::new(),
@@ -760,7 +761,7 @@ impl Env {
 
         // save from extra memory / can be done in parallal
         self.ga_mmr = 0xc0;
-        let _ : Vec<()> = self.banks.iter()
+        let _ : Vec<()> = self.banks.par_iter()
             .map(|bank| {
             bank.1.execute_save(self)
             })
@@ -945,7 +946,7 @@ impl Env {
 
         if self.selected_bank.is_none(){
             if let Some(section) = &self.current_section {
-                let section = section.borrow();
+                let section = section.read().unwrap();
                 if !section.contains(physical_address.address()) {
                     return Err(AssemblerError::AssemblingError {
                         msg: format!(
@@ -991,8 +992,8 @@ impl Env {
             );
 
             if let Some(section) = &mut self.current_section {
-                section.borrow_mut().output_adr = output;
-                section.borrow_mut().code_adr = code;
+                section.write().unwrap().output_adr = output;
+                section.write().unwrap().code_adr = code;
             }
         }
 
@@ -1449,7 +1450,7 @@ impl Env {
         };
 
         {
-            let section = section.borrow();
+            let section = section.read().unwrap();
 
             if section.mmr != self.ga_mmr {
                 self.warnings.push(AssemblerError::AssemblingError{
@@ -1460,11 +1461,11 @@ impl Env {
             }
         }
 
-        let section = Rc::clone(section);
+        let section = Arc::clone(section);
 
-        self.active_page_info_mut().logical_outputadr = section.borrow().output_adr;
-        self.active_page_info_mut().logical_codeadr = section.borrow().code_adr;
-        self.output_address = section.borrow().output_adr;
+        self.active_page_info_mut().logical_outputadr = section.read().unwrap().output_adr;
+        self.active_page_info_mut().logical_codeadr = section.read().unwrap().code_adr;
+        self.output_address = section.read().unwrap().output_adr;
         self.current_section = Some(section);
 
         Ok(())
@@ -1482,7 +1483,7 @@ impl Env {
         let start = self.resolve_expr_must_never_fail(start)?;
         let stop = self.resolve_expr_must_never_fail(stop)?;
 
-        let section = Rc::new(RefCell::new(Section::new(
+        let section = Arc::new(RwLock::new(Section::new(
             name,
             start.int() as _,
             stop.int() as _,
@@ -2073,12 +2074,12 @@ pub fn visit_located_token(
                 off: _,
                 content,
                 transformation: _,
-            } => if content.borrow().is_none() {
+            } => if content.read().unwrap().is_none() {
                 outer_token
                     .read_referenced_file(&outer_token.context().1)
                     .and_then(|_| visit_located_token(outer_token, env))
             } else {
-                env.visit_incbin(content.borrow().as_ref().unwrap())
+                env.visit_incbin(content.read().unwrap().as_ref().unwrap())
             }
             .map_err(|err| AssemblerError::IncludedFileError {
                 span: span.clone(),
@@ -2096,12 +2097,12 @@ pub fn visit_located_token(
             env.visit_crunched_section(kind, lst, Some(span))
         }
 
-        LocatedToken::Include(fname, ref cell, namespace, span) => if cell.borrow().is_some() {
+        LocatedToken::Include(fname, ref cell, namespace, span) => if cell.read().unwrap().is_some() {
             if let Some(namespace) = namespace {
                 env.enter_namespace(namespace)
                     .map_err(|e| e.locate(span.clone()))?;
             }
-            env.visit_listing(cell.borrow().as_ref().unwrap())?;
+            env.visit_listing(cell.read().unwrap().as_ref().unwrap())?;
             if namespace.is_some() {
                 env.leave_namespace().map_err(|e| e.locate(span.clone()))?;
             }
@@ -2206,17 +2207,17 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             });
             Ok(())
         }
-        Token::Include(_, cell, namespace) if cell.borrow().is_some() => {
+        Token::Include(_, cell, namespace) if cell.read().unwrap().is_some() => {
             if let Some(namespace) = namespace.as_ref() {
                 env.enter_namespace(namespace)?;
             }
-            env.visit_listing(cell.borrow().as_ref().unwrap())?;
+            env.visit_listing(cell.read().unwrap().as_ref().unwrap())?;
             if namespace.is_some() {
                 env.leave_namespace()?;
             }
             Ok(())
         }
-        Token::Include(fname, cell, namespace) if cell.borrow().is_none() => {
+        Token::Include(fname, cell, namespace) if cell.read().unwrap().is_none() => {
             todo!("Read the file (without being able to specify parser options)")
         }
         Token::Incbin {
@@ -2227,7 +2228,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             off: _,
             content,
             transformation: _,
-        } => env.visit_incbin(content.borrow().as_ref().unwrap()),
+        } => env.visit_incbin(content.read().unwrap().as_ref().unwrap()),
         Token::If(ref cases, ref other) => env.visit_if(
             cases
                 .iter()

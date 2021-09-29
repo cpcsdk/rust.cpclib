@@ -1,11 +1,5 @@
-use std::{
-    convert::TryFrom,
-    fs::File,
-    io::Read,
-    ops::{Deref, DerefMut},
-    rc::Rc,
-};
-
+use std::{clone, convert::TryFrom, fs::File, io::Read, ops::{Deref, DerefMut}, sync::{Mutex, RwLock}};
+use std::sync::Arc;
 use cpclib_common::itertools::Itertools;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::{
@@ -23,7 +17,7 @@ use crate::implementation::instructions::Cruncher;
 
 ///! This crate is related to the adaptation of tokens and listing for the case where they are parsed
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 /// Add span information for a Token.
 /// This hierarchy is a mirror of the original token one
 pub enum LocatedToken {
@@ -37,7 +31,7 @@ pub enum LocatedToken {
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
     Include(
         String,
-        std::cell::RefCell<Option<LocatedListing>>,
+        RwLock<Option<LocatedListing>>,
         Option<String>,
         Z80Span,
     ),
@@ -53,6 +47,31 @@ pub enum LocatedToken {
     Switch(Vec<(Expr, LocatedListing)>, Z80Span),
     While(Expr, LocatedListing, Z80Span),
     Module(String, LocatedListing, Z80Span),
+}
+
+impl Clone for LocatedToken {
+    fn clone(&self) -> Self {
+        match self {
+            LocatedToken::Standard { token, span } => todo!(),
+            LocatedToken::CrunchedSection(_, _, _) => todo!(),
+            LocatedToken::Include(filename, listing, namespace, span) => {
+                Self::Include(
+                    filename.clone(),
+                    RwLock::new(listing.read().unwrap().clone()),
+                    namespace.clone(),
+                    span.clone()
+                )
+            },
+            LocatedToken::If(_, _, _) => todo!(),
+            LocatedToken::Repeat(_, _, _, _, _) => todo!(),
+            LocatedToken::Iterate(_, _, _, _) => todo!(),
+            LocatedToken::RepeatUntil(_, _, _) => todo!(),
+            LocatedToken::Rorg(_, _, _) => todo!(),
+            LocatedToken::Switch(_, _) => todo!(),
+            LocatedToken::While(_, _, _) => todo!(),
+            LocatedToken::Module(_, _, _) => todo!(),
+        }
+    }
 }
 
 impl Deref for LocatedToken {
@@ -93,7 +112,7 @@ impl LocatedToken {
         }
     }
 
-    pub fn context(&self) -> &(Rc<String>, Rc<ParserContext>) {
+    pub fn context(&self) -> &(Arc<String>, Arc<ParserContext>) {
         &self.span().extra
     }
 }
@@ -107,7 +126,7 @@ impl LocatedToken {
             }
             LocatedToken::Include(s, l, module, _span) => Token::Include(
                 s.clone(),
-                l.borrow().as_ref().map(|l| l.as_listing()).into(),
+                l.read().unwrap().as_ref().map(|l| l.as_listing()).into(),
                 module.clone(),
             ),
             LocatedToken::If(v, e, _span) => Token::If(
@@ -196,16 +215,16 @@ impl LocatedToken {
                             }
                         };
 
-                        let content = Rc::new(content);
+                        let content = Arc::new(content);
                         let new_ctx = {
                             let mut new_ctx = ctx.deref().clone();
                             new_ctx.set_current_filename(fname);
-                            Rc::new(new_ctx)
+                            Arc::new(new_ctx)
                         };
 
                         let listing = parse_z80_strrc_with_contextrc(content, new_ctx)?;
-                        cell.replace(Some(listing));
-                        assert!(cell.borrow().is_some());
+                        cell.write().unwrap().replace(listing);
+                        assert!(cell.read().unwrap().is_some());
                     }
                 }
             }
@@ -222,7 +241,7 @@ impl LocatedToken {
                         transformation,
                     },
                 span,
-            } if content.borrow().is_none() => {
+            } if content.read().unwrap().is_none() => {
                 //TODO manage the optional arguments
                 match ctx.get_path_for(&fname) {
                     Err(_e) => {
@@ -302,7 +321,7 @@ impl LocatedToken {
 
                         match transformation {
                             BinaryTransformation::None => {
-                                content.replace(data.to_vec().into());
+                            content.write().unwrap().replace(data.to_vec());
                             }
 
                             other => {
@@ -314,7 +333,7 @@ impl LocatedToken {
 
                                 let crunch_type = other.crunch_type().unwrap();
                                 let crunched = crunch_type.crunch(&data)?;
-                                content.replace(crunched.into());
+                                content.write().unwrap().replace(crunched.into());
                             }
                         }
                     }
@@ -434,39 +453,40 @@ pub struct LocatedListing {
     /// The real listing
     listing: InnerLocatedListing,
     /// Its source code
-    src: Rc<String>,
+    src: Arc<String>,
     /// Its Parsing Context
-    ctx: Rc<ParserContext>,
+    ctx: Arc<ParserContext>,
 }
+
 
 impl LocatedListing {
     /// Create an empty listing. Code as to be parsed afterwhise
     pub fn new_empty(str: String, ctx: ParserContext) -> Self {
         Self {
             listing: Default::default(),
-            src: Rc::new(str),
-            ctx: Rc::new(ctx),
+            src: Arc::new(str),
+            ctx: Arc::new(ctx),
         }
     }
 
     pub fn new_empty_span(span: Z80Span) -> Self {
         Self {
             listing: Default::default(),
-            src: Rc::clone(&span.extra.0),
-            ctx: Rc::clone(&span.extra.1),
+            src: Arc::clone(&span.extra.0),
+            ctx: Arc::clone(&span.extra.1),
         }
     }
 
-    pub fn src(&self) -> &Rc<String> {
+    pub fn src(&self) -> &Arc<String> {
         &self.src
     }
 
-    pub fn ctx(&self) -> &Rc<ParserContext> {
+    pub fn ctx(&self) -> &Arc<ParserContext> {
         &self.ctx
     }
 
     pub fn span(&self) -> Z80Span {
-        Z80Span::new_extra_from_rc(Rc::clone(&self.src), Rc::clone(&self.ctx))
+        Z80Span::new_extra_from_rc(Arc::clone(&self.src), Arc::clone(&self.ctx))
     }
 
     /*
@@ -498,8 +518,8 @@ impl TryFrom<Vec<LocatedToken>> for LocatedListing {
         match tokens.first() {
             Some(token) => {
                 let extra = &token.span().extra;
-                let src = Rc::clone(&extra.0);
-                let ctx = Rc::clone(&extra.1);
+                let src = Arc::clone(&extra.0);
+                let ctx = Arc::clone(&extra.1);
                 Ok(LocatedListing {
                     listing: tokens.into(),
                     ctx,

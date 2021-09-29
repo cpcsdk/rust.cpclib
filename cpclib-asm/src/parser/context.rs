@@ -1,12 +1,14 @@
+use std::ops::Deref;
 use std::{cell::RefCell, path::PathBuf};
 
 use crate::error::AssemblerError;
-
+use std::sync::{Mutex, RwLock};
+use std::sync::Arc;
 use super::Z80Span;
 
 /// Context information that can guide the parser
 /// TODO add assembling flags
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ParserContext {
     /// Filename that is currently parsed
     pub current_filename: Option<PathBuf>,
@@ -17,7 +19,19 @@ pub struct ParserContext {
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
     pub read_referenced_files: bool,
     /// indicate we are parsing a listing generating by a struct
-    parse_warning: RefCell<Vec<AssemblerError>>,
+    parse_warning: RwLock<Vec<AssemblerError>>,
+}
+
+impl Clone for ParserContext {
+    fn clone(&self) -> Self {
+        Self {
+            current_filename: self.current_filename.clone(),
+            context_name: self.context_name.clone(),
+            search_path: self.search_path.clone(),
+            read_referenced_files: self.read_referenced_files.clone(),
+            parse_warning: self.parse_warning.write().unwrap().clone().into()
+        }
+    }
 }
 
 impl Default for ParserContext {
@@ -26,7 +40,7 @@ impl Default for ParserContext {
             current_filename: None,
             context_name: None,
             search_path: Default::default(),
-            read_referenced_files: false,
+            read_referenced_files: true,
             parse_warning: Default::default(),
         }
     }
@@ -160,15 +174,21 @@ impl ParserContext {
     }
 
     pub fn add_warning(&self, warning: AssemblerError) {
-        self.parse_warning.borrow_mut().push(warning)
+        self.parse_warning
+            .write().unwrap()
+            .push(warning)
     }
 
     pub fn warnings(&self) -> Vec<AssemblerError> {
-        self.parse_warning.borrow().clone() // TODO investigate why I cannot return a reference
+        self.parse_warning
+            .write().unwrap().deref()
+            .clone() // TODO investigate why I cannot return a reference
     }
 
     pub fn pop_warning(&self) -> Option<AssemblerError> {
-        self.parse_warning.borrow_mut().pop() // TODO investigate why I cannot return a reference
+        self.parse_warning
+            .write().unwrap()
+            .pop() // TODO investigate why I cannot return a reference
     }
 }
 /*

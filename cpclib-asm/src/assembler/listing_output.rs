@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::sync::Arc;
 use std::{fmt::Debug, io::Write};
 
 use crate::preamble::LocatedToken;
@@ -7,13 +8,12 @@ use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::Token;
 use std::ops::Deref;
 use std::rc::Rc;
-
 /// Generate an output listing.
 /// Can be useful to detect issues
 pub struct ListingOutput {
     /// Writer that will contains the listing/
     /// The listing is produced line by line and not token per token
-    writer: Box<dyn Write>,
+    writer: Box<dyn Write + Send + Sync >,
     /// Filename of the current line
     current_fname: Option<String>,
     activated: bool,
@@ -21,7 +21,7 @@ pub struct ListingOutput {
     /// Bytes collected at the current line
     current_line_bytes: SmallVec<[u8; 4]>,
     /// Complete source
-    current_source: Option<Rc<String>>,
+    current_source: Option<Arc<String>>,
     /// Line number and line content.
     current_line_group: Option<(u32, String)>, // clone view of the line XXX avoid this clone
 
@@ -60,7 +60,7 @@ impl Debug for ListingOutput {
 
 impl ListingOutput {
     /// Build a new ListingOutput that will write everyting in writter
-    pub fn new<W: 'static + Write>(writer: W) -> Self {
+    pub fn new<W: 'static + Write + Send + Sync>(writer: W) -> Self {
         Self {
             writer: Box::new(writer),
             current_fname: None,

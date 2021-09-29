@@ -20,11 +20,13 @@ pub mod error;
 
 mod crunchers;
 
+
 #[cfg(feature = "basm")]
 pub mod basm_utils;
 
 use std::{cell::RefCell, fmt::Debug, io::Write, rc::Rc};
-
+use std::sync::RwLock;
+use std::sync::Arc;
 use cpclib_disc::amsdos::*;
 
 use self::listing_output::ListingOutput;
@@ -37,7 +39,7 @@ pub struct AssemblingOptions {
     case_sensitive: bool,
     /// Contains some symbols that could be used during assembling
     symbols: cpclib_tokens::symbols::SymbolsTable,
-    builder: Option<Rc<RefCell<ListingOutput>>>,
+    builder: Option<Arc<RwLock<ListingOutput>>>,
 }
 
 impl Default for AssemblingOptions {
@@ -93,9 +95,9 @@ impl AssemblingOptions {
         self.case_sensitive
     }
 
-    pub fn write_listing_output<W: 'static + Write>(&mut self, writer: W) -> &mut Self {
-        self.builder = Some(Rc::new(RefCell::new(ListingOutput::new(writer))));
-        self.builder.as_mut().map(|b| b.borrow_mut().on());
+    pub fn write_listing_output<W: 'static + Write + Send + Sync>(&mut self, writer: W) -> &mut Self {
+        self.builder = Some(Arc::new(RwLock::new(ListingOutput::new(writer))));
+        self.builder.as_mut().map(|b| b.write().unwrap().on());
         self
     }
 }
