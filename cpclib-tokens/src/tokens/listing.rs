@@ -1,12 +1,17 @@
+use std::borrow::Cow;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
 use core::fmt::Debug;
 use std::iter::FromIterator;
+
+use crate::Token;
 /// The ListingElement trati contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
 pub trait ListingElement {}
 
+impl<'t> ListingElement for Cow<'t, Token> {
+}
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaseListing<T: Clone + ListingElement> {

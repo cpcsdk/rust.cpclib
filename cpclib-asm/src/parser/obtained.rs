@@ -1,6 +1,7 @@
-use std::{clone, convert::TryFrom, fs::File, io::Read, ops::{Deref, DerefMut}, sync::{Mutex, RwLock}};
+use std::{borrow::Cow, clone, convert::TryFrom, fs::File, io::Read, ops::{Deref, DerefMut}, sync::{Mutex, RwLock}};
 use std::sync::Arc;
 use cpclib_common::itertools::Itertools;
+use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::{
     BaseListing, BinaryTransformation, CrunchType, Expr, Listing, ListingElement, TestKind, Token,
@@ -118,34 +119,34 @@ impl LocatedToken {
 }
 
 impl LocatedToken {
-    pub fn as_token(&self) -> Token {
+    pub fn as_token(&self) -> Cow<Token> {
         match self {
-            LocatedToken::Standard { token, .. } => token.clone(),
+            LocatedToken::Standard { token, .. } => Cow::Borrowed(token),
             LocatedToken::CrunchedSection(c, l, _span) => {
-                Token::CrunchedSection(*c, l.as_listing())
-            }
-            LocatedToken::Include(s, l, module, _span) => Token::Include(
+                Cow::Owned(Token::CrunchedSection(*c, l.as_listing()))
+            },
+            LocatedToken::Include(s, l, module, _span) => Cow::Owned(Token::Include(
                 s.clone(),
                 l.read().unwrap().as_ref().map(|l| l.as_listing()).into(),
                 module.clone(),
-            ),
-            LocatedToken::If(v, e, _span) => Token::If(
+            )),
+            LocatedToken::If(v, e, _span) => Cow::Owned(Token::If(
                 v.iter()
                     .map(|(k, l)| (k.clone(), l.as_listing()))
                     .collect_vec(),
                 e.as_ref().map(|l| l.as_listing()),
-            ),
+            )),
             LocatedToken::Repeat(e, l, s, start, _span) => {
-                Token::Repeat(e.clone(), l.as_listing(), s.clone(), start.clone())
+                Cow::Owned(Token::Repeat(e.clone(), l.as_listing(), s.clone(), start.clone()))
             }
-            LocatedToken::RepeatUntil(e, l, _span) => Token::RepeatUntil(e.clone(), l.as_listing()),
-            LocatedToken::Rorg(e, l, _span) => Token::Rorg(e.clone(), l.as_listing()),
-            LocatedToken::Switch(v, _span) => Token::Switch(
+            LocatedToken::RepeatUntil(e, l, _span) => Cow::Owned(Token::RepeatUntil(e.clone(), l.as_listing())),
+            LocatedToken::Rorg(e, l, _span) => Cow::Owned(Token::Rorg(e.clone(), l.as_listing())),
+            LocatedToken::Switch(v, _span) => Cow::Owned(Token::Switch(
                 v.iter()
                     .map(|(e, l)| (e.clone(), l.as_listing()))
                     .collect_vec(),
-            ),
-            LocatedToken::While(e, l, _span) => Token::While(e.clone(), l.as_listing()),
+            )),
+            LocatedToken::While(e, l, _span) => Cow::Owned(Token::While(e.clone(), l.as_listing())),
             LocatedToken::Iterate(name, values, code, _span) => todo!(),
             LocatedToken::Module(_, _, _) => todo!(),
         }
@@ -532,11 +533,20 @@ impl TryFrom<Vec<LocatedToken>> for LocatedListing {
 }
 
 impl LocatedListing {
-    pub fn as_listing(&self) -> Listing {
+    pub fn as_cowed_listing(&self) -> BaseListing<Cow<Token>> {
         self.deref()
-            .iter()
+            .par_iter()
             .map(|lt| lt.as_token())
-            .collect_vec()
+            .collect::<Vec<_>>()
+            .into()
+    }
+
+    pub fn as_listing(&self) -> BaseListing<Token> {
+        self.deref()
+            .par_iter()
+            .map(|lt| lt.as_token())
+            .map(|c| -> Token { c.into_owned()})
+            .collect::<Vec<Token>>()
             .into()
     }
 }
@@ -550,6 +560,8 @@ impl ParseToken for Token {
     type Output = Token;
     fn parse_token(src: &str) -> Result<Self::Output, String> {
         let token = LocatedToken::parse_token(src);
-        token.map(|lt| lt.as_token())
+        token.map(|lt| lt.as_token().into_owned())
     }
 }
+
+

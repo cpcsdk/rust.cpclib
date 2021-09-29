@@ -530,9 +530,9 @@ pub enum Token {
 impl Clone for Token {
     fn clone(&self) -> Self {
         match self {
-            Token::Align(_, _) => todo!(),
-            Token::Assert(_, _) => todo!(),
-            Token::Assign(_, _) => todo!(),
+            Token::Align(a, b) => Token::Align(a.clone(), b.clone()),
+            Token::Assert(a, b) => Token::Assert(a.clone(), b.clone()),
+            Token::Assign(a,  b) => Token::Assign(a.clone(), b.clone()),
             Token::Bank(_) => todo!(),
             Token::Bankset(_) => todo!(),
             Token::Basic(_, _, _) => todo!(),
@@ -541,7 +541,7 @@ impl Clone for Token {
             Token::BuildCpr => todo!(),
             Token::BuildSna(_) => todo!(),
             Token::Charset(_) => todo!(),
-            Token::Comment(_) => todo!(),
+            Token::Comment(c) => Token::Comment(c.clone()),
             Token::CrunchedBinary(_, _) => todo!(),
             Token::CrunchedSection(_, _) => todo!(),
             Token::Defb(l) => Token::Defb(l.clone()),
@@ -565,7 +565,7 @@ impl Clone for Token {
             Token::Next(_, _, _) => todo!(),
             Token::NoExport(_) => todo!(),
             Token::NoList => todo!(),
-            Token::OpCode(_, _, _, _) => todo!(),
+            Token::OpCode(mne, arg1, arg2, arg3) => Self::OpCode(mne.clone(), arg1.clone(), arg2.clone(), arg3.clone()),
             Token::Org(_, _) => todo!(),
             Token::Print(_) => todo!(),
             Token::Protect(_, _) => todo!(),
