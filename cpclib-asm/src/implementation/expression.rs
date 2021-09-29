@@ -117,7 +117,7 @@ impl ExprEvaluationExt for Expr {
             }
 
             OpCode(ref token) => {
-                let bytes = token.as_ref().to_bytes()?;
+                let bytes = token.clone().to_bytes()?;
                 match bytes.len() {
                     0 => Err(AssemblerError::ExpressionError{msg:format!("{} is assembled with 0 bytes", token)}),
                     1 => Ok(i32::from(bytes[0]).into()),

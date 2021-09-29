@@ -197,7 +197,7 @@ Truc
 
     #[test]
     fn test_size() {
-        let mut env = Default::default();
+        let env = Default::default();
         dbg!(assemble_call_jr_or_jp(
             Mnemonic::Jp,
             None,
@@ -289,6 +289,8 @@ label2
         assert {page}label2==0x7fC6 
         assert {pageset}label1==#7fC0
         assert {pageset}label2==#7fC2
+        assert $ == 0x0000
+        assert $$ == 0x0000
         nop";
         code_test(code);
     }

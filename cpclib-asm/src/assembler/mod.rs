@@ -123,21 +123,21 @@ impl AssemblingPass {
         }
     }
 
-    fn is_finished(self) -> bool {
+    pub fn is_finished(self) -> bool {
         match self {
             AssemblingPass::Finished => true,
             _ => false,
         }
     }
 
-    fn is_first_pass(self) -> bool {
+    pub fn is_first_pass(self) -> bool {
         match self {
             AssemblingPass::FirstPass => true,
             _ => false,
         }
     }
 
-    fn is_second_pass(self) -> bool {
+    pub fn is_second_pass(self) -> bool {
         match self {
             AssemblingPass::SecondPass => true,
             _ => false,
@@ -215,6 +215,7 @@ impl Visited for Token {
 
 impl Visited for LocatedToken {
     fn visited(&self, env: &mut Env) -> Result<(), AssemblerError> {
+        dbg!(env.output_address, self.as_token());
         visit_located_token(self, env)
     }
 }
@@ -703,7 +704,7 @@ impl Env {
 
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
-    fn start_new_pass(&mut self) {
+    pub(crate) fn start_new_pass(&mut self) {
         self.pass = self.pass.next_pass();
 
         if !self.pass.is_finished() {
@@ -884,6 +885,7 @@ impl Env {
     /// Output one byte either in the appropriate bank of the snapshot or in the termporary bank
     /// return true if it raised an override warning
     pub fn output(&mut self, v: u8) -> Result<bool, AssemblerError> {
+        dbg!(self.logical_output_address(), self.output_address);
         if  self.logical_output_address() != self.output_address {
             return Err(
                 AssemblerError::BugInAssembler {
@@ -1626,6 +1628,8 @@ impl Env {
             self.pages_info_sna.resize(expected_nb, Default::default());
             self.written_bytes().resize(expected_nb * 0x1_0000, false);
         }
+
+        self.output_address = self.logical_output_address();
         Ok(())
     }
 
@@ -1988,26 +1992,37 @@ pub fn visit_tokens_all_passes<T: Visited>(tokens: &[T]) -> Result<Env, Assemble
     visit_tokens_all_passes_with_options(tokens, &options)
 }
 
+impl Env {
+    pub fn new(options: &AssemblingOptions) -> Self {
+        let mut env = Env::default();
+        env.symbols =
+            SymbolsTableCaseDependent::new(options.symbols().clone(), options.case_sensitive());
+    
+        if let Some(builder) = &options.builder {
+            env.output_trigger = ListingOutputTrigger {
+                token: None,
+                bytes: Vec::new(),
+                builder: builder.clone(),
+                start: 0,
+            }
+            .into();
+        }
+        env
+    }
+
+    pub fn pass(&self)-> &AssemblingPass {
+        &self.pass
+    }
+}
+
 /// Visit the tokens during several passes by providing a specific symbol table.
 /// Warning Listing output is only possible for LocatedToken
 pub fn visit_tokens_all_passes_with_options<T: Visited>(
     tokens: &[T],
     options: &AssemblingOptions,
 ) -> Result<Env, AssemblerError> {
-    let mut env = Env::default();
-    env.symbols =
-        SymbolsTableCaseDependent::new(options.symbols().clone(), options.case_sensitive());
 
-    if let Some(builder) = &options.builder {
-        env.output_trigger = ListingOutputTrigger {
-            token: None,
-            bytes: Vec::new(),
-            builder: builder.clone(),
-            start: 0,
-        }
-        .into();
-    }
-
+    let mut env = Env::new(options);
     loop {
         env.start_new_pass();
         //println!("[pass] {:?}", env.pass);
@@ -2889,7 +2904,7 @@ pub fn assemble_opcode(
 
 fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(), AssemblerError> {
     // org $ set org to the output address (cf. rasm)
-    let adr = if address2.is_none() && address == &"$".into() {
+    let code_adr = if address2.is_none() && address == &"$".into() {
         if env.start_address().is_none() {
             return Err(AssemblerError::InvalidArgument {
                 msg: "ORG: $ cannot be used now".into(),
@@ -2900,16 +2915,16 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
         env.resolve_expr_must_never_fail(address)?.int()
     };
 
-    let adr2 = if address2.is_some() {
+    let output_adr = if address2.is_some() {
         env.resolve_expr_must_never_fail(address2.unwrap())?.int()
     } else {
-        adr.clone()
+        code_adr.clone()
     };
 
     // TODO Check overlapping region
     let page_info = env.active_page_info_mut();
-    page_info.logical_outputadr = adr2 as _;
-    page_info.logical_codeadr = adr as _;
+    page_info.logical_outputadr = output_adr as _;
+    page_info.logical_codeadr = code_adr as _;
     page_info.fail_next_write_if_zero = false;
 
     // Specify start address at first use
@@ -2919,7 +2934,12 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     }
     .into();
 
-    env.output_address = adr2 as _;
+    env.output_address = output_adr as _;
+
+    assert_eq!(
+        env.logical_output_address(),
+        env.output_address
+    );
 
     Ok(())
 }

@@ -1,47 +1,107 @@
+use std::borrow::Borrow;
+use std::borrow::Cow;
+use std::fmt::Debug;
+
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
 
+use crate::assembler::Env;
 use crate::assembler::assemble_defs_item;
 use crate::error::*;
-
+use crate::assembler::Visited;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
-
+use std::ops::Deref;
 use crate::AssemblingOptions;
 
 /// Needed methods for the Token defined in cpclib_tokens
-pub trait TokenExt: ListingElement {
+pub trait TokenExt: ListingElement + Clone + Debug {
     fn estimated_duration(&self) -> Result<usize, AssemblerError>;
-    fn number_of_bytes(&self) -> Result<usize, String>;
-    fn number_of_bytes_with_context(
-        &self,
-        table: &mut SymbolsTableCaseDependent,
-    ) -> Result<usize, String>;
-
     /// Unroll the tokens when it represents a loop
     fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>>;
 
     /// Generate the listing of opcodes for directives that embed bytes
     fn disassemble_data(&self) -> Result<Listing, String>;
 
-    /// Assemble the token to a stream of bytes
-    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError>;
+    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError>;
 
-    /// Assemble the token to a streal of bytes .Can use the symbols context
-    #[deprecated]
+    fn number_of_bytes(&self) -> Result<usize, String> {
+        let bytes = self.to_bytes();
+        if bytes.is_ok() {
+            Ok(bytes.ok().unwrap().len())
+        } else {
+            Err(format!("Unable to get the bytes of this token: {:?}", self))
+        }
+    }
+
+    /// Return the number of bytes of the token given the provided context
+    fn number_of_bytes_with_context(
+        &self,
+        table: &mut SymbolsTableCaseDependent,
+    ) -> Result<usize, String> {
+        let bytes = self.to_bytes_with_context(table);
+        if bytes.is_ok() {
+            Ok(bytes.ok().unwrap().len())
+        } else {
+            eprintln!("{:?}", bytes);
+            Err(format!("Unable to get the bytes of this token: {:?}", self))
+        }
+    }
+
+
+
+        /// Dummy version that assemble without taking into account the context
+    /// TODO find a way to not build a symbol table each time
+    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
+        let mut table = SymbolsTableCaseDependent::laxist();
+        let table = &mut table;
+        self.to_bytes_with_context(table)
+    }
+
+    /// Assemble the symbol taking into account some context, but never modify this context
+    #[allow(clippy::match_same_arms)]
     fn to_bytes_with_context(
         &self,
         table: &mut SymbolsTableCaseDependent,
-    ) -> Result<Vec<u8>, AssemblerError>;
+    ) -> Result<Vec<u8>, AssemblerError> {
+        let mut options = if table.is_case_sensitive() {
+            AssemblingOptions::new_case_sensitive()
+        } else {
+            AssemblingOptions::new_case_insensitive()
+        };
+        options.set_symbols(table.table());
+        self.to_bytes_with_options(&options)
+    }
 
-    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError>;
+
 
     /// Check if the token is valid. We consider a token vlaid if it is possible to assemble it
     fn is_valid(&self) -> bool {
         self.to_bytes().is_ok()
     }
+}
+
+
+impl<'t> TokenExt for Cow<'t, Token> {
+    fn disassemble_data(&self) -> Result<Listing, String> {
+        self.deref().disassemble_data()
+    }
+
+    fn estimated_duration(&self) -> Result<usize, AssemblerError> {
+        self.deref().estimated_duration()
+    }
+
+    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
+        self.deref().to_bytes_with_options(option)
+    }
+
+    fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
+        unimplemented!("signature issue. should be transformed/unused")
+    }
+
+
 }
 
 impl TokenExt for Token {
@@ -122,32 +182,23 @@ impl TokenExt for Token {
         }
     }
 
-    /// Dummy version that assemble without taking into account the context
-    /// TODO find a way to not build a symbol table each time
-    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
-        let mut table = SymbolsTableCaseDependent::laxist();
-        let table = &mut table;
-        self.to_bytes_with_context(table)
-    }
 
-    /// Assemble the symbol taking into account some context, but never modify this context
-    #[allow(clippy::match_same_arms)]
-    fn to_bytes_with_context(
-        &self,
-        table: &mut SymbolsTableCaseDependent,
-    ) -> Result<Vec<u8>, AssemblerError> {
-        let mut options = if table.is_case_sensitive() {
-            AssemblingOptions::new_case_sensitive()
-        } else {
-            AssemblingOptions::new_case_insensitive()
-        };
-        options.set_symbols(table.table());
-        self.to_bytes_with_options(&options)
-    }
 
     fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
-        let listing: Listing = self.clone().into();
-        listing.to_bytes_with_options(option)
+        let mut env = Env::new(option);
+        // we need several passes in case the token is a directive that contains code
+        loop {
+            env.start_new_pass();
+            //println!("[pass] {:?}", env.pass);
+    
+            if env.pass().is_finished() {
+                break;
+            }
+    
+            self.visited(&mut env)?;
+        }
+
+        Ok(env.produced_bytes())
     }
 
     /// Returns an estimation of the duration.
@@ -363,30 +414,9 @@ impl TokenExt for Token {
         Ok(duration)
     }
 
-    /// Return the number of bytes of the token
-    fn number_of_bytes(&self) -> Result<usize, String> {
-        let bytes = self.to_bytes();
-        if bytes.is_ok() {
-            Ok(bytes.ok().unwrap().len())
-        } else {
-            eprintln!("{:?}", bytes);
-            Err(format!("Unable to get the bytes of this token: {:?}", self))
-        }
-    }
 
-    /// Return the number of bytes of the token given the provided context
-    fn number_of_bytes_with_context(
-        &self,
-        table: &mut SymbolsTableCaseDependent,
-    ) -> Result<usize, String> {
-        let bytes = self.to_bytes_with_context(table);
-        if bytes.is_ok() {
-            Ok(bytes.ok().unwrap().len())
-        } else {
-            eprintln!("{:?}", bytes);
-            Err(format!("Unable to get the bytes of this token: {:?}", self))
-        }
-    }
+
+
 }
 
 #[cfg(test)]
