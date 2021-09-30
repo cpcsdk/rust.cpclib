@@ -215,7 +215,7 @@ impl Visited for Token {
 
 impl Visited for LocatedToken {
     fn visited(&self, env: &mut Env) -> Result<(), AssemblerError> {
-        dbg!(env.output_address, self.as_token());
+       // dbg!(env.output_address, self.as_token());
         visit_located_token(self, env)
     }
 }
@@ -885,7 +885,7 @@ impl Env {
     /// Output one byte either in the appropriate bank of the snapshot or in the termporary bank
     /// return true if it raised an override warning
     pub fn output(&mut self, v: u8) -> Result<bool, AssemblerError> {
-        dbg!(self.logical_output_address(), self.output_address);
+     //   dbg!(self.logical_output_address(), self.output_address);
         if  self.logical_output_address() != self.output_address {
             return Err(
                 AssemblerError::BugInAssembler {
@@ -1699,7 +1699,7 @@ impl Env {
                 r#struct.develop(&parameters)
             };
 
-            dbg!(&code);
+           // dbg!(&code);
 
             // Tokenize with the same parsing  parameters and context when possible
             let listing = match caller_span {
@@ -1719,7 +1719,7 @@ impl Env {
             listing
         };
 
-        dbg!(&listing);
+     //   dbg!(&listing);
 
         self.macro_seed += 1;
         let seed = self.macro_seed;
@@ -1741,7 +1741,7 @@ impl Env {
         })?;
 
         self.symbols_mut().pop_seed();
-        dbg!("done");
+     //   dbg!("done");
 
         Ok(())
     }
@@ -2662,6 +2662,7 @@ impl Env {
             self.active_page_info_mut().logical_outputadr = 0x170;
             self.active_page_info_mut().logical_codeadr = self.logical_output_address();
             self.active_page_info_mut().startadr = Some(self.logical_output_address());
+            self.output_address = 0x170;
         }
 
         self.output_bytes(&bytes)
