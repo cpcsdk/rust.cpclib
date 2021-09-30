@@ -137,6 +137,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "BANK",
     "BANKSET",
     "BUILDSNA",
+    "CHARSET",
     "INCBIN",
     "BINCLUDE",
     "LZEXO",
@@ -1080,6 +1081,12 @@ pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z8
 pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_word("CHARSET")(input)?;
 
+    let (input, charset) = opt(parse_charset_string)(input)?;
+
+    Ok((input, charset.unwrap_or_else(|| Token::Charset(CharsetFormat::Reset))))
+}
+
+pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     // manage the string format - TODO manage the others too
     let (input, chars) = context("Invalid string", parse_string)(input)?;
     let (input, start) = context("Missing start value", preceded(parse_comma, expr))(input)?;
@@ -1095,7 +1102,6 @@ pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
     let format = CharsetFormat::CharsList(chars.chars().collect_vec(), start);
 
     let charset = Token::Charset(format);
-
     Ok((input, charset))
 }
 
