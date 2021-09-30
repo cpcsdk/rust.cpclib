@@ -5,7 +5,7 @@ use std::sync::Arc;
 use cpclib_common::nom::{
     error::{ErrorKind, ParseError},
     Compare, CompareResult, Err, FindSubstring, IResult, InputIter, InputLength, InputTake, Needed,
-    Slice,
+    Slice, Offset
 };
 use cpclib_common::nom_locate::LocatedSpan;
 
@@ -148,6 +148,12 @@ impl cpclib_common::nom::InputIter for Z80Span {
 impl cpclib_common::nom::InputLength for Z80Span {
     fn input_len(&self) -> usize {
         self.deref().input_len()
+    }
+}
+
+impl Offset for Z80Span {
+    fn offset(&self, second: &Self) -> usize {
+        self.deref().offset(second.deref())
     }
 }
 

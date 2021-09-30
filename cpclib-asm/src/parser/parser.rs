@@ -1996,10 +1996,14 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseEr
         map(
             delimited(
                 space0,
-                many0(none_of(" ,\r\n\t][;")), // TODO find a way to give arguments with space
+                
+                alt((
+                    map(recognize(expr), |s| s.to_string()), // TODO handle evaluation or transposition
+                    map(many0(none_of(" ,\r\n\t][;")), |s| s.iter().collect::<String>().trim().to_owned())
+                )), // TODO find a way to give arguments with space
                 alt((space0, eof)),
             ),
-            |s| MacroParam::Single(s.iter().collect::<String>().trim().to_owned()),
+            |s| MacroParam::Single(s),
         ),
     ))(input)
 }
