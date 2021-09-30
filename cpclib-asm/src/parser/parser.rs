@@ -1,21 +1,7 @@
 #![allow(clippy::cast_lossless)]
 
-use std::borrow::Borrow;
-use std::cell::RefCell;
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::ops::Deref;
-use std::sync::RwLock;
 use cpclib_common::itertools::chain;
 use cpclib_common::itertools::Itertools;
-use cpclib_common::nom_locate::LocatedSpan;
-use cpclib_sna::parse::bin_number;
-use cpclib_sna::parse::dec_number;
-use cpclib_sna::parse::hex_number;
-use cpclib_sna::parse::parse_flag;
-use cpclib_sna::parse::parse_flag_value;
-use cpclib_sna::FlagValue;
-use std::sync::Arc;
 use cpclib_common::nom::branch::*;
 use cpclib_common::nom::bytes::complete::tag;
 use cpclib_common::nom::bytes::complete::tag_no_case;
@@ -26,7 +12,21 @@ use cpclib_common::nom::error::*;
 use cpclib_common::nom::multi::separated_list1;
 use cpclib_common::nom::multi::*;
 use cpclib_common::nom::sequence::*;
+use cpclib_common::nom_locate::LocatedSpan;
 use cpclib_common::rayon::prelude::*;
+use cpclib_sna::parse::bin_number;
+use cpclib_sna::parse::dec_number;
+use cpclib_sna::parse::hex_number;
+use cpclib_sna::parse::parse_flag;
+use cpclib_sna::parse::parse_flag_value;
+use cpclib_sna::FlagValue;
+use std::borrow::Borrow;
+use std::cell::RefCell;
+use std::convert::TryFrom;
+use std::convert::TryInto;
+use std::ops::Deref;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use self::error_code::INVALID_ARGUMENT;
 #[allow(missing_docs)]
@@ -243,19 +243,14 @@ pub fn parse_z80_strrc_with_contextrc(
             }
 
             if ctx.read_referenced_files {
-                let errors = parsed.listing_mut().par_iter_mut()
-                .map(|token|
-                    token.read_referenced_file(&ctx)
-                ).filter(
-                    Result::is_err
-                )
-                .map(
-                    Result::err
-                )
-                .map(
-                    Option::unwrap
-                )
-                .collect::<Vec<_>>();
+                let errors = parsed
+                    .listing_mut()
+                    .par_iter_mut()
+                    .map(|token| token.read_referenced_file(&ctx))
+                    .filter(Result::is_err)
+                    .map(Result::err)
+                    .map(Option::unwrap)
+                    .collect::<Vec<_>>();
                 if errors.len() > 0 {
                     return Err(AssemblerError::MultipleErrors { errors });
                 }
@@ -315,7 +310,7 @@ pub fn parse_z80_code<'src, 'ctx, 'a>(
         |mut source_tokens, mut line_tokens| {
             source_tokens.append(&mut line_tokens);
             source_tokens
-        }
+        },
     )(input)?; // here it is my_many0 supposed to be used
 
     if input.trim().is_empty() {
@@ -554,12 +549,12 @@ pub fn parse_crunched_section(
     let (input, kind) = preceded(
         space0,
         alt((
-            map( parse_word("LZEXO"), |_| CrunchType::LZEXO),
-            map( parse_word("LZ4"), |_|CrunchType::LZ4, ),
-            map( parse_word("LZ48"), |_| CrunchType::LZ48),
-            map( parse_word("LZ49"), |_| CrunchType::LZ49),
-            map( parse_word("LZX7"), |_| CrunchType::LZX7),
-            map( parse_word("LZAPU"), |_| CrunchType::LZAPU),
+            map(parse_word("LZEXO"), |_| CrunchType::LZEXO),
+            map(parse_word("LZ4"), |_| CrunchType::LZ4),
+            map(parse_word("LZ48"), |_| CrunchType::LZ48),
+            map(parse_word("LZ49"), |_| CrunchType::LZ49),
+            map(parse_word("LZX7"), |_| CrunchType::LZX7),
+            map(parse_word("LZAPU"), |_| CrunchType::LZAPU),
         )),
     )(input)?;
 
@@ -988,18 +983,25 @@ pub fn parse_z80_line_label_only(
     // Manage Equ
     // BUG Equ and = are supposed to be different
     let (input, label_modifier) = opt(alt((
-        map(preceded(space1, parse_word("DEFL")), |_| LabelModifier::Equ, ),
-        map( preceded(space1, parse_word("EQU")), |_| LabelModifier::Equ,),
-        map( preceded(space1, parse_word("SETN")), |_|LabelModifier::SetN ),
-        map( preceded(space1, parse_word("NEXT")), |_| LabelModifier::Next),
+        map(preceded(space1, parse_word("DEFL")), |_| LabelModifier::Equ),
+        map(preceded(space1, parse_word("EQU")), |_| LabelModifier::Equ),
+        map(preceded(space1, parse_word("SETN")), |_| {
+            LabelModifier::SetN
+        }),
+        map(preceded(space1, parse_word("NEXT")), |_| {
+            LabelModifier::Next
+        }),
         map(
             delimited(
                 space1,
                 parse_word("SET"),
                 not(tuple((space0, expr, parse_comma))),
-            ), |_| LabelModifier::Set
+            ),
+            |_| LabelModifier::Set,
         ),
-        map( delimited(space0, tag("="), space0), |_| LabelModifier::Equal),
+        map(delimited(space0, tag("="), space0), |_| {
+            LabelModifier::Equal
+        }),
     )))(input)?;
 
     // ensure let uses =
@@ -1336,18 +1338,20 @@ pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
 
 /// Parse ex af, af' instruction
 pub fn parse_ex_af(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    
-        map(
-            alt((        
-            value((), tuple((
-                parse_word("EX"),
-                parse_register_af,
-                parse_comma,
-                parse_word("AF'"),
-            ))),
+    map(
+        alt((
+            value(
+                (),
+                tuple((
+                    parse_word("EX"),
+                    parse_register_af,
+                    parse_comma,
+                    parse_word("AF'"),
+                )),
+            ),
             value((), parse_word("exa")),
         )),
-        |_| Token::new_opcode(Mnemonic::ExAf, None, None)
+        |_| Token::new_opcode(Mnemonic::ExAf, None, None),
     )(input)
 }
 
@@ -1370,7 +1374,7 @@ pub fn parse_ex_hl_de(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z8
                 parse_register_hl,
             )),
         )),
-        |_| Token::new_opcode(Mnemonic::ExHlDe, None, None)
+        |_| Token::new_opcode(Mnemonic::ExHlDe, None, None),
     )(input)
 }
 
@@ -1661,7 +1665,7 @@ pub fn parse_stable_ticker_stop(input: Z80Span) -> IResult<Z80Span, Token, Verbo
             space1,
             tag_no_case("stop"),
         )),
-        |_| Token::StableTicker(StableTickerAction::Stop)
+        |_| Token::StableTicker(StableTickerAction::Stop),
     )(input)
 }
 
@@ -2050,10 +2054,9 @@ pub fn parse_macro_or_struct_call(
                         "MACRO or STRUCT: forbidden name"
                     },
                     alt((
-                        map(
-                             delimited(space0, tag_no_case("(void)"), space0),
-                             |_| Default::default()
-                        ),
+                        map(delimited(space0, tag_no_case("(void)"), space0), |_| {
+                            Default::default()
+                        }),
                         alt((
                             map(tag_no_case("(void)"), |_| Vec::new()),
                             separated_list1(
@@ -2072,6 +2075,27 @@ pub fn parse_macro_or_struct_call(
                 panic!();
             }
 
+            /// avoid ambiguate code such as label nop
+            if args.len() == 1 {
+                let arg = args[0].to_string().to_lowercase();
+                if  arg == "nop" || parse_opcode_no_arg(Z80Span::from(arg)).is_ok() {
+                    return Err(Err::Failure(cpclib_common::nom::error::VerboseError::<
+                        Z80Span,
+                    >::add_context(
+                        input_label,
+                        if for_struct {
+                            "First argument of STRUCT cannot be an opcode with no argument"
+                        } else {
+                            "First argument of MACRO or STRUCT cannot be an opcode with no argument"
+                        },
+                        cpclib_common::nom::error::ParseError::<Z80Span>::from_error_kind(
+                            input,
+                            ErrorKind::AlphaNumeric,
+                        ),
+                    )));
+                }
+            }
+
             Ok((input, Token::MacroCall(name, args)))
         }
     }
@@ -2084,10 +2108,18 @@ fn parse_word(
         map(
             tuple((
                 tag_no_case(name),
-                not(one_of(
-                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_",
+                alt((
+                    map(eof, |_| ()),
+                    map(
+                        pair(
+                            not(one_of(
+                                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_",
+                            )),
+                            space0,
+                        ),
+                        |_| (),
+                    ),
                 )),
-                space0,
             )),
             |v| v.0,
         )(input)
@@ -2179,7 +2211,7 @@ fn formatted_expr(input: Z80Span) -> IResult<Z80Span, FormattedExpr, VerboseErro
         map(tag_no_case("INT"), |_| ExprFormat::Int),
         map(tag_no_case("HEX4"), |_| ExprFormat::Hex(Some(4))),
         map(tag_no_case("HEX8"), |_| ExprFormat::Hex(Some(8))),
-        map( tag_no_case("HEX2"), |_|ExprFormat::Hex(Some(2)) ),
+        map(tag_no_case("HEX2"), |_| ExprFormat::Hex(Some(2))),
         map(tag_no_case("HEX"), |_| ExprFormat::Hex(None)),
         map(tag_no_case("BIN8"), |_| ExprFormat::Bin(Some(8))),
         map(tag_no_case("BIN16"), |_| ExprFormat::Bin(Some(16))),
@@ -2212,8 +2244,8 @@ pub fn parse_protect(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
 pub fn parse_logical_operator(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, operator) = alt((
         map(parse_word("AND"), |_| Mnemonic::And),
-        map( parse_word("Or"), |_| Mnemonic::Or),
-        map( parse_word("Xor"), |_| Mnemonic::Xor),
+        map(parse_word("Or"), |_| Mnemonic::Or),
+        map(parse_word("Xor"), |_| Mnemonic::Xor),
     ))(input)?;
 
     let (input, operand) = cut(context(
@@ -2291,7 +2323,9 @@ pub fn parse_add_or_adc_complete(input: Z80Span) -> IResult<Z80Span, Token, Verb
 
     let (input, first) = alt((
         map(parse_register_a, |_| DataAccess::Register8(Register8::A)),
-        map(parse_register_hl, |_| DataAccess::Register16(Register16::Hl)),
+        map(parse_register_hl, |_| {
+            DataAccess::Register16(Register16::Hl)
+        }),
         parse_indexregister16,
     ))(input)?;
 
@@ -2331,7 +2365,7 @@ pub fn parse_add_or_adc_complete(input: Z80Span) -> IResult<Z80Span, Token, Verb
 /// TODO Find a way to not duplicate code with complete version
 pub fn parse_add_or_adc_shorten(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, add_or_adc) = alt((
-        map( parse_word("ADC"), |_| Mnemonic::Adc),
+        map(parse_word("ADC"), |_| Mnemonic::Adc),
         map(parse_word("ADD"), |_| Mnemonic::Add),
     ))(input)?;
 
@@ -2356,8 +2390,8 @@ pub fn parse_add_or_adc_shorten(input: Z80Span) -> IResult<Z80Span, Token, Verbo
 /// ...
 pub fn parse_push_n_pop(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, push_or_pop) = alt((
-        map( parse_word("PUSH"), |_|Mnemonic::Push),
-        map( parse_word("POP"), |_|Mnemonic::Pop),
+        map(parse_word("PUSH"), |_| Mnemonic::Push),
+        map(parse_word("POP"), |_| Mnemonic::Pop),
     ))(input)?;
 
     let (input, registers) =
@@ -2395,7 +2429,7 @@ pub fn parse_ret(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span
 /// ...
 pub fn parse_inc_dec(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, inc_or_dec) = alt((
-        map(parse_word("INC"), |_|Mnemonic::Inc),
+        map(parse_word("INC"), |_| Mnemonic::Inc),
         map(parse_word("DEC"), |_| Mnemonic::Dec),
     ))(input)?;
 
@@ -2426,10 +2460,9 @@ pub fn parse_out(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span
             parse_comma,
             alt((
                 parse_register8,
-                map(
-                    alt((parse_word("f"), tag("0"))),
-                    |_| DataAccess::from(Expr::from(0)),
-                ),
+                map(alt((parse_word("f"), tag("0"))), |_| {
+                    DataAccess::from(Expr::from(0))
+                }),
             )),
         ))(input)?
     } else {
@@ -2502,15 +2535,15 @@ pub fn parse_shifts_and_rotations(
     input: Z80Span,
 ) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, oper) = alt((
-        map( parse_word("RLC"), |_| Mnemonic::Rlc,),
-        map( parse_word("RRC"), |_| Mnemonic::Rrc,),
-        map( parse_word("RL"), |_| Mnemonic::Rl,),
-        map( parse_word("RR"), |_| Mnemonic::Rr,),
-        map( parse_word("SLA"), |_| Mnemonic::Sla,),
-        map( parse_word("SRA"), |_| Mnemonic::Sra,),
-        map( parse_word("SRL"), |_| Mnemonic::Srl,),
-        map( parse_word("SL1"), |_| Mnemonic::Sl1,),
-        map( parse_word("SLL"), |_| Mnemonic::Sl1,),
+        map(parse_word("RLC"), |_| Mnemonic::Rlc),
+        map(parse_word("RRC"), |_| Mnemonic::Rrc),
+        map(parse_word("RL"), |_| Mnemonic::Rl),
+        map(parse_word("RR"), |_| Mnemonic::Rr),
+        map(parse_word("SLA"), |_| Mnemonic::Sla),
+        map(parse_word("SRA"), |_| Mnemonic::Sra),
+        map(parse_word("SRL"), |_| Mnemonic::Srl),
+        map(parse_word("SL1"), |_| Mnemonic::Sl1),
+        map(parse_word("SLL"), |_| Mnemonic::Sl1),
     ))(input)?;
 
     let (input, arg) = alt((
@@ -2528,9 +2561,9 @@ pub fn parse_shifts_and_rotations(
 /// TODO reduce the flag space for jr"],
 pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, call_jp_or_jr) = alt((
-        map( parse_word("JP"), |_| Mnemonic::Jp),
+        map(parse_word("JP"), |_| Mnemonic::Jp),
         map(parse_word("JR"), |_| Mnemonic::Jr),
-        map( parse_word("CALL"), |_| Mnemonic::Call)
+        map(parse_word("CALL"), |_| Mnemonic::Call),
     ))(input)?;
 
     let (input, flag_test) = opt(terminated(parse_flag_test, parse_comma))(input)?;
@@ -2578,14 +2611,14 @@ pub fn parse_call_jp_or_jr(input: Z80Span) -> IResult<Z80Span, Token, VerboseErr
 /// ...
 pub fn parse_flag_test(input: Z80Span) -> IResult<Z80Span, FlagTest, VerboseError<Z80Span>> {
     alt((
-        map( parse_word("NZ"), |_| FlagTest::NZ),
-        map( parse_word("Z"), |_| FlagTest::Z),
-        map( parse_word("NC"), |_| FlagTest::NC),
-        map( parse_word("C"), |_| FlagTest::C),
-        map( parse_word("PO"), |_| FlagTest::PO),
-        map( parse_word("PE"), |_| FlagTest::PE),
-        map( parse_word("P"), |_| FlagTest::P),
-        map( parse_word("M"), |_| FlagTest::M),
+        map(parse_word("NZ"), |_| FlagTest::NZ),
+        map(parse_word("Z"), |_| FlagTest::Z),
+        map(parse_word("NC"), |_| FlagTest::NC),
+        map(parse_word("C"), |_| FlagTest::C),
+        map(parse_word("PO"), |_| FlagTest::PO),
+        map(parse_word("PE"), |_| FlagTest::PE),
+        map(parse_word("P"), |_| FlagTest::P),
+        map(parse_word("M"), |_| FlagTest::M),
     ))(input)
 }
 
@@ -2952,22 +2985,22 @@ fn parse_opcode_no_arg1(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
 
 fn parse_opcode_no_arg2(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, mnemonic) = alt((
-        map( parse_word("CPD"), |_|Mnemonic::Cpd),
-        map( parse_word("CPDR"), |_|Mnemonic::Cpdr),
-        map( parse_word("CPI"), |_|Mnemonic::Cpi),
-        map( parse_word("CPIR"), |_|Mnemonic::Cpir),
-        map( parse_word("CPL"), |_|Mnemonic::Cpl),
-        map( parse_word("IND"), |_|Mnemonic::Ind),
-        map( parse_word("INDR"), |_|Mnemonic::Indr),
-        map( parse_word("INI"), |_|Mnemonic::Ini),
-        map( parse_word("INIR"), |_|Mnemonic::Inir),
-        map( parse_word("RETI"), |_|Mnemonic::Reti),
-        map( parse_word("RETN"), |_| Mnemonic::Retn),
-        map( parse_word("RLA"), |_| Mnemonic::Rla),
-        map( parse_word("RLCA"), |_|Mnemonic::Rlca),
-        map( parse_word("RRA"), |_|Mnemonic::Rra),
-        map( parse_word("RRCA"), |_|Mnemonic::Rrca),
-        map( parse_word("SCF"), |_|Mnemonic::Scf),
+        map(parse_word("CPD"), |_| Mnemonic::Cpd),
+        map(parse_word("CPDR"), |_| Mnemonic::Cpdr),
+        map(parse_word("CPI"), |_| Mnemonic::Cpi),
+        map(parse_word("CPIR"), |_| Mnemonic::Cpir),
+        map(parse_word("CPL"), |_| Mnemonic::Cpl),
+        map(parse_word("IND"), |_| Mnemonic::Ind),
+        map(parse_word("INDR"), |_| Mnemonic::Indr),
+        map(parse_word("INI"), |_| Mnemonic::Ini),
+        map(parse_word("INIR"), |_| Mnemonic::Inir),
+        map(parse_word("RETI"), |_| Mnemonic::Reti),
+        map(parse_word("RETN"), |_| Mnemonic::Retn),
+        map(parse_word("RLA"), |_| Mnemonic::Rla),
+        map(parse_word("RLCA"), |_| Mnemonic::Rlca),
+        map(parse_word("RRA"), |_| Mnemonic::Rra),
+        map(parse_word("RRCA"), |_| Mnemonic::Rrca),
+        map(parse_word("SCF"), |_| Mnemonic::Scf),
     ))(input)?;
 
     Ok((input, Token::new_opcode(mnemonic, None, None)))
@@ -2975,18 +3008,16 @@ fn parse_opcode_no_arg2(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
 
 fn parse_opcode_no_arg3(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, mnemonic) = alt((
-        map( parse_word("DAA"), |_| Mnemonic::Daa),
-        map(  parse_word("NEG"), |_| Mnemonic::Neg,),
-        map( 
-            alt((parse_word("OUTDR"), parse_word("OTDR"))), |_| 
-            Mnemonic::Otdr,
-        ),
-        map( 
-            alt((parse_word("OUTIR"), parse_word("OTIR"))), |_| 
-            Mnemonic::Otir,
-        ),
-        map(  parse_word("RLD"), |_|Mnemonic::Rld, ),
-        map(  parse_word("RRD"), |_| Mnemonic::Rrd,),
+        map(parse_word("DAA"), |_| Mnemonic::Daa),
+        map(parse_word("NEG"), |_| Mnemonic::Neg),
+        map(alt((parse_word("OUTDR"), parse_word("OTDR"))), |_| {
+            Mnemonic::Otdr
+        }),
+        map(alt((parse_word("OUTIR"), parse_word("OTIR"))), |_| {
+            Mnemonic::Otir
+        }),
+        map(parse_word("RLD"), |_| Mnemonic::Rld),
+        map(parse_word("RRD"), |_| Mnemonic::Rrd),
     ))(input)?;
 
     Ok((input, Token::new_opcode(mnemonic, None, None)))
