@@ -7,14 +7,14 @@ use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
 
-use crate::assembler::Env;
 use crate::assembler::assemble_defs_item;
-use crate::error::*;
+use crate::assembler::Env;
 use crate::assembler::Visited;
+use crate::error::*;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
-use std::ops::Deref;
 use crate::AssemblingOptions;
+use std::ops::Deref;
 
 /// Needed methods for the Token defined in cpclib_tokens
 pub trait TokenExt: ListingElement + Clone + Debug {
@@ -50,9 +50,7 @@ pub trait TokenExt: ListingElement + Clone + Debug {
         }
     }
 
-
-
-        /// Dummy version that assemble without taking into account the context
+    /// Dummy version that assemble without taking into account the context
     /// TODO find a way to not build a symbol table each time
     fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
         let mut table = SymbolsTableCaseDependent::laxist();
@@ -75,14 +73,11 @@ pub trait TokenExt: ListingElement + Clone + Debug {
         self.to_bytes_with_options(&options)
     }
 
-
-
     /// Check if the token is valid. We consider a token vlaid if it is possible to assemble it
     fn is_valid(&self) -> bool {
         self.to_bytes().is_ok()
     }
 }
-
 
 impl<'t> TokenExt for Cow<'t, Token> {
     fn disassemble_data(&self) -> Result<Listing, String> {
@@ -100,8 +95,6 @@ impl<'t> TokenExt for Cow<'t, Token> {
     fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
         unimplemented!("signature issue. should be transformed/unused")
     }
-
-
 }
 
 impl TokenExt for Token {
@@ -182,19 +175,17 @@ impl TokenExt for Token {
         }
     }
 
-
-
     fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
         let mut env = Env::new(option);
         // we need several passes in case the token is a directive that contains code
         loop {
             env.start_new_pass();
             //println!("[pass] {:?}", env.pass);
-    
+
             if env.pass().is_finished() {
                 break;
             }
-    
+
             self.visited(&mut env)?;
         }
 
@@ -413,10 +404,6 @@ impl TokenExt for Token {
         };
         Ok(duration)
     }
-
-
-
-
 }
 
 #[cfg(test)]

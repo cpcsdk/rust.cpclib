@@ -10,8 +10,7 @@ use crate::Token;
 /// ATM there is nothing really usefull
 pub trait ListingElement {}
 
-impl<'t> ListingElement for Cow<'t, Token> {
-}
+impl<'t> ListingElement for Cow<'t, Token> {}
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaseListing<T: Clone + ListingElement> {

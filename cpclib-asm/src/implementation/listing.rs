@@ -1,13 +1,13 @@
 use crate::error::*;
+use crate::implementation::expression::*;
+use crate::implementation::tokens::*;
 use crate::preamble::parse_z80_str;
 use crate::AssemblingOptions;
+use cpclib_common::itertools::Itertools;
 use cpclib_tokens::symbols::PhysicalAddress;
 use cpclib_tokens::tokens::*;
 use std::borrow::Cow;
 use std::fmt;
-use cpclib_common::itertools::Itertools;
-use crate::implementation::expression::*;
-use crate::implementation::tokens::*;
 
 /// Additional methods for the listings
 pub trait ListingExt {
@@ -299,9 +299,6 @@ pub trait ListingFromStr {
 
 impl ListingFromStr for Listing {
     fn from_str(s: &str) -> Result<Listing, AssemblerError> {
-        crate::parser::parse_z80_str(s)
-            .map(|ll| 
-                ll.as_listing()
-            )
+        crate::parser::parse_z80_str(s).map(|ll| ll.as_listing())
     }
 }

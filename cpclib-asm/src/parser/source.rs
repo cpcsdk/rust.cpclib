@@ -1,13 +1,11 @@
-use std::{
-    ops::{Deref, DerefMut},
-};
-use std::sync::Arc;
 use cpclib_common::nom::{
     error::{ErrorKind, ParseError},
     Compare, CompareResult, Err, FindSubstring, IResult, InputIter, InputLength, InputTake, Needed,
-    Slice, Offset
+    Offset, Slice,
 };
 use cpclib_common::nom_locate::LocatedSpan;
+use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 use super::context::ParserContext;
 
