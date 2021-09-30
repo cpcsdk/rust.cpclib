@@ -48,7 +48,7 @@ fn lz48_encode_block(
         lz48_encode_extended_length(odata, maxlength - 18);
     }
 
-    odata.push(if offset == 0 {255} else {offset-1} as u8);
+    odata.push(if offset == 0 { 255 } else { offset - 1 } as u8);
 
     odata[first_idx] = token as u8;
 }
@@ -85,11 +85,7 @@ pub fn lz48_encode_legacy(data: &[u8]) -> Vec<u8> {
 
     while current < length {
         let mut maxlength = 0;
-        let mut startscan = if current < 255 {
-                0
-            } else {
-                current - 255
-            };
+        let mut startscan = if current < 255 { 0 } else { current - 255 };
 
         let mut maxoffset = 0;
 

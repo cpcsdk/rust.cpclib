@@ -13,7 +13,7 @@ use std::rc::Rc;
 pub struct ListingOutput {
     /// Writer that will contains the listing/
     /// The listing is produced line by line and not token per token
-    writer: Box<dyn Write + Send + Sync >,
+    writer: Box<dyn Write + Send + Sync>,
     /// Filename of the current line
     current_fname: Option<String>,
     activated: bool,

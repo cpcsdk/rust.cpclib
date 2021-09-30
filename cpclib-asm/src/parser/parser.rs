@@ -1083,7 +1083,10 @@ pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
 
     let (input, charset) = opt(parse_charset_string)(input)?;
 
-    Ok((input, charset.unwrap_or_else(|| Token::Charset(CharsetFormat::Reset))))
+    Ok((
+        input,
+        charset.unwrap_or_else(|| Token::Charset(CharsetFormat::Reset)),
+    ))
 }
 
 pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
@@ -1996,10 +1999,11 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseEr
         map(
             delimited(
                 space0,
-                
                 alt((
                     map(recognize(expr), |s| s.to_string()), // TODO handle evaluation or transposition
-                    map(many0(none_of(" ,\r\n\t][;")), |s| s.iter().collect::<String>().trim().to_owned())
+                    map(many0(none_of(" ,\r\n\t][;")), |s| {
+                        s.iter().collect::<String>().trim().to_owned()
+                    }),
                 )), // TODO find a way to give arguments with space
                 alt((space0, eof)),
             ),
@@ -2088,7 +2092,7 @@ pub fn parse_macro_or_struct_call(
             /// avoid ambiguate code such as label nop
             if args.len() == 1 {
                 let arg = args[0].to_string().to_lowercase();
-                if  arg == "nop" || parse_opcode_no_arg(Z80Span::from(arg)).is_ok() {
+                if arg == "nop" || parse_opcode_no_arg(Z80Span::from(arg)).is_ok() {
                     return Err(Err::Failure(cpclib_common::nom::error::VerboseError::<
                         Z80Span,
                     >::add_context(

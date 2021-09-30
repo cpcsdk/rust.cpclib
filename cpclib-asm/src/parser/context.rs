@@ -1,10 +1,10 @@
 use std::ops::Deref;
 use std::{cell::RefCell, path::PathBuf};
 
-use crate::error::AssemblerError;
-use std::sync::{Mutex, RwLock};
-use std::sync::Arc;
 use super::Z80Span;
+use crate::error::AssemblerError;
+use std::sync::Arc;
+use std::sync::{Mutex, RwLock};
 
 /// Context information that can guide the parser
 /// TODO add assembling flags
@@ -29,7 +29,7 @@ impl Clone for ParserContext {
             context_name: self.context_name.clone(),
             search_path: self.search_path.clone(),
             read_referenced_files: self.read_referenced_files.clone(),
-            parse_warning: self.parse_warning.write().unwrap().clone().into()
+            parse_warning: self.parse_warning.write().unwrap().clone().into(),
         }
     }
 }
@@ -174,21 +174,15 @@ impl ParserContext {
     }
 
     pub fn add_warning(&self, warning: AssemblerError) {
-        self.parse_warning
-            .write().unwrap()
-            .push(warning)
+        self.parse_warning.write().unwrap().push(warning)
     }
 
     pub fn warnings(&self) -> Vec<AssemblerError> {
-        self.parse_warning
-            .write().unwrap().deref()
-            .clone() // TODO investigate why I cannot return a reference
+        self.parse_warning.write().unwrap().deref().clone() // TODO investigate why I cannot return a reference
     }
 
     pub fn pop_warning(&self) -> Option<AssemblerError> {
-        self.parse_warning
-            .write().unwrap()
-            .pop() // TODO investigate why I cannot return a reference
+        self.parse_warning.write().unwrap().pop() // TODO investigate why I cannot return a reference
     }
 }
 /*

@@ -20,14 +20,13 @@ pub mod error;
 
 mod crunchers;
 
-
 #[cfg(feature = "basm")]
 pub mod basm_utils;
 
-use std::{cell::RefCell, fmt::Debug, io::Write, rc::Rc};
-use std::sync::RwLock;
-use std::sync::Arc;
 use cpclib_disc::amsdos::*;
+use std::sync::Arc;
+use std::sync::RwLock;
+use std::{cell::RefCell, fmt::Debug, io::Write, rc::Rc};
 
 use self::listing_output::ListingOutput;
 use preamble::*;
@@ -95,7 +94,10 @@ impl AssemblingOptions {
         self.case_sensitive
     }
 
-    pub fn write_listing_output<W: 'static + Write + Send + Sync>(&mut self, writer: W) -> &mut Self {
+    pub fn write_listing_output<W: 'static + Write + Send + Sync>(
+        &mut self,
+        writer: W,
+    ) -> &mut Self {
         self.builder = Some(Arc::new(RwLock::new(ListingOutput::new(writer))));
         self.builder.as_mut().map(|b| b.write().unwrap().on());
         self

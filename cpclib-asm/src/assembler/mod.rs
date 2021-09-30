@@ -13,19 +13,19 @@ use cpclib_sna::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static::__Deref;
-use cpclib_common::smallvec::SmallVec;
 use cpclib_common::rayon::prelude::*;
+use cpclib_common::smallvec::SmallVec;
 use std::any::Any;
 use std::cell::RefCell;
 use std::fmt;
 
-use std::convert::TryFrom;
-use std::io::Write;
-use std::sync::RwLock;
-use std::sync::Arc;
 use crate::AmsdosFile;
 use crate::AmsdosFileName;
 use cpclib_common::rayon::prelude::*;
+use std::convert::TryFrom;
+use std::io::Write;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use self::listing_output::AddressKind;
 use self::listing_output::ListingOutput;
@@ -217,7 +217,7 @@ impl Visited for Token {
 
 impl Visited for LocatedToken {
     fn visited(&self, env: &mut Env) -> Result<(), AssemblerError> {
-       // dbg!(env.output_address, self.as_token());
+        // dbg!(env.output_address, self.as_token());
         visit_located_token(self, env)
     }
 }
@@ -241,7 +241,8 @@ impl ListingOutputTrigger {
     fn new_token(&mut self, new: &LocatedToken, address: u32, kind: AddressKind) {
         if let Some(token) = &self.token {
             self.builder
-                .write().unwrap()
+                .write()
+                .unwrap()
                 .add_token(token, &self.bytes, self.start, kind);
         }
 
@@ -377,16 +378,15 @@ impl SaveCommand {
                 }
             }
             either::Left(data) => {
-                std::fs::write(&self.filename, &data)
-                    .map_err(|e| {
-                        AssemblerError::AssemblingError{
-                            msg: format!(
-                                "Error while saving \"{}\". {}",
-                                &self.filename,
-                                e.to_string()
-                            )
-                        }
-                    })?;
+                std::fs::write(&self.filename, &data).map_err(|e| {
+                    AssemblerError::AssemblingError {
+                        msg: format!(
+                            "Error while saving \"{}\". {}",
+                            &self.filename,
+                            e.to_string()
+                        ),
+                    }
+                })?;
             }
         }
 
@@ -728,11 +728,10 @@ impl Env {
 
             self.current_section = None;
 
-            self.banks.iter_mut()
-                .for_each(|bank| {
-                    bank.1.new_pass();
-                    bank.2.set_all(false);
-                });
+            self.banks.iter_mut().for_each(|bank| {
+                bank.1.new_pass();
+                bank.2.set_all(false);
+            });
             self.selected_bank = None;
             self.output_address = 0;
         }
@@ -764,10 +763,10 @@ impl Env {
 
         // save from extra memory / can be done in parallal
         self.ga_mmr = 0xc0;
-        let _ : Vec<()> = self.banks.par_iter()
-            .map(|bank| {
-            bank.1.execute_save(self)
-            })
+        let _: Vec<()> = self
+            .banks
+            .par_iter()
+            .map(|bank| bank.1.execute_save(self))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
 
         // restor memory conf
@@ -778,9 +777,7 @@ impl Env {
     /// TODO
     fn active_page_info(&self) -> &PageInformation {
         match &self.selected_bank {
-            Some(idx) => {
-                &self.banks[*idx].1
-            }
+            Some(idx) => &self.banks[*idx].1,
             None => {
                 let active_page =
                     self.logical_to_physical_address(self.output_address).page() as usize;
@@ -792,9 +789,7 @@ impl Env {
     /// TODO remove this method and its calls
     fn active_page_info_mut(&mut self) -> &mut PageInformation {
         match &self.selected_bank {
-            Some(idx) => {
-                &mut self.banks[*idx].1
-            }
+            Some(idx) => &mut self.banks[*idx].1,
             None => {
                 let active_page =
                     self.logical_to_physical_address(self.output_address).page() as usize;
@@ -805,12 +800,8 @@ impl Env {
 
     fn written_bytes(&mut self) -> &mut BitVec {
         match &self.selected_bank {
-            Some(idx) => {
-                &mut self.banks[*idx].2
-            } ,
-            None => {
-                &mut self.written_bytes
-            }
+            Some(idx) => &mut self.banks[*idx].2,
+            None => &mut self.written_bytes,
         }
     }
 
@@ -887,21 +878,17 @@ impl Env {
     /// Output one byte either in the appropriate bank of the snapshot or in the termporary bank
     /// return true if it raised an override warning
     pub fn output(&mut self, v: u8) -> Result<bool, AssemblerError> {
-     //   dbg!(self.logical_output_address(), self.output_address);
-        if  self.logical_output_address() != self.output_address {
-            return Err(
-                AssemblerError::BugInAssembler {
-                    msg: format!(
-                        "Sync issue with output address (0x{:x} != 0x{:x})",
-                        self.logical_output_address(),
-                        self.output_address
-                    )
-                }
-            );
+        //   dbg!(self.logical_output_address(), self.output_address);
+        if self.logical_output_address() != self.output_address {
+            return Err(AssemblerError::BugInAssembler {
+                msg: format!(
+                    "Sync issue with output address (0x{:x} != 0x{:x})",
+                    self.logical_output_address(),
+                    self.output_address
+                ),
+            });
         }
 
-        
-        
         // dbg!(self.output_address(), &v);
         let physical_address =
             self.logical_to_physical_address(self.logical_output_address() as u16);
@@ -948,7 +935,7 @@ impl Env {
             false
         };
 
-        if self.selected_bank.is_none(){
+        if self.selected_bank.is_none() {
             if let Some(section) = &self.current_section {
                 let section = section.read().unwrap();
                 if !section.contains(physical_address.address()) {
@@ -967,7 +954,7 @@ impl Env {
         match &self.selected_bank {
             Some(idx) => {
                 self.banks[*idx].0[self.output_address as usize] = v;
-            },
+            }
             None => {
                 self.sna.set_byte(abstract_address, v);
             }
@@ -1070,12 +1057,8 @@ impl Env {
     pub fn peek(&self, address: &PhysicalAddress) -> u8 {
         let address = address.offset_in_cpc();
         match &self.selected_bank {
-            Some(idx) => {
-                self.banks[*idx].0[address as usize]
-            },
-            None => {
-                self.sna.get_byte(address)
-            }
+            Some(idx) => self.banks[*idx].0[address as usize],
+            None => self.sna.get_byte(address),
         }
     }
 
@@ -1084,7 +1067,7 @@ impl Env {
         match &self.selected_bank {
             Some(idx) => {
                 self.banks[*idx].0[address as usize] = byte;
-            },
+            }
             None => {
                 self.sna.set_byte(address, byte);
             }
@@ -1561,16 +1544,13 @@ impl Env {
                 // nothing provided, we write in a temporary area
                 if self.pass.is_first_pass() {
                     self.selected_bank = Some(self.banks.len());
-                    self.banks
-                        .push((
-                            Bank::default(), 
-                            PageInformation::default(),
-                            BitVec::repeat(false, 0x4000 * 4)
-                        ));
+                    self.banks.push((
+                        Bank::default(),
+                        PageInformation::default(),
+                        BitVec::repeat(false, 0x4000 * 4),
+                    ));
                 } else {
-                        self.selected_bank = self.selected_bank
-                                            .map(|v| v + 1)
-                                            .or(Some(0));
+                    self.selected_bank = self.selected_bank.map(|v| v + 1).or(Some(0));
                     if *self.selected_bank.as_ref().unwrap() >= self.banks.len() {
                         return Err(AssemblerError::AssemblingError {
                             msg: "There were less banks in previous pass".to_owned(),
@@ -1701,7 +1681,7 @@ impl Env {
                 r#struct.develop(&parameters)
             };
 
-           // dbg!(&code);
+            // dbg!(&code);
 
             // Tokenize with the same parsing  parameters and context when possible
             let listing = match caller_span {
@@ -1721,7 +1701,7 @@ impl Env {
             listing
         };
 
-     //   dbg!(&listing);
+        //   dbg!(&listing);
 
         self.macro_seed += 1;
         let seed = self.macro_seed;
@@ -1743,7 +1723,7 @@ impl Env {
         })?;
 
         self.symbols_mut().pop_seed();
-     //   dbg!("done");
+        //   dbg!("done");
 
         Ok(())
     }
@@ -1999,7 +1979,7 @@ impl Env {
         let mut env = Env::default();
         env.symbols =
             SymbolsTableCaseDependent::new(options.symbols().clone(), options.case_sensitive());
-    
+
         if let Some(builder) = &options.builder {
             env.output_trigger = ListingOutputTrigger {
                 token: None,
@@ -2012,7 +1992,7 @@ impl Env {
         env
     }
 
-    pub fn pass(&self)-> &AssemblingPass {
+    pub fn pass(&self) -> &AssemblingPass {
         &self.pass
     }
 }
@@ -2023,7 +2003,6 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
     tokens: &[T],
     options: &AssemblingOptions,
 ) -> Result<Env, AssemblerError> {
-
     let mut env = Env::new(options);
     loop {
         env.start_new_pass();
@@ -2114,25 +2093,27 @@ pub fn visit_located_token(
             env.visit_crunched_section(kind, lst, Some(span))
         }
 
-        LocatedToken::Include(fname, ref cell, namespace, span) => if cell.read().unwrap().is_some() {
-            if let Some(namespace) = namespace {
-                env.enter_namespace(namespace)
-                    .map_err(|e| e.locate(span.clone()))?;
+        LocatedToken::Include(fname, ref cell, namespace, span) => {
+            if cell.read().unwrap().is_some() {
+                if let Some(namespace) = namespace {
+                    env.enter_namespace(namespace)
+                        .map_err(|e| e.locate(span.clone()))?;
+                }
+                env.visit_listing(cell.read().unwrap().as_ref().unwrap())?;
+                if namespace.is_some() {
+                    env.leave_namespace().map_err(|e| e.locate(span.clone()))?;
+                }
+                Ok(())
+            } else {
+                outer_token
+                    .read_referenced_file(&outer_token.context().1)
+                    .and_then(|_| visit_located_token(outer_token, env))
             }
-            env.visit_listing(cell.read().unwrap().as_ref().unwrap())?;
-            if namespace.is_some() {
-                env.leave_namespace().map_err(|e| e.locate(span.clone()))?;
-            }
-            Ok(())
-        } else {
-            outer_token
-                .read_referenced_file(&outer_token.context().1)
-                .and_then(|_| visit_located_token(outer_token, env))
+            .map_err(|err| AssemblerError::IncludedFileError {
+                span: span.clone(),
+                error: Box::new(err),
+            })
         }
-        .map_err(|err| AssemblerError::IncludedFileError {
-            span: span.clone(),
-            error: Box::new(err),
-        }),
 
         LocatedToken::If(cases, other, span) => env
             .visit_if(
@@ -2939,10 +2920,7 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
 
     env.output_address = output_adr as _;
 
-    assert_eq!(
-        env.logical_output_address(),
-        env.output_address
-    );
+    assert_eq!(env.logical_output_address(), env.output_address);
 
     Ok(())
 }

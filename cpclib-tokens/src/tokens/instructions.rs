@@ -532,7 +532,7 @@ impl Clone for Token {
         match self {
             Token::Align(a, b) => Token::Align(a.clone(), b.clone()),
             Token::Assert(a, b) => Token::Assert(a.clone(), b.clone()),
-            Token::Assign(a,  b) => Token::Assign(a.clone(), b.clone()),
+            Token::Assign(a, b) => Token::Assign(a.clone(), b.clone()),
             Token::Bank(b) => Token::Bank(b.clone()),
             Token::Bankset(b) => Token::Bankset(b.clone()),
             Token::Basic(a, b, c) => Token::Basic(a.clone(), b.clone(), c.clone()),
@@ -542,22 +542,42 @@ impl Clone for Token {
             Token::BuildSna(a) => Token::BuildSna(a.clone()),
             Token::Charset(a) => Token::Charset(a.clone()),
             Token::Comment(c) => Token::Comment(c.clone()),
-            Token::CrunchedBinary(a, b) => Token::CrunchedBinary(a.clone(), b.clone()) ,
+            Token::CrunchedBinary(a, b) => Token::CrunchedBinary(a.clone(), b.clone()),
             Token::CrunchedSection(a, b) => Token::CrunchedSection(a.clone(), b.clone()),
             Token::Defb(l) => Token::Defb(l.clone()),
             Token::Defs(l) => Token::Defs(l.clone()),
             Token::Defw(l) => Token::Defw(l.clone()),
-            Token::Equ(a, b) => Token::Equ(a.clone(), b.clone()) ,
-            Token::Export(a) =>Token::Export(a.clone()),
+            Token::Equ(a, b) => Token::Equ(a.clone(), b.clone()),
+            Token::Export(a) => Token::Export(a.clone()),
             Token::Fail(a) => Token::Fail(a.clone()),
             Token::If(a, b) => Token::If(a.clone(), b.clone()),
-            Token::Incbin { fname, offset, length, extended_offset, off, content, transformation} => Token::Incbin { fname: fname.clone(), offset: offset.clone(), length : length.clone(), extended_offset: extended_offset.clone(), off: off.clone(), content: content.read().unwrap().as_ref().map(|v| v.clone()).into(), transformation: transformation.clone() },
-            Token::Include(a, b, c) => Token::Include(a.clone(), b.read().unwrap().as_ref().map(|l| l.clone()).into(), c.clone()),
+            Token::Incbin {
+                fname,
+                offset,
+                length,
+                extended_offset,
+                off,
+                content,
+                transformation,
+            } => Token::Incbin {
+                fname: fname.clone(),
+                offset: offset.clone(),
+                length: length.clone(),
+                extended_offset: extended_offset.clone(),
+                off: off.clone(),
+                content: content.read().unwrap().as_ref().map(|v| v.clone()).into(),
+                transformation: transformation.clone(),
+            },
+            Token::Include(a, b, c) => Token::Include(
+                a.clone(),
+                b.read().unwrap().as_ref().map(|l| l.clone()).into(),
+                c.clone(),
+            ),
             Token::Iterate(a, b, c) => Token::Iterate(a.clone(), b.clone(), c.clone()),
             Token::Label(a) => Token::Label(a.clone()),
             Token::Let(a, b) => Token::Let(a.clone(), b.clone()),
             Token::Limit(a) => Token::Limit(a.clone()),
-            Token::List => Token::List ,
+            Token::List => Token::List,
             Token::Macro(a, b, c) => Token::Macro(a.clone(), b.clone(), c.clone()),
             Token::MacroCall(n, p) => Token::MacroCall(n.clone(), p.clone()),
             Token::MultiPop(a) => Token::MultiPop(a.clone()),
@@ -565,7 +585,9 @@ impl Clone for Token {
             Token::Next(a, b, c) => Token::Next(a.clone(), b.clone(), c.clone()),
             Token::NoExport(a) => Token::NoExport(a.clone()),
             Token::NoList => Token::NoList,
-            Token::OpCode(mne, arg1, arg2, arg3) => Self::OpCode(mne.clone(), arg1.clone(), arg2.clone(), arg3.clone()),
+            Token::OpCode(mne, arg1, arg2, arg3) => {
+                Self::OpCode(mne.clone(), arg1.clone(), arg2.clone(), arg3.clone())
+            }
             Token::Org(a, b) => Token::Org(a.clone(), b.clone()),
             Token::Print(a) => Token::Print(a.clone()),
             Token::Protect(a, b) => Token::Protect(a.clone(), b.clone()),
@@ -574,16 +596,30 @@ impl Clone for Token {
             Token::RepeatUntil(a, b) => Token::RepeatUntil(a.clone(), b.clone()),
             Token::Rorg(a, b) => Token::Rorg(a.clone(), b.clone()),
             Token::Run(a, b) => Token::Run(a.clone(), b.clone()),
-            Token::Save { filename, address, size, save_type, dsk_filename, side } => Token::Save { filename: filename.clone(), address: address.clone(), size: size.clone(), save_type: save_type.clone(), dsk_filename: dsk_filename.clone(), side: side.clone() },
-            Token::Section(a) =>Token::Section(a.clone()),
+            Token::Save {
+                filename,
+                address,
+                size,
+                save_type,
+                dsk_filename,
+                side,
+            } => Token::Save {
+                filename: filename.clone(),
+                address: address.clone(),
+                size: size.clone(),
+                save_type: save_type.clone(),
+                dsk_filename: dsk_filename.clone(),
+                side: side.clone(),
+            },
+            Token::Section(a) => Token::Section(a.clone()),
             Token::SetCPC(b) => Token::SetCPC(b.clone()),
             Token::SetCrtc(c) => Token::SetCrtc(c.clone()),
-            Token::SetN(a, b, c) => Token::SetN(a.clone(), b.clone(), c.clone()) ,
+            Token::SetN(a, b, c) => Token::SetN(a.clone(), b.clone(), c.clone()),
             Token::SnaSet(a, b) => Token::SnaSet(a.clone(), b.clone()),
             Token::StableTicker(a) => Token::StableTicker(a.clone()),
             Token::Str(a) => Token::Str(a.clone()),
             Token::Struct(a, b) => Token::Struct(a.clone(), b.clone()),
-            Token::Switch(a) => Token::Switch(a.clone()) ,
+            Token::Switch(a) => Token::Switch(a.clone()),
             Token::Undef(a) => Token::Undef(a.clone()),
             Token::WaitNops(b) => Token::WaitNops(b.clone()),
             Token::While(a, b) => Token::While(a.clone(), b.clone()),
@@ -596,17 +632,15 @@ impl PartialEq for Token {
         match (self, other) {
             (Token::OpCode(a1, b1, c1, d1), Token::OpCode(a2, b2, c2, d2)) => {
                 a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2
-            },
+            }
 
             (Token::Print(a1), Token::Print(a2)) => a1 == a2,
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
 
-impl Eq for Token {
-
-}
+impl Eq for Token {}
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

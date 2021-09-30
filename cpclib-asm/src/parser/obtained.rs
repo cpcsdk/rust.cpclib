@@ -1,10 +1,18 @@
-use std::{borrow::Cow, clone, convert::TryFrom, fs::File, io::Read, ops::{Deref, DerefMut}, sync::{Mutex, RwLock}};
-use std::sync::Arc;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::{
     BaseListing, BinaryTransformation, CrunchType, Expr, Listing, ListingElement, TestKind, Token,
+};
+use std::sync::Arc;
+use std::{
+    borrow::Cow,
+    clone,
+    convert::TryFrom,
+    fs::File,
+    io::Read,
+    ops::{Deref, DerefMut},
+    sync::{Mutex, RwLock},
 };
 
 use crate::{
@@ -53,18 +61,23 @@ pub enum LocatedToken {
 impl Clone for LocatedToken {
     fn clone(&self) -> Self {
         match self {
-            LocatedToken::Standard { token, span } => LocatedToken::Standard { token: token.clone(), span: span.clone()},
-            LocatedToken::CrunchedSection(a, b, c) => LocatedToken::CrunchedSection(a.clone(), b.clone(), c.clone()),
-            LocatedToken::Include(filename, listing, namespace, span) => {
-                Self::Include(
-                    filename.clone(),
-                    RwLock::new(listing.read().unwrap().clone()),
-                    namespace.clone(),
-                    span.clone()
-                )
+            LocatedToken::Standard { token, span } => LocatedToken::Standard {
+                token: token.clone(),
+                span: span.clone(),
             },
-            LocatedToken::If(a, b, c) => LocatedToken::If(a.clone(), b.clone(), c.clone()) ,
-            LocatedToken::Repeat(a, b, c, d, e) => LocatedToken::Repeat(a.clone(), b.clone(), c.clone(), d.clone(), e.clone()) ,
+            LocatedToken::CrunchedSection(a, b, c) => {
+                LocatedToken::CrunchedSection(a.clone(), b.clone(), c.clone())
+            }
+            LocatedToken::Include(filename, listing, namespace, span) => Self::Include(
+                filename.clone(),
+                RwLock::new(listing.read().unwrap().clone()),
+                namespace.clone(),
+                span.clone(),
+            ),
+            LocatedToken::If(a, b, c) => LocatedToken::If(a.clone(), b.clone(), c.clone()),
+            LocatedToken::Repeat(a, b, c, d, e) => {
+                LocatedToken::Repeat(a.clone(), b.clone(), c.clone(), d.clone(), e.clone())
+            }
             LocatedToken::Iterate(_, _, _, _) => todo!(),
             LocatedToken::RepeatUntil(_, _, _) => todo!(),
             LocatedToken::Rorg(_, _, _) => todo!(),
@@ -124,7 +137,7 @@ impl LocatedToken {
             LocatedToken::Standard { token, .. } => Cow::Borrowed(token),
             LocatedToken::CrunchedSection(c, l, _span) => {
                 Cow::Owned(Token::CrunchedSection(*c, l.as_listing()))
-            },
+            }
             LocatedToken::Include(s, l, module, _span) => Cow::Owned(Token::Include(
                 s.clone(),
                 l.read().unwrap().as_ref().map(|l| l.as_listing()).into(),
@@ -136,10 +149,15 @@ impl LocatedToken {
                     .collect_vec(),
                 e.as_ref().map(|l| l.as_listing()),
             )),
-            LocatedToken::Repeat(e, l, s, start, _span) => {
-                Cow::Owned(Token::Repeat(e.clone(), l.as_listing(), s.clone(), start.clone()))
+            LocatedToken::Repeat(e, l, s, start, _span) => Cow::Owned(Token::Repeat(
+                e.clone(),
+                l.as_listing(),
+                s.clone(),
+                start.clone(),
+            )),
+            LocatedToken::RepeatUntil(e, l, _span) => {
+                Cow::Owned(Token::RepeatUntil(e.clone(), l.as_listing()))
             }
-            LocatedToken::RepeatUntil(e, l, _span) => Cow::Owned(Token::RepeatUntil(e.clone(), l.as_listing())),
             LocatedToken::Rorg(e, l, _span) => Cow::Owned(Token::Rorg(e.clone(), l.as_listing())),
             LocatedToken::Switch(v, _span) => Cow::Owned(Token::Switch(
                 v.iter()
@@ -322,7 +340,7 @@ impl LocatedToken {
 
                         match transformation {
                             BinaryTransformation::None => {
-                            content.write().unwrap().replace(data.to_vec());
+                                content.write().unwrap().replace(data.to_vec());
                             }
 
                             other => {
@@ -459,7 +477,6 @@ pub struct LocatedListing {
     ctx: Arc<ParserContext>,
 }
 
-
 impl LocatedListing {
     /// Create an empty listing. Code as to be parsed afterwhise
     pub fn new_empty(str: String, ctx: ParserContext) -> Self {
@@ -545,7 +562,7 @@ impl LocatedListing {
         self.deref()
             .par_iter()
             .map(|lt| lt.as_token())
-            .map(|c| -> Token { c.into_owned()})
+            .map(|c| -> Token { c.into_owned() })
             .collect::<Vec<Token>>()
             .into()
     }
@@ -563,5 +580,3 @@ impl ParseToken for Token {
         token.map(|lt| lt.as_token().into_owned())
     }
 }
-
-
