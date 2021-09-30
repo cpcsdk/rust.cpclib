@@ -34,6 +34,8 @@ use std::collections::HashMap;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
+const REPEAT_START_VALUE: i32 = 1;
+
 #[allow(missing_docs)]
 pub type Bytes = SmallVec<[u8; MAX_SIZE]>;
 
@@ -243,7 +245,7 @@ impl ListingOutputTrigger {
                 .add_token(token, &self.bytes, self.start, kind);
         }
 
-        self.token.replace(new.clone());
+        self.token.replace(new.clone()); // TODO remove that clone that is memory/time eager
         self.bytes.clear();
         self.start = address;
     }
@@ -2469,7 +2471,7 @@ impl Env {
         let mut counter_value = counter_start
             .as_ref()
             .map(|start| self.resolve_expr_must_never_fail(start))
-            .unwrap_or(Ok(0.into()))?;
+            .unwrap_or(Ok(REPEAT_START_VALUE.into()))?;
 
         for i in 0..count {
             self.inner_visit_repeat(counter_name, counter_value, i as _, code, span.clone())?;
