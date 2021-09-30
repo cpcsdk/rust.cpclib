@@ -38,6 +38,19 @@ impl From<&'src str> for Z80Span {
     }
 }
 
+impl From<String> for Z80Span {
+    fn from(s: String) -> Self {
+        let src = Arc::new(s);
+        let ctx = Arc::default();
+
+        Self(LocatedSpan::new_extra(
+            // The string is safe on the heap
+            unsafe { &*(src.as_str() as *const str) as &'static str },
+            (src, ctx),
+        ))
+    }
+}
+
 impl Z80Span {
     pub fn from_standard_span(
         span: LocatedSpan<&'static str, ()>,
