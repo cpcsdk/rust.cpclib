@@ -54,7 +54,7 @@ impl Clone for LocatedToken {
     fn clone(&self) -> Self {
         match self {
             LocatedToken::Standard { token, span } => LocatedToken::Standard { token: token.clone(), span: span.clone()},
-            LocatedToken::CrunchedSection(_, _, _) => todo!(),
+            LocatedToken::CrunchedSection(a, b, c) => LocatedToken::CrunchedSection(a.clone(), b.clone(), c.clone()),
             LocatedToken::Include(filename, listing, namespace, span) => {
                 Self::Include(
                     filename.clone(),
@@ -63,8 +63,8 @@ impl Clone for LocatedToken {
                     span.clone()
                 )
             },
-            LocatedToken::If(_, _, _) => todo!(),
-            LocatedToken::Repeat(_, _, _, _, _) => todo!(),
+            LocatedToken::If(a, b, c) => LocatedToken::If(a.clone(), b.clone(), c.clone()) ,
+            LocatedToken::Repeat(a, b, c, d, e) => LocatedToken::Repeat(a.clone(), b.clone(), c.clone(), d.clone(), e.clone()) ,
             LocatedToken::Iterate(_, _, _, _) => todo!(),
             LocatedToken::RepeatUntil(_, _, _) => todo!(),
             LocatedToken::Rorg(_, _, _) => todo!(),
