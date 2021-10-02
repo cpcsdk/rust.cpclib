@@ -57,7 +57,7 @@ do
 			then
 				err_result "$fname" content
 
-				#hexdiff "$OUTPUT" "$binary"
+				hexdiff "$OUTPUT" "$binary"
 			fi
 		fi
 

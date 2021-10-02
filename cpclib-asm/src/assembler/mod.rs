@@ -1,10 +1,16 @@
 pub mod listing_output;
 pub mod symbols_output;
 pub mod report;
+pub mod save_command;
+pub mod page_info;
+pub mod stable_ticker;
 
 use crate::report::Report;
+use crate::save_command::*;
+use crate::stable_ticker::*;
 use crate::preamble::*;
 use crate::PhysicalAddress;
+use crate::page_info::{PageInformation, ProtectedArea};
 
 use crate::AssemblingOptions;
 
@@ -28,8 +34,8 @@ use std::io::Write;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-use self::listing_output::AddressKind;
-use self::listing_output::ListingOutput;
+use self::listing_output::*;
+use self::report::SavedFile;
 use self::symbols_output::SymbolOutputGenerator;
 use std::collections::HashMap;
 
@@ -157,51 +163,6 @@ impl AssemblingPass {
     }
 }
 
-/// Manage the stack of stable counters.
-/// They are updated each time an opcode is visited
-#[derive(Default, Clone)]
-struct StableTickerCounters {
-    counters: Vec<(String, usize)>,
-}
-
-#[allow(missing_docs)]
-impl StableTickerCounters {
-    /// Check if a counter with the same name already exists
-    pub fn has_counter<S: AsRef<str>>(&self, name: S) -> bool {
-        let name = name.as_ref().to_owned();
-        self.counters.iter().any(|(s, _)| s == &name)
-    }
-
-    /// Add a new counter if no counter has the same name
-    pub fn add_counter<S: AsRef<str>>(&mut self, name: S) -> Result<(), AssemblerError> {
-        let name: String = name.as_ref().to_owned();
-        if self.has_counter(&name) {
-            return Err(AssemblerError::CounterAlreadyExists { symbol: name });
-        }
-        self.counters.push((name, 0));
-        Ok(())
-    }
-
-    /// Release the latest counter (if exists)
-    pub fn release_last_counter(&mut self) -> Option<(String, usize)> {
-        self.counters.pop()
-    }
-
-    /// Update each opened counters by count
-    pub fn update_counters(&mut self, count: usize) {
-        self.counters.iter_mut().for_each(|(_, local_count)| {
-            *local_count += count;
-        });
-    }
-
-    pub fn len(&self) -> usize {
-        self.counters.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
 
 /// Trait to implement for each type of token.
 /// it allows to drive the appropriate data vonversion
@@ -223,218 +184,8 @@ impl Visited for LocatedToken {
     }
 }
 
-/// This structure collects the necessary information to feed the output
-#[derive(Clone)]
-struct ListingOutputTrigger {
-    /// the token read before collecting the bytes
-    /// Because of macros we need to make a copy (TODO find why...)
-    token: Option<LocatedToken>,
-    /// the bytes progressively collected
-    bytes: Vec<u8>,
-    start: u32,
-    builder: Arc<RwLock<ListingOutput>>,
-}
-
-impl ListingOutputTrigger {
-    fn write_byte(&mut self, b: u8) {
-        self.bytes.push(b);
-    }
-    fn new_token(&mut self, new: &LocatedToken, address: u32, kind: AddressKind) {
-        if let Some(token) = &self.token {
-            self.builder
-                .write()
-                .unwrap()
-                .add_token(token, &self.bytes, self.start, kind);
-        }
-
-        self.token.replace(new.clone()); // TODO remove that clone that is memory/time eager
-        self.bytes.clear();
-        self.start = address;
-    }
-    fn finish(&mut self) {
-        if let Some(token) = &self.token {
-            self.builder.write().unwrap().add_token(
-                token,
-                &self.bytes,
-                self.start,
-                AddressKind::Address,
-            );
-        }
-        self.builder.write().unwrap().finish();
-    }
-
-    fn on(&mut self) {
-        self.builder.write().unwrap().on();
-    }
-
-    fn off(&mut self) {
-        self.builder.write().unwrap().off();
-    }
-
-    fn enter_crunched_section(&mut self) {
-        self.builder.write().unwrap().enter_crunched_section();
-    }
-
-    fn leave_crunched_section(&mut self) {
-        self.builder.write().unwrap().leave_crunched_section();
-    }
-}
-
-type ProtectedArea = std::ops::RangeInclusive<u16>;
 type AssemblerWarning = AssemblerError;
 
-/// Store all the compilation information for the currently selected 64kb page
-/// A stock CPC 6128 is composed of two pages
-#[derive(Debug, Clone)]
-pub struct PageInformation {
-    /// Start adr to use to write binary files. No use when working with snapshots.
-    startadr: Option<u16>,
-    /// maximum address reached when working with 64k data
-    maxadr: u16,
-    /// Current address to write to
-    logical_outputadr: u16,
-    /// Current address used by the code
-    logical_codeadr: u16,
-    /// Maximum possible address to write to
-    limit: u16,
-    /// List of pretected zones
-    protected_areas: Vec<ProtectedArea>,
-    fail_next_write_if_zero: bool,
-
-    /// List of save directives that will be executed ONLY after full assembling
-    save_commands: Vec<SaveCommand>,
-}
-
-/// Save command information
-#[derive(Debug, Clone)]
-pub struct SaveCommand {
-    from: Option<i32>,
-    size: Option<i32>,
-    filename: String,
-    save_type: Option<SaveType>,
-    dsk_filename: Option<String>,
-}
-
-impl SaveCommand {
-    /// Really make the save - Prerequisit : the page is properly selected
-    pub fn execute_on(&self, env: &Env) -> Result<(), AssemblerError> {
-        let from = match self.from {
-            Some(from) => from,
-            None => env.start_address().unwrap() as _,
-        };
-
-        let size = match self.size {
-            Some(size) => size,
-            None => {
-                let stop = env.maximum_address();
-                (stop - from as u16) as _
-            }
-        };
-
-        let data = env.memory(from as _, size as _);
-
-        // Add the header if any
-        let object: either::Either<Vec<u8>, AmsdosFile> = match self.save_type {
-            Some(r#type) => {
-                let loading_address = from as u16;
-                let execution_address = match env.run_options {
-                    Some((exec_address, _)) => exec_address,
-                    None => loading_address,
-                };
-
-                let amsdos_file = AmsdosFile::binary_file_from_buffer(
-                    &AmsdosFileName::try_from(self.filename.as_str())?,
-                    loading_address,
-                    execution_address,
-                    &data,
-                )?;
-
-                match r#type {
-                    SaveType::Amsdos => {
-                        either::Left(amsdos_file.full_content().copied().collect::<Vec<u8>>())
-                    }
-                    SaveType::Dsk | SaveType::Tape => either::Right(amsdos_file),
-                }
-            }
-            None => either::Left(data),
-        };
-
-        // Save at the right place
-        match object {
-            either::Right(amsdos_file) => {
-                if let Some(dsk_filename) = &self.dsk_filename {
-                    let mut dsk = if std::path::Path::new(dsk_filename.as_str()).exists() {
-                        ExtendedDsk::open(dsk_filename)?
-                    } else {
-                        ExtendedDsk::default()
-                    };
-
-                    dsk.add_amsdos_file(&amsdos_file)?;
-
-                    dsk.save(dsk_filename)?;
-                } else {
-                    return Err(AssemblerError::InvalidArgument {
-                        msg: "DSK parameter not provided".to_owned(),
-                    });
-                }
-            }
-            either::Left(data) => {
-                std::fs::write(&self.filename, &data).map_err(|e| {
-                    AssemblerError::AssemblingError {
-                        msg: format!(
-                            "Error while saving \"{}\". {}",
-                            &self.filename,
-                            e.to_string()
-                        ),
-                    }
-                })?;
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl Default for PageInformation {
-    fn default() -> Self {
-        Self {
-            startadr: None,
-            maxadr: 0,
-            logical_outputadr: 0,
-            logical_codeadr: 0,
-            limit: 0xffff,
-            protected_areas: Vec::new(),
-            fail_next_write_if_zero: false,
-            save_commands: Vec::new(),
-        }
-    }
-}
-
-impl PageInformation {
-    /// Properly set the information for a new pass
-    fn new_pass(&mut self) {
-        self.startadr = None;
-        self.maxadr = 0;
-        self.logical_outputadr = 0;
-        self.logical_codeadr = 0;
-        self.limit = 0xffff;
-        self.fail_next_write_if_zero = false;
-    }
-
-    fn add_save_command(&mut self, command: SaveCommand) {
-        self.save_commands.push(command);
-    }
-
-    fn execute_save(&self, env: &Env) -> Result<(), AssemblerError> {
-        let res = self
-            .save_commands
-            .iter()
-            .map(|cmd| cmd.execute_on(env))
-            .collect::<Result<Vec<_>, AssemblerError>>()?;
-
-        Ok(())
-    }
-}
 
 /// Store all the necessary information when handling a crunched section
 #[derive(Clone)]
@@ -540,11 +291,14 @@ impl Section {
 
 /// Environment of the assembly
 #[allow(missing_docs)]
-#[derive(Clone)]
 pub struct Env {
     /// Current pass
     pass: AssemblingPass,
     real_nb_passes: usize,
+    /// If true at the end of the pass, can prematurely stop the assembling
+    /// Hidden in a rwlock to allow a modification even in non mutable state
+    can_skip_next_passes: RwLock<bool>,
+
     /// Check if we are assembling a crunched section as there are some limitations
     crunched_section_state: Option<CrunchedSectionState>,
 
@@ -597,6 +351,44 @@ pub struct Env {
     sections: HashMap<String, Arc<RwLock<Section>>>,
     /// Current section if any
     current_section: Option<Arc<RwLock<Section>>>,
+
+    saved_files: Option<Vec<SavedFile>>
+}
+
+impl Clone for Env {
+    fn clone(&self) -> Self {
+        Self {
+            can_skip_next_passes: (*self.can_skip_next_passes
+                                        .read()
+                                        .unwrap()
+                                        .deref()).into(),
+            pass: self.pass.clone(),
+            real_nb_passes: self.real_nb_passes.clone(),
+            crunched_section_state: self.crunched_section_state.clone(),
+            stable_counters: self.stable_counters.clone(),
+            ga_mmr: self.ga_mmr.clone(),
+            output_address: self.output_address.clone(),
+            pages_info_sna: self.pages_info_sna.clone(),
+            sna: self.sna.clone(),
+            sna_version: self.sna_version.clone(),
+            banks: self.banks.clone(),
+            selected_bank: self.selected_bank.clone(),
+            macro_seed: self.macro_seed.clone(),
+            charset_encoding: self.charset_encoding.clone(),
+            written_bytes: self.written_bytes.clone(),
+            symbols: self.symbols.clone(),
+            run_options: self.run_options.clone(),
+            output_trigger: self.output_trigger.clone(),
+            symbols_output: self.symbols_output.clone(),
+            string_warning_done: self.string_warning_done.clone(),
+            warnings: self.warnings.clone(),
+            nested_rorg: self.nested_rorg.clone(),
+            sections: self.sections.clone(),
+            current_section: self.current_section.clone(),
+            saved_files: self.saved_files.clone(),
+           
+        }
+    }
 }
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -641,7 +433,9 @@ impl Default for Env {
             banks: Vec::new(),
             selected_bank: None,
 
-            real_nb_passes: 0
+            real_nb_passes: 0,
+            saved_files: None,
+            can_skip_next_passes: true.into(),
         }
     }
 }
@@ -719,10 +513,15 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
-        self.pass = self.pass.next_pass();
+        self.pass = if self.real_nb_passes == 0 || !*self.can_skip_next_passes.read().unwrap().deref() {
+            self.pass.next_pass()
+        }
+        else {
+            AssemblingPass::Finished
+        };
 
-        if !self.pass.is_finished() {
-        self.real_nb_passes += 1;
+        if  !self.pass.is_finished() {
+            self.real_nb_passes += 1;
 
             // environnement is not reset when assembling is finished
             self.symbols
@@ -748,13 +547,14 @@ impl Env {
             });
             self.selected_bank = None;
             self.output_address = 0;
+            self.can_skip_next_passes = true.into();
 
         }
     }
 
     /// Handle the actions to do after assembling.
     /// ATM it is only the save of data for each page
-    fn handle_post_actions(&mut self) -> Result<(), AssemblerError> {
+    fn handle_post_actions(&mut self) -> Result<Vec<SavedFile>, AssemblerError> {
         let backup = self.ga_mmr;
 
         // ga values to properly switch the pages
@@ -770,23 +570,29 @@ impl Env {
             0b11_111_0_01,
         ];
 
+        let mut saved_files = Vec::new();
+
         // save from snapshot
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
             self.ga_mmr = *page;
-            self.pages_info_sna[activepage].execute_save(self)?;
+            let mut saved = self.pages_info_sna[activepage].execute_save(self)?;
+            saved_files.append(&mut saved);
         }
 
         // save from extra memory / can be done in parallal
         self.ga_mmr = 0xc0;
-        let _: Vec<()> = self
+        let mut saved= self
             .banks
             .par_iter()
             .map(|bank| bank.1.execute_save(self))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
+        for s in &mut saved {
+            saved_files.append(s);
+        }
 
         // restor memory conf
         self.ga_mmr = backup;
-        Ok(())
+        Ok(saved_files)
     }
 
     /// TODO
@@ -1137,8 +943,8 @@ impl Env {
             Ok(value) => Ok(value),
             Err(e) => {
                 if self.pass.is_first_pass()
-                /*&& self.crunched_section_state.is_none()*/
                 {
+                    *self.can_skip_next_passes.write().unwrap() = false;
                     Ok(0.into())
                 } else {
                     Err(e)
@@ -1818,11 +1624,7 @@ impl Env {
         dsk_filename: Option<&String>,
         _side: Option<&Expr>,
     ) -> Result<(), AssemblerError> {
-        // No need to do that before the last pass
-        if !self.pass.is_second_pass() {
-            return Ok(());
-        }
-
+        
         let from = match address {
             Some(address) => Some(self.resolve_expr_must_never_fail(address)?.int()),
             None => None,
@@ -1833,13 +1635,13 @@ impl Env {
         };
 
         let page_info = self.active_page_info_mut();
-        page_info.add_save_command(SaveCommand {
+        page_info.add_save_command(SaveCommand::new(
             from,
             size,
-            filename: filename.to_owned(),
-            save_type: save_type.cloned(),
-            dsk_filename: dsk_filename.cloned(),
-        });
+            filename.to_owned(),
+            save_type.cloned(),
+            dsk_filename.cloned(),
+        ));
 
         Ok(())
     }
@@ -1945,6 +1747,9 @@ impl Env {
 
         // update the symbol table with the new symbols obtained in the crunched section
         std::mem::swap(self.symbols_mut(), crunched_env.symbols_mut());
+        let can_skip_next_passes = (*self.can_skip_next_passes.read().unwrap().deref() | *crunched_env.can_skip_next_passes.read().unwrap().deref()).into(); // report missing symbols from the crunched area to the current area
+        *self.can_skip_next_passes.write().unwrap() = can_skip_next_passes;
+        self.macro_seed = crunched_env.macro_seed;
 
         // TODO display ONLY if:
         // - no LIMIT/PROTECT has been used in the crunched area
@@ -2036,7 +1841,8 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
         trigger.finish()
     }
 
-    env.handle_post_actions()?;
+
+    env.saved_files = Some(env.handle_post_actions()?);
 
     Ok(env)
 }
