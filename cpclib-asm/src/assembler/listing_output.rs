@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::{fmt::Debug, io::Write};
 
 use crate::preamble::LocatedToken;
@@ -275,5 +275,64 @@ impl ListingOutput {
 
     pub fn leave_crunched_section(&mut self) {
         self.crunched_section_counter -= 1;
+    }
+}
+
+
+
+/// This structure collects the necessary information to feed the output
+#[derive(Clone)]
+pub struct ListingOutputTrigger {
+    /// the token read before collecting the bytes
+    /// Because of macros we need to make a copy (TODO find why...)
+    pub(crate) token: Option<LocatedToken>,
+    /// the bytes progressively collected
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) start: u32,
+    pub(crate) builder: Arc<RwLock<ListingOutput>>,
+}
+
+impl ListingOutputTrigger {
+    pub fn write_byte(&mut self, b: u8) {
+        self.bytes.push(b);
+    }
+    pub fn new_token(&mut self, new: &LocatedToken, address: u32, kind: AddressKind) {
+        if let Some(token) = &self.token {
+            self.builder
+                .write()
+                .unwrap()
+                .add_token(token, &self.bytes, self.start, kind);
+        }
+
+        self.token.replace(new.clone()); // TODO remove that clone that is memory/time eager
+        self.bytes.clear();
+        self.start = address;
+    }
+    pub fn finish(&mut self) {
+        if let Some(token) = &self.token {
+            self.builder.write().unwrap().add_token(
+                token,
+                &self.bytes,
+                self.start,
+                AddressKind::Address,
+            );
+        }
+        self.builder.write().unwrap().finish();
+    }
+
+    pub fn on(&mut self) {
+        self.builder.write().unwrap().on();
+    }
+
+    pub fn off(&mut self) {
+        self.builder.write().unwrap().off();
+    }
+
+    pub fn enter_crunched_section(&mut self) {
+        self.builder.write().unwrap().enter_crunched_section();
+    }
+
+    pub fn leave_crunched_section(&mut self) {
+        self.builder.write().unwrap().leave_crunched_section();
     }
 }
