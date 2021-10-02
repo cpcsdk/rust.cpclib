@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::fmt::Debug;
 
@@ -143,8 +142,6 @@ impl TokenExt for Token {
 
         match self {
             Token::Defs(ref l) => {
-                use crate::assembler::Env;
-
                 l.iter()
                     .map(|(e, f)| {
                         assemble_defs_item(e, f.as_ref(), &Env::default())
@@ -159,7 +156,6 @@ impl TokenExt for Token {
 
             Token::Defb(_) | Token::Defw(_) => {
                 use crate::assembler::visit_db_or_dw_or_str;
-                use crate::assembler::Env;
 
                 let mut env = Env::default();
                 visit_db_or_dw_or_str(self, &mut env)

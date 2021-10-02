@@ -7,7 +7,6 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::Token;
 use std::ops::Deref;
-use std::rc::Rc;
 /// Generate an output listing.
 /// Can be useful to detect issues
 pub struct ListingOutput {

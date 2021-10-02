@@ -31,11 +31,16 @@ fn main() {
         .before_help(&desc_before[..])
         .get_matches();
 
+    let start = std::time::Instant::now();
+
     match process(&matches) {
-        Ok((_env, warnings)) => {
+        Ok((env, warnings)) => {
             for warning in warnings {
                 eprintln!("{}", warning);
             }
+
+            let report = env.report(&start);
+            println!("{}", report);
 
             std::process::exit(0);
         }

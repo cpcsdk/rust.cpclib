@@ -3,10 +3,8 @@ use crate::implementation::expression::*;
 use crate::implementation::tokens::*;
 use crate::preamble::parse_z80_str;
 use crate::AssemblingOptions;
-use cpclib_common::itertools::Itertools;
 use cpclib_tokens::symbols::PhysicalAddress;
 use cpclib_tokens::tokens::*;
-use std::borrow::Cow;
 use std::fmt;
 
 /// Additional methods for the listings

@@ -2,7 +2,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::{
-    BaseListing, BinaryTransformation, CrunchType, Expr, Listing, ListingElement, TestKind, Token,
+    BaseListing, BinaryTransformation, CrunchType, Expr, ListingElement, TestKind, Token,
 };
 use std::sync::Arc;
 use std::{
@@ -12,7 +12,7 @@ use std::{
     fs::File,
     io::Read,
     ops::{Deref, DerefMut},
-    sync::{Mutex, RwLock},
+    sync::{RwLock},
 };
 
 use crate::{
