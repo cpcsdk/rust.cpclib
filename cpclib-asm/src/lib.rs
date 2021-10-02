@@ -26,7 +26,7 @@ pub mod basm_utils;
 use cpclib_disc::amsdos::*;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::{cell::RefCell, fmt::Debug, io::Write, rc::Rc};
+use std::{fmt::Debug, io::Write};
 
 use self::listing_output::ListingOutput;
 use preamble::*;

@@ -1,10 +1,9 @@
 use std::ops::Deref;
-use std::{cell::RefCell, path::PathBuf};
+use std::{path::PathBuf};
 
 use super::Z80Span;
 use crate::error::AssemblerError;
-use std::sync::Arc;
-use std::sync::{Mutex, RwLock};
+use std::sync::{RwLock};
 
 /// Context information that can guide the parser
 /// TODO add assembling flags

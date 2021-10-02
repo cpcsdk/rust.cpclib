@@ -20,15 +20,12 @@ use cpclib_sna::parse::hex_number;
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::parse::parse_flag_value;
 use cpclib_sna::FlagValue;
-use std::borrow::Borrow;
-use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-use self::error_code::INVALID_ARGUMENT;
 #[allow(missing_docs)]
 use cpclib_common::nom::*;
 
@@ -978,7 +975,7 @@ pub fn parse_z80_line_label_only(
         Equal,
         SetN,
         Next,
-    };
+    }
 
     // TODO make these stuff alternatives ...
     // Manage Equ
@@ -2089,7 +2086,7 @@ pub fn parse_macro_or_struct_call(
                 panic!();
             }
 
-            /// avoid ambiguate code such as label nop
+            // avoid ambiguate code such as label nop
             if args.len() == 1 {
                 let arg = args[0].to_string().to_lowercase();
                 if arg == "nop" || parse_opcode_no_arg(Z80Span::from(arg)).is_ok() {

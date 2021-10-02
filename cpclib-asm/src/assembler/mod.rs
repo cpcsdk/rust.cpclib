@@ -1,6 +1,8 @@
 pub mod listing_output;
 pub mod symbols_output;
+pub mod report;
 
+use crate::report::Report;
 use crate::preamble::*;
 use crate::PhysicalAddress;
 
@@ -16,12 +18,11 @@ use cpclib_common::lazy_static::__Deref;
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use std::any::Any;
-use std::cell::RefCell;
 use std::fmt;
+use std::time::Instant;
 
 use crate::AmsdosFile;
 use crate::AmsdosFileName;
-use cpclib_common::rayon::prelude::*;
 use std::convert::TryFrom;
 use std::io::Write;
 use std::sync::Arc;
@@ -543,6 +544,7 @@ impl Section {
 pub struct Env {
     /// Current pass
     pass: AssemblingPass,
+    real_nb_passes: usize,
     /// Check if we are assembling a crunched section as there are some limitations
     crunched_section_state: Option<CrunchedSectionState>,
 
@@ -638,8 +640,18 @@ impl Default for Env {
             output_address: 0,
             banks: Vec::new(),
             selected_bank: None,
+
+            real_nb_passes: 0
         }
     }
+}
+
+/// Report handling
+impl Env {
+    pub fn report (&self, start: &Instant) -> Report {
+        Report::from((self, start))
+    }
+
 }
 
 /// Namespace handling
@@ -710,6 +722,8 @@ impl Env {
         self.pass = self.pass.next_pass();
 
         if !self.pass.is_finished() {
+        self.real_nb_passes += 1;
+
             // environnement is not reset when assembling is finished
             self.symbols
                 .set_current_address(PhysicalAddress::new(0, 0xc0));
@@ -734,6 +748,7 @@ impl Env {
             });
             self.selected_bank = None;
             self.output_address = 0;
+
         }
     }
 
