@@ -119,7 +119,7 @@ pub enum AssemblingPass {
     FirstPass,
     SecondPass, // and subsequent
     Finished,
-    Listing, // pass dedicated to the listing production
+    ListingPass, // pass dedicated to the listing production
 }
 impl fmt::Display for AssemblingPass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -128,7 +128,7 @@ impl fmt::Display for AssemblingPass {
             AssemblingPass::FirstPass => "1",
             AssemblingPass::SecondPass => "2",
             AssemblingPass::Finished => "Finished",
-            AssemblingPass::Listing => "Listing",
+            AssemblingPass::ListingPass => "Listing",
         };
         write!(f, "{}", content)
     }
@@ -165,12 +165,19 @@ impl AssemblingPass {
         }
     }
 
+    pub fn is_listing_pass(self) -> bool {
+        match self {
+            AssemblingPass::ListingPass => true,
+            _ => false,
+        }
+    }
+
     fn next_pass(self) -> Self {
         match self {
             AssemblingPass::Uninitialized => AssemblingPass::FirstPass,
             AssemblingPass::FirstPass => AssemblingPass::SecondPass,
             AssemblingPass::SecondPass => AssemblingPass::Finished,
-            AssemblingPass::Finished | AssemblingPass::Listing => panic!(),
+            AssemblingPass::Finished | AssemblingPass::ListingPass => panic!(),
         }
     }
 }
@@ -498,7 +505,7 @@ impl Env {
 
     /// Manage the play with data for the output listing
     fn handle_output_trigger(&mut self, new: &LocatedToken) {
-        if self.pass.is_second_pass() && self.output_trigger.is_some() {
+        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
             let addr = match new {
                 LocatedToken::Standard {
                     token: Token::Equ(label, _),
@@ -523,8 +530,10 @@ impl Env {
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
         let mut can_change_request = true;
-        self.pass =
-            if self.real_nb_passes == 0 || !*self.can_skip_next_passes.read().unwrap().deref() {
+        if !self.pass.is_listing_pass() {
+            self.pass = if self.real_nb_passes == 0
+                || !*self.can_skip_next_passes.read().unwrap().deref()
+            {
                 if *self.request_additional_pass.read().unwrap() {
                     if self.pass.is_first_pass() {
                         can_change_request = false;
@@ -536,14 +545,16 @@ impl Env {
             } else {
                 if !*self.request_additional_pass.read().unwrap() {
                     AssemblingPass::Finished
-                }
-                else {
+                } else {
                     AssemblingPass::SecondPass
                 }
             };
+        }
 
         if !self.pass.is_finished() {
-            self.real_nb_passes += 1;
+            if !self.pass.is_listing_pass() {
+                self.real_nb_passes += 1;
+            }
 
             // environnement is not reset when assembling is finished
             self.symbols
@@ -574,7 +585,6 @@ impl Env {
                 self.request_additional_pass = false.into();
             }
         }
-
     }
 
     /// Handle the actions to do after assembling.
@@ -1147,7 +1157,7 @@ impl Env {
             (true, AssemblingPass::FirstPass) => Err(AssemblerError::SymbolAlreadyExists {
                 symbol: label.to_string(),
             }),
-            (false, AssemblingPass::SecondPass) => Err(AssemblerError::IncoherentCode{msg: format!(
+            (false, AssemblingPass::SecondPass | AssemblingPass::ListingPass) => Err(AssemblerError::IncoherentCode{msg: format!(
                 "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
                 label, self.pass
             )}),
@@ -1156,7 +1166,7 @@ impl Env {
                     .set_symbol_to_value(label, value);
                 Ok(())
             }
-            (true, AssemblingPass::SecondPass) => {
+            (true, AssemblingPass::SecondPass | AssemblingPass::ListingPass) => {
                 self.symbols_mut()
                     .update_symbol_to_value(&label.to_owned(), value);
                 Ok(())
@@ -1915,7 +1925,7 @@ impl Env {
         .into();
         *self.can_skip_next_passes.write().unwrap() = can_skip_next_passes;
         *self.request_additional_pass.write().unwrap() = request_additional_pass;
-        
+
         self.macro_seed = crunched_env.macro_seed;
 
         // TODO display ONLY if:
@@ -2002,6 +2012,14 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
         for token in tokens.iter() {
             token.visited(&mut env)?;
         }
+    }
+
+    env.pass = AssemblingPass::ListingPass;
+    env.start_new_pass();
+    for token in tokens.iter() {
+        token
+            .visited(&mut env)
+            .expect("No error can arise in listing output mode; there is a bug somewhere")
     }
 
     if let Some(trigger) = env.output_trigger.as_mut() {
@@ -2752,7 +2770,7 @@ pub fn assemble_defs_item(
     let mut bytes = Bytes::with_capacity(count as usize);
     bytes.resize_with(count as _, || value);
 
-    Ok(dbg!(bytes))
+    Ok(bytes)
 }
 
 /// Assemble align directive. It can only work if current address is known...
