@@ -7,7 +7,6 @@ use cpclib_tokens::{
 use std::sync::Arc;
 use std::{
     borrow::Cow,
-    clone,
     convert::TryFrom,
     fs::File,
     io::Read,

@@ -4,18 +4,19 @@ pub mod report;
 pub mod save_command;
 pub mod page_info;
 pub mod stable_ticker;
+pub mod delayed_command;
 
 use crate::report::Report;
 use crate::save_command::*;
 use crate::stable_ticker::*;
 use crate::preamble::*;
 use crate::PhysicalAddress;
-use crate::page_info::{PageInformation, ProtectedArea};
+use crate::page_info::{PageInformation};
+use crate::delayed_command::*;
 
 use crate::AssemblingOptions;
 
 use cpclib_basic::*;
-use cpclib_disc::edsk::ExtendedDsk;
 use cpclib_sna::*;
 
 use cpclib_common::bitvec::prelude::BitVec;
@@ -27,8 +28,6 @@ use std::any::Any;
 use std::fmt;
 use std::time::Instant;
 
-use crate::AmsdosFile;
-use crate::AmsdosFileName;
 use std::convert::TryFrom;
 use std::io::Write;
 use std::sync::Arc;
@@ -42,6 +41,17 @@ use std::collections::HashMap;
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
 const REPEAT_START_VALUE: i32 = 1;
+const MMR_PAGES_SELECTION: [u8;9] = [
+    0xc0,
+    0b11_000_0_01,
+    0b11_001_0_01,
+    0b11_010_0_01,
+    0b11_011_0_01,
+    0b11_100_0_01,
+    0b11_101_0_01,
+    0b11_110_0_01,
+    0b11_111_0_01,
+];
 
 #[allow(missing_docs)]
 pub type Bytes = SmallVec<[u8; MAX_SIZE]>;
@@ -555,20 +565,156 @@ impl Env {
     /// Handle the actions to do after assembling.
     /// ATM it is only the save of data for each page
     fn handle_post_actions(&mut self) -> Result<Vec<SavedFile>, AssemblerError> {
+        self.handle_assert()?;
+        self.handle_print()?;
+        self.handle_file_save()
+    }
+
+    fn handle_assert(&mut self) -> Result<(), AssemblerError> {
         let backup = self.ga_mmr;
 
         // ga values to properly switch the pages
-        let pages_mmr = [
-            0xc0,
-            0b11_000_0_01,
-            0b11_001_0_01,
-            0b11_010_0_01,
-            0b11_011_0_01,
-            0b11_100_0_01,
-            0b11_101_0_01,
-            0b11_110_0_01,
-            0b11_111_0_01,
-        ];
+        let pages_mmr = MMR_PAGES_SELECTION;
+
+        let mut assert_failures: Option<AssemblerError> = None;
+
+        // Print from the snapshot
+        for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
+            self.ga_mmr = *page;
+            let mut l_errors = self.pages_info_sna[activepage].collect_assert_failure();
+            match (&mut assert_failures, &mut l_errors) {
+                (
+                    _, 
+                    Ok(_)
+                ) => {
+                    //nothing to do
+                },
+                (
+                    Some(AssemblerError::MultipleErrors{errors:e1}),
+                    Err(AssemblerError::MultipleErrors{errors:e2 })
+                ) => {
+                    e1.append(e2);
+                },
+                (
+                    None, 
+                    Err(l_errors)) => {
+                    assert_failures = Some(l_errors.clone());
+                },
+                _ => unreachable!()
+            }
+        }
+
+        for bank in self.banks.iter() {
+            let mut l_errors = bank.1.collect_assert_failure();
+            match (&mut assert_failures, &mut l_errors) {
+                (
+                    _, 
+                    Ok(_)
+                ) => {
+                    //nothing to do
+                },
+                (
+                    Some(AssemblerError::MultipleErrors{errors:e1}),
+                    Err(AssemblerError::MultipleErrors{errors:e2 })
+                ) => {
+                    e1.append(e2);
+                },
+                (None, Err(l_errors)) => {
+                    assert_failures = Some(l_errors.clone());
+                },
+                _ => unreachable!()
+            }
+
+        }
+
+        self.ga_mmr = backup;
+
+
+        // All possible messages have been printed.
+        // Errors are generated for the others
+        if let Some(errors) = assert_failures {
+            Err(errors)
+        } else {
+            Ok(())
+        }
+    }
+
+
+    fn handle_print(&mut self) -> Result<(), AssemblerError> {
+        let backup = self.ga_mmr;
+
+        // ga values to properly switch the pages
+        let pages_mmr = MMR_PAGES_SELECTION;
+
+        let mut print_errors: Option<AssemblerError> = None;
+        let mut writer = std::io::stdout();
+
+        // Print from the snapshot
+        for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
+            self.ga_mmr = *page;
+            let mut l_errors = self.pages_info_sna[activepage].execute_print(&mut writer);
+            match (&mut print_errors, &mut l_errors) {
+                (
+                    _, 
+                    Ok(_)
+                ) => {
+                    //nothing to do
+                },
+                (
+                    Some(AssemblerError::MultipleErrors{errors:e1}),
+                    Err(AssemblerError::MultipleErrors{errors:e2 })
+                ) => {
+                    e1.append(e2);
+                },
+                (
+                    None, 
+                    Err(l_errors)) => {
+                    print_errors = Some(l_errors.clone());
+                },
+                _ => unreachable!()
+            }
+        }
+
+        for bank in self.banks.iter() {
+            let mut l_errors = bank.1.execute_print(&mut writer);
+            match (&mut print_errors, &mut l_errors) {
+                (
+                    _, 
+                    Ok(_)
+                ) => {
+                    //nothing to do
+                },
+                (
+                    Some(AssemblerError::MultipleErrors{errors:e1}),
+                    Err(AssemblerError::MultipleErrors{errors:e2 })
+                ) => {
+                    e1.append(e2);
+                },
+                (None, Err(l_errors)) => {
+                    print_errors = Some(l_errors.clone());
+                },
+                _ => unreachable!()
+            }
+
+        }
+
+        self.ga_mmr = backup;
+
+
+        // All possible messages have been printed.
+        // Errors are generated for the others
+        if let Some(errors) = print_errors {
+            Err(errors)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn  handle_file_save(&mut self) -> Result<Vec<SavedFile>, AssemblerError> {
+        let backup = self.ga_mmr;
+
+        // ga values to properly switch the pages
+        let pages_mmr = MMR_PAGES_SELECTION;
 
         let mut saved_files = Vec::new();
 
@@ -956,7 +1102,18 @@ impl Env {
     /// Compute the expression thanks to the symbol table of the environment.
     /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
     fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<ExprResult, AssemblerError> {
-        exp.resolve(self)
+        match exp.resolve(self) {
+            Ok(value) => Ok(value),
+            Err(e) => {
+                if self.pass.is_first_pass()
+                {
+                    *self.can_skip_next_passes.write().unwrap() = false;
+                    Err(e)
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 
     /// Compute the relative address. Is authorized to fail at first pass
@@ -1600,12 +1757,17 @@ impl Env {
         Ok(repr)
     }
     /// Print the evaluation of the expression in the 2nd pass
-    pub fn visit_print(&self, info: &[FormattedExpr]) -> Result<(), AssemblerError> {
-        if self.pass.is_second_pass() {
-            let repr = self.build_string_from_formatted_expression(info)?;
-            println!("{}", repr);
-        }
-        Ok(())
+    pub fn visit_print(&mut self, info: &[FormattedExpr], span: Option<Z80Span>) {
+        let print_or_error = match self.build_string_from_formatted_expression(info) {
+            Ok(msg) => either::Either::Left(msg),
+            Err(error) => either::Either::Right(error),
+        };
+
+        self.active_page_info_mut()
+            .add_print_command(PrintCommand{
+                span,
+                print_or_error,
+            })
     }
 
     pub fn visit_fail(&self, info: &[FormattedExpr]) -> Result<(), AssemblerError> {
@@ -1994,7 +2156,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     // dbg!(token, env.active_page_info());
     match token {
         Token::Align(ref boundary, ref fill) => env.visit_align(boundary, fill.as_ref()),
-        Token::Assert(ref exp, ref txt) => visit_assert(exp, txt.as_ref(), env),
+        Token::Assert(ref exp, ref txt) => {visit_assert(exp, txt.as_ref(), env); Ok(())},
         Token::Basic(ref variables, ref hidden_lines, ref code) => {
             env.visit_basic(variables.as_ref(), hidden_lines.as_ref(), code)
         }
@@ -2065,7 +2227,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Assign(ref label, ref exp) => visit_assign(label, exp, env),
         Token::Protect(ref start, ref end) => env.visit_protect(start, end),
-        Token::Print(ref exp) => env.visit_print(exp.as_ref()),
+        Token::Print(ref exp) => {env.visit_print(exp.as_ref(), None); Ok(())},
         Token::Fail(ref exp) => env.visit_fail(exp.as_ref()),
         Token::Repeat(count, code, counter, counter_start) => env.visit_repeat(
             count,
@@ -2112,36 +2274,53 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     }
 }
 
-fn visit_assert(exp: &Expr, txt: Option<&String>, env: &Env) -> Result<(), AssemblerError> {
-    if env.pass.is_second_pass() {
-        let value = env.resolve_expr_must_never_fail(exp)?;
-        if value == 0.into() {
-            let symbols = env.symbols();
-            let oper = |left: &Expr, right: &Expr, oper: &str| -> String {
-                let res_left = left.resolve(env).unwrap();
-                let res_right = right.resolve(env).unwrap();
+/// No error is generated here; everything is delayed at the end of assembling.
+/// Returns false in case of assert failure
+fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> bool {
+    let res = match env.resolve_expr_must_never_fail(exp) {
+        Err(e) => {
+            Err(e)
+        },
 
-                format!("[{} {} {}] ", res_left, oper, res_right)
-                    + &format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right)
-            };
+        Ok(value) => {
+            if value == 0.into() {
+                let symbols = env.symbols();
+                let oper = |left: &Expr, right: &Expr, oper: &str| -> String {
+                    let res_left = left.resolve(env).unwrap();
+                    let res_right = right.resolve(env).unwrap();
 
-            let prefix = match exp {
-                Expr::Equal(ref left, ref right) => oper(left, right, "=="),
-                Expr::LowerOrEqual(ref left, ref right) => oper(left, right, "<="),
-                Expr::GreaterOrEqual(ref left, ref right) => oper(left, right, ">="),
-                Expr::StrictlyGreater(ref left, ref right) => oper(left, right, ">"),
-                Expr::StrictlyLower(ref left, ref right) => oper(left, right, "<"),
-                _ => "".to_string(),
-            };
+                    format!("[{} {} {}] ", res_left, oper, res_right)
+                        + &format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right)
+                };
 
-            return Err(AssemblerError::AssertionFailed {
-                msg: prefix + if txt.is_some() { &txt.unwrap() } else { "" },
-                test: exp.to_string(),
-                guidance: env.to_assert_string(exp),
-            });
+                let prefix = match exp {
+                    Expr::Equal(ref left, ref right) => oper(left, right, "=="),
+                    Expr::LowerOrEqual(ref left, ref right) => oper(left, right, "<="),
+                    Expr::GreaterOrEqual(ref left, ref right) => oper(left, right, ">="),
+                    Expr::StrictlyGreater(ref left, ref right) => oper(left, right, ">"),
+                    Expr::StrictlyLower(ref left, ref right) => oper(left, right, "<"),
+                    _ => "".to_string(),
+                };
+
+                Err(AssemblerError::AssertionFailed {
+                    msg: prefix + if txt.is_some() { &txt.unwrap() } else { "" },
+                    test: exp.to_string(),
+                    guidance: env.to_assert_string(exp),
+                })
+            } else {
+                Ok(())
+            }
         }
+    };
+
+    if let Err(assert_error) = res {
+        env.active_page_info_mut()
+            .add_failed_assert_command(assert_error.into());
+        false
+    } else {
+        true
     }
-    Ok(())
+
 }
 
 impl Env {
@@ -4328,14 +4507,12 @@ mod test {
             &Expr::Equal(Box::new(0.into()), Box::new(0.into())),
             None,
             &mut env
-        )
-        .is_ok());
-        assert!(visit_assert(
+        ));
+        assert!(!visit_assert(
             &Expr::Equal(Box::new(1.into()), Box::new(0.into())),
             None,
             &mut env
-        )
-        .is_err());
+        ));
     }
 
     #[test]
