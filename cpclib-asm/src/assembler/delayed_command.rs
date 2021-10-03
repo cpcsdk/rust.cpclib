@@ -100,6 +100,7 @@ impl DelayedCommands {
         Ok(res)
     }
 
+	/// Return Ok if no assertion error, Err otherwise
 	pub fn collect_assert_failure(&self) -> Result<(), AssemblerError> {
 		if self.failed_assert_commands.is_empty() {
 			Ok(())

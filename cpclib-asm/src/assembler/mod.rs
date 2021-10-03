@@ -1,18 +1,18 @@
+pub mod delayed_command;
 pub mod listing_output;
-pub mod symbols_output;
+pub mod page_info;
 pub mod report;
 pub mod save_command;
-pub mod page_info;
 pub mod stable_ticker;
-pub mod delayed_command;
+pub mod symbols_output;
 
+use crate::delayed_command::*;
+use crate::page_info::PageInformation;
+use crate::preamble::*;
 use crate::report::Report;
 use crate::save_command::*;
 use crate::stable_ticker::*;
-use crate::preamble::*;
 use crate::PhysicalAddress;
-use crate::page_info::{PageInformation};
-use crate::delayed_command::*;
 
 use crate::AssemblingOptions;
 
@@ -41,7 +41,7 @@ use std::collections::HashMap;
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
 const REPEAT_START_VALUE: i32 = 1;
-const MMR_PAGES_SELECTION: [u8;9] = [
+const MMR_PAGES_SELECTION: [u8; 9] = [
     0xc0,
     0b11_000_0_01,
     0b11_001_0_01,
@@ -117,8 +117,9 @@ impl MyDefault for Banks {
 pub enum AssemblingPass {
     Uninitialized,
     FirstPass,
-    SecondPass,
+    SecondPass, // and subsequent
     Finished,
+    Listing, // pass dedicated to the listing production
 }
 impl fmt::Display for AssemblingPass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -127,6 +128,7 @@ impl fmt::Display for AssemblingPass {
             AssemblingPass::FirstPass => "1",
             AssemblingPass::SecondPass => "2",
             AssemblingPass::Finished => "Finished",
+            AssemblingPass::Listing => "Listing",
         };
         write!(f, "{}", content)
     }
@@ -168,11 +170,10 @@ impl AssemblingPass {
             AssemblingPass::Uninitialized => AssemblingPass::FirstPass,
             AssemblingPass::FirstPass => AssemblingPass::SecondPass,
             AssemblingPass::SecondPass => AssemblingPass::Finished,
-            AssemblingPass::Finished => panic!(),
+            AssemblingPass::Finished | AssemblingPass::Listing => panic!(),
         }
     }
 }
-
 
 /// Trait to implement for each type of token.
 /// it allows to drive the appropriate data vonversion
@@ -195,7 +196,6 @@ impl Visited for LocatedToken {
 }
 
 type AssemblerWarning = AssemblerError;
-
 
 /// Store all the necessary information when handling a crunched section
 #[derive(Clone)]
@@ -308,6 +308,8 @@ pub struct Env {
     /// If true at the end of the pass, can prematurely stop the assembling
     /// Hidden in a rwlock to allow a modification even in non mutable state
     can_skip_next_passes: RwLock<bool>,
+    /// An issue in a crunched section requires an additional pass
+    request_additional_pass: RwLock<bool>,
 
     /// Check if we are assembling a crunched section as there are some limitations
     crunched_section_state: Option<CrunchedSectionState>,
@@ -362,16 +364,14 @@ pub struct Env {
     /// Current section if any
     current_section: Option<Arc<RwLock<Section>>>,
 
-    saved_files: Option<Vec<SavedFile>>
+    saved_files: Option<Vec<SavedFile>>,
 }
 
 impl Clone for Env {
     fn clone(&self) -> Self {
         Self {
-            can_skip_next_passes: (*self.can_skip_next_passes
-                                        .read()
-                                        .unwrap()
-                                        .deref()).into(),
+            can_skip_next_passes: (*self.can_skip_next_passes.read().unwrap().deref()).into(),
+            request_additional_pass: (*self.request_additional_pass.read().unwrap().deref()).into(),
             pass: self.pass.clone(),
             real_nb_passes: self.real_nb_passes.clone(),
             crunched_section_state: self.crunched_section_state.clone(),
@@ -396,7 +396,6 @@ impl Clone for Env {
             sections: self.sections.clone(),
             current_section: self.current_section.clone(),
             saved_files: self.saved_files.clone(),
-           
         }
     }
 }
@@ -446,16 +445,16 @@ impl Default for Env {
             real_nb_passes: 0,
             saved_files: None,
             can_skip_next_passes: true.into(),
+            request_additional_pass: false.into(),
         }
     }
 }
 
 /// Report handling
 impl Env {
-    pub fn report (&self, start: &Instant) -> Report {
+    pub fn report(&self, start: &Instant) -> Report {
         Report::from((self, start))
     }
-
 }
 
 /// Namespace handling
@@ -523,14 +522,27 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
-        self.pass = if self.real_nb_passes == 0 || !*self.can_skip_next_passes.read().unwrap().deref() {
-            self.pass.next_pass()
-        }
-        else {
-            AssemblingPass::Finished
-        };
+        let mut can_change_request = true;
+        self.pass =
+            if self.real_nb_passes == 0 || !*self.can_skip_next_passes.read().unwrap().deref() {
+                if *self.request_additional_pass.read().unwrap() {
+                    if self.pass.is_first_pass() {
+                        can_change_request = false;
+                    }
+                    AssemblingPass::SecondPass
+                } else {
+                    self.pass.next_pass()
+                }
+            } else {
+                if !*self.request_additional_pass.read().unwrap() {
+                    AssemblingPass::Finished
+                }
+                else {
+                    AssemblingPass::SecondPass
+                }
+            };
 
-        if  !self.pass.is_finished() {
+        if !self.pass.is_finished() {
             self.real_nb_passes += 1;
 
             // environnement is not reset when assembling is finished
@@ -558,8 +570,11 @@ impl Env {
             self.selected_bank = None;
             self.output_address = 0;
             self.can_skip_next_passes = true.into();
-
+            if can_change_request {
+                self.request_additional_pass = false.into();
+            }
         }
+
     }
 
     /// Handle the actions to do after assembling.
@@ -583,52 +598,42 @@ impl Env {
             self.ga_mmr = *page;
             let mut l_errors = self.pages_info_sna[activepage].collect_assert_failure();
             match (&mut assert_failures, &mut l_errors) {
-                (
-                    _, 
-                    Ok(_)
-                ) => {
+                (_, Ok(_)) => {
                     //nothing to do
-                },
+                }
                 (
-                    Some(AssemblerError::MultipleErrors{errors:e1}),
-                    Err(AssemblerError::MultipleErrors{errors:e2 })
+                    Some(AssemblerError::MultipleErrors { errors: e1 }),
+                    Err(AssemblerError::MultipleErrors { errors: e2 }),
                 ) => {
                     e1.append(e2);
-                },
-                (
-                    None, 
-                    Err(l_errors)) => {
+                }
+                (None, Err(l_errors)) => {
                     assert_failures = Some(l_errors.clone());
-                },
-                _ => unreachable!()
+                }
+                _ => unreachable!(),
             }
         }
 
         for bank in self.banks.iter() {
             let mut l_errors = bank.1.collect_assert_failure();
             match (&mut assert_failures, &mut l_errors) {
-                (
-                    _, 
-                    Ok(_)
-                ) => {
+                (_, Ok(_)) => {
                     //nothing to do
-                },
+                }
                 (
-                    Some(AssemblerError::MultipleErrors{errors:e1}),
-                    Err(AssemblerError::MultipleErrors{errors:e2 })
+                    Some(AssemblerError::MultipleErrors { errors: e1 }),
+                    Err(AssemblerError::MultipleErrors { errors: e2 }),
                 ) => {
                     e1.append(e2);
-                },
+                }
                 (None, Err(l_errors)) => {
                     assert_failures = Some(l_errors.clone());
-                },
-                _ => unreachable!()
+                }
+                _ => unreachable!(),
             }
-
         }
 
         self.ga_mmr = backup;
-
 
         // All possible messages have been printed.
         // Errors are generated for the others
@@ -638,7 +643,6 @@ impl Env {
             Ok(())
         }
     }
-
 
     fn handle_print(&mut self) -> Result<(), AssemblerError> {
         let backup = self.ga_mmr;
@@ -654,52 +658,42 @@ impl Env {
             self.ga_mmr = *page;
             let mut l_errors = self.pages_info_sna[activepage].execute_print(&mut writer);
             match (&mut print_errors, &mut l_errors) {
-                (
-                    _, 
-                    Ok(_)
-                ) => {
+                (_, Ok(_)) => {
                     //nothing to do
-                },
+                }
                 (
-                    Some(AssemblerError::MultipleErrors{errors:e1}),
-                    Err(AssemblerError::MultipleErrors{errors:e2 })
+                    Some(AssemblerError::MultipleErrors { errors: e1 }),
+                    Err(AssemblerError::MultipleErrors { errors: e2 }),
                 ) => {
                     e1.append(e2);
-                },
-                (
-                    None, 
-                    Err(l_errors)) => {
+                }
+                (None, Err(l_errors)) => {
                     print_errors = Some(l_errors.clone());
-                },
-                _ => unreachable!()
+                }
+                _ => unreachable!(),
             }
         }
 
         for bank in self.banks.iter() {
             let mut l_errors = bank.1.execute_print(&mut writer);
             match (&mut print_errors, &mut l_errors) {
-                (
-                    _, 
-                    Ok(_)
-                ) => {
+                (_, Ok(_)) => {
                     //nothing to do
-                },
+                }
                 (
-                    Some(AssemblerError::MultipleErrors{errors:e1}),
-                    Err(AssemblerError::MultipleErrors{errors:e2 })
+                    Some(AssemblerError::MultipleErrors { errors: e1 }),
+                    Err(AssemblerError::MultipleErrors { errors: e2 }),
                 ) => {
                     e1.append(e2);
-                },
+                }
                 (None, Err(l_errors)) => {
                     print_errors = Some(l_errors.clone());
-                },
-                _ => unreachable!()
+                }
+                _ => unreachable!(),
             }
-
         }
 
         self.ga_mmr = backup;
-
 
         // All possible messages have been printed.
         // Errors are generated for the others
@@ -710,7 +704,7 @@ impl Env {
         }
     }
 
-    fn  handle_file_save(&mut self) -> Result<Vec<SavedFile>, AssemblerError> {
+    fn handle_file_save(&mut self) -> Result<Vec<SavedFile>, AssemblerError> {
         let backup = self.ga_mmr;
 
         // ga values to properly switch the pages
@@ -727,7 +721,7 @@ impl Env {
 
         // save from extra memory / can be done in parallal
         self.ga_mmr = 0xc0;
-        let mut saved= self
+        let mut saved = self
             .banks
             .par_iter()
             .map(|bank| bank.1.execute_save(self))
@@ -740,7 +734,9 @@ impl Env {
         self.ga_mmr = backup;
         Ok(saved_files)
     }
+}
 
+impl Env {
     /// TODO
     fn active_page_info(&self) -> &PageInformation {
         match &self.selected_bank {
@@ -1088,8 +1084,7 @@ impl Env {
         match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
-                if self.pass.is_first_pass()
-                {
+                if self.pass.is_first_pass() {
                     *self.can_skip_next_passes.write().unwrap() = false;
                     Ok(0.into())
                 } else {
@@ -1105,8 +1100,7 @@ impl Env {
         match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
-                if self.pass.is_first_pass()
-                {
+                if self.pass.is_first_pass() {
                     *self.can_skip_next_passes.write().unwrap() = false;
                     Err(e)
                 } else {
@@ -1763,11 +1757,10 @@ impl Env {
             Err(error) => either::Either::Right(error),
         };
 
-        self.active_page_info_mut()
-            .add_print_command(PrintCommand{
-                span,
-                print_or_error,
-            })
+        self.active_page_info_mut().add_print_command(PrintCommand {
+            span,
+            print_or_error,
+        })
     }
 
     pub fn visit_fail(&self, info: &[FormattedExpr]) -> Result<(), AssemblerError> {
@@ -1786,7 +1779,6 @@ impl Env {
         dsk_filename: Option<&String>,
         _side: Option<&Expr>,
     ) -> Result<(), AssemblerError> {
-        
         let from = match address {
             Some(address) => Some(self.resolve_expr_must_never_fail(address)?.int()),
             None => None,
@@ -1864,7 +1856,8 @@ impl Env {
         crunched_env.active_page_info_mut().logical_outputadr = 0; // relocated output at 0 to be sure to have 64kb available
                                                                    // XXX probably a wrong behavior/to see with users
 
-        crunched_env.active_page_info_mut().startadr = Some(0); // reset the counter to obtain the bytes
+        crunched_env.active_page_info_mut().startadr = None; // reset the counter to obtain the bytes
+        crunched_env.active_page_info_mut().maxadr = 0;
         crunched_env.active_page_info_mut().limit = 0xffff; // disable limit (to be redone in the area)
         crunched_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
         crunched_env.output_address = 0;
@@ -1873,6 +1866,7 @@ impl Env {
             .as_mut()
             .map(|t| t.enter_crunched_section());
         crunched_env.visit_listing(lst).map_err(|e| {
+            dbg!(&self.pass, &crunched_env.pass);
             let e = AssemblerError::CrunchedSectionError { error: e.into() };
             match span {
                 Some(span) => AssemblerError::RelocatedError {
@@ -1888,13 +1882,17 @@ impl Env {
 
         // get the new data and crunch it
         let bytes = crunched_env.produced_bytes();
-        let crunched: Vec<u8> = kind.crunch(&bytes).map_err(|e| match span {
-            Some(span) => AssemblerError::RelocatedError {
-                error: e.into(),
-                span: span.clone(),
-            },
-            None => e,
-        })?;
+        let crunched: Vec<u8> = if bytes.is_empty() {
+            Vec::new()
+        } else {
+            kind.crunch(&bytes).map_err(|e| match span {
+                Some(span) => AssemblerError::RelocatedError {
+                    error: e.into(),
+                    span: span.clone(),
+                },
+                None => e,
+            })?
+        };
 
         eprintln!("Crunched from {} to {} bytes", bytes.len(), crunched.len());
 
@@ -1909,8 +1907,15 @@ impl Env {
 
         // update the symbol table with the new symbols obtained in the crunched section
         std::mem::swap(self.symbols_mut(), crunched_env.symbols_mut());
-        let can_skip_next_passes = (*self.can_skip_next_passes.read().unwrap().deref() | *crunched_env.can_skip_next_passes.read().unwrap().deref()).into(); // report missing symbols from the crunched area to the current area
+        let can_skip_next_passes = (*self.can_skip_next_passes.read().unwrap().deref()
+            & *crunched_env.can_skip_next_passes.read().unwrap())
+        .into(); // report missing symbols from the crunched area to the current area
+        let request_additional_pass = (*self.request_additional_pass.read().unwrap().deref()
+            | *crunched_env.request_additional_pass.read().unwrap())
+        .into();
         *self.can_skip_next_passes.write().unwrap() = can_skip_next_passes;
+        *self.request_additional_pass.write().unwrap() = request_additional_pass;
+        
         self.macro_seed = crunched_env.macro_seed;
 
         // TODO display ONLY if:
@@ -2002,7 +2007,6 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
     if let Some(trigger) = env.output_trigger.as_mut() {
         trigger.finish()
     }
-
 
     env.saved_files = Some(env.handle_post_actions()?);
 
@@ -2156,7 +2160,10 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     // dbg!(token, env.active_page_info());
     match token {
         Token::Align(ref boundary, ref fill) => env.visit_align(boundary, fill.as_ref()),
-        Token::Assert(ref exp, ref txt) => {visit_assert(exp, txt.as_ref(), env); Ok(())},
+        Token::Assert(ref exp, ref txt) => {
+            visit_assert(exp, txt.as_ref(), env);
+            Ok(())
+        }
         Token::Basic(ref variables, ref hidden_lines, ref code) => {
             env.visit_basic(variables.as_ref(), hidden_lines.as_ref(), code)
         }
@@ -2227,7 +2234,10 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Assign(ref label, ref exp) => visit_assign(label, exp, env),
         Token::Protect(ref start, ref end) => env.visit_protect(start, end),
-        Token::Print(ref exp) => {env.visit_print(exp.as_ref(), None); Ok(())},
+        Token::Print(ref exp) => {
+            env.visit_print(exp.as_ref(), None);
+            Ok(())
+        }
         Token::Fail(ref exp) => env.visit_fail(exp.as_ref()),
         Token::Repeat(count, code, counter, counter_start) => env.visit_repeat(
             count,
@@ -2278,9 +2288,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 /// Returns false in case of assert failure
 fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> bool {
     let res = match env.resolve_expr_must_never_fail(exp) {
-        Err(e) => {
-            Err(e)
-        },
+        Err(e) => Err(e),
 
         Ok(value) => {
             if value == 0.into() {
@@ -2320,7 +2328,6 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> bool {
     } else {
         true
     }
-
 }
 
 impl Env {
@@ -2726,7 +2733,13 @@ pub fn assemble_defs_item(
     fill: Option<&Expr>,
     env: &Env,
 ) -> Result<Bytes, AssemblerError> {
-    let count = env.resolve_expr_must_never_fail(expr)?.int();
+    let count = match env.resolve_expr_must_never_fail(expr) {
+        Ok(amount) => amount.int(),
+        Err(_) => {
+            *env.request_additional_pass.write().unwrap() = true; // we expect to obtain this value later
+            0.into()
+        }
+    };
     let value = if fill.is_none() {
         0
     } else {
@@ -2739,7 +2752,7 @@ pub fn assemble_defs_item(
     let mut bytes = Bytes::with_capacity(count as usize);
     bytes.resize_with(count as _, || value);
 
-    Ok(bytes)
+    Ok(dbg!(bytes))
 }
 
 /// Assemble align directive. It can only work if current address is known...
