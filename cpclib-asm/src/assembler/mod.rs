@@ -4500,8 +4500,6 @@ mod test {
     pub fn test_assert() {
         let mut env = Env::default();
         env.start_new_pass();
-        env.start_new_pass();
-        assert!(env.pass.is_second_pass());
 
         assert!(visit_assert(
             &Expr::Equal(Box::new(0.into()), Box::new(0.into())),
