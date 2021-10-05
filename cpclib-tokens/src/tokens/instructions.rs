@@ -362,6 +362,8 @@ pub enum TestKind {
     LabelExists(String),
     // Test succeed if it is a missing label
     LabelDoesNotExist(String),
+    LabelUsed(String),
+    LabelNused(String),
 }
 
 /// List of transformations that can be applied to an imported binary file

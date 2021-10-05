@@ -151,6 +151,9 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "EXPORT",
     "NOEXPORT",
     "IF",
+    "IFDEF",
+    "IFNDEF",
+    "IFUSED",
     "ELSE",
     "ENDIF",
     "INCLUDE",
@@ -1486,6 +1489,8 @@ enum KindOfConditional {
     IfNot,
     IfDef,
     IfNdef,
+    IfUsed,
+    IfNused,
 }
 
 /// Parse if expression.TODO finish the implementation in order to have ELSEIF and ELSE branches"
@@ -1497,6 +1502,8 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
         map(parse_word("IFNOT"), |_| KindOfConditional::IfNot),
         map(parse_word("IFDEF"), |_| KindOfConditional::IfDef),
         map(parse_word("IFNDEF"), |_| KindOfConditional::IfNdef),
+        map(parse_word("IFUSED"), |_| KindOfConditional::IfUsed),
+        map(parse_word("IFNUSED"), |_| KindOfConditional::IfNused),
     ))(input)?;
 
     // Get the corresponding test
@@ -1576,6 +1583,16 @@ fn parse_conditional_condition(
 
             KindOfConditional::IfNdef => {
                 map(parse_label(false), |l| TestKind::LabelDoesNotExist(l))(input)
+            }
+
+            KindOfConditional::IfUsed => {
+                map(parse_label(false), |l| TestKind::LabelUsed(l))(input)
+
+            }
+
+            KindOfConditional::IfNused => {
+                map(parse_label(false), |l| TestKind::LabelNused(l))(input)
+
             }
 
             _ => unreachable!(),

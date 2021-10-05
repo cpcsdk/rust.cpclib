@@ -189,7 +189,7 @@ pub fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
             io: e,
             ctx: format!("saving \"{}\"", pc_filename),
         })?;
-    } else if matches.is_present("OUTPUT") {
+    } else if matches.is_present("OUTPUT") || matches.is_present("DB_LIST") {
         // Collect the produced bytes
         let binary = env.produced_bytes();
 

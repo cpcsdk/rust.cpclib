@@ -3,6 +3,8 @@
 #![feature(specialization)]
 #![feature(exact_size_is_empty)]
 #![feature(exclusive_range_pattern)]
+#![feature(let_chains)]
+
 /// Implementation of various behvior for the tokens of cpclib_tokens
 pub mod implementation;
 

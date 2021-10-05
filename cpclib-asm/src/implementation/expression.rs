@@ -2,7 +2,7 @@ use crate::assembler::Env;
 use crate::error::*;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
-
+use cpclib_common::itertools::Itertools;
 use crate::implementation::tokens::*;
 
 ///! Add all important methods to expresison-like structure sthat are not availalbe in the cpclib_tokens crate.
@@ -17,10 +17,56 @@ pub trait ExprEvaluationExt {
         self.resolve(&env)
     }
 
+    /// Resolve the expression base on the env context
     fn resolve(&self, sym: &Env) -> Result<ExprResult, AssemblerError>;
+
+    /// Get all the symbols used
+    fn symbols_used(&self) -> Vec<&str>;
 }
 
 impl ExprEvaluationExt for Expr {
+    fn symbols_used(&self) -> Vec<&str> {
+        match self {
+            Expr::RelativeDelta(_) | Expr::Value(_) | Expr::Float(_) |
+            Expr::Char(_) | Expr::String(_) |
+            Expr::Duration(_) | Expr::OpCode(_)|
+            Expr::Rnd  => Vec::new(),
+            
+            Expr::Label(label) | Expr::PrefixedLabel(_, label)=> vec![label.as_str()],
+
+            Expr::RightShift(a, b) | Expr::LeftShift(a, b) |
+            Expr::Add(a, b)|
+            Expr::Sub(a, b)|
+            Expr::Mul(a, b)|
+            Expr::Div(a, b)|
+            Expr::Mod(a, b)|
+            Expr::BinaryAnd(a, b)|
+            Expr::BinaryOr(a, b)|
+            Expr::BinaryXor(a, b) |
+            Expr::BooleanAnd(a, b) |
+            Expr::Equal(a, b) |
+            Expr::Different(a, b) |
+            Expr::LowerOrEqual(a, b) |
+            Expr::GreaterOrEqual(a, b) |
+            Expr::StrictlyGreater(a, b) |
+            Expr::StrictlyLower(a, b) |
+            Expr::BinaryFunction(_, a, b) |
+            Expr::BooleanOr(a, b) => {
+                a.symbols_used().into_iter()
+                    .chain(b.symbols_used().into_iter())
+                    .collect_vec()
+            }
+
+            Expr::BinaryNot(a) | Expr::Neg(a) |
+            Expr::Paren(a) |
+            Expr::UnaryFunction(_, a) 
+            => a.symbols_used(),
+
+        }
+    }
+
+
+
     fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
         let sym = env.symbols();
         use self::Expr::*;
@@ -186,6 +232,11 @@ impl<'a> UnaryFunctionWrapper<'a> {
 }
 
 impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
+
+    fn symbols_used(&self) -> Vec<&str> {
+        self.arg.symbols_used()
+    }
+
     /// TODO handle float numbers
     fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
         let arg = self.arg.resolve(env)?;
@@ -235,6 +286,13 @@ impl<'a> BinaryFunctionWrapper<'a> {
 }
 
 impl<'a> ExprEvaluationExt for BinaryFunctionWrapper<'a> {
+
+    fn symbols_used(&self) -> Vec<&str> {
+        self.arg1.symbols_used().into_iter()
+            .chain(self.arg2.symbols_used().into_iter())
+            .collect_vec()
+    }
+    
     fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
         let arg1 = self.arg1.resolve(env)?;
         let arg2 = self.arg2.resolve(env)?;
