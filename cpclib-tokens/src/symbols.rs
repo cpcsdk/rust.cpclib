@@ -452,6 +452,12 @@ pub trait SymbolsTableTrait {
     /// Return the symbols that correspond to integer values
     fn integer_symbols(&self) -> Vec<&Symbol>;
 
+
+    /// Return true if the symbol has already been used in an expression
+    fn is_used<S: Into<Symbol>>(&self, symbol: S) -> bool;
+    /// Add a symbol to the list of used symbols
+    fn use_symbol<S: Into<Symbol>>(&mut self, symbol: S);
+
     /// Return the integer value corredponding to this symbol (if any)
     fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError>;
 
@@ -558,6 +564,7 @@ impl<'t> Iterator for ModuleSymbolTableIterator<'t> {
 pub struct SymbolsTable {
     // Tree of symbols. The default one is the root
     map: ModuleSymbolTable,
+
     dummy: bool,
     current_global_label: Symbol, //  Value of the current label to allow local labels
     // Stack of namespaces
@@ -566,6 +573,9 @@ pub struct SymbolsTable {
     // list of symbols that are assignable (i.e. modified programmatically)
     assignable: HashSet<Symbol>,
     seed_stack: Vec<usize>, // stack of seeds for nested repeat to properly interpret the @ symbol
+
+    /// Contains all the symbols that have been used in expressions
+    used_symbols: HashSet<Symbol>
 }
 
 impl Default for SymbolsTable {
@@ -579,6 +589,7 @@ impl Default for SymbolsTable {
             assignable: Default::default(),
             seed_stack: Vec::new(),
             namespace_stack: Vec::new(),
+            used_symbols: HashSet::new()
         }
     }
 }
@@ -779,6 +790,16 @@ impl SymbolsTableTrait for SymbolsTable {
         let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self.map.remove(&symbol))
     }
+
+    fn is_used<S: Into<Symbol>>(&self, symbol: S) -> bool {
+        let symbol = self.extend_readable_symbol(symbol).unwrap();
+        self.used_symbols.contains(&symbol)
+    }
+
+    fn use_symbol<S: Into<Symbol>>(&mut self, symbol: S) {
+        let symbol = self.extend_readable_symbol(symbol).unwrap();
+        self.used_symbols.insert(symbol);
+    }
 }
 
 #[allow(missing_docs)]
@@ -793,6 +814,7 @@ impl SymbolsTable {
             assignable: HashSet::new(),
             seed_stack: Vec::new(),
             namespace_stack: Vec::new(),
+            used_symbols: HashSet::new()
         }
     }
 
@@ -1123,6 +1145,16 @@ impl SymbolsTableCaseDependent {
 }
 
 impl SymbolsTableTrait for SymbolsTableCaseDependent {
+
+    fn is_used<S: Into<Symbol>>(&self, symbol: S) -> bool {
+        self.table.is_used(self.normalize_symbol(symbol))
+    }
+
+    fn use_symbol<S: Into<Symbol>>(&mut self, symbol: S)  {
+        self.table.use_symbol(self.normalize_symbol(symbol))
+    }
+
+
     fn integer_symbols(&self) -> Vec<&Symbol> {
         self.table.integer_symbols()
     }

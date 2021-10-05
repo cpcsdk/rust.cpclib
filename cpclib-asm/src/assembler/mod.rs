@@ -317,6 +317,8 @@ pub struct Env {
     can_skip_next_passes: RwLock<bool>,
     /// An issue in a crunched section requires an additional pass
     request_additional_pass: RwLock<bool>,
+    /// true when it is an additional pass
+    requested_additional_pass: bool,
 
     /// Check if we are assembling a crunched section as there are some limitations
     crunched_section_state: Option<CrunchedSectionState>,
@@ -372,6 +374,11 @@ pub struct Env {
     current_section: Option<Arc<RwLock<Section>>>,
 
     saved_files: Option<Vec<SavedFile>>,
+    
+    if_token_adr_to_ndef_decision: HashMap<usize, bool>,
+    if_token_adr_to_def_decision: HashMap<usize, bool>,
+    if_token_adr_to_used_decision: HashMap<usize, bool>,
+    if_token_adr_to_unused_decision: HashMap<usize, bool>,
 }
 
 impl Clone for Env {
@@ -403,6 +410,12 @@ impl Clone for Env {
             sections: self.sections.clone(),
             current_section: self.current_section.clone(),
             saved_files: self.saved_files.clone(),
+
+            if_token_adr_to_ndef_decision: self.if_token_adr_to_ndef_decision.clone(),
+            if_token_adr_to_def_decision: self.if_token_adr_to_def_decision.clone(),
+            if_token_adr_to_used_decision: self.if_token_adr_to_used_decision.clone(),
+            if_token_adr_to_unused_decision: self.if_token_adr_to_unused_decision.clone(),
+            requested_additional_pass: self.requested_additional_pass,
         }
     }
 }
@@ -453,10 +466,124 @@ impl Default for Env {
             saved_files: None,
             can_skip_next_passes: true.into(),
             request_additional_pass: false.into(),
+        
+        
+            if_token_adr_to_ndef_decision: HashMap::default(),
+            if_token_adr_to_def_decision: HashMap::default(),
+            if_token_adr_to_used_decision: HashMap::default(),
+            if_token_adr_to_unused_decision: HashMap::default(),
+            requested_additional_pass: false,
         }
     }
 }
 
+/// Symbols handling
+impl Env {
+    pub fn symbols(&self) -> &SymbolsTableCaseDependent {
+        &self.symbols
+    }
+
+    pub fn symbols_mut(&mut self) -> &mut SymbolsTableCaseDependent {
+        &mut self.symbols
+    }
+
+        /// Compute the expression thanks to the symbol table of the environment.
+    /// If the expression is not solvable in first pass, 0 is returned.
+    /// If the expression is not solvable in second pass, an error is returned
+    ///
+    /// However, when assembling in a crunched section, the expression MUST NOT fail. edit: why ? I do not get it now and I have removed this limitation
+    fn resolve_expr_may_fail_in_first_pass(
+        &self,
+        exp: &Expr,
+    ) -> Result<ExprResult, AssemblerError> {
+        match exp.resolve(self) {
+            Ok(value) => Ok(value),
+            Err(e) => {
+                if self.pass.is_first_pass() {
+                    *self.can_skip_next_passes.write().unwrap() = false;
+                    Ok(0.into())
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+        /// Compute the expression thanks to the symbol table of the environment.
+    /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
+    fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<ExprResult, AssemblerError> {
+        match exp.resolve(self) {
+            Ok(value) => Ok(value),
+            Err(e) => {
+                if self.pass.is_first_pass() {
+                    *self.can_skip_next_passes.write().unwrap() = false;
+                    Err(e)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+      /// Add a symbol to the symbol table.
+    /// In pass 1: the label MUST be absent
+    /// In pass 2: the label MUST be present and of the same value
+    fn add_symbol_to_symbol_table<E: Into<Value>>(
+        &mut self,
+        label: &str,
+        value: E,
+    ) -> Result<(), AssemblerError> {
+        let already_present = self.symbols().contains_symbol(label)?;
+        let value = value.into();
+
+        match (already_present, self.pass) {
+            (true, AssemblingPass::FirstPass) => Err(AssemblerError::SymbolAlreadyExists {
+                symbol: label.to_string(),
+            }),
+            (false, AssemblingPass::SecondPass ) => {
+                // here we weaken the test to allow multipass stuff
+                if ! self.requested_additional_pass &&
+                   ! *self.request_additional_pass.read().unwrap()
+                {
+                        Err(AssemblerError::IncoherentCode{msg: format!(
+                        "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
+                        label, self.pass
+                    )})
+                } else {
+                    self.symbols_mut()
+                        .set_symbol_to_value(label, value);
+                    Ok(())
+                }
+             },
+            (false,  AssemblingPass::ListingPass) => Err(AssemblerError::IncoherentCode{msg: format!(
+                "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
+                label, self.pass
+            )}),
+            (false, AssemblingPass::FirstPass) | (false, AssemblingPass::Uninitialized) => {
+                self.symbols_mut()
+                    .set_symbol_to_value(label, value);
+                Ok(())
+            }
+            (true, AssemblingPass::SecondPass | AssemblingPass::ListingPass) => {
+                self.symbols_mut()
+                    .update_symbol_to_value(&label.to_owned(), value);
+                Ok(())
+            }
+            (_, _) => panic!(
+                "add_symbol_to_symbol_table / unmanaged case {}, {}, {} {:#?}",
+                self.pass, label, already_present, value
+            ),
+        }
+    }
+
+    /// Track the symbols for an expression that has been properly executed
+    fn track_used_symbols(&mut self, e: &Expr) {
+        e.symbols_used()
+            .into_iter()
+            .for_each(|symbol| self.symbols.use_symbol(symbol))
+    }
+
+}
 /// Report handling
 impl Env {
     pub fn report(&self, start: &Instant) -> Report {
@@ -529,6 +656,9 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
+
+        self.requested_additional_pass = *self.request_additional_pass.read().unwrap();
+
         let mut can_change_request = true;
         if !self.pass.is_listing_pass() {
             self.pass = if self.real_nb_passes == 0
@@ -746,6 +876,7 @@ impl Env {
     }
 }
 
+/// Output handling
 impl Env {
     /// TODO
     fn active_page_info(&self) -> &PageInformation {
@@ -1062,13 +1193,7 @@ impl Env {
         expr.resolve(self)
     }
 
-    pub fn symbols(&self) -> &SymbolsTableCaseDependent {
-        &self.symbols
-    }
 
-    pub fn symbols_mut(&mut self) -> &mut SymbolsTableCaseDependent {
-        &mut self.symbols
-    }
 
     pub fn sna(&self) -> &cpclib_sna::Snapshot {
         &self.sna
@@ -1082,43 +1207,8 @@ impl Env {
         self.sna().save(fname, self.sna_version())
     }
 
-    /// Compute the expression thanks to the symbol table of the environment.
-    /// If the expression is not solvable in first pass, 0 is returned.
-    /// If the expression is not solvable in second pass, an error is returned
-    ///
-    /// However, when assembling in a crunched section, the expression MUST NOT fail. edit: why ? I do not get it now and I have removed this limitation
-    fn resolve_expr_may_fail_in_first_pass(
-        &self,
-        exp: &Expr,
-    ) -> Result<ExprResult, AssemblerError> {
-        match exp.resolve(self) {
-            Ok(value) => Ok(value),
-            Err(e) => {
-                if self.pass.is_first_pass() {
-                    *self.can_skip_next_passes.write().unwrap() = false;
-                    Ok(0.into())
-                } else {
-                    Err(e)
-                }
-            }
-        }
-    }
 
-    /// Compute the expression thanks to the symbol table of the environment.
-    /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
-    fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<ExprResult, AssemblerError> {
-        match exp.resolve(self) {
-            Ok(value) => Ok(value),
-            Err(e) => {
-                if self.pass.is_first_pass() {
-                    *self.can_skip_next_passes.write().unwrap() = false;
-                    Err(e)
-                } else {
-                    Err(e)
-                }
-            }
-        }
-    }
+
 
     /// Compute the relative address. Is authorized to fail at first pass
     fn absolute_to_relative_may_fail_in_first_pass(
@@ -1142,41 +1232,7 @@ impl Env {
         }
     }
 
-    /// Add a symbol to the symbol table.
-    /// In pass 1: the label MUST be absent
-    /// In pass 2: the label MUST be present and of the same value
-    fn add_symbol_to_symbol_table<E: Into<Value>>(
-        &mut self,
-        label: &str,
-        value: E,
-    ) -> Result<(), AssemblerError> {
-        let already_present = self.symbols().contains_symbol(label)?;
-        let value = value.into();
-
-        match (already_present, self.pass) {
-            (true, AssemblingPass::FirstPass) => Err(AssemblerError::SymbolAlreadyExists {
-                symbol: label.to_string(),
-            }),
-            (false, AssemblingPass::SecondPass | AssemblingPass::ListingPass) => Err(AssemblerError::IncoherentCode{msg: format!(
-                "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
-                label, self.pass
-            )}),
-            (false, AssemblingPass::FirstPass) | (false, AssemblingPass::Uninitialized) => {
-                self.symbols_mut()
-                    .set_symbol_to_value(label, value);
-                Ok(())
-            }
-            (true, AssemblingPass::SecondPass | AssemblingPass::ListingPass) => {
-                self.symbols_mut()
-                    .update_symbol_to_value(&label.to_owned(), value);
-                Ok(())
-            }
-            (_, _) => panic!(
-                "add_symbol_to_symbol_table / unmanaged case {}, {}, {} {:#?}",
-                self.pass, label, already_present, value
-            ),
-        }
-    }
+  
 }
 
 #[allow(missing_docs)]
@@ -1285,6 +1341,7 @@ impl Env {
 
         // Test all the if cases until reaching one != 0
         for case in cases.iter() {
+            let token_adr = case.0 as *const _ as usize;
             match case {
                 // Expression must be true
                 (TestKind::True(ref exp), ref listing) => {
@@ -1296,7 +1353,7 @@ impl Env {
                 }
 
                 // Expression must be false
-                (TestKind::False(ref exp), ref listing) => {
+                (TestKind::False(ref exp), listing) => {
                     let value = self.resolve_expr_must_never_fail(exp)?;
                     if value == 0.into() {
                         self.visit_listing(listing)?;
@@ -1304,9 +1361,57 @@ impl Env {
                     }
                 }
 
+                (TestKind::LabelUsed(label), listing) => {
+                    let decision = self.symbols().is_used(label);
+
+                    // Add an extra pass if the test differ
+                    if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr)  {
+                        if *res != decision {
+                         *self.request_additional_pass.write().unwrap() = true;
+                        }
+                    }
+
+                    // replace the previously stored value
+                    self.if_token_adr_to_used_decision.insert(
+                        token_adr.clone(),
+                        decision
+                    );
+
+                    if  decision {
+                        self.visit_listing(listing)?;
+                    }
+                }
+
+                (TestKind::LabelNused(label), listing) => {
+                    let decision = !self.symbols().is_used(label);
+
+                    // Add an extra pass if the test differ
+                    if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr)  {
+                        if *res != decision {
+                         *self.request_additional_pass.write().unwrap() = true;
+                        }
+                    }
+
+                    // replace the previously stored value
+                    self.if_token_adr_to_unused_decision.insert(
+                        token_adr.clone(),
+                        decision
+                    );
+
+                    if  decision {
+                        self.visit_listing(listing)?;
+                    }
+                }
+
                 // Label must exist
-                (TestKind::LabelExists(ref label), ref listing) => {
-                    if self.symbols().contains_symbol(label)? {
+                (TestKind::LabelExists(ref label), listing) => {
+                    if !self.if_token_adr_to_def_decision.contains_key(&token_adr) {
+                        self.if_token_adr_to_def_decision.insert(
+                            token_adr.clone(),
+                            self.symbols().contains_symbol(label)?
+                        );
+                    }
+                    if *self.if_token_adr_to_def_decision.get(&token_adr).unwrap(){
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -1314,7 +1419,13 @@ impl Env {
 
                 // Label must not exist
                 (TestKind::LabelDoesNotExist(ref label), ref listing) => {
-                    if !self.symbols().contains_symbol(label)? {
+                    if !self.if_token_adr_to_ndef_decision.contains_key(&token_adr) {
+                        self.if_token_adr_to_ndef_decision.insert(
+                            token_adr.clone(),
+                            !self.symbols().contains_symbol(label)?
+                        );
+                    }
+                    if *self.if_token_adr_to_ndef_decision.get(&token_adr).unwrap(){
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -3170,7 +3281,7 @@ pub fn assemble_call_jr_or_jp(
     mne: Mnemonic,
     arg1: Option<&DataAccess>,
     arg2: &DataAccess,
-    env: &Env,
+    env: &mut Env,
 ) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
@@ -3239,6 +3350,8 @@ pub fn assemble_call_jr_or_jp(
             }
             add_word(&mut bytes, address as u16);
         }
+
+        env.track_used_symbols(e);
     } else if let DataAccess::MemoryRegister16(Register16::Hl) = arg2 {
         assert!(is_jp);
         add_byte(&mut bytes, 0xe9);
