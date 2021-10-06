@@ -60,15 +60,22 @@ impl SaveCommand {
                     None => loading_address,
                 };
 
-                let amsdos_file = AmsdosFile::binary_file_from_buffer(
+                let amsdos_file = if r#type  == SaveType::AmsdosBas  {
+                    AmsdosFile::basic_file_from_buffer(
+                        &AmsdosFileName::try_from(self.filename.as_str())?,
+                            &data,
+                        )?
+                } else { 
+                    AmsdosFile::binary_file_from_buffer(
                     &AmsdosFileName::try_from(self.filename.as_str())?,
-                    loading_address,
-                    execution_address,
-                    &data,
-                )?;
+                        loading_address,
+                        execution_address,
+                        &data,
+                    )?
+                };
 
                 match r#type {
-                    SaveType::Amsdos => {
+                    SaveType::AmsdosBin | SaveType::AmsdosBas => {
                         either::Left(amsdos_file.full_content().copied().collect::<Vec<u8>>())
                     }
                     SaveType::Dsk | SaveType::Tape => either::Right(amsdos_file),
