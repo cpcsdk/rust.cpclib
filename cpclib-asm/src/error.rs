@@ -478,7 +478,7 @@ impl Display for AssemblerError {
             AssemblerError::BugInAssembler { msg } => write!(f, "BUG in assembler: {}", msg),
             AssemblerError::BugInParser { error, context } => todo!(),
 
-            AssemblerError::BasicError { error } => todo!(),
+            AssemblerError::BasicError { error } => write!(f, "{}", error.to_string()),
             AssemblerError::AssemblingError { msg } => write!(f, "{}", msg),
             AssemblerError::InvalidArgument { msg } => write!(f, "Invalid argument: {}", msg),
             AssemblerError::AssertionFailed {
@@ -566,6 +566,15 @@ impl Display for AssemblerError {
                             Severity::Error,
                         );
                         write!(f, "{}\n{}", msg, root)
+                    }
+
+                    AssemblerError::BasicError{error} => {
+                        let msg = build_simple_error_message(
+                            "BASIC error",
+                            span,
+                            Severity::Error,
+                        );
+                        write!(f, "{}\n{}", msg, error)
                     }
 
                     AssemblerError::OutputProtected { area, address } => {

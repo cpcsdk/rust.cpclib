@@ -1237,14 +1237,15 @@ pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
         opt(preceded(
             parse_comma,
             alt((
-                value(SaveType::Amsdos, parse_word("AMSDOS")),
+                value(SaveType::AmsdosBin, parse_word("AMSDOS")),
+                value(SaveType::AmsdosBas, parse_word("BASIC")),
                 value(SaveType::Dsk, parse_word("DSK")),
                 value(SaveType::Tape, parse_word("TAPE")),
             )),
         ))(input)?
     } else {
         if save_kind == SaveKind::WriteDirect {
-            (input, Some(SaveType::Amsdos))
+            (input, Some(SaveType::AmsdosBin))
         } else {
             (input, None)
         }
