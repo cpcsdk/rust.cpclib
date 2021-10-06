@@ -1,16 +1,27 @@
 #!/bin/bash
 
 
-OUTPUT="/tmp/basm1.o"
-OUTPUT2="/tmp/basm2.o"
-ERR="/tmp/basm_err.o"
+
 
 #export RUSTFLAGS=-Awarnings
 
-# ensure assmebler exists
-cargo build --bin basm --features basm || exit -1
 
-BASM="$(git rev-parse --show-toplevel)/target/debug/basm"
+if uname -a | grep -q '^Linux.*icrosoft'; then
+	CARGO=cargo.exe
+	BASM="$(git rev-parse --show-toplevel)/target/debug/basm.exe"
+	OUTPUT="basm1.o"
+	OUTPUT2="basm2.o"
+	ERR="basm_err.o"
+else
+	CARGO=cargo
+	BASM="$(git rev-parse --show-toplevel)/target/debug/basm"
+	OUTPUT="/tmp/basm1.o"
+	OUTPUT2="/tmp/basm2.o"
+	ERR="/tmp/basm_err.o"
+fi
+
+# ensure assmebler exists
+$CARGO +nightly build --bin basm --features basm || exit -1
 
 declare -a wrong_files
 
