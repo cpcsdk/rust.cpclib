@@ -10,4 +10,5 @@
  charset
  db "aA"
  ASSERT memory(0x200) == 'a'
- ASSERT memory(0x201) == 'A'
+ ASSERT memory(0x201) == 'A' 
+ 
