@@ -184,6 +184,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "SWITCH",
     "SECTION",
     "UNDEF",
+    "UNTIL",
     "WAITNOPS",
     "WHILE",
     "WEND",
@@ -196,6 +197,7 @@ const FIRST_DIRECTIVE: &[&str] = &[
 
 // This table is supposed to contain the keywords that finish a section
 const FINAL_DIRECTIVE: &[&str] = &[
+    "UNTIL",
     "REND",
     "ENDR",
     "ENDREPEAT",
@@ -592,40 +594,69 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         )),
     )(input)?;
 
-    let (input, count) = cut(context("REPEAT: wrong number of iterations", expr))(input)?;
-    let (input, counter) = cut(context(
-        "REPEAT: issue in the counter",
-        opt(preceded(parse_comma, parse_label(false))),
-    ))(input)?;
-    let (input, counter_start) = opt(preceded(parse_comma, expr))(input)?;
-    let (input, inner) = cut(context("REPEAT: issue in the content", inner_code))(input)?;
+    let (input, count) = opt(expr)(input)?;
+    match count {
+        Some(count) => {
+            let (input, counter) = cut(context(
+                "REPEAT: issue in the counter",
+                opt(preceded(parse_comma, parse_label(false))),
+            ))(input)?;
+            let (input, counter_start) = opt(preceded(parse_comma, expr))(input)?;
+            let (input, inner) = cut(context("REPEAT: issue in the content", inner_code))(input)?;
+        
+            let (input, _) = cut(context(
+                "REPEAT: not closed",
+                preceded(
+                    space0,
+                    alt((
+                        parse_word("ENDREPEAT"),
+                        parse_word("ENDREPT"),
+                        parse_word("ENDREP"),
+                        parse_word("ENDR"),
+                        parse_word("REND"),
+                    ))
+                ),
+            ))(input)?;
 
-    let (input, _) = cut(context(
-        "REPEAT: not closed",
-        tuple((
-            space0,
-            alt((
-                parse_word("ENDREPEAT"),
-                parse_word("ENDREPT"),
-                parse_word("ENDREP"),
-                parse_word("ENDR"),
-                parse_word("REND"),
-            )),
-            space0,
-        )),
-    ))(input)?;
+            Ok((
+                input.clone(),
+                LocatedToken::Repeat(
+                    count,
+                    LocatedListing::try_from(inner)
+                        .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
+                    counter,
+                    counter_start,
+                    repeat_start,
+                ),
+            ))
 
-    Ok((
-        input.clone(),
-        LocatedToken::Repeat(
-            count,
-            LocatedListing::try_from(inner)
-                .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
-            counter,
-            counter_start,
-            repeat_start,
-        ),
-    ))
+        },
+
+        None => {
+            let (input, inner) = cut(context("REPEAT: issue in the content", inner_code))(input)?;
+
+            let (input, _) = cut(context(
+                "REPEAT ... UNTIL: not closed", 
+                delimited(space0, parse_word("UNTIL"), space0)
+            ))(input)?;
+            let (input,cond) = cut(context("REPEAT UNTIL: condition error", expr))(input)? ;
+            Ok((
+                input.clone(),
+                LocatedToken::RepeatUntil(
+                    cond,
+                    LocatedListing::try_from(inner)
+                        .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
+                    repeat_start,
+                )
+            ))
+        }
+    }
+
+
+
+
+
+
 }
 
 pub fn parse_iterate(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {

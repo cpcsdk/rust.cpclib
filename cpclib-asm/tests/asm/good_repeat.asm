@@ -22,3 +22,9 @@ I = 50
             inc c
 @no_inc
     rend
+
+I = 0
+    repeat
+        db I
+I = I + 1
+    until I == 3
