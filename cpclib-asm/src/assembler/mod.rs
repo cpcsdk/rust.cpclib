@@ -2259,7 +2259,9 @@ pub fn visit_located_token(
             counter_start.as_ref(),
             Some(span.clone()),
         ),
-        LocatedToken::RepeatUntil(_, _, _) => todo!(),
+        LocatedToken::RepeatUntil(cond, code, span) => {
+            env.visit_repeat_until(cond, code, Some(span.clone()))
+        }
         LocatedToken::Rorg(address, code, span) => {
             env.visit_rorg(address, code, Some(span.clone()))
         }
@@ -2511,7 +2513,7 @@ impl Env {
             })?;
             self.inner_visit_repeat(
                 Some(counter_name),
-                counter_value,
+                Some(counter_value),
                 i as _,
                 code,
                 span.clone(),
@@ -2558,6 +2560,29 @@ impl Env {
         Ok(())
     }
 
+
+        /// Handle the statndard repetition directive
+        pub fn visit_repeat_until<T: ListingElement + Visited>(
+            &mut self,
+            cond: &Expr,
+            code: &[T],
+            span: Option<Z80Span>,
+        ) -> Result<(), AssemblerError> {
+    
+            let mut i = 0;
+            loop {
+                i = i + 1;
+                self.inner_visit_repeat(None, None, i as _, code, span.clone())?;
+                let res = self.resolve_expr_must_never_fail(cond)?;
+                if res.bool() {
+                    break;
+                }
+            }
+    
+            Ok(())
+        }
+    
+
     /// Handle the statndard repetition directive
     pub fn visit_repeat<T: ListingElement + Visited>(
         &mut self,
@@ -2593,7 +2618,7 @@ impl Env {
             .unwrap_or(Ok(REPEAT_START_VALUE.into()))?;
 
         for i in 0..count {
-            self.inner_visit_repeat(counter_name, counter_value, i as _, code, span.clone())?;
+            self.inner_visit_repeat(counter_name, Some(counter_value), i as _, code, span.clone())?;
             // handle the counter update
             counter_value += 1.into();
         }
@@ -2608,7 +2633,7 @@ impl Env {
     fn inner_visit_repeat<T: ListingElement + Visited>(
         &mut self,
         counter_name: Option<&str>,
-        counter_value: ExprResult,
+        counter_value: Option<ExprResult>,
         iteration: i32,
         code: &[T],
         span: Option<Z80Span>,
@@ -2623,7 +2648,7 @@ impl Env {
         // handle counter value update
         if let Some(counter_name) = counter_name {
             self.symbols_mut()
-                .set_symbol_to_value(counter_name, counter_value.clone())?;
+                .set_symbol_to_value(counter_name, counter_value.clone().unwrap())?;
         }
 
         // generate the bytes
