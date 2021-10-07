@@ -201,12 +201,12 @@ Truc
 
     #[test]
     fn test_size() {
-        let env = Default::default();
+        let mut  env = Default::default();
         dbg!(assemble_call_jr_or_jp(
             Mnemonic::Jp,
             None,
             &DataAccess::Expression(Expr::Value(0)),
-            &env
+            &mut env
         ));
         assert_eq!(
             Token::OpCode(

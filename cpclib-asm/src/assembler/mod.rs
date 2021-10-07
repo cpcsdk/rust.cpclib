@@ -4658,7 +4658,7 @@ mod test {
             Mnemonic::Jp,
             Some(&DataAccess::FlagTest(FlagTest::Z)),
             &DataAccess::Expression(Expr::Value(0x1234)),
-            &Env::default(),
+            &mut Env::default(),
         )
         .unwrap();
         assert_eq!(res.len(), 3);
