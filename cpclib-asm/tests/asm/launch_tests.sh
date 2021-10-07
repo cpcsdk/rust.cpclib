@@ -77,6 +77,7 @@ do
 			if ! diff "$OUTPUT2" "$OUTPUT" > /dev/null 2>/dev/null
 			then
 				err_result "$fname" equiv
+				hexdiff "$OUTPUT" "$OUTPUT2"
 			fi
 		fi
 

@@ -1,0 +1,10 @@
+
+	org 0x100
+
+	push hl
+	push de
+	push bc
+	pop bc
+	pop de
+	pop hl
+	

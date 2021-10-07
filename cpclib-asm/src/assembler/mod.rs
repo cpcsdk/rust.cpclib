@@ -1318,17 +1318,19 @@ impl Env {
     }
 
     fn visit_multi_pushes(&mut self, regs: &[DataAccess]) -> Result<(), AssemblerError> {
-        for reg in regs.iter() {
-            assemble_push(reg)?;
-        }
-        Ok(())
+        let result = regs.iter()
+            .map(|reg| assemble_push(reg))
+            .collect::<Result<Vec<_>, AssemblerError>>()?;
+        let result = result.into_iter().flatten().collect_vec();
+        self.output_bytes(&result)
     }
 
     fn visit_multi_pops(&mut self, regs: &[DataAccess]) -> Result<(), AssemblerError> {
-        for reg in regs.iter() {
-            assemble_pop(reg)?;
-        }
-        Ok(())
+        let result = regs.iter()
+            .map(|reg| assemble_pop(reg))
+            .collect::<Result<Vec<_>, AssemblerError>>()?;
+        let result = result.into_iter().flatten().collect_vec();
+        self.output_bytes(&result)
     }
 
     /// Manage a IF .. XXX ELSEIF YYY ELSE ZZZ structure
