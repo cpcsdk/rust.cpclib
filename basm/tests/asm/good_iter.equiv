@@ -1,0 +1,20 @@
+        add 1
+        jr nz, no_inc1
+            inc c
+no_inc1
+		call do_stuff
+
+		add 2
+        jr nz, no_inc2
+            inc c
+no_inc2
+		call do_stuff
+
+		add 10
+        jr nz, no_inc3
+            inc c
+no_inc3
+		call do_stuff
+
+do_stuff
+	ret

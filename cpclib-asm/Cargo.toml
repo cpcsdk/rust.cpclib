@@ -53,14 +53,10 @@ cc = "1.0.68"
 
 
 [features]
-basm = ["clap",  "semver", "time"]
 bdasm = ["clap",  "semver", "time"]
+basm = ["clap",  "semver", "time"]
 nocolor = []
 
-[[bin]]
-name = "basm"
-path = "src/bin/basm.rs"
-required-features = ["basm"]
 
 [[bin]]
 name = "bdasm"

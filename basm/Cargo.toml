@@ -1,0 +1,13 @@
+[package]
+name = "basm"
+version = "0.5.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cpclib-asm = {version="0.5.0", features=["basm"]}
+time = "0.2.27"
+
+[build-dependencies]
+built = { version = "0.5.1", features = ["chrono"] }
