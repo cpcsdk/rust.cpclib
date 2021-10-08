@@ -1,0 +1,46 @@
+
+
+COUNT = 5
+I = 50
+
+ if 0
+    repeat COUNT
+        db COUNT
+    rend
+ endif
+
+	db 5, 5, 5, 5, 5
+
+ if 0
+    repeat COUNT, J
+        db {J}
+    rend
+ endif
+
+	db 1, 2, 3, 4, 5
+
+ if 0
+    repeat COUNT, J, I
+        db {J}
+    rend
+ endif
+
+	db 50, 51, 52, 53, 54
+
+
+    repeat I
+        add b
+        jr nz, @no_inc
+            inc c
+@no_inc
+    rend
+
+	if 0
+I = 0
+    repeat
+        db I
+I = I + 1
+    until I == 3
+	endif
+
+	db 0, 1, 2
