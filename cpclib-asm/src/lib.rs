@@ -207,7 +207,7 @@ Truc
             None,
             &DataAccess::Expression(Expr::Value(0)),
             &mut env
-        ));
+        ).unwrap());
         assert_eq!(
             Token::OpCode(
                 Mnemonic::Jp,

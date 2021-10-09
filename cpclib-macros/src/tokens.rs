@@ -60,6 +60,29 @@ impl<T: ?Sized + MyToTokens> MyToTokens for Box<T> {
     }
 }
 
+impl<T1: Sized + MyToTokens, T2: ?Sized + MyToTokens> MyToTokens for (T1, T2) {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let mut inner_token = TokenStream::new();
+        self.0.to_tokens(&mut inner_token);
+        inner_token.append(Punct::new(',', Spacing::Joint));
+        self.1.to_tokens(&mut inner_token);
+        tokens.append(Group::new(Delimiter::Parenthesis, inner_token));
+    }
+}
+
+impl<T: Sized + MyToTokens> MyToTokens for &[T] {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.append(Ident::new("vec!", Span::call_site()));
+
+        let mut inner_token = TokenStream::new();
+        for elem in self.iter() {
+            elem.to_tokens(&mut inner_token);
+            inner_token.append(Punct::new(':', Spacing::Joint));
+        }
+        tokens.append(Group::new(Delimiter::Bracket, inner_token));
+    }
+}
+
 /*
 impl<T> MyToTokens for T where T: ToTokens {
     fn to_tokens(&self, tokens: &mut TokenStream) {
@@ -138,6 +161,27 @@ where
     tokens.append(Group::new(Delimiter::Parenthesis, inside));
 }
 
+fn four_params<T1, T2, T3, T4>(name: &str, t1: &T1, t2: &T2, t3: &T3, t4: &T4,tokens: &mut TokenStream)
+where
+    T1: MyToTokens,
+    T2: MyToTokens,
+    T3: MyToTokens,
+    T4: MyToTokens,
+{
+    tokens.append(Ident::new(name, Span::call_site()));
+
+    let mut inside = TokenStream::new();
+    t1.to_tokens(&mut inside);
+    inside.append(Punct::new(',', Spacing::Joint));
+    t2.to_tokens(&mut inside);
+    inside.append(Punct::new(',', Spacing::Joint));
+    t3.to_tokens(&mut inside);
+    inside.append(Punct::new(',', Spacing::Joint));
+    t4.to_tokens(&mut inside);
+
+    tokens.append(Group::new(Delimiter::Parenthesis, inside));
+}
+
 impl MyToTokens for Token {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append(Ident::new("Token", Span::call_site()));
@@ -149,8 +193,22 @@ impl MyToTokens for Token {
                 one_param("Comment", arg, tokens);
             }
 
-            Self::Defs(arg1, arg2) => {
-                two_params("Defs", arg1, arg2, tokens);
+            Self::Defs(args) => {
+                tokens.append(Ident::new("Defs", Span::call_site()));
+        
+                let mut vec_tokens = TokenStream::new();
+                vec_tokens.append(Punct::new('&', Spacing::Joint));
+                vec_tokens.append(Ident::new("vec", Span::call_site()));
+                vec_tokens.append(Punct::new('!', Spacing::Joint));
+        
+                let mut inner_token = TokenStream::new();
+                for arg in args.iter() {
+                    arg.to_tokens(&mut inner_token);
+                    inner_token.append(Punct::new(',', Spacing::Joint));
+                }
+                vec_tokens.append(Group::new(Delimiter::Bracket, inner_token));
+
+                tokens.append(Group::new(Delimiter::Parenthesis, vec_tokens));
             }
 
             Self::Equ(arg1, arg2) => {
@@ -187,8 +245,8 @@ impl MyToTokens for Token {
                 one_param("StableTicker", arg, tokens);
             }
 
-            Self::Repeat(exp, lst, lab) => {
-                three_params("Repeat", exp, lst, lab, tokens);
+            Self::Repeat(exp, lst, lab, count) => {
+                four_params("Repeat", exp, lst, lab, count, tokens,);
             }
 
             _ => unimplemented!("impl MyToTokens for Token {{ fn to_tokens ...}} {:?}", self),
