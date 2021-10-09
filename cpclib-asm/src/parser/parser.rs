@@ -219,7 +219,7 @@ pub fn parse_z80_strrc_with_contextrc(
     ctx: Arc<ParserContext>,
 ) -> Result<LocatedListing, AssemblerError> {
     let span = Z80Span::new_extra_from_rc(code, ctx);
-    let mut listing = LocatedListing::new_empty_span(span);
+    let listing = LocatedListing::new_empty_span(span);
     let ctx = listing.ctx();
     match parse_z80_code(listing.span()) {
         Err(e) => match e {
@@ -718,7 +718,7 @@ pub fn parse_basic_hide_lines(input: Z80Span) -> IResult<Z80Span, Vec<u16>, Verb
 }
 pub fn dec_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z80Span>> {
     let input_inner = input.deref().clone();
-    let (input, number) = dec_number(input_inner).map_err(|err| {
+    let (input, number) = dec_number(input_inner).map_err(|_err| {
         cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
             input,
             ErrorKind::AlphaNumeric,
@@ -729,7 +729,7 @@ pub fn dec_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z8
 }
 pub fn bin_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z80Span>> {
     let input_inner = input.deref().clone();
-    let (input, number) = bin_number(input_inner).map_err(|err| {
+    let (input, number) = bin_number(input_inner).map_err(|_err| {
         cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
             input,
             ErrorKind::AlphaNumeric,
@@ -740,7 +740,7 @@ pub fn bin_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z8
 }
 pub fn hex_number_inner(input: Z80Span) -> IResult<Z80Span, u32, VerboseError<Z80Span>> {
     let input_inner = input.deref().clone();
-    let (input, number) = hex_number(input_inner).map_err(|err| {
+    let (input, number) = hex_number(input_inner).map_err(|_err| {
         cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
             input,
             ErrorKind::AlphaNumeric,
@@ -755,7 +755,7 @@ pub fn parse_flag_value_inner(
 ) -> IResult<Z80Span, FlagValue, VerboseError<Z80Span>> {
     let inner_input = input.deref().clone();
 
-    let (input, number) = parse_flag_value(inner_input).map_err(|err| {
+    let (input, number) = parse_flag_value(inner_input).map_err(|_err| {
         cpclib_common::nom::Err::Error(VerboseError::from_error_kind(
             input,
             ErrorKind::AlphaNumeric,
@@ -829,7 +829,7 @@ pub fn parse_z80_line_complete(
 
     // Eat optional label (or macro call)
     let before_label = input.clone();
-    let (input, mut label_or_macro) = opt(preceded(space0, parse_label(false)))(input)?;
+    let (input, label_or_macro) = opt(preceded(space0, parse_label(false)))(input)?;
     let (mut input, mut know_it_is_label) = if label_or_macro.is_some() {
         alt((
             value(true, tuple((space0, char(':'), space0))),
@@ -907,7 +907,7 @@ pub fn parse_z80_line_complete(
         // try to parse a token. if it fails, fall back to the macro call parser
         let (input2, opcode) = match parse_single_token(true)(input2.clone()) {
             Ok((
-                input3,
+                _input3,
                 LocatedToken::Standard {
                     token: Token::Label(_),
                     ..
@@ -988,7 +988,7 @@ pub fn parse_z80_line_label_only(
     let before_label = input.clone();
 
     let (input, r#let) = opt(delimited(space0, parse_word("LET"), space0))(input)?;
-    let after_let = input.clone();
+    let _after_let = input.clone();
     let (input, label) = context("Label issue", preceded(space0, parse_label(true)))(input)?;
 
     #[derive(Clone, Copy)]
@@ -1903,7 +1903,7 @@ pub fn parse_res_set_bit(input: Z80Span) -> IResult<Z80Span, Token, VerboseError
     ))(input)?;
 
     // Bit and Res can copy the result in a reg
-    let (input, mut hidden_arg) = if res_or_set == Mnemonic::Bit {
+    let (input, hidden_arg) = if res_or_set == Mnemonic::Bit {
         (input, None)
     } else {
         opt(preceded(parse_comma, parse_register8))(input)?
@@ -3295,7 +3295,7 @@ pub fn parse_file(fname: String) -> Vec<Token> {
 pub fn parse_value(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     let extra = input.extra.clone();
     let (input, val) =
-        alt((hex_number, dec_number, bin_number))(input.clone().into()).map_err(|op| {
+        alt((hex_number, dec_number, bin_number))(input.clone().into()).map_err(|_op| {
             cpclib_common::nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::Verify))
         })?;
 

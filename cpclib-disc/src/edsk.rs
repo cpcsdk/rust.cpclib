@@ -996,7 +996,7 @@ impl ExtendedDsk {
     }
 
     /// Add the file where it is possible with respect to amsdos format
-    pub fn add_amsdos_file(&mut self, file: &AmsdosFile) -> Result<(), AmsdosError> {
+    pub fn add_amsdos_file(&mut self, _file: &AmsdosFile) -> Result<(), AmsdosError> {
         eprintln!("{}: ExtedendDsk::add_amsdos_file not implemented. need to do it (but in the amsdos.rs file", file!());
         Ok(())
     }

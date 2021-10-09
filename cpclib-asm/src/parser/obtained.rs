@@ -164,7 +164,7 @@ impl LocatedToken {
                     .collect_vec(),
             )),
             LocatedToken::While(e, l, _span) => Cow::Owned(Token::While(e.clone(), l.as_listing())),
-            LocatedToken::Iterate(name, values, code, _span) => todo!(),
+            LocatedToken::Iterate(_name, _values, _code, _span) => todo!(),
             LocatedToken::Module(_, _, _) => todo!(),
         }
     }
@@ -196,7 +196,7 @@ impl LocatedToken {
     /// Works in read only tokens thanks to RefCell
     pub fn read_referenced_file(&self, ctx: &ParserContext) -> Result<(), AssemblerError> {
         match self {
-            LocatedToken::Include(ref fname, ref cell, _namespace, span) => {
+            LocatedToken::Include(ref fname, ref cell, _namespace, _span) => {
                 match ctx.get_path_for(fname) {
                     Err(e) => {
                         return Err(AssemblerError::IOError {

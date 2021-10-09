@@ -472,11 +472,11 @@ impl Display for AssemblerError {
             ),
 
             AssemblerError::EmptyBinaryFile(_) => todo!(),
-            AssemblerError::AmsdosError { error } => {
+            AssemblerError::AmsdosError { error: _ } => {
                 todo!()
             }
             AssemblerError::BugInAssembler { msg } => write!(f, "BUG in assembler: {}", msg),
-            AssemblerError::BugInParser { error, context } => todo!(),
+            AssemblerError::BugInParser { error: _, context: _ } => todo!(),
 
             AssemblerError::BasicError { error } => write!(f, "{}", error.to_string()),
             AssemblerError::AssemblingError { msg } => write!(f, "{}", msg),
@@ -497,31 +497,31 @@ impl Display for AssemblerError {
             }
 
             AssemblerError::WrongNumberOfParameters {
-                symbol,
-                nb_paramers,
-                nb_arguments,
+                symbol: _,
+                nb_paramers: _,
+                nb_arguments: _,
             } => todo!(),
             AssemblerError::MacroError { name, root } => {
                 write!(f, "Error in macro call: {}\n{}", name, root)
             }
-            AssemblerError::WrongSymbolType { symbol, isnot } => todo!(),
+            AssemblerError::WrongSymbolType { symbol: _, isnot: _ } => todo!(),
             AssemblerError::IOError { msg } => {
                 write!(f, "IO Error: {}", msg)
             }
             AssemblerError::UnknownAssemblingAddress => todo!(),
-            AssemblerError::ExpressionUnresolvable { expression } => todo!(),
-            AssemblerError::ExpressionError { msg } => todo!(),
+            AssemblerError::ExpressionUnresolvable { expression: _ } => todo!(),
+            AssemblerError::ExpressionError { msg: _ } => todo!(),
             AssemblerError::RelativeAddressUncomputable {
-                address,
-                pass,
-                error,
+                address: _,
+                pass: _,
+                error: _,
             } => todo!(),
 
             // By construction contains only error with no span information
             AssemblerError::RelocatedError { error, span } => {
                 // Relocated error format may vary among errors
                 match error.deref() {
-                    AssemblerError::RelocatedError { error, span } => {
+                    AssemblerError::RelocatedError { error, span: _ } => {
                         write!(f, "{}", error)
                     }
 
@@ -698,7 +698,7 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
         ),
     };
 
-    let mut diagnostic = Diagnostic::error()
+    let diagnostic = Diagnostic::error()
         .with_message(title)
         .with_labels(vec![Label::new(
             codespan_reporting::diagnostic::LabelStyle::Primary,
@@ -730,7 +730,7 @@ fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -
         ),
     };
 
-    let mut diagnostic = Diagnostic::new(severity)
+    let diagnostic = Diagnostic::new(severity)
         .with_message(title)
         .with_labels(vec![Label::new(
             codespan_reporting::diagnostic::LabelStyle::Primary,

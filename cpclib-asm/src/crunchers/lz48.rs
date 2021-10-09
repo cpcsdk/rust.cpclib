@@ -15,7 +15,7 @@ fn lz48_encode_block(
     data: &[u8],
     mut literaloffset: usize,
     literalcpt: usize,
-    mut offset: usize,
+    offset: usize,
     maxlength: usize,
 ) {
     odata.push(0x00); // Will be overriden at the very last instruction

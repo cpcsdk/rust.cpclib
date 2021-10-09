@@ -190,7 +190,7 @@ impl Struct {
             .iter()
             .zip(args.iter())
             .enumerate()
-            .map(|(idx, ((name, token), current_param))| {
+            .map(|(_idx, ((_name, token), current_param))| {
                 match token {
                     Token::Defb(c) | Token::Defw(c) => {
                         assert_eq!(c.len(), 1);
@@ -229,7 +229,7 @@ impl Struct {
                             }
 
                             // default is several, provided is single. Use provided only if not empty
-                            (MacroParam::Single(_), nb_default) => {
+                            (MacroParam::Single(_), _nb_default) => {
                                 let mut default_iter = current_default_arg.iter();
                                 let first_default = default_iter.next().unwrap();
                                 let mut collected = Vec::new();
@@ -720,11 +720,11 @@ impl SymbolsTableTrait for SymbolsTable {
     fn integer_symbols(&self) -> Vec<&Symbol> {
         self.map
             .iter()
-            .filter(|(k, v)| match v {
+            .filter(|(_k, v)| match v {
                 Value::Number(_) | Value::Address(_) => true,
                 _ => false,
             })
-            .map(|(k, v)| k)
+            .map(|(k, _v)| k)
             .collect_vec()
     }
 
@@ -844,7 +844,7 @@ impl SymbolsTable {
         } else {
             let full = symbol.clone();
 
-            let global = self.namespace_stack.clone();
+            let _global = self.namespace_stack.clone();
             let global = self.inject_current_namespace(symbol);
 
             smallvec![global, full]
@@ -994,7 +994,7 @@ impl SymbolsTable {
         Ok(self
             .map
             .iter()
-            .filter(|(k, v)| match (v, r#for) {
+            .filter(|(_k, v)| match (v, r#for) {
                 (Value::Number(_), SymbolFor::Number)
                 | (Value::Number(_), SymbolFor::Address)
                 | (Value::Address(_), SymbolFor::Address)
@@ -1004,7 +1004,7 @@ impl SymbolsTable {
                 | (_, SymbolFor::Any) => true,
                 _ => false,
             })
-            .map(|(k, v)| k)
+            .map(|(k, _v)| k)
             .map(move |symbol2| {
                 (
                     strsim::levenshtein(&symbol2.0, &symbol.0).min(strsim::levenshtein(

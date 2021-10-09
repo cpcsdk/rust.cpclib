@@ -23,7 +23,7 @@ fn test_macro_parse_z80_single_instruction() {
         )
     );
 
-    let bytes = parse_z80!(" push hl");
+    let _bytes = parse_z80!(" push hl");
 }
 
 /* // Cannot be assemble because of the error

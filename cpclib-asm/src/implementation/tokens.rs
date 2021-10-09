@@ -91,7 +91,7 @@ impl<'t> TokenExt for Cow<'t, Token> {
         self.deref().to_bytes_with_options(option)
     }
 
-    fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
+    fn unroll(&self, _env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
         unimplemented!("signature issue. should be transformed/unused")
     }
 }
@@ -205,7 +205,7 @@ impl TokenExt for Token {
                 .map_err(|e| AssemblerError::DisassemblerError { msg: e })
                 .and_then(|lst| lst.estimated_duration())?,
 
-            Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
+            Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref _arg3) => {
                 match mnemonic {
                     &Mnemonic::Add => match arg1 {
                         Some(DataAccess::Register8(_)) => match arg2 {

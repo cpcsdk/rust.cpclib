@@ -28,7 +28,7 @@ use std::any::Any;
 use std::fmt;
 use std::time::Instant;
 
-use std::convert::TryFrom;
+
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -1287,7 +1287,7 @@ impl Env {
         };
 
         // Try to fallback on a macro call - parser is not that much great
-        if let Err(AssemblerError::AlreadyDefinedSymbol { symbol, kind }) = &res {
+        if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
             if kind == "macro" || kind == "struct" {
                 self.visit_call_macro_or_build_struct(&Token::MacroCall(
                     label.to_string(),
@@ -2216,7 +2216,7 @@ pub fn visit_located_token(
             env.visit_crunched_section(kind, lst, Some(span))
         }
 
-        LocatedToken::Include(fname, ref cell, namespace, span) => {
+        LocatedToken::Include(_fname, ref cell, namespace, span) => {
             if cell.read().unwrap().is_some() {
                 if let Some(namespace) = namespace {
                     env.enter_namespace(namespace)
@@ -2343,7 +2343,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             }
             Ok(())
         }
-        Token::Include(fname, cell, namespace) if cell.read().unwrap().is_none() => {
+        Token::Include(_fname, cell, _namespace) if cell.read().unwrap().is_none() => {
             todo!("Read the file (without being able to specify parser options)")
         }
         Token::Incbin {
@@ -2406,7 +2406,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
         Token::Macro(name, arguments, code) => env.visit_macro_definition(name, arguments, code),
-        Token::MacroCall(name, parameters) => env.visit_call_macro_or_build_struct(token),
+        Token::MacroCall(_name, _parameters) => env.visit_call_macro_or_build_struct(token),
         Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice()),
         Token::WaitNops(count) => env.visit_waitnops(count),
         Token::Next(label, source, delta) => {
@@ -2430,7 +2430,7 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> bool {
 
         Ok(value) => {
             if value == 0.into() {
-                let symbols = env.symbols();
+                let _symbols = env.symbols();
                 let oper = |left: &Expr, right: &Expr, oper: &str| -> String {
                     let res_left = left.resolve(env).unwrap();
                     let res_right = right.resolve(env).unwrap();
@@ -3217,7 +3217,7 @@ pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(
     sym: T,
 ) -> Result<u8, AssemblerError> {
     match sym.as_ref().current_address() {
-        Err(msg) => Err(AssemblerError::UnknownAssemblingAddress),
+        Err(_msg) => Err(AssemblerError::UnknownAssemblingAddress),
         Ok(root) => {
             let delta = (address - i32::from(root)) - opcode_delta;
             if delta > 128 || delta < -127 {

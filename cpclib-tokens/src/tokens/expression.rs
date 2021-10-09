@@ -662,7 +662,7 @@ impl ExprResult {
     pub fn frac(&self) -> Self {
         match self {
             ExprResult::Float(f) => f.fract().into(),
-            ExprResult::Value(v) => 0.into(),
+            ExprResult::Value(_v) => 0.into(),
         }
     }
     pub fn sin(&self) -> Self {
@@ -862,7 +862,7 @@ impl std::fmt::Display for ExprResult {
 impl std::fmt::LowerHex for ExprResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExprResult::Float(f2) => write!(f, "????"),
+            ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:x}", v),
         }
     }
@@ -871,7 +871,7 @@ impl std::fmt::LowerHex for ExprResult {
 impl std::fmt::UpperHex for ExprResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExprResult::Float(f2) => write!(f, "????"),
+            ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:X}", v),
         }
     }

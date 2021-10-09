@@ -1,5 +1,5 @@
-use std::cell::RefCell;
-use std::clone;
+
+
 use std::fmt;
 use std::sync::RwLock;
 
@@ -72,7 +72,7 @@ impl MacroParam {
     pub fn is_empty(&self) -> bool {
         match self {
             Self::Single(s) => s.trim().is_empty(),
-            Self::List(l) => false,
+            Self::List(_l) => false,
         }
     }
 }

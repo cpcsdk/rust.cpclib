@@ -52,7 +52,7 @@ impl Display for AddressKind {
 }
 
 impl Debug for ListingOutput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
 }
@@ -91,7 +91,7 @@ impl ListingOutput {
     /// Check if the token is for the same line than the previous token
     fn token_is_on_same_line(&self, token: &LocatedToken) -> bool {
         match &self.current_line_group {
-            Some((current_location, current_line)) => {
+            Some((current_location, _current_line)) => {
                 self.token_is_on_same_source(token)
                     && *current_location == token.span().location_line()
             }

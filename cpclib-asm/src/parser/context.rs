@@ -65,7 +65,7 @@ impl ParserContext {
         self.context_name = Some(name.to_owned());
     }
 
-    pub fn set_read_referenced_files(&mut self, tag: bool) {
+    pub fn set_read_referenced_files(&mut self, _tag: bool) {
         self.read_referenced_files = true;
     }
 
