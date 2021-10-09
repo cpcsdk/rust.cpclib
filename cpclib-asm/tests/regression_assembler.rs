@@ -68,7 +68,7 @@ p3 point
 	endstruct
 
 
-my_triangle1 triangle
+my_triangle1: triangle
 	";
 
     // just check that it assemble

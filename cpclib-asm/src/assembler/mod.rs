@@ -1274,7 +1274,10 @@ impl Env {
         // A label cannot be defined multiple times
         let res = if self.symbols().contains_symbol(label)? &&
                (self.pass.is_first_pass() || 
-                self.symbols().kind(label)? != "address") {
+                !(
+                    self.symbols().kind(label)? == "address" ||
+                    self.symbols().kind(label)? == "any"
+               )) {
                 Err(AssemblerError::AlreadyDefinedSymbol {
                     symbol: label.to_owned(),
                     kind: self.symbols().kind(label)?.to_owned(),
@@ -1302,7 +1305,7 @@ impl Env {
             symbol,
             kind,
         }) = &res {
-            if kind.as_str() == "macro" || kind.as_str() == "struct" {
+            if kind == "macro" || kind == "struct" {
                 self.visit_call_macro_or_build_struct(
                      &Token::MacroCall(label.to_string(), Default::default())
                 )
@@ -2112,7 +2115,7 @@ impl Env {
         env.symbols =
             SymbolsTableCaseDependent::new(options.symbols().clone(), options.case_sensitive());
 
-        if let Some(builder) = &options.builder {
+        if let Some(builder) = &options.output_builder {
             env.output_trigger = ListingOutputTrigger {
                 token: None,
                 bytes: Vec::new(),
@@ -2149,12 +2152,14 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
         }
     }
 
-    env.pass = AssemblingPass::ListingPass;
-    env.start_new_pass();
-    for token in tokens.iter() {
-        token
-            .visited(&mut env)
-            .expect("No error can arise in listing output mode; there is a bug somewhere")
+    if options.output_builder.is_some() {
+        env.pass = AssemblingPass::ListingPass;
+        env.start_new_pass();
+        for token in tokens.iter() {
+            token
+                .visited(&mut env)
+                .expect("No error can arise in listing output mode; there is a bug somewhere")
+        }
     }
 
     if let Some(trigger) = env.output_trigger.as_mut() {

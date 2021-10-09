@@ -40,7 +40,7 @@ pub struct AssemblingOptions {
     case_sensitive: bool,
     /// Contains some symbols that could be used during assembling
     symbols: cpclib_tokens::symbols::SymbolsTable,
-    builder: Option<Arc<RwLock<ListingOutput>>>,
+    output_builder: Option<Arc<RwLock<ListingOutput>>>,
 }
 
 impl Default for AssemblingOptions {
@@ -48,7 +48,7 @@ impl Default for AssemblingOptions {
         Self {
             case_sensitive: true,
             symbols: cpclib_tokens::symbols::SymbolsTable::default(),
-            builder: None,
+            output_builder: None,
         }
     }
 }
@@ -100,8 +100,8 @@ impl AssemblingOptions {
         &mut self,
         writer: W,
     ) -> &mut Self {
-        self.builder = Some(Arc::new(RwLock::new(ListingOutput::new(writer))));
-        self.builder.as_mut().map(|b| b.write().unwrap().on());
+        self.output_builder = Some(Arc::new(RwLock::new(ListingOutput::new(writer))));
+        self.output_builder.as_mut().map(|b| b.write().unwrap().on());
         self
     }
 }
