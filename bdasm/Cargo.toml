@@ -1,0 +1,15 @@
+[package]
+name = "bdasm"
+version = "0.5.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cpclib-asm = {version="0.5.0"}
+cpclib-disc = {version="0.5.0"}
+clap = { version = "2.33.3"}
+time = "0.2.27"
+
+[build-dependencies]
+built = { version = "0.5.1", features = ["chrono"] }

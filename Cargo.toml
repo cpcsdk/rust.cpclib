@@ -12,7 +12,7 @@ members = [
   #  "cpclib-xferfs",
     "cpclib-z80emu",
     "cpclib",
-    "basm",
+    "basm", "bdasm",
     "visual-basm"
 ]
 

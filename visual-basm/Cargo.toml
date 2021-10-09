@@ -9,4 +9,4 @@ edition = "2018"
 eframe = "0.14.0"
 cpclib-asm = { version = "0.5", features = ["basm", "nocolor"] }
 temp-file = "0.1.6"
-rfd= "0.5.0"
+rfd= "0.5.1"
