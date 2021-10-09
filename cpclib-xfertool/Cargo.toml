@@ -3,7 +3,7 @@
 name = "cpclib-xfertool"
 version = "0.5.0"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 description = "cpclib tool related to xfer"
 repository = "https://github.com/cpcsdk/rust.cpclib"

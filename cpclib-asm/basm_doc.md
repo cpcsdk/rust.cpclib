@@ -33,7 +33,10 @@ On the code space ($), not physical space ($$)
 
 On the code space ($), not physical space ($$)
 
+### BANK
 
+When used with no argument, a bank corresponds to a memory area outside of the snapshot. All things read&write in memory are thus uncorrelated to the snapshot.
+Sections do not apply in a bank.
 
 ## Labels related
 
