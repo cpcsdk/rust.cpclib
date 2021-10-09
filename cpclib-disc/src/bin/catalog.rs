@@ -11,6 +11,7 @@
     warnings
 )]
 #![deny(clippy::pedantic)]
+#![cfg(feature="catalog")]
 
 /// Catalog tool manipulator.
 ///
@@ -21,13 +22,13 @@ use std::io::{Read, Write};
 use cpclib_disc::amsdos::*;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
-use num::Num;
+use cpclib_common::num::Num;
 use simplelog::*;
 
 pub fn to_number<T>(repr: &str) -> T
 where
     T: Num,
-    <T as num::Num>::FromStrRadixErr: std::fmt::Debug,
+    <T as cpclib_common::num::Num>::FromStrRadixErr: std::fmt::Debug,
 {
     dbg!(repr);
     let repr = repr.trim();

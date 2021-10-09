@@ -40,8 +40,14 @@ impl Z80 {
         arg2: Option<&DataAccess>,
         arg3: Option<&cpclib_asm::preamble::Register8>,
     ) -> usize {
-        let opcode = Token::OpCode(mnemonic, arg1.cloned(), arg2.cloned(), arg3.cloned());
-        self.pc_mut().add(opcode.number_of_bytes().unwrap() as _);
+        let opcode = Token::OpCode(
+            mnemonic, 
+            arg1.cloned(), 
+            arg2.cloned(), 
+            arg3.cloned());
+
+        let count = opcode.number_of_bytes_with_context(self.context.env.symbols_mut()).unwrap() as _;
+        self.pc_mut().add(count);
 
         // this is the minimal duration; it can be updated depending on the instruction
         let mut duration = opcode.estimated_duration().unwrap();
@@ -380,7 +386,7 @@ impl Z80 {
 
     /// Replace the current symbol table by a copy of the one in argument
     pub fn setup_symbol_table(&mut self, symbols: &SymbolsTableCaseDependent) {
-        todo!()
+        *self.context.env.symbols_mut() = symbols.clone()
     }
 
     /// Execute the RET instruction
