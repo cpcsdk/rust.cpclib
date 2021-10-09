@@ -393,7 +393,7 @@ fn inner_code(mut input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, Verbose
     loop {
         // dbg!("loop");
         // check if the line need to be parsed (ie there is no end directive)
-        let must_break = input.is_empty() || {
+        let must_break = input.trim().is_empty() || {
             // TODO take into account potential label
             let maybe_keyword = opt(preceded(space0, parse_end_directive))(input.clone());
             match maybe_keyword {
@@ -588,9 +588,9 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
     let (input, _) = preceded(
         space0,
         alt((
-            parse_word("REPEAT"),
+            parse_word("REP"),
             parse_word("REPT"),
-            //          parse_word("REP"),
+            parse_word("REPEAT"),
         )),
     )(input)?;
 
@@ -3989,7 +3989,7 @@ mod test {
         .replace("\u{C2}\u{A0}", " ");
         let res = inner_code(Z80Span::new_extra(&code.to_owned(), ctx()));
         assert!(res.is_ok(), "{}", &res.err().unwrap().to_string());
-        assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
+        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", &res);
     }
     #[test]
     fn parser_regression_1e() {

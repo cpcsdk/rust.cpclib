@@ -18,7 +18,7 @@ pub struct ParserContext {
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
     pub read_referenced_files: bool,
     /// indicate we are parsing a listing generating by a struct
-    parse_warning: RwLock<Vec<AssemblerError>>,
+    pub parse_warning: RwLock<Vec<AssemblerError>>,
 }
 
 impl Clone for ParserContext {

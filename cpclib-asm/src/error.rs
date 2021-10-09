@@ -597,8 +597,7 @@ impl Display for AssemblerError {
                             span,
                             Severity::Error,
                         );
-                        write!(f, "{}", msg);
-
+                        write!(f, "{}", msg)?;
                         write!(f, "{}", error)
                     }
 

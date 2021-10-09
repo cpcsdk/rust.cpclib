@@ -2,8 +2,8 @@
 
 use image as im;
 
-use bitfield::BitRange;
-use itertools::Itertools;
+use cpclib_common::bitfield::BitRange;
+use  cpclib_common::itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::path::Path;

@@ -28,7 +28,7 @@ mod tests {
     #[test]
     pub fn test_ld() {
         let mut env = Env::default();
-        assert_eq!(env.peek(0x0000), 0x00);
+        assert_eq!(env.peek(&0x0000.into()), 0x00);
 
         visit_token(
             &Token::OpCode(
@@ -39,7 +39,7 @@ mod tests {
             ),
             &mut env,
         );
-        assert_eq!(env.peek(0x0000), 0x7f);
+        assert_eq!(env.peek(&0x0000.into()), 0x7f);
 
         visit_token(
             &Token::OpCode(
@@ -50,7 +50,7 @@ mod tests {
             ),
             &mut env,
         );
-        assert_eq!(env.peek(0x0001), 0x7d);
+        assert_eq!(env.peek(&0x0001.into()), 0x7d);
 
         visit_token(
             &Token::OpCode(
@@ -61,7 +61,7 @@ mod tests {
             ),
             &mut env,
         );
-        assert_eq!(env.peek(0x0002), 0x49);
+        assert_eq!(env.peek(&0x0002.into()), 0x49);
     }
 
     #[test]

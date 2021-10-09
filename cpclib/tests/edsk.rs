@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
 
+    use cpclib_common::itertools::Itertools;
+
     fn test_single_dsk(dsk: &cpclib::disc::edsk::ExtendedDsk) {
         let track = dsk
             .get_track_information(cpclib::disc::edsk::Head::A, 0)
@@ -121,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_harley() {
-        use itertools::Itertools;
+        use  cpclib_common::itertools::Itertools;
 
         let dsk = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/harley.dsk").unwrap();
 
@@ -319,7 +321,7 @@ mod tests {
 
     #[test]
     pub fn test_turlogh() {
-        use itertools::Itertools;
+        use  cpclib_common::itertools::Itertools;
 
         let dsk = cpclib::disc::edsk::ExtendedDsk::open(
             "tests/dsk/Turlogh Le Rodeur (F) (Face A) (1987) [Original] (GAPS).dsk",

@@ -39,7 +39,7 @@ impl PrintCommand {
 		match &self.print_or_error {
 			either::Either::Left(msg) => {
 				// TODO improve printting + integrate z80span information
-				writeln!(writer, "{}", msg);
+				writeln!(writer, "{}", msg).unwrap();
 				Ok(())
 			},
 			either::Either::Right(e) => Err(e.clone()),

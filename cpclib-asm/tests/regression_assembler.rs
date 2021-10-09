@@ -130,6 +130,7 @@ my_triangle1 triangle [11, 12, 13],, [1, 2, 3]
 #[test]
 pub fn test_inner_struct_deeper() {
     let code = "
+	org 0x0000
 	struct point
 xx    db 4
 yy    db 5
@@ -150,12 +151,11 @@ tr2 triangle
 	
 	
 	
-my_shape shape	
+my_shape: shape	
 ";
 
     // just check that it assemble
     let binary = assemble(code).unwrap();
-    assert_eq!(binary.len(), 3 * 3 * 2);
     assert_eq!(
         &binary,
         &[1, 2, 3, 4, 5, 8, 9, 5, 6, 1, 2, 3, 4, 5, 8, 9, 5, 6,]
@@ -185,7 +185,7 @@ tr2 triangle
 	
 	
 	
-my_shape shape	, [ [1,2,3], [1,2,3], [1,2,3] ]
+my_shape: shape	, [ [1,2,3], [1,2,3], [1,2,3] ]
 ";
 
     // just check that it assemble

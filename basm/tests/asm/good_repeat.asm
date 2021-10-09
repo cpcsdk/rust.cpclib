@@ -28,3 +28,7 @@ I = 0
         db I
 I = I + 1
     until I == 3
+
+
+    rep 3
+    endrepeat

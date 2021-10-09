@@ -2,9 +2,9 @@
 use crate::preamble::*;
 
 use cpclib_asm::assembler::Env;
-use num::integer::Integer;
-use num::traits::{WrappingAdd, WrappingSub};
-use num::One;
+use cpclib_common::num::integer::Integer;
+use cpclib_common::num::traits::{WrappingAdd, WrappingSub};
+use cpclib_common::num::One;
 use std::fmt;
 use std::fmt::Debug;
 ///! Manage z80 CPU

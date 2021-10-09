@@ -140,7 +140,7 @@ fn macro_args_list_2() {
         arg,
         MacroParam::List(vec![
             Box::new(MacroParam::Single("1".to_string())),
-            Box::new(MacroParam::Single(" 3".to_string())),
+            Box::new(MacroParam::Single("3".to_string())),
         ])
     )
 }
@@ -154,7 +154,7 @@ fn macro_args_list_3() {
         arg,
         MacroParam::List(vec![
             Box::new(MacroParam::Single("1".to_string())),
-            Box::new(MacroParam::Single(" ".to_string())),
+            Box::new(MacroParam::Single("".to_string())),
             Box::new(MacroParam::Single("3".to_string())),
         ])
     )

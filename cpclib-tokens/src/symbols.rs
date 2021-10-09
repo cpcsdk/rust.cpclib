@@ -24,6 +24,12 @@ pub struct PhysicalAddress {
     address: u16,
 }
 
+impl From<u16> for PhysicalAddress {
+    fn from(nb: u16) -> Self {
+        PhysicalAddress::new(nb, 0xc0)
+    }
+}
+
 impl PhysicalAddress {
     pub fn new(address: u16, mmr: u8) -> Self {
         let possible_page = ((mmr >> 3) & 0b111) + 1;

@@ -8,9 +8,10 @@ impl Z80 {
     /// BUGGY flags are not properly updated
     /// Returns the number of noprs
     pub fn execute(&mut self, opcode: &Token) -> usize {
+        let pc = self.pc().value() as i32;
         self.context
             .symbols_mut()
-            .set_symbol_to_value("$", self.pc().value() as i32);
+            .set_symbol_to_value("$", pc).unwrap();
 
         match opcode {
             Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {

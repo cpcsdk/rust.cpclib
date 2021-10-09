@@ -6,7 +6,7 @@ use crate::ga::*;
 use crate::pixels;
 use anyhow;
 use anyhow::Context;
-use itertools::Itertools;
+use cpclib_common::itertools::Itertools;
 use std::collections::HashSet;
 
 /// Screen mode
@@ -993,7 +993,7 @@ impl Sprite {
 /// Simple multimode sprite where each line can have its own resolution mode
 /// The palette is assumed to be the same on all the lines
 #[derive(Clone, Debug)]
-#[allow(missing_docs)]
+#[allow(missing_docs, unused)]
 pub struct MultiModeSprite {
     mode: Vec<Mode>,
     palette: Palette,

@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use cpclib_asm::{basm_utils::*, error::AssemblerError};
+use cpclib_asm::{basm_utils::*};
 use eframe::{
     egui::{self, ScrollArea},
-    epi::{self, App},
+    epi::{self},
 };
 
 enum AssembleState {
@@ -77,7 +77,7 @@ impl BasmApp {
         let matches = build_args_parser().get_matches_from(cmd);
 
         match process(&matches) {
-            Ok((env, warnings)) => {
+            Ok((_env, warnings)) => {
                 self.error = None;
                 self.warnings = warnings
                     .iter()
@@ -167,7 +167,7 @@ impl epi::App for BasmApp {
                     }
 
                     if ui.button("Add search directory").clicked() {
-                        let mut dialog = rfd::FileDialog::new()
+                        let dialog = rfd::FileDialog::new()
                             .set_directory(std::env::current_dir().unwrap().display().to_string());
                         added_dir = dialog.pick_folder();
                     }

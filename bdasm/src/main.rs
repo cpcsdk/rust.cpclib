@@ -1,7 +1,7 @@
 use clap;
-use clap::{App, Arg, ArgGroup, ArgMatches};
+use clap::{App, Arg};
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Read};
 
 use cpclib_asm::preamble::*;
 use cpclib_disc::amsdos::AmsdosHeader;

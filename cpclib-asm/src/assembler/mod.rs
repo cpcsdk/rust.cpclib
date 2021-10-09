@@ -1272,12 +1272,17 @@ impl Env {
 
     fn visit_label(&mut self, label: &str) -> Result<(), AssemblerError> {
         // A label cannot be defined multiple times
-        if self.pass.is_first_pass() && self.symbols().contains_symbol(label)? {
-            Err(AssemblerError::AlreadyDefinedSymbol {
-                symbol: label.to_owned(),
-                kind: self.symbols().kind(label)?.to_owned(),
-            })
+        let res = if self.symbols().contains_symbol(label)? &&
+               (self.pass.is_first_pass() || 
+                self.symbols().kind(label)? != "address") {
+                Err(AssemblerError::AlreadyDefinedSymbol {
+                    symbol: label.to_owned(),
+                    kind: self.symbols().kind(label)?.to_owned(),
+                })
         } else {
+
+
+
             if !label.starts_with('.') {
                 self.symbols_mut().set_current_label(label)?;
             }
@@ -1290,6 +1295,22 @@ impl Env {
             let addr = self.logical_to_physical_address(value);
 
             self.add_symbol_to_symbol_table(label, addr)
+        };
+
+        // Try to fallback on a macro call - parser is not that much great
+        if let Err(AssemblerError::AlreadyDefinedSymbol {
+            symbol,
+            kind,
+        }) = &res {
+            if kind.as_str() == "macro" || kind.as_str() == "struct" {
+                self.visit_call_macro_or_build_struct(
+                     &Token::MacroCall(label.to_string(), Default::default())
+                )
+            } else {
+                res
+            }
+        } else {
+            res
         }
     }
 
@@ -1747,6 +1768,7 @@ impl Env {
         }
         */
         let listing = {
+            dbg!(&self.symbols());
             // Retreive the macro or structure definition
             let r#macro = self.symbols().macro_value(name)?;
             let r#struct = self.symbols().struct_value(name)?;

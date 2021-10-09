@@ -3,7 +3,6 @@ use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::parse::Parse;
 use syn::parse::ParseStream;
-use syn::parse::Parser;
 use syn::{parse_macro_input, Result};
 mod tokens;
 
