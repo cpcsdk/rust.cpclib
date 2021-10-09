@@ -161,8 +161,14 @@ where
     tokens.append(Group::new(Delimiter::Parenthesis, inside));
 }
 
-fn four_params<T1, T2, T3, T4>(name: &str, t1: &T1, t2: &T2, t3: &T3, t4: &T4,tokens: &mut TokenStream)
-where
+fn four_params<T1, T2, T3, T4>(
+    name: &str,
+    t1: &T1,
+    t2: &T2,
+    t3: &T3,
+    t4: &T4,
+    tokens: &mut TokenStream,
+) where
     T1: MyToTokens,
     T2: MyToTokens,
     T3: MyToTokens,
@@ -195,12 +201,12 @@ impl MyToTokens for Token {
 
             Self::Defs(args) => {
                 tokens.append(Ident::new("Defs", Span::call_site()));
-        
+
                 let mut vec_tokens = TokenStream::new();
                 vec_tokens.append(Punct::new('&', Spacing::Joint));
                 vec_tokens.append(Ident::new("vec", Span::call_site()));
                 vec_tokens.append(Punct::new('!', Spacing::Joint));
-        
+
                 let mut inner_token = TokenStream::new();
                 for arg in args.iter() {
                     arg.to_tokens(&mut inner_token);
@@ -246,7 +252,7 @@ impl MyToTokens for Token {
             }
 
             Self::Repeat(exp, lst, lab, count) => {
-                four_params("Repeat", exp, lst, lab, count, tokens,);
+                four_params("Repeat", exp, lst, lab, count, tokens);
             }
 
             _ => unimplemented!("impl MyToTokens for Token {{ fn to_tokens ...}} {:?}", self),

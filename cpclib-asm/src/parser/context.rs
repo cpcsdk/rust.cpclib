@@ -1,9 +1,9 @@
 use std::ops::Deref;
-use std::{path::PathBuf};
+use std::path::PathBuf;
 
 use super::Z80Span;
 use crate::error::AssemblerError;
-use std::sync::{RwLock};
+use std::sync::RwLock;
 
 /// Context information that can guide the parser
 /// TODO add assembling flags

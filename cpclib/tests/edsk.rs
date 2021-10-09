@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_harley() {
-        use  cpclib_common::itertools::Itertools;
+        use cpclib_common::itertools::Itertools;
 
         let dsk = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/harley.dsk").unwrap();
 
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     pub fn test_turlogh() {
-        use  cpclib_common::itertools::Itertools;
+        use cpclib_common::itertools::Itertools;
 
         let dsk = cpclib::disc::edsk::ExtendedDsk::open(
             "tests/dsk/Turlogh Le Rodeur (F) (Face A) (1987) [Original] (GAPS).dsk",

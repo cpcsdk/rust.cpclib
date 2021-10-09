@@ -1,6 +1,5 @@
 use crate::error::AssemblerError;
 
-
 /// Manage the stack of stable counters.
 /// They are updated each time an opcode is visited
 #[derive(Default, Clone)]

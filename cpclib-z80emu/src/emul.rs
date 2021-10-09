@@ -11,7 +11,8 @@ impl Z80 {
         let pc = self.pc().value() as i32;
         self.context
             .symbols_mut()
-            .set_symbol_to_value("$", pc).unwrap();
+            .set_symbol_to_value("$", pc)
+            .unwrap();
 
         match opcode {
             Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
@@ -40,13 +41,11 @@ impl Z80 {
         arg2: Option<&DataAccess>,
         arg3: Option<&cpclib_asm::preamble::Register8>,
     ) -> usize {
-        let opcode = Token::OpCode(
-            mnemonic, 
-            arg1.cloned(), 
-            arg2.cloned(), 
-            arg3.cloned());
+        let opcode = Token::OpCode(mnemonic, arg1.cloned(), arg2.cloned(), arg3.cloned());
 
-        let count = opcode.number_of_bytes_with_context(self.context.env.symbols_mut()).unwrap() as _;
+        let count = opcode
+            .number_of_bytes_with_context(self.context.env.symbols_mut())
+            .unwrap() as _;
         self.pc_mut().add(count);
 
         // this is the minimal duration; it can be updated depending on the instruction

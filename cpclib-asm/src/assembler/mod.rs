@@ -374,7 +374,7 @@ pub struct Env {
     current_section: Option<Arc<RwLock<Section>>>,
 
     saved_files: Option<Vec<SavedFile>>,
-    
+
     if_token_adr_to_ndef_decision: HashMap<usize, bool>,
     if_token_adr_to_def_decision: HashMap<usize, bool>,
     if_token_adr_to_used_decision: HashMap<usize, bool>,
@@ -466,8 +466,7 @@ impl Default for Env {
             saved_files: None,
             can_skip_next_passes: true.into(),
             request_additional_pass: false.into(),
-        
-        
+
             if_token_adr_to_ndef_decision: HashMap::default(),
             if_token_adr_to_def_decision: HashMap::default(),
             if_token_adr_to_used_decision: HashMap::default(),
@@ -487,7 +486,7 @@ impl Env {
         &mut self.symbols
     }
 
-        /// Compute the expression thanks to the symbol table of the environment.
+    /// Compute the expression thanks to the symbol table of the environment.
     /// If the expression is not solvable in first pass, 0 is returned.
     /// If the expression is not solvable in second pass, an error is returned
     ///
@@ -509,7 +508,7 @@ impl Env {
         }
     }
 
-        /// Compute the expression thanks to the symbol table of the environment.
+    /// Compute the expression thanks to the symbol table of the environment.
     /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
     fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<ExprResult, AssemblerError> {
         match exp.resolve(self) {
@@ -525,7 +524,7 @@ impl Env {
         }
     }
 
-      /// Add a symbol to the symbol table.
+    /// Add a symbol to the symbol table.
     /// In pass 1: the label MUST be absent
     /// In pass 2: the label MUST be present and of the same value
     fn add_symbol_to_symbol_table<E: Into<Value>>(
@@ -582,7 +581,6 @@ impl Env {
             .into_iter()
             .for_each(|symbol| self.symbols.use_symbol(symbol))
     }
-
 }
 /// Report handling
 impl Env {
@@ -656,7 +654,6 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
-
         self.requested_additional_pass = *self.request_additional_pass.read().unwrap();
 
         let mut can_change_request = true;
@@ -1193,8 +1190,6 @@ impl Env {
         expr.resolve(self)
     }
 
-
-
     pub fn sna(&self) -> &cpclib_sna::Snapshot {
         &self.sna
     }
@@ -1206,9 +1201,6 @@ impl Env {
     pub fn save_sna<P: AsRef<std::path::Path>>(&self, fname: P) -> Result<(), std::io::Error> {
         self.sna().save(fname, self.sna_version())
     }
-
-
-
 
     /// Compute the relative address. Is authorized to fail at first pass
     fn absolute_to_relative_may_fail_in_first_pass(
@@ -1231,8 +1223,6 @@ impl Env {
             }
         }
     }
-
-  
 }
 
 #[allow(missing_docs)]
@@ -1272,20 +1262,16 @@ impl Env {
 
     fn visit_label(&mut self, label: &str) -> Result<(), AssemblerError> {
         // A label cannot be defined multiple times
-        let res = if self.symbols().contains_symbol(label)? &&
-               (self.pass.is_first_pass() || 
-                !(
-                    self.symbols().kind(label)? == "address" ||
-                    self.symbols().kind(label)? == "any"
-               )) {
-                Err(AssemblerError::AlreadyDefinedSymbol {
-                    symbol: label.to_owned(),
-                    kind: self.symbols().kind(label)?.to_owned(),
-                })
+        let res = if self.symbols().contains_symbol(label)?
+            && (self.pass.is_first_pass()
+                || !(self.symbols().kind(label)? == "address"
+                    || self.symbols().kind(label)? == "any"))
+        {
+            Err(AssemblerError::AlreadyDefinedSymbol {
+                symbol: label.to_owned(),
+                kind: self.symbols().kind(label)?.to_owned(),
+            })
         } else {
-
-
-
             if !label.starts_with('.') {
                 self.symbols_mut().set_current_label(label)?;
             }
@@ -1301,14 +1287,12 @@ impl Env {
         };
 
         // Try to fallback on a macro call - parser is not that much great
-        if let Err(AssemblerError::AlreadyDefinedSymbol {
-            symbol,
-            kind,
-        }) = &res {
+        if let Err(AssemblerError::AlreadyDefinedSymbol { symbol, kind }) = &res {
             if kind == "macro" || kind == "struct" {
-                self.visit_call_macro_or_build_struct(
-                     &Token::MacroCall(label.to_string(), Default::default())
-                )
+                self.visit_call_macro_or_build_struct(&Token::MacroCall(
+                    label.to_string(),
+                    Default::default(),
+                ))
             } else {
                 res
             }
@@ -1342,7 +1326,8 @@ impl Env {
     }
 
     fn visit_multi_pushes(&mut self, regs: &[DataAccess]) -> Result<(), AssemblerError> {
-        let result = regs.iter()
+        let result = regs
+            .iter()
             .map(|reg| assemble_push(reg))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
         let result = result.into_iter().flatten().collect_vec();
@@ -1350,7 +1335,8 @@ impl Env {
     }
 
     fn visit_multi_pops(&mut self, regs: &[DataAccess]) -> Result<(), AssemblerError> {
-        let result = regs.iter()
+        let result = regs
+            .iter()
             .map(|reg| assemble_pop(reg))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
         let result = result.into_iter().flatten().collect_vec();
@@ -1391,19 +1377,17 @@ impl Env {
                     let decision = self.symbols().is_used(label);
 
                     // Add an extra pass if the test differ
-                    if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr)  {
+                    if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr) {
                         if *res != decision {
-                         *self.request_additional_pass.write().unwrap() = true;
+                            *self.request_additional_pass.write().unwrap() = true;
                         }
                     }
 
                     // replace the previously stored value
-                    self.if_token_adr_to_used_decision.insert(
-                        token_adr.clone(),
-                        decision
-                    );
+                    self.if_token_adr_to_used_decision
+                        .insert(token_adr.clone(), decision);
 
-                    if  decision {
+                    if decision {
                         self.visit_listing(listing)?;
                     }
                 }
@@ -1412,19 +1396,17 @@ impl Env {
                     let decision = !self.symbols().is_used(label);
 
                     // Add an extra pass if the test differ
-                    if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr)  {
+                    if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr) {
                         if *res != decision {
-                         *self.request_additional_pass.write().unwrap() = true;
+                            *self.request_additional_pass.write().unwrap() = true;
                         }
                     }
 
                     // replace the previously stored value
-                    self.if_token_adr_to_unused_decision.insert(
-                        token_adr.clone(),
-                        decision
-                    );
+                    self.if_token_adr_to_unused_decision
+                        .insert(token_adr.clone(), decision);
 
-                    if  decision {
+                    if decision {
                         self.visit_listing(listing)?;
                     }
                 }
@@ -1432,12 +1414,10 @@ impl Env {
                 // Label must exist
                 (TestKind::LabelExists(ref label), listing) => {
                     if !self.if_token_adr_to_def_decision.contains_key(&token_adr) {
-                        self.if_token_adr_to_def_decision.insert(
-                            token_adr.clone(),
-                            self.symbols().contains_symbol(label)?
-                        );
+                        self.if_token_adr_to_def_decision
+                            .insert(token_adr.clone(), self.symbols().contains_symbol(label)?);
                     }
-                    if *self.if_token_adr_to_def_decision.get(&token_adr).unwrap(){
+                    if *self.if_token_adr_to_def_decision.get(&token_adr).unwrap() {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -1446,12 +1426,10 @@ impl Env {
                 // Label must not exist
                 (TestKind::LabelDoesNotExist(ref label), ref listing) => {
                     if !self.if_token_adr_to_ndef_decision.contains_key(&token_adr) {
-                        self.if_token_adr_to_ndef_decision.insert(
-                            token_adr.clone(),
-                            !self.symbols().contains_symbol(label)?
-                        );
+                        self.if_token_adr_to_ndef_decision
+                            .insert(token_adr.clone(), !self.symbols().contains_symbol(label)?);
                     }
-                    if *self.if_token_adr_to_ndef_decision.get(&token_adr).unwrap(){
+                    if *self.if_token_adr_to_ndef_decision.get(&token_adr).unwrap() {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -2587,28 +2565,25 @@ impl Env {
         Ok(())
     }
 
-
-        /// Handle the statndard repetition directive
-        pub fn visit_repeat_until<T: ListingElement + Visited>(
-            &mut self,
-            cond: &Expr,
-            code: &[T],
-            span: Option<Z80Span>,
-        ) -> Result<(), AssemblerError> {
-    
-            let mut i = 0;
-            loop {
-                i = i + 1;
-                self.inner_visit_repeat(None, None, i as _, code, span.clone())?;
-                let res = self.resolve_expr_must_never_fail(cond)?;
-                if res.bool() {
-                    break;
-                }
+    /// Handle the statndard repetition directive
+    pub fn visit_repeat_until<T: ListingElement + Visited>(
+        &mut self,
+        cond: &Expr,
+        code: &[T],
+        span: Option<Z80Span>,
+    ) -> Result<(), AssemblerError> {
+        let mut i = 0;
+        loop {
+            i = i + 1;
+            self.inner_visit_repeat(None, None, i as _, code, span.clone())?;
+            let res = self.resolve_expr_must_never_fail(cond)?;
+            if res.bool() {
+                break;
             }
-    
-            Ok(())
         }
-    
+
+        Ok(())
+    }
 
     /// Handle the statndard repetition directive
     pub fn visit_repeat<T: ListingElement + Visited>(
@@ -2645,7 +2620,13 @@ impl Env {
             .unwrap_or(Ok(REPEAT_START_VALUE.into()))?;
 
         for i in 0..count {
-            self.inner_visit_repeat(counter_name, Some(counter_value), i as _, code, span.clone())?;
+            self.inner_visit_repeat(
+                counter_name,
+                Some(counter_value),
+                i as _,
+                code,
+                span.clone(),
+            )?;
             // handle the counter update
             counter_value += 1.into();
         }

@@ -278,8 +278,6 @@ impl ListingOutput {
     }
 }
 
-
-
 /// This structure collects the necessary information to feed the output
 #[derive(Clone)]
 pub struct ListingOutputTrigger {

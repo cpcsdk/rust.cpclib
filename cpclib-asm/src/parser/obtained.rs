@@ -11,7 +11,7 @@ use std::{
     fs::File,
     io::Read,
     ops::{Deref, DerefMut},
-    sync::{RwLock},
+    sync::RwLock,
 };
 
 use crate::{

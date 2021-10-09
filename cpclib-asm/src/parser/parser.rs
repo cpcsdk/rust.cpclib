@@ -587,11 +587,7 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
     let repeat_start = input.clone();
     let (input, _) = preceded(
         space0,
-        alt((
-            parse_word("REP"),
-            parse_word("REPT"),
-            parse_word("REPEAT"),
-        )),
+        alt((parse_word("REP"), parse_word("REPT"), parse_word("REPEAT"))),
     )(input)?;
 
     let (input, count) = opt(expr)(input)?;
@@ -603,7 +599,7 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
             ))(input)?;
             let (input, counter_start) = opt(preceded(parse_comma, expr))(input)?;
             let (input, inner) = cut(context("REPEAT: issue in the content", inner_code))(input)?;
-        
+
             let (input, _) = cut(context(
                 "REPEAT: not closed",
                 preceded(
@@ -614,7 +610,7 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
                         parse_word("ENDREP"),
                         parse_word("ENDR"),
                         parse_word("REND"),
-                    ))
+                    )),
                 ),
             ))(input)?;
 
@@ -629,17 +625,16 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
                     repeat_start,
                 ),
             ))
-
-        },
+        }
 
         None => {
             let (input, inner) = cut(context("REPEAT: issue in the content", inner_code))(input)?;
 
             let (input, _) = cut(context(
-                "REPEAT ... UNTIL: not closed", 
-                delimited(space0, parse_word("UNTIL"), space0)
+                "REPEAT ... UNTIL: not closed",
+                delimited(space0, parse_word("UNTIL"), space0),
             ))(input)?;
-            let (input,cond) = cut(context("REPEAT UNTIL: condition error", expr))(input)? ;
+            let (input, cond) = cut(context("REPEAT UNTIL: condition error", expr))(input)?;
             Ok((
                 input.clone(),
                 LocatedToken::RepeatUntil(
@@ -647,16 +642,10 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
                     LocatedListing::try_from(inner)
                         .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
                     repeat_start,
-                )
+                ),
             ))
         }
     }
-
-
-
-
-
-
 }
 
 pub fn parse_iterate(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
@@ -1617,14 +1606,10 @@ fn parse_conditional_condition(
                 map(parse_label(false), |l| TestKind::LabelDoesNotExist(l))(input)
             }
 
-            KindOfConditional::IfUsed => {
-                map(parse_label(false), |l| TestKind::LabelUsed(l))(input)
-
-            }
+            KindOfConditional::IfUsed => map(parse_label(false), |l| TestKind::LabelUsed(l))(input),
 
             KindOfConditional::IfNused => {
                 map(parse_label(false), |l| TestKind::LabelNused(l))(input)
-
             }
 
             _ => unreachable!(),

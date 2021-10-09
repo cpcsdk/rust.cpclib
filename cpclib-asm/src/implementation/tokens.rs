@@ -141,18 +141,17 @@ impl TokenExt for Token {
         };
 
         match self {
-            Token::Defs(ref l) => {
-                l.iter()
-                    .map(|(e, f)| {
-                        assemble_defs_item(e, f.as_ref(), &Env::default())
-                            .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
-                    })
-                    .fold_ok(SmallVec::<[u8; 4]>::new(), |mut acc, v| {
-                        acc.extend_from_slice(v.as_slice());
-                        acc
-                    })
-                    .and_then(|b| wrap(&b))
-            }
+            Token::Defs(ref l) => l
+                .iter()
+                .map(|(e, f)| {
+                    assemble_defs_item(e, f.as_ref(), &Env::default())
+                        .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
+                })
+                .fold_ok(SmallVec::<[u8; 4]>::new(), |mut acc, v| {
+                    acc.extend_from_slice(v.as_slice());
+                    acc
+                })
+                .and_then(|b| wrap(&b)),
 
             Token::Defb(_) | Token::Defw(_) => {
                 use crate::assembler::visit_db_or_dw_or_str;

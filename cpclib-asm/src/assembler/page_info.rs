@@ -2,9 +2,8 @@ use std::io::Write;
 
 use crate::error::AssemblerError;
 
-use super::{Env, delayed_command::*, report::SavedFile, save_command::SaveCommand};
+use super::{delayed_command::*, report::SavedFile, save_command::SaveCommand, Env};
 pub type ProtectedArea = std::ops::RangeInclusive<u16>;
-
 
 /// Store all the compilation information for the currently selected 64kb page
 /// A stock CPC 6128 is composed of two pages
@@ -27,7 +26,6 @@ pub struct PageInformation {
     /// List of save commands  that will be executed ONLY after full assembling (they are emptied at the beginning of each pass)
     delayed_commands: DelayedCommands,
 }
-
 
 impl Default for PageInformation {
     fn default() -> Self {
@@ -53,22 +51,20 @@ impl PageInformation {
         self.logical_codeadr = 0;
         self.limit = 0xffff;
         self.fail_next_write_if_zero = false;
-		self.delayed_commands.clear();
+        self.delayed_commands.clear();
     }
 
+    delegate::delegate! {
+        to self.delayed_commands {
+            pub fn add_save_command(&mut self, command: SaveCommand);
+            pub fn add_failed_assert_command(&mut self, command: FailedAssertCommand);
+            pub fn add_print_command(&mut self, command: PrintCommand);
 
 
-	delegate::delegate!{
-		to self.delayed_commands {
-			pub fn add_save_command(&mut self, command: SaveCommand);
-			pub fn add_failed_assert_command(&mut self, command: FailedAssertCommand);
-			pub fn add_print_command(&mut self, command: PrintCommand);
+            pub fn execute_save(&self, env: &Env) -> Result<Vec<SavedFile>, AssemblerError>;
+            pub fn collect_assert_failure(&self) -> Result<(), AssemblerError>;
+            pub fn execute_print(&self, writer: &mut impl Write)-> Result<(), AssemblerError>;
+        }
 
-
-			pub fn execute_save(&self, env: &Env) -> Result<Vec<SavedFile>, AssemblerError>;
-			pub fn collect_assert_failure(&self) -> Result<(), AssemblerError>;
-			pub fn execute_print(&self, writer: &mut impl Write)-> Result<(), AssemblerError>;
-		}
-
-	}
+    }
 }

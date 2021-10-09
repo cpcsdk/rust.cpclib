@@ -11,7 +11,7 @@
     warnings
 )]
 #![deny(clippy::pedantic)]
-#![cfg(feature="catalog")]
+#![cfg(feature = "catalog")]
 
 /// Catalog tool manipulator.
 ///
@@ -19,10 +19,10 @@ use clap::{App, Arg};
 use std::fs::File;
 use std::io::{Read, Write};
 
+use cpclib_common::num::Num;
 use cpclib_disc::amsdos::*;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
-use cpclib_common::num::Num;
 use simplelog::*;
 
 pub fn to_number<T>(repr: &str) -> T

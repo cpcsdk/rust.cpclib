@@ -5,11 +5,11 @@ extern crate matches;
 mod tests {
     use std::{sync::RwLock, u32};
 
-    use cpclib_common::lazy_static;
     use cpclib_asm::preamble::*;
+    use cpclib_common::lazy_static;
     use std::ops::Deref;
 
-    use  cpclib_common::nom::IResult;
+    use cpclib_common::nom::IResult;
 
     lazy_static::lazy_static! {
         static ref CTX: ParserContext = ParserContext {
@@ -42,7 +42,7 @@ mod tests {
     }
 
     fn get_val<'src, 'ctx, T: core::fmt::Debug>(
-        res: IResult<Z80Span, T,  cpclib_common::nom::error::VerboseError<Z80Span>>,
+        res: IResult<Z80Span, T, cpclib_common::nom::error::VerboseError<Z80Span>>,
     ) -> T {
         match res {
             Err(e) => panic!("{:?}", e),
@@ -347,19 +347,19 @@ mod tests {
         assert_eq!(tokens.len(), 2);
         assert_matches!(tokens[0].deref(), Token::OpCode(Mnemonic::Jp, _, _, _));
     }
-/*
-    #[test]
-    #[should_panic]
-    pub fn ld_16_8() {
-        // XXX Currently do not panic as de can be considered has being a label
-        // XXX Do we allow that ? The parse knows de is not a register but a label
-        // XXX Do we forbid labels with the same name as a register ? => Probably better
-        let code = " ld hl, a";
-        let _tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
-    }
-*/
+    /*
+        #[test]
+        #[should_panic]
+        pub fn ld_16_8() {
+            // XXX Currently do not panic as de can be considered has being a label
+            // XXX Do we allow that ? The parse knows de is not a register but a label
+            // XXX Do we forbid labels with the same name as a register ? => Probably better
+            let code = " ld hl, a";
+            let _tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
+        }
+    */
 
-/* // deactivated -- there is a segfault however
+    /* // deactivated -- there is a segfault however
     #[test]
     pub fn ld_16_16() {
         let code = " ld hl, de";
@@ -647,10 +647,16 @@ mod tests {
     #[test]
     fn test_call_macro() {
         let z80 = "MACRONAME";
-        assert!(dbg!(parse_macro_or_struct_call(false, false)(CTX.build_span(z80))).is_ok());
+        assert!(dbg!(parse_macro_or_struct_call(false, false)(
+            CTX.build_span(z80)
+        ))
+        .is_ok());
 
         let z80 = "BREAKPOINT_WINAPE";
-        assert!(dbg!(parse_macro_or_struct_call(false, false)(CTX.build_span(z80))).is_ok());
+        assert!(dbg!(parse_macro_or_struct_call(false, false)(
+            CTX.build_span(z80)
+        ))
+        .is_ok());
 
         let z80 = "MACRONAME 1, 2, 3, TRUC";
         assert!(parse_macro_or_struct_call(false, false)(CTX.build_span(z80)).is_ok());
@@ -1152,13 +1158,13 @@ INC_H equ opcode(inc h)
     }
 
     /*
-    #[test]
-    fn include_test() {
-        let code = "  include \"file.asm\"";
-        let tokens = parse_z80_str(code).unwrap();
-        assert_eq!(tokens.len(), 1);
-    }
-*/
+        #[test]
+        fn include_test() {
+            let code = "  include \"file.asm\"";
+            let tokens = parse_z80_str(code).unwrap();
+            assert_eq!(tokens.len(), 1);
+        }
+    */
 
     #[test]
     fn quoted_string() {

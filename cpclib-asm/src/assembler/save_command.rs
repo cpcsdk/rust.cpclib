@@ -1,12 +1,14 @@
 use std::convert::TryFrom;
 
-use cpclib_disc::{amsdos::{AmsdosFile, AmsdosFileName}, edsk::ExtendedDsk};
+use cpclib_disc::{
+    amsdos::{AmsdosFile, AmsdosFileName},
+    edsk::ExtendedDsk,
+};
 use cpclib_tokens::SaveType;
 
 use crate::error::AssemblerError;
 
-use super::{Env, report::SavedFile};
-
+use super::{report::SavedFile, Env};
 
 /// Save command information
 #[derive(Debug, Clone)]
@@ -19,20 +21,21 @@ pub struct SaveCommand {
 }
 
 impl SaveCommand {
-	pub fn new(
-		from: Option<i32>,
-		size: Option<i32>,
-		filename: String,
-		save_type: Option<SaveType>,
-		dsk_filename: Option<String>) -> Self {
-		SaveCommand {
+    pub fn new(
+        from: Option<i32>,
+        size: Option<i32>,
+        filename: String,
+        save_type: Option<SaveType>,
+        dsk_filename: Option<String>,
+    ) -> Self {
+        SaveCommand {
             from,
             size,
             filename,
             save_type,
             dsk_filename,
         }
-	}
+    }
 
     /// Really make the save - Prerequisit : the page is properly selected
     pub fn execute_on(&self, env: &Env) -> Result<SavedFile, AssemblerError> {
@@ -60,14 +63,14 @@ impl SaveCommand {
                     None => loading_address,
                 };
 
-                let amsdos_file = if r#type  == SaveType::AmsdosBas  {
+                let amsdos_file = if r#type == SaveType::AmsdosBas {
                     AmsdosFile::basic_file_from_buffer(
                         &AmsdosFileName::try_from(self.filename.as_str())?,
-                            &data,
-                        )?
-                } else { 
+                        &data,
+                    )?
+                } else {
                     AmsdosFile::binary_file_from_buffer(
-                    &AmsdosFileName::try_from(self.filename.as_str())?,
+                        &AmsdosFileName::try_from(self.filename.as_str())?,
                         loading_address,
                         execution_address,
                         &data,
@@ -117,8 +120,8 @@ impl SaveCommand {
         }
 
         Ok(SavedFile {
-			name:self.filename.clone(),
-			size: size as _
-		})
+            name: self.filename.clone(),
+            size: size as _,
+        })
     }
 }

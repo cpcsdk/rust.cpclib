@@ -2,7 +2,7 @@ use image as im;
 
 use self::im::Pixel;
 use crate::image::Mode;
-use  cpclib_common::itertools::Itertools;
+use cpclib_common::itertools::Itertools;
 use cpclib_common::num::Integer;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};

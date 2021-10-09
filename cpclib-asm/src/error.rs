@@ -568,12 +568,8 @@ impl Display for AssemblerError {
                         write!(f, "{}\n{}", msg, root)
                     }
 
-                    AssemblerError::BasicError{error} => {
-                        let msg = build_simple_error_message(
-                            "BASIC error",
-                            span,
-                            Severity::Error,
-                        );
+                    AssemblerError::BasicError { error } => {
+                        let msg = build_simple_error_message("BASIC error", span, Severity::Error);
                         write!(f, "{}\n{}", msg, error)
                     }
 

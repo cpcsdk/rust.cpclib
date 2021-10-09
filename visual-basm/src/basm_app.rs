@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use cpclib_asm::{basm_utils::*};
+use cpclib_asm::basm_utils::*;
 use eframe::{
     egui::{self, ScrollArea},
     epi::{self},

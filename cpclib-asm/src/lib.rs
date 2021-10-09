@@ -101,7 +101,9 @@ impl AssemblingOptions {
         writer: W,
     ) -> &mut Self {
         self.output_builder = Some(Arc::new(RwLock::new(ListingOutput::new(writer))));
-        self.output_builder.as_mut().map(|b| b.write().unwrap().on());
+        self.output_builder
+            .as_mut()
+            .map(|b| b.write().unwrap().on());
         self
     }
 }
@@ -201,13 +203,14 @@ Truc
 
     #[test]
     fn test_size() {
-        let mut  env = Default::default();
+        let mut env = Default::default();
         dbg!(assemble_call_jr_or_jp(
             Mnemonic::Jp,
             None,
             &DataAccess::Expression(Expr::Value(0)),
             &mut env
-        ).unwrap());
+        )
+        .unwrap());
         assert_eq!(
             Token::OpCode(
                 Mnemonic::Jp,

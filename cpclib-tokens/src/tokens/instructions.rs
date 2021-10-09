@@ -638,11 +638,9 @@ impl PartialEq for Token {
             }
 
             (Token::Print(a1), Token::Print(a2)) => a1 == a2,
-            
-            (Token::Defb(a), Token::Defb(b)) => {
-                a == b
-            }
-            
+
+            (Token::Defb(a), Token::Defb(b)) => a == b,
+
             _ => unimplemented!("{:?}, {:?}", self, other),
         }
     }

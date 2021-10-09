@@ -458,7 +458,6 @@ pub trait SymbolsTableTrait {
     /// Return the symbols that correspond to integer values
     fn integer_symbols(&self) -> Vec<&Symbol>;
 
-
     /// Return true if the symbol has already been used in an expression
     fn is_used<S: Into<Symbol>>(&self, symbol: S) -> bool;
     /// Add a symbol to the list of used symbols
@@ -581,7 +580,7 @@ pub struct SymbolsTable {
     seed_stack: Vec<usize>, // stack of seeds for nested repeat to properly interpret the @ symbol
 
     /// Contains all the symbols that have been used in expressions
-    used_symbols: HashSet<Symbol>
+    used_symbols: HashSet<Symbol>,
 }
 
 impl Default for SymbolsTable {
@@ -595,7 +594,7 @@ impl Default for SymbolsTable {
             assignable: Default::default(),
             seed_stack: Vec::new(),
             namespace_stack: Vec::new(),
-            used_symbols: HashSet::new()
+            used_symbols: HashSet::new(),
         }
     }
 }
@@ -820,7 +819,7 @@ impl SymbolsTable {
             assignable: HashSet::new(),
             seed_stack: Vec::new(),
             namespace_stack: Vec::new(),
-            used_symbols: HashSet::new()
+            used_symbols: HashSet::new(),
         }
     }
 
@@ -1151,15 +1150,13 @@ impl SymbolsTableCaseDependent {
 }
 
 impl SymbolsTableTrait for SymbolsTableCaseDependent {
-
     fn is_used<S: Into<Symbol>>(&self, symbol: S) -> bool {
         self.table.is_used(self.normalize_symbol(symbol))
     }
 
-    fn use_symbol<S: Into<Symbol>>(&mut self, symbol: S)  {
+    fn use_symbol<S: Into<Symbol>>(&mut self, symbol: S) {
         self.table.use_symbol(self.normalize_symbol(symbol))
     }
-
 
     fn integer_symbols(&self) -> Vec<&Symbol> {
         self.table.integer_symbols()
