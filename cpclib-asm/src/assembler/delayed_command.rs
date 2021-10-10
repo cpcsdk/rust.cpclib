@@ -34,7 +34,7 @@ impl PrintCommand {
         match &self.print_or_error {
             either::Either::Left(msg) => {
                 // TODO improve printting + integrate z80span information
-                writeln!(
+                write!(
                     writer, 
                     "{}", 
                     if let Some(span) = &self.span {

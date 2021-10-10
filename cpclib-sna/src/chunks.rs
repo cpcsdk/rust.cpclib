@@ -64,7 +64,6 @@ impl MemoryChunk {
                 || code[3] == b'7'
                 || code[3] == b'8'
         );
-        dbg!(code);
         Self {
             data: SnapshotChunkData { code, data },
         }
