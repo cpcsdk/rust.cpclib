@@ -1317,14 +1317,16 @@ pub fn parse_section(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
 pub fn parse_range(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_word("RANGE")(input)?;
 
-    let (input, (label, start, stop)) = cut(context(
-        "Wrong parameter for RANGE",
-        tuple((
-            delimited(space0, parse_label(false), space0),
-            preceded(parse_comma, expr),
-            preceded(parse_comma, expr),
-        )),
+    let (input, start) = cut(context("RANGE: wrong start address",
+        delimited(space0, expr, space0)
     ))(input)?;
+    let (input, stop) = cut(context("RANGE: wrong end address",
+    preceded(parse_comma, delimited(space0, expr, space0))
+    ))(input)?;
+    let (input, label) = cut(context("RANGE: wrong name",
+        preceded(parse_comma, delimited(space0, parse_label(false), space0))
+    ))(input)?;
+
 
     Ok((input, Token::Range(label.into(), start, stop)))
 }

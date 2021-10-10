@@ -1,7 +1,7 @@
 ; sarcasm inspiration https://www.ecstaticlyrics.com/electronics/Z80/sarcasm/
 
-range code, $0080, $3FFF
-range data, $4000, $7FFF
+range $0080, $3FFF, code
+range $4000, $7FFF, data
 
 section code
   ld hl, message_1
