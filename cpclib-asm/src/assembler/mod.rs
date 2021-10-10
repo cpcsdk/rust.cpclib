@@ -1751,21 +1751,7 @@ impl Env {
             }
         };
 
-        /*
-                dbg!(parameters);
-        // fallback to label definition
-        if let (Ok(None), Ok(None), true) = (self.symbols().macro_value(name), self.symbols().struct_value(name), parameters.is_empty() ) {
-            self.warnings.push(
-                AssemblerError::AssemblingError{
-                        msg: format!("Macro {} not found. We try to use a label instead", name)
-                    }
-            );
-
-            return self.visit_label(name);
-        }
-        */
         let listing = {
-            dbg!(&self.symbols());
             // Retreive the macro or structure definition
             let r#macro = self.symbols().macro_value(name)?;
             let r#struct = self.symbols().struct_value(name)?;
@@ -1794,8 +1780,6 @@ impl Env {
                 parameters.resize(r#struct.nb_args(), MacroParam::empty());
                 r#struct.develop(&parameters)
             };
-
-            // dbg!(&code);
 
             // Tokenize with the same parsing  parameters and context when possible
             let listing = match caller_span {
@@ -2197,6 +2181,10 @@ pub fn visit_located_token(
     let span = outer_token.span();
     match outer_token {
         LocatedToken::Standard { token, span } => match token {
+            Token::Assert(exp, txt) => {
+                visit_assert(exp, txt.as_ref(), env, Some(span.clone()));
+                Ok(())
+            }
             Token::MacroCall(_, _) => env
                 .visit_call_macro_or_build_struct(outer_token)
                 .map_err(|e| e.locate(span.clone())),
@@ -2321,7 +2309,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     match token {
         Token::Align(ref boundary, ref fill) => env.visit_align(boundary, fill.as_ref()),
         Token::Assert(ref exp, ref txt) => {
-            visit_assert(exp, txt.as_ref(), env);
+            visit_assert(exp, txt.as_ref(), env, None);
             Ok(())
         }
         Token::Basic(ref variables, ref hidden_lines, ref code) => {
@@ -2446,7 +2434,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 
 /// No error is generated here; everything is delayed at the end of assembling.
 /// Returns false in case of assert failure
-fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> bool {
+fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env, span: Option<Z80Span>) -> bool {
     let res = match env.resolve_expr_must_never_fail(exp) {
         Err(e) => Err(e),
 
@@ -2482,6 +2470,12 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env) -> bool {
     };
 
     if let Err(assert_error) = res {
+
+        let assert_error = if let Some(span) = span {
+            assert_error.locate(span)
+        } else {
+            assert_error
+        };
         env.active_page_info_mut()
             .add_failed_assert_command(assert_error.into());
         false
@@ -4741,12 +4735,14 @@ mod test {
         assert!(visit_assert(
             &Expr::Equal(Box::new(0.into()), Box::new(0.into())),
             None,
-            &mut env
+            &mut env,
+            None
         ));
         assert!(!visit_assert(
             &Expr::Equal(Box::new(1.into()), Box::new(0.into())),
             None,
-            &mut env
+            &mut env,
+            None
         ));
     }
 

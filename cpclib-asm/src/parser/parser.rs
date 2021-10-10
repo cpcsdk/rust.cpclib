@@ -360,7 +360,7 @@ pub fn parse_z80_line(
                                 context("[DBG] crunched section", parse_crunched_section),
                                 context("[DBG] module", parse_module),
                                 context("[DBG] repeat", parse_repeat),
-                                context("[DBG] switch", parse_switch),
+                                context("SWITCH parse error", parse_switch),
                                 context("[DBG] iterate", parse_iterate),
                                 context("[DBG] while", parse_while),
                                 context("[DBG] rorg", parse_rorg),
@@ -588,7 +588,7 @@ pub fn parse_crunched_section(
 
 /// Parse the switch directive
 pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
-    let (switch_start, _) = space0(input)?;
+    let (switch_start, _) = many0(alt((space1, line_ending)))(input)?;
     let (input, _) = parse_word("SWITCH")(switch_start.clone())?;
 
     
@@ -602,11 +602,10 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
     let mut loop_start = input;
     loop {
 
-        let (input, _) = cut(pair(
-            space0,
-            opt(alt((
+        let (input, _) = cut(context("SWITCH: whitespace error", many0(alt((
+                space1,
                 line_ending,
-                tag(".")
+                tag(":")
             )))
         ))(loop_start)?;
 

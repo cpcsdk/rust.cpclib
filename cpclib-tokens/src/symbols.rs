@@ -100,7 +100,6 @@ impl PhysicalAddress {
     }
 
     pub fn ga_bank(&self) -> u16 {
-        dbg!(&self);
         let low = if self.page() == 0 {
             0b11_000_0_00
         } else {
@@ -110,7 +109,6 @@ impl PhysicalAddress {
     }
 
     pub fn ga_page(&self) -> u16 {
-        dbg!(&self);
         let low = if self.page() == 0 {
             0b11_000_0_00
         } else {
@@ -944,7 +942,7 @@ impl SymbolsTable {
         key: S,
     ) -> Result<Option<u16>, SymbolError> {
         let key = key.into();
-        let addr = dbg!(self.address_value(key.clone()))?;
+        let addr = self.address_value(key.clone())?;
         Ok(addr.map(|v| {
             match prefix {
                 LabelPrefix::Bank => v.bank() as u16,
