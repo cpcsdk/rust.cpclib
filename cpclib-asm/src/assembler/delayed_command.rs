@@ -1,7 +1,9 @@
 use std::io::Write;
 
 use super::{report::SavedFile, save_command::SaveCommand, Env};
+use crate::error::build_simple_error_message;
 use crate::{error::AssemblerError, preamble::Z80Span};
+use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::prelude::*;
 trait DelayedCommand {}
@@ -32,7 +34,15 @@ impl PrintCommand {
         match &self.print_or_error {
             either::Either::Left(msg) => {
                 // TODO improve printting + integrate z80span information
-                writeln!(writer, "{}", msg).unwrap();
+                writeln!(
+                    writer, 
+                    "{}", 
+                    if let Some(span) = &self.span {
+                        build_simple_error_message(msg, &span, Severity::Note)
+                    } else {
+                        msg.to_owned()
+                    }
+                ).unwrap();
                 Ok(())
             }
             either::Either::Right(e) => Err(e.clone()),

@@ -126,7 +126,14 @@ impl Clone for LocatedToken {
             LocatedToken::Iterate(_, _, _, _) => todo!(),
             LocatedToken::RepeatUntil(_, _, _) => todo!(),
             LocatedToken::Rorg(_, _, _) => todo!(),
-            LocatedToken::Switch(_, _,_,_) => todo!(),
+            LocatedToken::Switch(value, cases, default, span) => {
+                LocatedToken::Switch(
+                    value.clone(),
+                    cases.clone(),
+                    default.clone(),
+                    span.clone()
+                )
+            },
             LocatedToken::While(_, _, _) => todo!(),
             LocatedToken::Module(_, _, _) => todo!(),
         }

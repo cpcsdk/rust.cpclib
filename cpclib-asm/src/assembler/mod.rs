@@ -2191,6 +2191,10 @@ pub fn visit_located_token(
                 visit_assert(exp, txt.as_ref(), env, Some(span.clone()));
                 Ok(())
             }
+            Token::Print(ref exp) => {
+                env.visit_print(exp.as_ref(), Some(span.clone()));
+                Ok(())
+            }
             Token::MacroCall(_, _) => env
                 .visit_call_macro_or_build_struct(outer_token)
                 .map_err(|e| e.locate(span.clone())),

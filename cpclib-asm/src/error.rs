@@ -714,7 +714,7 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
 }
 
-fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
+pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
     let filename = build_filename(span);
     let source = span.extra.0.as_ref();
 
