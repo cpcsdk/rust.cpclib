@@ -1,0 +1,4 @@
+	org 0x1000
+
+	ld l, e
+	ld h, d
