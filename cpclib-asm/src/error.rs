@@ -7,6 +7,8 @@ use crate::PhysicalAddress;
 use crate::Z80Span;
 use codespan_reporting::diagnostic::Severity;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
+use codespan_reporting::term::Config;
+use codespan_reporting::term::DisplayStyle;
 use cpclib_basic::BasicError;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::error::VerboseError;
@@ -739,7 +741,10 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
         )]);
 
     let mut writer = buffer();
-    let config = config();
+    let mut config = config();
+    if severity == Severity::Note {
+        config.display_style = DisplayStyle::Short;
+    }
     term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
 
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
