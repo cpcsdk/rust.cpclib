@@ -25,6 +25,52 @@ use crate::implementation::instructions::Cruncher;
 
 ///! This crate is related to the adaptation of tokens and listing for the case where they are parsed
 
+/// Read the content of the source file.
+/// Uses the context to obtain the appropriate file other the included directories
+pub fn read_source(fname: &str, ctx: & ParserContext) -> Result<String, AssemblerError> {
+    match ctx.get_path_for(fname) {
+        Err(e) => {
+            Err(AssemblerError::IOError {
+                msg: format!("{:?} not found. {:?}", fname, e),
+            })
+        }
+        Ok(ref fname) => {
+            let mut f = File::open(&fname)
+                    .map_err(|e| AssemblerError::IOError {
+                        msg: format!("Unable to open {:?}. {}", fname, e),
+                    })?;
+
+            let mut content = Vec::new();
+            f.read_to_end(&mut content)
+                .map_err(|e| AssemblerError::IOError {
+                    msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
+                })?;
+
+            let result = chardet::detect(&content);
+            let coder = encoding::label::encoding_from_whatwg_label(
+                chardet::charset2encoding(&result.0),
+            );
+
+            let content = match coder {
+                Some(coder) => {
+                    let utf8reader = coder
+                        .decode(&content, encoding::DecoderTrap::Ignore)
+                        .expect("Error");
+                    utf8reader.to_string()
+                }
+                None => {
+                    return Err(AssemblerError::IOError {
+                        msg: format!("Encoding error for {:?}.", fname),
+                    });
+                }
+            };
+
+            Ok(content)
+
+        }
+    }
+}
+
 #[derive(Debug)]
 /// Add span information for a Token.
 /// This hierarchy is a mirror of the original token one
@@ -197,54 +243,18 @@ impl LocatedToken {
     pub fn read_referenced_file(&self, ctx: &ParserContext) -> Result<(), AssemblerError> {
         match self {
             LocatedToken::Include(ref fname, ref cell, _namespace, _span) => {
-                match ctx.get_path_for(fname) {
-                    Err(e) => {
-                        return Err(AssemblerError::IOError {
-                            msg: format!("{:?} not found. {:?}", fname, e),
-                        });
-                    }
-                    Ok(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|e| AssemblerError::IOError {
-                            msg: format!("Unable to open {:?}. {}", fname, e),
-                        })?;
+                let content = read_source(fname, ctx)?;
 
-                        let mut content = Vec::new();
-                        f.read_to_end(&mut content)
-                            .map_err(|e| AssemblerError::IOError {
-                                msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
-                            })?;
+                let content = Arc::new(content);
+                let new_ctx = {
+                    let mut new_ctx = ctx.deref().clone();
+                    new_ctx.set_current_filename(fname);
+                    Arc::new(new_ctx)
+                };
 
-                        let result = chardet::detect(&content);
-                        let coder = encoding::label::encoding_from_whatwg_label(
-                            chardet::charset2encoding(&result.0),
-                        );
-
-                        let content = match coder {
-                            Some(coder) => {
-                                let utf8reader = coder
-                                    .decode(&content, encoding::DecoderTrap::Ignore)
-                                    .expect("Error");
-                                utf8reader.to_string()
-                            }
-                            None => {
-                                return Err(AssemblerError::IOError {
-                                    msg: format!("Encoding error for {:?}.", fname),
-                                });
-                            }
-                        };
-
-                        let content = Arc::new(content);
-                        let new_ctx = {
-                            let mut new_ctx = ctx.deref().clone();
-                            new_ctx.set_current_filename(fname);
-                            Arc::new(new_ctx)
-                        };
-
-                        let listing = parse_z80_strrc_with_contextrc(content, new_ctx)?;
-                        cell.write().unwrap().replace(listing);
-                        assert!(cell.read().unwrap().is_some());
-                    }
-                }
+                let listing = parse_z80_strrc_with_contextrc(content, new_ctx)?;
+                cell.write().unwrap().replace(listing);
+                assert!(cell.read().unwrap().is_some());
             }
 
             LocatedToken::Standard {

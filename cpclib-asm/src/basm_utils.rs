@@ -62,50 +62,14 @@ impl From<AssemblerError> for BasmError {
 pub fn parse<'arg>(
     matches: &'arg ArgMatches<'_>,
 ) -> Result<(LocatedListing, Vec<AssemblerError>), BasmError> {
-    let (filename, code) = {
-        if let Some(filename) = matches.value_of("INPUT") {
-            let mut f = File::open(filename).map_err(|e| BasmError::Io {
-                io: e,
-                ctx: format!("opening \"{}\"", filename),
-            })?;
 
-            // Rust is boring for non utf8? that is why we have to play with that
-            let mut content = Vec::new();
-            f.read_to_end(&mut content).map_err(|e| BasmError::Io {
-                io: e,
-                ctx: format!("reading \"{}\"", filename),
-            })?;
+    let inline_fname = "<inline code>";
+    let filename = matches.value_of("INPUT").unwrap_or(inline_fname);
 
-            let result = chardet::detect(&content);
-            let coder =
-                encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
-
-            let content = match coder {
-                Some(coder) => {
-                    let utf8reader = coder
-                        .decode(&content, encoding::DecoderTrap::Ignore)
-                        .expect("Error");
-                    utf8reader.to_string()
-                }
-                None => {
-                    return Err(AssemblerError::IOError {
-                        msg: format!("Encoding error for {:?}.", filename),
-                    }
-                    .into());
-                }
-            };
-
-            (filename, content)
-        } else if let Some(code) = matches.value_of("INLINE") {
-            ("<inline code>", format!(" {}", code))
-        } else {
-            panic!("No code provided to assemble");
-        }
-    };
-
+    // prepare the context for the included directories
     let mut context = ParserContext::default();
     context.set_current_filename(&filename);
-    context.add_search_path_from_file(&filename)?;
+    context.add_search_path_from_file(&filename); // we ignore the potential error
     if let Some(directories) = matches.values_of("INCLUDE_DIRECTORIES") {
         for directory in directories {
             if !Path::new(directory).is_dir() {
@@ -117,6 +81,17 @@ pub fn parse<'arg>(
         }
     }
 
+    // get the source code if any
+    let code = if matches.is_present("INPUT") {
+        read_source(filename, &context)?
+    } else if let Some(code) = matches.value_of("INLINE") {
+            format!(" {}", code)
+    } else {
+        panic!("No code provided to assemble");
+    };
+
+
+    // Continue the creation of the context
     let code = Arc::new(code);
     let context = Arc::new(context);
 
