@@ -995,6 +995,7 @@ impl SymbolsTable {
                 (Value::Number(_), SymbolFor::Number)
                 | (Value::Number(_), SymbolFor::Address)
                 | (Value::Address(_), SymbolFor::Address)
+                | (Value::Address(_), SymbolFor::Number)
                 | (Value::Macro(_), SymbolFor::Macro)
                 | (Value::Struct(_), SymbolFor::Struct)
                 | (Value::Counter(_), SymbolFor::Counter)
