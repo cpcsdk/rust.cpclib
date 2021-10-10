@@ -148,7 +148,8 @@ impl ExprEvaluationExt for Expr {
             },
 
             PrefixedLabel(prefix, label) => {
-                let val = env.symbols().prefixed_value(prefix, label)?;
+                let val = env.symbols()
+                                        .prefixed_value(prefix, label)?;
                 match  val  {
                     Some(val) => Ok(val.into()),
                     None => Err(AssemblerError::AssemblingError {

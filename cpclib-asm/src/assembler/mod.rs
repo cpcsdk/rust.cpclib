@@ -1533,25 +1533,32 @@ impl Env {
             }
         };
 
-        {
+        let (output_adr, code_adr, mmr) = {
             let section = section.read().unwrap();
 
             if section.mmr != self.ga_mmr {
                 self.warnings.push(AssemblerError::AssemblingError{
                     msg: format!("Gate Array configuration is not coherent with the section. We  manually set it (0x{:x} expected instead of 0x{:x})", section.mmr, self.ga_mmr)
                 });
-
-                self.ga_mmr = section.mmr;
             }
-        }
 
-        let section = Arc::clone(section);
+            (
+                section.output_adr,
+                section.code_adr,
+                section.mmr
+            )
+        };
 
-        self.active_page_info_mut().logical_outputadr = section.read().unwrap().output_adr;
-        self.active_page_info_mut().logical_codeadr = section.read().unwrap().code_adr;
-        self.output_address = section.read().unwrap().output_adr;
-        self.current_section = Some(section);
+        self.current_section = Some(Arc::clone(section));
 
+        self.ga_mmr = mmr;
+        self.output_address = output_adr;
+
+        self.active_page_info_mut().logical_outputadr = output_adr;
+        self.active_page_info_mut().logical_codeadr = code_adr;
+
+
+        self.update_dollar();
         Ok(())
     }
 

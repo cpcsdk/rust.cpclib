@@ -944,13 +944,12 @@ impl SymbolsTable {
         key: S,
     ) -> Result<Option<u16>, SymbolError> {
         let key = key.into();
-        dbg!(&self.map);
-        let addr = self.address_value(key.clone())?;
+        let addr = dbg!(self.address_value(key.clone()))?;
         Ok(addr.map(|v| {
             match prefix {
                 LabelPrefix::Bank => v.bank() as u16,
-                LabelPrefix::Page => v.ga_bank(),
-                LabelPrefix::Pageset => v.ga_page(),
+                LabelPrefix::Page => v.ga_bank() & 0x00ff,
+                LabelPrefix::Pageset => v.ga_page() & 0x00ff, // delete 0x7f00
             }
         } as _))
 
