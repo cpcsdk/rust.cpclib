@@ -1465,7 +1465,7 @@ impl Env {
         self.symbols_mut().set_symbol_to_value(
             name,
             Macro::new(name.to_owned(), arguments.to_vec(), code.to_owned()),
-        );
+        )?;
         Ok(())
     }
 

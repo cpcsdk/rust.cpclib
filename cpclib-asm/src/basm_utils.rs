@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::fs::File;
 use std::io;
-use std::io::{Read, Write};
+use std::io::{Write};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -29,6 +29,8 @@ pub enum BasmError {
     NotAValidFile { file: String },
 
     ListingGeneration { msg: String },
+
+    InvalidArgument(String)
 }
 
 impl Display for BasmError {
@@ -47,6 +49,9 @@ impl Display for BasmError {
             BasmError::ListingGeneration { msg } => {
                 write!(f, "Error when generating the symbol table: {}", msg)
             }
+            BasmError::InvalidArgument(msg) => {
+                write!(f, "Invalid argument: {}", msg)
+            },
         }
     }
 }
@@ -91,6 +96,7 @@ pub fn parse<'arg>(
     };
 
 
+
     // Continue the creation of the context
     let code = Arc::new(code);
     let context = Arc::new(context);
@@ -121,6 +127,24 @@ pub fn assemble<'arg>(
             }
         }
     }
+
+        // Get the variables definition
+        if let Some(definitions) = matches.values_of("DEFINE_SYMBOL") {
+            for definition in definitions {
+                let mut split = definition.split("=");
+                let symbol = split.next().unwrap();
+                let value = split.next().unwrap_or("1");
+                let value = /*cpclib_common::*/parse_value(value.into())
+                    .map_err(|e| BasmError::InvalidArgument(definition.to_string()))
+                    ?
+                    .1;
+    
+                options.symbols_mut()
+                    .assign_symbol_to_value(symbol, value.eval()?)
+                    .map_err(|e| BasmError::InvalidArgument(definition.to_string()))?;
+            }
+        }
+    
 
     if let Some(dest) = matches.value_of("LISTING_OUTPUT") {
         if dest == "-" {
@@ -318,6 +342,15 @@ pub fn build_args_parser() -> clap::App<'static, 'static> {
                             .help("Provide additional directories used to search files.")
                             .long("include")
                             .short("I")
+                            .takes_value(true)
+                            .multiple(true)
+                            .number_of_values(1)
+                    )
+                    .arg(
+                        Arg::with_name("DEFINE_SYMBOL")
+                            .help("Provide a symbol with its value (default set to 1")
+                            .long("define")
+                            .short("D")
                             .takes_value(true)
                             .multiple(true)
                             .number_of_values(1)
