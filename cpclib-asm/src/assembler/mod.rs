@@ -304,6 +304,11 @@ impl Section {
     fn contains(&self, addr: u16) -> bool {
         addr >= self.start && addr <= self.stop
     }
+
+    fn new_pass(&mut self) {
+        self.output_adr = self.start;
+        self.code_adr = self.start;
+    }
 }
 
 /// Environment of the assembly
@@ -699,6 +704,7 @@ impl Env {
             self.warnings.retain(|elem| !elem.is_override_memory());
             self.pages_info_sna.iter_mut().for_each(|p| p.new_pass());
 
+            self.sections.iter_mut().for_each(|s| s.1.write().unwrap().new_pass());
             self.current_section = None;
 
             self.banks.iter_mut().for_each(|bank| {
