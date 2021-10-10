@@ -1556,25 +1556,34 @@ impl Env {
     }
 
     fn visit_range(&mut self, name: &str, start: &Expr, stop: &Expr) -> Result<(), AssemblerError> {
-        if self.pass.is_first_pass() {
-            if self.sections.contains_key(name) {
+
+
+
+        let start = self.resolve_expr_must_never_fail(start)?.int() as u16;
+        let stop = self.resolve_expr_must_never_fail(stop)?.int() as u16;
+        let mmr = self.ga_mmr;
+
+        if let Some(section) = self.sections.get(name) {
+            let section = section.read().unwrap();
+            if start != section.start || 
+                stop != section.stop ||
+                name != section.name || 
+                mmr != section.mmr {
                 return Err(AssemblerError::AssemblingError {
-                    msg: format!("Section '{}' is already defined", name),
+                    msg: format!("Section '{}' is already defined from 0x{:x} to 0x{:x} in 0x{:x}", 
+                    section.name, section.start, section.stop, section.mmr),
                 });
             }
+        } else {
+            let section = Arc::new(RwLock::new(Section::new(
+                name,
+                start,
+                stop,
+                mmr,
+            )));
+
+            self.sections.insert(name.to_owned(), section);
         }
-
-        let start = self.resolve_expr_must_never_fail(start)?;
-        let stop = self.resolve_expr_must_never_fail(stop)?;
-
-        let section = Arc::new(RwLock::new(Section::new(
-            name,
-            start.int() as _,
-            stop.int() as _,
-            self.ga_mmr,
-        )));
-
-        self.sections.insert(name.to_owned(), section);
 
         Ok(())
     }
