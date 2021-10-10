@@ -2109,6 +2109,7 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseEr
                 space0,
                 alt((
                     map(recognize(expr), |s| s.to_string()), // TODO handle evaluation or transposition
+                    map(string_between_quotes, |s| s.to_string()),
                     map(many0(none_of(" ,\r\n\t][;")), |s| {
                         s.iter().collect::<String>().trim().to_owned()
                     }),
