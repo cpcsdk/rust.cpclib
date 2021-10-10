@@ -1,6 +1,7 @@
 use std::io::Write;
 
 use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait};
+use cpclib_common::itertools::Itertools;
 
 /// Manage the generation of the symbols output.
 /// Could be parametrize by some directives
@@ -32,10 +33,12 @@ impl SymbolOutputGenerator {
         w: &mut W,
         symbs: &impl SymbolsTableTrait,
     ) -> std::io::Result<()> {
+       
         for &k in symbs
             .integer_symbols()
             .iter()
             .filter(|s| self.keep_symbol(s))
+            .sorted()
         {
             // TODO add some filtering stuffs based on the directives
             writeln!(

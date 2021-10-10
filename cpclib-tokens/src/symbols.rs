@@ -410,7 +410,7 @@ impl<I: Into<ExprResult>> From<I> for Value {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Symbol(String);
 
 impl Display for Symbol {
