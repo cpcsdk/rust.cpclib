@@ -181,7 +181,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "WRITE DIRECT",
     "SNASET",
     "STRUCT",
-    "SWITCH",
+    "SWITCH", "CASE", "DEFAULT", "BREAK",
     "SECTION",
     "UNDEF",
     "UNTIL",
@@ -193,6 +193,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
 const FIRST_DIRECTIVE: &[&str] = &[
     "IF", "IFDEF", "IFNDEF", "ITERATE", "ITER", "REPEAT", "REPT", //   "REP",
     "PHASE", "MODULE", "WHILE", "LZAPU", "LZEXO", "LZ4", "LZ48", "LZ49", "LZX7",
+    "SWITCH"
 ];
 
 // This table is supposed to contain the keywords that finish a section
@@ -213,6 +214,8 @@ const FINAL_DIRECTIVE: &[&str] = &[
     "WEND",
     "LZCLOSE",
     "ENDMODULE",
+    "CASE", "DEFAULT", "BREAK",
+    "ENDSWITCH"
 ];
 pub fn parse_z80_strrc_with_contextrc(
     code: Arc<String>,
@@ -357,6 +360,7 @@ pub fn parse_z80_line(
                                 context("[DBG] crunched section", parse_crunched_section),
                                 context("[DBG] module", parse_module),
                                 context("[DBG] repeat", parse_repeat),
+                                context("[DBG] switch", parse_switch),
                                 context("[DBG] iterate", parse_iterate),
                                 context("[DBG] while", parse_while),
                                 context("[DBG] rorg", parse_rorg),
@@ -582,6 +586,78 @@ pub fn parse_crunched_section(
     ))
 }
 
+/// Parse the switch directive
+pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let (switch_start, _) = space0(input)?;
+    let (input, _) = parse_word("SWITCH")(switch_start.clone())?;
+
+    
+    let (input, value) = cut(context("SWITCH: tested value", 
+        preceded(space0, expr))) (input)?;
+
+
+    let mut cases_listing = Vec::new();
+    let mut default_listing = None;
+    
+    let mut loop_start = input;
+    loop {
+
+        let (input, _) = cut(pair(
+            space0,
+            opt(alt((
+                line_ending,
+                tag(".")
+            )))
+        ))(loop_start)?;
+
+        
+        // after default it is mandatory to end the block
+        let (input, endswitch) = if default_listing.is_some() {
+            cut(context("SWITCH: endswitch not present after default listing.", preceded(space0, map(parse_word("ENDSWITCH"), |_| true))))(input)?
+        } else {
+            preceded(space0, map(opt(parse_word("ENDSWITCH")), |e| e.is_some()))(input)?
+        };
+        if endswitch {
+            return Ok((
+                input,
+                LocatedToken::Switch(
+                    value,
+                    cases_listing,
+                    default_listing,
+                    switch_start.clone()
+                ))
+            );
+        }
+
+
+
+
+        let (input, value) = preceded(space0, opt(parse_word("CASE")))(input)?;
+        loop_start = if value.is_some() {
+            let (input, value) = cut(context("SWITCH: case value error.", 
+            preceded(space0, expr)))(input)?;
+            let (input, inner) = cut(context("SWITCH: error in case code", inner_code))(input)?;
+            let (input, do_break) = opt(preceded(space0, parse_word("BREAK")))(input)?;
+
+            cases_listing.push((
+                value,
+                LocatedListing::try_from(inner)
+                .unwrap_or_else(|_| LocatedListing::new_empty_span(input.clone())),
+                do_break.is_some()
+            ));
+            input
+        } else {
+            let (input, _) = preceded(space0, parse_word("DEFAULT"))(input)?;
+            let (input, default) = cut(context("SWITCH: error in default case",
+            inner_code))(input)?;
+            default_listing = Some(LocatedListing::try_from(default)
+            .unwrap_or_else(|_| LocatedListing::new_empty_span(input.clone())),);
+            input
+        }
+     }
+
+
+}
 /// TODO
 pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let repeat_start = input.clone();

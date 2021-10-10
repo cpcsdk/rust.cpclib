@@ -2286,7 +2286,7 @@ pub fn visit_located_token(
         LocatedToken::Rorg(address, code, span) => {
             env.visit_rorg(address, code, Some(span.clone()))
         }
-        LocatedToken::Switch(_, _) => todo!(),
+        LocatedToken::Switch(value, cases, default, span) => todo!(),
         LocatedToken::While(cond, inner, span) => env.visit_while(cond, inner, Some(span.clone())),
         LocatedToken::Iterate(name, values, code, span) => {
             env.visit_iterate(name.as_str(), values, code, Some(span.clone()))

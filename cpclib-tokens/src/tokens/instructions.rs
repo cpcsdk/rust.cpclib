@@ -523,7 +523,7 @@ pub enum Token {
     StableTicker(StableTickerAction),
     Str(Vec<Expr>),
     Struct(String, Vec<(String, Token)>),
-    Switch(Vec<(Expr, Listing)>),
+    Switch(Expr, Vec<(Expr, Listing, bool)>, Option<Listing>),
 
     Undef(String),
     WaitNops(Expr),
@@ -622,7 +622,7 @@ impl Clone for Token {
             Token::StableTicker(a) => Token::StableTicker(a.clone()),
             Token::Str(a) => Token::Str(a.clone()),
             Token::Struct(a, b) => Token::Struct(a.clone(), b.clone()),
-            Token::Switch(a) => Token::Switch(a.clone()),
+            Token::Switch(a, b, c) => Token::Switch(a.clone(), b.clone(), c.clone()),
             Token::Undef(a) => Token::Undef(a.clone()),
             Token::WaitNops(b) => Token::WaitNops(b.clone()),
             Token::While(a, b) => Token::While(a.clone(), b.clone()),
@@ -1146,7 +1146,7 @@ impl Token {
             | Self::Repeat(_, _, _, _)
             | Self::RepeatUntil(_, _)
             | Self::Rorg(_, _)
-            | Self::Switch(_)
+            | Self::Switch(_,_,_)
             | Self::While(_, _) => true,
             _ => false,
         }

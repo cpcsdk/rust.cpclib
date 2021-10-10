@@ -98,7 +98,7 @@ pub enum LocatedToken {
     Iterate(String, Vec<Expr>, LocatedListing, Z80Span),
     RepeatUntil(Expr, LocatedListing, Z80Span),
     Rorg(Expr, LocatedListing, Z80Span),
-    Switch(Vec<(Expr, LocatedListing)>, Z80Span),
+    Switch(Expr, Vec<(Expr, LocatedListing, bool)>, Option<LocatedListing>, Z80Span),
     While(Expr, LocatedListing, Z80Span),
     Module(String, LocatedListing, Z80Span),
 }
@@ -126,7 +126,7 @@ impl Clone for LocatedToken {
             LocatedToken::Iterate(_, _, _, _) => todo!(),
             LocatedToken::RepeatUntil(_, _, _) => todo!(),
             LocatedToken::Rorg(_, _, _) => todo!(),
-            LocatedToken::Switch(_, _) => todo!(),
+            LocatedToken::Switch(_, _,_,_) => todo!(),
             LocatedToken::While(_, _, _) => todo!(),
             LocatedToken::Module(_, _, _) => todo!(),
         }
@@ -166,7 +166,7 @@ impl LocatedToken {
             | Self::Repeat(_, _, _, _, span)
             | Self::RepeatUntil(_, _, span)
             | Self::Rorg(_, _, span)
-            | Self::Switch(_, span)
+            | Self::Switch(_,_,_, span)
             | Self::While(_, _, span) => span,
         }
     }
@@ -204,10 +204,12 @@ impl LocatedToken {
                 Cow::Owned(Token::RepeatUntil(e.clone(), l.as_listing()))
             }
             LocatedToken::Rorg(e, l, _span) => Cow::Owned(Token::Rorg(e.clone(), l.as_listing())),
-            LocatedToken::Switch(v, _span) => Cow::Owned(Token::Switch(
-                v.iter()
-                    .map(|(e, l)| (e.clone(), l.as_listing()))
+            LocatedToken::Switch(v, c, d, span) => Cow::Owned(Token::Switch(
+                v.clone(),
+                c.iter()
+                    .map(|(e, l, b)| (e.clone(), l.as_listing(), b.clone()))
                     .collect_vec(),
+                    d.as_ref().map(|d| d.as_listing())
             )),
             LocatedToken::While(e, l, _span) => Cow::Owned(Token::While(e.clone(), l.as_listing())),
             LocatedToken::Iterate(_name, _values, _code, _span) => todo!(),
