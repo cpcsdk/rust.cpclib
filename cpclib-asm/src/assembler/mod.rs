@@ -2286,7 +2286,13 @@ pub fn visit_located_token(
         LocatedToken::Rorg(address, code, span) => {
             env.visit_rorg(address, code, Some(span.clone()))
         }
-        LocatedToken::Switch(value, cases, default, span) => todo!(),
+        LocatedToken::Switch(value, cases, default, span) => {
+            env.visit_switch(
+                value, 
+                cases.iter().map(|c| (&c.0, &c.1, c.2)), 
+                default.as_ref().map(|l| l), 
+                Some(span.clone()))
+        },
         LocatedToken::While(cond, inner, span) => env.visit_while(cond, inner, Some(span.clone())),
         LocatedToken::Iterate(name, values, code, span) => {
             env.visit_iterate(name.as_str(), values, code, Some(span.clone()))
@@ -2498,6 +2504,37 @@ impl Env {
                     error: Box::new(e),
                     span: span.clone(),
                 })?;
+        }
+
+        Ok(())
+    }
+
+    /// Handle the switch directive
+    pub fn visit_switch<'a, T: 'a+ ListingElement + Visited>(&mut self, value: &Expr, cases: impl Iterator<Item=(&'a Expr, &'a[T], bool)>, default: Option<&'a [T]>, span: Option<Z80Span>) -> Result<(), AssemblerError> {
+
+        let value = self.resolve_expr_must_never_fail(value)?;
+        let mut met = false;
+        let mut broken = false;
+        for (case, listing, r#break) in cases {
+            // check if case must be executed
+            let case = self.resolve_expr_must_never_fail(case)?;
+            met |= case == value;
+
+            // inject code if needed and leave if break is present
+            if met {
+                self.visit_listing(listing)?;
+                if r#break {
+                    broken = true;
+                    break;
+                }
+            }
+        }
+
+        // execute default if any
+        if !met || !broken {
+            if let Some(default) = default {
+                self.visit_listing(default)?;
+            }
         }
 
         Ok(())
