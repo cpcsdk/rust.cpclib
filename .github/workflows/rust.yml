@@ -21,7 +21,7 @@ jobs:
             toolchain: nightly
             profile: minimal
     - name: Dependencies
-      run: sudo apt install libgtk-3-dev libcogl-pango-dev
+      run: sudo apt install libgtk-3-dev libcogl-pango-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev
     - name: Build
       run: cargo +nightly build --verbose --all-features
     - name: Run tests
