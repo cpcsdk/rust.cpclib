@@ -2289,8 +2289,8 @@ pub fn visit_located_token(
         LocatedToken::Switch(value, cases, default, span) => {
             env.visit_switch(
                 value, 
-                cases.iter().map(|c| (&c.0, &c.1, c.2)), 
-                default.as_ref().map(|l| l), 
+                cases.iter().map(|c| (&c.0, &c.1[..], c.2)), 
+                default.as_ref().map(|l| &l[..]), 
                 Some(span.clone()))
         },
         LocatedToken::While(cond, inner, span) => env.visit_while(cond, inner, Some(span.clone())),
@@ -2510,7 +2510,12 @@ impl Env {
     }
 
     /// Handle the switch directive
-    pub fn visit_switch<'a, T: 'a+ ListingElement + Visited>(&mut self, value: &Expr, cases: impl Iterator<Item=(&'a Expr, &'a[T], bool)>, default: Option<&'a [T]>, span: Option<Z80Span>) -> Result<(), AssemblerError> {
+    pub fn visit_switch<'a, T: 'a+ ListingElement + Visited>(
+        &mut self, 
+        value: &Expr, 
+        cases: impl Iterator<Item=(&'a Expr, &'a[T], bool)>, 
+        default: Option<&'a [T]>, 
+        span: Option<Z80Span>) -> Result<(), AssemblerError> {
 
         let value = self.resolve_expr_must_never_fail(value)?;
         let mut met = false;
