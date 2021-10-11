@@ -1814,6 +1814,13 @@ impl Env {
         let seed = self.macro_seed;
         self.symbols_mut().push_seed(seed);
 
+
+        // save the number of prints to patch the ones added by the macro
+        // to properly locate them
+        let nb_prints = self.pages_info_sna.iter()
+                .map(|ti| ti.print_commands().len())
+                .collect_vec();
+
         // really assemble the produced tokens
         self.visit_listing(&listing).or_else(|e| {
             let e = AssemblerError::MacroError {
@@ -1828,6 +1835,18 @@ impl Env {
                 None => Err(e),
             }
         })?;
+
+        if let Some(span) = caller_span {
+            self.pages_info_sna.iter_mut()
+                .zip(nb_prints.into_iter())
+                .for_each(|(ti, count)| 
+                    ti.print_commands_mut()[count..]
+                        .iter_mut()
+                        .for_each(|cmd| {
+                            cmd.relocate(span.clone())
+                        })
+                    );
+        }
 
         self.symbols_mut().pop_seed();
         //   dbg!("done");

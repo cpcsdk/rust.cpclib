@@ -13,6 +13,12 @@ pub struct PrintCommand {
     pub(crate) span: Option<Z80Span>,
     pub(crate) print_or_error: either::Either<String, AssemblerError>,
 }
+
+impl PrintCommand {
+    pub fn relocate(&mut self, span: Z80Span) {
+        self.span.replace(span);
+    }
+}
 #[derive(Debug, Clone)]
 pub struct FailedAssertCommand {
     failure: AssemblerError,
@@ -131,4 +137,15 @@ impl DelayedCommands {
             Err(AssemblerError::MultipleErrors { errors: res })
         }
     }
+}
+
+
+impl DelayedCommands {
+    pub fn print_commands(&self) -> &[PrintCommand] {
+        & self.print_commands
+    }
+    pub fn print_commands_mut(&mut self) -> &mut [PrintCommand] {
+        &mut self.print_commands
+    }
+
 }

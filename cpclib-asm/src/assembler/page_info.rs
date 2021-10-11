@@ -60,6 +60,8 @@ impl PageInformation {
             pub fn add_failed_assert_command(&mut self, command: FailedAssertCommand);
             pub fn add_print_command(&mut self, command: PrintCommand);
 
+            pub fn print_commands(&self) -> &[PrintCommand];
+            pub fn print_commands_mut(&mut self) -> &mut [PrintCommand];
 
             pub fn execute_save(&self, env: &Env) -> Result<Vec<SavedFile>, AssemblerError>;
             pub fn collect_assert_failure(&self) -> Result<(), AssemblerError>;
