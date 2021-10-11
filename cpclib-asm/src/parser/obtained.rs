@@ -550,6 +550,7 @@ impl TryFrom<Vec<LocatedToken>> for LocatedListing {
 
     /// Conversion fails only when the vec is empty.
     /// In this case a workaround has to be used
+    /// TODO shorten the listing the src does not seems appropriate at all
     fn try_from(tokens: Vec<LocatedToken>) -> Result<Self, Self::Error> {
         match tokens.first() {
             Some(token) => {

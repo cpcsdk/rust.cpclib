@@ -1592,54 +1592,87 @@ enum KindOfConditional {
 }
 
 /// Parse if expression.TODO finish the implementation in order to have ELSEIF and ELSE branches"
+/// TODO shorten the string code source
 pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let if_start = input.clone();
-    // Gest the kind of test to do
-    let (input, test_kind) = alt((
-        map(parse_word("IF"), |_| KindOfConditional::If),
-        map(parse_word("IFNOT"), |_| KindOfConditional::IfNot),
-        map(parse_word("IFDEF"), |_| KindOfConditional::IfDef),
-        map(parse_word("IFNDEF"), |_| KindOfConditional::IfNdef),
-        map(parse_word("IFUSED"), |_| KindOfConditional::IfUsed),
-        map(parse_word("IFNUSED"), |_| KindOfConditional::IfNused),
-    ))(input)?;
 
-    // Get the corresponding test
-    let (input, cond) = cut(context(
-        "Condition: error in the condition",
-        delimited(space0, parse_conditional_condition(test_kind), space0),
-    ))(input)?;
+    let mut conditions = Vec::new();
+    let mut else_clause = None;
 
-    let (input, _) = cut(context(
-        "Condition: condition must end by a new line or ':'",
-        alt((
-            map(delimited(space0, parse_comment, line_ending), |_| "".into()),
-            line_ending,
-            tag(":"),
-        )),
-    ))(input)?;
+    let mut input_loop = input.clone();
+    loop {
 
-    let (input, r#if) = cut(context(
-        "Condition: syntax error in main condition",
-        inner_code,
-    ))(input)?;
+        let first_loop = conditions.is_empty();
 
-    let else_input = input.clone();
-    let (input, r#else) = context(
-        "else",
-        opt(preceded(
-            delimited(
-                space0,
-                parse_word("ELSE"),
-                cut(opt(alt((
-                    map(delimited(space0, parse_comment, line_ending), |_| "".into()),
-                    terminated(space0, line_ending),
-                    tag(":"),
-                )))),
-            ),
-            context("else code", inner_code),
-        )),
-    )(input)?;
+        // Gest the kind of test to do - it can fail after an else
+        let if_token_or_error = alt((
+            map(parse_word("IF"), |_| KindOfConditional::If),
+            map(parse_word("IFNOT"), |_| KindOfConditional::IfNot),
+            map(parse_word("IFDEF"), |_| KindOfConditional::IfDef),
+            map(parse_word("IFNDEF"), |_| KindOfConditional::IfNdef),
+            map(parse_word("IFUSED"), |_| KindOfConditional::IfUsed),
+            map(parse_word("IFNUSED"), |_| KindOfConditional::IfNused),
+        ))(input_loop.clone());
+
+        if first_loop && if_token_or_error.is_err() {
+            return Err(if_token_or_error.err().unwrap());
+        }
+
+        let (input,condition) = if let Ok((input, test_kind)) = if_token_or_error {
+            // Get the corresponding test
+            let (input, cond) = cut(context(
+                "Condition: error in the condition",
+                delimited(space0, parse_conditional_condition(test_kind), space0),
+            ))(input)?;
+            (input, Some(cond))
+        } else {
+            (input_loop, None)
+        };
+
+        let (input, _) = cut(context(
+            "Condition: condition must end by a new line or ':'",
+            alt((
+                map(delimited(space0, parse_comment, line_ending), |_| "".into()),
+                line_ending,
+                tag(":"),
+            )),
+        ))(input)?;
+
+        let code_input = input.clone();
+        let (input, code) = cut(context(
+            "Condition: syntax error in code condition",
+            inner_code,
+        ))(input)?;
+
+        let code = LocatedListing::try_from(code)
+                    .unwrap_or_else(|_| LocatedListing::new_empty_span(code_input));
+
+
+        if let Some(condition) = condition {
+            conditions.push((
+                condition,
+                code
+            ));
+
+            let (input, r#else) = opt(preceded(
+                many0(alt((
+                    space1,
+                    line_ending,
+                    tag(":")
+                ))),
+                parse_word("ELSE")
+            ))(input)?;
+            input_loop = input;
+            if r#else.is_none() {
+                break;
+            }
+
+        } else {
+            else_clause = Some(code);
+            input_loop = input;
+            break;
+        }
+    }
 
     let (input, _) = context(
         "Condition: issue in end condition",
@@ -1650,16 +1683,13 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
             ))),
             cut(preceded(space0, parse_word("ENDIF"))),
         )),
-    )(input)?;
+    )(input_loop)?;
 
     Ok((
         input,
         LocatedToken::If(
-            vec![(cond, r#if.try_into().unwrap())],
-            r#else.map(|v| {
-                LocatedListing::try_from(v)
-                    .unwrap_or_else(|_| LocatedListing::new_empty_span(else_input))
-            }),
+            conditions,
+            else_clause,
             if_start,
         ),
     ))
