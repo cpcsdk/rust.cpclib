@@ -691,6 +691,7 @@ impl Env {
             // environnement is not reset when assembling is finished
             self.symbols
                 .set_current_address(PhysicalAddress::new(0, 0xc0));
+            self.update_dollar();
 
             self.ga_mmr = 0xc0;
             self.macro_seed = 0;
@@ -1094,6 +1095,8 @@ impl Env {
                 section.write().unwrap().code_adr = code;
             }
         }
+
+        self.update_dollar();
 
         Ok(r#override)
     }
@@ -2610,10 +2613,13 @@ impl Env {
             })?
             .int();
 
+        // do not change the output address
         {
             let page_info = self.active_page_info_mut();
             page_info.logical_codeadr = address as _;
         }
+
+        self.update_dollar();
 
         // execute the listing
         self.nested_rorg += 1; // used to disable page functionalities
@@ -3160,7 +3166,7 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     env.output_address = output_adr as _;
 
     assert_eq!(env.logical_output_address(), env.output_address);
-
+    env.update_dollar();
     Ok(())
 }
 
