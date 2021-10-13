@@ -1,5 +1,8 @@
 #![allow(clippy::cast_lossless)]
 
+use cpclib_common::bin_number;
+use cpclib_common::dec_number;
+use cpclib_common::hex_number;
 use cpclib_common::itertools::chain;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::branch::*;
@@ -14,9 +17,6 @@ use cpclib_common::nom::multi::*;
 use cpclib_common::nom::sequence::*;
 use cpclib_common::nom_locate::LocatedSpan;
 use cpclib_common::rayon::prelude::*;
-use cpclib_common::bin_number;
-use cpclib_common::dec_number;
-use cpclib_common::hex_number;
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::parse::parse_flag_value;
 use cpclib_sna::FlagValue;
@@ -181,7 +181,10 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "WRITE DIRECT",
     "SNASET",
     "STRUCT",
-    "SWITCH", "CASE", "DEFAULT", "BREAK",
+    "SWITCH",
+    "CASE",
+    "DEFAULT",
+    "BREAK",
     "SECTION",
     "UNDEF",
     "UNTIL",
@@ -192,8 +195,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
 
 const FIRST_DIRECTIVE: &[&str] = &[
     "IF", "IFDEF", "IFNDEF", "ITERATE", "ITER", "REPEAT", "REPT", //   "REP",
-    "PHASE", "MODULE", "WHILE", "LZAPU", "LZEXO", "LZ4", "LZ48", "LZ49", "LZX7",
-    "SWITCH"
+    "PHASE", "MODULE", "WHILE", "LZAPU", "LZEXO", "LZ4", "LZ48", "LZ49", "LZX7", "SWITCH",
 ];
 
 // This table is supposed to contain the keywords that finish a section
@@ -214,8 +216,10 @@ const FINAL_DIRECTIVE: &[&str] = &[
     "WEND",
     "LZCLOSE",
     "ENDMODULE",
-    "CASE", "DEFAULT", "BREAK",
-    "ENDSWITCH"
+    "CASE",
+    "DEFAULT",
+    "BREAK",
+    "ENDSWITCH",
 ];
 pub fn parse_z80_strrc_with_contextrc(
     code: Arc<String>,
@@ -591,71 +595,59 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
     let (switch_start, _) = many0(alt((space1, line_ending)))(input)?;
     let (input, _) = parse_word("SWITCH")(switch_start.clone())?;
 
-    
-    let (input, value) = cut(context("SWITCH: tested value", 
-        preceded(space0, expr))) (input)?;
-
+    let (input, value) = cut(context("SWITCH: tested value", preceded(space0, expr)))(input)?;
 
     let mut cases_listing = Vec::new();
     let mut default_listing = None;
-    
+
     let mut loop_start = input;
     loop {
-
-        let (input, _) = cut(context("SWITCH: whitespace error", many0(alt((
-                space1,
-                line_ending,
-                tag(":")
-            )))
+        let (input, _) = cut(context(
+            "SWITCH: whitespace error",
+            many0(alt((space1, line_ending, tag(":")))),
         ))(loop_start)?;
 
-        
         // after default it is mandatory to end the block
         let (input, endswitch) = if default_listing.is_some() {
-            cut(context("SWITCH: endswitch not present after default listing.", preceded(space0, map(parse_word("ENDSWITCH"), |_| true))))(input)?
+            cut(context(
+                "SWITCH: endswitch not present after default listing.",
+                preceded(space0, map(parse_word("ENDSWITCH"), |_| true)),
+            ))(input)?
         } else {
             preceded(space0, map(opt(parse_word("ENDSWITCH")), |e| e.is_some()))(input)?
         };
         if endswitch {
             return Ok((
                 input,
-                LocatedToken::Switch(
-                    value,
-                    cases_listing,
-                    default_listing,
-                    switch_start.clone()
-                ))
-            );
+                LocatedToken::Switch(value, cases_listing, default_listing, switch_start.clone()),
+            ));
         }
-
-
-
 
         let (input, value) = preceded(space0, opt(parse_word("CASE")))(input)?;
         loop_start = if value.is_some() {
-            let (input, value) = cut(context("SWITCH: case value error.", 
-            preceded(space0, expr)))(input)?;
+            let (input, value) =
+                cut(context("SWITCH: case value error.", preceded(space0, expr)))(input)?;
             let (input, inner) = cut(context("SWITCH: error in case code", inner_code))(input)?;
             let (input, do_break) = opt(preceded(space0, parse_word("BREAK")))(input)?;
 
             cases_listing.push((
                 value,
                 LocatedListing::try_from(inner)
-                .unwrap_or_else(|_| LocatedListing::new_empty_span(input.clone())),
-                do_break.is_some()
+                    .unwrap_or_else(|_| LocatedListing::new_empty_span(input.clone())),
+                do_break.is_some(),
             ));
             input
         } else {
             let (input, _) = preceded(space0, parse_word("DEFAULT"))(input)?;
-            let (input, default) = cut(context("SWITCH: error in default case",
-            inner_code))(input)?;
-            default_listing = Some(LocatedListing::try_from(default)
-            .unwrap_or_else(|_| LocatedListing::new_empty_span(input.clone())),);
+            let (input, default) =
+                cut(context("SWITCH: error in default case", inner_code))(input)?;
+            default_listing = Some(
+                LocatedListing::try_from(default)
+                    .unwrap_or_else(|_| LocatedListing::new_empty_span(input.clone())),
+            );
             input
         }
-     }
-
-
+    }
 }
 /// TODO
 pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
@@ -1392,16 +1384,18 @@ pub fn parse_section(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
 pub fn parse_range(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_word("RANGE")(input)?;
 
-    let (input, start) = cut(context("RANGE: wrong start address",
-        delimited(space0, expr, space0)
+    let (input, start) = cut(context(
+        "RANGE: wrong start address",
+        delimited(space0, expr, space0),
     ))(input)?;
-    let (input, stop) = cut(context("RANGE: wrong end address",
-    preceded(parse_comma, delimited(space0, expr, space0))
+    let (input, stop) = cut(context(
+        "RANGE: wrong end address",
+        preceded(parse_comma, delimited(space0, expr, space0)),
     ))(input)?;
-    let (input, label) = cut(context("RANGE: wrong name",
-        preceded(parse_comma, delimited(space0, parse_label(false), space0))
+    let (input, label) = cut(context(
+        "RANGE: wrong name",
+        preceded(parse_comma, delimited(space0, parse_label(false), space0)),
     ))(input)?;
-
 
     Ok((input, Token::Range(label.into(), start, stop)))
 }
@@ -1601,7 +1595,6 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
 
     let mut input_loop = input.clone();
     loop {
-
         let first_loop = conditions.is_empty();
 
         // Gest the kind of test to do - it can fail after an else
@@ -1618,7 +1611,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
             return Err(if_token_or_error.err().unwrap());
         }
 
-        let (input,condition) = if let Ok((input, test_kind)) = if_token_or_error {
+        let (input, condition) = if let Ok((input, test_kind)) = if_token_or_error {
             // Get the corresponding test
             let (input, cond) = cut(context(
                 "Condition: error in the condition",
@@ -1645,28 +1638,19 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
         ))(input)?;
 
         let code = LocatedListing::try_from(code)
-                    .unwrap_or_else(|_| LocatedListing::new_empty_span(code_input));
-
+            .unwrap_or_else(|_| LocatedListing::new_empty_span(code_input));
 
         if let Some(condition) = condition {
-            conditions.push((
-                condition,
-                code
-            ));
+            conditions.push((condition, code));
 
             let (input, r#else) = opt(preceded(
-                many0(alt((
-                    space1,
-                    line_ending,
-                    tag(":")
-                ))),
-                parse_word("ELSE")
+                many0(alt((space1, line_ending, tag(":")))),
+                parse_word("ELSE"),
             ))(input)?;
             input_loop = input;
             if r#else.is_none() {
                 break;
             }
-
         } else {
             else_clause = Some(code);
             input_loop = input;
@@ -1685,14 +1669,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
         )),
     )(input_loop)?;
 
-    Ok((
-        input,
-        LocatedToken::If(
-            conditions,
-            else_clause,
-            if_start,
-        ),
-    ))
+    Ok((input, LocatedToken::If(conditions, else_clause, if_start)))
 }
 
 /// Read the condition part in the parse_conditional macro
@@ -3180,21 +3157,21 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
     let (input, _) = parse_word("STRUCT")(input)?;
     let (input, name) = cut(parse_label(false))(input)?;
 
-    let (input, _) = preceded(space0, alt((line_ending, tag(":"))))(input)?;
-
     let (input, fields) = cut(context(
         "STRUCT: error in inner content",
-        many1(pair(
-            verify(terminated(parse_label(false), space1), |label: &str| {
-                label.to_ascii_lowercase() != "endstruct"
-            }),
-            cut(terminated(
-                alt((
-                    parse_db_or_dw_or_str,
-                    parse_macro_or_struct_call(false, true),
-                )),
-                tuple((space0, opt(parse_comment), space0, alt((line_ending, eof)))),
-            )),
+        many1(delimited(
+            many0(alt((space1, recognize(parse_comment), line_ending, tag(":")))),
+            pair(
+                context("STRUCT: label error", verify(terminated(parse_label(false), space1), |label: &str| {
+                    label.to_ascii_lowercase() != "endstruct"
+                })),
+                cut(
+                    alt((
+                        parse_db_or_dw_or_str,
+                        parse_macro_or_struct_call(false, true),
+                    ))),
+            ),
+            many0(alt((space1, recognize(parse_comment), line_ending, tag(":")))),
         )),
     ))(input)?;
 
