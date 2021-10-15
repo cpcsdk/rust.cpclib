@@ -4,6 +4,8 @@
 #![feature(exact_size_is_empty)]
 #![feature(exclusive_range_pattern)]
 #![feature(let_chains)]
+#![feature(box_syntax)]
+#![feature(box_patterns)]
 
 /// Implementation of various behvior for the tokens of cpclib_tokens
 pub mod implementation;
