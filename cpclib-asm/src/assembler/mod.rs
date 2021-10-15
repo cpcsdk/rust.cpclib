@@ -1493,7 +1493,7 @@ impl Env {
             });
         }
 
-        let r#struct = dbg!(Struct::new(name, content));
+        let r#struct = Struct::new(name, content);
         // add inner index BEFORE the structure. It should reduce infinite loops
         let mut index = 0;
         for (f, s) in r#struct.fields_size(self.symbols()) {

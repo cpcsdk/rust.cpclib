@@ -465,7 +465,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
             /*parse_label(false)*/
             delimited(
                 space0,
-                take_till(|c| c == '\n' || c == ':' || c == ',' || c == ' '),
+                take_till(|c| c == '\n' || c == '\r' || c == ':' || c == ',' || c == ' '),
                 space0,
             ),
         ),
@@ -474,7 +474,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
     let (input, content) = cut(context(
         "MACRO: issue in the content",
         preceded(
-            space0,
+            alt((space0, line_ending, tag(":"))),
             many_till(
                 take(1usize),
                 alt((tag_no_case("ENDM"), tag_no_case("MEND"))),

@@ -180,9 +180,6 @@ impl Struct {
     pub fn develop(&self, args: &[MacroParam]) -> String {
         assert_eq!(args.len(), self.content.len());
 
-        dbg!(args);
-        dbg!(&self.content);
-
         let mut developped = self
             .content
             .iter()
@@ -646,7 +643,7 @@ impl SymbolsTable {
         // handle the labels build with patterns
         // Get the replacement strings
         lazy_static::lazy_static! {
-            static ref RE: Regex = Regex::new("\\{[^\\}]+\\}").unwrap();
+            static ref RE: Regex = Regex::new("\\{[^\\}]+\\}[^\\}]").unwrap();
         }
         let mut replace = HashSet::new();
         for cap in RE.captures_iter(&symbol) {
@@ -656,8 +653,8 @@ impl SymbolsTable {
         }
         // make the replacement
         for model in replace.iter() {
-            let local_symbol = &model[1..model.len() - 1]; // remove {}
-            let local_value = self.int_value(local_symbol)?.unwrap();
+            let local_symbol = dbg!(&model[1..model.len() - 1]); // remove {}
+            let local_value = self.value(local_symbol)?.unwrap().integer().unwrap();
             symbol = symbol.replace(model, &local_value.to_string());
         }
 
