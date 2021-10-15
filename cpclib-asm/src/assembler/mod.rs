@@ -2748,11 +2748,32 @@ impl Env {
 
         // generate the bytes
         self.visit_listing(code)
-            .map_err(|e| AssemblerError::RepeatIssue {
+            .map_err(|e| {
+                let e = if let AssemblerError::RelocatedError{
+                    error:box AssemblerError::UnknownSymbol{closest: _, symbol},
+                    span} = &e {
+                    dbg!(symbol, counter_name);
+                    if let Some(counter_name) = counter_name {
+                        if counter_name == &format!("{{{}}}", symbol) {
+                            AssemblerError::RelocatedError{ error: box AssemblerError::UnknownSymbol {
+                                closest: Some(counter_name.to_owned()),
+                                symbol: symbol.clone()
+                            }, span: span.clone() }
+                        } else {
+                            e
+                        }
+                    } else {
+                        e
+                    }
+                } else {
+                    e
+                };
+
+                AssemblerError::RepeatIssue {
                 error: Box::new(e),
                 span: span.clone(),
                 repetition: iteration as _,
-            })?;
+            }})?;
 
         // handle the end of visibility of unique labels
         self.symbols_mut().pop_seed();

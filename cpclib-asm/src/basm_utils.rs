@@ -180,7 +180,7 @@ pub fn assemble<'arg>(
 }
 
 /// Save the provided result
-/// TODO manage the various save options
+/// TODO manage the various save options and delegate them with save commands
 pub fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
     if matches.is_present("SNAPSHOT") {
         let pc_filename = matches.value_of("OUTPUT").unwrap();
