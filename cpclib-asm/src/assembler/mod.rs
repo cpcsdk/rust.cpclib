@@ -1891,6 +1891,9 @@ impl Env {
                 FormattedExpr::Raw(Expr::String(string)) => {
                     repr += string;
                 }
+                FormattedExpr::Raw(Expr::Char(char)) => {
+                    repr += &char.to_string();
+                }
                 FormattedExpr::Raw(expr) => {
                     let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int() as f32;
                     repr += &value.to_string();
