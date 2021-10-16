@@ -6,6 +6,7 @@ mod tests {
     use std::{sync::RwLock, u32};
 
     use cpclib_asm::preamble::*;
+    use cpclib_asm::parser::context::*;
     use cpclib_common::lazy_static;
     use std::ops::Deref;
 
@@ -17,7 +18,8 @@ mod tests {
             current_filename: None,
             read_referenced_files: false,
             search_path: Vec::new(),
-            parse_warning: RwLock::new(Vec::new())
+            parse_warning: RwLock::new(Vec::new()),
+            state: ParsingContext::Unlimited
         };
     }
 

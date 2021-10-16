@@ -34,7 +34,8 @@ use crate::preamble::*;
 use cpclib_common::nom::lib::std::convert::Into;
 use cpclib_sna::SnapshotVersion;
 
-use super::obtained::Locate;
+use super::obtained::*;
+use super::context::*;
 
 /// ...
 pub mod error_code {
@@ -133,64 +134,65 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "ASSERT",
     "BANK",
     "BANKSET",
-    "BUILDSNA",
-    "CHARSET",
-    "INCBIN",
     "BINCLUDE",
-    "LZEXO",
-    "DEFB",
-    "DB",
+    "BREAK",
+    "BUILDSNA",
     "BYTE",
-    "DEFW",
-    "DW",
-    "WORD",
+    "CASE",
+    "CHARSET",
+    "DB",
+    "DEFAULT",
+    "DEFB",
     "DEFS",
+    "DEFW",
     "DS",
-    "FAIL",
-    "NOP",
+    "DW",
+    "ELSE",
+    "ENDF",
+    "ENDIF",
+    "ENDM",
     "EXPORT",
-    "NOEXPORT",
+    "FAIL",
+    "IEND",
     "IF",
     "IFDEF",
     "IFNDEF",
     "IFUSED",
-    "ELSE",
-    "ENDIF",
+    "INCBIN",
     "INCLUDE",
-    "READ",
     "ITERATE",
-    "IEND",
     "LIMIT",
     "LIST",
-    "NOLIST",
+    "LZEXO",
+    "MACRO",
     "MODULE",
+    "NOEXPORT",
+    "NOLIST",
+    "NOP",
     "ORG",
     "PRINT",
     "PROTECT",
-    "REPEAT",
-    "REND",
-    "RORG",
-    "MACRO",
-    "ENDM",
     "RANGE",
+    "READ",
+    "REND",
+    "REPEAT",
+    "RORG",
     "RUN",
     "SAVE",
-    "STR",
-    "TICKER",
-    "WRITE",
-    "WRITE DIRECT",
+    "SECTION",
     "SNASET",
+    "STR",
     "STRUCT",
     "SWITCH",
-    "CASE",
-    "DEFAULT",
-    "BREAK",
-    "SECTION",
+    "TICKER",
     "UNDEF",
     "UNTIL",
     "WAITNOPS",
-    "WHILE",
     "WEND",
+    "WHILE",
+    "WORD",
+    "WRITE DIRECT",
+    "WRITE",
 ];
 
 const FIRST_DIRECTIVE: &[&str] = &[
@@ -220,6 +222,7 @@ const FINAL_DIRECTIVE: &[&str] = &[
     "DEFAULT",
     "BREAK",
     "ENDSWITCH",
+    "ENDF"
 ];
 pub fn parse_z80_strrc_with_contextrc(
     code: Arc<String>,
@@ -360,10 +363,11 @@ pub fn parse_z80_line(
                         }),
                         map(
                             alt((
-                                context("macro", parse_macro),
+                                context("macro definition", parse_macro),
                                 context("[DBG] crunched section", parse_crunched_section),
                                 context("[DBG] module", parse_module),
                                 context("[DBG] repeat", parse_repeat),
+                                context("Function definition", parse_function),
                                 context("SWITCH parse error", parse_switch),
                                 context("[DBG] iterate", parse_iterate),
                                 context("[DBG] while", parse_while),
@@ -446,6 +450,57 @@ pub fn parse_rorg(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError
                 .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
             rorg_start,
         ),
+    ))
+}
+
+/// TODO - limit the listing possibilities
+pub fn parse_function_listing(input: Z80Span) -> IResult<Z80Span, LocatedListing, VerboseError<Z80Span>> {
+    let mut input = input.clone();
+    input.context_mut().state = ParsingState::FunctionLimited;
+    let (output, inner) = inner_code(input.clone())?;
+    let inner = inner
+        .try_into()
+        .unwrap_or_else(|_| LocatedListing::new_empty_span(input.slice(.. input.len() - output.len())));
+    Ok((
+        output,
+        inner
+    ))
+}
+
+
+pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let function_start = input.clone();
+    let (input, _) = preceded(space0, parse_word("FUNCTION"))(input)?;
+    let (input, name) = cut(context("FUNCTION: wrong name", parse_label(false)))(input)?; // TODO use a specific function for that
+
+    let (input, arguments) = cut(context("FUNCTION: wrong parameters", preceded(
+        opt(parse_comma), // comma after macro name is not mandatory
+        separated_list0(
+            parse_comma,
+            /*parse_label(false)*/
+            delimited(
+                space0,
+                take_till(|c| c == '\n' || c == '\r' || c == ':' || c == ',' || c == ' '),
+                space0,
+            ),
+        ),
+    )))(input)?;
+
+    let (input, _) = preceded(space0, alt((line_ending, tag(":"))))(input)?;
+    let (before_expr, listing) = cut(context("FUNCTION: invalid content", parse_function_listing))(input)?;
+    
+    let (after_expr, r#return) = cut(context("FUNCTION: error in return.", preceded(
+        tuple((parse_word("return"), space0)),
+        expr
+    )))(before_expr.clone())?;
+
+    Ok((
+        function_start.clone(), 
+        LocatedToken::Function(
+            listing, 
+            r#return.locate(before_expr.slice(..before_expr.len()-after_expr.len())),
+            function_start.slice(.. function_start.len()-after_expr.len())
+        )
     ))
 }
 
@@ -1411,7 +1466,9 @@ pub fn parse_assign(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
 
 /// Parse the opcodes. TODO rename as parse_opcode ...
 pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
-    alt((
+    let mut parsing_state = input.context().state.clone();
+
+    verify(alt((
         parse_ex_af,
         parse_ex_hl_de,
         parse_ex_mem_sp,
@@ -1433,7 +1490,9 @@ pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
         parse_ret,
         parse_rst,
         parse_im,
-    ))(input.clone())
+    )),
+    move |t| t.is_accepted(&parsing_state)
+)(input.clone())
     .map(|(i, r)| (i, r.locate(input)))
 }
 
@@ -1564,7 +1623,11 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
 
 /// Parse any directive
 pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
-    alt((parse_directive1, parse_directive2))(input.clone())
+    let mut parsing_state = input.context().state.clone();
+    verify(
+        alt((parse_directive1, parse_directive2)),
+        move |d| d.is_accepted(&parsing_state)
+    )(input.clone())
 }
 
 /// Parse directives with no arguments

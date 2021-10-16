@@ -277,4 +277,12 @@ impl Z80Span {
             (Arc::clone(&src), Arc::clone(&ctx)),
         ))
     }
+
+    pub fn context_mut(&mut self) -> &mut ParserContext {
+        Arc::get_mut(&mut self.0.extra.1).unwrap()
+    }
+
+    pub fn context(& self) -> & ParserContext {
+        & self.0.extra.1
+    }
 }

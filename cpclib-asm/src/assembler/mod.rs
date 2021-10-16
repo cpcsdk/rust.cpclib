@@ -2216,6 +2216,7 @@ pub fn visit_located_token(
                 visit_assert(exp, txt.as_ref(), env, Some(span.clone()));
                 Ok(())
             }
+
             Token::Print(ref exp) => {
                 env.visit_print(exp.as_ref(), Some(span.clone()));
                 Ok(())
@@ -2255,6 +2256,9 @@ pub fn visit_located_token(
             env.visit_crunched_section(kind, lst, Some(span))
         }
 
+        LocatedToken::Function(inner, r#return, span) => {
+            unimplemented!()
+        }
         LocatedToken::Include(_fname, ref cell, namespace, span) => {
             if cell.read().unwrap().is_some() {
                 if let Some(namespace) = namespace {

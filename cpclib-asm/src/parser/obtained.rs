@@ -71,6 +71,15 @@ pub fn read_source(fname: &str, ctx: & ParserContext) -> Result<String, Assemble
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct LocatedExpr (Expr, Z80Span);
+
+impl LocatedExpr {
+    pub fn as_expr(&self) -> &Expr {
+        &self.0
+    }
+}
+
 #[derive(Debug)]
 /// Add span information for a Token.
 /// This hierarchy is a mirror of the original token one
@@ -82,6 +91,11 @@ pub enum LocatedToken {
         /// The span that correspond to the token
         span: Z80Span,
     },
+    Function(
+        LocatedListing,
+        LocatedExpr,
+        Z80Span
+    ),
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
     Include(
         String,
@@ -112,7 +126,10 @@ impl Clone for LocatedToken {
             },
             LocatedToken::CrunchedSection(a, b, c) => {
                 LocatedToken::CrunchedSection(a.clone(), b.clone(), c.clone())
-            }
+            },
+            LocatedToken::Function(a, b, c) => {
+                LocatedToken::Function(a.clone(), b.clone(), c.clone())
+            },
             LocatedToken::Include(filename, listing, namespace, span) => Self::Include(
                 filename.clone(),
                 RwLock::new(listing.read().unwrap().clone()),
@@ -166,6 +183,7 @@ impl LocatedToken {
         match self {
             Self::Standard { span, .. }
             | Self::CrunchedSection(_, _, span)
+            | Self::Function(_, _, span)
             | Self::Include(_, _, _, span)
             | Self::If(_, _, span)
             | Self::Module(_, _, span)
@@ -189,6 +207,9 @@ impl LocatedToken {
             LocatedToken::Standard { token, .. } => Cow::Borrowed(token),
             LocatedToken::CrunchedSection(c, l, _span) => {
                 Cow::Owned(Token::CrunchedSection(*c, l.as_listing()))
+            }
+            LocatedToken::Function(inner, r#return, _span) => {
+                Cow::Owned(Token::Function(inner.as_listing(), r#return.as_expr().clone()))
             }
             LocatedToken::Include(s, l, module, _span) => Cow::Owned(Token::Include(
                 s.clone(),
@@ -436,6 +457,14 @@ pub trait Locate {
     type Output;
 
     fn locate(self, span: Z80Span) -> Self::Output;
+}
+
+impl Locate for Expr {
+    type Output = LocatedExpr;
+
+    fn locate(self, span: Z80Span) -> Self::Output {
+        LocatedExpr(self, span)
+    }
 }
 
 impl Locate for Token {

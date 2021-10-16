@@ -111,12 +111,16 @@ raster_table
     RASTER_BAR $44, $55, $5C, $55, $44
 
 
+    function curve_value idx, height
+        return height/2*cos(idx*360/256) + height/2 + 1
+    endf
+
     align 256
 sine_curve
 .height equ min(255, 312 - 30 - 8)
 
     repeat 256, i
-        val set .height/2*cos({i}*360/256) + .height/2 + 1
+        val set curve_value({i}, .height)
         print {hex}$, "=", val
         db val
     endr
