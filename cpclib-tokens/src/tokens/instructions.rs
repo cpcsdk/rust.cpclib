@@ -439,6 +439,9 @@ pub enum Token {
 
     Fail(Vec<FormattedExpr>),
 
+    /// Function embeds a listing with a limited number of possible instructions and return a value
+    Function(Listing, Expr),
+
     /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
     If(Vec<(TestKind, Listing)>, Option<Listing>),
 
@@ -553,6 +556,7 @@ impl Clone for Token {
             Token::Equ(a, b) => Token::Equ(a.clone(), b.clone()),
             Token::Export(a) => Token::Export(a.clone()),
             Token::Fail(a) => Token::Fail(a.clone()),
+            Token::Function(a, b) => Token::Function(a.clone(), b.clone()),
             Token::If(a, b) => Token::If(a.clone(), b.clone()),
             Token::Incbin {
                 fname,

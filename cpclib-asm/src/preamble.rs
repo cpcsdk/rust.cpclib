@@ -11,7 +11,6 @@ pub use crate::implementation::expression::*;
 pub use crate::implementation::instructions::*;
 pub use crate::implementation::listing::*;
 pub use crate::implementation::tokens::*;
-
 pub use crate::error::*;
 
 pub use crate::assembler::*;

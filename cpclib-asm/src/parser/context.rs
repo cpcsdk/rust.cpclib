@@ -2,13 +2,67 @@ use std::ops::Deref;
 use std::path::PathBuf;
 
 use super::Z80Span;
+use crate::LocatedToken;
 use crate::error::AssemblerError;
+use crate::preamble::*;
 use std::sync::RwLock;
+
+/// State to limit the parsing abilities depending on the parsing context
+#[derive(Debug, Clone)]
+pub enum ParsingState {
+    Unlimited,
+    FunctionLimited,
+    StructLimited
+}
+
+
+pub trait ParsingStateVerified {
+    fn is_accepted(&self, state: &ParsingState) -> bool;
+}
+
+impl ParsingStateVerified for LocatedToken {
+    fn is_accepted(&self, state: &ParsingState) -> bool {
+        match state {
+            ParsingState::Unlimited => true,
+            ParsingState::FunctionLimited => {
+                match self {
+                    LocatedToken::Standard{token, span:_span} => token.is_accepted(state),
+                    LocatedToken::If{..} | LocatedToken::Repeat{..} 
+                    | LocatedToken::Switch{..} | LocatedToken::Iterate{..} => true,
+                    _ => false
+                }
+            },
+            ParsingState::StructLimited => todo!()
+        }
+    }
+
+}
+
+impl ParsingStateVerified for Token {
+    fn is_accepted(&self, state: &ParsingState) -> bool {
+        match state {
+            ParsingState::Unlimited => true,
+            ParsingState::FunctionLimited => {
+                match self {
+                    Token::Equ(_,_ ) | Token::Let(_, _) => true,
+                    Token::If{..} | Token::Repeat{..} 
+                    | Token::Switch{..} | Token::Iterate{..} => true,
+                    _ => false
+                }
+            }
+            ParsingState::StructLimited => todo!()
+        }
+    }
+
+}
+
 
 /// Context information that can guide the parser
 /// TODO add assembling flags
 #[derive(Debug)]
 pub struct ParserContext {
+    /// Limitation on the kind of intruction to parse
+    pub state: ParsingState,
     /// Filename that is currently parsed
     pub current_filename: Option<PathBuf>,
     /// Current context (mainly when playing with macros)
@@ -29,6 +83,7 @@ impl Clone for ParserContext {
             search_path: self.search_path.clone(),
             read_referenced_files: self.read_referenced_files.clone(),
             parse_warning: self.parse_warning.write().unwrap().clone().into(),
+            state: self.state.clone()
         }
     }
 }
@@ -41,6 +96,7 @@ impl Default for ParserContext {
             search_path: Default::default(),
             read_referenced_files: true,
             parse_warning: Default::default(),
+            state: ParsingState::Unlimited
         }
     }
 }
