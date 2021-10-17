@@ -2259,7 +2259,7 @@ pub fn visit_located_token(
             env.visit_crunched_section(kind, lst, Some(span))
         }
 
-        LocatedToken::Function(inner, r#return, span) => {
+        LocatedToken::Function(name, params, inner, span) => {
             unimplemented!()
         }
         LocatedToken::Include(_fname, ref cell, namespace, span) => {

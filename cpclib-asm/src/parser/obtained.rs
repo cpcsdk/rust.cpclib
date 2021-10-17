@@ -92,8 +92,9 @@ pub enum LocatedToken {
         span: Z80Span,
     },
     Function(
+        String,
+        Vec<String>,
         LocatedListing,
-        LocatedExpr,
         Z80Span
     ),
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
@@ -127,8 +128,8 @@ impl Clone for LocatedToken {
             LocatedToken::CrunchedSection(a, b, c) => {
                 LocatedToken::CrunchedSection(a.clone(), b.clone(), c.clone())
             },
-            LocatedToken::Function(a, b, c) => {
-                LocatedToken::Function(a.clone(), b.clone(), c.clone())
+            LocatedToken::Function(a, b, c, d) => {
+                LocatedToken::Function(a.clone(), b.clone(), c.clone(), d.clone())
             },
             LocatedToken::Include(filename, listing, namespace, span) => Self::Include(
                 filename.clone(),
@@ -183,7 +184,7 @@ impl LocatedToken {
         match self {
             Self::Standard { span, .. }
             | Self::CrunchedSection(_, _, span)
-            | Self::Function(_, _, span)
+            | Self::Function(_, _, _, span)
             | Self::Include(_, _, _, span)
             | Self::If(_, _, span)
             | Self::Module(_, _, span)
@@ -208,8 +209,8 @@ impl LocatedToken {
             LocatedToken::CrunchedSection(c, l, _span) => {
                 Cow::Owned(Token::CrunchedSection(*c, l.as_listing()))
             }
-            LocatedToken::Function(inner, r#return, _span) => {
-                Cow::Owned(Token::Function(inner.as_listing(), r#return.as_expr().clone()))
+            LocatedToken::Function(name, params, inner, _span) => {
+                Cow::Owned(Token::Function(name.clone(), params.clone(), inner.as_listing()))
             }
             LocatedToken::Include(s, l, module, _span) => Cow::Owned(Token::Include(
                 s.clone(),

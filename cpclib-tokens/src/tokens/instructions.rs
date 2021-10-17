@@ -440,7 +440,7 @@ pub enum Token {
     Fail(Vec<FormattedExpr>),
 
     /// Function embeds a listing with a limited number of possible instructions and return a value
-    Function(Listing, Expr),
+    Function(String, Vec<String>,  Listing),
 
     /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
     If(Vec<(TestKind, Listing)>, Option<Listing>),
@@ -502,6 +502,8 @@ pub enum Token {
         Option<Expr>,
     ),
     RepeatUntil(Expr, Listing),
+    /// Return value from a function
+    Return(Expr),
     /// Set the value of $ to Expr
     Rorg(Expr, Listing),
     Run(Expr, Option<Expr>),
@@ -556,7 +558,7 @@ impl Clone for Token {
             Token::Equ(a, b) => Token::Equ(a.clone(), b.clone()),
             Token::Export(a) => Token::Export(a.clone()),
             Token::Fail(a) => Token::Fail(a.clone()),
-            Token::Function(a, b) => Token::Function(a.clone(), b.clone()),
+            Token::Function(a, b, c) => Token::Function(a.clone(), b.clone(), c.clone()),
             Token::If(a, b) => Token::If(a.clone(), b.clone()),
             Token::Incbin {
                 fname,
@@ -601,6 +603,7 @@ impl Clone for Token {
             Token::Range(a, b, c) => Token::Range(a.clone(), b.clone(), c.clone()),
             Token::Repeat(a, b, c, d) => Token::Repeat(a.clone(), b.clone(), c.clone(), d.clone()),
             Token::RepeatUntil(a, b) => Token::RepeatUntil(a.clone(), b.clone()),
+            Token::Return(a) => Token::Return(a.clone()),
             Token::Rorg(a, b) => Token::Rorg(a.clone(), b.clone()),
             Token::Run(a, b) => Token::Run(a.clone(), b.clone()),
             Token::Save {

@@ -17,6 +17,14 @@ title: BASM documentation - WIP
 
 ## Comments
 
+## Expressions
+
+## Provided functions
+
+## User defined functions
+
+Function, endf
+
 # Directives
 
 ## Memory related

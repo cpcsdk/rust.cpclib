@@ -149,6 +149,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "DW",
     "ELSE",
     "ENDF",
+    "ENDFUNCTION",
     "ENDIF",
     "ENDM",
     "EXPORT",
@@ -177,6 +178,7 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "REND",
     "REPEAT",
     "RORG",
+    "RETURN",
     "RUN",
     "SAVE",
     "SECTION",
@@ -222,7 +224,7 @@ const FINAL_DIRECTIVE: &[&str] = &[
     "DEFAULT",
     "BREAK",
     "ENDSWITCH",
-    "ENDF"
+    "ENDF", "ENDFUNCTION"
 ];
 pub fn parse_z80_strrc_with_contextrc(
     code: Arc<String>,
@@ -455,14 +457,13 @@ pub fn parse_rorg(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError
 
 /// TODO - limit the listing possibilities
 pub fn parse_function_listing(input: Z80Span) -> IResult<Z80Span, LocatedListing, VerboseError<Z80Span>> {
-    let mut input = input.clone();
-    input.context_mut().state = ParsingState::FunctionLimited;
+    let input = input.clone_with_state(ParsingState::FunctionLimited);
     let (output, inner) = inner_code(input.clone())?;
     let inner = inner
         .try_into()
         .unwrap_or_else(|_| LocatedListing::new_empty_span(input.slice(.. input.len() - output.len())));
     Ok((
-        output,
+        output.clone_with_state(ParsingState::Standard),
         inner
     ))
 }
@@ -489,18 +490,19 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseE
     let (input, _) = preceded(space0, alt((line_ending, tag(":"))))(input)?;
     let (before_expr, listing) = cut(context("FUNCTION: invalid content", parse_function_listing))(input)?;
     
-    let (after_expr, r#return) = cut(context("FUNCTION: error in return.", preceded(
-        tuple((parse_word("return"), space0)),
-        expr
-    )))(before_expr.clone())?;
+    let (input, _) = many0(alt((space1, line_ending, tag(":"))))(before_expr)?;
+    let (input, _) = alt((parse_word("ENDF"), parse_word("ENDFUNCTION")))(input)?;
+    
+
 
     Ok((
-        function_start.clone(), 
-        LocatedToken::Function(
+        input.clone(), 
+        dbg!(LocatedToken::Function(
+            name,
+            arguments.iter().map(|a| a.to_string()).collect_vec() ,
             listing, 
-            r#return.locate(before_expr.slice(..before_expr.len()-after_expr.len())),
-            function_start.slice(.. function_start.len()-after_expr.len())
-        )
+            function_start.slice(.. function_start.len()-input.len())
+        ))
     ))
 }
 
@@ -1429,6 +1431,14 @@ pub fn parse_undef(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     Ok((input, Token::Undef(label)))
 }
 
+/// Parse return from a function
+pub fn parse_return(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, expr) =
+        preceded(parse_word("RETURN"), expr)(input)?;
+
+    Ok((input, Token::Return(expr)))
+}
+
 pub fn parse_section(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = parse_word("SECTION")(input)?;
     let (input, name) = preceded(space0, parse_label(false))(input)?;
@@ -1599,6 +1609,7 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
         context("[DBG] waitnops", parse_waitnops),
         context("[DBG] struct", parse_struct),
         context("[DBG] undef", parse_undef),
+        context("[DBG] return", parse_return),
         context("[DBG] noargs", parse_noarg_directive),
         context("[DBG] assign", parse_assign),
         context("[DBG] range", parse_range),
@@ -3492,6 +3503,7 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                     parse_binary_functions,
                     parse_duration,
                     parse_assemble,
+                    parse_any_function,
                     // manage values
                     alt((positive_number, negative_number)),
                     char_expr,
@@ -3692,11 +3704,14 @@ pub fn parse_unary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseEr
         value(UnaryFunction::Sqrt, parse_word("SQRT")),
     ))(input)?;
 
-    let (input, _) = tuple((space0, tag("("), space0))(input)?;
+    let (input, exp) = cut(context("UNARY function: error in parameters", 
+    delimited(
+    tuple((space0, tag("("), space0)),
+    expr,
+    tuple((space0, tag(")")))
+    )
+    ))(input)?;
 
-    let (input, exp) = expr(input)?;
-
-    let (input, _) = tuple((space0, tag(")")))(input)?;
 
     Ok((input, Expr::UnaryFunction(func, Box::new(exp))))
 }
@@ -3721,6 +3736,25 @@ pub fn parse_binary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseE
         Expr::BinaryFunction(func, Box::new(arg1), Box::new(arg2)),
     ))
 }
+
+pub fn parse_any_function(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+
+    let (input, function_name) = parse_label(false)(input)?;
+    let (input, arguments) = delimited(
+        tuple((space0, tag("("), space0)),
+        separated_list0(
+            parse_comma,
+            expr
+        ),
+        tuple((space0, tag(")")))
+    )(input)?;
+
+    Ok((
+        input,
+        Expr::UserDefinedFunction(function_name, arguments)
+    ))
+}
+
 
 /// Parser for functions taking into argument a token
 pub fn token_function<'a>(

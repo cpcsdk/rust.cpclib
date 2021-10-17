@@ -64,6 +64,13 @@ impl ExprEvaluationExt for Expr {
 
             Expr::BinaryNot(a) | Expr::Neg(a) | Expr::Paren(a) | Expr::UnaryFunction(_, a) => {
                 a.symbols_used()
+            },
+
+            Expr::UserDefinedFunction(_, p) => {
+                p.iter()
+                    .map(|e| e.symbols_used())
+                    .flatten()
+                    .collect_vec()
             }
         }
     }
@@ -157,7 +164,6 @@ impl ExprEvaluationExt for Expr {
                     })
                 }
             },
-
             Duration(ref token) => {
                 let duration = token.estimated_duration()?;
                 let duration = duration as i32;
@@ -211,12 +217,11 @@ impl ExprEvaluationExt for Expr {
                 BinaryFunctionWrapper::new(func, &exp1, &exp2).resolve(env)
             }
 
-            PrefixedLabel(prefix, label) => match sym.prefixed_value(prefix, label)? {
-                Some(value) => Ok(value.into()),
-                None => Err(AssemblerError::ExpressionError{msg: format!("Unable to obtain {} of {}", prefix, label)}),
-            },
+
             Float(f) => Ok(f.into_inner().into()),
-            Rnd =>  unimplemented!("Env need to maintain a counter of call with its value to ensure a consistant generation among the passes")
+            Rnd =>  unimplemented!("Env need to maintain a counter of call with its value to ensure a consistant generation among the passes"),
+
+            UserDefinedFunction(d, expr) => unimplemented!()
         }
     }
 }

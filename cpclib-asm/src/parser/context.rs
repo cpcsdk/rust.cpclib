@@ -10,7 +10,7 @@ use std::sync::RwLock;
 /// State to limit the parsing abilities depending on the parsing context
 #[derive(Debug, Clone)]
 pub enum ParsingState {
-    Unlimited,
+    Standard,
     FunctionLimited,
     StructLimited
 }
@@ -23,7 +23,11 @@ pub trait ParsingStateVerified {
 impl ParsingStateVerified for LocatedToken {
     fn is_accepted(&self, state: &ParsingState) -> bool {
         match state {
-            ParsingState::Unlimited => true,
+            ParsingState::Standard => match self {
+                LocatedToken::Standard{token, span:_span} => token.is_accepted(state), // because of return
+                _ => true
+
+            },
             ParsingState::FunctionLimited => {
                 match self {
                     LocatedToken::Standard{token, span:_span} => token.is_accepted(state),
@@ -41,12 +45,16 @@ impl ParsingStateVerified for LocatedToken {
 impl ParsingStateVerified for Token {
     fn is_accepted(&self, state: &ParsingState) -> bool {
         match state {
-            ParsingState::Unlimited => true,
+            ParsingState::Standard => match self {
+                Token::Return(_) => false,
+                _ => true
+            },
             ParsingState::FunctionLimited => {
                 match self {
                     Token::Equ(_,_ ) | Token::Let(_, _) => true,
                     Token::If{..} | Token::Repeat{..} 
                     | Token::Switch{..} | Token::Iterate{..} => true,
+                    Token::Return(_) => true,
                     _ => false
                 }
             }
@@ -86,6 +94,7 @@ impl Clone for ParserContext {
             state: self.state.clone()
         }
     }
+
 }
 
 impl Default for ParserContext {
@@ -96,7 +105,22 @@ impl Default for ParserContext {
             search_path: Default::default(),
             read_referenced_files: true,
             parse_warning: Default::default(),
-            state: ParsingState::Unlimited
+            state: ParsingState::Standard
+        }
+    }
+
+}
+
+impl ParserContext {
+    pub fn clone_with_state(&self, state: ParsingState ) -> Self {
+        Self {
+            current_filename: self.current_filename.clone(),
+            context_name: self.context_name.clone(),
+            search_path: self.search_path.clone(),
+            read_referenced_files: self.read_referenced_files.clone(),
+            parse_warning: self.parse_warning.write().unwrap().clone().into(),
+            state
+        
         }
     }
 }
@@ -249,3 +273,19 @@ pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
     parse_warning: Default::default()
 };
 */
+
+
+#[cfg(test)]
+mod test_super {
+    use super::*;
+
+    #[test]
+    fn test_function_state() {
+        assert!(Token::Return(0.into()).is_accepted(&ParsingState::FunctionLimited));
+    }
+    #[test]
+
+    fn test_normal_state() {
+        assert!(!Token::Return(0.into()).is_accepted(&ParsingState::Standard));
+    }
+}

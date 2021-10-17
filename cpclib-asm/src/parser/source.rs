@@ -4,10 +4,11 @@ use cpclib_common::nom::{
     Offset, Slice,
 };
 use cpclib_common::nom_locate::LocatedSpan;
+use failure::ResultExt;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use super::context::ParserContext;
+use super::{ParsingState, context::ParserContext};
 
 #[derive(Clone, PartialEq)]
 pub struct Z80Span(
@@ -278,11 +279,23 @@ impl Z80Span {
         ))
     }
 
-    pub fn context_mut(&mut self) -> &mut ParserContext {
-        Arc::get_mut(&mut self.0.extra.1).unwrap()
-    }
-
     pub fn context(& self) -> & ParserContext {
         & self.0.extra.1
+    }
+}
+
+impl Z80Span {
+    pub fn clone_with_state(&self, state: ParsingState ) -> Self {
+        let ctx = self.context().clone_with_state(state);
+        let mut clone = self.clone();
+        clone.extra = (
+            self.extra.0.clone(),
+            Arc::new(ctx)
+        );
+        clone
+    }
+
+    pub fn state(&self) -> &ParsingState {
+        &self.context().state
     }
 }

@@ -60,11 +60,14 @@ pub enum Expr {
     StrictlyGreater(Box<Expr>, Box<Expr>),
     StrictlyLower(Box<Expr>, Box<Expr>),
 
-    // Function with one argument
+    /// Hardcoded function with one argument
     UnaryFunction(UnaryFunction, Box<Expr>),
-    // Function with two arguments
+    /// Hardoded function with two arguments
     BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
+    /// Function supposely coded by the user
+    UserDefinedFunction(String, Vec<Expr>),
 
+    /// Random value
     Rnd,
 }
 
@@ -449,7 +452,7 @@ impl Display for Expr {
             &StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
             &LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
 
-            PrefixedLabel(prefix, label) => write!(format, "{}{}", prefix, label),
+            UserDefinedFunction(_, _) => unimplemented!()
         }
     }
 }
