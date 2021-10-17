@@ -659,7 +659,7 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
-        self.requested_additional_pass = *self.request_additional_pass.read().unwrap();
+        self.requested_additional_pass = dbg!(*self.request_additional_pass.read().unwrap());
 
         let mut can_change_request = true;
         if !self.pass.is_listing_pass() {
@@ -719,6 +719,9 @@ impl Env {
                 self.request_additional_pass = false.into();
             }
         }
+
+
+        dbg!(&self.pass, &self.request_additional_pass.read().unwrap().deref());
     }
 
     /// Handle the actions to do after assembling.
