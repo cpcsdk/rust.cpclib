@@ -546,10 +546,11 @@ impl Env {
     pub(crate) fn add_function_parameter_to_symbols_table<S:Into<Symbol>, V: Into<Value>>(&mut self, symbol: S, value: V) -> Result<(), AssemblerError> {
 
         let symbol = symbol.into();
+        /* // we do not test that, otherwise it is impossible to do recursive functions
         if self.symbols().contains_symbol(symbol.clone())? {
             return Err(AssemblerError::IncoherentCode{msg: format!("Function parameter {} already present", symbol)})
         }
-
+        */
         self.symbols.set_symbol_to_value(symbol, value)?;
         Ok(())
     }
