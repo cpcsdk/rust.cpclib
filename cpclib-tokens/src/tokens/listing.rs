@@ -8,7 +8,7 @@ use std::iter::FromIterator;
 use crate::Token;
 /// The ListingElement trati contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
-pub trait ListingElement {}
+pub trait ListingElement : Debug {}
 
 impl<'t> ListingElement for Cow<'t, Token> {}
 /// A listing is simply a list of things similar to token

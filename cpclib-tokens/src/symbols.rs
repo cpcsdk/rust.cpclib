@@ -8,7 +8,7 @@ use delegate::delegate;
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{ExprResult, MacroParam, Token};
+use crate::{ExprResult, ListingElement, MacroParam, Token};
 
 use std::ops::Deref;
 use std::ops::DerefMut;
@@ -279,6 +279,7 @@ impl Struct {
         developped
     }
 }
+
 #[derive(Debug, Clone)]
 pub struct Macro {
     // The name of the macro

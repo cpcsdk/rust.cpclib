@@ -5,6 +5,7 @@ pub mod report;
 pub mod save_command;
 pub mod stable_ticker;
 pub mod symbols_output;
+pub mod function;
 
 use crate::delayed_command::*;
 use crate::page_info::PageInformation;
@@ -33,6 +34,9 @@ use std::io::Write;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+use self::function::AnyFunction;
+use self::function::Function;
+use self::function::FunctionBuilder;
 use self::listing_output::*;
 use self::report::SavedFile;
 use self::symbols_output::SymbolOutputGenerator;
@@ -359,6 +363,10 @@ pub struct Env {
 
     symbols: SymbolsTableCaseDependent,
 
+    /// Return value of the currently executed function. Is almost always None
+    return_value: Option<ExprResult>,
+    functions: HashMap<String, Function>,
+
     /// Set only if the run instruction has been used
     run_options: Option<(u16, Option<u16>)>,
 
@@ -421,6 +429,9 @@ impl Clone for Env {
             if_token_adr_to_used_decision: self.if_token_adr_to_used_decision.clone(),
             if_token_adr_to_unused_decision: self.if_token_adr_to_unused_decision.clone(),
             requested_additional_pass: self.requested_additional_pass,
+
+            functions: self.functions.clone(),
+            return_value: self.return_value.clone(),
         }
     }
 }
@@ -477,6 +488,9 @@ impl Default for Env {
             if_token_adr_to_used_decision: HashMap::default(),
             if_token_adr_to_unused_decision: HashMap::default(),
             requested_additional_pass: false,
+
+            functions: HashMap::default(),
+            return_value: None
         }
     }
 }
@@ -496,7 +510,7 @@ impl Env {
     /// If the expression is not solvable in second pass, an error is returned
     ///
     /// However, when assembling in a crunched section, the expression MUST NOT fail. edit: why ? I do not get it now and I have removed this limitation
-    fn resolve_expr_may_fail_in_first_pass(
+   pub fn resolve_expr_may_fail_in_first_pass(
         &self,
         exp: &Expr,
     ) -> Result<ExprResult, AssemblerError> {
@@ -529,6 +543,16 @@ impl Env {
         }
     }
 
+    pub(crate) fn add_function_parameter_to_symbols_table<S:Into<Symbol>, V: Into<Value>>(&mut self, symbol: S, value: V) -> Result<(), AssemblerError> {
+
+        let symbol = symbol.into();
+        if self.symbols().contains_symbol(symbol.clone())? {
+            return Err(AssemblerError::IncoherentCode{msg: format!("Function parameter {} already present", symbol)})
+        }
+
+        self.symbols.set_symbol_to_value(symbol, value)?;
+        Ok(())
+    }
     /// Add a symbol to the symbol table.
     /// In pass 1: the label MUST be absent
     /// In pass 2: the label MUST be present and of the same value
@@ -1456,6 +1480,7 @@ impl Env {
         }
     }
 
+
     pub fn visit_macro_definition(
         &mut self,
         name: &str,
@@ -2144,6 +2169,43 @@ impl Env {
     }
 }
 
+// Functions related
+impl Env {
+
+    pub fn visit_return(&mut self, e: &Expr) -> Result<(), AssemblerError> {
+        debug_assert!(self.return_value.is_none());
+        self.return_value = Some(self.resolve_expr_must_never_fail(e)?);
+        Ok(())
+    }
+
+    pub fn user_defined_function(&self, name: &str) -> Result<&Function, AssemblerError> {
+        match self.functions.get(name){
+            Some(f) => Ok(f),
+            None => Err(AssemblerError::FunctionUnknown(name.to_owned()))
+        }
+    }
+
+    pub fn visit_function_definition<T: ListingElement + Visited + Clone + FunctionBuilder>(&mut self, 
+        name: &str, 
+        params: &[String], 
+        inner: &[T], 
+        span: Option<&Z80Span>) -> Result<(), AssemblerError> {
+
+        let f = FunctionBuilder::new(
+            name,
+            params,
+            inner
+        )?;
+
+        self.functions.insert(
+            name.to_owned(),
+            f
+        );
+
+        Ok(())
+    }
+}
+
 /// Visit the tokens during several passes by providing a specific symbol table.
 /// Warning Listing output is only possible for LocatedToken
 pub fn visit_tokens_all_passes_with_options<T: Visited>(
@@ -2260,7 +2322,7 @@ pub fn visit_located_token(
         }
 
         LocatedToken::Function(name, params, inner, span) => {
-            unimplemented!()
+            env.visit_function_definition(name, params, inner, Some(span))
         }
         LocatedToken::Include(_fname, ref cell, namespace, span) => {
             if cell.read().unwrap().is_some() {
@@ -2470,6 +2532,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Range(name, start, stop) => env.visit_range(name, start, stop),
         Token::Section(name) => env.visit_section(name),
 
+        Token::Return(exp) => env.visit_return(exp),
         _ => unimplemented!("{:?}", token),
     }
 }

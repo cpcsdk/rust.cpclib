@@ -224,6 +224,12 @@ pub enum AssemblerError {
     SnapshotError {
         error: SnapshotError,
     },
+
+    FunctionWithoutReturn(String),
+    FunctionWithEmptyBody(String),
+    FunctionUnknown(String),
+    FunctionWithWrongNumberOfArguments(String, usize, usize),
+    FunctionError(String, Box<AssemblerError>)
 }
 
 impl From<VerboseError<Z80Span>> for AssemblerError {
@@ -407,6 +413,7 @@ impl Display for AssemblerError {
                 write!(f, "{}", str)
             }
 
+
             AssemblerError::IncludedFileError { span, error } => match error.as_ref() {
                 AssemblerError::IOError { msg } => {
                     let msg = build_simple_error_message_with_message(
@@ -497,7 +504,28 @@ impl Display for AssemblerError {
                     closest.as_ref().unwrap_or(&"".to_owned())
                 )
             }
+            AssemblerError::FunctionWithoutReturn(name) => {
+                write!(f, "Function {} has no RETURN directive", name)
+            },
+            AssemblerError::FunctionWithEmptyBody(name) => {
+                write!(f, "Function {} has no body", name)
+            },
+            AssemblerError::FunctionUnknown(name) => {
+                write!(f, "Function {} unknown", name)
+            }
+            AssemblerError::FunctionError(name, e) => {
+                write!(f, "Function {} error: {}", name, e)
+            }
+            AssemblerError::FunctionWithWrongNumberOfArguments(name, expected, received) => {
+                write!(
+                    f,
+                    "Function {} called with {} parameters instead of {}",
+                    name,
+                    received,
+                    expected
+                )
 
+            }
             AssemblerError::WrongNumberOfParameters {
                 symbol: _,
                 nb_paramers: _,

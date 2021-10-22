@@ -14,11 +14,8 @@
 			return local1
 		ENDIF
 
-		return {arg3}
 		
 	ENDFUNCTION
 	
-	; Use the function name
+	; Use the function name XXX Fail because of no return
 	ld a, name(0, 1, 2)
-	assert name(0, 1, 2) == 2
-	assert name(3, 3, -2) == 0

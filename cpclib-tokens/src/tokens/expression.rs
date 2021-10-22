@@ -4,6 +4,8 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, Sub};
 
+use cpclib_common::itertools::Itertools;
+
 /// Expression nodes.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[allow(missing_docs)]
@@ -452,7 +454,11 @@ impl Display for Expr {
             &StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
             &LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
 
-            UserDefinedFunction(_, _) => unimplemented!()
+            UserDefinedFunction(name, args) => write!(format,
+            "{}({})",
+            name,
+            args.iter().map(|e| e.to_string()).join(",")
+            )
         }
     }
 }
