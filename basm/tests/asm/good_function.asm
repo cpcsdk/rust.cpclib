@@ -1,7 +1,8 @@
 	;;
-	; The function `name` takes 2 arguments arg1 and arg2, 
+	; The function `name` takes 3 arguments arg1, arg2, and arg3,
 	; uses a local variable
-	; and returns a value (the sum of the two arguments)
+	; and returns a value (the sum of the two arguments).
+	; No z80 code is allowed there, but it is possible to use some directives
 	FUNCTION name, arg1, arg2, arg3
 
 		IF {arg3} > 0
@@ -14,11 +15,15 @@
 			return local1
 		ENDIF
 
-		return {arg3}
+		repeat 3
+			local1 = local1+1
+		rend
+
+		return local1
 		
 	ENDFUNCTION
 	
 	; Use the function name
 	ld a, name(0, 1, 2)
-	assert name(0, 1, 2) == 2
+	assert name(0, 1, 2) == 4
 	assert name(3, 3, -2) == 0
