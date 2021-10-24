@@ -256,7 +256,7 @@ lazy_static::lazy_static! {
                                                 .collect_vec();
     static ref DOTTED_STAND_ALONE_DIRECTIVE: Vec<&'static str> = _DOTTED_STAND_ALONE_DIRECTIVE.iter().map(String::as_str).collect_vec();                                        
     static ref DOTTED_START_DIRECTIVE: Vec<&'static str> = _DOTTED_START_DIRECTIVE.iter().map(String::as_str).collect_vec();                                        
-    static ref DOTTED_END_DIRECTIVE: Vec<&'static str> = dbg!(_DOTTED_END_DIRECTIVE.iter().map(String::as_str).collect_vec());                                        
+    static ref DOTTED_END_DIRECTIVE: Vec<&'static str> = _DOTTED_END_DIRECTIVE.iter().map(String::as_str).collect_vec();                                        
 }
 
 pub fn parse_z80_strrc_with_contextrc(
