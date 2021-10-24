@@ -2374,7 +2374,7 @@ pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
         preceded(
             parse_word("PRINT"),
             cut(separated_list1(
-                delimited(space0, tag(","), space0),
+                parse_comma,
                 alt((
                     formatted_expr,
                     map(expr, FormattedExpr::from),
@@ -2431,8 +2431,28 @@ fn formatted_expr(input: Z80Span) -> IResult<Z80Span, FormattedExpr, VerboseErro
     Ok((input, FormattedExpr::Formatted(format, exp)))
 }
 
+/// Handle \ in end of line
+fn my_space0(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
+    recognize(opt(my_space1))(input)
+}
+
+/// Handle \ in end of line
+fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
+    alt((
+        recognize(eof),
+        recognize(tuple((
+            space0, 
+            tag("\\"), 
+            opt(pair(space0, parse_comment)), 
+            line_ending, 
+            space0
+        ))),
+        recognize(space1),
+    ))(input)
+}
+
 fn parse_comma(input: Z80Span) -> IResult<Z80Span, (), VerboseError<Z80Span>> {
-    map(tuple((space0, tag(","), space0)), |_| ())(input)
+    map(tuple((my_space0, tag(","), my_space0)), |_| ())(input)
 }
 
 /// ...
