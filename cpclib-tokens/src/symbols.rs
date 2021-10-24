@@ -563,8 +563,11 @@ impl<'t> Iterator for ModuleSymbolTableIterator<'t> {
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub struct SymbolsTable {
-    // Tree of symbols. The default one is the root
+    /// Tree of symbols. The default one is the root. build and maintained all over assembling
     map: ModuleSymbolTable,
+
+    /// A kind of clone of map that contains only the information of the current pass
+    current_pass_map: ModuleSymbolTable,
 
     dummy: bool,
     current_global_label: Symbol, //  Value of the current label to allow local labels
@@ -584,7 +587,8 @@ impl Default for SymbolsTable {
         let mut map = ModuleSymbolTable::default();
         map.add_children("".to_owned().into());
         Self {
-            map,
+            map: map.clone(),
+            current_pass_map: map.clone(),
             dummy: false,
             current_global_label: "".into(),
             assignable: Default::default(),
@@ -597,6 +601,12 @@ impl Default for SymbolsTable {
 
 /// Local/global label handling code
 impl SymbolsTable {
+
+     pub fn new_pass(&mut self) {
+         self.current_pass_map = ModuleSymbolTable::default();
+         self.current_pass_map.add_children("".to_owned().into());
+     }
+
     /// Setup the current label for local to global labels conversions
     pub fn set_current_global_label<S: Into<Symbol>>(
         &mut self,
@@ -745,7 +755,9 @@ impl SymbolsTableTrait for SymbolsTable {
 
         self.assignable.insert(symbol.clone());
 
-        Ok(self.map.insert(symbol, value.into()))
+        let value = value.into();
+        self.current_pass_map.insert(symbol.clone(), value.clone());
+        Ok(self.map.insert(symbol, value))
     }
 
     fn enter_namespace(&mut self, namespace: &str) {
@@ -809,7 +821,8 @@ impl SymbolsTable {
         let mut map = ModuleSymbolTable::default();
         map.insert(Symbol::from("$"), Value::Number(0.into()));
         Self {
-            map,
+            map: map.clone(),
+            current_pass_map: map.clone(),
             dummy: true,
             current_global_label: "".into(),
             assignable: HashSet::new(),
@@ -899,7 +912,9 @@ impl SymbolsTable {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
         self.current_address().map(|val| {
-            self.map.insert(symbol, Value::Number(val.into()));
+            let value = Value::Number(val.into());
+            self.map.insert(symbol.clone(), value.clone());
+            self.current_pass_map.insert(symbol, value);
         })
     }
 
@@ -913,7 +928,10 @@ impl SymbolsTable {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.inject_current_namespace(symbol);
 
-        Ok(self.map.insert(symbol, value.into()))
+        let value = value.into();
+        self.current_pass_map.insert(symbol.clone(), value.clone());
+
+        Ok(self.map.insert(symbol, value))
     }
 
     pub fn update_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
@@ -928,7 +946,12 @@ impl SymbolsTable {
             .find(|symbol| self.map.contains_key(symbol))
             .unwrap();
 
-        *(self.map.get_mut(&symbol).unwrap()) = value.into();
+        let value = value.into();
+
+        self.current_pass_map.insert(symbol.clone(), value.clone());
+
+        *(self.map.get_mut(symbol).unwrap()) = value;
+
         Ok(())
     }
 
@@ -972,10 +995,17 @@ impl SymbolsTable {
                 */
     }
 
+    /// Check if the symbol table contains the expected symbol, whatever is the pass
     pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbols = self.get_potential_candidates(symbol);
         Ok(symbols.iter().any(|symbol| self.map.contains_key(&symbol)))
+    }
+    /// Check if the symbol table contains the expected symbol, added during the current pass
+    pub fn symbol_exist_in_current_pass<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
+        let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
+        let symbols = self.get_potential_candidates(symbol);
+        Ok(symbols.iter().any(|symbol| self.current_pass_map.contains_key(&symbol)))
     }
 
     /// Returns the closest Value
@@ -1128,6 +1158,14 @@ impl SymbolsTableCaseDependent {
 
     pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
         self.table.contains_symbol(self.normalize_symbol(symbol))
+    }
+
+    pub fn symbol_exist_in_current_pass<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
+        self.table.symbol_exist_in_current_pass(self.normalize_symbol(symbol))
+    }
+
+    pub fn new_pass(&mut self) {
+        self.table.new_pass();
     }
 
     pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> Result<&'static str, SymbolError> {

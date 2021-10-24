@@ -144,7 +144,7 @@ impl TokenExt for Token {
             Token::Defs(ref l) => l
                 .iter()
                 .map(|(e, f)| {
-                    assemble_defs_item(e, f.as_ref(), &Env::default())
+                    assemble_defs_item(e, f.as_ref(), &mut Env::default())
                         .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
                 })
                 .fold_ok(SmallVec::<[u8; 4]>::new(), |mut acc, v| {

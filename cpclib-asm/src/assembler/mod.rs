@@ -26,6 +26,7 @@ use cpclib_common::lazy_static::__Deref;
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use std::any::Any;
+use std::collections::HashSet;
 use std::fmt;
 use std::time::Instant;
 
@@ -388,8 +389,11 @@ pub struct Env {
 
     saved_files: Option<Vec<SavedFile>>,
 
-    if_token_adr_to_ndef_decision: HashMap<usize, bool>,
-    if_token_adr_to_def_decision: HashMap<usize, bool>,
+    // Store the error that has been temporarily discarded at previous pass, by expecting they will be not be raised at current pass
+    previous_pass_discarded_errors: HashSet<String>,
+    // Store the error that has been temporarily discarded, by expecting they will be fixed at next pass
+    current_pass_discarded_errors: HashSet<String>,
+
     if_token_adr_to_used_decision: HashMap<usize, bool>,
     if_token_adr_to_unused_decision: HashMap<usize, bool>,
 }
@@ -424,14 +428,15 @@ impl Clone for Env {
             current_section: self.current_section.clone(),
             saved_files: self.saved_files.clone(),
 
-            if_token_adr_to_ndef_decision: self.if_token_adr_to_ndef_decision.clone(),
-            if_token_adr_to_def_decision: self.if_token_adr_to_def_decision.clone(),
             if_token_adr_to_used_decision: self.if_token_adr_to_used_decision.clone(),
             if_token_adr_to_unused_decision: self.if_token_adr_to_unused_decision.clone(),
             requested_additional_pass: self.requested_additional_pass,
 
             functions: self.functions.clone(),
             return_value: self.return_value.clone(),
+
+            current_pass_discarded_errors: self.current_pass_discarded_errors.clone(),
+            previous_pass_discarded_errors: self.previous_pass_discarded_errors.clone(),
         }
     }
 }
@@ -483,14 +488,15 @@ impl Default for Env {
             can_skip_next_passes: true.into(),
             request_additional_pass: false.into(),
 
-            if_token_adr_to_ndef_decision: HashMap::default(),
-            if_token_adr_to_def_decision: HashMap::default(),
             if_token_adr_to_used_decision: HashMap::default(),
             if_token_adr_to_unused_decision: HashMap::default(),
             requested_additional_pass: false,
 
             functions: HashMap::default(),
-            return_value: None
+            return_value: None,
+
+            current_pass_discarded_errors: HashSet::default(),
+            previous_pass_discarded_errors: HashSet::default()
         }
     }
 }
@@ -619,6 +625,20 @@ impl Env {
     }
 }
 
+/// Error handling
+impl Env {
+    /// If the error has not been raised at the previous pass, store it and do not propagate it. Otherwise, propagate it
+    pub fn add_error_discardable_one_pass(&mut self, e: AssemblerError) -> Result<(), AssemblerError> {
+
+        let repr = SimplerAssemblerError(&e).to_string();
+        if self.previous_pass_discarded_errors.contains(&repr) {
+            return Err(e);
+        } else {
+            self.current_pass_discarded_errors.insert(repr);
+            return Ok(());
+        }
+    }
+}
 /// Namespace handling
 impl Env {
     fn enter_namespace(&mut self, namespace: &str) -> Result<(), AssemblerError> {
@@ -684,7 +704,7 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
-        self.requested_additional_pass = dbg!(*self.request_additional_pass.read().unwrap());
+        self.requested_additional_pass |= !self.current_pass_discarded_errors.is_empty();
 
         let mut can_change_request = true;
         if !self.pass.is_listing_pass() {
@@ -712,6 +732,12 @@ impl Env {
             if !self.pass.is_listing_pass() {
                 self.real_nb_passes += 1;
             }
+
+            std::mem::swap(
+                &mut self.current_pass_discarded_errors, 
+                &mut self.previous_pass_discarded_errors
+            );
+            self.current_pass_discarded_errors.clear();
 
             // environnement is not reset when assembling is finished
             self.symbols
@@ -743,6 +769,7 @@ impl Env {
             if can_change_request {
                 self.request_additional_pass = false.into();
             }
+            self.symbols.new_pass();
         }
 
 
@@ -1417,6 +1444,7 @@ impl Env {
                     if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr) {
                         if *res != decision {
                             *self.request_additional_pass.write().unwrap() = true;
+                            dbg!("yyyy");
                         }
                     }
 
@@ -1436,6 +1464,7 @@ impl Env {
                     if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr) {
                         if *res != decision {
                             *self.request_additional_pass.write().unwrap() = true;
+                            dbg!("xxxxxxxxxx");
                         }
                     }
 
@@ -1450,11 +1479,7 @@ impl Env {
 
                 // Label must exist
                 (TestKind::LabelExists(ref label), listing) => {
-                    if !self.if_token_adr_to_def_decision.contains_key(&token_adr) {
-                        self.if_token_adr_to_def_decision
-                            .insert(token_adr.clone(), self.symbols().contains_symbol(label)?);
-                    }
-                    if *self.if_token_adr_to_def_decision.get(&token_adr).unwrap() {
+                    if self.symbols().symbol_exist_in_current_pass(label)? {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -1462,11 +1487,7 @@ impl Env {
 
                 // Label must not exist
                 (TestKind::LabelDoesNotExist(ref label), ref listing) => {
-                    if !self.if_token_adr_to_ndef_decision.contains_key(&token_adr) {
-                        self.if_token_adr_to_ndef_decision
-                            .insert(token_adr.clone(), !self.symbols().contains_symbol(label)?);
-                    }
-                    if *self.if_token_adr_to_ndef_decision.get(&token_adr).unwrap() {
+                          if !self.symbols().symbol_exist_in_current_pass(label)?  {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -2100,7 +2121,7 @@ impl Env {
             | *crunched_env.request_additional_pass.read().unwrap())
         .into();
         *self.can_skip_next_passes.write().unwrap() = can_skip_next_passes;
-        *self.request_additional_pass.write().unwrap() = request_additional_pass;
+        *self.request_additional_pass.write().unwrap() = dbg!(request_additional_pass);
 
         self.macro_seed = crunched_env.macro_seed;
 
@@ -3077,11 +3098,12 @@ pub fn visit_stableticker(
 pub fn assemble_defs_item(
     expr: &Expr,
     fill: Option<&Expr>,
-    env: &Env,
+    env: &mut Env,
 ) -> Result<Bytes, AssemblerError> {
     let count = match env.resolve_expr_must_never_fail(expr) {
         Ok(amount) => amount.int(),
-        Err(_) => {
+        Err(e) => {
+            env.add_error_discardable_one_pass(e)?;
             *env.request_additional_pass.write().unwrap() = true; // we expect to obtain this value later
             0.into()
         }

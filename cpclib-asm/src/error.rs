@@ -232,6 +232,8 @@ pub enum AssemblerError {
     FunctionError(String, Box<AssemblerError>)
 }
 
+
+
 impl From<VerboseError<Z80Span>> for AssemblerError {
     fn from(err: VerboseError<Z80Span>) -> Self {
         AssemblerError::SyntaxError { error: err }
@@ -321,6 +323,12 @@ pub(crate) const SNASET_MISSING_COMMA: &'static str = "SNASET: missing comma";
 
 impl Display for AssemblerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.format(f, true)
+    }
+}
+
+impl AssemblerError {
+    pub fn format(&self, f: &mut std::fmt::Formatter<'_>, complete: bool) -> std::fmt::Result {
         match self {
             AssemblerError::SyntaxError { error } => {
                 let mut source_files = SimpleFiles::new();
@@ -549,6 +557,8 @@ impl Display for AssemblerError {
 
             // By construction contains only error with no span information
             AssemblerError::RelocatedError { error, span } => {
+
+                if complete {
                 // Relocated error format may vary among errors
                 match error.deref() {
                     AssemblerError::RelocatedError { error, span: _ } => {
@@ -636,6 +646,10 @@ impl Display for AssemblerError {
                         write!(f, "{}", msg)
                     }
                 }
+            } else {
+                write!(f, "{}", error)
+
+            }
             }
             AssemblerError::ReadOnlySymbol(symb) => {
                 write!(f, "{} cannot be modified", symb.value())
@@ -936,5 +950,14 @@ fn config() -> codespan_reporting::term::Config {
         conf
     } else {
         codespan_reporting::term::Config::default()
+    }
+}
+
+
+pub struct SimplerAssemblerError<'e>(pub(crate) &'e AssemblerError);
+
+impl<'e> Display for SimplerAssemblerError<'e> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.format(f, false)
     }
 }
