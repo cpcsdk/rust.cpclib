@@ -1934,9 +1934,9 @@ impl Env {
     ) -> Result<String, AssemblerError> {
         let mut repr = String::default();
         for (idx, current) in info.iter().enumerate() {
-            if idx != 0 {
+            /*if idx != 0 {
                 repr += " ";
-            }
+            }*/ // we do not want the space anymore
             match current {
                 FormattedExpr::Raw(Expr::String(string)) => {
                     repr += string;
