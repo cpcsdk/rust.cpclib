@@ -67,7 +67,7 @@ impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
 			// TODO modify the code according to the value
 			env.add_function_parameter_to_symbols_table(
 				format!("{{{}}}", param.0), 
-				*param.1).unwrap();
+				param.1.clone()).unwrap();
 		}
 
 		for token in self.inner.iter() {

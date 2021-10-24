@@ -101,7 +101,7 @@ impl ListingExt for Listing {
 
         for instruction in self.listing() {
             if let Token::Org(address, _) = instruction {
-                current_address = Some(address.eval().unwrap().int() as u16);
+                current_address = Some(address.eval().unwrap().int().unwrap() as u16);
             }
 
             match current_address.as_ref() {
@@ -211,7 +211,7 @@ impl ListingExt for Listing {
             let current_instruction = &self.listing()[current_idx];
 
             let next_address = if let Token::Org(address, _) = current_instruction {
-                current_address = Some(address.eval().unwrap().int() as u16);
+                current_address = Some(address.eval().unwrap().int().unwrap() as u16);
                 current_address.clone()
             } else {
                 let nb_bytes = current_instruction.number_of_bytes().unwrap();

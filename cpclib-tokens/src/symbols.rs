@@ -327,6 +327,7 @@ impl Macro {
 pub enum Value {
     /// Integer value used in an expression
     Number(ExprResult),
+    String(String),
     /// Address (use in physical way to ensure all bank/page info are available)
     Address(PhysicalAddress),
     /// Macro information
@@ -404,7 +405,11 @@ impl From<Macro> for Value {
 
 impl<I: Into<ExprResult>> From<I> for Value {
     fn from(i: I) -> Self {
-        Self::Number(i.into())
+        let value = i.into();
+        match  &value {
+            ExprResult::String(s) => Value::String(s.clone()),
+            _ => Value::Number(value)
+        }
     }
 }
 
@@ -738,6 +743,7 @@ impl SymbolsTableTrait for SymbolsTable {
         Ok(self
             .value(symbol)?
             .map(|v| v.integer())
+            .filter(|v| v.is_some())
             .map(|v| v.unwrap())
             .or_else(|| if self.dummy { Some(1i32) } else { None }))
     }
@@ -1051,6 +1057,7 @@ impl SymbolsTable {
             Some(Value::Macro(_)) => "macro",
             Some(Value::Struct(_)) => "struct",
             Some(Value::Counter(_)) => "counter",
+            Some(Value::String(_)) => "string",
             None => "any",
         })
     }

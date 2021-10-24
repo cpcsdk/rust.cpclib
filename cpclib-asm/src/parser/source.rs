@@ -4,7 +4,6 @@ use cpclib_common::nom::{
     Offset, Slice,
 };
 use cpclib_common::nom_locate::LocatedSpan;
-use failure::ResultExt;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 

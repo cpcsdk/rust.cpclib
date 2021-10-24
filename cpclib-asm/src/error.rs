@@ -15,6 +15,7 @@ use cpclib_common::nom::error::VerboseError;
 use cpclib_common::nom::error::VerboseErrorKind;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
+use cpclib_tokens::ExpressionTypeError;
 use cpclib_tokens::symbols::Symbol;
 use cpclib_tokens::symbols::SymbolError;
 use cpclib_tokens::tokens;
@@ -229,10 +230,23 @@ pub enum AssemblerError {
     FunctionWithEmptyBody(String),
     FunctionUnknown(String),
     FunctionWithWrongNumberOfArguments(String, usize, usize),
-    FunctionError(String, Box<AssemblerError>)
+    FunctionError(String, Box<AssemblerError>),
+
+    ExpressionTypeError(ExpressionTypeError)
 }
 
 
+impl From<ExpressionTypeError> for AssemblerError {
+    fn from(e: ExpressionTypeError) -> Self {
+        Self::ExpressionTypeError(e)
+    }
+}
+
+impl From<&ExpressionTypeError> for AssemblerError {
+    fn from(e: &ExpressionTypeError) -> Self {
+        Self::ExpressionTypeError(e.clone())
+    }
+}
 
 impl From<VerboseError<Z80Span>> for AssemblerError {
     fn from(err: VerboseError<Z80Span>) -> Self {
@@ -487,6 +501,8 @@ impl AssemblerError {
                 "Unknown symbol: {}. Closest one is: {:?}",
                 symbol, closest
             ),
+
+            AssemblerError::ExpressionTypeError(e) => write!(f, "{}", e),
 
             AssemblerError::EmptyBinaryFile(_) => todo!(),
             AssemblerError::AmsdosError { error: _ } => {

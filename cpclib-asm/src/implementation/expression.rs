@@ -1,3 +1,5 @@
+use std::ops::Neg;
+
 use crate::assembler::Env;
 use crate::error::*;
 use crate::implementation::tokens::*;
@@ -85,17 +87,17 @@ impl ExprEvaluationExt for Expr {
 
             match (res_left, res_right) {
                 (Ok(a), Ok(b)) => match oper {
-                    Oper::Add => Ok(a + b),
-                    Oper::Sub => Ok(a - b),
-                    Oper::Div => Ok(a / b),
-                    Oper::Mod => Ok(a % b),
-                    Oper::Mul => Ok(a * b),
-                    Oper::RightShift => Ok(a >> b),
-                    Oper::LeftShift => Ok(a << b),
+                    Oper::Add => (a + b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                    Oper::Sub => (a - b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                    Oper::Div => (a / b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                    Oper::Mod => (a % b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                    Oper::Mul => (a * b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                    Oper::RightShift => (a >> b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                    Oper::LeftShift => (a << b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
 
-                    Oper::BinaryAnd => Ok(a & b),
-                    Oper::BinaryOr => Ok(a | b),
-                    Oper::BinaryXor => Ok(a ^ b),
+                    Oper::BinaryAnd => (a & b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                    Oper::BinaryOr => (a | b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                    Oper::BinaryXor => (a ^ b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
 
                     Oper::BooleanAnd => Ok(((a != 0.into()) && (b != 0.into())).into()),
                     Oper::BooleanOr => Ok(((a != 0.into()) || (b != 0.into())).into()),
@@ -130,7 +132,7 @@ impl ExprEvaluationExt for Expr {
         };
 
         match self {
-            RelativeDelta(delta) => Ok((Expr::Label("$".into()).resolve(env)? + delta.clone().into()).into()),
+            RelativeDelta(delta) => (Expr::Label("$".into()).resolve(env)? + delta.clone().into()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
 
             Value(val) => Ok(val.clone().into()),
             Char(c) => {
@@ -138,7 +140,7 @@ impl ExprEvaluationExt for Expr {
                 Ok(c.clone().into())
             }
 
-            String(ref string) => panic!("String values cannot be converted to i32 {}", string),
+            String(ref string) => Ok(ExprResult::String(string.clone())),
 
             Label(ref label) => match sym.value(label)? {
                 Some(cpclib_tokens::symbols::Value::Number(ref val)) => Ok(val.clone().into()),
@@ -194,14 +196,14 @@ impl ExprEvaluationExt for Expr {
             BinaryNot(ref e) => {
                 e.resolve(env)?
                  .binary_not()
-                 .map_err(|e| AssemblerError::ExpressionError{msg: e})
+                 .map_err(|e| AssemblerError::ExpressionTypeError(e))
             },
 
 
             BooleanAnd(ref left, ref right) => oper(left, right, Oper::BooleanAnd),
             BooleanOr(ref left, ref right) => oper(left, right, Oper::BooleanOr),
 
-            Neg(ref e) => e.resolve(env).map(|result| -result),
+            Neg(ref e) => (e.resolve(env)?).neg().map_err(|e| AssemblerError::ExpressionTypeError(e)),
 
             Equal(ref left, ref right) => oper(left, right, Oper::Equal),
             Different(ref left, ref right) => oper(left, right, Oper::Different),
@@ -254,8 +256,8 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
         let arg = self.arg.resolve(env)?;
 
         match self.func {
-            UnaryFunction::High => Ok((arg >> 8.into()) & 0xff.into()),
-            UnaryFunction::Low => Ok(arg & 0xff.into()),
+            UnaryFunction::High => ((arg >> 8.into())? & 0xff.into()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Low => (arg & 0xff.into()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::Memory => {
                 if arg < 0.into() || arg > 0xffff.into() {
                     return Err(AssemblerError::ExpressionError {
@@ -263,23 +265,23 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
                     });
                 } else {
                     Ok(env
-                        .peek(&env.logical_to_physical_address(arg.int() as _))
+                        .peek(&env.logical_to_physical_address(arg.int()? as _))
                         .into())
                 }
             }
-            UnaryFunction::Floor => Ok(arg.floor()),
-            UnaryFunction::Ceil => Ok(arg.ceil()),
-            UnaryFunction::Frac => Ok(arg.frac()),
-            UnaryFunction::Int => Ok(arg.int().into()),
-            UnaryFunction::Sin => Ok(arg.sin()),
-            UnaryFunction::Cos => Ok(arg.cos()),
-            UnaryFunction::ASin => Ok(arg.asin()),
-            UnaryFunction::ACos => Ok(arg.acos()),
-            UnaryFunction::Abs => Ok(arg.abs()),
-            UnaryFunction::Ln => Ok(arg.ln()),
-            UnaryFunction::Log10 => Ok(arg.log10()),
-            UnaryFunction::Exp => Ok(arg.exp()),
-            UnaryFunction::Sqrt => Ok(arg.sqrt()),
+            UnaryFunction::Floor => (arg.floor()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Ceil => (arg.ceil()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Frac => (arg.frac()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Int => (arg.int()).map(|i| i.into()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Sin => (arg.sin()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Cos => (arg.cos()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::ASin => (arg.asin()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::ACos => (arg.acos()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Abs => (arg.abs()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Ln => (arg.ln()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Log10 => (arg.log10()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Exp => (arg.exp()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Sqrt => (arg.sqrt()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
         }
     }
 }

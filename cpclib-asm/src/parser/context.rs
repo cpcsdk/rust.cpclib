@@ -79,6 +79,8 @@ pub struct ParserContext {
     pub search_path: Vec<PathBuf>,
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
     pub read_referenced_files: bool,
+    /// Set to true when directives must start by a dot
+    pub dotted_directive: bool,
     /// indicate we are parsing a listing generating by a struct
     pub parse_warning: RwLock<Vec<AssemblerError>>,
 }
@@ -91,7 +93,8 @@ impl Clone for ParserContext {
             search_path: self.search_path.clone(),
             read_referenced_files: self.read_referenced_files.clone(),
             parse_warning: self.parse_warning.write().unwrap().clone().into(),
-            state: self.state.clone()
+            state: self.state.clone(),
+            dotted_directive: self.dotted_directive.clone()
         }
     }
 
@@ -105,7 +108,8 @@ impl Default for ParserContext {
             search_path: Default::default(),
             read_referenced_files: true,
             parse_warning: Default::default(),
-            state: ParsingState::Standard
+            state: ParsingState::Standard,
+            dotted_directive: false
         }
     }
 
@@ -113,12 +117,14 @@ impl Default for ParserContext {
 
 impl ParserContext {
     pub fn clone_with_state(&self, state: ParsingState ) -> Self {
+
         Self {
             current_filename: self.current_filename.clone(),
             context_name: self.context_name.clone(),
             search_path: self.search_path.clone(),
             read_referenced_files: self.read_referenced_files.clone(),
             parse_warning: self.parse_warning.write().unwrap().clone().into(),
+            dotted_directive: self.dotted_directive.clone(),
             state
         
         }
@@ -145,8 +151,12 @@ impl ParserContext {
         self.context_name = Some(name.to_owned());
     }
 
-    pub fn set_read_referenced_files(&mut self, _tag: bool) {
-        self.read_referenced_files = true;
+    pub fn set_read_referenced_files(&mut self, tag: bool) {
+        self.read_referenced_files = tag;
+    }
+
+    pub fn set_dotted_directives(&mut self, tag: bool) {
+        self.dotted_directive = tag;
     }
 
     /// Add a search path and ensure it is ABSOLUTE

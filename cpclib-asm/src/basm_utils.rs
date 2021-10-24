@@ -73,6 +73,8 @@ pub fn parse<'arg>(
 
     // prepare the context for the included directories
     let mut context = ParserContext::default();
+    context.set_dotted_directives(matches.is_present("DOTTED_DIRECTIVES"));
+
     context.set_current_filename(&filename);
     context.add_search_path_from_file(&filename); // we ignore the potential error
     if let Some(directories) = matches.values_of("INCLUDE_DIRECTORIES") {
@@ -337,6 +339,12 @@ pub fn build_args_parser() -> clap::App<'static, 'static> {
 							.long("case-insensitive")
 							.short("i") 
 					)
+                    .arg(
+                        Arg::with_name("DOTTED_DIRECTIVES")
+                            .help("Expect directives to by prefixed with a dot")
+                            .long("directives-prefixed-by-dot")
+                            .short("d")
+                    )
                     .arg(
                         Arg::with_name("INCLUDE_DIRECTORIES")
                             .help("Provide additional directories used to search files.")

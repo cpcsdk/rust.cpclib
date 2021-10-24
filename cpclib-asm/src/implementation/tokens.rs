@@ -105,9 +105,9 @@ impl TokenExt for Token {
             if count.is_err() {
                 Some(Err(count.err().unwrap()))
             } else {
-                let count = count.unwrap();
-                let mut res = Vec::with_capacity(count.int() as usize * tokens.len());
-                for _i in 0..count.int() {
+                let count = count.unwrap().int().unwrap();
+                let mut res = Vec::with_capacity(count as usize * tokens.len());
+                for _i in 0..count {
                     // TODO add a specific token to control the loop counter (and change the return type)
                     for t in tokens.iter() {
                         res.push(t);

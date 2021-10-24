@@ -351,7 +351,7 @@ impl LocatedToken {
                         }
 
                         if offset.is_some() {
-                            let offset = offset.as_ref().unwrap().eval()?.int() as usize;
+                            let offset = offset.as_ref().unwrap().eval()?.int()? as usize;
                             if offset >= data.len() {
                                 return Err(AssemblerError::AssemblingError {
                                     msg: format!(
@@ -365,7 +365,7 @@ impl LocatedToken {
                         }
 
                         if length.is_some() {
-                            let length = length.as_ref().unwrap().eval()?.int() as usize;
+                            let length = length.as_ref().unwrap().eval()?.int()? as usize;
                             data = &data[..length];
                             if data.len() != length {
                                 return Err(AssemblerError::AssemblingError {

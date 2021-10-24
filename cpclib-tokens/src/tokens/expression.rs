@@ -553,12 +553,28 @@ impl Expr {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ExpressionTypeError(String);
+
+impl Display for ExpressionTypeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", &self.0)
+    }
+}
+
 /// The successful result of an evaluation.
-/// Embeds eiterh a real or an integer
-#[derive(Eq, Ord, Debug, Clone, Copy)]
+/// Embeds  a real,  an integer or a string
+#[derive(Eq, Ord, Debug, Clone)]
 pub enum ExprResult {
     Float(OrderedFloat<f64>),
     Value(i32),
+    String(String)
+}
+
+impl From<String> for ExprResult {
+    fn from(f: String) -> Self {
+        ExprResult::String(f)
+    }
 }
 
 impl From<f64> for ExprResult {
@@ -633,209 +649,238 @@ impl ExprResult {
         }
     }
 
-    pub fn int(&self) -> i32 {
+    pub fn is_string(&self) -> bool {
         match self {
-            ExprResult::Float(f) => f.into_inner() as _,
-            ExprResult::Value(i) => *i,
+            Self::String(_) => true,
+            _ => false,
         }
     }
 
-    pub fn float(&self) -> f64 {
+    pub fn int(&self) -> Result<i32, ExpressionTypeError> {
         match self {
-            ExprResult::Float(f) => f.into_inner(),
-            ExprResult::Value(i) => *i as f64,
+            ExprResult::Float(f) => Ok(f.into_inner() as _),
+            ExprResult::Value(i) => Ok(*i),
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as an int", s)))
         }
     }
 
-    pub fn bool(&self) -> bool {
+    pub fn float(&self) -> Result<f64, ExpressionTypeError> {
         match self {
-            ExprResult::Float(f) => *f != 0.,
-            ExprResult::Value(i) => *i != 0,
+            ExprResult::Float(f) => Ok(f.into_inner()),
+            ExprResult::Value(i) => Ok(*i as f64),
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as a float", s)))
+        }
+    }
+
+    pub fn bool(&self) -> Result<bool, ExpressionTypeError> {
+        match self {
+            ExprResult::Float(f) => Ok(*f != 0.),
+            ExprResult::Value(i) => Ok(*i != 0),
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as a bool", s)))
         }
     }
 }
 
 impl ExprResult {
-    pub fn floor(&self) -> Self {
+    pub fn floor(&self) -> Result<Self, ExpressionTypeError>  {
         match self {
-            ExprResult::Float(f) => f.floor().into(),
-            ExprResult::Value(v) => v.clone().into(),
+            ExprResult::Float(f) => Ok(f.floor().into()),
+            ExprResult::Value(v) => Ok(v.clone().into()),
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply floor to {}", s)))
         }
     }
-    pub fn ceil(&self) -> Self {
+    pub fn ceil(&self) -> Result<Self, ExpressionTypeError> {
         match self {
-            ExprResult::Float(f) => f.ceil().into(),
-            ExprResult::Value(v) => v.clone().into(),
+            ExprResult::Float(f) => Ok(f.ceil().into()),
+            ExprResult::Value(v) => Ok(v.clone().into()),
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply ceil to {}", s)))
         }
     }
-    pub fn frac(&self) -> Self {
+    pub fn frac(&self) -> Result<Self, ExpressionTypeError>  {
         match self {
-            ExprResult::Float(f) => f.fract().into(),
-            ExprResult::Value(_v) => 0.into(),
+            ExprResult::Float(f) => Ok(f.fract().into()),
+            ExprResult::Value(_v) => Ok(0.into()),
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply frac to {}", s)))
+
         }
     }
-    pub fn sin(&self) -> Self {
-        (self.float() * 3.1415926545 / 180.0).sin().into()
+    pub fn sin(&self) -> Result<Self, ExpressionTypeError>  {
+        Ok((self.float()? * 3.1415926545 / 180.0).sin().into())
     }
-    pub fn cos(&self) -> Self {
-        (self.float() * 3.1415926545 / 180.0).cos().into()
+    pub fn cos(&self) -> Result<Self, ExpressionTypeError>  {
+        Ok((self.float()? * 3.1415926545 / 180.0).cos().into())
     }
-    pub fn asin(&self) -> Self {
-        (self.float() * 180.0 / 3.1415926545).asin().into()
+    pub fn asin(&self) -> Result<Self, ExpressionTypeError>  {
+        Ok((self.float()? * 180.0 / 3.1415926545).asin().into())
     }
-    pub fn acos(&self) -> Self {
-        (self.float() * 180.0 / 3.1415926545).acos().into()
+    pub fn acos(&self) -> Result<Self, ExpressionTypeError>  {
+        Ok((self.float()? * 180.0 / 3.1415926545).acos().into())
     }
-    pub fn atan(&self) -> Self {
-        (self.float() * 180.0 / 3.1415926545).atan().into()
+    pub fn atan(&self) -> Result<Self, ExpressionTypeError>  {
+        Ok((self.float()? * 180.0 / 3.1415926545).atan().into())
     }
-    pub fn abs(&self) -> Self {
+    pub fn abs(&self) -> Result<Self, ExpressionTypeError>  {
         match self {
-            ExprResult::Float(f) => f.abs().into(),
-            ExprResult::Value(v) => v.abs().into(),
+            ExprResult::Float(f) => Ok(f.abs().into()),
+            ExprResult::Value(v) => Ok(v.abs().into()),
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply abs to {}", s)))
+
         }
     }
-    pub fn ln(&self) -> Self {
-        self.float().ln().into()
+    pub fn ln(&self) -> Result<Self, ExpressionTypeError>  {
+        Ok(self.float()?.ln().into())
     }
-    pub fn log10(&self) -> Self {
-        self.float().log10().into()
+    pub fn log10(&self) -> Result<Self, ExpressionTypeError>  {
+        Ok(self.float()?.log10().into())
     }
-    pub fn exp(&self) -> Self {
-        self.float().exp().into()
+    pub fn exp(&self) -> Result<Self, ExpressionTypeError>  {
+        Ok(self.float()?.exp().into())
     }
-    pub fn sqrt(&self) -> Self {
-        self.float().sqrt().into()
+    pub fn sqrt(&self) -> Result<Self, ExpressionTypeError>  {
+        Ok(self.float()?.sqrt().into())
     }
 
-    pub fn binary_not(&self) -> Result<Self, String> {
+    pub fn binary_not(&self) -> Result<Self, ExpressionTypeError> {
         match self {
             ExprResult::Float(_) => {
-                return Err("Float are not compatible with ~ operator".to_owned())
+                return Err(ExpressionTypeError("Float are not compatible with ~ operator".to_owned()))
             }
             ExprResult::Value(i) => Ok((!*i).into()),
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply floor to {}", s)))
+
         }
     }
 }
 
 impl std::ops::Neg for ExprResult {
-    type Output = Self;
+    type Output = Result<Self, ExpressionTypeError> ;
 
     fn neg(self) -> Self::Output {
         match self {
-            ExprResult::Float(f) => f.neg().into(),
-            ExprResult::Value(i) => i.neg().into(),
+            ExprResult::Float(f) => Ok(f.neg().into()),
+            ExprResult::Value(i) => Ok(i.neg().into()),
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to substract {}", s)))
+            
         }
     }
 }
 
 impl std::ops::Add for ExprResult {
-    type Output = ExprResult;
+    type Output = Result<Self, ExpressionTypeError> ;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1 + f2).into(),
-            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1 + rhs.float()).into(),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 + f2).into()),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1 + rhs.float()?).into()),
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
-                (self.float() + f2.into_inner()).into()
+                Ok((self.float()? + f2.into_inner()).into())
             }
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1 + v2).into(),
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 + v2).into()),
+            (_, _) => Err(ExpressionTypeError(format!("Impossible addition between {} and {}", self, rhs)))
         }
     }
 }
 
 impl std::ops::Sub for ExprResult {
-    type Output = ExprResult;
+    type Output = Result<Self, ExpressionTypeError> ;
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1 - f2).into(),
-            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner() - rhs.float()).into(),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 - f2).into()),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1.into_inner() - rhs.float()?).into()),
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
-                (self.float() - f2.into_inner()).into()
+                Ok((self.float()? - f2.into_inner()).into())
             }
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1 - v2).into(),
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 - v2).into()),
+            (_, _) => Err(ExpressionTypeError(format!("Impossible substraction between {} and {}", self, rhs)))
+
         }
     }
 }
 
 impl std::ops::Mul for ExprResult {
-    type Output = ExprResult;
+    type Output = Result<Self, ExpressionTypeError> ;
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1 * f2).into(),
-            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner() * rhs.float()).into(),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 * f2).into()),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1.into_inner() * rhs.float()?).into()),
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
-                (self.float() * f2.into_inner()).into()
+                Ok((self.float()? * f2.into_inner()).into())
             }
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1 * v2).into(),
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 * v2).into()),
+            (_, _) => Err(ExpressionTypeError(format!("Impossible multiplication between {} and {}", self, rhs)))
+
         }
     }
 }
 
 impl std::ops::Div for ExprResult {
-    type Output = ExprResult;
+    type Output = Result<Self, ExpressionTypeError> ;
 
     fn div(self, rhs: Self) -> Self::Output {
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1 / f2).into(),
-            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner() / rhs.float()).into(),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 / f2).into()),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1.into_inner() / rhs.float()?).into()),
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
-                (self.float() / f2.into_inner()).into()
+                Ok((self.float()? / f2.into_inner()).into())
             }
-            (ExprResult::Value(_), ExprResult::Value(_)) => (self.float() / rhs.float()).into(),
+            (ExprResult::Value(_), ExprResult::Value(_)) => Ok((self.float()? / rhs.float()?).into()),
+            (_, _) => Err(ExpressionTypeError(format!("Impossible division between {} and {}", self, rhs)))
+
         }
     }
 }
 
 impl std::ops::Rem for ExprResult {
-    type Output = ExprResult;
+    type Output = Result<Self, ExpressionTypeError> ;
 
     fn rem(self, rhs: Self) -> Self::Output {
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => (f1 % f2).into(),
-            (ExprResult::Float(f1), ExprResult::Value(_)) => (f1.into_inner() % rhs.float()).into(),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 % f2).into()),
+            (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1.into_inner() % rhs.float()?).into()),
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
-                (self.float() % f2.into_inner()).into()
+                Ok((self.float()? % f2.into_inner()).into())
             }
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => (v1 % v2).into(),
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 % v2).into()),
+            (_, _) => Err(ExpressionTypeError(format!("Impossible reminder between {} and {}", self, rhs)))
+
         }
     }
 }
 
-impl std::ops::Shr for ExprResult {
-    type Output = ExprResult;
+impl std::ops::Shr for ExprResult  {
+    type Output = Result<Self, ExpressionTypeError>;
     fn shr(self, rhs: Self) -> Self::Output {
-        (self.int() >> rhs.int()).into()
+        Ok((self.int()? >> rhs.int()?).into())
     }
 }
 
 impl std::ops::Shl for ExprResult {
-    type Output = ExprResult;
+    type Output = Result<Self, ExpressionTypeError> ;
     fn shl(self, rhs: Self) -> Self::Output {
-        (self.int() << rhs.int()).into()
+        Ok((self.int()? << rhs.int()?).into())
     }
 }
 
 impl std::ops::BitAnd for ExprResult {
-    type Output = ExprResult;
+    type Output = Result<Self, ExpressionTypeError> ;
     fn bitand(self, rhs: Self) -> Self::Output {
-        (self.int() & rhs.int()).into()
+        Ok((self.int()? & rhs.int()?).into())
     }
 }
 
 impl std::ops::BitOr for ExprResult {
-    type Output = ExprResult;
+    type Output = Result<Self, ExpressionTypeError> ;
     fn bitor(self, rhs: Self) -> Self::Output {
-        (self.int() | rhs.int()).into()
+        Ok((self.int()? | rhs.int()?).into())
     }
 }
 
 impl std::ops::BitXor for ExprResult {
-    type Output = ExprResult;
+    type Output = Result<Self, ExpressionTypeError> ;
     fn bitxor(self, rhs: Self) -> Self::Output {
-        (self.int() ^ rhs.int()).into()
+        Ok((self.int()? ^ rhs.int()?).into())
     }
 }
 
@@ -844,7 +889,9 @@ impl std::cmp::PartialEq for ExprResult {
         match (self, other) {
             (Self::Float(l0), Self::Float(r0)) => l0 == r0,
             (Self::Value(l0), Self::Value(r0)) => l0 == r0,
-            _ => self.int() == other.int(),
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            (Self::String(_), _) | (_, Self::String(_)) => false,
+            _ => self.int().unwrap() == other.int().unwrap(),
         }
     }
 }
@@ -854,7 +901,9 @@ impl std::cmp::PartialOrd for ExprResult {
         match (self, other) {
             (Self::Float(l0), Self::Float(r0)) => l0.partial_cmp(r0),
             (Self::Value(l0), Self::Value(r0)) => l0.partial_cmp(r0),
-            _ => self.float().partial_cmp(&other.float()),
+            (Self::String(l0), Self::String(r0)) => l0.partial_cmp(r0),
+            (Self::String(_), _) | (_, Self::String(_)) => None,
+            _ => self.float().unwrap().partial_cmp(&other.float().unwrap()),
         }
     }
 }
@@ -864,6 +913,7 @@ impl std::fmt::Display for ExprResult {
         match self {
             ExprResult::Float(f2) => write!(f, "{}", f2.into_inner()),
             ExprResult::Value(v) => write!(f, "{}", v),
+            ExprResult::String(v) => write!(f, "\"{}\"", v),
         }
     }
 }
@@ -873,6 +923,8 @@ impl std::fmt::LowerHex for ExprResult {
         match self {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:x}", v),
+            ExprResult::String(v) => write!(f, "STRING REPRESENTATION ISSUE"),
+
         }
     }
 }
@@ -882,18 +934,25 @@ impl std::fmt::UpperHex for ExprResult {
         match self {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:X}", v),
+            ExprResult::String(v) => write!(f, "STRING REPRESENTATION ISSUE"),
         }
     }
 }
 
 impl std::ops::AddAssign for ExprResult {
     fn add_assign(&mut self, rhs: Self) {
-        *self = self.clone().add(rhs) // todo implement in a faster way
+        match self.clone().add(rhs) {
+            Ok(v) => {*self = v},
+            Err(_) => {},
+        }
     }
 }
 
 impl std::ops::SubAssign for ExprResult {
     fn sub_assign(&mut self, rhs: Self) {
-        *self = self.clone().sub(rhs) // todo implement in a faster way
+        match self.clone().sub(rhs) {
+            Ok(v) => {*self = v},
+            Err(_) => {},
+        }
     }
 }

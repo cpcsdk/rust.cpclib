@@ -248,18 +248,18 @@ impl CharsetEncoding {
         match spec {
             CharsetFormat::Reset => self.reset(),
             CharsetFormat::CharsList(l, s) => {
-                let mut s = env.resolve_expr_must_never_fail(s)?.int();
+                let mut s = env.resolve_expr_must_never_fail(s)?.int()?;
                 for c in l.iter() {
                     self.lut.insert(*c, s);
                     s += 1;
                 }
             }
             CharsetFormat::Char(c, i) => {
-                let i = env.resolve_expr_must_never_fail(i)?.int();
+                let i = env.resolve_expr_must_never_fail(i)?.int()?;
                 self.lut.insert(*c, i);
             }
             CharsetFormat::Interval(a, b, s) => {
-                let mut s = env.resolve_expr_must_never_fail(s)?.int();
+                let mut s = env.resolve_expr_must_never_fail(s)?.int()?;
                 for c in *a..=*b {
                     self.lut.insert(c, s);
                     s += 1;
@@ -1310,7 +1310,7 @@ impl Env {
 
     /// TODO set the limit for the current page
     fn visit_limit(&mut self, exp: &Expr) -> Result<(), AssemblerError> {
-        let value = self.resolve_expr_must_never_fail(exp)?.int();
+        let value = self.resolve_expr_must_never_fail(exp)?.int()?;
         self.active_page_info_mut().limit = value as _;
 
         if self.limit_address() <= self.maximum_address() {
@@ -1528,7 +1528,7 @@ impl Env {
         self.output_bytes(&bytes)?;
 
         self.stable_counters
-            .update_counters(self.resolve_expr_may_fail_in_first_pass(count)?.int() as _);
+            .update_counters(self.resolve_expr_may_fail_in_first_pass(count)?.int()? as _);
         Ok(())
     }
 
@@ -1569,11 +1569,11 @@ impl Env {
         boundary: &Expr,
         fill: Option<&Expr>,
     ) -> Result<(), AssemblerError> {
-        let boundary = self.resolve_expr_must_never_fail(boundary)?.int() as u16;
-        let fill = fill
-            .map(|e| self.resolve_expr_may_fail_in_first_pass(e))
-            .map(|e| e.map(|e| e.int()))
-            .unwrap_or(Ok(0))? as u8;
+        let boundary = self.resolve_expr_must_never_fail(boundary)?.int()? as u16;
+        let fill = match fill {
+            Some(fill) => self.resolve_expr_may_fail_in_first_pass(fill)?.int()? as u8,
+            None => 0
+        };
 
         while self.logical_output_address() as u16 % boundary != 0 {
             self.output(fill)?;
@@ -1625,8 +1625,8 @@ impl Env {
 
 
 
-        let start = self.resolve_expr_must_never_fail(start)?.int() as u16;
-        let stop = self.resolve_expr_must_never_fail(stop)?.int() as u16;
+        let start = self.resolve_expr_must_never_fail(start)?.int()? as u16;
+        let stop = self.resolve_expr_must_never_fail(stop)?.int()? as u16;
         let mmr = self.ga_mmr;
 
         if let Some(section) = self.sections.get(name) {
@@ -1674,9 +1674,9 @@ impl Env {
         let value = self.resolve_expr_must_never_fail(&source.into())?;
         if can_override {
             self.symbols_mut()
-                .assign_symbol_to_value(destination, value)?;
+                .assign_symbol_to_value(destination, value.clone())?;
         } else {
-            self.add_symbol_to_symbol_table(destination, value)?;
+            self.add_symbol_to_symbol_table(destination, value.clone())?;
         }
 
         // increase next one
@@ -1684,7 +1684,7 @@ impl Env {
             Some(delta) => self.resolve_expr_must_never_fail(delta)?,
             None => 1.into(),
         };
-        let value = value + delta;
+        let value = (value + delta)?;
         self.symbols_mut().assign_symbol_to_value(source, value)?;
 
         Ok(())
@@ -1704,7 +1704,7 @@ impl Env {
         match exp {
             Some(exp) => {
                 // prefix provided, we explicitely want one configuration
-                let mmr = self.resolve_expr_must_never_fail(exp)?.int();
+                let mmr = self.resolve_expr_must_never_fail(exp)?.int()?;
                 if mmr < 0xc0 || mmr > 0xc7 {
                     return Err(AssemblerError::MMRError { value: mmr });
                 }
@@ -1747,7 +1747,7 @@ impl Env {
             return Err(AssemblerError::NotAllowed);
         }
 
-        let page = self.resolve_expr_must_never_fail(exp)?.int() as u8; // This value MUST be interpretable once executed
+        let page = self.resolve_expr_must_never_fail(exp)?.int()? as u8; // This value MUST be interpretable once executed
 
         eprintln!("Warning need to code sna memory extension if needed");
         self.select_page(page)?;
@@ -1917,8 +1917,8 @@ impl Env {
 
     pub fn visit_protect(&mut self, start: &Expr, stop: &Expr) -> Result<(), AssemblerError> {
         if self.pass.is_first_pass() {
-            let start = self.resolve_expr_must_never_fail(start)?.int() as u16;
-            let stop = self.resolve_expr_must_never_fail(stop)?.int() as u16;
+            let start = self.resolve_expr_must_never_fail(start)?.int()? as u16;
+            let stop = self.resolve_expr_must_never_fail(stop)?.int()? as u16;
 
             self.active_page_info_mut()
                 .protected_areas
@@ -1945,11 +1945,11 @@ impl Env {
                     repr += &char.to_string();
                 }
                 FormattedExpr::Raw(expr) => {
-                    let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int() as f32;
+                    let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int()? as f32;
                     repr += &value.to_string();
                 }
                 FormattedExpr::Formatted(format, expr) => {
-                    let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int() as i32;
+                    let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int()? as i32;
                     repr += &format.string_representation(value);
                 }
             }
@@ -1987,11 +1987,11 @@ impl Env {
         _side: Option<&Expr>,
     ) -> Result<(), AssemblerError> {
         let from = match address {
-            Some(address) => Some(self.resolve_expr_must_never_fail(address)?.int()),
+            Some(address) => Some(self.resolve_expr_must_never_fail(address)?.int()?),
             None => None,
         };
         let size = match size {
-            Some(size) => Some(self.resolve_expr_must_never_fail(size)?.int()),
+            Some(size) => Some(self.resolve_expr_must_never_fail(size)?.int()?),
             None => None,
         };
 
@@ -2143,7 +2143,7 @@ impl Env {
 impl Env {
     fn assemble_nop(&self, kind: Mnemonic, count: Option<&Expr>) -> Result<Bytes, AssemblerError> {
         let count = match count {
-            Some(count) => self.resolve_expr_must_never_fail(count)?.int(),
+            Some(count) => self.resolve_expr_must_never_fail(count)?.int()?,
             None => 1,
         };
         let mut bytes = Bytes::new();
@@ -2618,7 +2618,7 @@ impl Env {
         code: &[T],
         span: Option<Z80Span>,
     ) -> Result<(), AssemblerError> {
-        while self.resolve_expr_must_never_fail(cond)?.bool() {
+        while self.resolve_expr_must_never_fail(cond)?.bool()? {
             // generate the bytes
             self.visit_listing(code)
                 .map_err(|e| AssemblerError::WhileIssue {
@@ -2725,7 +2725,7 @@ impl Env {
                 },
                 None => error,
             })?
-            .int();
+            .int()?;
 
         // do not change the output address
         {
@@ -2759,7 +2759,7 @@ impl Env {
             i = i + 1;
             self.inner_visit_repeat(None, None, i as _, code, span.clone())?;
             let res = self.resolve_expr_must_never_fail(cond)?;
-            if res.bool() {
+            if res.bool()? {
                 break;
             }
         }
@@ -2777,7 +2777,7 @@ impl Env {
         span: Option<Z80Span>,
     ) -> Result<(), AssemblerError> {
         // get the number of loops
-        let count = self.resolve_expr_must_never_fail(count)?.int();
+        let count = self.resolve_expr_must_never_fail(count)?.int()?;
 
         // get the counter name of any
         let counter_name = counter.as_ref().map(|counter| format!("{{{}}}", counter));
@@ -2804,7 +2804,7 @@ impl Env {
         for i in 0..count {
             self.inner_visit_repeat(
                 counter_name,
-                Some(counter_value),
+                Some(counter_value.clone()),
                 i as _,
                 code,
                 span.clone(),
@@ -2900,7 +2900,7 @@ impl Env {
     }
 
     fn visit_run(&mut self, address: &Expr, ga: Option<&Expr>) -> Result<(), AssemblerError> {
-        let address = self.resolve_expr_may_fail_in_first_pass(address)?.int();
+        let address = self.resolve_expr_may_fail_in_first_pass(address)?.int()?;
 
         if self.run_options.is_some() {
             return Err(AssemblerError::RunAlreadySpecified);
@@ -2913,7 +2913,7 @@ impl Env {
                 self.run_options = Some((address as _, None));
             }
             Some(ga_expr) => {
-                let ga_expr = self.resolve_expr_may_fail_in_first_pass(ga_expr)?.int();
+                let ga_expr = self.resolve_expr_may_fail_in_first_pass(ga_expr)?.int()?;
                 self.sna.set_value(SnapshotFlag::GA_RAMCFG, address as _)?;
                 self.run_options = Some((address as _, Some(ga_expr as _)));
             }
@@ -2978,7 +2978,7 @@ pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), Assembl
                 env.update_dollar();
             }
             _ => {
-                let val = env.resolve_expr_may_fail_in_first_pass(exp)?.int() & mask;
+                let val = env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & mask;
                 if mask == 0xff {
                     env.output(val as u8)?;
                 } else {
@@ -3101,7 +3101,7 @@ pub fn assemble_defs_item(
     env: &mut Env,
 ) -> Result<Bytes, AssemblerError> {
     let count = match env.resolve_expr_must_never_fail(expr) {
-        Ok(amount) => amount.int(),
+        Ok(amount) => amount.int()?,
         Err(e) => {
             env.add_error_discardable_one_pass(e)?;
             *env.request_additional_pass.write().unwrap() = true; // we expect to obtain this value later
@@ -3113,7 +3113,7 @@ pub fn assemble_defs_item(
     } else {
         let value = env
             .resolve_expr_may_fail_in_first_pass(fill.unwrap())?
-            .int();
+            .int()?;
         (value & 0xff) as u8
     };
 
@@ -3129,14 +3129,14 @@ pub fn assemble_align(
     fill: Option<&Expr>,
     env: &Env,
 ) -> Result<Bytes, AssemblerError> {
-    let expression = env.resolve_expr_must_never_fail(expr)?.int() as u16;
+    let expression = env.resolve_expr_must_never_fail(expr)?.int()? as u16;
     let current = env.symbols().current_address()?;
     let value = if fill.is_none() {
         0
     } else {
         let value = env
             .resolve_expr_may_fail_in_first_pass(fill.unwrap())?
-            .int();
+            .int()?;
         (value & 0xff) as u8
     };
 
@@ -3277,11 +3277,11 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
         }
         env.logical_output_address() as i32
     } else {
-        env.resolve_expr_must_never_fail(address)?.int()
+        env.resolve_expr_must_never_fail(address)?.int()?
     };
 
     let output_adr = if address2.is_some() {
-        env.resolve_expr_must_never_fail(address2.unwrap())?.int()
+        env.resolve_expr_must_never_fail(address2.unwrap())?.int()?
     } else {
         code_adr.clone()
     };
@@ -3394,7 +3394,7 @@ fn assemble_inc_dec(mne: Mnemonic, arg1: &DataAccess, env: &Env) -> Result<Bytes
         }
 
         DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-            let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+            let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
 
             bytes.push(indexed_register16_to_code(*reg));
             bytes.push(if is_inc { 0x34 } else { 0x35 });
@@ -3462,7 +3462,7 @@ fn assemble_rst(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
     let val = env
         .resolve_expr_may_fail_in_first_pass(arg1.get_expression().unwrap())?
-        .int();
+        .int()?;
 
     let p = match val {
         0x00 => 0b000,
@@ -3496,7 +3496,7 @@ fn assemble_im(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
     let val = env
         .resolve_expr_may_fail_in_first_pass(arg1.get_expression().unwrap())?
-        .int();
+        .int()?;
 
     let code = match val {
         0x00 => 0x46,
@@ -3558,7 +3558,7 @@ pub fn assemble_call_jr_or_jp(
 
     // Treat address
     if let DataAccess::Expression(ref e) = arg2 {
-        let address = env.resolve_expr_may_fail_in_first_pass(e)?.int();
+        let address = env.resolve_expr_may_fail_in_first_pass(e)?.int()?;
         if is_jr {
             let relative = if e.is_relative() {
                 address as u8
@@ -3610,7 +3610,7 @@ pub fn assemble_call_jr_or_jp(
 fn assemble_djnz(arg1: &DataAccess, env: &Env) -> Result<Bytes, AssemblerError> {
     if let DataAccess::Expression(ref expr) = arg1 {
         let mut bytes = Bytes::new();
-        let address = env.resolve_expr_may_fail_in_first_pass(expr)?.int();
+        let address = env.resolve_expr_may_fail_in_first_pass(expr)?.int()?;
         let relative = if expr.is_relative() {
             address as u8
         } else {
@@ -3643,7 +3643,7 @@ impl Env {
                 add_byte(&mut bytes, 0xfe);
                 add_byte(
                     &mut bytes,
-                    self.resolve_expr_may_fail_in_first_pass(exp)?.int() as _,
+                    self.resolve_expr_may_fail_in_first_pass(exp)?.int()? as _,
                 );
             }
 
@@ -3656,7 +3656,7 @@ impl Env {
                 add_byte(&mut bytes, 0xbe);
                 add_byte(
                     &mut bytes,
-                    self.resolve_expr_may_fail_in_first_pass(idx)?.int() as _,
+                    self.resolve_expr_may_fail_in_first_pass(idx)?.int()? as _,
                 );
             }
 
@@ -3671,7 +3671,7 @@ impl Env {
 
         match arg {
             DataAccess::Expression(ref exp) => {
-                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
                 bytes.push(0xd6);
                 bytes.push(val);
             }
@@ -3690,7 +3690,7 @@ impl Env {
             }
 
             DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
 
                 bytes.push(indexed_register16_to_code(*reg));
                 bytes.push(0x96);
@@ -3723,7 +3723,7 @@ impl Env {
                 }
 
                 DataAccess::Expression(ref exp) => {
-                    let val = self.resolve_expr_may_fail_in_first_pass(exp)?.int() as u8;
+                    let val = self.resolve_expr_may_fail_in_first_pass(exp)?.int()? as u8;
                     bytes.push(0xde);
                     bytes.push(val);
                 }
@@ -3735,7 +3735,7 @@ impl Env {
                 DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
                     bytes.push(indexed_register16_to_code(*reg));
                     bytes.push(0x9e);
-                    let val = self.resolve_expr_may_fail_in_first_pass(exp)?.int() as u8;
+                    let val = self.resolve_expr_may_fail_in_first_pass(exp)?.int()? as u8;
                     bytes.push(val);
                 }
 
@@ -3796,7 +3796,7 @@ impl Env {
             // add prefix for ix/iy
             match target {
                 DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                    let val = self.resolve_expr_may_fail_in_first_pass(exp)?.int() as u8;
+                    let val = self.resolve_expr_may_fail_in_first_pass(exp)?.int()? as u8;
                     bytes.push(indexed_register16_to_code(*reg));
                     add_byte(&mut bytes, 0xcb);
                     bytes.push(val);
@@ -3880,14 +3880,14 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             }
 
             DataAccess::Expression(ref exp) => {
-                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
 
                 bytes.push(0b0000_0110 | (dst << 3));
                 bytes.push(val);
             }
 
             DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                let val = env.resolve_expr_may_fail_in_first_pass(exp)?.int();
+                let val = env.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
 
                 add_index_register_code(&mut bytes, *reg);
                 add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
@@ -3913,7 +3913,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
             DataAccess::Memory(ref expr) => {
                 // dst is A
-                let val = env.resolve_expr_may_fail_in_first_pass(expr)?.int();
+                let val = env.resolve_expr_may_fail_in_first_pass(expr)?.int()?;
                 add_byte(&mut bytes, 0x3a);
                 add_word(&mut bytes, val as _);
             }
@@ -3943,7 +3943,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
         match arg2 {
             DataAccess::Expression(ref exp) => {
-                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xffff) as u16;
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xffff) as u16;
 
                 add_byte(&mut bytes, 0b0000_0001 | (dst_code << 4));
                 add_word(&mut bytes, val);
@@ -3979,7 +3979,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             }
 
             DataAccess::Memory(ref expr) => {
-                let val = (env.resolve_expr_may_fail_in_first_pass(expr)?.int() & 0xffff) as u16;
+                let val = (env.resolve_expr_may_fail_in_first_pass(expr)?.int()? & 0xffff) as u16;
 
                 if let Register16::Hl = dst {
                     add_byte(&mut bytes, 0x2a);
@@ -4000,7 +4000,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
         add_byte(&mut bytes, indexed_register16_to_code(dst.complete()));
         match arg2 {
             DataAccess::Expression(ref exp) => {
-                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
                 bytes.push(0b0000_0110 | (indexregister8_to_code(*dst) << 3));
                 bytes.push(val);
             }
@@ -4037,7 +4037,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
         match arg2 {
             DataAccess::Expression(ref exp) => {
-                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xffff) as u16;
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xffff) as u16;
 
                 add_byte(&mut bytes, code);
                 add_byte(&mut bytes, 0x21);
@@ -4045,7 +4045,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             }
 
             DataAccess::Memory(ref exp) => {
-                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xffff) as u16;
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xffff) as u16;
 
                 add_byte(&mut bytes, code);
                 add_byte(&mut bytes, 0x2a);
@@ -4064,7 +4064,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
                     let code = 0b0111_0000 | src;
                     bytes.push(code);
                 } else if let DataAccess::Expression(ref exp) = arg2 {
-                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
                     bytes.push(0x36);
                     bytes.push(val);
                 }
@@ -4089,7 +4089,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
             let code = 0b0111_0000 | src;
             bytes.push(code);
         } else if let DataAccess::Expression(ref exp) = arg2 {
-            let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+            let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
             bytes.push(0x36);
             bytes.push(val);
         }
@@ -4097,11 +4097,11 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
     // Destination is memory form ix/iy + n
     else if let DataAccess::IndexRegister16WithIndex(ref reg, ref exp) = arg1 {
         add_byte(&mut bytes, indexed_register16_to_code(*reg));
-        let delta = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+        let delta = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
 
         match arg2 {
             DataAccess::Expression(ref exp) => {
-                let value = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+                let value = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
                 add_byte(&mut bytes, 0x36);
                 add_byte(&mut bytes, delta);
                 add_byte(&mut bytes, value);
@@ -4119,7 +4119,7 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
     }
     // Destination is memory
     else if let DataAccess::Memory(ref exp) = arg1 {
-        let address = env.resolve_expr_may_fail_in_first_pass(exp)?.int();
+        let address = env.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
 
         match arg2 {
             DataAccess::IndexRegister16(IndexRegister16::Ix) => {
@@ -4372,7 +4372,7 @@ fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
             DataAccess::PortN(ref exp) => {
                 if let DataAccess::Register8(Register8::A) = arg1 {
-                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
                     bytes.push(0xDB);
                     bytes.push(val);
                 }
@@ -4414,7 +4414,7 @@ fn assemble_out(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes
 
             DataAccess::PortN(ref exp) => {
                 if let DataAccess::Register8(Register8::A) = arg2 {
-                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff) as u8;
+                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff) as u8;
                     bytes.push(0xD3);
                     bytes.push(val);
                 }
@@ -4519,7 +4519,7 @@ fn assemble_logical_operator(
                 Mnemonic::Xor => 0xEE,
                 _ => unreachable!(),
             };
-            let value = env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff;
+            let value = env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff;
             bytes.push(base);
             bytes.push(value as u8);
         }
@@ -4529,7 +4529,7 @@ fn assemble_logical_operator(
         }
 
         DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-            let value = env.resolve_expr_may_fail_in_first_pass(exp)?.int() & 0xff;
+            let value = env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xff;
             bytes.push(indexed_register16_to_code(*reg));
             bytes.push(memory_code());
             bytes.push(value as u8);
@@ -4576,7 +4576,7 @@ fn assemble_add_or_adc(
                 }
 
                 DataAccess::IndexRegister16WithIndex(ref reg, ref exp) => {
-                    let val = env.resolve_expr_may_fail_in_first_pass(exp)?.int();
+                    let val = env.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
 
                     // TODO check if the code is ok
                     bytes.push(indexed_register16_to_code(*reg));
@@ -4589,7 +4589,7 @@ fn assemble_add_or_adc(
                 }
 
                 DataAccess::Expression(ref exp) => {
-                    let val = env.resolve_expr_may_fail_in_first_pass(exp)?.int() as u8;
+                    let val = env.resolve_expr_may_fail_in_first_pass(exp)?.int()? as u8;
                     if is_add {
                         bytes.push(0b1100_0110);
                     } else {
@@ -4688,7 +4688,7 @@ fn assemble_bit_res_or_set(
     // Get the bit of interest
     let bit = match arg1 {
         DataAccess::Expression(ref e) => {
-            let bit = (env.resolve_expr_may_fail_in_first_pass(e)?.int() & 0xff) as u8;
+            let bit = (env.resolve_expr_may_fail_in_first_pass(e)?.int()? & 0xff) as u8;
             if bit > 7 {
                 return Err(AssemblerError::InvalidArgument {
                     msg: format!("{}: {} is an invalid value", mnemonic.to_string(), bit),
@@ -4726,7 +4726,7 @@ fn assemble_bit_res_or_set(
         if let DataAccess::IndexRegister16WithIndex(ref reg, delta) = arg2 {
             bytes.push(indexed_register16_to_code(*reg));
             add_byte(&mut bytes, 0xcb);
-            let delta = (env.resolve_expr_may_fail_in_first_pass(delta)?.int() & 0xff) as u8;
+            let delta = (env.resolve_expr_may_fail_in_first_pass(delta)?.int()? & 0xff) as u8;
             add_byte(&mut bytes, delta);
 
             // patch the code for hidden opcode

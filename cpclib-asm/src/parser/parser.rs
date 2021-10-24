@@ -5,6 +5,7 @@ use cpclib_common::dec_number;
 use cpclib_common::hex_number;
 use cpclib_common::itertools::chain;
 use cpclib_common::itertools::Itertools;
+use cpclib_common::lazy_static;
 use cpclib_common::nom::branch::*;
 use cpclib_common::nom::bytes::complete::tag;
 use cpclib_common::nom::bytes::complete::tag_no_case;
@@ -47,8 +48,8 @@ pub mod error_code {
     pub const UNABLE_TO_PARSE_INNER_CONTENT: u32 = 130;
 }
 
-const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
-    //Registers
+// TODO search why they are listed to forbid label naming. Delete it if unneeded
+const REGISTERS: &[&str] = &[
     "AF",
     "HL",
     "DE",
@@ -57,8 +58,9 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "IY",
     "IXL",
     "IXH",
-    "LET",
-    //Instructions
+];
+
+const INSTRUCTIONS: &[&str] = &[
     "ADC",
     "ADD",
     "AND",
@@ -128,14 +130,19 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "XOR",
     "SL1",
     "SLL",
-    "EXA",
-    // Directives
+    "EXA"
+];
+
+  
+
+const STAND_ALONE_DIRECTIVE: &[&str] = &[
     "ALIGN",
     "ASSERT",
     "BANK",
     "BANKSET",
     "BINCLUDE",
     "BREAK",
+    "BREAKPOINT",
     "BUILDSNA",
     "BYTE",
     "CASE",
@@ -145,27 +152,18 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "DEFB",
     "DEFS",
     "DEFW",
+    "DEFSECTION",
     "DS",
     "DW",
     "ELSE",
-    "ENDF",
-    "ENDFUNCTION",
-    "ENDIF",
-    "ENDM",
     "EXPORT",
     "FAIL",
-    "IEND",
-    "IF",
-    "IFDEF",
-    "IFNDEF",
-    "IFUSED",
     "INCBIN",
     "INCLUDE",
-    "ITERATE",
+    "LET",
     "LIMIT",
     "LIST",
     "LZEXO",
-    "MACRO",
     "MODULE",
     "NOEXPORT",
     "NOLIST",
@@ -184,48 +182,83 @@ const IMPOSSIBLE_LABEL_NAME: &[&str] = &[
     "SECTION",
     "SNASET",
     "STR",
-    "STRUCT",
-    "SWITCH",
     "TICKER",
     "UNDEF",
     "UNTIL",
     "WAITNOPS",
-    "WEND",
-    "WHILE",
     "WORD",
     "WRITE DIRECT",
     "WRITE",
 ];
 
-const FIRST_DIRECTIVE: &[&str] = &[
-    "IF", "IFDEF", "IFNDEF", "ITERATE", "ITER", "REPEAT", "REPT", //   "REP",
-    "PHASE", "MODULE", "WHILE", "LZAPU", "LZEXO", "LZ4", "LZ48", "LZ49", "LZX7", "SWITCH",
+const START_DIRECTIVE: &[&str] = &[
+    "IF",
+    "IFDEF", 
+    "IFNDEF", 
+    "IFUSED",
+    "ITER", 
+    "ITERATE",
+    "LZ4", 
+    "LZ48", 
+    "LZ49", 
+    "LZAPU", 
+    "LZEXO", 
+    "LZX7", 
+    "MACRO",
+    "MODULE", 
+    "PHASE", 
+    "REPEAT", 
+    "REPT", 
+    "STRUCT",
+    "SWITCH",
+    "WHILE", 
 ];
 
 // This table is supposed to contain the keywords that finish a section
-const FINAL_DIRECTIVE: &[&str] = &[
-    "UNTIL",
-    "REND",
-    "ENDR",
-    "ENDREPEAT",
-    "IEND",
-    "ENDI",
-    "ENDITERATE",
-    "ENDITER",
-    "ENDREP", // repeat directive
-    "DEPHASE",
-    "REND",  // rorg directive
-    "ENDIF", // if directive
-    "ELSE",
-    "WEND",
-    "LZCLOSE",
-    "ENDMODULE",
+const END_DIRECTIVE: &[&str] = &[
+    "BREAK",
     "CASE",
     "DEFAULT",
-    "BREAK",
+    "DEPHASE",
+    "ELSE",
+    "ENDF", 
+    "ENDFUNCTION",
+    "ENDI",
+    "ENDIF",
+    "ENDIF", // if directive
+    "ENDITER",
+    "ENDITERATE",
+    "ENDM",
+    "ENDMODULE",
+    "ENDR",
+    "ENDREP", // repeat directive
+    "ENDREPEAT",
     "ENDSWITCH",
-    "ENDF", "ENDFUNCTION"
+    "IEND",
+    "LZCLOSE",
+    "REND",  // rorg directive
+    "UNTIL",
+    "WEND",
 ];
+
+lazy_static::lazy_static! {
+    static ref _DOTTED_STAND_ALONE_DIRECTIVE: Vec<String> = STAND_ALONE_DIRECTIVE
+                                                .iter()
+                                                .map(|d| format!(".{}", d))
+                                                .collect_vec();
+    static ref _DOTTED_START_DIRECTIVE: Vec<String> = START_DIRECTIVE
+                                                .iter()
+                                                .map(|d| format!(".{}", d))
+                                                .collect_vec();
+    static ref _DOTTED_END_DIRECTIVE: Vec<String> = END_DIRECTIVE
+                                                .iter()
+                                                .map(|d| format!(".{}", d))
+                                                .collect_vec();
+    static ref DOTTED_STAND_ALONE_DIRECTIVE: Vec<&'static str> = _DOTTED_STAND_ALONE_DIRECTIVE.iter().map(String::as_str).collect_vec();                                        
+    static ref DOTTED_START_DIRECTIVE: Vec<&'static str> = _DOTTED_START_DIRECTIVE.iter().map(String::as_str).collect_vec();                                        
+    static ref DOTTED_END_DIRECTIVE: Vec<&'static str> = dbg!(_DOTTED_END_DIRECTIVE.iter().map(String::as_str).collect_vec());                                        
+}
+
 pub fn parse_z80_strrc_with_contextrc(
     code: Arc<String>,
     ctx: Arc<ParserContext>,
@@ -471,7 +504,7 @@ pub fn parse_function_listing(input: Z80Span) -> IResult<Z80Span, LocatedListing
 
 pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let function_start = input.clone();
-    let (input, _) = preceded(space0, parse_word("FUNCTION"))(input)?;
+    let (input, _) = preceded(space0, parse_directive_word("FUNCTION"))(input)?;
     let (input, name) = cut(context("FUNCTION: wrong name", parse_label(false)))(input)?; // TODO use a specific function for that
 
     let (input, arguments) = cut(context("FUNCTION: wrong parameters", preceded(
@@ -491,7 +524,7 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseE
     let (before_expr, listing) = cut(context("FUNCTION: invalid content", parse_function_listing))(input)?;
     
     let (input, _) = many0(alt((space1, line_ending, tag(":"))))(before_expr)?;
-    let (input, _) = alt((parse_word("ENDF"), parse_word("ENDFUNCTION")))(input)?;
+    let (input, _) = alt((parse_directive_word("ENDF"), parse_directive_word("ENDFUNCTION")))(input)?;
     
 
 
@@ -509,7 +542,7 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseE
 /// TODO
 pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let dir_start = input.clone();
-    let (input, _) = preceded(space0, parse_word("MACRO"))(input)?;
+    let (input, _) = preceded(space0, parse_directive_word("MACRO"))(input)?;
 
     // macro name
     let (input, name) = cut(context("MACRO: wrong name", parse_label(false)))(input)?; // TODO use a specific function for that
@@ -534,7 +567,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
             alt((space0, line_ending, tag(":"))),
             many_till(
                 take(1usize),
-                alt((tag_no_case("ENDM"), tag_no_case("MEND"))),
+                alt((parse_directive_word("ENDM"), parse_directive_word("MEND"))),
             ),
         ),
     ))(input)?;
@@ -567,13 +600,13 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
 /// TODO
 pub fn parse_while(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let while_start = input.clone();
-    let (input, _) = parse_word("WHILE")(input)?;
+    let (input, _) = parse_directive_word("WHILE")(input)?;
 
     let (input, cond) = cut(context("WHILE: error in condition", expr))(input)?;
     let (input, inner) = cut(context("WHILE: issue in the content", inner_code))(input)?;
     let (input, _) = cut(context(
         "WHILE: not closed",
-        preceded(space0, parse_word("WEND")),
+        preceded(space0, parse_directive_word("WEND")),
     ))(input)?;
 
     Ok((
@@ -589,13 +622,13 @@ pub fn parse_while(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
 
 pub fn parse_module(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let module_start = input.clone();
-    let (input, _) = parse_word("MODULE")(input)?;
+    let (input, _) = parse_directive_word("MODULE")(input)?;
 
     let (input, name) = cut(context("MODULE: error in naming", parse_label(false)))(input)?;
     let (input, inner) = cut(context("MODULE: issue in the content", inner_code))(input)?;
     let (input, _) = cut(context(
         "MODULE: not closed",
-        preceded(space0, parse_word("ENDMODULE")),
+        preceded(space0, parse_directive_word("ENDMODULE")),
     ))(input)?;
 
     Ok((
@@ -617,12 +650,12 @@ pub fn parse_crunched_section(
     let (input, kind) = preceded(
         space0,
         alt((
-            map(parse_word("LZEXO"), |_| CrunchType::LZEXO),
-            map(parse_word("LZ4"), |_| CrunchType::LZ4),
-            map(parse_word("LZ48"), |_| CrunchType::LZ48),
-            map(parse_word("LZ49"), |_| CrunchType::LZ49),
-            map(parse_word("LZX7"), |_| CrunchType::LZX7),
-            map(parse_word("LZAPU"), |_| CrunchType::LZAPU),
+            map(parse_directive_word("LZEXO"), |_| CrunchType::LZEXO),
+            map(parse_directive_word("LZ4"), |_| CrunchType::LZ4),
+            map(parse_directive_word("LZ48"), |_| CrunchType::LZ48),
+            map(parse_directive_word("LZ49"), |_| CrunchType::LZ49),
+            map(parse_directive_word("LZX7"), |_| CrunchType::LZX7),
+            map(parse_directive_word("LZAPU"), |_| CrunchType::LZAPU),
         )),
     )(input)?;
 
@@ -633,7 +666,7 @@ pub fn parse_crunched_section(
 
     let (input, _) = cut(context(
         "REPEAT: not closed",
-        tuple((space0, parse_word("LZCLOSE"), space0)),
+        tuple((space0, parse_directive_word("LZCLOSE"), space0)),
     ))(input)?;
 
     Ok((
@@ -650,7 +683,7 @@ pub fn parse_crunched_section(
 /// Parse the switch directive
 pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let (switch_start, _) = many0(alt((space1, line_ending)))(input)?;
-    let (input, _) = parse_word("SWITCH")(switch_start.clone())?;
+    let (input, _) = parse_directive_word("SWITCH")(switch_start.clone())?;
 
     let (input, value) = cut(context("SWITCH: tested value", preceded(space0, expr)))(input)?;
 
@@ -668,10 +701,10 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         let (input, endswitch) = if default_listing.is_some() {
             cut(context(
                 "SWITCH: endswitch not present after default listing.",
-                preceded(space0, map(parse_word("ENDSWITCH"), |_| true)),
+                preceded(space0, map(parse_directive_word("ENDSWITCH"), |_| true)),
             ))(input)?
         } else {
-            preceded(space0, map(opt(parse_word("ENDSWITCH")), |e| e.is_some()))(input)?
+            preceded(space0, map(opt(parse_directive_word("ENDSWITCH")), |e| e.is_some()))(input)?
         };
         if endswitch {
             return Ok((
@@ -680,12 +713,12 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
             ));
         }
 
-        let (input, value) = preceded(space0, opt(parse_word("CASE")))(input)?;
+        let (input, value) = preceded(space0, opt(parse_directive_word("CASE")))(input)?;
         loop_start = if value.is_some() {
             let (input, value) =
                 cut(context("SWITCH: case value error.", preceded(space0, expr)))(input)?;
             let (input, inner) = cut(context("SWITCH: error in case code", inner_code))(input)?;
-            let (input, do_break) = opt(preceded(space0, parse_word("BREAK")))(input)?;
+            let (input, do_break) = opt(preceded(space0, parse_directive_word("BREAK")))(input)?;
 
             cases_listing.push((
                 value,
@@ -695,7 +728,7 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
             ));
             input
         } else {
-            let (input, _) = preceded(space0, parse_word("DEFAULT"))(input)?;
+            let (input, _) = preceded(space0, parse_directive_word("DEFAULT"))(input)?;
             let (input, default) =
                 cut(context("SWITCH: error in default case", inner_code))(input)?;
             default_listing = Some(
@@ -711,7 +744,7 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
     let repeat_start = input.clone();
     let (input, _) = preceded(
         space0,
-        alt((parse_word("REP"), parse_word("REPT"), parse_word("REPEAT"))),
+        alt((parse_directive_word("REP"), parse_directive_word("REPT"), parse_directive_word("REPEAT"))),
     )(input)?;
 
     let (input, count) = opt(expr)(input)?;
@@ -729,11 +762,11 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
                 preceded(
                     space0,
                     alt((
-                        parse_word("ENDREPEAT"),
-                        parse_word("ENDREPT"),
-                        parse_word("ENDREP"),
-                        parse_word("ENDR"),
-                        parse_word("REND"),
+                        parse_directive_word("ENDREPEAT"),
+                        parse_directive_word("ENDREPT"),
+                        parse_directive_word("ENDREP"),
+                        parse_directive_word("ENDR"),
+                        parse_directive_word("REND"),
                     )),
                 ),
             ))(input)?;
@@ -756,7 +789,7 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
 
             let (input, _) = cut(context(
                 "REPEAT ... UNTIL: not closed",
-                delimited(space0, parse_word("UNTIL"), space0),
+                delimited(space0, parse_directive_word("UNTIL"), space0),
             ))(input)?;
             let (input, cond) = cut(context("REPEAT UNTIL: condition error", expr))(input)?;
             Ok((
@@ -774,7 +807,7 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
 
 pub fn parse_iterate(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let iterate_start = input.clone();
-    let (input, _) = preceded(space0, alt((parse_word("ITERATE"), parse_word("ITER"))))(input)?;
+    let (input, _) = preceded(space0, alt((parse_directive_word("ITERATE"), parse_directive_word("ITER"))))(input)?;
 
     let (input, counter) = cut(context(
         "ITERATE: issue in the counter",
@@ -790,10 +823,10 @@ pub fn parse_iterate(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
         tuple((
             space0,
             alt((
-                parse_word("ENDITERATE"),
-                parse_word("ENDITER"),
-                parse_word("ENDI"),
-                parse_word("IEND"),
+                parse_directive_word("ENDITERATE"),
+                parse_directive_word("ENDITER"),
+                parse_directive_word("ENDI"),
+                parse_directive_word("IEND"),
             )),
             space0,
         )),
@@ -1111,7 +1144,7 @@ pub fn parse_z80_line_label_only(
 ) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     let before_label = input.clone();
 
-    let (input, r#let) = opt(delimited(space0, parse_word("LET"), space0))(input)?;
+    let (input, r#let) = opt(delimited(space0, parse_directive_word("LET"), space0))(input)?;
     let _after_let = input.clone();
     let (input, label) = context("Label issue", preceded(space0, parse_label(true)))(input)?;
 
@@ -1128,18 +1161,18 @@ pub fn parse_z80_line_label_only(
     // Manage Equ
     // BUG Equ and = are supposed to be different
     let (input, label_modifier) = opt(alt((
-        map(preceded(space1, parse_word("DEFL")), |_| LabelModifier::Equ),
-        map(preceded(space1, parse_word("EQU")), |_| LabelModifier::Equ),
-        map(preceded(space1, parse_word("SETN")), |_| {
+        map(preceded(space1, parse_directive_word("DEFL")), |_| LabelModifier::Equ),
+        map(preceded(space1, parse_directive_word("EQU")), |_| LabelModifier::Equ),
+        map(preceded(space1, parse_directive_word("SETN")), |_| {
             LabelModifier::SetN
         }),
-        map(preceded(space1, parse_word("NEXT")), |_| {
+        map(preceded(space1, parse_directive_word("NEXT")), |_| {
             LabelModifier::Next
         }),
         map(
             delimited(
                 space1,
-                parse_word("SET"),
+                parse_directive_word("SET"),
                 not(tuple((space0, expr, parse_comma))),
             ),
             |_| LabelModifier::Set,
@@ -1223,7 +1256,7 @@ pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z8
 }
 
 pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = parse_word("CHARSET")(input)?;
+    let (input, _) = parse_directive_word("CHARSET")(input)?;
 
     let (input, charset) = opt(parse_charset_string)(input)?;
 
@@ -1256,7 +1289,7 @@ pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, Token, VerboseEr
 pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let include_start = input.clone();
     let (input, fname) = preceded(
-        alt((parse_word("INCLUDE"), parse_word("READ"))),
+        alt((parse_directive_word("INCLUDE"), parse_word("READ"))),
         parse_fname,
     )(input)?;
 
@@ -1362,7 +1395,7 @@ pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
 
     let (input, (save_kind, filename)) = pair(
         alt((
-            map(parse_word("SAVE"), |_| SaveKind::Save),
+            map(parse_directive_word("SAVE"), |_| SaveKind::Save),
             map(tuple((parse_word("WRITE"), parse_word("DIRECT"))), |_| {
                 SaveKind::WriteDirect
             }),
@@ -1434,20 +1467,20 @@ pub fn parse_undef(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
 /// Parse return from a function
 pub fn parse_return(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, expr) =
-        preceded(parse_word("RETURN"), expr)(input)?;
+        preceded(parse_directive_word("RETURN"), expr)(input)?;
 
     Ok((input, Token::Return(expr)))
 }
 
 pub fn parse_section(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = parse_word("SECTION")(input)?;
+    let (input, _) = parse_directive_word("SECTION")(input)?;
     let (input, name) = preceded(space0, parse_label(false))(input)?;
 
     Ok((input, Token::Section(name.to_string())))
 }
 
 pub fn parse_range(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = parse_word("RANGE")(input)?;
+    let (input, _) = alt((parse_directive_word("DEFSECTION"), parse_directive_word("RANGE")))(input)?;
 
     let (input, start) = cut(context(
         "RANGE: wrong start address",
@@ -1673,12 +1706,12 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
 
         // Gest the kind of test to do - it can fail after an else
         let if_token_or_error = alt((
-            map(parse_word("IF"), |_| KindOfConditional::If),
-            map(parse_word("IFNOT"), |_| KindOfConditional::IfNot),
-            map(parse_word("IFDEF"), |_| KindOfConditional::IfDef),
-            map(parse_word("IFNDEF"), |_| KindOfConditional::IfNdef),
-            map(parse_word("IFUSED"), |_| KindOfConditional::IfUsed),
-            map(parse_word("IFNUSED"), |_| KindOfConditional::IfNused),
+            map(parse_directive_word("IF"), |_| KindOfConditional::If),
+            map(parse_directive_word("IFNOT"), |_| KindOfConditional::IfNot),
+            map(parse_directive_word("IFDEF"), |_| KindOfConditional::IfDef),
+            map(parse_directive_word("IFNDEF"), |_| KindOfConditional::IfNdef),
+            map(parse_directive_word("IFUSED"), |_| KindOfConditional::IfUsed),
+            map(parse_directive_word("IFNUSED"), |_| KindOfConditional::IfNused),
         ))(input_loop.clone());
 
         if first_loop && if_token_or_error.is_err() {
@@ -1719,7 +1752,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
 
             let (input, r#else) = opt(preceded(
                 many0(alt((space1, line_ending, tag(":")))),
-                parse_word("ELSE"),
+                parse_directive_word("ELSE"),
             ))(input)?;
             input_loop = input;
             if r#else.is_none() {
@@ -1739,7 +1772,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbo
                 delimited(space0, tag(":"), space0),
                 map(delimited(space0, parse_comment, line_ending), |_| "".into()),
             ))),
-            cut(preceded(space0, parse_word("ENDIF"))),
+            cut(preceded(space0, parse_directive_word("ENDIF"))),
         )),
     )(input_loop)?;
 
@@ -1777,13 +1810,13 @@ fn parse_conditional_condition(
 
 /// Parse a breakpint instruction
 pub fn parse_breakpoint(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    map(preceded(parse_word("BREAKPOINT"), opt(expr)), |exp| {
+    map(preceded(parse_directive_word("BREAKPOINT"), opt(expr)), |exp| {
         Token::Breakpoint(exp)
     })(input)
 }
 
 pub fn parse_bankset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = parse_word("bankset")(input)?;
+    let (input, _) = parse_directive_word("bankset")(input)?;
     let (input, count) = expr(input)?;
 
     Ok((input, Token::Bankset(count)))
@@ -1793,7 +1826,7 @@ pub fn parse_buildsna(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z8
     terminated(
         map(
             preceded(
-                parse_word("BUILDSNA"),
+                parse_directive_word("BUILDSNA"),
                 cut(opt(alt((tag_no_case("V2"), tag_no_case("V3"))))),
             ),
             |v| {
@@ -1814,20 +1847,20 @@ pub fn parse_buildsna(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z8
 }
 
 pub fn parse_run(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, exp) = preceded(parse_word("RUN"), expr)(input)?;
+    let (input, exp) = preceded(parse_directive_word("RUN"), expr)(input)?;
     let (input, ga) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
 
     Ok((input, Token::Run(exp, ga)))
 }
 
 pub fn parse_limit(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, exp) = preceded(parse_word("LIMIT"), expr)(input)?;
+    let (input, exp) = preceded(parse_directive_word("LIMIT"), expr)(input)?;
 
     Ok((input, Token::Limit(exp)))
 }
 
 pub fn parse_waitnops(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, exp) = preceded(parse_word("WAITNOPS"), expr)(input)?;
+    let (input, exp) = preceded(parse_directive_word("WAITNOPS"), expr)(input)?;
 
     Ok((input, Token::WaitNops(exp)))
 }
@@ -1868,7 +1901,7 @@ pub fn parse_stable_ticker_stop(input: Z80Span) -> IResult<Z80Span, Token, Verbo
 }
 
 pub fn parse_bank(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = parse_word("bank")(input)?;
+    let (input, _) = parse_directive_word("bank")(input)?;
     let (input, count) = opt(expr)(input)?;
 
     Ok((input, Token::Bank(count)))
@@ -2097,8 +2130,8 @@ pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
 
 pub fn parse_export(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, code) = alt((
-        map(parse_word("EXPORT"), |_| 0),
-        map(parse_word("NOEXPORT"), |_| 1),
+        map(parse_directive_word("EXPORT"), |_| 0),
+        map(parse_directive_word("NOEXPORT"), |_| 1),
     ))(input)?;
 
     let (input, labels) = cut(context(
@@ -2117,20 +2150,20 @@ pub fn parse_db_or_dw_or_str(input: Z80Span) -> IResult<Z80Span, Token, VerboseE
     let (input, code) = alt((
         map(
             alt((
-                parse_word("BYTE"),
-                parse_word("TEXT"),
-                parse_word("DB"),
-                parse_word("DEFB"),
-                parse_word("DM"),
-                parse_word("DEFM"),
+                parse_directive_word("BYTE"),
+                parse_directive_word("TEXT"),
+                parse_directive_word("DB"),
+                parse_directive_word("DEFB"),
+                parse_directive_word("DM"),
+                parse_directive_word("DEFM"),
             )),
             |_| 0,
         ),
         map(
-            alt((parse_word("WORD"), parse_word("DW"), parse_word("DEFW"))),
+            alt((parse_directive_word("WORD"), parse_directive_word("DW"), parse_directive_word("DEFW"))),
             |_| 1,
         ),
-        map(parse_word("STR"), |_| 2),
+        map(parse_directive_word("STR"), |_| 2),
     ))(input)?;
 
     let (input, expr) = expr_list(input)?;
@@ -2154,9 +2187,13 @@ pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, String, Verbo
     let (input, _) = space0(input)?;
     let (input, name) = parse_label(false)(input)?;
 
-    if !FINAL_DIRECTIVE
-        .iter()
-        .find(|&&a| a.to_lowercase() == name.to_lowercase())
+    let mut end_directive_iter = if input.context().dotted_directive {
+        DOTTED_END_DIRECTIVE.iter()
+    } else {
+        END_DIRECTIVE.iter()
+    };
+    if !end_directive_iter
+        .find(|&&a| a == name.to_uppercase())
         .is_some()
     {
         return Err(Err::Error(VerboseError::from_error_kind(
@@ -2214,11 +2251,8 @@ pub fn parse_macro_or_struct_call(
         let (input, name) = parse_macro_name(input_label.clone())?;
 
         // Check if the macro name is allowed
-        if FIRST_DIRECTIVE
-            .iter()
-            .chain(FINAL_DIRECTIVE.iter())
-            .find(|&&a| a.to_lowercase() == name.to_lowercase())
-            .is_some()
+        if impossible_names(input.context().dotted_directive)
+            .any(|&a| a == name.to_uppercase())
         {
             Err(Err::Failure(cpclib_common::nom::error::VerboseError::<
                 Z80Span,
@@ -2305,6 +2339,21 @@ pub fn parse_macro_or_struct_call(
     }
 }
 
+fn parse_directive_word(
+    name: &'static str,
+) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> + 'static {
+    move |input: Z80Span| {
+        if input.context().dotted_directive {
+            preceded(
+                tag("."),
+                parse_word(name)
+            )(input)
+        } else {
+            parse_word(name)(input)
+        }
+    }
+}
+
 fn parse_word(
     name: &'static str,
 ) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> + 'static {
@@ -2348,7 +2397,7 @@ pub fn expr_list(input: Z80Span) -> IResult<Z80Span, Vec<Expr>, VerboseError<Z80
 
 /// ...
 pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = context("assert", preceded(space0, parse_word("ASSERT")))(input)?;
+    let (input, _) = context("assert", preceded(space0, parse_directive_word("ASSERT")))(input)?;
 
     let (input, expr) = cut(context("ASSERT: expression error", expr))(input)?;
 
@@ -2362,7 +2411,7 @@ pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
 
 /// ...
 pub fn parse_align(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, boundary) = preceded(parse_word("ALIGN"), expr)(input)?;
+    let (input, boundary) = preceded(parse_directive_word("ALIGN"), expr)(input)?;
     let (input, fill) = opt(preceded(parse_comma, expr))(input)?;
 
     Ok((input, Token::Align(boundary, fill)))
@@ -2372,7 +2421,7 @@ pub fn parse_align(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
 pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
         preceded(
-            parse_word("PRINT"),
+            parse_directive_word("PRINT"),
             cut(separated_list1(
                 parse_comma,
                 alt((
@@ -2391,7 +2440,7 @@ pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
 pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
         preceded(
-            parse_word("FAIL"),
+            parse_directive_word("FAIL"),
             cut(separated_list1(
                 delimited(space0, tag(","), space0),
                 alt((
@@ -2457,7 +2506,7 @@ fn parse_comma(input: Z80Span) -> IResult<Z80Span, (), VerboseError<Z80Span>> {
 
 /// ...
 pub fn parse_protect(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, start) = preceded(parse_word("PROTECT"), expr)(input)?;
+    let (input, start) = preceded(parse_directive_word("PROTECT"), expr)(input)?;
 
     let (input, end) = preceded(parse_comma, expr)(input)?;
 
@@ -3137,7 +3186,7 @@ pub fn parse_expr(input: Z80Span) -> IResult<Z80Span, DataAccess, VerboseError<Z
 
 /// Parse standard org directive
 pub fn parse_org(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = parse_word("ORG")(input)?;
+    let (input, _) = parse_directive_word("ORG")(input)?;
 
     let (input, val1) = cut(context("Invalid argument", expr))(input)?;
     let (input, val2) = opt(preceded(parse_comma, expr))(input)?;
@@ -3148,10 +3197,10 @@ pub fn parse_org(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span
 /// Parse defs instruction. TODO add optional parameters
 pub fn parse_defs(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     let (input, _) = alt((
-        parse_word("FILL"),
-        parse_word("DS"),
-        parse_word("DEFS"),
-        parse_word("RMEM"),
+        parse_directive_word("FILL"),
+        parse_directive_word("DS"),
+        parse_directive_word("DEFS"),
+        parse_directive_word("RMEM"),
     ))(input)?;
 
     let (input, val) = separated_list1(
@@ -3248,7 +3297,7 @@ fn parse_opcode_no_arg3(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
 }
 
 fn parse_struct(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = parse_word("STRUCT")(input)?;
+    let (input, _) = parse_directive_word("STRUCT")(input)?;
     let (input, name) = cut(parse_label(false))(input)?;
 
     let (input, fields) = cut(context(
@@ -3269,13 +3318,13 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
         )),
     ))(input)?;
 
-    let (input, _) = cut(preceded(space0, parse_word("ENDSTRUCT")))(input)?;
+    let (input, _) = cut(preceded(space0, parse_directive_word("ENDSTRUCT")))(input)?;
 
     Ok((input, Token::Struct(name.to_owned(), fields)))
 }
 
 fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    let (input, _) = parse_word("SNASET")(input)?;
+    let (input, _) = parse_directive_word("SNASET")(input)?;
 
     let (input, flagname) = cut(context(SNASET_WRONG_LABEL, parse_label(false)))(input)?;
     let (input, _) = context(SNASET_MISSING_COMMA, cut(parse_comma))(input)?;
@@ -3390,8 +3439,9 @@ pub fn parse_label(
                 .unwrap_or_default()
         );
 
-        let mut impossible = chain!(IMPOSSIBLE_LABEL_NAME, FIRST_DIRECTIVE, FINAL_DIRECTIVE);
-        if impossible.any(|val| val == &label.to_uppercase()) {
+
+        if impossible_names(input.context().dotted_directive)
+            .any(|val| val == &label.to_uppercase()) {
             Err(cpclib_common::nom::Err::Error(error_position!(
                 input,
                 ErrorKind::OneOf
@@ -3402,15 +3452,46 @@ pub fn parse_label(
     }
 }
 
+fn impossible_names(dotted_directive: bool) -> impl Iterator<Item=&'static &'static str> {
+    if dotted_directive {
+        REGISTERS.into_iter()
+         .chain(INSTRUCTIONS.into_iter())
+         .chain(DOTTED_STAND_ALONE_DIRECTIVE.iter())
+         .chain(DOTTED_START_DIRECTIVE.iter())
+         .chain(DOTTED_END_DIRECTIVE.iter())
+     
+ } else {
+     REGISTERS.into_iter()
+     .chain(INSTRUCTIONS.into_iter())
+     .chain(STAND_ALONE_DIRECTIVE.into_iter())
+     .chain(START_DIRECTIVE.into_iter())
+     .chain(END_DIRECTIVE.into_iter())
+ }
+}
+
 pub fn parse_end_directive(input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
+
+    let (input, dot) = if input.context().dotted_directive {
+        value(Some('.'), tag("."))(input)?
+    } else {
+        (input, None)
+    };
+
     let (input, keyword) =
         is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")(input)?;
-    let keyword = keyword
-        .iter_elements()
+    let keyword = 
+        dot.as_ref().into_iter().cloned()
+        .chain(keyword.iter_elements().into_iter())
         .collect::<String>()
         .to_ascii_uppercase();
 
-    if FINAL_DIRECTIVE.iter().any(|&val| val == &keyword) {
+
+    let mut end_directive_iter = if input.context().dotted_directive {
+        DOTTED_END_DIRECTIVE.iter() 
+    } else {
+        END_DIRECTIVE.iter()
+    };
+    if end_directive_iter.any(|&val| val == &keyword) {
         Ok((input, keyword))
     } else {
         Err(cpclib_common::nom::Err::Error(error_position!(
@@ -3428,7 +3509,7 @@ pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, String, VerboseError
     let keyword = chain!(first.iter().cloned(), name.iter_elements()).collect::<String>();
     let KEYWORD = keyword.to_ascii_uppercase();
 
-    if chain!(FINAL_DIRECTIVE, IMPOSSIBLE_LABEL_NAME).any(|&val| val == &KEYWORD) {
+    if impossible_names(input.context().dotted_directive).any(|&val| val == &KEYWORD) {
         Err(cpclib_common::nom::Err::Error(error_position!(
             input,
             ErrorKind::OneOf
