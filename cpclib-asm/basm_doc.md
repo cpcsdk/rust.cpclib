@@ -111,6 +111,8 @@ do_stuff
 
 ### INCLUDE, READ
 
+`INCLUDE|READ [ONCE] "fname" [AS|MODULE|NAMESPACE "module"]`
+
 ## Data saving and export
 
 ### EXPORT, NOEXPORT

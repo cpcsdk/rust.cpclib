@@ -456,7 +456,7 @@ pub enum Token {
         transformation: BinaryTransformation,
     },
     // file may or may not be read during parse. If not, it is read on demand when assembling
-    Include(String, RwLock<Option<Listing>>, Option<String>),
+    Include(String, RwLock<Option<Listing>>, Option<String>, bool),
     Iterate(String, Vec<Expr>, Listing),
 
     Label(String),
@@ -577,10 +577,11 @@ impl Clone for Token {
                 content: content.read().unwrap().as_ref().map(|v| v.clone()).into(),
                 transformation: transformation.clone(),
             },
-            Token::Include(a, b, c) => Token::Include(
+            Token::Include(a, b, c, d) => Token::Include(
                 a.clone(),
                 b.read().unwrap().as_ref().map(|l| l.clone()).into(),
                 c.clone(),
+                *d
             ),
             Token::Iterate(a, b, c) => Token::Iterate(a.clone(), b.clone(), c.clone()),
             Token::Label(a) => Token::Label(a.clone()),
@@ -754,11 +755,11 @@ impl fmt::Display for Token {
                  }
  
 
-                 Token::Include(ref fname, _, Some(module))
-                 => write!(f, "INCLUDE \"{}\" namespace {}", fname, module.as_str()),
+                 Token::Include(ref fname, _, Some(module), once)
+                 => write!(f, "INCLUDE {}\"{}\" namespace {}", fname, module.as_str(), if *once {"ONCE "} else {""}),
 
-                 Token::Include(ref fname, _, None)
-                 => write!(f, "INCLUDE \"{}\"", fname),
+                 Token::Include(ref fname, _, None, once)
+                 => write!(f, "INCLUDE {}\"{}\"", fname, if *once {"ONCE "} else {""}),
  
             Token::Label(ref string)
                 => write!(f, "{}", string),
@@ -1148,7 +1149,7 @@ impl Token {
     pub fn has_at_least_one_listing(&self) -> bool {
         match self {
             Self::CrunchedSection(_, _)
-            | Self::Include(_, _, _)
+            | Self::Include(_, _, _, _)
             | Self::If(_, _)
             | Self::Repeat(_, _, _, _)
             | Self::RepeatUntil(_, _)

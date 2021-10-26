@@ -99,9 +99,10 @@ pub enum LocatedToken {
     ),
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
     Include(
-        String,
-        RwLock<Option<LocatedListing>>,
-        Option<String>,
+        String, // fname
+        RwLock<Option<LocatedListing>>, // content
+        Option<String>, // optional module name
+        bool, // must be included only one time
         Z80Span,
     ),
     If(
@@ -131,10 +132,11 @@ impl Clone for LocatedToken {
             LocatedToken::Function(a, b, c, d) => {
                 LocatedToken::Function(a.clone(), b.clone(), c.clone(), d.clone())
             },
-            LocatedToken::Include(filename, listing, namespace, span) => Self::Include(
+            LocatedToken::Include(filename, listing, namespace, once, span) => Self::Include(
                 filename.clone(),
                 RwLock::new(listing.read().unwrap().clone()),
                 namespace.clone(),
+                once.clone(),
                 span.clone(),
             ),
             LocatedToken::If(a, b, c) => LocatedToken::If(a.clone(), b.clone(), c.clone()),
@@ -185,7 +187,7 @@ impl LocatedToken {
             Self::Standard { span, .. }
             | Self::CrunchedSection(_, _, span)
             | Self::Function(_, _, _, span)
-            | Self::Include(_, _, _, span)
+            | Self::Include(_, _, _, _, span)
             | Self::If(_, _, span)
             | Self::Module(_, _, span)
             | Self::Iterate(_, _, _, span)
@@ -212,10 +214,11 @@ impl LocatedToken {
             LocatedToken::Function(name, params, inner, _span) => {
                 Cow::Owned(Token::Function(name.clone(), params.clone(), inner.as_listing()))
             }
-            LocatedToken::Include(s, l, module, _span) => Cow::Owned(Token::Include(
+            LocatedToken::Include(s, l, module, once, _span) => Cow::Owned(Token::Include(
                 s.clone(),
                 l.read().unwrap().as_ref().map(|l| l.as_listing()).into(),
                 module.clone(),
+                *once
             )),
             LocatedToken::If(v, e, _span) => Cow::Owned(Token::If(
                 v.iter()
@@ -273,7 +276,7 @@ impl LocatedToken {
     /// Works in read only tokens thanks to RefCell
     pub fn read_referenced_file(&self, ctx: &ParserContext) -> Result<(), AssemblerError> {
         match self {
-            LocatedToken::Include(ref fname, ref cell, _namespace, _span) => {
+            LocatedToken::Include(ref fname, ref cell, _namespace, _once, _span) => {
                 let content = read_source(fname, ctx)?;
 
                 let content = Arc::new(content);

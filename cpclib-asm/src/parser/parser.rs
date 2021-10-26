@@ -1288,10 +1288,15 @@ pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, Token, VerboseEr
 /// Parser for the include directive
 pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let include_start = input.clone();
-    let (input, fname) = preceded(
-        alt((parse_directive_word("INCLUDE"), parse_word("READ"))),
-        parse_fname,
+    let (input, once_fname) = preceded(
+        alt((
+            parse_directive_word("INCLUDE"), 
+            parse_word("READ")
+        )),
+        pair(opt(delimited(space0, parse_word("ONCE"),space0)), parse_fname),
     )(input)?;
+
+    let (once, fname) = once_fname;
 
     let (input, namespace) = opt(preceded(
         delimited(
@@ -1312,6 +1317,7 @@ pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
             fname.to_string(),
             RwLock::new(None),
             namespace,
+            once.is_some(),
             include_start,
         ),
     ))

@@ -28,6 +28,7 @@ use cpclib_common::smallvec::SmallVec;
 use std::any::Any;
 use std::collections::HashSet;
 use std::fmt;
+use std::path::PathBuf;
 use std::time::Instant;
 
 
@@ -396,6 +397,8 @@ pub struct Env {
 
     if_token_adr_to_used_decision: HashMap<usize, bool>,
     if_token_adr_to_unused_decision: HashMap<usize, bool>,
+
+    included_paths: HashSet<PathBuf>
 }
 
 impl Clone for Env {
@@ -437,6 +440,8 @@ impl Clone for Env {
 
             current_pass_discarded_errors: self.current_pass_discarded_errors.clone(),
             previous_pass_discarded_errors: self.previous_pass_discarded_errors.clone(),
+
+            included_paths: self.included_paths.clone()
         }
     }
 }
@@ -496,7 +501,9 @@ impl Default for Env {
             return_value: None,
 
             current_pass_discarded_errors: HashSet::default(),
-            previous_pass_discarded_errors: HashSet::default()
+            previous_pass_discarded_errors: HashSet::default(),
+
+            included_paths: HashSet::default()
         }
     }
 }
@@ -622,6 +629,17 @@ impl Env {
 impl Env {
     pub fn report(&self, start: &Instant) -> Report {
         Report::from((self, start))
+    }
+}
+
+/// Include once handling {
+impl Env {
+    fn has_included(&self, path: &PathBuf) -> bool {
+        self.included_paths.contains(path)
+    }
+
+    fn mark_included(&mut self, path: PathBuf) {
+        self.included_paths.insert(path);
     }
 }
 
@@ -2346,26 +2364,37 @@ pub fn visit_located_token(
         LocatedToken::Function(name, params, inner, span) => {
             env.visit_function_definition(name, params, inner, Some(span))
         }
-        LocatedToken::Include(_fname, ref cell, namespace, span) => {
-            if cell.read().unwrap().is_some() {
-                if let Some(namespace) = namespace {
-                    env.enter_namespace(namespace)
-                        .map_err(|e| e.locate(span.clone()))?;
+        LocatedToken::Include(fname, ref cell, namespace, once, span) => {
+            let fname = span.context()
+                                .get_path_for(fname)
+                                .unwrap_or("will_fail".into());
+            if (!*once) || (!env.has_included(&fname)) {
+                env.mark_included(fname);
+                
+                if cell.read().unwrap().is_some() {
+                    if let Some(namespace) = namespace {
+                        env.enter_namespace(namespace)
+                            .map_err(|e| e.locate(span.clone()))?;
+                    }
+                    
+                    env.visit_listing(cell.read().unwrap().as_ref().unwrap())?;
+                    
+                    if namespace.is_some() {
+                        env.leave_namespace().map_err(|e| e.locate(span.clone()))?;
+                    }
+                    Ok(())
+                } else {
+                    outer_token
+                        .read_referenced_file(&outer_token.context().1)
+                        .and_then(|_| visit_located_token(outer_token, env))
                 }
-                env.visit_listing(cell.read().unwrap().as_ref().unwrap())?;
-                if namespace.is_some() {
-                    env.leave_namespace().map_err(|e| e.locate(span.clone()))?;
-                }
-                Ok(())
+                .map_err(|err| AssemblerError::IncludedFileError {
+                    span: span.clone(),
+                    error: Box::new(err),
+                })
             } else {
-                outer_token
-                    .read_referenced_file(&outer_token.context().1)
-                    .and_then(|_| visit_located_token(outer_token, env))
+                Ok(()) // we include nothing
             }
-            .map_err(|err| AssemblerError::IncludedFileError {
-                span: span.clone(),
-                error: Box::new(err),
-            })
         }
 
         LocatedToken::If(cases, other, span) => env
@@ -2469,7 +2498,12 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             });
             Ok(())
         }
-        Token::Include(_, cell, namespace) if cell.read().unwrap().is_some() => {
+        Token::Include(_, cell, namespace, once) if cell.read().unwrap().is_some() => {
+
+            if *once {
+                unimplemented!("ONCE on hardcoded tokens");
+            }
+
             if let Some(namespace) = namespace.as_ref() {
                 env.enter_namespace(namespace)?;
             }
@@ -2479,7 +2513,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             }
             Ok(())
         }
-        Token::Include(_fname, cell, _namespace) if cell.read().unwrap().is_none() => {
+        Token::Include(_fname, cell, _namespace, _once) if cell.read().unwrap().is_none() => {
             todo!("Read the file (without being able to specify parser options)")
         }
         Token::Incbin {
