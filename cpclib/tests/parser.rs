@@ -18,7 +18,8 @@ mod tests {
             read_referenced_files: false,
             search_path: Vec::new(),
             parse_warning: RwLock::new(Vec::new()),
-            state: ParsingState::Standard
+            state: ParsingState::Standard,
+            dotted_directive: false
         };
     }
 
