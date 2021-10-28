@@ -25,7 +25,7 @@ jobs:
     - name: Run tests
       run: cargo +nightly test --verbose --all-features
     - name: Basm tests
-      run: cd basm/tests/asm && ./launch_tests.asm
+      run: cd basm/tests/asm && ./launch_tests.sh
   pre-release-linux:
     runs-on: ubuntu-latest
     needs: build-linux
