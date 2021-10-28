@@ -11,6 +11,12 @@ pub use rayon;
 pub use smallvec;
 pub use strsim;
 
+#[cfg(feature="cmdline")]
+pub use clap;
+#[cfg(feature="cmdline")]
+pub use semver;
+#[cfg(feature="cmdline")]
+pub use time;
 
 use nom::branch::*;
 use nom::bytes::complete::*;

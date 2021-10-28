@@ -13,7 +13,7 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
-use clap;
+use cpclib_common::clap;
 
 use crossbeam_channel::unbounded;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};

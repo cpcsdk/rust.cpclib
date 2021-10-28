@@ -14,12 +14,10 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::identity_op)]
 
-use std::convert::TryInto;
-
 use std::path::Path;
 use std::str::FromStr;
 
-use clap::{App, Arg};
+use cpclib_common::clap::{App, Arg};
 use cpclib_sna::*;
 
 pub mod built_info {

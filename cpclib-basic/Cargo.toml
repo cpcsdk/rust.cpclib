@@ -30,6 +30,7 @@ built = { version = "0.5.1", features = ["chrono"] }
 
 
 [features]
+default = ["basic"]
 basic = ["clap"]
 
 

@@ -15,7 +15,7 @@
 
 /// Catalog tool manipulator.
 ///
-use clap::{App, Arg};
+use cpclib_common::clap::{App, Arg};
 use std::fs::File;
 use std::io::{Read, Write};
 

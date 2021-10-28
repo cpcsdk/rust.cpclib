@@ -45,13 +45,11 @@ tempfile= "3.2.0"
 
 
 
-semver = { version = "1.0.3", optional = true }
 
 path-absolutize = { version = "3.0.10", optional = true }
 curl = { version = "0.4.38", optional = true }
 reqwest = { version = "0.11.4", optional = true }
 
-clap = { version = "2.33.3", optional = true }
 time = { version = "0.2.27", optional = true }
 exitcode = { version = "1.1.2", optional = true }
 
@@ -72,8 +70,9 @@ built = { version = "0.5.1", features = ["chrono"] }
 
 
 [features]
+default = ["xferlib", "imgconverter"]
 xferlib = [	"curl", "reqwest", "path-absolutize"]
-imgconverter = ["clap", 'notify', "exitcode", "lz4"]
+imgconverter = ["cpclib-common/cmdline", 'notify', "crossbeam-channel", "exitcode", "lz4"]
 
 
 
