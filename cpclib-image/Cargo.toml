@@ -1,0 +1,16 @@
+[package]
+name = "cpclib-image"
+version = "0.5.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cpclib-common = "0.5.0"
+image = "0.23.14"
+anyhow = "1.0.41"
+gif = "0.11.2"
+gif-dispose = "3.1.1"
+as-slice = "0.2.1"
+
+serde = { version = "1.0.126", features = ["derive"] }

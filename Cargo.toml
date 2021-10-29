@@ -4,6 +4,7 @@ members = [
     "cpclib-basic",
     "cpclib-common",
     "cpclib-disc",
+    "cpclib-image",
     "cpclib-macros",
     "cpclib-sna",
     "cpclib-tokens",
@@ -23,6 +24,7 @@ cpclib-asm = {path = "./cpclib-asm/"}
 cpclib-basic = {path = "./cpclib-basic/"}
 cpclib-common = {path = "./cpclib-common/"}
 cpclib-disc = {path = "./cpclib-disc/"}
+cpclib-image = {path = "./cpclib-image/"}
 cpclib-macros = {path = "./cpclib-macros/"}
 cpclib-sna = {path = "./cpclib-sna/"}#
 cpclib-tokens = {path = "./cpclib-tokens/"}

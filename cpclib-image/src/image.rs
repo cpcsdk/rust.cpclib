@@ -115,8 +115,8 @@ fn merge_mode0_mode3(line1: &[u8], line2: &[u8]) -> Vec<u8> {
         .iter()
         .zip(line2.iter())
         .map(|(&u1, &u2)| {
-            let (p10, p11) = pixels::mode0::byte_to_pens(u1);
-            let (p20, p21) = pixels::mode0::byte_to_pens(u2);
+            let [p10, p11] = pixels::mode0::byte_to_pens(u1);
+            let [p20, p21] = pixels::mode0::byte_to_pens(u2);
 
             let p0 = pixels::mode0::mix_mode0_mode3(p10, p20);
             let p1 = pixels::mode0::mix_mode0_mode3(p11, p21);
@@ -865,11 +865,11 @@ impl Sprite {
                     .flat_map(|b: &u8| {
                         let pens = {
                             let mut pens = pixels::mode0::byte_to_pens(*b);
-                            pens.0.limit(self.mode.unwrap());
-                            pens.1.limit(self.mode.unwrap());
+                            pens[0].limit(self.mode.unwrap());
+                            pens[1].limit(self.mode.unwrap());
                             pens
                         };
-                        vec![*p.get(&pens.0), *p.get(&pens.1)]
+                        vec![*p.get(&pens[0]), *p.get(&pens[1])]
                     })
                     .collect::<Vec<Ink>>(),
 

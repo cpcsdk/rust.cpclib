@@ -57,22 +57,8 @@ pub use cpclib_disc as disc;
 #[cfg(any(feature = "xferlib", feature = "xfer"))]
 pub use cpclib_xfer as xfer;
 
-/// Screen emulation. Unknown state ;)
-pub mod screen;
-
-/// CPC pixels conversion routines. Useable
-pub mod pixels;
-
-/// CPC Image manipulation. Useable.
-pub mod image;
-/// OCP related functions
-pub mod ocp;
-
 /// PC to CPC image conversions. WIP
 pub mod imageconverter;
-
-/// Gate Array specific objects. Finished.
-pub mod ga;
 
 /// ???
 pub mod asm;

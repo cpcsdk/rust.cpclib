@@ -1301,7 +1301,7 @@ pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
     let (input, namespace) = opt(preceded(
         delimited(
             space0,
-            alt((tag_no_case("namespace"), tag_no_case("module"))),
+            alt((tag_no_case("namespace"), tag_no_case("module"), tag_no_case("as"))),
             space0,
         ),
         delimited(
@@ -3858,7 +3858,7 @@ pub fn parse_any_function(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError
 
     Ok((
         input,
-        Expr::UserDefinedFunction(function_name, arguments)
+        Expr::AnyFunction(function_name, arguments)
     ))
 }
 

@@ -67,7 +67,7 @@ pub enum Expr {
     /// Hardoded function with two arguments
     BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
     /// Function supposely coded by the user
-    UserDefinedFunction(String, Vec<Expr>),
+    AnyFunction(String, Vec<Expr>),
 
     /// Random value
     Rnd,
@@ -454,7 +454,7 @@ impl Display for Expr {
             &StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
             &LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
 
-            UserDefinedFunction(name, args) => write!(format,
+            AnyFunction(name, args) => write!(format,
             "{}({})",
             name,
             args.iter().map(|e| e.to_string()).join(",")

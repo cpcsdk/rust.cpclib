@@ -68,7 +68,7 @@ impl ExprEvaluationExt for Expr {
                 a.symbols_used()
             },
 
-            Expr::UserDefinedFunction(_, p) => {
+            Expr::AnyFunction(_, p) => {
                 p.iter()
                     .map(|e| e.symbols_used())
                     .flatten()
@@ -223,8 +223,8 @@ impl ExprEvaluationExt for Expr {
             Float(f) => Ok(f.into_inner().into()),
             Rnd =>  unimplemented!("Env need to maintain a counter of call with its value to ensure a consistant generation among the passes"),
 
-            UserDefinedFunction(d, expr) => {
-                let f = env.user_defined_function(d)?;
+            AnyFunction(d, expr) => {
+                let f = env.any_function(d)?;
                 let params = expr.iter()
                             .map(|p| env.resolve_expr_may_fail_in_first_pass(p))
                             .collect::<Result<Vec<ExprResult>, AssemblerError>>()?;

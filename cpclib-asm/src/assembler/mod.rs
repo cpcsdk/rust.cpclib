@@ -2219,10 +2219,18 @@ impl Env {
         Ok(())
     }
 
+
     pub fn user_defined_function(&self, name: &str) -> Result<&Function, AssemblerError> {
         match self.functions.get(name){
             Some(f) => Ok(f),
             None => Err(AssemblerError::FunctionUnknown(name.to_owned()))
+        }
+    }
+
+    pub fn any_function(&self, name: &str) -> Result<&Function, AssemblerError> {
+        match name {
+            "byte_to_mode0_pixel_at" => todo!(),
+            _ => self.user_defined_function(name)
         }
     }
 
