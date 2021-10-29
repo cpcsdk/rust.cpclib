@@ -17,7 +17,7 @@
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
-
+use cpclib_common::clap;
 use cpclib_disc::amsdos::*;
 
 /**

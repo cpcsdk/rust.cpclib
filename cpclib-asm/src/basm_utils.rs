@@ -8,8 +8,8 @@ use std::sync::Arc;
 use crate::preamble::*;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
-pub use clap;
-use clap::{App, Arg, ArgGroup, ArgMatches};
+use cpclib_common::clap;
+use cpclib_common::clap::{App, Arg, ArgGroup, ArgMatches};
 
 #[derive(Debug)]
 pub enum BasmError {

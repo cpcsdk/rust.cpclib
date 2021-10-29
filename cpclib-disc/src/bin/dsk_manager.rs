@@ -12,7 +12,7 @@
 )]
 #![deny(clippy::pedantic)]
 
-use clap::{App, Arg, ArgGroup, SubCommand};
+use cpclib_common::clap::{App, Arg, ArgGroup, SubCommand};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;

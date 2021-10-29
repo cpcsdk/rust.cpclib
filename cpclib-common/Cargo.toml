@@ -21,3 +21,10 @@ rayon = "1.5"
 smallvec = "1.6.1"
 strsim = "0.10.0"
 
+
+time = { version = "0.2.27", optional = true }
+semver = { version = "1.0.3", optional = true }
+clap = { version = "2.33.3", optional = true }
+
+[features]
+cmdline = ["time", "semver", "clap"]

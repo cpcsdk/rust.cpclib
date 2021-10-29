@@ -39,9 +39,7 @@ rayon = "1.5.1"
 serde = { version = "1.0.126", features = ["derive"] }
 libc = "0.2.97"
 
-time = { version = "0.2.27", optional = true }
-semver = { version = "1.0.3", optional = true }
-clap = { version = "2.33.3", optional = true }
+
 
 
 [build-dependencies]
@@ -53,12 +51,7 @@ cc = "1.0.68"
 
 
 [features]
-basm = ["clap",  "semver", "time"]
+basm = ["cpclib-common/cmdline"] #only usefull for the basm crate
 nocolor = []
 
-
-[[bin]]
-name = "bdasm"
-path = "src/bin/bdasm.rs"
-required-features = ["bdasm"]
 

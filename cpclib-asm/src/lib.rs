@@ -294,10 +294,10 @@ label1
         org #9000
 label2
         bankset 2
-        assert {page}label1==0x7fC0
-        assert {page}label2==0x7fC6 
-        assert {pageset}label1==#7fC0
-        assert {pageset}label2==#7fC2
+        assert {page}label1==0xC0
+        assert {page}label2==0xC6 
+        assert {pageset}label1==#C0
+        assert {pageset}label2==#C2
         assert $ == 0x0000
         assert $$ == 0x0000
         nop";

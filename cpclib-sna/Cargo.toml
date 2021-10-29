@@ -16,15 +16,12 @@ serde = { version = "1.0.126", features = ["derive"] }
 num_enum = "0.5.4"
 
 
-clap = { version = "2.33.3", optional = true }
-time = { version = "0.2.27", optional = true }
-semver = { version = "1.0.3", optional = true }
-
 [build-dependencies]
 built = { version = "0.5.1", features = ["chrono"] }
 
 [features]
-snapshot = ["clap", "time", "semver"]
+default = ["snapshot"]
+snapshot = ["cpclib-common/cmdline"]
 
 
 [[bin]]

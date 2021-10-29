@@ -1802,6 +1802,7 @@ impl Env {
         }
 
         self.output_address = self.logical_output_address();
+        self.update_dollar();
         Ok(())
     }
 
