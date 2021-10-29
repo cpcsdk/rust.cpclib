@@ -44,21 +44,18 @@
 
 #![recursion_limit = "512"]
 
-#[macro_use]
-extern crate dbg;
-
 pub use cpclib_asm as assembler;
 pub use cpclib_basic as basic;
 pub use cpclib_sna as sna;
 pub use cpclib_z80emu as z80emu;
-
+pub use cpclib_common as common;
+pub use cpclib_image as image;
 pub use cpclib_disc as disc;
+
 /// CPC Wifi extension related stuff. Useable
 #[cfg(any(feature = "xferlib", feature = "xfer"))]
 pub use cpclib_xfer as xfer;
 
-/// PC to CPC image conversions. WIP
-pub mod imageconverter;
 
 /// ???
 pub mod asm;
@@ -66,7 +63,7 @@ pub mod asm;
 /// Disk (edsk) manipulation. WIP
 // Some reexports
 pub use crate::disc::edsk::ExtendedDsk;
-pub use crate::ga::{Ink, Palette, Pen};
+pub use cpclib_image::ga::{Ink, Palette, Pen};
 
 /// `util` namespace contain various utility functions that could be used by any module and are not specific to the project.
 pub mod util {

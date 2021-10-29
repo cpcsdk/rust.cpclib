@@ -3,6 +3,8 @@ use std::any::Any;
 use crate::{error::AssemblerError, preamble::LocatedToken, Visited};
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
+use cpclib_common::lazy_static;
+use std::collections::HashMap;
 
 use super::Env;
 
@@ -92,6 +94,46 @@ pub enum Function {
     HardCoded(HardCodedFunction),
 }
 
+
+lazy_static::lazy_static! {
+	 static ref HARD_CODED_FUNCTIONS: HashMap<String, Function> = {
+		let mut functions: HashMap<String, Function> = Default::default();
+
+		functions.insert(
+			"byte_to_mode0_pixel_at".to_owned(), 
+			Function::HardCoded(HardCodedFunction::ByteToMode0PenAt));
+		functions.insert(
+			"byte_to_mode1_pixel_at".to_owned(), 
+			Function::HardCoded(HardCodedFunction::ByteToMode1PenAt));
+		functions.insert(
+			"byte_to_mode2_pixel_at".to_owned(),
+			Function::HardCoded(HardCodedFunction::ByteToMode2PenAt));
+
+		functions.insert(
+			"pen_at_mode0_byte".to_owned(),
+			Function::HardCoded(HardCodedFunction::PenAtToMode0Byte));
+		functions.insert(
+			"pen_at_mode1_byte".to_owned(), 
+			Function::HardCoded(HardCodedFunction::PenAtToMode1Byte));
+		functions.insert(
+			"pen_at_mode2_byte".to_owned(), 
+			Function::HardCoded(HardCodedFunction::PenAtToMode2Byte));
+
+		functions.insert(
+			"pens_to_mode0_byte".to_owned(), 
+			Function::HardCoded(HardCodedFunction::PensToMode0Byte));
+		functions.insert("
+		pens_to_mode1_byte".to_owned(), 
+		Function::HardCoded(HardCodedFunction::PensToMode1Byte));
+		functions.insert(
+			"pens_to_mode2_byte".to_owned(), 
+			Function::HardCoded(HardCodedFunction::PensToMode2Byte));
+
+		functions
+	};
+}
+
+
 #[derive(Debug, Clone)]
 pub enum HardCodedFunction {
     ByteToMode0PenAt,
@@ -123,6 +165,10 @@ impl HardCodedFunction {
             HardCodedFunction::PensToMode2Byte => 8,
         }
     }
+
+	pub fn by_name(name: &str) -> Option<&Function> {
+		HARD_CODED_FUNCTIONS.get(&name.to_lowercase())
+	}
 
     pub fn name(&self) -> &str {
         match self {

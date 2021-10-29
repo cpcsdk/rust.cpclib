@@ -13,7 +13,7 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
-use cpclib_common::clap;
+use cpclib::common::clap;
 
 use crossbeam_channel::unbounded;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -23,15 +23,15 @@ use clap::{App, Arg, ArgMatches, SubCommand};
 use std::path::Path;
 use tempfile::Builder;
 
-use cpclib::ga::Palette;
-use cpclib_asm::preamble::*;
+use cpclib::image::ga::Palette;
+use cpclib::assembler::preamble::*;
 
-use cpclib::imageconverter::*;
-use cpclib::ocp;
+use cpclib::image::imageconverter::*;
+use cpclib::image::ocp;
 use cpclib::sna;
 use cpclib::sna::*;
-use cpclib_disc::amsdos::*;
-use cpclib_disc::edsk::ExtendedDsk;
+use cpclib::disc::amsdos::*;
+use cpclib::disc::edsk::ExtendedDsk;
 
 use std::fs::File;
 use std::io::Write;
@@ -536,9 +536,9 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 };
                 file.save_in_folder(folder)?;
             } else {
-                use cpclib_disc::cfg::DiscConfig;
-                let cfg = cpclib_disc::cfg::DiscConfig::single_head_data_format();
-                let dsk = cpclib_disc::builder::build_disc_from_cfg(&cfg);
+                use cpclib::disc::cfg::DiscConfig;
+                let cfg = cpclib::disc::cfg::DiscConfig::single_head_data_format();
+                let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
                 let mut manager = AmsdosManager::new_from_disc(dsk, 0);
                 manager.add_file(&file, false, false).unwrap();
                 manager

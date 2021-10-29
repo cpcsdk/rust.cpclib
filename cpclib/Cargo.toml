@@ -23,6 +23,7 @@ cpclib-xfer = "0.5.0"
 cpclib-disc = "0.5.0"
 cpclib-macros = "0.5.0"
 cpclib-common = "0.5.0"
+cpclib-image = "0.5.0"
 
 anyhow = "1.0.41"
 arrayref= "0.3.6"
@@ -48,14 +49,8 @@ curl = { version = "0.4.38", optional = true }
 reqwest = { version = "0.11.4", optional = true }
 
 time = { version = "0.2.27", optional = true }
-exitcode = { version = "1.1.2", optional = true }
-
-lz4 = { version = "1.23.2", optional = true }
 
 
-
-notify = { version = "5.0.0-pre.10", optional = true }
-crossbeam-channel = { version = "0.5.1", optional = true }
 
 log = { version = "0.4.14", optional = true }
 
@@ -67,16 +62,10 @@ built = { version = "0.5.1", features = ["chrono"] }
 
 
 [features]
-default = ["xferlib", "imgconverter"]
+default = ["xferlib"]
 xferlib = [	"curl", "reqwest", "path-absolutize"]
-imgconverter = ["cpclib-common/cmdline", 'notify', "crossbeam-channel", "exitcode", "lz4"]
+cmdline = ["cpclib-common/cmdline"]
 
 
 
-
-[[bin]]
-name = "imgconverter"
-path = "src/bin/imgconverter.rs"
-#required-features = ["xferlib", "imgconverter"]
-required-features = ["imgconverter"]
 

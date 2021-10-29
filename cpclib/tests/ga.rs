@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use cpclib::ga::*;
+    use cpclib::image::ga::*;
 
     #[test]
     fn test_empty() {

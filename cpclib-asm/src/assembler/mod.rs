@@ -39,6 +39,7 @@ use std::sync::RwLock;
 use self::function::AnyFunction;
 use self::function::Function;
 use self::function::FunctionBuilder;
+use self::function::HardCodedFunction;
 use self::listing_output::*;
 use self::report::SavedFile;
 use self::symbols_output::SymbolOutputGenerator;
@@ -2227,10 +2228,10 @@ impl Env {
         }
     }
 
-    pub fn any_function(&self, name: &str) -> Result<&Function, AssemblerError> {
-        match name {
-            "byte_to_mode0_pixel_at" => todo!(),
-            _ => self.user_defined_function(name)
+    pub fn any_function<'res>(&'res self, name: &'res str) -> Result<&'res Function, AssemblerError> {
+        match HardCodedFunction::by_name(name) {
+            Some(f) => Ok(f),
+            None => self.user_defined_function(name)
         }
     }
 
