@@ -2,8 +2,8 @@ use std::any::Any;
 
 use crate::{error::AssemblerError, preamble::LocatedToken, Visited};
 use cpclib_common::itertools::Itertools;
-use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 use cpclib_common::lazy_static;
+use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 use std::collections::HashMap;
 
 use super::Env;
@@ -73,7 +73,6 @@ impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
         }
 
         for token in self.inner.iter() {
-            dbg!(token, token.return_expr());
             token
                 .visited(&mut env)
                 .map_err(|e| AssemblerError::FunctionError(self.name.clone(), box e))?;
@@ -94,51 +93,49 @@ pub enum Function {
     HardCoded(HardCodedFunction),
 }
 
-
 lazy_static::lazy_static! {
-	 static ref HARD_CODED_FUNCTIONS: HashMap<String, Function> = {
-		let mut functions: HashMap<String, Function> = Default::default();
+     static ref HARD_CODED_FUNCTIONS: HashMap<String, Function> = {
+        let mut functions: HashMap<String, Function> = Default::default();
 
-		functions.insert(
-			"byte_to_mode0_pixel_at".to_owned(), 
-			Function::HardCoded(HardCodedFunction::ByteToMode0PenAt));
-		functions.insert(
-			"byte_to_mode1_pixel_at".to_owned(), 
-			Function::HardCoded(HardCodedFunction::ByteToMode1PenAt));
-		functions.insert(
-			"byte_to_mode2_pixel_at".to_owned(),
-			Function::HardCoded(HardCodedFunction::ByteToMode2PenAt));
+        functions.insert(
+            "mode0_byte_to_pen_at".to_owned(),
+            Function::HardCoded(HardCodedFunction::Mode0ByteToPenAt));
+        functions.insert(
+            "mode1_byte_to_pen_at".to_owned(),
+            Function::HardCoded(HardCodedFunction::Mode1ByteToPenAt));
+        functions.insert(
+            "mode2_byte_to_pen_at".to_owned(),
+            Function::HardCoded(HardCodedFunction::Mode2ByteToPenAt));
 
-		functions.insert(
-			"pen_at_mode0_byte".to_owned(),
-			Function::HardCoded(HardCodedFunction::PenAtToMode0Byte));
-		functions.insert(
-			"pen_at_mode1_byte".to_owned(), 
-			Function::HardCoded(HardCodedFunction::PenAtToMode1Byte));
-		functions.insert(
-			"pen_at_mode2_byte".to_owned(), 
-			Function::HardCoded(HardCodedFunction::PenAtToMode2Byte));
+        functions.insert(
+            "pen_at_mode0_byte".to_owned(),
+            Function::HardCoded(HardCodedFunction::PenAtToMode0Byte));
+        functions.insert(
+            "pen_at_mode1_byte".to_owned(),
+            Function::HardCoded(HardCodedFunction::PenAtToMode1Byte));
+        functions.insert(
+            "pen_at_mode2_byte".to_owned(),
+            Function::HardCoded(HardCodedFunction::PenAtToMode2Byte));
 
-		functions.insert(
-			"pens_to_mode0_byte".to_owned(), 
-			Function::HardCoded(HardCodedFunction::PensToMode0Byte));
-		functions.insert("
-		pens_to_mode1_byte".to_owned(), 
-		Function::HardCoded(HardCodedFunction::PensToMode1Byte));
-		functions.insert(
-			"pens_to_mode2_byte".to_owned(), 
-			Function::HardCoded(HardCodedFunction::PensToMode2Byte));
+        functions.insert(
+            "pens_to_mode0_byte".to_owned(),
+            Function::HardCoded(HardCodedFunction::PensToMode0Byte));
+        functions.insert("
+        pens_to_mode1_byte".to_owned(),
+        Function::HardCoded(HardCodedFunction::PensToMode1Byte));
+        functions.insert(
+            "pens_to_mode2_byte".to_owned(),
+            Function::HardCoded(HardCodedFunction::PensToMode2Byte));
 
-		functions
-	};
+        functions
+    };
 }
-
 
 #[derive(Debug, Clone)]
 pub enum HardCodedFunction {
-    ByteToMode0PenAt,
-    ByteToMode1PenAt,
-    ByteToMode2PenAt,
+    Mode0ByteToPenAt,
+    Mode1ByteToPenAt,
+    Mode2ByteToPenAt,
 
     PenAtToMode0Byte,
     PenAtToMode1Byte,
@@ -152,9 +149,9 @@ pub enum HardCodedFunction {
 impl HardCodedFunction {
     pub fn nb_expected_params(&self) -> usize {
         match self {
-            HardCodedFunction::ByteToMode0PenAt => 2,
-            HardCodedFunction::ByteToMode1PenAt => 2,
-            HardCodedFunction::ByteToMode2PenAt => 2,
+            HardCodedFunction::Mode0ByteToPenAt => 2,
+            HardCodedFunction::Mode1ByteToPenAt => 2,
+            HardCodedFunction::Mode2ByteToPenAt => 2,
 
             HardCodedFunction::PenAtToMode0Byte => 2,
             HardCodedFunction::PenAtToMode1Byte => 2,
@@ -166,15 +163,15 @@ impl HardCodedFunction {
         }
     }
 
-	pub fn by_name(name: &str) -> Option<&Function> {
-		HARD_CODED_FUNCTIONS.get(&name.to_lowercase())
-	}
+    pub fn by_name(name: &str) -> Option<&Function> {
+        HARD_CODED_FUNCTIONS.get(&name.to_lowercase())
+    }
 
     pub fn name(&self) -> &str {
         match self {
-            HardCodedFunction::ByteToMode0PenAt => "byte_to_mode0_pixel_at",
-            HardCodedFunction::ByteToMode1PenAt => "byte_to_mode1_pixel_at",
-            HardCodedFunction::ByteToMode2PenAt => "byte_to_mode2_pixel_at",
+            HardCodedFunction::Mode0ByteToPenAt => "mode0_byte_to_pen_at",
+            HardCodedFunction::Mode1ByteToPenAt => "mode1_byte_to_pen_at",
+            HardCodedFunction::Mode2ByteToPenAt => "mode2_byte_to_pen_at",
 
             HardCodedFunction::PenAtToMode0Byte => "pen_at_mode0_byte",
             HardCodedFunction::PenAtToMode1Byte => "pen_at_mode1_byte",
@@ -196,53 +193,68 @@ impl HardCodedFunction {
         }
 
         match self {
-            HardCodedFunction::ByteToMode0PenAt => {
-				Ok(cpclib_image::pixels::mode0::byte_to_pens(params[0].int()? as _)[params[1].int()? as usize %2].number().into())
-			},
-            HardCodedFunction::ByteToMode1PenAt =>  {
-				Ok(cpclib_image::pixels::mode1::byte_to_pens(params[0].int()? as _)[params[1].int()? as usize %4].number().into())
-			},
-            HardCodedFunction::ByteToMode2PenAt =>  {
-				Ok(cpclib_image::pixels::mode2::byte_to_pens(params[0].int()? as _)[params[1].int()? as usize %8].number().into())
-			},
+            HardCodedFunction::Mode0ByteToPenAt => Ok(dbg!(cpclib_image::pixels::mode0::byte_to_pens(
+                params[0].int()? as _,
+            ))[params[1].int()? as usize % 2]
+                .number()
+                .into()),
+            HardCodedFunction::Mode1ByteToPenAt => Ok(cpclib_image::pixels::mode1::byte_to_pens(
+                params[0].int()? as _,
+            )[params[1].int()? as usize % 4]
+                .number()
+                .into()),
+            HardCodedFunction::Mode2ByteToPenAt => Ok(cpclib_image::pixels::mode2::byte_to_pens(
+                params[0].int()? as _,
+            )[params[1].int()? as usize % 8]
+                .number()
+                .into()),
 
             HardCodedFunction::PenAtToMode0Byte => {
                 Ok(cpclib_image::pixels::mode0::pen_to_pixel_byte(
-                    (params[0].int()? as u8 %16).into(),
-                    (params[1].int()? as u8 %2).into(),
+                    (params[0].int()? as u8 % 16).into(),
+                    (params[1].int()? as u8 % 2).into(),
                 )
                 .into())
-            },
-
+            }
             HardCodedFunction::PenAtToMode1Byte => {
                 Ok(cpclib_image::pixels::mode1::pen_to_pixel_byte(
-                    (params[0].int()? as u8 %4).into(),
-                    (params[1].int()? as u8 %4).into(),
-                )
-                .into())
-            },
-
-            HardCodedFunction::PenAtToMode2Byte => {
-                Ok(cpclib_image::pixels::mode2::pen_to_pixel_byte(
-                    (params[0].int()? as u8 %2).into(),
-                    (params[1].int()? as u8 %8).into(),
+                    (params[0].int()? as u8 % 4).into(),
+                    (params[1].int()? as u8 % 4).into(),
                 )
                 .into())
             }
 
-            HardCodedFunction::PensToMode0Byte => {
-				Ok(cpclib_image::pixels::mode0::pens_to_byte(params[0].int()?.into(), params[1].int()?.into()).into())
-			},
-            HardCodedFunction::PensToMode1Byte =>  {
-				Ok(cpclib_image::pixels::mode1::pens_to_byte(params[0].int()?.into(), params[1].int()?.into(), params[2].int()?.into(), params[3].int()?.into()).into())
-			},
-            HardCodedFunction::PensToMode2Byte => {
-				Ok(cpclib_image::pixels::mode2::pens_to_byte(
-					params[0].int()?.into(), params[1].int()?.into(), params[2].int()?.into(), params[3].int()?.into(),
-					params[4].int()?.into(), params[5].int()?.into(), params[6].int()?.into(), params[7].int()?.into()
-				
-				).into())
-			},
+            HardCodedFunction::PenAtToMode2Byte => {
+                Ok(cpclib_image::pixels::mode2::pen_to_pixel_byte(
+                    (params[0].int()? as u8 % 2).into(),
+                    (params[1].int()? as u8 % 8).into(),
+                )
+                .into())
+            }
+
+            HardCodedFunction::PensToMode0Byte => Ok(cpclib_image::pixels::mode0::pens_to_byte(
+                params[0].int()?.into(),
+                params[1].int()?.into(),
+            )
+            .into()),
+            HardCodedFunction::PensToMode1Byte => Ok(cpclib_image::pixels::mode1::pens_to_byte(
+                params[0].int()?.into(),
+                params[1].int()?.into(),
+                params[2].int()?.into(),
+                params[3].int()?.into(),
+            )
+            .into()),
+            HardCodedFunction::PensToMode2Byte => Ok(cpclib_image::pixels::mode2::pens_to_byte(
+                params[0].int()?.into(),
+                params[1].int()?.into(),
+                params[2].int()?.into(),
+                params[3].int()?.into(),
+                params[4].int()?.into(),
+                params[5].int()?.into(),
+                params[6].int()?.into(),
+                params[7].int()?.into(),
+            )
+            .into()),
         }
     }
 }

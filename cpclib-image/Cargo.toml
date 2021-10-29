@@ -12,5 +12,6 @@ anyhow = "1.0.41"
 gif = "0.11.2"
 gif-dispose = "3.1.1"
 as-slice = "0.2.1"
+contracts = "0.6.2"
 
 serde = { version = "1.0.126", features = ["derive"] }
