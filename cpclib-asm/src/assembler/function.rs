@@ -193,9 +193,9 @@ impl HardCodedFunction {
         }
 
         match self {
-            HardCodedFunction::Mode0ByteToPenAt => Ok(dbg!(cpclib_image::pixels::mode0::byte_to_pens(
+            HardCodedFunction::Mode0ByteToPenAt => Ok(cpclib_image::pixels::mode0::byte_to_pens(
                 params[0].int()? as _,
-            ))[params[1].int()? as usize % 2]
+            )[params[1].int()? as usize % 2]
                 .number()
                 .into()),
             HardCodedFunction::Mode1ByteToPenAt => Ok(cpclib_image::pixels::mode1::byte_to_pens(

@@ -530,12 +530,12 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseE
 
     Ok((
         input.clone(), 
-        dbg!(LocatedToken::Function(
+        LocatedToken::Function(
             name,
             arguments.iter().map(|a| a.to_string()).collect_vec() ,
             listing, 
             function_start.slice(.. function_start.len()-input.len())
-        ))
+        )
     ))
 }
 
