@@ -2466,7 +2466,7 @@ pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
 /// WARNING: only formated case is taken into account
 fn formatted_expr(input: Z80Span) -> IResult<Z80Span, FormattedExpr, VerboseError<Z80Span>> {
     let (input, _) = char('{')(input)?;
-    let (input, format) = cut(alt((
+    let (input, format) = alt((
         map(tag_no_case("INT"), |_| ExprFormat::Int),
         map(tag_no_case("HEX4"), |_| ExprFormat::Hex(Some(4))),
         map(tag_no_case("HEX8"), |_| ExprFormat::Hex(Some(8))),
@@ -2476,7 +2476,7 @@ fn formatted_expr(input: Z80Span) -> IResult<Z80Span, FormattedExpr, VerboseErro
         map(tag_no_case("BIN16"), |_| ExprFormat::Bin(Some(16))),
         map(tag_no_case("BIN32"), |_| ExprFormat::Bin(Some(32))),
         map(tag_no_case("BIN"), |_| ExprFormat::Bin(None)),
-    )))(input)?;
+    ))(input)?;
     let (input, _) = char('}')(input)?;
 
     let (input, _) = space0(input)?;
