@@ -3,6 +3,7 @@ use std::fmt::{Debug, Display};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{smallvec, SmallVec};
+use cpclib_common::strsim::levenshtein;
 use cpclib_common::{lazy_static, strsim};
 use delegate::delegate;
 use regex::Regex;
@@ -1038,16 +1039,22 @@ impl SymbolsTable {
             })
             .map(|(k, _v)| k)
             .map(move |symbol2| {
-                (
+                let symbol_upper = symbol.0.to_ascii_uppercase();
+                let symbol2_upper = symbol2.0.to_ascii_uppercase();
+                let levenshtein_distance = 
                     strsim::levenshtein(&symbol2.0, &symbol.0).min(strsim::levenshtein(
-                        &symbol2.0.to_ascii_uppercase(),
-                        &symbol.0.to_ascii_uppercase(),
-                    )),
+                        &symbol2_upper,
+                        &symbol_upper,
+                    ));
+                let included = if symbol2_upper.contains(&symbol_upper) {0} else {1};
+
+                (
+                    (included, levenshtein_distance),
                     symbol2.0.clone(),
                 )
             })
             .min()
-            .map(|(_distance, symbol2)| symbol2))
+            .map(|(_distance, symbol2)| { symbol2}))
     }
 
     pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> Result<&'static str, SymbolError> {
