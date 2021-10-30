@@ -55,7 +55,7 @@ impl ParsingStateVerified for Token {
                     Token::If{..} | Token::Repeat{..} 
                     | Token::Switch{..} | Token::Iterate{..} => true,
                     Token::Return(_) => true,
-                    Token::Assert(_, _) => true,
+                    Token::Assert(_, _) | Token::Print(_) => true,
                     _ => false
                 }
             }

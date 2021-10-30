@@ -28,6 +28,7 @@ use cpclib_common::smallvec::SmallVec;
 use std::any::Any;
 use std::collections::HashSet;
 use std::fmt;
+use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -399,7 +400,11 @@ pub struct Env {
     if_token_adr_to_used_decision: HashMap<usize, bool>,
     if_token_adr_to_unused_decision: HashMap<usize, bool>,
 
-    included_paths: HashSet<PathBuf>
+    included_paths: HashSet<PathBuf>,
+
+    // temporary stuff
+    extra_print_from_function: RwLock<Vec<PrintCommand>>,
+    extra_failed_assert_from_function: RwLock<Vec<FailedAssertCommand>>,
 }
 
 impl Clone for Env {
@@ -442,7 +447,9 @@ impl Clone for Env {
             current_pass_discarded_errors: self.current_pass_discarded_errors.clone(),
             previous_pass_discarded_errors: self.previous_pass_discarded_errors.clone(),
 
-            included_paths: self.included_paths.clone()
+            included_paths: self.included_paths.clone(),
+            extra_print_from_function: self.extra_print_from_function.read().unwrap().clone().into(),
+            extra_failed_assert_from_function: self.extra_failed_assert_from_function.read().unwrap().clone().into(),
         }
     }
 }
@@ -504,7 +511,10 @@ impl Default for Env {
             current_pass_discarded_errors: HashSet::default(),
             previous_pass_discarded_errors: HashSet::default(),
 
-            included_paths: HashSet::default()
+            included_paths: HashSet::default(),
+
+            extra_print_from_function: Vec::new().into(),
+            extra_failed_assert_from_function: Vec::new().into(),
         }
     }
 }
@@ -2464,6 +2474,9 @@ pub fn visit_located_token(
         }
     }
 
+    env.move_delayed_commands_of_functions();
+
+
     Ok(())
 }
 
@@ -2600,7 +2613,10 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 
         Token::Return(exp) => env.visit_return(exp),
         _ => unimplemented!("{:?}", token),
-    }
+    }?;
+
+    env.move_delayed_commands_of_functions();
+    Ok(())
 }
 
 /// No error is generated here; everything is delayed at the end of assembling.
@@ -3045,6 +3061,27 @@ pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), Assembl
     }
 
     Ok(())
+}
+
+impl Env {
+    // TODO find a more efficient way; there a tons of copies there...
+    fn move_delayed_commands_of_functions(&mut self) {
+        {
+        let prints = self.extra_print_from_function.read().unwrap().clone();
+        for print in prints.into_iter() {
+            self.active_page_info_mut().add_print_command(print);
+        }
+        self.extra_print_from_function.write().unwrap().clear();
+    }
+
+        {
+        let asserts = self.extra_failed_assert_from_function.read().unwrap().clone();
+        for assert in asserts.into_iter() {
+            self.active_page_info_mut().add_failed_assert_command(assert);
+        }
+        self.extra_failed_assert_from_function.write().unwrap().clear();
+        }
+    }
 }
 
 #[allow(missing_docs)]

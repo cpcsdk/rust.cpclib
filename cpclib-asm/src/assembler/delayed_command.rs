@@ -148,4 +148,12 @@ impl DelayedCommands {
         &mut self.print_commands
     }
 
+
+    pub fn failed_assert_commands(&self) -> &[FailedAssertCommand] {
+        & self.failed_assert_commands
+    }
+    pub fn failed_assert_commands_mut(&mut self) -> &mut [FailedAssertCommand] {
+        &mut self.failed_assert_commands
+    }
+
 }

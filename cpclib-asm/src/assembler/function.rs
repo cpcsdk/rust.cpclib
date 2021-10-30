@@ -1,12 +1,12 @@
 use std::any::Any;
 
-use crate::{error::AssemblerError, preamble::LocatedToken, Visited};
+use crate::{Visited, assembler::delayed_command::FailedAssertCommand, error::AssemblerError, preamble::LocatedToken};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 use std::collections::HashMap;
 
-use super::Env;
+use super::{Env, delayed_command::PrintCommand};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -49,7 +49,7 @@ impl<T: ListingElement + Visited + Clone> AnyFunction<T> {
 }
 
 impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
-    pub fn eval(&self, env: &Env, params: Vec<ExprResult>) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(&self, init_env: &Env, params: Vec<ExprResult>) -> Result<ExprResult, AssemblerError> {
         if self.args.len() != params.len() {
             return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
                 self.name.clone(),
@@ -60,7 +60,7 @@ impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
         // we copy the environement to be sure no bug can modify it
         // and to keep the symbol table fixed.
         // a better alternative would be to backup the symbol table
-        let mut env = env.clone();
+        let mut env = init_env.clone();
 
         // set the parameters
         for param in self.args.iter().zip(params.iter()) {
@@ -78,6 +78,12 @@ impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
                 .map_err(|e| AssemblerError::FunctionError(self.name.clone(), box e))?;
 
             if env.return_value.is_some() {
+                let extra_print = &env.active_page_info().print_commands()[init_env.active_page_info().print_commands().len()..];
+                let extra_assert = &env.active_page_info().failed_assert_commands()[init_env.active_page_info().failed_assert_commands().len()..];
+
+                init_env.extra_print_from_function.write().unwrap().extend_from_slice(extra_print);
+                init_env.extra_failed_assert_from_function.write().unwrap().extend_from_slice(extra_assert);
+
                 return Ok(env.return_value.take().unwrap());
             }
         }
