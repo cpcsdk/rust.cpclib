@@ -16,6 +16,7 @@ use cpclib_common::nom::error::VerboseErrorKind;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
 use cpclib_tokens::ExpressionTypeError;
+use cpclib_tokens::Oper;
 use cpclib_tokens::symbols::Symbol;
 use cpclib_tokens::symbols::SymbolError;
 use cpclib_tokens::tokens;
@@ -24,6 +25,15 @@ use std::ops::Deref;
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::termcolor::Buffer;
 use codespan_reporting::term::{self, Chars};
+
+
+#[derive(Debug, Clone)]
+pub enum ExpressionError {
+    LeftError(Oper, Box<AssemblerError>),
+    RightError(Oper, Box<AssemblerError>),
+    LeftAndRightError(Oper, Box<AssemblerError>, Box<AssemblerError>),
+    OwnError(Box<AssemblerError>)
+}
 
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
@@ -178,9 +188,7 @@ pub enum AssemblerError {
         expression: tokens::Expr,
     },
 
-    ExpressionError {
-        msg: String,
-    },
+    ExpressionError(ExpressionError),
 
     RelativeAddressUncomputable {
         address: i32,
@@ -464,7 +472,24 @@ impl AssemblerError {
                 )
             }
             AssemblerError::DisassemblerError { msg } => write!(f, "Disassembler error: {}", msg),
-            AssemblerError::ExpressionError { msg } => write!(f, "Expression error: {}", msg),
+
+            AssemblerError::ExpressionError(e) => {
+                let msg = match e {
+                    ExpressionError::LeftError(oper, error) => {
+                        format!("on left operand of {}: {}.", oper, error)
+                    },
+                    ExpressionError::RightError(oper, error) => {
+                        format!("on right operand of {}: {}.", oper, error)
+                    },
+                    ExpressionError::LeftAndRightError(oper, error1, error2) => {
+                        format!("on left and right operand of {}: {} / {}", oper, error1, error2)
+                    },
+                    ExpressionError::OwnError(error) => {
+                        format!("{}", error)
+                    }
+                };
+                write!(f, "Expression error {}", msg)
+            },
             AssemblerError::CounterAlreadyExists { symbol } => {
                 write!(f, "A counter named `{}` already exists", symbol)
             }
@@ -564,7 +589,7 @@ impl AssemblerError {
             }
             AssemblerError::UnknownAssemblingAddress => todo!(),
             AssemblerError::ExpressionUnresolvable { expression: _ } => todo!(),
-            AssemblerError::ExpressionError { msg: _ } => todo!(),
+            AssemblerError::ExpressionError (e) => todo!(),
             AssemblerError::RelativeAddressUncomputable {
                 address: _,
                 pass: _,

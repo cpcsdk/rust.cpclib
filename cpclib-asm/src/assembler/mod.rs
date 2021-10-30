@@ -2738,9 +2738,11 @@ impl Env {
         let counter_name = counter_name.as_str();
         if self.symbols().contains_symbol(counter_name)? {
             return Err(AssemblerError::RepeatIssue {
-                error: AssemblerError::ExpressionError {
-                    msg: format!("Counter {} already exists", counter_name),
-                }
+                error: AssemblerError::ExpressionError( ExpressionError::OwnError(
+                    box AssemblerError::AssemblingError {
+                    msg: format!("Counter {} already exists", counter_name)
+                    }
+                ))
                 .into(),
                 span: span.clone(),
                 repetition: 0,
@@ -2845,9 +2847,9 @@ impl Env {
         if let Some(counter_name) = counter_name {
             if self.symbols().contains_symbol(counter_name)? {
                 return Err(AssemblerError::RepeatIssue {
-                    error: AssemblerError::ExpressionError {
+                    error: AssemblerError::ExpressionError(ExpressionError::OwnError(box AssemblerError::AssemblingError {
                         msg: format!("Counter {} already exists", counter_name),
-                    }
+                    }))
                     .into(),
                     span: span.clone(),
                     repetition: 0,

@@ -110,24 +110,22 @@ impl ExprEvaluationExt for Expr {
                     Oper::GreaterOrEqual => Ok((a >= b).into()),
                     Oper::StrictlyGreater => Ok((a > b).into()),
                 },
-                (Err(a), Ok(_b)) => Err(AssemblerError::ExpressionError {
-                    msg: format!(
-                        "Unable to make the operation {:?}: error in left operand {:?}",
-                        oper, a
-                    ),
-                }),
-                (Ok(_a), Err(b)) => Err(AssemblerError::ExpressionError {
-                    msg: format!(
-                        "Unable to make the operation {:?}: error in right operand {:?}",
-                        oper, b
-                    ),
-                }),
-                (Err(a), Err(b)) => Err(AssemblerError::ExpressionError {
-                    msg: format!(
-                        "Unable to make the operation {:?}: error in both operands {:?} & {:?}",
-                        oper, a, b
-                    ),
-                }),
+                (Err(a), Ok(_b)) => Err(
+                    AssemblerError::ExpressionError(
+                        ExpressionError::LeftError(oper, box a)
+                    )
+                ),
+             
+                (Ok(_a), Err(b)) => Err(
+                    AssemblerError::ExpressionError(
+                        ExpressionError::RightError(oper, box b)
+                    )
+                ),
+                (Err(a), Err(b)) => Err(
+                    AssemblerError::ExpressionError(
+                        ExpressionError::LeftAndRightError(oper, box a, box b)
+                    )
+                )
             }
         };
 
@@ -175,10 +173,22 @@ impl ExprEvaluationExt for Expr {
             OpCode(ref token) => {
                 let bytes = token.clone().to_bytes()?;
                 match bytes.len() {
-                    0 => Err(AssemblerError::ExpressionError{msg:format!("{} is assembled with 0 bytes", token)}),
+                    0 => Err(
+                        AssemblerError::ExpressionError(
+                            ExpressionError::OwnError(
+                                box AssemblerError::AssemblingError{msg:format!("{} is assembled with 0 bytes", token)}
+                            )
+                        )
+                    ),
                     1 => Ok(i32::from(bytes[0]).into()),
                     2 => Ok((i32::from(bytes[0]) * 256 + i32::from(bytes[1])).into()),
-                    val => Err(AssemblerError::ExpressionError{msg:format!("{} is assembled with {} bytes", token, val)}),
+                    val => Err(
+                        AssemblerError::ExpressionError(
+                            ExpressionError::OwnError(
+                                box AssemblerError::AssemblingError{msg:format!("{} is assembled with {} bytes", token, val)}
+                            )
+                        )
+                    )
                 }
             }
 
@@ -260,9 +270,13 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
             UnaryFunction::Low => (arg & 0xff.into()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::Memory => {
                 if arg < 0.into() || arg > 0xffff.into() {
-                    return Err(AssemblerError::ExpressionError {
-                        msg: format!("Impossible to read memory address {}", arg),
-                    });
+
+                    return Err(AssemblerError::ExpressionError(
+                        ExpressionError::OwnError(
+                            box AssemblerError::AssemblingError{msg:format!("Impossible to read memory address {}", arg)}
+                        )
+                    ));
+
                 } else {
                     Ok(env
                         .peek(&env.logical_to_physical_address(arg.int()? as _))
