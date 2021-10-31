@@ -6,7 +6,7 @@ use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 use std::collections::HashMap;
 
-use super::{Env, delayed_command::PrintCommand, list::{list_get, string_new}};
+use super::{Env, delayed_command::PrintCommand, list::{list_get, list_sublist, string_new}};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -146,6 +146,10 @@ lazy_static::lazy_static! {
             "list_set".to_owned(),
             Function::HardCoded(HardCodedFunction::ListSet)
         );
+        functions.insert(
+            "list_sublist".to_owned(),
+            Function::HardCoded(HardCodedFunction::ListSublist)
+        );
 
         functions.insert(
             "string_new".to_owned(),
@@ -173,6 +177,7 @@ pub enum HardCodedFunction {
     ListNew,
     ListSet,
     ListGet,
+    ListSublist,
 
     StringNew
 }
@@ -195,6 +200,7 @@ impl HardCodedFunction {
             HardCodedFunction::ListNew => 2,
             HardCodedFunction::ListSet => 3,
             HardCodedFunction::ListGet => 2,
+            HardCodedFunction::ListSublist => 3,
 
             HardCodedFunction::StringNew => 2
             
@@ -222,6 +228,7 @@ impl HardCodedFunction {
             HardCodedFunction::ListNew => "list_new",
             HardCodedFunction::ListSet => "list_set",
             HardCodedFunction::ListGet => "list_get",
+            HardCodedFunction::ListSublist => "list_sublist",
 
             HardCodedFunction::StringNew => "string_new"
         }
@@ -310,6 +317,12 @@ impl HardCodedFunction {
             ),
 
             HardCodedFunction::StringNew => string_new(params[0].int()? as _, params[1].clone()),
+
+            HardCodedFunction::ListSublist => list_sublist(
+                params[0].clone(),
+                params[1].int()? as _,
+                params[2].int()? as _
+            )
         }
     }
 }

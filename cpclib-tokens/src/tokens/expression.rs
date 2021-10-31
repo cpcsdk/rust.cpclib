@@ -23,6 +23,12 @@ pub enum Expr {
     String(String),
     /// Label
     Label(String),
+    /// List of expression
+    List(Vec<Expr>),
+
+
+
+
     /// Label with a prefix
     PrefixedLabel(LabelPrefix, String),
 
@@ -411,6 +417,11 @@ impl Display for Expr {
             &Float(val) => write!(format, "{}", val),
             Char(c) => write!(format, "'{}'", c),
             &String(ref string) => write!(format, "\"{}\"", string),
+            List(l) => write!(
+                format,
+                "[{}]",
+                l.iter().map(|e| e.to_string()).join(",")
+            ),
             &Label(ref label) => write!(format, "{}", label),
             PrefixedLabel(prefix, label) => write!(format, "{}{}", prefix, label),
 
@@ -911,8 +922,13 @@ impl std::cmp::PartialEq for ExprResult {
         match (self, other) {
             (Self::Float(l0), Self::Float(r0)) => l0 == r0,
             (Self::Value(l0), Self::Value(r0)) => l0 == r0,
+
             (Self::String(l0), Self::String(r0)) => l0 == r0,
             (Self::String(_), _) | (_, Self::String(_)) => false,
+
+            (Self::List(l0), Self::List(r0)) => l0 == r0,
+            (Self::List(_), _) | (_, Self::List(_)) => false,
+
             _ => self.int().unwrap() == other.int().unwrap(),
         }
     }
@@ -923,8 +939,13 @@ impl std::cmp::PartialOrd for ExprResult {
         match (self, other) {
             (Self::Float(l0), Self::Float(r0)) => l0.partial_cmp(r0),
             (Self::Value(l0), Self::Value(r0)) => l0.partial_cmp(r0),
+
             (Self::String(l0), Self::String(r0)) => l0.partial_cmp(r0),
             (Self::String(_), _) | (_, Self::String(_)) => None,
+
+            (Self::List(l0), Self::List(r0)) => l0.partial_cmp(r0),
+            (Self::List(_), _) | (_, Self::List(_)) => None,
+
             _ => self.float().unwrap().partial_cmp(&other.float().unwrap()),
         }
     }

@@ -68,8 +68,8 @@ impl ExprEvaluationExt for Expr {
                 a.symbols_used()
             },
 
-            Expr::AnyFunction(_, p) => {
-                p.iter()
+            Expr::AnyFunction(_, l) | Expr::List(l)=> {
+                l.iter()
                     .map(|e| e.symbols_used())
                     .flatten()
                     .collect_vec()
@@ -139,6 +139,7 @@ impl ExprEvaluationExt for Expr {
             }
 
             String(ref string) => Ok(ExprResult::String(string.clone())),
+            List(ref l) => Ok(ExprResult::List(l.iter().map(|e| e.resolve(env)).collect::<Result<Vec<_>, _>>()?)),
 
             Label(ref label) => match sym.value(label)? {
                 Some(cpclib_tokens::symbols::Value::Expr(ref val)) => Ok(val.clone().into()),

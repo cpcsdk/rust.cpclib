@@ -3585,9 +3585,25 @@ pub fn parse_counter(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80S
 /// Read a parenthesed expression
 pub fn parens(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     delimited(
-        delimited(space0, tag("("), space0),
+        delimited(my_space0, tag("("), my_space0),
         map(map(expr, Box::new), Expr::Paren),
-        delimited(space0, tag(")"), space0),
+        delimited(my_space0, tag(")"), space0),
+    )(input)
+}
+
+pub fn parse_expr_list(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+    map(
+        delimited(
+            pair(tag("["), my_space0),
+            separated_list0(
+                parse_comma,
+                expr
+            ),
+            pair(my_space0, tag("]")),
+        ),
+
+        |l| Expr::List(l)
+
     )(input)
 }
 
@@ -3604,6 +3620,7 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
             context(
                 "[DBG]alt",
                 alt((
+                    parse_expr_list,
                     // Manage functions
                     map(parse_word("RND()"), |_| Expr::Rnd),
                     parse_unary_functions,
@@ -3849,12 +3866,12 @@ pub fn parse_any_function(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError
 
     let (input, function_name) = parse_label(false)(input)?;
     let (input, arguments) = delimited(
-        tuple((space0, tag("("), space0)),
+        tuple((/*space0,*/ tag("("), my_space0)),
         separated_list0(
             parse_comma,
             expr
         ),
-        tuple((space0, tag(")")))
+        tuple((my_space0, tag(")")))
     )(input)?;
 
     Ok((
