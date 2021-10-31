@@ -141,13 +141,14 @@ impl ExprEvaluationExt for Expr {
             String(ref string) => Ok(ExprResult::String(string.clone())),
 
             Label(ref label) => match sym.value(label)? {
-                Some(cpclib_tokens::symbols::Value::Number(ref val)) => Ok(val.clone().into()),
+                Some(cpclib_tokens::symbols::Value::Expr(ref val)) => Ok(val.clone().into()),
                 Some(cpclib_tokens::symbols::Value::Address(ref val)) => Ok(val.address().into()),
                 Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym).into()),
-                Some(_) => Err(AssemblerError::WrongSymbolType {
+                Some(cpclib_tokens::symbols::Value::String(ref val)) => Ok(val.clone().into()),
+                Some(e) => {dbg!(e); Err(AssemblerError::WrongSymbolType {
                     symbol: label.to_owned(),
                     isnot: "a value".to_owned(),
-                }),
+                })},
                 None => Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),
                     closest: sym.closest_symbol(label, SymbolFor::Number)?,

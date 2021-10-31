@@ -327,7 +327,7 @@ impl Macro {
 #[allow(missing_docs)]
 pub enum Value {
     /// Integer value used in an expression
-    Number(ExprResult),
+    Expr(ExprResult),
     String(String),
     /// Address (use in physical way to ensure all bank/page info are available)
     Address(PhysicalAddress),
@@ -352,7 +352,7 @@ pub enum SymbolFor {
 impl Value {
     pub fn integer(&self) -> Option<i32> {
         match self {
-            Value::Number(ExprResult::Value(i)) => Some(*i),
+            Value::Expr(ExprResult::Value(i)) => Some(*i),
             Value::Address(addr) => Some(addr.address as _),
             _ => None,
         }
@@ -409,7 +409,7 @@ impl<I: Into<ExprResult>> From<I> for Value {
         let value = i.into();
         match  &value {
             ExprResult::String(s) => Value::String(s.clone()),
-            _ => Value::Number(value)
+            _ => Value::Expr(value)
         }
     }
 }
@@ -733,7 +733,7 @@ impl SymbolsTableTrait for SymbolsTable {
         self.map
             .iter()
             .filter(|(_k, v)| match v {
-                Value::Number(_) | Value::Address(_) => true,
+                Value::Expr(_) | Value::Address(_) => true,
                 _ => false,
             })
             .map(|(k, _v)| k)
@@ -826,7 +826,7 @@ impl SymbolsTableTrait for SymbolsTable {
 impl SymbolsTable {
     pub fn laxist() -> Self {
         let mut map = ModuleSymbolTable::default();
-        map.insert(Symbol::from("$"), Value::Number(0.into()));
+        map.insert(Symbol::from("$"), Value::Expr(0.into()));
         Self {
             map: map.clone(),
             current_pass_map: map.clone(),
@@ -919,7 +919,7 @@ impl SymbolsTable {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
         self.current_address().map(|val| {
-            let value = Value::Number(val.into());
+            let value = Value::Expr(val.into());
             self.map.insert(symbol.clone(), value.clone());
             self.current_pass_map.insert(symbol, value);
         })
@@ -1027,8 +1027,8 @@ impl SymbolsTable {
             .map
             .iter()
             .filter(|(_k, v)| match (v, r#for) {
-                (Value::Number(_), SymbolFor::Number)
-                | (Value::Number(_), SymbolFor::Address)
+                (Value::Expr(_), SymbolFor::Number)
+                | (Value::Expr(_), SymbolFor::Address)
                 | (Value::Address(_), SymbolFor::Address)
                 | (Value::Address(_), SymbolFor::Number)
                 | (Value::Macro(_), SymbolFor::Macro)
@@ -1059,7 +1059,7 @@ impl SymbolsTable {
 
     pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> Result<&'static str, SymbolError> {
         Ok(match self.value(symbol)? {
-            Some(Value::Number(_)) => "number",
+            Some(Value::Expr(_)) => "number",
             Some(Value::Address(_)) => "address",
             Some(Value::Macro(_)) => "macro",
             Some(Value::Struct(_)) => "struct",

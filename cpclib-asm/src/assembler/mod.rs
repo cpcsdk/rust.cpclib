@@ -1976,7 +1976,7 @@ impl Env {
                     repr += &char.to_string();
                 }
                 FormattedExpr::Raw(expr) => {
-                    let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int()? as f32;
+                    let value =  self.resolve_expr_may_fail_in_first_pass(expr)?;
                     repr += &value.to_string();
                 }
                 FormattedExpr::Formatted(format, expr) => {

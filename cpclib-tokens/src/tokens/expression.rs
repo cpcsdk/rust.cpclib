@@ -678,6 +678,15 @@ impl ExprResult {
         }
     }
 
+    pub fn char(&self) -> Result<char, ExpressionTypeError> {
+        match self {
+            ExprResult::Float(f) => Ok(f.into_inner() as u8 as char),
+            ExprResult::Value(v) => Ok(*v as u8 as char),
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as a char", s))),
+            ExprResult::List(l) => Err(ExpressionTypeError(format!("Try to convert {:?} as a char", l)))
+        }
+    }
+
     pub fn bool(&self) -> Result<bool, ExpressionTypeError> {
         match self {
             ExprResult::Float(f) => Ok(*f != 0.),

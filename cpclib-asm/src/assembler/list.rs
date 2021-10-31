@@ -1,4 +1,4 @@
-use cpclib_tokens::ExprResult;
+use cpclib_tokens::{ExprResult, ExpressionTypeError};
 
 use crate::error::{AssemblerError, ExpressionError};
 
@@ -6,6 +6,13 @@ use crate::error::{AssemblerError, ExpressionError};
 /// Create a new list
 pub fn list_new(count: usize, value: ExprResult) -> ExprResult {
 	ExprResult::List(vec![value; count])
+}
+
+/// Create a new string
+pub fn string_new(count: usize, value: ExprResult) -> Result<ExprResult, AssemblerError>  {
+	let value = value.char()?;
+	let s = (0..count).map(|_| value).collect::<String>();
+	Ok(ExprResult::String(s))
 }
 
 /// Modify a list or a string
@@ -63,3 +70,5 @@ pub fn list_get(mut list: ExprResult, index: usize) -> Result<ExprResult, crate:
 		))
 	}
 }
+
+

@@ -587,13 +587,14 @@ impl AssemblerError {
             AssemblerError::MacroError { name, root } => {
                 write!(f, "Error in macro call: {}\n{}", name, root)
             }
-            AssemblerError::WrongSymbolType { symbol: _, isnot: _ } => todo!(),
+            AssemblerError::WrongSymbolType { symbol: s, isnot: n } => {
+                write!(f, "Wrong symbol type: {} is not {}", s, n)
+            },
             AssemblerError::IOError { msg } => {
                 write!(f, "IO Error: {}", msg)
             }
             AssemblerError::UnknownAssemblingAddress => todo!(),
             AssemblerError::ExpressionUnresolvable { expression: _ } => todo!(),
-            AssemblerError::ExpressionError (e) => todo!(),
             AssemblerError::RelativeAddressUncomputable {
                 address: _,
                 pass: _,
