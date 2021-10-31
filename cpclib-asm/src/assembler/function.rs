@@ -6,7 +6,7 @@ use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 use std::collections::HashMap;
 
-use super::{Env, delayed_command::PrintCommand, list::{list_get, list_sublist, string_new}};
+use super::{Env, delayed_command::PrintCommand, list::{list_get, list_len, list_sublist, string_new, string_push}};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -31,7 +31,7 @@ impl ReturnExpr for LocatedToken {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnyFunction<T: ListingElement + Visited> {
     name: String,
     args: Vec<String>,
@@ -100,67 +100,28 @@ pub enum Function {
 }
 
 lazy_static::lazy_static! {
-     static ref HARD_CODED_FUNCTIONS: HashMap<String, Function> = {
-        let mut functions: HashMap<String, Function> = Default::default();
-
-        functions.insert(
-            "mode0_byte_to_pen_at".to_owned(),
-            Function::HardCoded(HardCodedFunction::Mode0ByteToPenAt));
-        functions.insert(
-            "mode1_byte_to_pen_at".to_owned(),
-            Function::HardCoded(HardCodedFunction::Mode1ByteToPenAt));
-        functions.insert(
-            "mode2_byte_to_pen_at".to_owned(),
-            Function::HardCoded(HardCodedFunction::Mode2ByteToPenAt));
-
-        functions.insert(
-            "pen_at_mode0_byte".to_owned(),
-            Function::HardCoded(HardCodedFunction::PenAtToMode0Byte));
-        functions.insert(
-            "pen_at_mode1_byte".to_owned(),
-            Function::HardCoded(HardCodedFunction::PenAtToMode1Byte));
-        functions.insert(
-            "pen_at_mode2_byte".to_owned(),
-            Function::HardCoded(HardCodedFunction::PenAtToMode2Byte));
-
-        functions.insert(
-            "pens_to_mode0_byte".to_owned(),
-            Function::HardCoded(HardCodedFunction::PensToMode0Byte));
-        functions.insert("
-        pens_to_mode1_byte".to_owned(),
-        Function::HardCoded(HardCodedFunction::PensToMode1Byte));
-        functions.insert(
-            "pens_to_mode2_byte".to_owned(),
-            Function::HardCoded(HardCodedFunction::PensToMode2Byte));
-
-
-        functions.insert(
-            "list_new".to_owned(),
-            Function::HardCoded(HardCodedFunction::ListNew)
-        );
-        functions.insert(
-            "list_get".to_owned(),
-            Function::HardCoded(HardCodedFunction::ListGet)
-        );
-        functions.insert(
-            "list_set".to_owned(),
-            Function::HardCoded(HardCodedFunction::ListSet)
-        );
-        functions.insert(
-            "list_sublist".to_owned(),
-            Function::HardCoded(HardCodedFunction::ListSublist)
-        );
-
-        functions.insert(
-            "string_new".to_owned(),
-            Function::HardCoded(HardCodedFunction::StringNew)
-        );
-
-        functions
+     static ref HARD_CODED_FUNCTIONS: HashMap<&'static str, Function> = velcro::hash_map! {
+        "mode0_byte_to_pen_at": Function::HardCoded(HardCodedFunction::Mode0ByteToPenAt),
+        "mode1_byte_to_pen_at": Function::HardCoded(HardCodedFunction::Mode1ByteToPenAt),
+        "mode2_byte_to_pen_at": Function::HardCoded(HardCodedFunction::Mode2ByteToPenAt),
+        "pen_at_mode0_byte": Function::HardCoded(HardCodedFunction::PenAtToMode0Byte),
+        "pen_at_mode1_byte":Function::HardCoded(HardCodedFunction::PenAtToMode1Byte),
+        "pen_at_mode2_byte": Function::HardCoded(HardCodedFunction::PenAtToMode2Byte),
+        "pens_to_mode0_byte": Function::HardCoded(HardCodedFunction::PensToMode0Byte),
+        "pens_to_mode1_byte":
+        Function::HardCoded(HardCodedFunction::PensToMode1Byte),
+        "pens_to_mode2_byte": Function::HardCoded(HardCodedFunction::PensToMode2Byte),
+        "list_new": Function::HardCoded(HardCodedFunction::ListNew),
+        "list_get": Function::HardCoded(HardCodedFunction::ListGet),
+        "list_set": Function::HardCoded(HardCodedFunction::ListSet),
+        "list_len": Function::HardCoded(HardCodedFunction::ListLen),
+        "list_sublist": Function::HardCoded(HardCodedFunction::ListSublist),
+        "string_new": Function::HardCoded(HardCodedFunction::StringNew),
+        "string_push": Function::HardCoded(HardCodedFunction::StringPush)
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HardCodedFunction {
     Mode0ByteToPenAt,
     Mode1ByteToPenAt,
@@ -178,8 +139,10 @@ pub enum HardCodedFunction {
     ListSet,
     ListGet,
     ListSublist,
+    ListLen,
 
-    StringNew
+    StringNew,
+    StringPush
 }
 
 impl HardCodedFunction {
@@ -201,37 +164,25 @@ impl HardCodedFunction {
             HardCodedFunction::ListSet => 3,
             HardCodedFunction::ListGet => 2,
             HardCodedFunction::ListSublist => 3,
+            HardCodedFunction::ListLen => 1,
 
-            HardCodedFunction::StringNew => 2
+            HardCodedFunction::StringNew => 2,
+            HardCodedFunction::StringPush => 2,
             
         }
     }
 
     pub fn by_name(name: &str) -> Option<&Function> {
-        HARD_CODED_FUNCTIONS.get(&name.to_lowercase())
+        HARD_CODED_FUNCTIONS.get(name.to_lowercase().as_str())
     }
 
     pub fn name(&self) -> &str {
-        match self {
-            HardCodedFunction::Mode0ByteToPenAt => "mode0_byte_to_pen_at",
-            HardCodedFunction::Mode1ByteToPenAt => "mode1_byte_to_pen_at",
-            HardCodedFunction::Mode2ByteToPenAt => "mode2_byte_to_pen_at",
-
-            HardCodedFunction::PenAtToMode0Byte => "pen_at_mode0_byte",
-            HardCodedFunction::PenAtToMode1Byte => "pen_at_mode1_byte",
-            HardCodedFunction::PenAtToMode2Byte => "pen_at_mode2_byte",
-
-            HardCodedFunction::PensToMode0Byte => "pens_to_mode0_byte",
-            HardCodedFunction::PensToMode1Byte => "pens_to_mode1_byte",
-            HardCodedFunction::PensToMode2Byte => "pens_to_mode2_byte",
-            
-            HardCodedFunction::ListNew => "list_new",
-            HardCodedFunction::ListSet => "list_set",
-            HardCodedFunction::ListGet => "list_get",
-            HardCodedFunction::ListSublist => "list_sublist",
-
-            HardCodedFunction::StringNew => "string_new"
-        }
+        HARD_CODED_FUNCTIONS.iter()
+            .find_map(|(k,v)| match v {
+                Function::HardCoded(v) => if v == self {Some(k)} else {None},
+                _ => None
+            })
+            .unwrap()// Cannot fail by definition
     }
 
     pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
@@ -317,11 +268,16 @@ impl HardCodedFunction {
             ),
 
             HardCodedFunction::StringNew => string_new(params[0].int()? as _, params[1].clone()),
-
+            HardCodedFunction::ListLen => list_len(params[0].clone()),
             HardCodedFunction::ListSublist => list_sublist(
                 params[0].clone(),
                 params[1].int()? as _,
                 params[2].int()? as _
+            ),
+
+            HardCodedFunction::StringPush => string_push(
+                params[0].clone(),
+                params[1].clone()
             )
         }
     }

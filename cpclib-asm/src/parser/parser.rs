@@ -233,7 +233,9 @@ const END_DIRECTIVE: &[&str] = &[
     "ENDR",
     "ENDREP", // repeat directive
     "ENDREPEAT",
+    "ENDS",
     "ENDSWITCH",
+    "ENDW",
     "IEND",
     "LZCLOSE",
     "REND",  // rorg directive
@@ -606,7 +608,7 @@ pub fn parse_while(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
     let (input, inner) = cut(context("WHILE: issue in the content", inner_code))(input)?;
     let (input, _) = cut(context(
         "WHILE: not closed",
-        preceded(space0, parse_directive_word("WEND")),
+        preceded(space0, alt((parse_directive_word("ENDW"), parse_directive_word("WEND")))),
     ))(input)?;
 
     Ok((
@@ -701,10 +703,10 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         let (input, endswitch) = if default_listing.is_some() {
             cut(context(
                 "SWITCH: endswitch not present after default listing.",
-                preceded(space0, map(parse_directive_word("ENDSWITCH"), |_| true)),
+                preceded(space0, map(alt((parse_directive_word("ENDS"), parse_directive_word("ENDSWITCH"))), |_| true)),
             ))(input)?
         } else {
-            preceded(space0, map(opt(parse_directive_word("ENDSWITCH")), |e| e.is_some()))(input)?
+            preceded(space0, map(opt(alt((parse_directive_word("ENDS"),parse_directive_word("ENDSWITCH")))), |e| e.is_some()))(input)?
         };
         if endswitch {
             return Ok((

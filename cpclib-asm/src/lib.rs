@@ -6,6 +6,7 @@
 #![feature(let_chains)]
 #![feature(box_syntax)]
 #![feature(box_patterns)]
+#![feature(string_extend_from_within)]
 
 /// Implementation of various behvior for the tokens of cpclib_tokens
 pub mod implementation;

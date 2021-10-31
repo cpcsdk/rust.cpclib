@@ -99,8 +99,8 @@ impl ExprEvaluationExt for Expr {
                     Oper::BinaryOr => (a | b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
                     Oper::BinaryXor => (a ^ b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
 
-                    Oper::BooleanAnd => Ok(((a != 0.into()) && (b != 0.into())).into()),
-                    Oper::BooleanOr => Ok(((a != 0.into()) || (b != 0.into())).into()),
+                    Oper::BooleanAnd => Ok(ExprResult::from(a.bool()? && (b.bool()?))),
+                    Oper::BooleanOr => Ok(ExprResult::from(a.bool()? || (b.bool()?))),
 
                     Oper::Equal => Ok((a == b).into()),
                     Oper::Different => Ok((a != b).into()),
@@ -336,7 +336,7 @@ impl<'a> ExprEvaluationExt for BinaryFunctionWrapper<'a> {
                 match arg1 {
                     ExprResult::Float(f) => Ok(f.into_inner().powf(power as f64).into()),
                     ExprResult::Value(v) => Ok(v.pow(power as _).into()),
-                    ExprResult::String(_) => Err(AssemblerError::ExpressionError(
+                    _=> Err(AssemblerError::ExpressionError(
                         ExpressionError::OwnError(
                             box AssemblerError::AssemblingError{msg:format!("pow cannot be applied to a string")}
                         )

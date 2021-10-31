@@ -40,7 +40,7 @@ paste = "1.0.5"
 rayon = "1.5.1"
 serde = { version = "1.0.126", features = ["derive"] }
 substring = "1.4.5"
-
+velcro = "0.5.3"
 
 
 [build-dependencies]

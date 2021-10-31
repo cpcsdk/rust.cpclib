@@ -582,6 +582,7 @@ impl Display for ExpressionTypeError {
 pub enum ExprResult {
     Float(OrderedFloat<f64>),
     Value(i32),
+    Bool(bool),
     String(String),
     List(Vec<ExprResult>)
 }
@@ -595,6 +596,12 @@ impl From<String> for ExprResult {
 impl From<f64> for ExprResult {
     fn from(f: f64) -> Self {
         ExprResult::Float(f.into())
+    }
+}
+
+impl From<bool> for ExprResult {
+    fn from(b: bool) -> Self {
+        ExprResult::Bool(b)
     }
 }
 
@@ -639,16 +646,6 @@ impl From<char> for ExprResult {
     }
 }
 
-impl From<bool> for ExprResult {
-    fn from(b: bool) -> Self {
-        if b {
-            1.into()
-        } else {
-            0.into()
-        }
-    }
-}
-
 impl ExprResult {
     pub fn is_float(&self) -> bool {
         match self {
@@ -675,8 +672,8 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.into_inner() as _),
             ExprResult::Value(i) => Ok(*i),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as an int", s))),
-            ExprResult::List(l) => Err(ExpressionTypeError(format!("Try to convert {:?} as an int", l)))
+            ExprResult::Bool(b) => Ok(if *b {1} else {0}),
+            _ => Err(ExpressionTypeError(format!("Try to convert {} as an int", self))),
         }
     }
 
@@ -684,8 +681,8 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.into_inner()),
             ExprResult::Value(i) => Ok(*i as f64),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as a float", s))),
-            ExprResult::List(l) => Err(ExpressionTypeError(format!("Try to convert {:?} as a float", l)))
+            ExprResult::Bool(b) => Ok(if *b {1 as f64} else {0 as f64}),
+            _ => Err(ExpressionTypeError(format!("Try to convert {} as a float", self)))
         }
     }
 
@@ -693,8 +690,8 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.into_inner() as u8 as char),
             ExprResult::Value(v) => Ok(*v as u8 as char),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as a char", s))),
-            ExprResult::List(l) => Err(ExpressionTypeError(format!("Try to convert {:?} as a char", l)))
+            ExprResult::Bool(b) => Ok(if *b {'T'.into()} else {'F'.into()}),
+            _ => Err(ExpressionTypeError(format!("Try to convert {} as a char", self)))
         }
     }
 
@@ -702,8 +699,8 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(*f != 0.),
             ExprResult::Value(i) => Ok(*i != 0),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as a bool", s))),
-            ExprResult::List(l) => Err(ExpressionTypeError(format!("Try to convert {:?} as a bool", l))),
+            ExprResult::Bool(b) => Ok(*b),
+            _ => Err(ExpressionTypeError(format!("Try to convert {} as a bool", self)))
         }
     }
 }
@@ -713,25 +710,21 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.floor().into()),
             ExprResult::Value(v) => Ok(v.clone().into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply floor to {}", s))),
-            ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to apply floor to {:?}", s)))
+            _ => Err(ExpressionTypeError(format!("Try to apply floor to {}", self)))
         }
     }
     pub fn ceil(&self) -> Result<Self, ExpressionTypeError> {
         match self {
             ExprResult::Float(f) => Ok(f.ceil().into()),
             ExprResult::Value(v) => Ok(v.clone().into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply ceil to {}", s))),
-            ExprResult::List(l) => Err(ExpressionTypeError(format!("Try to apply ceil to {:?}", l))),
+            _ => Err(ExpressionTypeError(format!("Try to apply ceil to {}", self)))
         }
     }
     pub fn frac(&self) -> Result<Self, ExpressionTypeError>  {
         match self {
             ExprResult::Float(f) => Ok(f.fract().into()),
             ExprResult::Value(_v) => Ok(0.into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply frac to {}", s))),
-            ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to apply frac to {:?}", s)))
-
+            _ => Err(ExpressionTypeError(format!("Try to apply frac to {}", self)))
         }
     }
     pub fn sin(&self) -> Result<Self, ExpressionTypeError>  {
@@ -753,8 +746,8 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.abs().into()),
             ExprResult::Value(v) => Ok(v.abs().into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply abs to {}", s))),
-            ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to apply abs to {:?}", s)))
+            ExprResult::Bool(b) => Ok(self.clone()),
+            _ => Err(ExpressionTypeError(format!("Try to apply abs to {}", self))),
 
         }
     }
@@ -777,6 +770,7 @@ impl ExprResult {
                 return Err(ExpressionTypeError("Float are not compatible with ~ operator".to_owned()))
             }
             ExprResult::Value(i) => Ok((!*i).into()),
+            ExprResult::Bool(b) => Ok((!*b).into()),
             ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply floor to {}", s))),
             ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to apply floor to {:?}", s))),
 
@@ -791,6 +785,7 @@ impl std::ops::Neg for ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.neg().into()),
             ExprResult::Value(i) => Ok(i.neg().into()),
+            ExprResult::Bool(b) => Ok((!b).into()),
             ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to substract {}", s))),
             ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to substract {:?}", s)))
             
@@ -956,6 +951,7 @@ impl std::fmt::Display for ExprResult {
         match self {
             ExprResult::Float(f2) => write!(f, "{}", f2.into_inner()),
             ExprResult::Value(v) => write!(f, "{}", v),
+            ExprResult::Bool(b) => write!(f, "{}", b),
             ExprResult::String(v) => write!(f, "\"{}\"", v),
             ExprResult::List(v) => 
                 write!(
@@ -973,6 +969,7 @@ impl std::fmt::LowerHex for ExprResult {
         match self {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:x}", v),
+            ExprResult::Bool(v) => write!(f, "{:x}", *v as u8),
             ExprResult::String(v) => write!(f, "STRING REPRESENTATION ISSUE"),
             ExprResult::List(v) => 
                 write!(
@@ -991,6 +988,7 @@ impl std::fmt::UpperHex for ExprResult {
         match self {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:X}", v),
+            ExprResult::Bool(v) => write!(f, "{:X}", *v as u8),
             ExprResult::String(v) => write!(f, "STRING REPRESENTATION ISSUE"),
             ExprResult::List(v) => write!(
                 f, 

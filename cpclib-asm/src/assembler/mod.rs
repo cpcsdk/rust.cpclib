@@ -208,6 +208,7 @@ impl Visited for LocatedToken {
     fn visited(&self, env: &mut Env) -> Result<(), AssemblerError> {
         // dbg!(env.output_address, self.as_token());
         visit_located_token(self, env)
+            .map_err(|e| e.locate(self.span().clone()))
     }
 }
 
@@ -1452,7 +1453,7 @@ impl Env {
                 // Expression must be true
                 (TestKind::True(ref exp), ref listing) => {
                     let value = self.resolve_expr_must_never_fail(exp)?;
-                    if value != 0.into() {
+                    if value.bool()? {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
@@ -1461,7 +1462,7 @@ impl Env {
                 // Expression must be false
                 (TestKind::False(ref exp), listing) => {
                     let value = self.resolve_expr_must_never_fail(exp)?;
-                    if value == 0.into() {
+                    if !value.bool()? {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }

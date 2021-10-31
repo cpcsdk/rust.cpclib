@@ -24,3 +24,10 @@ data2 = list_set(data2, 1, 3)
 	assert list_get( \
 		data2, \
 		1 ) == 3
+
+
+data2 = list_sublist( \
+	data, \
+	1, \
+	3\
+	)
