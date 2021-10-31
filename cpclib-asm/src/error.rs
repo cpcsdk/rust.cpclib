@@ -32,7 +32,8 @@ pub enum ExpressionError {
     LeftError(Oper, Box<AssemblerError>),
     RightError(Oper, Box<AssemblerError>),
     LeftAndRightError(Oper, Box<AssemblerError>, Box<AssemblerError>),
-    OwnError(Box<AssemblerError>)
+    OwnError(Box<AssemblerError>),
+    InvalidSize(usize, usize), //expected index
 }
 
 #[derive(Debug, Clone)]
@@ -486,6 +487,9 @@ impl AssemblerError {
                     },
                     ExpressionError::OwnError(error) => {
                         format!("{}", error)
+                    },
+                    ExpressionError::InvalidSize(expected, index) => {
+                        format!("{} index incompatible with size {}", index, index)
                     }
                 };
                 write!(f, "Expression error {}", msg)

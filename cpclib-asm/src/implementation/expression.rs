@@ -238,7 +238,7 @@ impl ExprEvaluationExt for Expr {
                 let params = expr.iter()
                             .map(|p| env.resolve_expr_may_fail_in_first_pass(p))
                             .collect::<Result<Vec<ExprResult>, AssemblerError>>()?;
-                f.eval(env, params)
+                f.eval(env, &params)
             }
         }
     }
@@ -329,6 +329,23 @@ impl<'a> ExprEvaluationExt for BinaryFunctionWrapper<'a> {
         match self.func {
             BinaryFunction::Min => Ok(arg1.min(arg2)),
             BinaryFunction::Max => Ok(arg1.max(arg2)),
+            BinaryFunction::Pow => {
+                let power = arg2.int()?;
+                match arg1 {
+                    ExprResult::Float(f) => Ok(f.into_inner().powf(power as f64).into()),
+                    ExprResult::Value(v) => Ok(v.pow(power as _).into()),
+                    ExprResult::String(_) => Err(AssemblerError::ExpressionError(
+                        ExpressionError::OwnError(
+                            box AssemblerError::AssemblingError{msg:format!("pow cannot be applied to a string")}
+                        )
+                    )),
+                    ExprResult::List(_) => Err(AssemblerError::ExpressionError(
+                        ExpressionError::OwnError(
+                            box AssemblerError::AssemblingError{msg:format!("pow cannot be applied to a list")}
+                        )
+                    )),
+                }
+            }
         }
     }
 }

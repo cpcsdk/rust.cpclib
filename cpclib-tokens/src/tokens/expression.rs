@@ -248,13 +248,16 @@ impl Display for UnaryFunction {
 pub enum BinaryFunction {
     Min,
     Max,
+    Pow
+
 }
 
 impl Display for BinaryFunction {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         let repr = match self {
-            Self::Min => "MIN",
-            Self::Max => "MAX",
+            BinaryFunction::Min => "min",
+            BinaryFunction::Max => "max",
+            BinaryFunction::Pow => "pow",
         };
         write!(format, "{}", repr)
     }
@@ -568,7 +571,8 @@ impl Display for ExpressionTypeError {
 pub enum ExprResult {
     Float(OrderedFloat<f64>),
     Value(i32),
-    String(String)
+    String(String),
+    List(Vec<ExprResult>)
 }
 
 impl From<String> for ExprResult {
@@ -660,7 +664,8 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.into_inner() as _),
             ExprResult::Value(i) => Ok(*i),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as an int", s)))
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as an int", s))),
+            ExprResult::List(l) => Err(ExpressionTypeError(format!("Try to convert {:?} as an int", l)))
         }
     }
 
@@ -668,7 +673,8 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.into_inner()),
             ExprResult::Value(i) => Ok(*i as f64),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as a float", s)))
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as a float", s))),
+            ExprResult::List(l) => Err(ExpressionTypeError(format!("Try to convert {:?} as a float", l)))
         }
     }
 
@@ -676,7 +682,8 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(*f != 0.),
             ExprResult::Value(i) => Ok(*i != 0),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as a bool", s)))
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to convert {} as a bool", s))),
+            ExprResult::List(l) => Err(ExpressionTypeError(format!("Try to convert {:?} as a bool", l))),
         }
     }
 }
@@ -686,21 +693,24 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.floor().into()),
             ExprResult::Value(v) => Ok(v.clone().into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply floor to {}", s)))
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply floor to {}", s))),
+            ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to apply floor to {:?}", s)))
         }
     }
     pub fn ceil(&self) -> Result<Self, ExpressionTypeError> {
         match self {
             ExprResult::Float(f) => Ok(f.ceil().into()),
             ExprResult::Value(v) => Ok(v.clone().into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply ceil to {}", s)))
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply ceil to {}", s))),
+            ExprResult::List(l) => Err(ExpressionTypeError(format!("Try to apply ceil to {:?}", l))),
         }
     }
     pub fn frac(&self) -> Result<Self, ExpressionTypeError>  {
         match self {
             ExprResult::Float(f) => Ok(f.fract().into()),
             ExprResult::Value(_v) => Ok(0.into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply frac to {}", s)))
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply frac to {}", s))),
+            ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to apply frac to {:?}", s)))
 
         }
     }
@@ -723,7 +733,8 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.abs().into()),
             ExprResult::Value(v) => Ok(v.abs().into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply abs to {}", s)))
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply abs to {}", s))),
+            ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to apply abs to {:?}", s)))
 
         }
     }
@@ -746,7 +757,8 @@ impl ExprResult {
                 return Err(ExpressionTypeError("Float are not compatible with ~ operator".to_owned()))
             }
             ExprResult::Value(i) => Ok((!*i).into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply floor to {}", s)))
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply floor to {}", s))),
+            ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to apply floor to {:?}", s))),
 
         }
     }
@@ -759,7 +771,8 @@ impl std::ops::Neg for ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.neg().into()),
             ExprResult::Value(i) => Ok(i.neg().into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to substract {}", s)))
+            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to substract {}", s))),
+            ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to substract {:?}", s)))
             
         }
     }
@@ -914,6 +927,13 @@ impl std::fmt::Display for ExprResult {
             ExprResult::Float(f2) => write!(f, "{}", f2.into_inner()),
             ExprResult::Value(v) => write!(f, "{}", v),
             ExprResult::String(v) => write!(f, "\"{}\"", v),
+            ExprResult::List(v) => 
+                write!(
+                    f, 
+                    "[{}]", v.iter()
+                            .map(|item| format!("{}", item))
+                            .join(","))
+            ,
         }
     }
 }
@@ -924,6 +944,13 @@ impl std::fmt::LowerHex for ExprResult {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:x}", v),
             ExprResult::String(v) => write!(f, "STRING REPRESENTATION ISSUE"),
+            ExprResult::List(v) => 
+                write!(
+                    f, 
+                    "[{}]", v.iter()
+                            .map(|item| format!("{:x}", item))
+                            .join(","))
+            ,
 
         }
     }
@@ -935,6 +962,12 @@ impl std::fmt::UpperHex for ExprResult {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:X}", v),
             ExprResult::String(v) => write!(f, "STRING REPRESENTATION ISSUE"),
+            ExprResult::List(v) => write!(
+                f, 
+                "[{}]", v.iter()
+                        .map(|item| format!("{:X}", item))
+                        .join(","))
+        ,
         }
     }
 }

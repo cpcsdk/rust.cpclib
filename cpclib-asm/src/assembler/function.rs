@@ -1,12 +1,12 @@
 use std::any::Any;
 
-use crate::{Visited, assembler::delayed_command::FailedAssertCommand, error::AssemblerError, preamble::LocatedToken};
+use crate::{Visited, assembler::{delayed_command::FailedAssertCommand, list::{list_new, list_set}}, error::AssemblerError, preamble::LocatedToken};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 use std::collections::HashMap;
 
-use super::{Env, delayed_command::PrintCommand};
+use super::{Env, delayed_command::PrintCommand, list::list_get};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -49,7 +49,7 @@ impl<T: ListingElement + Visited + Clone> AnyFunction<T> {
 }
 
 impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
-    pub fn eval(&self, init_env: &Env, params: Vec<ExprResult>) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(&self, init_env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
         if self.args.len() != params.len() {
             return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
                 self.name.clone(),
@@ -133,6 +133,19 @@ lazy_static::lazy_static! {
             "pens_to_mode2_byte".to_owned(),
             Function::HardCoded(HardCodedFunction::PensToMode2Byte));
 
+
+        functions.insert(
+            "list_new".to_owned(),
+            Function::HardCoded(HardCodedFunction::ListNew)
+        );
+        functions.insert(
+            "list_get".to_owned(),
+            Function::HardCoded(HardCodedFunction::ListGet)
+        );
+        functions.insert(
+            "list_set".to_owned(),
+            Function::HardCoded(HardCodedFunction::ListSet)
+        );
         functions
     };
 }
@@ -150,6 +163,10 @@ pub enum HardCodedFunction {
     PensToMode0Byte,
     PensToMode1Byte,
     PensToMode2Byte,
+
+    ListNew,
+    ListSet,
+    ListGet
 }
 
 impl HardCodedFunction {
@@ -166,6 +183,12 @@ impl HardCodedFunction {
             HardCodedFunction::PensToMode0Byte => 2,
             HardCodedFunction::PensToMode1Byte => 4,
             HardCodedFunction::PensToMode2Byte => 8,
+
+            HardCodedFunction::ListNew => 2,
+            HardCodedFunction::ListSet => 3,
+            HardCodedFunction::ListGet => 2
+
+            
         }
     }
 
@@ -186,10 +209,14 @@ impl HardCodedFunction {
             HardCodedFunction::PensToMode0Byte => "pens_to_mode0_byte",
             HardCodedFunction::PensToMode1Byte => "pens_to_mode1_byte",
             HardCodedFunction::PensToMode2Byte => "pens_to_mode2_byte",
+            
+            HardCodedFunction::ListNew => "list_new",
+            HardCodedFunction::ListSet => "list_set",
+            HardCodedFunction::ListGet => "list_get",
         }
     }
 
-    pub fn eval(&self, env: &Env, params: Vec<ExprResult>) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
         if self.nb_expected_params() != params.len() {
             return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
                 self.name().into(),
@@ -261,6 +288,15 @@ impl HardCodedFunction {
                 params[7].int()?.into(),
             )
             .into()),
+            HardCodedFunction::ListNew => Ok(list_new(params[0].int()? as _, params[1].clone())),
+            HardCodedFunction::ListSet => list_set(
+                params[0].clone(), 
+                params[1].int()? as _, 
+                params[2].clone()),
+            HardCodedFunction::ListGet => list_get(
+                params[0].clone(),
+                params[1].int()? as _
+            ),
         }
     }
 }
@@ -292,7 +328,7 @@ impl Function {
         )));
     }
 
-    pub fn eval(&self, env: &Env, params: Vec<ExprResult>) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
         match self {
             Self::Located(f) => f.eval(env, params),
             Self::Standard(f) => f.eval(env, params),

@@ -3828,6 +3828,7 @@ pub fn parse_binary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseE
     let (input, func) = alt((
         value(BinaryFunction::Min, tag_no_case("MIN")),
         value(BinaryFunction::Max, tag_no_case("MAX")),
+        value(BinaryFunction::Pow, tag_no_case("POW")),
     ))(input)?;
 
     let (input, _) = tuple((space0, tag("("), space0))(input)?;

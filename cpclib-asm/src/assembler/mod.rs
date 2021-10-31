@@ -6,6 +6,7 @@ pub mod save_command;
 pub mod stable_ticker;
 pub mod symbols_output;
 pub mod function;
+pub mod list;
 
 use crate::delayed_command::*;
 use crate::page_info::PageInformation;
