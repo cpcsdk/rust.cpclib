@@ -111,7 +111,7 @@ pub enum LocatedToken {
         Z80Span,
     ),
     Repeat(Expr, LocatedListing, Option<String>, Option<Expr>, Z80Span),
-    Iterate(String, Vec<Expr>, LocatedListing, Z80Span),
+    Iterate(String, either::Either<Vec<Expr>, Expr>, LocatedListing, Z80Span),
     RepeatUntil(Expr, LocatedListing, Z80Span),
     Rorg(Expr, LocatedListing, Z80Span),
     Switch(Expr, Vec<(Expr, LocatedListing, bool)>, Option<LocatedListing>, Z80Span),

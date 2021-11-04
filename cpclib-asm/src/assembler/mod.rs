@@ -2460,7 +2460,7 @@ pub fn visit_located_token(
         },
         LocatedToken::While(cond, inner, span) => env.visit_while(cond, inner, Some(span.clone())),
         LocatedToken::Iterate(name, values, code, span) => {
-            env.visit_iterate(name.as_str(), values, code, Some(span.clone()))
+            env.visit_iterate(name.as_str(), values.as_ref(), code, Some(span.clone()))
         }
     }?;
 
@@ -2729,10 +2729,11 @@ impl Env {
     }
 
     /// Handle the iterate repetition directive
+    /// Values is either a list of values or a Expression that represents a list
     pub fn visit_iterate<T: ListingElement + Visited>(
         &mut self,
         counter_name: &str,
-        values: &[Expr],
+        values: either::Either<&Vec<Expr>, &Expr>,
         code: &[T],
         span: Option<Z80Span>,
     ) -> Result<(), AssemblerError> {
@@ -2751,6 +2752,22 @@ impl Env {
             });
         }
 
+        // Get the values (all args or list explosion)
+        let values = match values {
+            either::Either::Left(values) => {
+                values
+            }
+            either::Either::Right(values) => {
+                 match values {
+                    Expr::List(v) => v,
+                    _ => return Err(AssemblerError::AssemblingError {
+                        msg: format!("REPEAT issue: {} is not a list", values)
+                    })
+                }
+            }
+        };
+
+        // Apply the iteration
         for (i, value) in values.iter().enumerate() {
             let counter_value = self.resolve_expr_must_never_fail(value).map_err(|e| {
                 AssemblerError::RepeatIssue {
@@ -2768,6 +2785,8 @@ impl Env {
             )?;
         }
 
+
+        // TODO restore a previous value if any
         self.symbols_mut().remove_symbol(counter_name)?;
 
         Ok(())
@@ -3027,30 +3046,55 @@ pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), Assembl
         }
     };
 
-    let backup_address = env.logical_output_address();
+    let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {
+        if mask == 0xff {
+            env.output(val as u8)?;
+        } else {
+            let high = ((val & 0xff00) >> 8) as u8;
+            let low = (val & 0xff) as u8;
+            env.output(low)?;
+            env.output(high)?;
+        }
+        Ok(())
+    };
 
+    let output_expr_result = |env: &mut Env, expr: ExprResult, mask: u16| {
+        match &expr {
+            ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => output(env, expr.int()?, mask),
+            ExprResult::String(s) => {
+                for c in s.chars() {
+                    output(env, c as _, mask)?;
+                }
+                Ok(())
+            },
+            ExprResult::List(l) => {
+                for c in l {
+                    output(env, c.int()?, mask)?;
+                }
+                Ok(())
+            }
+        }
+    };
+
+
+    let backup_address = env.logical_output_address();
     for exp in exprs.iter() {
         match exp {
             Expr::String(s) => {
                 let bytes = env.charset_encoding.transform_string(s);
-                env.output_bytes(&bytes)?;
+                for b in &bytes {
+                    output(env, *b as _, mask)?
+                }
                 env.update_dollar();
             }
             Expr::Char(c) => {
                 let b = env.charset_encoding.transform_char(*c);
-                env.output(b)?;
+                output(env, b as _, mask)?;
                 env.update_dollar();
             }
             _ => {
-                let val = env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & mask;
-                if mask == 0xff {
-                    env.output(val as u8)?;
-                } else {
-                    let high = ((val & 0xff00) >> 8) as u8;
-                    let low = (val & 0xff) as u8;
-                    env.output(low)?;
-                    env.output(high)?;
-                }
+                let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
+                output_expr_result(env, val, mask)?;
                 env.update_dollar();
             }
         }

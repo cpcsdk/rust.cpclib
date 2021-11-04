@@ -16,5 +16,24 @@ no_inc2
 no_inc3
 		call do_stuff
 
+
+        add 11
+        jr nz, no_inc4
+            inc c
+no_inc4
+		call do_stuff
+
+		add 12
+        jr nz, no_inc5
+            inc c
+no_inc5
+		call do_stuff
+
+		add 110
+        jr nz, no_inc6
+            inc c
+no_inc6
+		call do_stuff
+
 do_stuff
 	ret

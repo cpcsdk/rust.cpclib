@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use crate::{Visited, assembler::{delayed_command::FailedAssertCommand, list::{list_new, list_set}}, error::AssemblerError, preamble::LocatedToken};
+use crate::{Visited, assembler::{delayed_command::FailedAssertCommand, list::{list_new, list_set}}, error::{AssemblerError, ExpressionError}, preamble::{LocatedToken, ParserContext, ParsingState}};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
@@ -117,7 +117,8 @@ lazy_static::lazy_static! {
         "list_len": Function::HardCoded(HardCodedFunction::ListLen),
         "list_sublist": Function::HardCoded(HardCodedFunction::ListSublist),
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
-        "string_push": Function::HardCoded(HardCodedFunction::StringPush)
+        "string_push": Function::HardCoded(HardCodedFunction::StringPush),
+        "assemble": Function::HardCoded(HardCodedFunction::Assemble)
     };
 }
 
@@ -142,7 +143,9 @@ pub enum HardCodedFunction {
     ListLen,
 
     StringNew,
-    StringPush
+    StringPush,
+
+    Assemble,
 }
 
 impl HardCodedFunction {
@@ -169,6 +172,7 @@ impl HardCodedFunction {
             HardCodedFunction::StringNew => 2,
             HardCodedFunction::StringPush => 2,
             
+            HardCodedFunction::Assemble => 1
         }
     }
 
@@ -278,7 +282,9 @@ impl HardCodedFunction {
             HardCodedFunction::StringPush => string_push(
                 params[0].clone(),
                 params[1].clone()
-            )
+            ),
+
+            HardCodedFunction::Assemble => assemble(params[0].clone(), env)
         }
     }
 }
@@ -339,4 +345,38 @@ impl FunctionBuilder for Token {
     fn new(name: &str, args: &[String], inner: &[Token]) -> Result<Function, AssemblerError> {
         Function::new_standard(name, args, inner)
     }
+}
+
+
+/// Assemble a simple listing with no directives.
+/// Warning !!! As the env is read only, we cannot assemble directly inside
+/// To overcome that, we use a bank in a copied Env. It has not been deeply tested
+pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, AssemblerError> {
+    let code = match code {
+        ExprResult::String(code) => code,
+        _ => {return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(box AssemblerError::AssemblingError{
+            msg: "Wrong type".to_owned()
+        })));}
+    };
+
+    let mut parser_context = ParserContext::default();
+    parser_context.state = ParsingState::GeneratedLimited;
+    parser_context.context_name = Some("Generated source".to_owned());
+    let tokens = crate::parse_z80_str_with_context(
+        code,
+        parser_context
+    )?;
+
+    let mut env = Env::default();
+    env.symbols = base_env.symbols().clone();
+    env.start_new_pass();
+    env.visit_bank(None)?; // assemble in a new bank
+    env.visit_listing(&tokens)?;
+    let mut bank_info = env.banks.pop().unwrap();
+    let bytes = bank_info.0[
+        bank_info.1.startadr.unwrap() as _ .. bank_info.1.maxadr as _
+    ].iter()
+    .map(|b| ExprResult::from(*b))
+    .collect_vec();
+    Ok(ExprResult::List(bytes))
 }

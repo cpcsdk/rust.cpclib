@@ -813,10 +813,37 @@ pub fn parse_iterate(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
 
     let (input, counter) = cut(context(
         "ITERATE: issue in the counter",
-        delimited(space0, parse_label(false), parse_comma),
+        preceded(space0, parse_label(false)),
     ))(input)?;
 
-    let (input, values) = cut(context("ITERATE: values issue", expr_list))(input)?;
+
+    let (input, comma_or_in) = cut(
+        context(
+            "ITERATE: expected ',' or 'in'",
+            preceded(
+                my_space0,
+                alt((
+                    parse_word("IN"),
+                    parse_comma
+                ))
+            )
+        )
+    )(input)?;
+
+    let (input, values) = if comma_or_in.contains(",") {
+        let (input, values) = cut(context("ITERATE: values issue", expr_list))(input)?;
+        (input, either::Either::Left(values))
+    } else {
+        let (input, values) = cut(context("ITERATE: list issue", alt((
+            parse_expr_bracketed_list,
+            parse_unary_function_call,
+            parse_binary_function_call,
+            parse_any_function_call,
+            parse_assemble,
+            map(parse_label(false), Expr::Label)
+        ))))(input)?;
+        (input, either::Either::Right(values))
+    };
 
     let (input, inner) = cut(context("ITERATE: issue in the content", inner_code))(input)?;
 
@@ -2091,15 +2118,15 @@ pub fn parse_res_set_bit(input: Z80Span) -> IResult<Z80Span, Token, VerboseError
         map(tag_no_case("SET"), |_| Mnemonic::Set),
     ))(input)?;
 
-    let (input, bit) = preceded(space1, parse_expr)(input)?;
+    let (input, bit) = cut(context("Wrong bit definition", preceded(space1, parse_expr)))(input)?;
 
-    let (input, _) = delimited(space0, tag(","), space0)(input)?;
+    let (input, _) = cut(parse_comma)(input)?;
 
-    let (input, operand) = alt((
+    let (input, operand) = cut(context("Wrong destination", alt((
         parse_register8,
         parse_hl_address,
         parse_indexregister_with_index,
-    ))(input)?;
+    ))))(input)?;
 
     // Bit and Res can copy the result in a reg
     let (input, hidden_arg) = if res_or_set == Mnemonic::Bit {
@@ -2508,8 +2535,8 @@ fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>>
     ))(input)
 }
 
-fn parse_comma(input: Z80Span) -> IResult<Z80Span, (), VerboseError<Z80Span>> {
-    map(tuple((my_space0, tag(","), my_space0)), |_| ())(input)
+fn parse_comma(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
+    delimited(my_space0, tag(","), my_space0)(input)
 }
 
 /// ...
@@ -3593,7 +3620,7 @@ pub fn parens(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     )(input)
 }
 
-pub fn parse_expr_list(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_expr_bracketed_list(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     map(
         delimited(
             pair(tag("["), my_space0),
@@ -3609,6 +3636,20 @@ pub fn parse_expr_list(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z8
     )(input)
 }
 
+pub fn parse_decoded_string(input: Z80Span) ->  IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+    map(parse_string, |s| {
+        Expr::String(
+            s.replace("\\\\", "\\")
+                .replace("\\a", &char::from(7).to_string())
+                .replace("\\b", &char::from(8).to_string())
+                .replace("\\t", "\t")
+                .replace("\\r", "\r")
+                .replace("\\v", &char::from(11).to_string())
+                .replace("\\f", &char::from(12).to_string()),
+        )
+    })(input)
+}
+
 /// Get a factor
 pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     let (input, neg) = opt(delimited(space0, tag("!"), space0))(input)?;
@@ -3622,28 +3663,18 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
             context(
                 "[DBG]alt",
                 alt((
-                    parse_expr_list,
+                    parse_expr_bracketed_list,
                     // Manage functions
                     map(parse_word("RND()"), |_| Expr::Rnd),
-                    parse_unary_functions,
-                    parse_binary_functions,
+                    parse_unary_function_call,
+                    parse_binary_function_call,
                     parse_duration,
                     parse_assemble,
-                    parse_any_function,
+                    parse_any_function_call,
                     // manage values
                     alt((positive_number, negative_number)),
                     char_expr,
-                    map(parse_string, |s| {
-                        Expr::String(
-                            s.replace("\\\\", "\\")
-                                .replace("\\a", &char::from(7).to_string())
-                                .replace("\\b", &char::from(8).to_string())
-                                .replace("\\t", "\t")
-                                .replace("\\r", "\r")
-                                .replace("\\v", &char::from(11).to_string())
-                                .replace("\\f", &char::from(12).to_string()),
-                        )
-                    }),
+                    parse_decoded_string,
                     parse_counter,
                     // manage $
                     map(tag("$$"), |_x| Expr::Label(String::from("$$"))),
@@ -3804,7 +3835,7 @@ pub fn expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
 }
 
 /// parse functions with one argument
-pub fn parse_unary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_unary_function_call(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     let (input, func) = alt((
         value(
             UnaryFunction::High,
@@ -3843,7 +3874,7 @@ pub fn parse_unary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseEr
 }
 
 /// parse functions with two arguments
-pub fn parse_binary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_binary_function_call(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     let (input, func) = alt((
         value(BinaryFunction::Min, tag_no_case("MIN")),
         value(BinaryFunction::Max, tag_no_case("MAX")),
@@ -3864,7 +3895,7 @@ pub fn parse_binary_functions(input: Z80Span) -> IResult<Z80Span, Expr, VerboseE
     ))
 }
 
-pub fn parse_any_function(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_any_function_call(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
 
     let (input, function_name) = parse_label(false)(input)?;
     let (input, arguments) = delimited(

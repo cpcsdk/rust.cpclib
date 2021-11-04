@@ -132,6 +132,21 @@ pub fn string_push(mut s1: ExprResult, mut s2: ExprResult) -> Result<ExprResult,
 			s1 += &fix_string(s2);
 			Ok(ExprResult::String(s1))
 		},
+		(ExprResult::String(mut s1), ExprResult::List(mut l)) => {
+			s1 += "[";
+
+			for (i, e)in l.into_iter().enumerate() {
+				if i!= 0 {
+					s1 += ","
+				}
+
+				s1 = string_push(s1.into(), e)?.string().unwrap();
+			}
+
+			s1 += "]";
+			Ok(ExprResult::String(s1))
+		},
+
 
 		(ExprResult::String(mut s1), ExprResult::Float(s2)) => {
 			s1 += &s2.into_inner().to_string();

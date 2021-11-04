@@ -668,6 +668,13 @@ impl ExprResult {
         }
     }
 
+    pub fn string(&self) -> Result<String, ExpressionTypeError> {
+        match self {
+            ExprResult::String(s) => Ok(s.clone()),
+            _ => Err(ExpressionTypeError(format!("Try to convert {} as an string", self))),
+        }
+    }
+
     pub fn int(&self) -> Result<i32, ExpressionTypeError> {
         match self {
             ExprResult::Float(f) => Ok(f.into_inner() as _),

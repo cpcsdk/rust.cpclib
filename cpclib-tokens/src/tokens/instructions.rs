@@ -851,6 +851,12 @@ impl From<u8> for Token {
 
 #[allow(missing_docs)]
 impl Token {
+    pub fn is_directive(&self) -> bool {
+        match self {
+            Self::OpCode(_, _, _, _) => false,
+            _ => true
+        }
+    }
     pub fn new_opcode(mne: Mnemonic, arg1: Option<DataAccess>, arg2: Option<DataAccess>) -> Self {
         Token::OpCode(mne, arg1, arg2, None)
     }

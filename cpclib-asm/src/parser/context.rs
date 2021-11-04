@@ -12,7 +12,8 @@ use std::sync::RwLock;
 pub enum ParsingState {
     Standard,
     FunctionLimited,
-    StructLimited
+    StructLimited,
+    GeneratedLimited
 }
 
 
@@ -23,6 +24,7 @@ pub trait ParsingStateVerified {
 impl ParsingStateVerified for LocatedToken {
     fn is_accepted(&self, state: &ParsingState) -> bool {
         match state {
+            ParsingState::GeneratedLimited => !self.is_directive(),
             ParsingState::Standard => match self {
                 LocatedToken::Standard{token, span:_span} => token.is_accepted(state), // because of return
                 _ => true
@@ -45,6 +47,8 @@ impl ParsingStateVerified for LocatedToken {
 impl ParsingStateVerified for Token {
     fn is_accepted(&self, state: &ParsingState) -> bool {
         match state {
+            ParsingState::GeneratedLimited => !self.is_directive(),
+
             ParsingState::Standard => match self {
                 Token::Return(_) => false,
                 _ => true
