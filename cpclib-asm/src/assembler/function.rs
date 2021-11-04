@@ -1,4 +1,3 @@
-use std::any::Any;
 
 use crate::{Visited, assembler::{delayed_command::FailedAssertCommand, list::{list_new, list_set}}, error::{AssemblerError, ExpressionError}, preamble::{LocatedToken, ParserContext, ParsingState}};
 use cpclib_common::itertools::Itertools;
@@ -118,6 +117,7 @@ lazy_static::lazy_static! {
         "list_sublist": Function::HardCoded(HardCodedFunction::ListSublist),
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
+        "string_concat": Function::HardCoded(HardCodedFunction::StringConcat),
         "assemble": Function::HardCoded(HardCodedFunction::Assemble)
     };
 }
@@ -144,35 +144,37 @@ pub enum HardCodedFunction {
 
     StringNew,
     StringPush,
+    StringConcat,
 
     Assemble,
 }
 
 impl HardCodedFunction {
-    pub fn nb_expected_params(&self) -> usize {
+    pub fn nb_expected_params(&self) -> Option<usize> {
         match self {
-            HardCodedFunction::Mode0ByteToPenAt => 2,
-            HardCodedFunction::Mode1ByteToPenAt => 2,
-            HardCodedFunction::Mode2ByteToPenAt => 2,
+            HardCodedFunction::Mode0ByteToPenAt => Some(2),
+            HardCodedFunction::Mode1ByteToPenAt => Some(2),
+            HardCodedFunction::Mode2ByteToPenAt => Some(2),
 
-            HardCodedFunction::PenAtToMode0Byte => 2,
-            HardCodedFunction::PenAtToMode1Byte => 2,
-            HardCodedFunction::PenAtToMode2Byte => 2,
+            HardCodedFunction::PenAtToMode0Byte => Some(2),
+            HardCodedFunction::PenAtToMode1Byte => Some(2),
+            HardCodedFunction::PenAtToMode2Byte => Some(2),
 
-            HardCodedFunction::PensToMode0Byte => 2,
-            HardCodedFunction::PensToMode1Byte => 4,
-            HardCodedFunction::PensToMode2Byte => 8,
+            HardCodedFunction::PensToMode0Byte => Some(2),
+            HardCodedFunction::PensToMode1Byte => Some(4),
+            HardCodedFunction::PensToMode2Byte => Some(8),
 
-            HardCodedFunction::ListNew => 2,
-            HardCodedFunction::ListSet => 3,
-            HardCodedFunction::ListGet => 2,
-            HardCodedFunction::ListSublist => 3,
-            HardCodedFunction::ListLen => 1,
+            HardCodedFunction::ListNew => Some(2),
+            HardCodedFunction::ListSet => Some(3),
+            HardCodedFunction::ListGet => Some(2),
+            HardCodedFunction::ListSublist => Some(3),
+            HardCodedFunction::ListLen => Some(1),
 
-            HardCodedFunction::StringNew => 2,
-            HardCodedFunction::StringPush => 2,
+            HardCodedFunction::StringNew => Some(2),
+            HardCodedFunction::StringPush => Some(2),
+            HardCodedFunction::StringConcat => None,
             
-            HardCodedFunction::Assemble => 1
+            HardCodedFunction::Assemble => Some(1)
         }
     }
 
@@ -190,13 +192,20 @@ impl HardCodedFunction {
     }
 
     pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
-        if self.nb_expected_params() != params.len() {
-            return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
-                self.name().into(),
-                self.nb_expected_params(),
-                params.len(),
-            ));
+
+        match self.nb_expected_params() {
+            Some(nb) => {
+                if nb != params.len() {
+                    return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
+                        self.name().into(),
+                        nb,
+                        params.len(),
+                    ));
+                }
+            },
+            _ => {}
         }
+        
 
         match self {
             HardCodedFunction::Mode0ByteToPenAt => Ok(cpclib_image::pixels::mode0::byte_to_pens(
@@ -284,7 +293,14 @@ impl HardCodedFunction {
                 params[1].clone()
             ),
 
-            HardCodedFunction::Assemble => assemble(params[0].clone(), env)
+            HardCodedFunction::Assemble => assemble(params[0].clone(), env),
+            HardCodedFunction::StringConcat => {
+                let mut base = params[0].clone();
+                for i in 1..params.len() {
+                    base = string_push(base, params[i].clone())?
+                }
+                Ok(base)
+            },
         }
     }
 }
