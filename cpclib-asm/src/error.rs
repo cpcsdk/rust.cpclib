@@ -13,6 +13,7 @@ use cpclib_basic::BasicError;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::error::VerboseError;
 use cpclib_common::nom::error::VerboseErrorKind;
+use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
 use cpclib_tokens::ExpressionTypeError;
@@ -123,13 +124,13 @@ pub enum AssemblerError {
     //        symbol, closest
     //    )]
     UnknownMacro {
-        symbol: String,
-        closest: Option<String>,
+        symbol: SmolStr,
+        closest: Option<SmolStr>,
     },
 
     //    #[fail(display = "Error when applying macro {}. {}", name, root)]
     MacroError {
-        name: String,
+        name: SmolStr,
         root: Box<AssemblerError>,
     },
 
@@ -145,22 +146,22 @@ pub enum AssemblerError {
 
     //  #[fail(display = "Unknown symbol: {}. Closest one is: {:?}", symbol, closest)]
     UnknownSymbol {
-        symbol: String,
-        closest: Option<String>,
+        symbol: SmolStr,
+        closest: Option<SmolStr>,
     },
 
-    InvalidSymbol(String),
+    InvalidSymbol(SmolStr),
 
     //   #[fail(display = "Symbol {} is not a {}", symbol, isnot)]
     WrongSymbolType {
-        symbol: String,
-        isnot: String,
+        symbol: SmolStr,
+        isnot: SmolStr,
     },
 
     // TODO add symbol type
     AlreadyDefinedSymbol {
-        symbol: String,
-        kind: String,
+        symbol: SmolStr,
+        kind: SmolStr,
     },
 
     //   #[fail(display = "IO error: {}", msg)]
@@ -288,7 +289,7 @@ impl From<SymbolError> for AssemblerError {
         match err {
             SymbolError::UnknownAssemblingAddress => AssemblerError::UnknownAssemblingAddress,
             SymbolError::CannotModify(symb) => AssemblerError::ReadOnlySymbol(symb),
-            SymbolError::WrongSymbol(err) => AssemblerError::InvalidSymbol(err.value().to_owned()),
+            SymbolError::WrongSymbol(err) => AssemblerError::InvalidSymbol(err.value().into()),
             SymbolError::NoNamespaceActive => AssemblerError::AssemblingError {
                 msg: "There is no namespace active".to_owned(),
             },
@@ -554,7 +555,7 @@ impl AssemblerError {
                     f,
                     "MACRO {} does not exist. Try {}",
                     symbol,
-                    closest.as_ref().unwrap_or(&"".to_owned())
+                    closest.as_ref().unwrap_or(&SmolStr::new_inline(""))
                 )
             }
             AssemblerError::FunctionWithoutReturn(name) => {

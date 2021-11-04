@@ -23,6 +23,5 @@ remain = "0.2.2"
 serde = { version = "1.0.126", features = ["derive"] }
 regex = "*"
 
-
 [build-dependencies]
 built = { version = "0.5.1", features = ["chrono"] }

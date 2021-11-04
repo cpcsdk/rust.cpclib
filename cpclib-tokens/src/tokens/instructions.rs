@@ -10,6 +10,7 @@ use crate::tokens::expression::*;
 use crate::Register8;
 
 use cpclib_common::itertools::Itertools;
+use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::SnapshotVersion;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -327,7 +328,7 @@ is_mnemonic!(
 #[allow(missing_docs)]
 pub enum StableTickerAction {
     /// Start of the ticker with its name that will contains its duration
-    Start(String),
+    Start(SmolStr),
     Stop,
 }
 
@@ -360,11 +361,11 @@ pub enum TestKind {
     // Test succeed if it is an expression that returns False
     False(Expr),
     // Test succeed if it is an existing label
-    LabelExists(String),
+    LabelExists(SmolStr),
     // Test succeed if it is a missing label
-    LabelDoesNotExist(String),
-    LabelUsed(String),
-    LabelNused(String),
+    LabelDoesNotExist(SmolStr),
+    LabelUsed(SmolStr),
+    LabelNused(SmolStr),
 }
 
 /// List of transformations that can be applied to an imported binary file
@@ -414,33 +415,33 @@ pub enum CharsetFormat {
 pub enum Token {
     Align(Expr, Option<Expr>),
     Assert(Expr, Option<String>),
-    Assign(String, Expr),
+    Assign(SmolStr, Expr),
 
     /// Configure the bank - completely incompatible with rasm behavior
     /// The expression corresponds to the GATE ARRAY value to select the banke of interest
     Bank(Option<Expr>),
     Bankset(Expr),
     /// Basic code which tokens will be included in the code (imported variables, lines to hide,  code)
-    Basic(Option<Vec<String>>, Option<Vec<u16>>, String),
+    Basic(Option<Vec<SmolStr>>, Option<Vec<u16>>, String),
     Break,
     Breakpoint(Option<Expr>),
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),
     Charset(CharsetFormat),
     Comment(String),
-    CrunchedBinary(CrunchType, String),
+    CrunchedBinary(CrunchType, SmolStr),
     CrunchedSection(CrunchType, Listing),
     Defb(Vec<Expr>),
     Defs(Vec<(Expr, Option<Expr>)>),
     Defw(Vec<Expr>),
 
-    Equ(String, Expr),
-    Export(Vec<String>),
+    Equ(SmolStr, Expr),
+    Export(Vec<SmolStr>),
 
     Fail(Vec<FormattedExpr>),
 
     /// Function embeds a listing with a limited number of possible instructions and return a value
-    Function(String, Vec<String>,  Listing),
+    Function(SmolStr, Vec<SmolStr>,  Listing),
 
     /// Conditional expression. _0 contains all the expression and the appropriate code, _1 contains the else case
     If(Vec<(TestKind, Listing)>, Option<Listing>),
@@ -456,25 +457,25 @@ pub enum Token {
         transformation: BinaryTransformation,
     },
     // file may or may not be read during parse. If not, it is read on demand when assembling
-    Include(String, RwLock<Option<Listing>>, Option<String>, bool),
-    Iterate(String, Vec<Expr>, Listing),
+    Include(String, RwLock<Option<Listing>>, Option<SmolStr>, bool),
+    Iterate(SmolStr, Vec<Expr>, Listing),
 
-    Label(String),
-    Let(String, Expr),
+    Label(SmolStr),
+    Let(SmolStr, Expr),
     Limit(Expr),
     List,
 
-    Macro(String, Vec<String>, String), // Content of the macro is parsed on use
+    Macro(SmolStr, Vec<SmolStr>, String), // Content of the macro is parsed on use
     // macro call can be used for struct too
-    MacroCall(String, Vec<MacroParam>), // String are used in order to not be limited to expression and allow opcode/registers use
+    MacroCall(SmolStr, Vec<MacroParam>), // String are used in order to not be limited to expression and allow opcode/registers use
 
     // Fake pop directive with several arguments
     MultiPop(Vec<DataAccess>),
     // Fake push directive with several arguments
     MultiPush(Vec<DataAccess>),
 
-    Next(String, String, Option<Expr>),
-    NoExport(Vec<String>),
+    Next(SmolStr, SmolStr, Option<Expr>),
+    NoExport(Vec<SmolStr>),
     NoList,
 
     /// Very last argument concerns only few undocumented instructions that save their results in a register
@@ -497,7 +498,7 @@ pub enum Token {
         // code to execute
         Listing,
         // name of the counter if any
-        Option<String>,
+        Option<SmolStr>,
         // start value
         Option<Expr>,
     ),
@@ -516,10 +517,10 @@ pub enum Token {
         dsk_filename: Option<String>,
         side: Option<Expr>,
     },
-    Section(String),
+    Section(SmolStr),
     SetCPC(Expr),
     SetCrtc(Expr),
-    SetN(String, String, Option<Expr>),
+    SetN(SmolStr, SmolStr, Option<Expr>),
     /// This directive setup a value for a given flag of the snapshot
     SnaSet(
         cpclib_sna::flags::SnapshotFlag,
@@ -527,10 +528,10 @@ pub enum Token {
     ),
     StableTicker(StableTickerAction),
     Str(Vec<Expr>),
-    Struct(String, Vec<(String, Token)>),
+    Struct(SmolStr, Vec<(SmolStr, Token)>),
     Switch(Expr, Vec<(Expr, Listing, bool)>, Option<Listing>),
 
-    Undef(String),
+    Undef(SmolStr),
     WaitNops(Expr),
     While(Expr, Listing),
 }
@@ -938,7 +939,7 @@ impl Token {
         )
     }
 
-    pub fn label(&self) -> Option<&String> {
+    pub fn label(&self) -> Option<&str> {
         match self {
             Token::Label(ref value) | Token::Equ(ref value, _) => Some(value),
             _ => None,
@@ -994,9 +995,9 @@ impl Token {
             _ => None,
         }
     }
-    pub fn macro_arguments(&self) -> Option<&[String]> {
+    pub fn macro_arguments(&self) -> Option<&[SmolStr]> {
         match self {
-            Self::Macro(_name, args, _content) => Some(args),
+            Self::Macro(_name, args, _content) => Some(args.as_ref()),
             _ => None,
         }
     }

@@ -149,10 +149,10 @@ impl ExprEvaluationExt for Expr {
                 Some(cpclib_tokens::symbols::Value::Expr(ref val)) => Ok(val.clone().into()),
                 Some(cpclib_tokens::symbols::Value::Address(ref val)) => Ok(val.address().into()),
                 Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym).into()),
-                Some(cpclib_tokens::symbols::Value::String(ref val)) => Ok(val.clone().into()),
+                Some(cpclib_tokens::symbols::Value::String(ref val)) => Ok(val.into()),
                 Some(e) => {dbg!(e); Err(AssemblerError::WrongSymbolType {
-                    symbol: label.to_owned(),
-                    isnot: "a value".to_owned(),
+                    symbol: label.clone(),
+                    isnot: "a value".into(),
                 })},
                 None => Err(AssemblerError::UnknownSymbol {
                     symbol: label.to_owned(),

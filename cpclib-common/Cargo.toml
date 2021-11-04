@@ -19,6 +19,7 @@ num= "0.4.0"
 num-bigint = "0.4.2" # To remove later when num will be updated
 rayon = "1.5"
 smallvec = "1.6.1"
+smol_str = "0.1.20"
 strsim = "0.10.0"
 
 

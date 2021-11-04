@@ -1,5 +1,6 @@
 use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::prelude::*;
+use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::{
     BaseListing, BinaryTransformation, CrunchType, Expr, ListingElement, TestKind, Token,
@@ -92,8 +93,8 @@ pub enum LocatedToken {
         span: Z80Span,
     },
     Function(
-        String,
-        Vec<String>,
+        SmolStr,
+        Vec<SmolStr>,
         LocatedListing,
         Z80Span
     ),
@@ -101,7 +102,7 @@ pub enum LocatedToken {
     Include(
         String, // fname
         RwLock<Option<LocatedListing>>, // content
-        Option<String>, // optional module name
+        Option<SmolStr>, // optional module name
         bool, // must be included only one time
         Z80Span,
     ),
@@ -110,13 +111,13 @@ pub enum LocatedToken {
         Option<LocatedListing>,
         Z80Span,
     ),
-    Repeat(Expr, LocatedListing, Option<String>, Option<Expr>, Z80Span),
-    Iterate(String, either::Either<Vec<Expr>, Expr>, LocatedListing, Z80Span),
+    Repeat(Expr, LocatedListing, Option<SmolStr>, Option<Expr>, Z80Span),
+    Iterate(SmolStr, either::Either<Vec<Expr>, Expr>, LocatedListing, Z80Span),
     RepeatUntil(Expr, LocatedListing, Z80Span),
     Rorg(Expr, LocatedListing, Z80Span),
     Switch(Expr, Vec<(Expr, LocatedListing, bool)>, Option<LocatedListing>, Z80Span),
     While(Expr, LocatedListing, Z80Span),
-    Module(String, LocatedListing, Z80Span),
+    Module(SmolStr, LocatedListing, Z80Span),
 }
 
 impl Clone for LocatedToken {

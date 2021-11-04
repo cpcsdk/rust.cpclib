@@ -19,6 +19,7 @@ use crate::PhysicalAddress;
 use crate::AssemblingOptions;
 
 use cpclib_basic::*;
+use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::*;
 
 use cpclib_common::bitvec::prelude::BitVec;
@@ -27,8 +28,10 @@ use cpclib_common::lazy_static::__Deref;
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use std::any::Any;
+use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::fmt;
+use std::fmt::Display;
 use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -1363,8 +1366,8 @@ impl Env {
                     || self.symbols().kind(label)? == "any"))
         {
             Err(AssemblerError::AlreadyDefinedSymbol {
-                symbol: label.to_owned(),
-                kind: self.symbols().kind(label)?.to_owned(),
+                symbol: label.into(),
+                kind: self.symbols().kind(label)?.into(),
             })
         } else {
             if !label.starts_with('.') {
@@ -1385,7 +1388,7 @@ impl Env {
         if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
             if kind == "macro" || kind == "struct" {
                 self.visit_call_macro_or_build_struct(&Token::MacroCall(
-                    label.to_string(),
+                    label.into(),
                     Default::default(),
                 ))
             } else {
@@ -1396,25 +1399,25 @@ impl Env {
         }
     }
 
-    fn visit_noexport(&mut self, labels: &[String]) -> Result<(), AssemblerError> {
+    fn visit_noexport<S: Borrow<str> + Display>(&mut self, labels: &[S]) -> Result<(), AssemblerError> {
         if labels.is_empty() {
             self.symbols_output.forbid_all_symbols();
         } else {
             labels
                 .iter()
-                .for_each(|l| self.symbols_output.forbid_symbol(l.clone()));
+                .for_each(|l| self.symbols_output.forbid_symbol(l.borrow()));
         }
 
         Ok(())
     }
 
-    fn visit_export(&mut self, labels: &[String]) -> Result<(), AssemblerError> {
+    fn visit_export<S: Borrow<str> + Display>(&mut self, labels: &[S]) -> Result<(), AssemblerError> {
         if labels.is_empty() {
             self.symbols_output.allow_all_symbols();
         } else {
             labels
                 .iter()
-                .for_each(|l| self.symbols_output.allow_symbol(l.clone()));
+                .for_each(|l| self.symbols_output.allow_symbol(l.borrow()));
         }
 
         Ok(())
@@ -1537,7 +1540,7 @@ impl Env {
     pub fn visit_macro_definition(
         &mut self,
         name: &str,
-        arguments: &[String],
+        arguments: &[SmolStr],
         code: &str,
     ) -> Result<(), AssemblerError> {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
@@ -1548,7 +1551,7 @@ impl Env {
 
         self.symbols_mut().set_symbol_to_value(
             name,
-            Macro::new(name.to_owned(), arguments.to_vec(), code.to_owned()),
+            Macro::new(name.into(), arguments, code.to_owned()),
         )?;
         Ok(())
     }
@@ -1566,7 +1569,7 @@ impl Env {
     pub fn visit_struct_definition(
         &mut self,
         name: &str,
-        content: &[(String, Token)],
+        content: &[(SmolStr, Token)],
     ) -> Result<(), AssemblerError> {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
@@ -1696,8 +1699,8 @@ impl Env {
         {
             let kind = self.symbols().kind(Symbol::from(destination))?;
             return Err(AssemblerError::AlreadyDefinedSymbol {
-                symbol: destination.to_owned(),
-                kind: kind.to_string(),
+                symbol: destination.into(),
+                kind: kind.into(),
             });
         }
 
@@ -1849,7 +1852,7 @@ impl Env {
 
             if r#macro.is_none() && r#struct.is_none() {
                 let e = AssemblerError::UnknownMacro {
-                    symbol: name.to_owned(),
+                    symbol: name.clone(),
                     closest: self.symbols().closest_symbol(name, SymbolFor::Macro)?,
                 };
                 return match caller_span {
@@ -1906,7 +1909,7 @@ impl Env {
         // really assemble the produced tokens
         self.visit_listing(&listing).or_else(|e| {
             let e = AssemblerError::MacroError {
-                name: name.to_owned(),
+                name: name.clone(),
                 root: Box::new(e),
             };
             match caller_span {
@@ -1941,7 +1944,7 @@ impl Env {
         match self.symbols_mut().remove_symbol(label)? {
             Some(_) => Ok(()),
             None => Err(AssemblerError::UnknownSymbol {
-                symbol: label.to_owned(),
+                symbol: label.into(),
                 closest: self.symbols().closest_symbol(label, SymbolFor::Number)?,
             }),
         }
@@ -2247,9 +2250,9 @@ impl Env {
         }
     }
 
-    pub fn visit_function_definition<T: ListingElement + Visited + Clone + FunctionBuilder>(&mut self, 
+    pub fn visit_function_definition<T: ListingElement + Visited + Clone + FunctionBuilder<S>, S: Borrow<str> + Display>(&mut self, 
         name: &str, 
-        params: &[String], 
+        params: &[S], 
         inner: &[T], 
         span: Option<&Z80Span>) -> Result<(), AssemblerError> {
 
@@ -2945,7 +2948,7 @@ impl Env {
                     if let Some(counter_name) = counter_name {
                         if counter_name == &format!("{{{}}}", symbol) {
                             AssemblerError::RelocatedError{ error: box AssemblerError::UnknownSymbol {
-                                closest: Some(counter_name.to_owned()),
+                                closest: Some(counter_name.into()),
                                 symbol: symbol.clone()
                             }, span: span.clone() }
                         } else {
@@ -3019,8 +3022,8 @@ impl Env {
 fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
     if env.symbols().contains_symbol(label)? && env.pass.is_first_pass() {
         Err(AssemblerError::AlreadyDefinedSymbol {
-            symbol: label.to_owned(),
-            kind: env.symbols().kind(label)?.to_owned(),
+            symbol: label.into(),
+            kind: env.symbols().kind(label)?.into(),
         })
     } else {
         let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
@@ -3145,9 +3148,9 @@ impl Env {
 
 #[allow(missing_docs)]
 impl Env {
-    pub fn visit_basic(
+    pub fn visit_basic<S: Borrow<str> + Display>(
         &mut self,
-        variables: Option<&Vec<String>>,
+        variables: Option<&Vec<S>>,
         hidden_lines: Option<&Vec<u16>>,
         code: &str,
     ) -> Result<(), AssemblerError> {
@@ -3165,9 +3168,9 @@ impl Env {
         self.output_bytes(&bytes)
     }
 
-    pub fn assemble_basic(
+    pub fn assemble_basic<S: Borrow<str> + Display>(
         &mut self,
-        variables: Option<&Vec<String>>,
+        variables: Option<&Vec<S>>,
         hidden_lines: Option<&Vec<u16>>,
         code: &str,
     ) -> Result<Vec<u8>, AssemblerError> {
@@ -3183,7 +3186,7 @@ impl Env {
                         let value = format!(
                             "&{:X}",
                             self.resolve_expr_may_fail_in_first_pass(&Expr::from(
-                                argument.as_ref()
+                                argument.borrow()
                             ))?
                         );
                         basic = basic.replace(&key, &value);

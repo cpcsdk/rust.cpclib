@@ -1,10 +1,13 @@
+use std::borrow::Borrow;
+
+use cpclib_common::smol_str::SmolStr;
 use cpclib_tokens::{ExprResult, ExpressionTypeError};
 
 use crate::error::{AssemblerError, ExpressionError};
 use substring::Substring;
 
-pub fn fix_string(mut s: String) -> String {
-	s.replace("\\n", "\n")
+pub fn fix_string<S: Borrow<str>>(mut s: S) -> SmolStr {
+	s.borrow().replace("\\n", "\n").into()
 }
 
 
@@ -16,7 +19,7 @@ pub fn list_new(count: usize, value: ExprResult) -> ExprResult {
 /// Create a new string
 pub fn string_new(count: usize, value: ExprResult) -> Result<ExprResult, AssemblerError>  {
 	let value = value.char()?;
-	let s = (0..count).map(|_| value).collect::<String>();
+	let s = (0..count).map(|_| value).collect::<SmolStr>();
 	Ok(ExprResult::String(fix_string(s)))
 }
 
@@ -29,6 +32,7 @@ pub fn list_set(mut list: ExprResult, index: usize, value: ExprResult) -> Result
 			}
 			let c = value.int()? as u8 as char;
 			let c = format!("{}", c);
+			let mut s = s.to_string();
 			s.replace_range(index..index+1, &c);
 			Ok(ExprResult::String(fix_string(s)))
 		},
@@ -90,7 +94,7 @@ pub fn list_sublist(mut list: ExprResult, start: usize, end: usize) -> Result<Ex
 			if end >= s.len()+1 {
 				return Err(AssemblerError::ExpressionError(ExpressionError::InvalidSize(s.len(), end+1)));
 			}
-			Ok(ExprResult::String(s.substring(start, end).to_owned()))
+			Ok(ExprResult::String(s.substring(start, end).into()))
 		},
 		ExprResult::List(mut l) => {
 			if start >= l.len() {
@@ -129,38 +133,46 @@ pub fn list_len(list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
 pub fn string_push(mut s1: ExprResult, mut s2: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
 	match (s1, s2) {
 		(ExprResult::String(mut s1), ExprResult::String(mut s2)) => {
-			s1 += &fix_string(s2);
-			Ok(ExprResult::String(s1))
+			let s1 = s1.to_string() + &fix_string(s2);
+			Ok(ExprResult::String(s1.into()))
 		},
 		(ExprResult::String(mut s1), ExprResult::List(mut l)) => {
-			s1 += "[";
+			let mut s1 = s1.to_string() + "[";
 
 			for (i, e)in l.into_iter().enumerate() {
 				if i!= 0 {
 					s1 += ","
 				}
 
-				s1 = string_push(s1.into(), e)?.string().unwrap();
+				s1 = string_push(s1.into(), e)?
+						.string()
+						.unwrap()
+						.to_string();
 			}
 
 			s1 += "]";
-			Ok(ExprResult::String(s1))
+			Ok(ExprResult::String(s1.into()))
 		},
 
 
 		(ExprResult::String(mut s1), ExprResult::Float(s2)) => {
+			let mut s1 = s1.to_string();
 			s1 += &s2.into_inner().to_string();
-			Ok(ExprResult::String(s1))
+			Ok(ExprResult::String(s1.into()))
 		},
 
 		(ExprResult::String(mut s1), ExprResult::Value(s2)) => {
+			let mut s1 = s1.to_string();
+
 			s1 += &s2.to_string();
-			Ok(ExprResult::String(s1))
+			Ok(ExprResult::String(s1.into()))
 		},
 		
 		(ExprResult::String(mut s1), ExprResult::Bool(s2)) => {
+			let mut s1 = s1.to_string();
+
 			s1 += &s2.to_string();
-			Ok(ExprResult::String(s1))
+			Ok(ExprResult::String(s1.into()))
 		},
 
 		_ => {

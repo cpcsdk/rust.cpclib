@@ -12,7 +12,7 @@ pub type Listing = BaseListing<Token>;
 impl Listing {
     /// Add a new label to the listing
     pub fn add_label(&mut self, label: &str) {
-        self.listing_mut().push(Token::Label(String::from(label)));
+        self.listing_mut().push(Token::Label(label.into()));
     }
 
     /// Add a new comment to the listing

@@ -1,9 +1,10 @@
 use crate::tokens::Token;
 use ordered_float::OrderedFloat;
+use std::borrow::Borrow;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, Sub};
-
+use cpclib_common::smol_str::SmolStr;
 use cpclib_common::itertools::Itertools;
 
 /// Expression nodes.
@@ -22,9 +23,9 @@ pub enum Expr {
     /// Boolean
     Bool(bool),
     /// String (for db directive)
-    String(String),
+    String(SmolStr),
     /// Label
-    Label(String),
+    Label(SmolStr),
     /// List of expression
     List(Vec<Expr>),
 
@@ -32,7 +33,7 @@ pub enum Expr {
 
 
     /// Label with a prefix
-    PrefixedLabel(LabelPrefix, String),
+    PrefixedLabel(LabelPrefix, SmolStr),
 
     /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
     Duration(Box<Token>), // TODO move in a token function stuff
@@ -75,7 +76,7 @@ pub enum Expr {
     /// Hardoded function with two arguments
     BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
     /// Function supposely coded by the user
-    AnyFunction(String, Vec<Expr>),
+    AnyFunction(SmolStr, Vec<Expr>),
 
     /// Random value
     Rnd,
@@ -273,7 +274,7 @@ impl Display for BinaryFunction {
 
 impl From<&str> for Expr {
     fn from(src: &str) -> Self {
-        Expr::Label(src.to_string())
+        Expr::Label(src.into())
     }
 }
 
@@ -586,12 +587,24 @@ pub enum ExprResult {
     Float(OrderedFloat<f64>),
     Value(i32),
     Bool(bool),
-    String(String),
+    String(SmolStr),
     List(Vec<ExprResult>)
 }
 
 impl From<String> for ExprResult {
     fn from(f: String) -> Self {
+        ExprResult::String(f.into())
+    }
+}
+
+impl From<&SmolStr> for ExprResult {
+    fn from(f: &SmolStr) -> Self {
+        ExprResult::String(f.clone())
+    }
+}
+
+impl From<SmolStr> for ExprResult {
+    fn from(f: SmolStr) -> Self {
         ExprResult::String(f)
     }
 }
@@ -671,9 +684,9 @@ impl ExprResult {
         }
     }
 
-    pub fn string(&self) -> Result<String, ExpressionTypeError> {
+    pub fn string(&self) -> Result<&str, ExpressionTypeError> {
         match self {
-            ExprResult::String(s) => Ok(s.clone()),
+            ExprResult::String(s) => Ok(s.borrow()),
             _ => Err(ExpressionTypeError(format!("Try to convert {} as an string", self))),
         }
     }

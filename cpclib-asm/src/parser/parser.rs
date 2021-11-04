@@ -18,6 +18,7 @@ use cpclib_common::nom::multi::*;
 use cpclib_common::nom::sequence::*;
 use cpclib_common::nom_locate::LocatedSpan;
 use cpclib_common::rayon::prelude::*;
+use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::parse::parse_flag_value;
 use cpclib_sna::FlagValue;
@@ -534,7 +535,7 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseE
         input.clone(), 
         LocatedToken::Function(
             name,
-            arguments.iter().map(|a| a.to_string()).collect_vec() ,
+            arguments.iter().map(|a| a.to_string().into()).collect_vec() ,
             listing, 
             function_start.slice(.. function_start.len()-input.len())
         )
@@ -580,8 +581,8 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
             name,
             arguments
                 .iter()
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>(),
+                .map(|s| s.to_string().into())
+                .collect::<Vec<SmolStr>>(),
             content
                 .0
                 .iter()
@@ -879,7 +880,7 @@ pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
 
     let (input, args) = opt(separated_list1(
         preceded(space0, char(',')),
-        preceded(space0, map(parse_label(false), |s| s.to_string())),
+        preceded(space0, map(parse_label(false), |s| s.to_string().into())),
     ))(input)?;
 
     let (input, _) = tuple((space0, opt(tag("\r")), tag("\n")))(input)?;
@@ -1503,7 +1504,7 @@ pub fn parse_section(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
     let (input, _) = parse_directive_word("SECTION")(input)?;
     let (input, name) = preceded(space0, parse_label(false))(input)?;
 
-    Ok((input, Token::Section(name.to_string())))
+    Ok((input, Token::Section(name.to_string().into())))
 }
 
 pub fn parse_range(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
@@ -2210,7 +2211,7 @@ pub fn parse_db_or_dw_or_str(input: Z80Span) -> IResult<Z80Span, Token, VerboseE
 }
 
 // Fail if we do not read a forbidden keyword
-pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
+pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, SmolStr, VerboseError<Z80Span>> {
     let (input, _) = space0(input)?;
     let (input, name) = parse_label(false)(input)?;
 
@@ -2455,7 +2456,7 @@ pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
                     formatted_expr,
                     map(expr, FormattedExpr::from),
                     map(string_between_quotes, {
-                        |s: Z80Span| FormattedExpr::from(Expr::String(s.to_string()))
+                        |s: Z80Span| FormattedExpr::from(Expr::String(s.to_string().into()))
                     }),
                 )),
             )),
@@ -2474,7 +2475,7 @@ pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
                     formatted_expr,
                     map(expr, FormattedExpr::from),
                     map(string_between_quotes, {
-                        |s: Z80Span| FormattedExpr::from(Expr::String(s.to_string()))
+                        |s: Z80Span| FormattedExpr::from(Expr::String(s.to_string().into()))
                     }),
                 )),
             )),
@@ -3347,7 +3348,7 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
 
     let (input, _) = cut(preceded(space0, parse_directive_word("ENDSTRUCT")))(input)?;
 
-    Ok((input, Token::Struct(name.to_owned(), fields)))
+    Ok((input, Token::Struct(name.into(), fields)))
 }
 
 fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
@@ -3365,7 +3366,7 @@ fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>
         (flagname, values[0].clone())
     } else {
         (
-            format!("{}:{}", flagname, values[0].as_u16().unwrap()),
+            format!("{}:{}", flagname, values[0].as_u16().unwrap()).into(),
             values[1].clone(),
         )
     };
@@ -3395,7 +3396,7 @@ pub fn string_between_quotes(input: Z80Span) -> IResult<Z80Span, Z80Span, Verbos
 /// TODO
 pub fn string_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     map(string_between_quotes, |string| {
-        Expr::String(string.to_string())
+        Expr::String(SmolStr::from(string.to_string()))
     })(input)
 }
 
@@ -3418,9 +3419,10 @@ pub fn char_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>
 }
 
 /// Parse a label(label: S)
+/// TODO reimplement to never build a string
 pub fn parse_label(
     doubledots: bool,
-) -> impl Fn(Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, SmolStr, VerboseError<Z80Span>> {
     move |input: Z80Span| {
         // Get the label
 
@@ -3474,7 +3476,7 @@ pub fn parse_label(
                 ErrorKind::OneOf
             )))
         } else {
-            Ok((input, label))
+            Ok((input, label.into()))
         }
     }
 }
@@ -3528,7 +3530,7 @@ pub fn parse_end_directive(input: Z80Span) -> IResult<Z80Span, String, VerboseEr
     }
 }
 
-pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
+pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, SmolStr, VerboseError<Z80Span>> {
     let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_")(input)?;
     let (input, name) =
         is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")(input)?;
@@ -3542,7 +3544,7 @@ pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, String, VerboseError
             ErrorKind::OneOf
         )))
     } else {
-        Ok((input, keyword))
+        Ok((input, keyword.into()))
     }
 }
 
@@ -3556,7 +3558,8 @@ pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseErro
         space0,
         alt((
             parse_label(false),
-            map(tag_no_case("$"), |s: Z80Span| s.to_string()),
+            map(tag_no_case("$"), |_| SmolStr::from("$")),
+            map(tag_no_case("$$"), |_| SmolStr::from("$$")),
         )),
     )(input)?;
 
@@ -3599,7 +3602,7 @@ pub fn parse_counter(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80S
             parse_label(false), // BUG will accept too many cases
             pair(tag("}".into()), not(alphanumeric1)),
         ),
-        |l| Expr::Label(format!("{{{}}}", l)),
+        |l| Expr::Label(format!("{{{}}}", l).into()),
     )(input)
 }
 
@@ -3672,11 +3675,11 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                     // manage values
                     alt((positive_number, negative_number)),
                     char_expr,
-                    map(parse_decoded_string, |s| Expr::String(s)),
+                    map(parse_decoded_string, |s| Expr::String(s.into())),
                     parse_counter,
                     // manage $
-                    map(tag("$$"), |_x| Expr::Label(String::from("$$"))),
-                    map(tag("$"), |_x| Expr::Label(String::from("$"))),
+                    map(tag("$$"), |_x| Expr::Label(SmolStr::from("$$"))),
+                    map(tag("$"), |_x| Expr::Label(SmolStr::from("$"))),
                     parse_bool_expr,
                     prefixed_label_expr,
                     // manage labels

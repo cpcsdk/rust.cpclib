@@ -3,6 +3,7 @@ use std::fmt::{Debug, Display};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{smallvec, SmallVec};
+use cpclib_common::smol_str::SmolStr;
 use cpclib_common::strsim::levenshtein;
 use cpclib_common::{lazy_static, strsim};
 use delegate::delegate;
@@ -130,14 +131,14 @@ pub enum SymbolError {
 /// Encode the data for the structure directive
 #[derive(Debug, Clone)]
 pub struct Struct {
-    name: String,
-    content: Vec<(String, Token)>,
+    name: SmolStr,
+    content: Vec<(SmolStr, Token)>,
 }
 
 impl Struct {
-    pub fn new(name: impl AsRef<str>, content: &[(String, Token)]) -> Self {
+    pub fn new(name: impl AsRef<str>, content: &[(SmolStr, Token)]) -> Self {
         Self {
-            name: name.as_ref().to_owned(),
+            name: name.as_ref().into(),
             content: content
                 .iter()
                 .map(|(s, t)| (s.clone(), t.clone()))
@@ -284,23 +285,23 @@ impl Struct {
 #[derive(Debug, Clone)]
 pub struct Macro {
     // The name of the macro
-    name: String,
+    name: SmolStr,
     // The name of its arguments
-    args: Vec<String>,
+    args: Vec<SmolStr>,
     // The content
     code: String,
 }
 
 impl Macro {
-    pub fn new(name: String, args: Vec<String>, code: String) -> Self {
-        Macro { name, args, code }
+    pub fn new(name: SmolStr, args: &[SmolStr], code: String) -> Self {
+        Macro { name, args: args.to_vec(), code }
     }
 
     pub fn code(&self) -> &str {
         self.code.as_ref()
     }
 
-    pub fn args(&self) -> &[String] {
+    pub fn args(&self) -> &[SmolStr] {
         &self.args
     }
 
@@ -328,7 +329,7 @@ impl Macro {
 pub enum Value {
     /// Integer value used in an expression
     Expr(ExprResult),
-    String(String),
+    String(SmolStr),
     /// Address (use in physical way to ensure all bank/page info are available)
     Address(PhysicalAddress),
     /// Macro information
@@ -415,7 +416,7 @@ impl<I: Into<ExprResult>> From<I> for Value {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct Symbol(String);
+pub struct Symbol(SmolStr);
 
 impl Display for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -430,12 +431,24 @@ impl From<&str> for Symbol {
 
 impl From<String> for Symbol {
     fn from(s: String) -> Symbol {
-        Symbol(s)
+        Symbol(s.into())
     }
 }
 
 impl From<&String> for Symbol {
     fn from(s: &String) -> Symbol {
+        Symbol(s.into())
+    }
+}
+
+impl From<SmolStr> for Symbol {
+    fn from(s: SmolStr) -> Symbol {
+        Symbol(s)
+    }
+}
+
+impl From<&SmolStr> for Symbol {
+    fn from(s: &SmolStr) -> Symbol {
         Symbol(s.clone())
     }
 }
@@ -1020,7 +1033,7 @@ impl SymbolsTable {
         &self,
         symbol: S,
         r#for: SymbolFor,
-    ) -> Result<Option<String>, SymbolError> {
+    ) -> Result<Option<SmolStr>, SymbolError> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self
@@ -1190,7 +1203,7 @@ impl SymbolsTableCaseDependent {
             pub fn current_address(&self) -> Result<u16, SymbolError>;
             pub fn set_current_address(&mut self, addr: PhysicalAddress);
             pub fn set_current_output_address(&mut self, addr: PhysicalAddress);
-            pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<String>, SymbolError>;
+            pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<SmolStr>, SymbolError>;
             pub fn push_seed(&mut self, seed: usize);
             pub fn pop_seed(&mut self);
         }

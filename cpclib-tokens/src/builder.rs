@@ -15,12 +15,12 @@ pub fn org<E: Into<Expr>>(val: E) -> Token {
 
 #[allow(missing_docs)]
 pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {
-    Token::Equ(label.as_ref().to_owned(), expr.into())
+    Token::Equ(label.as_ref().into(), expr.into())
 }
 
 #[allow(missing_docs)]
 pub fn label<S: AsRef<str>>(label: S) -> Token {
-    Token::Label(label.as_ref().to_owned())
+    Token::Label(label.as_ref().into())
 }
 
 /**

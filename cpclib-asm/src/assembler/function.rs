@@ -3,7 +3,7 @@ use crate::{Visited, assembler::{delayed_command::FailedAssertCommand, list::{li
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
-use std::collections::HashMap;
+use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
 use super::{Env, delayed_command::PrintCommand, list::{list_get, list_len, list_sublist, string_new, string_push}};
 
@@ -38,10 +38,10 @@ pub struct AnyFunction<T: ListingElement + Visited> {
 }
 
 impl<T: ListingElement + Visited + Clone> AnyFunction<T> {
-    fn new(name: &str, args: &[String], inner: &[T]) -> Self {
+    fn new<S :Borrow<str>>(name: &str, args: &[S], inner: &[T]) -> Self {
         AnyFunction {
             name: name.to_owned(),
-            args: args.to_vec(),
+            args: args.iter().map(|s| s.borrow().into()).collect_vec(),
             inner: inner.to_vec(),
         }
     }
@@ -306,9 +306,9 @@ impl HardCodedFunction {
 }
 
 impl Function {
-    pub fn new_located(
+    pub fn new_located<S: Borrow<str> + Display>(
         name: &str,
-        args: &[String],
+        args: &[S],
         inner: &[LocatedToken],
     ) -> Result<Self, AssemblerError> {
         if inner.is_empty() {
@@ -319,17 +319,19 @@ impl Function {
         )));
     }
 
-    pub fn new_standard(
+    pub fn new_standard<S: Borrow<str> + Display>(
         name: &str,
-        args: &[String],
+        args: &[S],
         inner: &[Token],
     ) -> Result<Self, AssemblerError> {
         if inner.is_empty() {
             return Err(AssemblerError::FunctionWithEmptyBody(name.to_owned()));
         }
-        return Ok(Function::Standard(AnyFunction::<Token>::new(
+        else {
+            return Ok(Function::Standard(AnyFunction::<Token>::new(
             name, args, inner,
         )));
+        }
     }
 
     pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
@@ -341,24 +343,24 @@ impl Function {
     }
 }
 
-pub trait FunctionBuilder {
-    fn new(name: &str, args: &[String], inner: &[Self]) -> Result<Function, AssemblerError>
+pub trait FunctionBuilder <S: Borrow<str> + Display>{
+    fn new(name: &str, args: &[S], inner: &[Self]) -> Result<Function, AssemblerError>
     where
         Self: Sized;
 }
 
-impl FunctionBuilder for LocatedToken {
+impl<S: Borrow<str> + Display> FunctionBuilder<S> for LocatedToken {
     fn new(
         name: &str,
-        args: &[String],
+        args: &[S],
         inner: &[LocatedToken],
     ) -> Result<Function, AssemblerError> {
         Function::new_located(name, args, inner)
     }
 }
 
-impl FunctionBuilder for Token {
-    fn new(name: &str, args: &[String], inner: &[Token]) -> Result<Function, AssemblerError> {
+impl<S: Borrow<str> + Display> FunctionBuilder<S>for Token {
+    fn new(name: &str, args: &[S], inner: &[Token]) -> Result<Function, AssemblerError> {
         Function::new_standard(name, args, inner)
     }
 }

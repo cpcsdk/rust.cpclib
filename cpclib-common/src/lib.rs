@@ -10,6 +10,7 @@ pub use num;
 pub use rayon;
 pub use smallvec;
 pub use strsim;
+pub use smol_str;
 
 #[cfg(feature="cmdline")]
 pub use clap;
