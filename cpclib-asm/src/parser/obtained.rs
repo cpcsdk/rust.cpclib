@@ -156,7 +156,13 @@ impl Clone for LocatedToken {
                     span.clone()
                 )
             },
-            LocatedToken::While(_, _, _) => todo!(),
+            LocatedToken::While(a, b, c) => {
+                LocatedToken::While(
+                    a.clone(),
+                    b.clone(),
+                    c.clone()
+                )
+            },
             LocatedToken::Module(_, _, _) => todo!(),
         }
     }

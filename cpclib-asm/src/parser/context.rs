@@ -56,10 +56,11 @@ impl ParsingStateVerified for Token {
             ParsingState::FunctionLimited => {
                 match self {
                     Token::Equ(_,_ ) | Token::Let(_, _) => true,
-                    Token::If{..} | Token::Repeat{..} 
-                    | Token::Switch{..} | Token::Iterate{..} => true,
+                    Token::If{..} | Token::Repeat{..} | Token::Break |
+                    Token::Switch{..} | 
+                    Token::Iterate{..} => true,
                     Token::Return(_) => true,
-                    Token::Assert(_, _) | Token::Print(_) => true,
+                    Token::Assert(_, _) | Token::Print(_) | Token::Fail(_) => true,
                     _ => false
                 }
             }
