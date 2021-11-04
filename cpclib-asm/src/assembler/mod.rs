@@ -2753,37 +2753,48 @@ impl Env {
         }
 
         // Get the values (all args or list explosion)
-        let values = match values {
+        // BUG: iteration over values make the expressions progressively evaluated, while iteration over a list make its expressions evaluated at first loop
+        match values {
             either::Either::Left(values) => {
-                values
+                for (i, value) in values.iter().enumerate() {
+                    let counter_value = self.resolve_expr_must_never_fail(value).map_err(|e| {
+                        AssemblerError::RepeatIssue {
+                            error: Box::new(e),
+                            span: span.clone(),
+                            repetition: i as _,
+                        }
+                    })?;
+                    self.inner_visit_repeat(
+                        Some(counter_name),
+                        Some(counter_value),
+                        i as _,
+                        code,
+                        span.clone(),
+                    )?;
+                }
             }
             either::Either::Right(values) => {
-                 match values {
-                    Expr::List(v) => v,
+                 match self.resolve_expr_must_never_fail(values)? {
+                    ExprResult::List(values) => {
+                        for (i, counter_value) in values.into_iter().enumerate() {
+                            self.inner_visit_repeat(
+                                Some(counter_name),
+                                Some(counter_value),
+                                i as _,
+                                code,
+                                span.clone(),
+                            )?;
+                        }
+                    },
                     _ => return Err(AssemblerError::AssemblingError {
                         msg: format!("REPEAT issue: {} is not a list", values)
                     })
                 }
             }
-        };
+        }
 
         // Apply the iteration
-        for (i, value) in values.iter().enumerate() {
-            let counter_value = self.resolve_expr_must_never_fail(value).map_err(|e| {
-                AssemblerError::RepeatIssue {
-                    error: Box::new(e),
-                    span: span.clone(),
-                    repetition: i as _,
-                }
-            })?;
-            self.inner_visit_repeat(
-                Some(counter_name),
-                Some(counter_value),
-                i as _,
-                code,
-                span.clone(),
-            )?;
-        }
+
 
 
         // TODO restore a previous value if any
