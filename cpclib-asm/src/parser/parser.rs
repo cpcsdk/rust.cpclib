@@ -1278,10 +1278,11 @@ pub fn parse_fname(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80
 
 /// Parser for file names in appropriate directives
 pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
-    alt((
-        preceded(tag("\""), terminated(take_until("\""), take(1usize))),
-        preceded(tag("'"), terminated(take_until("'"), take(1usize))),
-    ))(input)
+  //  alt((
+        preceded(tag("\""), terminated(take_until("\""), take(1usize)))
+  //      preceded(tag("'"), terminated(take_until("'"), take(1usize))),
+  //  )) // single quote is stricly reserved for chars now
+    (input)
 }
 
 pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
@@ -1297,17 +1298,8 @@ pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
 
 pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     // manage the string format - TODO manage the others too
-    let (input, chars) = context("Invalid string", parse_string)(input)?;
+    let (input, chars) = context("Invalid string", parse_decoded_string)(input)?;
     let (input, start) = context("Missing start value", preceded(parse_comma, expr))(input)?;
-    let chars = chars
-        .to_string()
-        .replace("\\\\", "\\")
-        .replace("\\a", &char::from(7).to_string())
-        .replace("\\b", &char::from(8).to_string())
-        .replace("\\t", "\t")
-        .replace("\\r", "\r")
-        .replace("\\v", &char::from(11).to_string())
-        .replace("\\f", &char::from(12).to_string());
     let format = CharsetFormat::CharsList(chars.chars().collect_vec(), start);
 
     let charset = Token::Charset(format);
@@ -3636,17 +3628,23 @@ pub fn parse_expr_bracketed_list(input: Z80Span) -> IResult<Z80Span, Expr, Verbo
     )(input)
 }
 
-pub fn parse_decoded_string(input: Z80Span) ->  IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_bool_expr(input: Z80Span) ->  IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+    alt((
+        map(parse_word("true"), |_| Expr::Bool(true)),
+        map(parse_word("false"), |_| Expr::Bool(false)),
+    ))(input)
+}
+
+
+pub fn parse_decoded_string(input: Z80Span) ->  IResult<Z80Span, String, VerboseError<Z80Span>> {
     map(parse_string, |s| {
-        Expr::String(
             s.replace("\\\\", "\\")
                 .replace("\\a", &char::from(7).to_string())
                 .replace("\\b", &char::from(8).to_string())
                 .replace("\\t", "\t")
                 .replace("\\r", "\r")
                 .replace("\\v", &char::from(11).to_string())
-                .replace("\\f", &char::from(12).to_string()),
-        )
+                .replace("\\f", &char::from(12).to_string())
     })(input)
 }
 
@@ -3674,11 +3672,12 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                     // manage values
                     alt((positive_number, negative_number)),
                     char_expr,
-                    parse_decoded_string,
+                    map(parse_decoded_string, |s| Expr::String(s)),
                     parse_counter,
                     // manage $
                     map(tag("$$"), |_x| Expr::Label(String::from("$$"))),
                     map(tag("$"), |_x| Expr::Label(String::from("$"))),
+                    parse_bool_expr,
                     prefixed_label_expr,
                     // manage labels
                     map(parse_label(false), Expr::Label),

@@ -19,6 +19,8 @@ pub enum Expr {
     Float(OrderedFloat<f64>),
     /// Char
     Char(char),
+    /// Boolean
+    Bool(bool),
     /// String (for db directive)
     String(String),
     /// Label
@@ -416,6 +418,7 @@ impl Display for Expr {
             &Value(val) => write!(format, "0x{:x}", val),
             &Float(val) => write!(format, "{}", val),
             Char(c) => write!(format, "'{}'", c),
+            Bool(b) => write!(format, "{}", if *b {"true"} else {"false"}),
             &String(ref string) => write!(format, "\"{}\"", string),
             List(l) => write!(
                 format,

@@ -33,6 +33,7 @@ impl ExprEvaluationExt for Expr {
             | Expr::Value(_)
             | Expr::Float(_)
             | Expr::Char(_)
+            | Expr::Bool(_)
             | Expr::String(_)
             | Expr::Duration(_)
             | Expr::OpCode(_)
@@ -133,6 +134,9 @@ impl ExprEvaluationExt for Expr {
             RelativeDelta(delta) => (Expr::Label("$".into()).resolve(env)? + delta.clone().into()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
 
             Value(val) => Ok(val.clone().into()),
+            Bool(b) => {
+                Ok(b.clone().into())
+            }
             Char(c) => {
                 // TODO convert them in another encoding
                 Ok(c.clone().into())
