@@ -535,7 +535,7 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseE
         input.clone(), 
         LocatedToken::Function(
             name,
-            arguments.iter().map(|a| a.to_string().into()).collect_vec() ,
+            arguments.iter().map(|a| SmolStr::from_iter(a.fragment().chars())).collect_vec() ,
             listing, 
             function_start.slice(.. function_start.len()-input.len())
         )
@@ -581,7 +581,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
             name,
             arguments
                 .iter()
-                .map(|s| s.to_string().into())
+                .map(|s| SmolStr::from_iter(s.fragment().chars()))
                 .collect::<Vec<SmolStr>>(),
             content
                 .0
@@ -880,7 +880,7 @@ pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
 
     let (input, args) = opt(separated_list1(
         preceded(space0, char(',')),
-        preceded(space0, map(parse_label(false), |s| s.to_string().into())),
+        preceded(space0, parse_label(false)),
     ))(input)?;
 
     let (input, _) = tuple((space0, opt(tag("\r")), tag("\n")))(input)?;
@@ -1504,7 +1504,7 @@ pub fn parse_section(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
     let (input, _) = parse_directive_word("SECTION")(input)?;
     let (input, name) = preceded(space0, parse_label(false))(input)?;
 
-    Ok((input, Token::Section(name.to_string().into())))
+    Ok((input, Token::Section(name)))
 }
 
 pub fn parse_range(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
@@ -2456,7 +2456,7 @@ pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
                     formatted_expr,
                     map(expr, FormattedExpr::from),
                     map(string_between_quotes, {
-                        |s: Z80Span| FormattedExpr::from(Expr::String(s.to_string().into()))
+                        |s: Z80Span| FormattedExpr::from(Expr::String(SmolStr::from_iter(s.fragment().chars())))
                     }),
                 )),
             )),
@@ -2475,7 +2475,7 @@ pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
                     formatted_expr,
                     map(expr, FormattedExpr::from),
                     map(string_between_quotes, {
-                        |s: Z80Span| FormattedExpr::from(Expr::String(s.to_string().into()))
+                        |s: Z80Span| FormattedExpr::from(Expr::String(SmolStr::from_iter(s.fragment().chars())))
                     }),
                 )),
             )),
