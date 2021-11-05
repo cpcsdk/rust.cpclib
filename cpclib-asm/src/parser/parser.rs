@@ -719,7 +719,8 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         let (input, value) = preceded(space0, opt(parse_directive_word("CASE")))(input)?;
         loop_start = if value.is_some() {
             let (input, value) =
-                cut(context("SWITCH: case value error.", preceded(space0, expr)))(input)?;
+                cut(context("SWITCH: case value error.", delimited(
+                    space0, expr, opt(tag(":")))))(input)?;
             let (input, inner) = cut(context("SWITCH: error in case code", inner_code))(input)?;
             let (input, do_break) = opt(preceded(space0, parse_directive_word("BREAK")))(input)?;
 
