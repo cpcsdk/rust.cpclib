@@ -665,7 +665,7 @@ impl SymbolsTable {
 
         // make the replacement
         for model in replace.iter() {
-            let local_symbol = dbg!(&model[1..model.len()-1]); // remove {}
+            let local_symbol = &model[1..model.len()-1]; // remove {}
             let local_value = match self.value(local_symbol)? {
                 Some(Value::String(s)) => s.to_string(),
                 Some(Value::Expr(e)) => e.to_string(),
