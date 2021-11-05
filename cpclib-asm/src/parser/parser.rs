@@ -516,9 +516,9 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseE
             parse_comma,
             /*parse_label(false)*/
             delimited(
-                space0,
+                my_space0,
                 take_till(|c| c == '\n' || c == '\r' || c == ':' || c == ',' || c == ' '),
-                space0,
+                my_space0,
             ),
         ),
     )))(input)?;

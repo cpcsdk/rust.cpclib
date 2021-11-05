@@ -31,3 +31,26 @@
 	ifdef local1
 		fail "Function variables must not outlive the function"
 	endif
+
+
+	FUNCTION name2 arg1, arg2, arg3
+
+		return true
+		
+	ENDFUNCTION
+
+	FUNCTION name3 \
+		 arg1, arg2, arg3
+
+		return true
+		
+	ENDFUNCTION
+
+		FUNCTION name3 \
+		 		arg1, \
+				arg2, \
+				arg3
+
+		return true
+		
+	ENDFUNCTION
