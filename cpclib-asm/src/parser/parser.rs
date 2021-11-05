@@ -2429,12 +2429,12 @@ pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
 
     let (input, expr) = cut(context("ASSERT: expression error", expr))(input)?;
 
-    let (input, comment) = cut(context(
+    let (input, exps) = cut(context(
         "ASSERT: comment error",
-        opt(preceded(parse_comma, parse_string)),
+        opt(preceded(parse_comma, parse_print_inner)),
     ))(input)?;
 
-    Ok((input, Token::Assert(expr, comment.map(|s| s.to_string()))))
+    Ok((input, Token::Assert(expr, exps)))
 }
 
 /// ...
@@ -2445,21 +2445,24 @@ pub fn parse_align(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     Ok((input, Token::Align(boundary, fill)))
 }
 
+pub fn parse_print_inner(input: Z80Span)-> IResult<Z80Span, Vec<FormattedExpr>, VerboseError<Z80Span>>  {
+    separated_list1(
+        parse_comma,
+        alt((
+            formatted_expr,
+            map(expr, FormattedExpr::from),
+            map(string_between_quotes, {
+                |s: Z80Span| FormattedExpr::from(Expr::String(SmolStr::from_iter(s.fragment().chars())))
+            }),
+        )),
+    )(input)
+}
 /// ...
 pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
         preceded(
             parse_directive_word("PRINT"),
-            cut(separated_list1(
-                parse_comma,
-                alt((
-                    formatted_expr,
-                    map(expr, FormattedExpr::from),
-                    map(string_between_quotes, {
-                        |s: Z80Span| FormattedExpr::from(Expr::String(SmolStr::from_iter(s.fragment().chars())))
-                    }),
-                )),
-            )),
+            cut(parse_print_inner),
         ),
         |exps| Token::Print(exps),
     )(input)
@@ -2469,16 +2472,7 @@ pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
     map(
         preceded(
             parse_directive_word("FAIL"),
-            cut(separated_list1(
-                delimited(space0, tag(","), space0),
-                alt((
-                    formatted_expr,
-                    map(expr, FormattedExpr::from),
-                    map(string_between_quotes, {
-                        |s: Z80Span| FormattedExpr::from(Expr::String(SmolStr::from_iter(s.fragment().chars())))
-                    }),
-                )),
-            )),
+            cut(parse_print_inner),
         ),
         |exps| Token::Fail(exps),
     )(input)
@@ -2519,7 +2513,7 @@ fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>>
         recognize(eof),
         recognize(tuple((
             space0, 
-            tag("\\"), 
+            tag("\\"), // do we keep it ?
             opt(pair(space0, parse_comment)), 
             line_ending, 
             space0
@@ -4159,7 +4153,7 @@ mod test {
         assert!(span.is_empty());
         assert_eq!(
             res,
-            Expr::PrefixedLabel(LabelPrefix::Bank, "label".to_string())
+            Expr::PrefixedLabel(LabelPrefix::Bank, "label".into())
         );
     }
 

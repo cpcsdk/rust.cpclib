@@ -29,6 +29,7 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use std::any::Any;
 use std::borrow::Borrow;
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Display;
@@ -374,7 +375,7 @@ pub struct Env {
 
     /// Return value of the currently executed function. Is almost always None
     return_value: Option<ExprResult>,
-    functions: HashMap<String, Function>,
+    functions: BTreeMap<String, Function>,
 
     /// Set only if the run instruction has been used
     run_options: Option<(u16, Option<u16>)>,
@@ -510,7 +511,7 @@ impl Default for Env {
             if_token_adr_to_unused_decision: HashMap::default(),
             requested_additional_pass: false,
 
-            functions: HashMap::default(),
+            functions: Default::default(),
             return_value: None,
 
             current_pass_discarded_errors: HashSet::default(),
@@ -2250,22 +2251,25 @@ impl Env {
         }
     }
 
+    /// Add a function if it does not exist.
     pub fn visit_function_definition<T: ListingElement + Visited + Clone + FunctionBuilder<S>, S: Borrow<str> + Display>(&mut self, 
         name: &str, 
         params: &[S], 
         inner: &[T], 
         span: Option<&Z80Span>) -> Result<(), AssemblerError> {
 
-        let f = FunctionBuilder::new(
-            name,
-            params,
-            inner
-        )?;
+        if !self.functions.contains_key(name) {
+            let f = FunctionBuilder::new(
+                name,
+                params,
+                inner
+            )?;
 
-        self.functions.insert(
-            name.to_owned(),
-            f
-        );
+            self.functions.insert(
+                name.to_owned(),
+                f
+            );
+        }
 
         Ok(())
     }
@@ -2492,7 +2496,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     match token {
         Token::Align(ref boundary, ref fill) => env.visit_align(boundary, fill.as_ref()),
         Token::Assert(ref exp, ref txt) => {
-            visit_assert(exp, txt.as_ref(), env, None);
+            visit_assert(exp, txt.as_ref(), env, None)?;
             Ok(())
         }
         Token::Basic(ref variables, ref hidden_lines, ref code) => {
@@ -2626,12 +2630,12 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 
 /// No error is generated here; everything is delayed at the end of assembling.
 /// Returns false in case of assert failure
-fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env, span: Option<Z80Span>) -> bool {
+fn visit_assert(exp: &Expr, txt: Option<&Vec<FormattedExpr>>, env: &mut Env, span: Option<Z80Span>) -> Result<bool, AssemblerError> {
     let res = match env.resolve_expr_must_never_fail(exp) {
         Err(e) => Err(e),
 
         Ok(value) => {
-            if value == 0.into() {
+            if !value.bool()? {
                 let _symbols = env.symbols();
                 let oper = |left: &Expr, right: &Expr, oper: &str| -> String {
                     let res_left = left.resolve(env).unwrap();
@@ -2651,7 +2655,7 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env, span: Option<Z8
                 };
 
                 Err(AssemblerError::AssertionFailed {
-                    msg: prefix + if txt.is_some() { &txt.unwrap() } else { "" },
+                    msg: prefix + &if txt.is_some() { env.build_string_from_formatted_expression(txt.unwrap())? } else { "".to_owned() },
                     test: exp.to_string(),
                     guidance: env.to_assert_string(exp),
                 })
@@ -2670,9 +2674,9 @@ fn visit_assert(exp: &Expr, txt: Option<&String>, env: &mut Env, span: Option<Z8
         };
         env.active_page_info_mut()
             .add_failed_assert_command(assert_error.into());
-        false
+        Ok(false)
     } else {
-        true
+        Ok(true)
     }
 }
 
@@ -5032,7 +5036,7 @@ mod test {
             None,
             &mut env,
             None
-        ));
+        ).unwrap());
         assert!(!visit_assert(
             &Expr::Equal(Box::new(1.into()), Box::new(0.into())),
             None,
@@ -5245,7 +5249,7 @@ mod test {
     #[test]
     pub fn test_stableticker() {
         let tokens = vec![
-            Token::StableTicker(StableTickerAction::Start("myticker".to_owned())),
+            Token::StableTicker(StableTickerAction::Start("myticker".into())),
             Token::OpCode(
                 Mnemonic::Inc,
                 Some(DataAccess::Register16(Register16::Hl)),

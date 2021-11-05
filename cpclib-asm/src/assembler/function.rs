@@ -390,11 +390,18 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
     env.start_new_pass();
     env.visit_bank(None)?; // assemble in a new bank
     env.visit_listing(&tokens)?;
-    let mut bank_info = env.banks.pop().unwrap();
-    let bytes = bank_info.0[
-        bank_info.1.startadr.unwrap() as _ .. bank_info.1.maxadr as _
-    ].iter()
-    .map(|b| ExprResult::from(*b))
-    .collect_vec();
-    Ok(ExprResult::List(bytes))
+    let bank_info = env.banks.pop().unwrap();
+    match &bank_info.1.startadr {
+        Some(startadr) => {
+            let bytes = bank_info.0[
+                *startadr as _ ..= bank_info.1.maxadr as _
+            ].iter()
+            .map(|b| ExprResult::from(*b))
+            .collect_vec();
+            Ok(ExprResult::List(bytes))
+        }
+        None => Ok(ExprResult::List(Default::default()))
+    }
+    
+    
 }

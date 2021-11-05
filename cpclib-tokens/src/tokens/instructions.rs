@@ -414,7 +414,7 @@ pub enum CharsetFormat {
 #[allow(missing_docs)]
 pub enum Token {
     Align(Expr, Option<Expr>),
-    Assert(Expr, Option<String>),
+    Assert(Expr, Option<Vec<FormattedExpr>>),
     Assign(SmolStr, Expr),
 
     /// Configure the bank - completely incompatible with rasm behavior
@@ -684,7 +684,7 @@ impl fmt::Display for Token {
             Token::Assert(ref expr, None)
                 => write!(f, "ASSERT {}", expr.to_simplified_string()),
             Token::Assert(ref expr, Some(ref text))
-                => write!(f, "ASSERT {}, {}", expr.to_simplified_string(), text),
+                => write!(f, "ASSERT {}, {}", expr.to_simplified_string(), text.iter().map(|e|e.to_string()).join(",")),
 
             Token::Breakpoint(None)
                 => write!(f, "BREAKPOINT"),
