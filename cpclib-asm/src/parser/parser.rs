@@ -3636,7 +3636,7 @@ pub fn parse_bool_expr(input: Z80Span) ->  IResult<Z80Span, Expr, VerboseError<Z
     ))(input)
 }
 
-
+// TODO rewire with https://docs.rs/nom/7.1.0/nom/bytes/complete/fn.escaped_transform.html
 pub fn parse_decoded_string(input: Z80Span) ->  IResult<Z80Span, String, VerboseError<Z80Span>> {
     map(parse_string, |s| {
             s.replace("\\\\", "\\")
@@ -3644,6 +3644,7 @@ pub fn parse_decoded_string(input: Z80Span) ->  IResult<Z80Span, String, Verbose
                 .replace("\\b", &char::from(8).to_string())
                 .replace("\\t", "\t")
                 .replace("\\r", "\r")
+                .replace("\\n", "\n")
                 .replace("\\v", &char::from(11).to_string())
                 .replace("\\f", &char::from(12).to_string())
     })(input)

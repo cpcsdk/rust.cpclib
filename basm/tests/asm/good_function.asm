@@ -27,3 +27,7 @@
 	ld a, name(0, 1, 2)
 	assert name(0, 1, 2) == 4
 	assert name(3, 3, -2) == 0
+
+	ifdef local1
+		fail "Function variables must not outlive the function"
+	endif
