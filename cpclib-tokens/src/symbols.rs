@@ -651,6 +651,33 @@ impl SymbolsTable {
         let symbol = symbol.into();
         let mut symbol = symbol.value().to_owned();
 
+                // handle the labels build with patterns
+        // Get the replacement strings
+        lazy_static::lazy_static! {
+            static ref RE: Regex = Regex::new(r"\{+[^\}]+\}+").unwrap();
+        }
+        let mut replace = HashSet::new();
+        for cap in RE.captures_iter(&symbol) {
+            if cap[0] != symbol {
+                replace.insert(cap[0].to_owned());
+            }
+        }
+
+        // make the replacement
+        for model in replace.iter() {
+            let local_symbol = dbg!(&model[1..model.len()-1]); // remove {}
+            let local_value = match self.value(local_symbol)? {
+                Some(Value::String(s)) => s.to_string(),
+                Some(Value::Expr(e)) => e.to_string(),
+                Some(Value::Counter(e)) => e.to_string(),
+                _ => {
+                    dbg!(&model, &local_symbol, self.value(local_symbol));
+                    return Err(SymbolError::CannotModify(symbol.into()));
+                }
+            };
+            symbol = symbol.replace(model, &local_value);
+        }
+
         // Local symbols are expensed with their global symbol
         if symbol.starts_with('.') {
             symbol = self.current_global_label.clone().value().to_owned() + &symbol;
@@ -670,23 +697,7 @@ impl SymbolsTable {
             }
         }
 
-        // handle the labels build with patterns
-        // Get the replacement strings
-        lazy_static::lazy_static! {
-            static ref RE: Regex = Regex::new("\\{[^\\}]+\\}[^\\}]").unwrap();
-        }
-        let mut replace = HashSet::new();
-        for cap in RE.captures_iter(&symbol) {
-            if cap[0] != symbol {
-                replace.insert(cap[0].to_owned());
-            }
-        }
-        // make the replacement
-        for model in replace.iter() {
-            let local_symbol = dbg!(&model[1..model.len() - 1]); // remove {}
-            let local_value = self.value(local_symbol)?.unwrap().integer().unwrap();
-            symbol = symbol.replace(model, &local_value.to_string());
-        }
+
 
         Ok(symbol.into())
     }

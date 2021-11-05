@@ -2937,7 +2937,7 @@ impl Env {
         }
 
         // handle counter value update
-        if let Some(counter_name) = counter_name {
+        if let Some(counter_name) = dbg!(counter_name) {
             self.symbols_mut()
                 .set_symbol_to_value(counter_name, counter_value.clone().unwrap())?;
         }
