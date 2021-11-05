@@ -130,6 +130,23 @@ pub fn list_len(list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
 	}
 }
 
+pub fn list_push(mut list: ExprResult, mut elem: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+	match list {
+		ExprResult::List(mut l) => {
+			l.push(elem);
+			Ok(ExprResult::List(l))
+		},
+		_ => Err(AssemblerError::ExpressionError(
+			ExpressionError::OwnError(
+				box AssemblerError::AssemblingError {
+					msg: format!("{} is not a list", list)
+				}
+			)
+		))
+	}
+}
+
+
 pub fn string_push(mut s1: ExprResult, mut s2: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
 	match (s1, s2) {
 		(ExprResult::String(mut s1), ExprResult::String(mut s2)) => {
