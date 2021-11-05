@@ -697,7 +697,7 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
     loop {
         let (input, _) = cut(context(
             "SWITCH: whitespace error",
-            many0(alt((space1, line_ending, tag(":")))),
+            many0(alt((space1, line_ending, tag(":"), recognize(parse_comment)))),
         ))(loop_start)?;
 
         // after default it is mandatory to end the block
@@ -716,7 +716,10 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
             ));
         }
 
-        let (input, value) = preceded(space0, opt(parse_directive_word("CASE")))(input)?;
+        let (input, value) = preceded(
+            my_space0, 
+            opt(parse_directive_word("CASE"))
+        )(input)?;
         loop_start = if value.is_some() {
             let (input, value) =
                 cut(context("SWITCH: case value error.", delimited(

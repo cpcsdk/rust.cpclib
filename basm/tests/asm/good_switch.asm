@@ -1,11 +1,13 @@
 	org 0x100
 	
 	switch 3
+	; one comment
 	case 1
 		db 1
 		break
 	case 3
 		db 3
+	; another comment
 	case 4
 		db 4
 		break
