@@ -5,7 +5,7 @@ use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
-use super::{Env, delayed_command::PrintCommand, list::{list_get, list_len, list_push, list_sublist, string_new, string_push}};
+use super::{Env, delayed_command::PrintCommand, list::{list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push}};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -115,6 +115,8 @@ lazy_static::lazy_static! {
         "list_set": Function::HardCoded(HardCodedFunction::ListSet),
         "list_len": Function::HardCoded(HardCodedFunction::ListLen),
         "list_sublist": Function::HardCoded(HardCodedFunction::ListSublist),
+        "list_sort": Function::HardCoded(HardCodedFunction::ListSort),
+        "list_argsort": Function::HardCoded(HardCodedFunction::ListArgsort),
         "list_push": Function::HardCoded(HardCodedFunction::ListPush),
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
@@ -143,6 +145,8 @@ pub enum HardCodedFunction {
     ListSublist,
     ListLen,
     ListPush,
+    ListSort,
+    ListArgsort,
 
     StringNew,
     StringPush,
@@ -171,6 +175,8 @@ impl HardCodedFunction {
             HardCodedFunction::ListGet => Some(2),
             HardCodedFunction::ListSublist => Some(3),
             HardCodedFunction::ListLen => Some(1),
+            HardCodedFunction::ListSort => Some(1),
+            HardCodedFunction::ListArgsort => Some(1),
             HardCodedFunction::ListPush => Some(2),
 
             HardCodedFunction::StringNew => Some(2),
@@ -308,6 +314,8 @@ impl HardCodedFunction {
                 }
                 Ok(base)
             },
+            HardCodedFunction::ListSort => list_sort(params[0].clone()),
+            HardCodedFunction::ListArgsort => list_argsort(params[0].clone()),
         }
     }
 }

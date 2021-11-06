@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_tokens::{ExprResult, ExpressionTypeError};
 
@@ -135,6 +136,50 @@ pub fn list_push(mut list: ExprResult, mut elem: ExprResult) -> Result<ExprResul
 		ExprResult::List(mut l) => {
 			l.push(elem);
 			Ok(ExprResult::List(l))
+		},
+		_ => Err(AssemblerError::ExpressionError(
+			ExpressionError::OwnError(
+				box AssemblerError::AssemblingError {
+					msg: format!("{} is not a list", list)
+				}
+			)
+		))
+	}
+}
+
+pub fn list_sort(mut list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+	match list {
+		ExprResult::List(mut l) => {
+			l.sort();
+			Ok(ExprResult::List(l))
+		},
+		_ => Err(AssemblerError::ExpressionError(
+			ExpressionError::OwnError(
+				box AssemblerError::AssemblingError {
+					msg: format!("{} is not a list", list)
+				}
+			)
+		))
+	}
+}
+
+
+
+
+pub fn list_argsort(mut list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+	match list {
+		ExprResult::List(mut l) => {
+			//https://stackoverflow.com/questions/69764050/how-to-get-the-indices-that-would-sort-a-vector-in-rust
+			fn argsort<T: Ord>(data: &[T]) -> Vec<ExprResult> {
+				let mut indices = (0..data.len())
+								.map(|i| ExprResult::from(i))
+								.collect_vec();
+				indices.sort_by_key(|i| &data[i.int().unwrap() as usize]);
+				indices
+			}
+
+			l = argsort(&l);
+			Ok(ExprResult::List(l.into()))
 		},
 		_ => Err(AssemblerError::ExpressionError(
 			ExpressionError::OwnError(
