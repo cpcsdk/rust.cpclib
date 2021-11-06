@@ -7,6 +7,7 @@ pub mod stable_ticker;
 pub mod symbols_output;
 pub mod function;
 pub mod list;
+pub mod matrix;
 
 use crate::delayed_command::*;
 use crate::page_info::PageInformation;
@@ -3103,6 +3104,14 @@ pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), Assembl
                 }
                 Ok(())
             }
+            ExprResult::Matrix {..} => {
+                for row in expr.matrix_rows() {
+                    for c in row.list_content() {
+                        output(env, c.int()?, mask)?;
+                    }
+                }
+                Ok(())
+            },
         }
     };
 
@@ -5055,7 +5064,7 @@ mod test {
             None,
             &mut env,
             None
-        ));
+        )?);
     }
 
     #[test]

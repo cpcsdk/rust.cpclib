@@ -37,12 +37,12 @@ pub fn list_set(mut list: ExprResult, index: usize, value: ExprResult) -> Result
 			s.replace_range(index..index+1, &c);
 			Ok(ExprResult::String(fix_string(s)))
 		},
-		ExprResult::List(mut l) => {
-			if index >= l.len() {
-				return Err(AssemblerError::ExpressionError(ExpressionError::InvalidSize(l.len(), index)));
+		ExprResult::List(_) => {
+			if index >= list.list_len() {
+				return Err(AssemblerError::ExpressionError(ExpressionError::InvalidSize(list.list_len(), index)));
 			}
-			l[index] = value;
-			Ok(ExprResult::List(l))
+			list.list_set(index,  value);
+			Ok(list)
 		}
 
 		_ => Err(AssemblerError::ExpressionError(
@@ -56,7 +56,7 @@ pub fn list_set(mut list: ExprResult, index: usize, value: ExprResult) -> Result
 }
 
 /// Get an item in a list of string
-pub fn list_get(mut list: ExprResult, index: usize) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_get(mut list: &ExprResult, index: usize) -> Result<ExprResult, crate::AssemblerError> {
 	match list {
 		ExprResult::String(s) => {
 			if index >= s.len() {
@@ -64,11 +64,11 @@ pub fn list_get(mut list: ExprResult, index: usize) -> Result<ExprResult, crate:
 			}
 			Ok(ExprResult::Value(s.chars().nth(index).unwrap() as _))
 		},
-		ExprResult::List(mut l) => {
-			if index >= l.len() {
-				return Err(AssemblerError::ExpressionError(ExpressionError::InvalidSize(l.len(), index)));
+		ExprResult::List(_) => {
+			if index >= list.list_len() {
+				return Err(AssemblerError::ExpressionError(ExpressionError::InvalidSize(list.list_len(), index)));
 			}
-			Ok(l[index].clone())
+			Ok(list.list_get(index).clone())
 		}
 
 		_ => Err(AssemblerError::ExpressionError(
@@ -85,7 +85,7 @@ pub fn list_get(mut list: ExprResult, index: usize) -> Result<ExprResult, crate:
 
 
 /// Get a sublist  a list of string
-pub fn list_sublist(mut list: ExprResult, start: usize, end: usize) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_sublist(mut list: &ExprResult, start: usize, end: usize) -> Result<ExprResult, crate::AssemblerError> {
 
 	match list {
 		ExprResult::String(s) => {
@@ -97,7 +97,7 @@ pub fn list_sublist(mut list: ExprResult, start: usize, end: usize) -> Result<Ex
 			}
 			Ok(ExprResult::String(s.substring(start, end).into()))
 		},
-		ExprResult::List(mut l) => {
+		ExprResult::List(l) => {
 			if start >= l.len() {
 				return Err(AssemblerError::ExpressionError(ExpressionError::InvalidSize(l.len(), start)));
 			}
@@ -117,7 +117,7 @@ pub fn list_sublist(mut list: ExprResult, start: usize, end: usize) -> Result<Ex
 	}
 }
 
-pub fn list_len(list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_len(list: &ExprResult) -> Result<ExprResult, crate::AssemblerError> {
 	match list {
 		ExprResult::List(l) => Ok(l.len().into()),
 		ExprResult::String(s) => Ok(s.len().into()),
@@ -166,9 +166,9 @@ pub fn list_sort(mut list: ExprResult) -> Result<ExprResult, crate::AssemblerErr
 
 
 
-pub fn list_argsort(mut list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerError> {
 	match list {
-		ExprResult::List(mut l) => {
+		ExprResult::List( l) => {
 			//https://stackoverflow.com/questions/69764050/how-to-get-the-indices-that-would-sort-a-vector-in-rust
 			fn argsort<T: Ord>(data: &[T]) -> Vec<ExprResult> {
 				let mut indices = (0..data.len())
@@ -178,7 +178,7 @@ pub fn list_argsort(mut list: ExprResult) -> Result<ExprResult, crate::Assembler
 				indices
 			}
 
-			l = argsort(&l);
+			let l = argsort(l);
 			Ok(ExprResult::List(l.into()))
 		},
 		_ => Err(AssemblerError::ExpressionError(

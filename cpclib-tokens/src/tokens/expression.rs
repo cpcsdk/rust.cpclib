@@ -588,7 +588,8 @@ pub enum ExprResult {
     Value(i32),
     Bool(bool),
     String(SmolStr),
-    List(Vec<ExprResult>)
+    List(Vec<ExprResult>),
+    Matrix{width: usize, height: usize, content: Vec<ExprResult>}
 }
 
 impl From<String> for ExprResult {
@@ -728,6 +729,111 @@ impl ExprResult {
     }
 }
 
+impl ExprResult  {
+
+    pub fn list_content(&self) -> &[ExprResult] {
+        match self {
+            ExprResult::List(content, ..) => content,
+            _ => panic!("not a list")
+        }
+    }
+
+    pub fn list_len(&self) -> usize {
+        self.list_content().len()
+    }
+
+    pub fn list_get(& self, pos: usize) ->  &ExprResult {
+        &self.list_content()[pos]
+    }
+
+
+    pub fn list_set(&mut self, pos: usize, value: ExprResult) {
+        match self {
+            ExprResult::List(content, ..) => content[pos] = value,
+            _ => panic!("not a list")
+        }
+    }
+}
+
+impl ExprResult {
+
+    pub fn matrix_set(&mut self, y: usize, x: usize, value: ExprResult) {
+        match self {
+            ExprResult::Matrix{content, ..} => content[y].list_set(x,value),
+            _ => panic!("not a matrix")
+        }
+    }
+
+    pub fn matrix_get(&self, y: usize, x: usize) -> &ExprResult{
+        self.matrix_rows()[y].list_get(x)
+    }
+
+    pub fn matrix_height(&self) -> usize {
+        match self {
+            ExprResult::Matrix{..} => self.matrix_rows().len(),
+            _ => panic!("not a matrix")
+        }
+    }
+
+    pub fn matrix_width(&self) -> usize {
+        match self {
+            ExprResult::Matrix{..} => self.matrix_rows()
+                    .get(0)
+                    .map(|r| r.list_len())
+                    .unwrap_or(0),
+            _ => panic!("not a matrix")
+        }
+    }
+
+
+
+    pub fn matrix_rows(&self) -> &[ExprResult] {
+        match self {
+            ExprResult::Matrix{content, ..} => content,
+            _ => panic!("not a matrix")
+        }
+    }
+
+    pub fn matrix_col(&self, col: usize) -> ExprResult {
+        let l = (0..self.matrix_height()).into_iter()
+            .map(|row| self.matrix_rows()[row].list_get(col))
+            .cloned()
+            .collect_vec();
+        ExprResult::List(l)
+    }
+
+    pub fn matrix_row(&self, y: usize) -> &ExprResult {
+        &self.matrix_rows()[y]
+    }
+
+    pub fn matrix_transpose(&self) -> ExprResult {
+        match self {
+            ExprResult::Matrix{ width, height, ..} => {
+                let mut cols = vec![Vec::new(); *width];
+                for row in self.matrix_rows() {
+                    for (col_idx, col_val) in row.list_content().iter().enumerate() {
+                        cols[col_idx].push(col_val.clone())
+                    }
+                }
+                let cols = cols.into_iter()
+                    .map(|v| ExprResult::List(v))
+                    .collect_vec();
+                ExprResult::Matrix{
+                    content: cols,
+                    width: *height,
+                    height: *width
+                }
+            }
+            _ => panic!("not a matrix")
+        }
+    }
+
+    pub fn matrix_cols(&self) -> Vec<ExprResult> {
+        let t = self.matrix_transpose();
+        t.matrix_rows().into_iter().cloned().collect_vec()
+    }
+}
+
 impl ExprResult {
     pub fn floor(&self) -> Result<Self, ExpressionTypeError>  {
         match self {
@@ -794,8 +900,7 @@ impl ExprResult {
             }
             ExprResult::Value(i) => Ok((!*i).into()),
             ExprResult::Bool(b) => Ok((!*b).into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to apply floor to {}", s))),
-            ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to apply floor to {:?}", s))),
+            _ => Err(ExpressionTypeError(format!("Try to apply floor to {}", self)))
 
         }
     }
@@ -809,8 +914,7 @@ impl std::ops::Neg for ExprResult {
             ExprResult::Float(f) => Ok(f.neg().into()),
             ExprResult::Value(i) => Ok(i.neg().into()),
             ExprResult::Bool(b) => Ok((!b).into()),
-            ExprResult::String(s) => Err(ExpressionTypeError(format!("Try to substract {}", s))),
-            ExprResult::List(s) => Err(ExpressionTypeError(format!("Try to substract {:?}", s)))
+            _ => Err(ExpressionTypeError(format!("Try to substract {}", self)))
             
         }
     }
@@ -983,6 +1087,13 @@ impl std::fmt::Display for ExprResult {
                             .map(|item| format!("{}", item))
                             .join(","))
             ,
+            ExprResult::Matrix{..} => {
+                write!(
+                    f, 
+                    "matrix({})", self.matrix_rows().iter()
+                            .map(|row| format!("{}", row))
+                            .join(","))
+            }
         }
     }
 }
@@ -1001,6 +1112,13 @@ impl std::fmt::LowerHex for ExprResult {
                             .map(|item| format!("{:x}", item))
                             .join(","))
             ,
+            ExprResult::Matrix{..} => {
+                write!(
+                    f, 
+                    "matrix({})", self.matrix_rows().iter()
+                            .map(|row| format!("{:x}", row))
+                            .join(","))
+            }
 
         }
     }
@@ -1018,7 +1136,15 @@ impl std::fmt::UpperHex for ExprResult {
                 "[{}]", v.iter()
                         .map(|item| format!("{:X}", item))
                         .join(","))
-        ,
+            ,
+
+            ExprResult::Matrix{..} => {
+                write!(
+                    f, 
+                    "matrix({})", self.matrix_rows().iter()
+                            .map(|row| format!("{:X}", row))
+                            .join(","))
+            }
         }
     }
 }

@@ -1,11 +1,11 @@
 
-use crate::{Visited, assembler::{delayed_command::FailedAssertCommand, list::{list_new, list_set}}, error::{AssemblerError, ExpressionError}, preamble::{LocatedToken, ParserContext, ParsingState}};
+use crate::{Visited, assembler::{delayed_command::FailedAssertCommand, list::{list_new, list_set}, matrix::{matrix_new, matrix_set}}, error::{AssemblerError, ExpressionError}, preamble::{LocatedToken, ParserContext, ParsingState}};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
-use super::{Env, delayed_command::PrintCommand, list::{list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push}};
+use super::{Env, delayed_command::PrintCommand, list::{list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push}, matrix::{matrix_col, matrix_get, matrix_row}};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -121,7 +121,12 @@ lazy_static::lazy_static! {
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
         "string_concat": Function::HardCoded(HardCodedFunction::StringConcat),
-        "assemble": Function::HardCoded(HardCodedFunction::Assemble)
+        "assemble": Function::HardCoded(HardCodedFunction::Assemble),
+        "matrix_new": Function::HardCoded(HardCodedFunction::MatrixNew),
+        "matrix_set": Function::HardCoded(HardCodedFunction::MatrixSet),
+        "matrix_get": Function::HardCoded(HardCodedFunction::MatrixGet),
+        "matrix_col": Function::HardCoded(HardCodedFunction::MatrixCol),
+        "matrix_row": Function::HardCoded(HardCodedFunction::MatrixRow),
     };
 }
 
@@ -147,6 +152,12 @@ pub enum HardCodedFunction {
     ListPush,
     ListSort,
     ListArgsort,
+
+    MatrixNew,
+    MatrixSet,
+    MatrixGet,
+    MatrixCol,
+    MatrixRow,
 
     StringNew,
     StringPush,
@@ -183,7 +194,13 @@ impl HardCodedFunction {
             HardCodedFunction::StringPush => Some(2),
             HardCodedFunction::StringConcat => None,
             
-            HardCodedFunction::Assemble => Some(1)
+            HardCodedFunction::Assemble => Some(1),
+
+            HardCodedFunction::MatrixNew => Some(3),
+            HardCodedFunction::MatrixSet => Some(4),
+            HardCodedFunction::MatrixCol => Some(2),
+            HardCodedFunction::MatrixRow => Some(2),
+            HardCodedFunction::MatrixGet => Some(3),
         }
     }
 
@@ -285,7 +302,7 @@ impl HardCodedFunction {
                 params[1].int()? as _, 
                 params[2].clone()),
             HardCodedFunction::ListGet => list_get(
-                params[0].clone(),
+                &params[0],
                 params[1].int()? as _
             ),
             HardCodedFunction::ListPush => list_push(
@@ -294,9 +311,9 @@ impl HardCodedFunction {
             ),
 
             HardCodedFunction::StringNew => string_new(params[0].int()? as _, params[1].clone()),
-            HardCodedFunction::ListLen => list_len(params[0].clone()),
+            HardCodedFunction::ListLen => list_len(&params[0]),
             HardCodedFunction::ListSublist => list_sublist(
-                params[0].clone(),
+                &params[0],
                 params[1].int()? as _,
                 params[2].int()? as _
             ),
@@ -315,7 +332,29 @@ impl HardCodedFunction {
                 Ok(base)
             },
             HardCodedFunction::ListSort => list_sort(params[0].clone()),
-            HardCodedFunction::ListArgsort => list_argsort(params[0].clone()),
+            HardCodedFunction::ListArgsort => list_argsort(&params[0]),
+
+            HardCodedFunction::MatrixNew => Ok(matrix_new(
+                params[0].int()? as _, 
+                params[1].int()? as _, 
+            params[2].clone())),
+            HardCodedFunction::MatrixSet => matrix_set(
+                params[0].clone(), 
+                params[1].int()? as _, 
+                params[2].int()? as _, 
+                params[3].clone()),
+            HardCodedFunction::MatrixGet => matrix_get(
+                    &params[0], 
+                    params[1].int()? as _, 
+                    params[2].int()? as _),
+            HardCodedFunction::MatrixCol => matrix_col(
+                &params[0],
+                params[1].int()? as _
+            ),
+            HardCodedFunction::MatrixRow => matrix_row(
+                &params[0],
+                params[1].int()? as _
+            )
         }
     }
 }

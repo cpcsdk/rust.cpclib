@@ -4174,7 +4174,7 @@ mod test {
 
         assert_eq!(
             res,
-            FormattedExpr::Formatted(ExprFormat::Hex(None), Expr::Label("VAL".to_string()))
+            FormattedExpr::Formatted(ExprFormat::Hex(None), Expr::Label("VAL".into()))
         );
     }
 
