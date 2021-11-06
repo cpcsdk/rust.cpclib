@@ -5,7 +5,7 @@ use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
-use super::{Env, delayed_command::PrintCommand, list::{list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push}, matrix::{matrix_col, matrix_get, matrix_row, matrix_set_col, matrix_set_row}};
+use super::{Env, delayed_command::PrintCommand, list::{list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push}, matrix::{matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width}};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -129,6 +129,8 @@ lazy_static::lazy_static! {
         "matrix_row": Function::HardCoded(HardCodedFunction::MatrixRow),
         "matrix_set_row": Function::HardCoded(HardCodedFunction::MatrixSetRow),
         "matrix_set_col": Function::HardCoded(HardCodedFunction::MatrixSetCol),
+        "matrix_width": Function::HardCoded(HardCodedFunction::MatrixWidth),
+        "matrix_height": Function::HardCoded(HardCodedFunction::MatrixHeight),
     };
 }
 
@@ -162,6 +164,8 @@ pub enum HardCodedFunction {
     MatrixRow,
     MatrixSetRow,
     MatrixSetCol,
+    MatrixWidth,
+    MatrixHeight,
 
     StringNew,
     StringPush,
@@ -207,6 +211,9 @@ impl HardCodedFunction {
             HardCodedFunction::MatrixGet => Some(3),
             HardCodedFunction::MatrixSetRow => Some(3),
             HardCodedFunction::MatrixSetCol => Some(3),
+
+            HardCodedFunction::MatrixWidth => Some(1),
+            HardCodedFunction::MatrixHeight => Some(1),
         }
     }
 
@@ -372,6 +379,8 @@ impl HardCodedFunction {
                 params[1].int()? as _,
                 &params[2]
             ),
+            HardCodedFunction::MatrixWidth => matrix_width(&params[0]),
+            HardCodedFunction::MatrixHeight => matrix_height(&params[0]),
         }
     }
 }

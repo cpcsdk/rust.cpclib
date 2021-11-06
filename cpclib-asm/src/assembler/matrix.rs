@@ -172,3 +172,33 @@ pub fn matrix_get(matrix: &ExprResult, y: usize, x: usize) -> Result<ExprResult,
 		))
 	}
 }
+
+pub fn matrix_width( matrix: &ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+	match matrix {
+		ExprResult::Matrix{width, ..} => {
+			Ok((*width as i32).into())
+		},
+		_ => Err(AssemblerError::ExpressionError(
+			ExpressionError::OwnError(
+				box AssemblerError::AssemblingError {
+					msg: format!("{} is not a matrix", matrix)
+				}
+			)
+		))
+	}
+}
+
+pub fn matrix_height( matrix: &ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+	match matrix {
+		ExprResult::Matrix{height, ..} => {
+			Ok((*height as i32).into())
+		},
+		_ => Err(AssemblerError::ExpressionError(
+			ExpressionError::OwnError(
+				box AssemblerError::AssemblingError {
+					msg: format!("{} is not a matrix", matrix)
+				}
+			)
+		))
+	}
+}
