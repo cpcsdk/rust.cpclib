@@ -409,7 +409,7 @@ pub struct Env {
     included_paths: HashSet<PathBuf>,
 
     // temporary stuff
-    extra_print_from_function: RwLock<Vec<PrintCommand>>,
+    extra_print_from_function: RwLock<Vec<PrintOrPauseCommand>>,
     extra_failed_assert_from_function: RwLock<Vec<FailedAssertCommand>>,
 }
 
@@ -890,7 +890,8 @@ impl Env {
         // Print from the snapshot
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
             self.ga_mmr = *page;
-            let mut l_errors = self.pages_info_sna[activepage].execute_print(&mut writer);
+            let mut l_errors = self.pages_info_sna[activepage]
+                    .execute_print_or_pause(&mut writer);
             match (&mut print_errors, &mut l_errors) {
                 (_, Ok(_)) => {
                     //nothing to do
@@ -909,7 +910,7 @@ impl Env {
         }
 
         for bank in self.banks.iter() {
-            let mut l_errors = bank.1.execute_print(&mut writer);
+            let mut l_errors = bank.1.execute_print_or_pause(&mut writer);
             match (&mut print_errors, &mut l_errors) {
                 (_, Ok(_)) => {
                     //nothing to do
@@ -2006,6 +2007,11 @@ impl Env {
         })
     }
 
+    pub fn visit_pause(&mut self, span: Option<Z80Span>) {
+        self.active_page_info_mut()
+            .add_pause_command(span.into());
+    }
+
     pub fn visit_fail(&self, info: &[FormattedExpr]) -> Result<(), AssemblerError> {
         let repr = self.build_string_from_formatted_expression(info)?;
         Err(AssemblerError::Fail { msg: repr })
@@ -2351,6 +2357,11 @@ pub fn visit_located_token(
                 Ok(())
             }
 
+            Token::Pause => {
+                env.visit_pause(Some(span.clone()));
+                Ok(())
+            }
+
             Token::Print(ref exp) => {
                 env.visit_print(exp.as_ref(), Some(span.clone()));
                 Ok(())
@@ -2573,6 +2584,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Export(ref labels) => env.visit_export(labels.as_slice()),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
         Token::Assign(ref label, ref exp) => visit_assign(label, exp, env),
+        Token::Pause => {env.visit_pause(None); Ok(())},
         Token::Protect(ref start, ref end) => env.visit_protect(start, end),
         Token::Print(ref exp) => {
             env.visit_print(exp.as_ref(), None);
@@ -3135,7 +3147,8 @@ impl Env {
         {
         let prints = self.extra_print_from_function.read().unwrap().clone();
         for print in prints.into_iter() {
-            self.active_page_info_mut().add_print_command(print);
+            self.active_page_info_mut()
+                .add_print_or_pause_command(print);
         }
         self.extra_print_from_function.write().unwrap().clear();
     }

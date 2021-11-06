@@ -55,12 +55,78 @@ impl PrintCommand {
         }
     }
 }
+#[derive(Debug, Clone)]
+
+pub struct PauseCommand(Option<Z80Span>);
+
+impl From<Option<Z80Span>> for PauseCommand {
+    fn from(s: Option<Z80Span>) -> Self {
+        Self(s)
+    }
+}
+
+impl PauseCommand {
+    pub fn execute(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
+        let msg = "PAUSE - press enter to continue.";
+        write!(
+            writer, 
+            "{}", 
+            if let Some(span) = &self.0 {
+                build_simple_error_message(msg, &span, Severity::Note)
+            } else {
+                msg.to_owned()
+            }
+        ).unwrap();
+
+        let mut buf = String::new();
+        std::io::stdin().read_line(&mut buf).unwrap();
+        Ok(())
+    }
+    pub fn relocate(&mut self, span: Z80Span) {
+        self.0.replace(span);
+    }
+    
+}
+
+#[derive(Debug, Clone)]
+pub enum PrintOrPauseCommand {
+    Print(PrintCommand),
+    Pause(PauseCommand)
+}
+
+impl From<PrintCommand> for PrintOrPauseCommand {
+    fn from(p: PrintCommand) -> Self {
+        PrintOrPauseCommand::Print(p)
+    }
+}
+
+impl From<PauseCommand> for PrintOrPauseCommand {
+    fn from(p: PauseCommand) -> Self {
+        PrintOrPauseCommand::Pause(p)
+    }
+}
+
+impl PrintOrPauseCommand {
+    pub fn execute(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
+        match self {
+            PrintOrPauseCommand::Print(p) => p.execute(writer),
+            PrintOrPauseCommand::Pause(p) => p.execute(writer)
+        }
+    }
+
+    pub fn relocate(&mut self, span: Z80Span) {
+        match self {
+            PrintOrPauseCommand::Print(p) => p.relocate(span),
+            PrintOrPauseCommand::Pause(p) => p.relocate(span)
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct DelayedCommands {
     failed_assert_commands: Vec<FailedAssertCommand>,
     save_commands: Vec<SaveCommand>,
-    print_commands: Vec<PrintCommand>,
+    print_commands: Vec<PrintOrPauseCommand>,
 }
 
 impl Default for DelayedCommands {
@@ -92,8 +158,17 @@ impl DelayedCommands {
     }
 
     pub fn add_print_command(&mut self, command: PrintCommand) {
-        self.print_commands.push(command);
+        self.add_print_or_pause_command(command.into());
     }
+
+    pub fn add_pause_command(&mut self, command: PauseCommand) {
+        self.add_print_or_pause_command(command.into());
+    }
+
+    pub fn add_print_or_pause_command(&mut self, command: PrintOrPauseCommand) {
+        self.print_commands.push(command)
+    }
+
 }
 
 /// Commands execution
@@ -123,7 +198,7 @@ impl DelayedCommands {
         }
     }
 
-    pub fn execute_print(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
+    pub fn execute_print_or_pause(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
         let res = self
             .print_commands
             .iter()
@@ -141,10 +216,10 @@ impl DelayedCommands {
 
 
 impl DelayedCommands {
-    pub fn print_commands(&self) -> &[PrintCommand] {
+    pub fn print_commands(&self) -> &[PrintOrPauseCommand] {
         & self.print_commands
     }
-    pub fn print_commands_mut(&mut self) -> &mut [PrintCommand] {
+    pub fn print_commands_mut(&mut self) -> &mut [PrintOrPauseCommand] {
         &mut self.print_commands
     }
 

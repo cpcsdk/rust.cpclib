@@ -170,6 +170,7 @@ const STAND_ALONE_DIRECTIVE: &[&str] = &[
     "NOLIST",
     "NOP",
     "ORG",
+    "PAUSE",
     "PRINT",
     "PROTECT",
     "RANGE",
@@ -1658,6 +1659,8 @@ pub fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
                 context("[DBG] protext", parse_protect),
                 context("[DBG] run", parse_run),
                 context("[DBG] snaset", parse_snaset),
+                map(preceded(space0, parse_directive_word("PAUSE")), |_| Token::Pause),
+
             )),
             move |t| t.locate(dir_start.clone()),
         ),

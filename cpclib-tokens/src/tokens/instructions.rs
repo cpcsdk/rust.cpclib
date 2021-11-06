@@ -486,7 +486,7 @@ pub enum Token {
         Option<Register8>,
     ),
     Org(Expr, Option<Expr>),
-
+    Pause,
     Print(Vec<FormattedExpr>),
     Protect(Expr, Expr),
     /// Define a named section in the current page
@@ -600,6 +600,7 @@ impl Clone for Token {
                 Self::OpCode(mne.clone(), arg1.clone(), arg2.clone(), arg3.clone())
             }
             Token::Org(a, b) => Token::Org(a.clone(), b.clone()),
+            Token::Pause => Token::Pause,
             Token::Print(a) => Token::Print(a.clone()),
             Token::Protect(a, b) => Token::Protect(a.clone(), b.clone()),
             Token::Range(a, b, c) => Token::Range(a.clone(), b.clone(), c.clone()),
