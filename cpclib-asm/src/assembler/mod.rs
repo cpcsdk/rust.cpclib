@@ -5054,13 +5054,13 @@ mod test {
         env.start_new_pass();
 
         assert!(visit_assert(
-            &Expr::Equal(Box::new(0.into()), Box::new(0.into())),
+            &Expr::Equal(Box::new(0i32.into()), Box::new(0i32.into())),
             None,
             &mut env,
             None
         ).unwrap());
         assert!(!visit_assert(
-            &Expr::Equal(Box::new(1.into()), Box::new(0.into())),
+            &Expr::Equal(Box::new(1i32.into()), Box::new(0i32.into())),
             None,
             &mut env,
             None

@@ -794,12 +794,20 @@ impl ExprResult {
         }
     }
 
-    pub fn matrix_col(&self, col: usize) -> ExprResult {
+    pub fn matrix_col(&self, x: usize) -> ExprResult {
         let l = (0..self.matrix_height()).into_iter()
-            .map(|row| self.matrix_rows()[row].list_get(col))
+            .map(|row| self.matrix_rows()[row].list_get(x))
             .cloned()
             .collect_vec();
         ExprResult::List(l)
+    }
+
+    pub fn matrix_set_col(&mut self, x: usize, values: &[ExprResult] ) {
+        debug_assert!(x < self.matrix_width());
+
+        for (y, val) in values.iter().enumerate() {
+            self.matrix_set(y, x, val.clone())
+        }
     }
 
     pub fn matrix_row(&self, y: usize) -> &ExprResult {

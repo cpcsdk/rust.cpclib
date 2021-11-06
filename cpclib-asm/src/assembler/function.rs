@@ -5,7 +5,7 @@ use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
-use super::{Env, delayed_command::PrintCommand, list::{list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push}, matrix::{matrix_col, matrix_get, matrix_row}};
+use super::{Env, delayed_command::PrintCommand, list::{list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push}, matrix::{matrix_col, matrix_get, matrix_row, matrix_set_col, matrix_set_row}};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -127,6 +127,8 @@ lazy_static::lazy_static! {
         "matrix_get": Function::HardCoded(HardCodedFunction::MatrixGet),
         "matrix_col": Function::HardCoded(HardCodedFunction::MatrixCol),
         "matrix_row": Function::HardCoded(HardCodedFunction::MatrixRow),
+        "matrix_set_row": Function::HardCoded(HardCodedFunction::MatrixSetRow),
+        "matrix_set_col": Function::HardCoded(HardCodedFunction::MatrixSetCol),
     };
 }
 
@@ -158,6 +160,8 @@ pub enum HardCodedFunction {
     MatrixGet,
     MatrixCol,
     MatrixRow,
+    MatrixSetRow,
+    MatrixSetCol,
 
     StringNew,
     StringPush,
@@ -201,6 +205,8 @@ impl HardCodedFunction {
             HardCodedFunction::MatrixCol => Some(2),
             HardCodedFunction::MatrixRow => Some(2),
             HardCodedFunction::MatrixGet => Some(3),
+            HardCodedFunction::MatrixSetRow => Some(3),
+            HardCodedFunction::MatrixSetCol => Some(3),
         }
     }
 
@@ -354,7 +360,18 @@ impl HardCodedFunction {
             HardCodedFunction::MatrixRow => matrix_row(
                 &params[0],
                 params[1].int()? as _
-            )
+            ),
+            HardCodedFunction::MatrixSetRow => matrix_set_row(
+                params[0].clone(),
+                params[1].int()? as _,
+                &params[2]
+            ),
+
+            HardCodedFunction::MatrixSetCol => matrix_set_col(
+                params[0].clone(),
+                params[1].int()? as _,
+                &params[2]
+            ),
         }
     }
 }

@@ -32,6 +32,44 @@ pub fn matrix_col(matrix: &ExprResult, x: usize) -> Result<ExprResult, crate::As
 	}
 }
 
+
+pub fn matrix_set_col(mut matrix: ExprResult, x: usize, col: &ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+	match matrix {
+		ExprResult::Matrix{width, ..} => {
+			if x >= width {
+				return Err(AssemblerError::ExpressionError(ExpressionError::InvalidSize(width, x)));
+			}
+
+			match col {
+				ExprResult::List(_) => {
+					if col.list_len() != width {
+						return Err(AssemblerError::ExpressionError(ExpressionError::InvalidSize(width, col.list_len())));
+					}
+
+					matrix.matrix_set_col(x, col.list_content());
+					Ok(matrix)
+				},
+				_ => Err(AssemblerError::ExpressionError(
+					ExpressionError::OwnError(
+						box AssemblerError::AssemblingError {
+							msg: format!("{} is not a list", matrix)
+						}
+					)
+				))
+			}
+		},
+
+
+		_ => Err(AssemblerError::ExpressionError(
+			ExpressionError::OwnError(
+				box AssemblerError::AssemblingError {
+					msg: format!("{} is not a matrix", matrix)
+				}
+			)
+		))
+	}
+}
+
 pub fn matrix_row(matrix: &ExprResult, y: usize) -> Result<ExprResult, crate::AssemblerError> {
 	match matrix {
 		ExprResult::Matrix{  ..} => {
@@ -40,6 +78,43 @@ pub fn matrix_row(matrix: &ExprResult, y: usize) -> Result<ExprResult, crate::As
 			}
 
 			Ok(matrix.matrix_row(y).clone())
+		},
+
+
+		_ => Err(AssemblerError::ExpressionError(
+			ExpressionError::OwnError(
+				box AssemblerError::AssemblingError {
+					msg: format!("{} is not a matrix", matrix)
+				}
+			)
+		))
+	}
+}
+
+pub fn matrix_set_row(mut matrix: ExprResult, y: usize, row: &ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+	match matrix {
+		ExprResult::Matrix{ref mut content, height, ..} => {
+			if y >= height {
+				return Err(AssemblerError::ExpressionError(ExpressionError::InvalidSize(height, y)));
+			}
+
+			match row {
+				ExprResult::List(_) => {
+					if row.list_len() != height {
+						return Err(AssemblerError::ExpressionError(ExpressionError::InvalidSize(height, row.list_len())));
+					}
+
+					content[y] = row.clone();
+					Ok(matrix)
+				},
+				_ => Err(AssemblerError::ExpressionError(
+					ExpressionError::OwnError(
+						box AssemblerError::AssemblingError {
+							msg: format!("{} is not a list", matrix)
+						}
+					)
+				))
+			}
 		},
 
 
