@@ -841,7 +841,9 @@ impl Env {
             winape_raw
         );
 
-        self.sna.add_chunk(winape_chunk);
+        if winape_chunk.nb_breakpoints() > 0 {
+            self.sna.add_chunk(winape_chunk);
+        }
 
         Ok(())
     }
