@@ -122,11 +122,39 @@ impl PrintOrPauseCommand {
     }
 }
 
+/// Information for a breakpoint:
+/// TODO: add condition
+#[derive(Debug, Clone)]
+pub struct BreakpointCommand {
+    address: u16,
+    page: u8,
+}
+
+impl BreakpointCommand {
+    pub fn new(address: u16, page: u8) -> Self {
+        BreakpointCommand {
+            address,
+            page
+        }
+    }
+
+    pub fn winape_raw(&self) -> [u8;4] {
+        [
+            (self.address & 0xff) as u8,
+            (self.address >> 8) as u8,
+            0,
+            0
+        ]
+    }
+}
+
+
 #[derive(Debug, Clone)]
 pub struct DelayedCommands {
     failed_assert_commands: Vec<FailedAssertCommand>,
     save_commands: Vec<SaveCommand>,
     print_commands: Vec<PrintOrPauseCommand>,
+    breakpoint_commands: Vec<BreakpointCommand>
 }
 
 impl Default for DelayedCommands {
@@ -135,6 +163,7 @@ impl Default for DelayedCommands {
             failed_assert_commands: Vec::new(),
             save_commands: Vec::new(),
             print_commands: Vec::new(),
+            breakpoint_commands: Vec::new()
         }
     }
 }
@@ -144,11 +173,15 @@ impl DelayedCommands {
         self.failed_assert_commands.clear();
         self.save_commands.clear();
         self.print_commands.clear();
+        self.breakpoint_commands.clear();
     }
 }
 
 /// Commands addition
 impl DelayedCommands {
+    pub fn add_breakpoint_command(&mut self, command: BreakpointCommand) {
+        self.breakpoint_commands.push(command);
+    }
     pub fn add_save_command(&mut self, command: SaveCommand) {
         self.save_commands.push(command);
     }
@@ -229,6 +262,13 @@ impl DelayedCommands {
     }
     pub fn failed_assert_commands_mut(&mut self) -> &mut [FailedAssertCommand] {
         &mut self.failed_assert_commands
+    }
+
+}
+
+impl DelayedCommands {
+    pub fn collect_breakpoints(&self)-> &[BreakpointCommand] {
+        &self.breakpoint_commands
     }
 
 }

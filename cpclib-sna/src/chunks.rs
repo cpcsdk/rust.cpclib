@@ -1,5 +1,6 @@
 use std::ops::AddAssign;
 use std::ops::DerefMut;
+use delegate::delegate;
 
 #[derive(Clone, Debug)]
 /// Raw chunk data.
@@ -34,6 +35,10 @@ impl SnapshotChunkData {
 
     pub fn data(&self) -> &[u8] {
         &self.data
+    }
+
+    pub fn add_bytes(&mut self, data: &[u8]) {
+        self.data.extend_from_slice(data);
     }
 }
 
@@ -179,6 +184,56 @@ impl MemoryChunk {
     pub fn is_crunched(&self) -> bool {
         self.data.data.len() == 64 * 1024
     }
+
+    delegate!{
+        to self.data {
+        pub fn code(&self) -> &[u8; 4];
+            pub fn size(&self) -> usize;
+            pub fn size_as_array(&self) -> [u8; 4];
+            pub fn data(&self) -> &[u8];
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct WinapeBreakPointChunk {
+    data: SnapshotChunkData
+}
+
+impl WinapeBreakPointChunk {
+    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
+        assert_eq!(code[0], b'B');
+        assert_eq!(code[1], b'R');
+        assert_eq!(code[2], b'K');
+        assert_eq!(code[3], b'S');
+
+        Self {
+            data: SnapshotChunkData{
+                code,
+                data: content
+            }
+        }
+    }
+
+    pub fn add_breakpoint_raw(&mut self, raw: &[u8]) {
+        assert!(raw.len() == 4);
+        self.add_bytes(raw);
+    }
+
+    pub fn nb_breakpoints(&self) -> usize {
+        self.size() / 4
+    }
+
+    delegate!{
+        to self.data {
+        pub fn code(&self) -> &[u8; 4];
+        pub fn size(&self) -> usize;
+            pub fn size_as_array(&self) -> [u8; 4];
+            pub fn data(&self) -> &[u8];
+            pub fn add_bytes(&mut self, data: &[u8]);
+
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -195,14 +250,20 @@ impl UnknownChunk {
             data: SnapshotChunkData { code, data },
         }
     }
-}
 
-/*
-pub struct BreakpointChunk {
-    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
-        unimplemented!()
+    delegate!{
+        to self.data {
+        pub fn code(&self) -> &[u8; 4];
+            pub fn size(&self) -> usize;
+            pub fn size_as_array(&self) -> [u8; 4];
+            pub fn data(&self) -> &[u8];
+        }
     }
 }
+
+
+/*
+
 
 pub struct InsertedDiscChunk {
     pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
@@ -222,6 +283,8 @@ pub struct CPCPlusChunk {
 pub enum SnapshotChunk {
     /// The chunk is a memory chunk
     Memory(MemoryChunk),
+    /// The chunk is a breakpoint chunk for winape emulator
+    WinapeBreakPoint(WinapeBreakPointChunk),
     /// The type of the chunk is unknown
     Unknown(UnknownChunk),
 }
@@ -242,33 +305,36 @@ impl SnapshotChunk {
     /// Provides the code of the chunk
     pub fn code(&self) -> &[u8; 4] {
         match self {
-            SnapshotChunk::Memory(ref chunk) => chunk.data.code(),
-
-            SnapshotChunk::Unknown(ref chunk) => chunk.data.code(),
+            SnapshotChunk::Memory(chunk) => chunk.code(),
+            SnapshotChunk::Unknown(chunk) => chunk.code(),
+            SnapshotChunk::WinapeBreakPoint(chunk) => chunk.code(),
         }
     }
 
     pub fn size(&self) -> usize {
         match self {
-            SnapshotChunk::Memory(ref chunk) => chunk.data.size(),
+            SnapshotChunk::Memory(chunk) => chunk.size(),
+            SnapshotChunk::WinapeBreakPoint(chunk) => chunk.size(),
 
-            SnapshotChunk::Unknown(ref chunk) => chunk.data.size(),
+            SnapshotChunk::Unknown(chunk) => chunk.size(),
         }
     }
 
     pub fn size_as_array(&self) -> [u8; 4] {
         match self {
-            SnapshotChunk::Memory(ref chunk) => chunk.data.size_as_array(),
+            SnapshotChunk::Memory(chunk) => chunk.size_as_array(),
+            SnapshotChunk::WinapeBreakPoint(ref chunk) => chunk.size_as_array(),
 
-            SnapshotChunk::Unknown(ref chunk) => chunk.data.size_as_array(),
+            SnapshotChunk::Unknown(chunk) => chunk.size_as_array(),
         }
     }
 
     pub fn data(&self) -> &[u8] {
         match self {
-            SnapshotChunk::Memory(ref chunk) => chunk.data.data(),
+            SnapshotChunk::Memory(chunk) => chunk.data(),
+            SnapshotChunk::WinapeBreakPoint(chunk) => chunk.data(),
 
-            SnapshotChunk::Unknown(ref chunk) => chunk.data.data(),
+            SnapshotChunk::Unknown(chunk) => chunk.data(),
         }
     }
 }
@@ -276,6 +342,12 @@ impl SnapshotChunk {
 impl From<MemoryChunk> for SnapshotChunk {
     fn from(chunk: MemoryChunk) -> Self {
         SnapshotChunk::Memory(chunk)
+    }
+}
+
+impl From<WinapeBreakPointChunk> for SnapshotChunk {
+    fn from(chunk: WinapeBreakPointChunk) -> Self {
+        SnapshotChunk::WinapeBreakPoint(chunk)
     }
 }
 

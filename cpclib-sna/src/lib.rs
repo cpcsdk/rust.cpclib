@@ -2,20 +2,22 @@ use std::fs::File;
 
 use std::io::prelude::*;
 
-use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
 use cpclib_common::bitsets;
+use cpclib_common::itertools::Chunk;
 use num_enum::TryFromPrimitive;
 
 mod chunks;
 mod error;
+mod memory;
 pub mod flags;
 pub mod parse;
 
 pub use chunks::*;
 pub use error::*;
 pub use flags::*;
+pub use memory::*;
 
 ///! Re-implementation of createsnapshot by Ramlaid/Arkos
 ///! in rust by Krusty/Benediction
@@ -43,6 +45,9 @@ pub use flags::*;
 
 */
 
+pub const HEADER_SIZE: usize = 256;
+
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
 #[repr(u8)]
 pub enum SnapshotVersion {
@@ -65,239 +70,6 @@ impl SnapshotVersion {
     }
 }
 
-const PAGE_SIZE: usize = 0x4000;
-const HEADER_SIZE: usize = 256;
-
-/// 3 different states are possible. No memory, 64kb or 128kb
-#[derive(Clone)]
-#[allow(clippy::large_enum_variant)]
-pub enum SnapshotMemory {
-    /// No memory is stored within the snapshot
-    Empty(Box<[u8; 0]>),
-    /// A 64kb page is stored within the snapshot
-    SixtyFourKb(Box<[u8; PAGE_SIZE * 4]>),
-    /// A 128kb page is stored within the snapshot
-    OneHundredTwentyHeightKb(Box<[u8; PAGE_SIZE * 8]>),
-    // 192
-    OneHundredNinetyTwoKb(Box<[u8; PAGE_SIZE * 12]>),
-    // 256
-    TwoHundredFiftySixKb(Box<[u8; PAGE_SIZE * 16]>),
-    //  320
-    ThreeHundredTwentyKb(Box<[u8; PAGE_SIZE * 20]>),
-    // 384
-    ThreeHundredHeightyFourKb(Box<[u8; PAGE_SIZE * 24]>),
-    // 448
-    FourHundredFortyHeightKb(Box<[u8; PAGE_SIZE * 28]>),
-    //  512
-    FiveHundredTwelveKb(Box<[u8; PAGE_SIZE * 32]>),
-    //  576
-    FiveHundredSeventySixKb(Box<[u8; PAGE_SIZE * 36]>),
-}
-
-impl Default for SnapshotMemory {
-    fn default() -> Self {
-        Self::Empty(Default::default())
-    }
-}
-
-impl std::fmt::Debug for SnapshotMemory {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let code = match self {
-            SnapshotMemory::Empty(_) => "Empty",
-            SnapshotMemory::SixtyFourKb(_) => "64kb",
-            SnapshotMemory::OneHundredTwentyHeightKb(_) => "128kb",
-            SnapshotMemory::OneHundredNinetyTwoKb(_) => "192kb",
-            SnapshotMemory::TwoHundredFiftySixKb(_) => "256kb",
-            SnapshotMemory::ThreeHundredTwentyKb(_) => "320kb",
-            SnapshotMemory::ThreeHundredHeightyFourKb(_) => "384kb",
-            SnapshotMemory::FourHundredFortyHeightKb(_) => "448kb",
-            SnapshotMemory::FiveHundredTwelveKb(_) => "512kb",
-            SnapshotMemory::FiveHundredSeventySixKb(_) => "576kb",
-        };
-        write!(f, "SnapshotMemory ({})", code)
-    }
-}
-
-#[allow(missing_docs)]
-impl SnapshotMemory {
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Empty(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_64k(&self) -> bool {
-        match self {
-            Self::SixtyFourKb(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_128k(&self) -> bool {
-        match self {
-            Self::OneHundredTwentyHeightKb(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Read only access to the memory
-    fn memory(&self) -> &[u8] {
-        match self {
-            SnapshotMemory::Empty(ref mem) => mem.deref(),
-            SnapshotMemory::SixtyFourKb(ref mem) => mem.deref(),
-            SnapshotMemory::OneHundredTwentyHeightKb(ref mem) => mem.deref(),
-            SnapshotMemory::OneHundredNinetyTwoKb(ref mem) => mem.deref(),
-            SnapshotMemory::TwoHundredFiftySixKb(ref mem) => mem.deref(),
-            SnapshotMemory::ThreeHundredTwentyKb(ref mem) => mem.deref(),
-            SnapshotMemory::ThreeHundredHeightyFourKb(ref mem) => mem.deref(),
-            SnapshotMemory::FourHundredFortyHeightKb(ref mem) => mem.deref(),
-            SnapshotMemory::FiveHundredTwelveKb(ref mem) => mem.deref(),
-            SnapshotMemory::FiveHundredSeventySixKb(ref mem) => mem.deref(),
-        }
-    }
-
-    /// Reda write access to the memory
-    fn memory_mut(&mut self) -> &mut [u8] {
-        match self {
-            SnapshotMemory::Empty(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::SixtyFourKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::OneHundredTwentyHeightKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::OneHundredNinetyTwoKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::TwoHundredFiftySixKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::ThreeHundredTwentyKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::ThreeHundredHeightyFourKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::FourHundredFortyHeightKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::FiveHundredTwelveKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::FiveHundredSeventySixKb(ref mut mem) => mem.deref_mut(),
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.memory().len()
-    }
-
-    /// Produce a novel memory that is bigger
-    fn increased_size(&self) -> Self {
-        match self {
-            SnapshotMemory::Empty(ref _mem) => Self::default_64(),
-            SnapshotMemory::SixtyFourKb(ref mem) => {
-                let mut new = Self::default_128();
-                new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
-                new
-            }
-            SnapshotMemory::OneHundredTwentyHeightKb(ref mem) => {
-                let mut new = Self::default_192();
-                new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
-                new
-            }
-            SnapshotMemory::OneHundredNinetyTwoKb(ref mem) => {
-                let mut new = Self::default_256();
-                new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
-                new
-            }
-            SnapshotMemory::TwoHundredFiftySixKb(ref mem) => {
-                let mut new = Self::default_320();
-                new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
-                new
-            }
-            SnapshotMemory::ThreeHundredTwentyKb(ref mem) => {
-                let mut new = Self::default_384();
-                new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
-                new
-            }
-            SnapshotMemory::ThreeHundredHeightyFourKb(ref mem) => {
-                let mut new = Self::default_448();
-                new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
-                new
-            }
-            SnapshotMemory::FourHundredFortyHeightKb(ref mem) => {
-                let mut new = Self::default_512();
-                new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
-                new
-            }
-            SnapshotMemory::FiveHundredTwelveKb(ref mem) => {
-                let mut new = Self::default_576();
-                new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
-                new
-            }
-            SnapshotMemory::FiveHundredSeventySixKb(_) => unreachable!(),
-        }
-    }
-
-    fn new(source: &[u8]) -> Self {
-        match source.len() {
-            0 => Self::default(),
-            0x10000 => Self::new_64(source),
-            0x20000 => Self::new_128(source),
-            _ => unreachable!(),
-        }
-    }
-
-    /// Build the chunk representation for the memory sapcz
-    pub fn to_chunks(&self) -> Vec<SnapshotChunk> {
-        let memory = self.memory();
-        let mut chunks = Vec::new();
-        let mut current_idx = [b'M', b'E', b'M', b'0'];
-        let mut cursor = 0;
-
-        while cursor < memory.len() {
-            let next_cursor = cursor + 64 * 1024;
-            let current_memory = &memory[cursor..next_cursor.min(memory.len())];
-
-            let current_chunk = MemoryChunk::build(current_idx, current_memory, true);
-            chunks.push(SnapshotChunk::Memory(current_chunk));
-            cursor = next_cursor;
-            current_idx[3] += 1;
-        }
-
-        chunks
-    }
-
-    fn new_64(source: &[u8]) -> Self {
-        assert_eq!(source.len(), 64 * 1024);
-        let mut mem = Self::default_64();
-        mem.memory_mut().copy_from_slice(source);
-        mem
-    }
-
-    fn new_128(source: &[u8]) -> Self {
-        assert_eq!(source.len(), 128 * 1024);
-        let mut mem = Self::default_128();
-        mem.memory_mut().copy_from_slice(source);
-        mem
-    }
-
-    fn default_64() -> Self {
-        Self::SixtyFourKb(Box::new([0; PAGE_SIZE * 4]))
-    }
-
-    fn default_128() -> Self {
-        Self::OneHundredTwentyHeightKb(Box::new([0; PAGE_SIZE * 8]))
-    }
-    fn default_192() -> Self {
-        Self::OneHundredNinetyTwoKb(Box::new([0; PAGE_SIZE * 12]))
-    }
-    fn default_256() -> Self {
-        Self::TwoHundredFiftySixKb(Box::new([0; PAGE_SIZE * 16]))
-    }
-
-    fn default_320() -> Self {
-        Self::ThreeHundredTwentyKb(Box::new([0; PAGE_SIZE * 20]))
-    }
-    fn default_384() -> Self {
-        Self::ThreeHundredHeightyFourKb(Box::new([0; PAGE_SIZE * 24]))
-    }
-    fn default_448() -> Self {
-        Self::FourHundredFortyHeightKb(Box::new([0; PAGE_SIZE * 28]))
-    }
-    fn default_512() -> Self {
-        Self::FiveHundredTwelveKb(Box::new([0; PAGE_SIZE * 32]))
-    }
-    fn default_576() -> Self {
-        Self::FiveHundredSeventySixKb(Box::new([0; PAGE_SIZE * 36]))
-    }
-}
 
 /// Snapshot V3 representation. Can be saved in snapshot V1 or v2.
 #[derive(Clone)]
@@ -555,7 +327,7 @@ impl Snapshot {
 
         // Write chunks if any
         for chunk in &sna.chunks {
-            println!("Add chunk: {:?}", chunk.code());
+            println!("Add chunk: {}", chunk.code().iter().map(|c|*c as char).collect::<String>());
             buffer.write_all(chunk.code())?;
             buffer.write_all(&chunk.size_as_array())?;
             buffer.write_all(chunk.data())?;
@@ -643,6 +415,10 @@ impl Snapshot {
 
             Ok(())
         }
+    }
+
+    pub fn add_chunk<C: Into<SnapshotChunk>>(&mut self, c: C) {
+        self.chunks.push(c.into());
     }
 
     #[deprecated]

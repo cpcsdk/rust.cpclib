@@ -47,6 +47,19 @@ impl MyToTokens for String {
     }
 }
 
+impl MyToTokens for SmallStr {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.append(Ident::new("SmallStr", Span::call_site()));
+        tokens.append(Punct::new(':', Spacing::Joint));
+        tokens.append(Punct::new(':', Spacing::Joint));
+        tokens.append(Ident::new("new", Span::call_site()));
+        
+        let mut inner_token = TokenStream::new();
+        (**self).to_tokens(&mut inner_token);
+        tokens.append(Group::new(Delimiter::Parenthesis, inner_token));
+    }
+}
+
 impl<T: ?Sized + MyToTokens> MyToTokens for Box<T> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append(Ident::new("Box", Span::call_site()));

@@ -151,6 +151,7 @@ const STAND_ALONE_DIRECTIVE: &[&str] = &[
     "DB",
     "DEFAULT",
     "DEFB",
+    "DEFM",
     "DEFS",
     "DEFW",
     "DEFSECTION",
@@ -1845,7 +1846,9 @@ fn parse_conditional_condition(
 
 /// Parse a breakpint instruction
 pub fn parse_breakpoint(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
-    map(preceded(parse_directive_word("BREAKPOINT"), opt(expr)), |exp| {
+    map(preceded(
+        delimited(space0, parse_directive_word("BREAKPOINT"), space0),
+        opt(expr)), |exp| {
         Token::Breakpoint(exp)
     })(input)
 }
@@ -4219,7 +4222,7 @@ mod test {
         assert!(span.is_empty());
         assert_eq!(
             res,
-            Token::Print(vec![FormattedExpr::Raw(Expr::Label("VAR".to_string()))])
+            Token::Print(vec![FormattedExpr::Raw(Expr::Label("VAR".into()))])
         );
 
         let (span, res) =
@@ -4228,8 +4231,8 @@ mod test {
         assert_eq!(
             res,
             Token::Print(vec![
-                FormattedExpr::Raw(Expr::Label("VAR".to_string())),
-                FormattedExpr::Raw(Expr::Label("VAR".to_string()))
+                FormattedExpr::Raw(Expr::Label("VAR".into())),
+                FormattedExpr::Raw(Expr::Label("VAR".into()))
             ])
         );
 
@@ -4240,7 +4243,7 @@ mod test {
             res,
             Token::Print(vec![FormattedExpr::Formatted(
                 ExprFormat::Hex(None),
-                Expr::Label("VAR".to_string())
+                Expr::Label("VAR".into())
             )])
         );
 
@@ -4250,7 +4253,7 @@ mod test {
 
         assert_eq!(
             res,
-            Token::Print(vec![FormattedExpr::Raw(Expr::String("hello".to_string()))])
+            Token::Print(vec![FormattedExpr::Raw(Expr::String("hello".into()))])
         );
     }
 

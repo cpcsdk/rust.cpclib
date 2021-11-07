@@ -146,7 +146,7 @@ impl Z80 {
                         Some(&DataAccess::Expression(Expr::Label(_))) => {
                             self.get_value(arg1.unwrap()).unwrap() as i32
                                 - self
-                                    .get_value(&DataAccess::Expression(Expr::Label("$".to_owned())))
+                                    .get_value(&DataAccess::Expression(Expr::Label("$".into())))
                                     .unwrap() as i32
                                 - 2
                         }
@@ -170,7 +170,7 @@ impl Z80 {
                     Some(&DataAccess::Expression(Expr::Label(_))) => {
                         self.get_value(arg2.unwrap()).unwrap() as i32
                             - self
-                                .get_value(&DataAccess::Expression(Expr::Label("$".to_owned())))
+                                .get_value(&DataAccess::Expression(Expr::Label("$".into())))
                                 .unwrap() as i32
                             - 2
                     }

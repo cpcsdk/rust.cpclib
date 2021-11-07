@@ -56,6 +56,8 @@ impl PageInformation {
 
     delegate::delegate! {
         to self.delayed_commands {
+            pub fn add_breakpoint_command(&mut self, command: BreakpointCommand);
+
             pub fn add_save_command(&mut self, command: SaveCommand);
             pub fn add_failed_assert_command(&mut self, command: FailedAssertCommand);
             pub fn add_print_command(&mut self, command: PrintCommand);
@@ -72,6 +74,7 @@ impl PageInformation {
             pub fn execute_save(&self, env: &Env) -> Result<Vec<SavedFile>, AssemblerError>;
             pub fn collect_assert_failure(&self) -> Result<(), AssemblerError>;
             pub fn execute_print_or_pause(&self, writer: &mut impl Write)-> Result<(), AssemblerError>;
+            pub fn collect_breakpoints(&self)-> &[BreakpointCommand];
         }
 
     }

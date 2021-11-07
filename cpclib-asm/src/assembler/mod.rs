@@ -817,7 +817,33 @@ impl Env {
     fn handle_post_actions(&mut self) -> Result<Vec<SavedFile>, AssemblerError> {
         self.handle_assert()?;
         self.handle_print()?;
+        self.handle_breakpoints()?;
         self.handle_file_save()
+    }
+
+    /// We handle breakpoint ONLY for the pages stored in the snapshot
+    /// as they are stored inside a chunck of the snapshot:
+    /// If one day another export is coded, we could export the others too.
+    fn handle_breakpoints(&mut self) -> Result<(), AssemblerError> {
+        let mut winape_raw = Vec::new();
+
+        let pages_mmr = MMR_PAGES_SELECTION;
+        for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
+            for brk in self.pages_info_sna[activepage].collect_breakpoints() {
+                winape_raw.extend(
+                    brk.winape_raw()
+                );
+            }
+        }
+
+        let winape_chunk = WinapeBreakPointChunk::from(
+            [b'B', b'R', b'K', b'S'],
+            winape_raw
+        );
+
+        self.sna.add_chunk(winape_chunk);
+
+        Ok(())
     }
 
     fn handle_assert(&mut self) -> Result<(), AssemblerError> {
@@ -1323,6 +1349,35 @@ impl Env {
                 }
             }
         }
+    }
+}
+
+impl Env {
+    fn visit_breakpoint(&mut self, exp: Option<&Expr>) -> Result<(), AssemblerError> {
+        if exp.is_some() {
+            return Err(
+                AssemblerError::BugInAssembler{
+                    msg: format!("Breakpoint with an expression is not yet implemented")
+                })
+        }
+
+        let current_address = self.logical_code_address();
+        let page = match self.logical_to_physical_address(current_address).page() {
+            0 => 0,
+            1 => 1,
+            _ => return Err(AssemblerError::BugInAssembler{
+                msg: format!("Page selection not handled 0x{:x}", self.logical_to_physical_address(current_address).page())
+            })
+        };
+
+        let brk = BreakpointCommand::new(
+            current_address,
+            page
+        );
+        self.active_page_info_mut()
+            .add_breakpoint_command(brk);
+    
+        Ok(())
     }
 }
 
@@ -2517,6 +2572,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::BuildSna(ref v) => env.visit_buildsna(v.as_ref()),
         Token::Bank(ref exp) => env.visit_bank(exp.as_ref()),
         Token::Bankset(ref v) => env.visit_bankset(v),
+        Token::Breakpoint(ref exp) => env.visit_breakpoint(exp.as_ref()),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | Token::Defw(_) | Token::Str(_) => visit_db_or_dw_or_str(token, env),
         Token::Defs(_) => visit_defs(token, env),
@@ -5064,7 +5120,7 @@ mod test {
             None,
             &mut env,
             None
-        )?);
+        ).unwrap());
     }
 
     #[test]
@@ -5301,7 +5357,7 @@ mod test {
     #[test]
     pub fn basic_variable_unset() {
         let tokens = vec![Token::Basic(
-            Some(vec!["STUFF".to_owned()]),
+            Some(vec!["STUFF".into()]),
             None,
             "10 PRINT {STUFF}".to_owned(),
         )];
@@ -5314,11 +5370,11 @@ mod test {
     #[test]
     pub fn basic_variable_set() {
         let tokens = vec![
-            Token::Label("STUFF".to_owned()),
+            Token::Label("STUFF".into()),
             Token::Basic(
-                Some(vec!["STUFF".to_owned()]),
+                Some(vec!["STUFF".into()]),
                 None,
-                "10 PRINT {STUFF}".to_owned(),
+                "10 PRINT {STUFF}".into(),
             ),
         ];
 
@@ -5438,10 +5494,10 @@ mod test {
     #[test]
     pub fn test_rorg() {
         let res = visit_tokens_all_passes(&[
-            Token::Org(0x4000.into(), None),
+            Token::Org(0x4000i32.into(), None),
             Token::Rorg(
-                0x8000.into(),
-                vec![Token::Defb(vec![Expr::Label("$".to_owned())])].into(),
+                0x8000i32.into(),
+                vec![Token::Defb(vec![Expr::Label("$".into())])].into(),
             ),
         ]);
         assert!(res.is_ok());
@@ -5450,14 +5506,14 @@ mod test {
     #[test]
     pub fn test_two_passes() {
         let tokens = vec![
-            Token::Org(0x123.into(), None),
+            Token::Org(0x123i32.into(), None),
             Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register16(Register16::Hl)),
-                Some(DataAccess::Expression(Expr::Label("test".to_string()))),
+                Some(DataAccess::Expression(Expr::Label("test".into()))),
                 None,
             ),
-            Token::Label("test".to_string()),
+            Token::Label("test".into()),
         ];
         let env = visit_tokens(&tokens);
         assert!(env.is_err());

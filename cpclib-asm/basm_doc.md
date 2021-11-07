@@ -13,6 +13,10 @@ title: BASM documentation - WIP
 
 ## Labels handling
 
+basm is quite lax on the z80 format: it does not impose to start a label at the very first char of a line and does not force an instruction or directive to not start at the very first line of a char.
+As a consequence there can be ambiguities between labels and macros.
+If it fails in properly recognizing macros or label, you can guide it by suffixing label declaration by : or by using (void) for macros with no arguments. 
+
 ## Fake instructions
 
 ## Comments
