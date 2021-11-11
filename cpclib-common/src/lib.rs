@@ -48,9 +48,14 @@ pub fn dec_number<'src, T>(
 where
     T: Clone,
 {
-    let (input, digits) = digit1(input)?;
+    let (input, digits) = 
+        verify(
+            recognize(many1(is_a("0123456789_"))), 
+            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
+)(input)?;
     let number = digits
         .chars()
+        .filter(|c| *c != '_')
         .map(|c| c.to_digit(10).unwrap())
         .fold(0, |acc, val| acc * 10 + val);
 
@@ -73,9 +78,14 @@ where
     T: Clone,
 {
     let (input, digits) =
-        preceded(alt((tag("0x"), tag("#"), tag("$"), tag("&"))), hex_digit1)(input)?;
+        preceded(alt((tag("0x"), tag("#"), tag("$"), tag("&"))), 
+        verify(
+            recognize(many1(is_a("0123456789abcdefABCDEF_"))), 
+            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_"))
+    )(input)?;
     let number = digits
         .chars()
+        .filter(|c| *c != '_')
         .map(|c| c.to_digit(16).unwrap())
         .fold(0, |acc, val| acc * 16 + val);
 
@@ -88,9 +98,14 @@ pub fn hex_number2<'src, T>(
 where
     T: Clone,
 {
-    let (input, digits) = terminated(hex_digit1, terminated(tag_no_case("h"), not(alpha1)))(input)?;
+    let (input, digits) = terminated(
+        verify(
+            recognize(many1(is_a("0123456789abcdefABCDEF_"))), 
+            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_"))
+        , terminated(tag_no_case("h"), not(alpha1)))(input)?;
     let number = digits
         .chars()
+        .filter(|c| *c != '_')
         .map(|c| c.to_digit(16).unwrap())
         .fold(0, |acc, val| acc * 16 + val);
 
@@ -104,10 +119,13 @@ where
     T: Clone,
 {
     let (input, digits) =
-        preceded(alt((tag("0b"), tag("%"))), many1(alt((tag("0"), tag("1")))))(input)?;
+        preceded(alt((tag("0b"), tag("%"))), verify(
+            recognize(many1(is_a("01_"))), 
+            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
+))(input)?;
     let number = digits
-        .iter()
-        .map(|d| d.chars().next().unwrap())
+        .chars()
+        .filter(|c| *c != '_')
         .map(|c| c.to_digit(2).unwrap())
         .fold(0, |acc, val| acc * 2 + val);
 
