@@ -599,8 +599,8 @@ impl AssemblerError {
             AssemblerError::RelativeAddressUncomputable {
                 address: _,
                 pass: _,
-                error: _,
-            } => todo!(),
+                error,
+            } => write!(f, "Unable to compute relative address {}", error),
 
             // By construction contains only error with no span information
             AssemblerError::RelocatedError { error, span } => {
