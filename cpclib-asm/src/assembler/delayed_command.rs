@@ -126,22 +126,25 @@ impl PrintOrPauseCommand {
 /// TODO: add condition
 #[derive(Debug, Clone)]
 pub struct BreakpointCommand {
-    address: u16,
-    page: u8,
+    pub(crate) address: u16,
+    pub(crate) page: u8,
+    pub(crate) span: Z80Span
 }
 
 impl BreakpointCommand {
-    pub fn new(address: u16, page: u8) -> Self {
+    pub fn new(address: u16, page: u8, span: Z80Span) -> Self {
         BreakpointCommand {
             address,
-            page
+            page,
+            span
         }
     }
 
-    pub fn winape_raw(&self) -> [u8;4] {
+    pub fn winape_raw(&self) -> [u8;5] {
         [
             (self.address & 0xff) as u8,
             (self.address >> 8) as u8,
+            self.page,
             0,
             0
         ]

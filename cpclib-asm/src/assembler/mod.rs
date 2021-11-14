@@ -830,11 +830,26 @@ impl Env {
         let pages_mmr = MMR_PAGES_SELECTION;
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
             for brk in self.pages_info_sna[activepage].collect_breakpoints() {
+                
+                
+                let info = AssemblerError::RelocatedInfo{
+                    info: Box::new(
+                        AssemblerError::AssemblingError{
+                            msg: format!("Add a breakpoint in 0x{:04x}", brk.address)
+                        }
+                    ),
+                    span: brk.span.clone()
+                };
+                eprint!("{}", info);
+
+
                 winape_raw.extend(
                     brk.winape_raw()
                 );
             }
         }
+
+        assert_eq!(winape_raw.len()%5, 0);
 
         let winape_chunk = WinapeBreakPointChunk::from(
             [b'B', b'R', b'K', b'S'],
@@ -1355,7 +1370,7 @@ impl Env {
 }
 
 impl Env {
-    fn visit_breakpoint(&mut self, exp: Option<&Expr>) -> Result<(), AssemblerError> {
+    fn visit_breakpoint(&mut self, exp: Option<&Expr>, span: Option<Z80Span>) -> Result<(), AssemblerError> {
         if exp.is_some() {
             return Err(
                 AssemblerError::BugInAssembler{
@@ -1374,7 +1389,8 @@ impl Env {
 
         let brk = BreakpointCommand::new(
             current_address,
-            page
+            page,
+            span.unwrap()
         );
         self.active_page_info_mut()
             .add_breakpoint_command(brk);
@@ -2415,6 +2431,10 @@ pub fn visit_located_token(
                 Ok(())
             }
 
+            Token::Breakpoint(expr) => {
+                env.visit_breakpoint(expr.as_ref(), Some(span.clone()))
+            }
+
             Token::Pause => {
                 env.visit_pause(Some(span.clone()));
                 Ok(())
@@ -2574,7 +2594,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::BuildSna(ref v) => env.visit_buildsna(v.as_ref()),
         Token::Bank(ref exp) => env.visit_bank(exp.as_ref()),
         Token::Bankset(ref v) => env.visit_bankset(v),
-        Token::Breakpoint(ref exp) => env.visit_breakpoint(exp.as_ref()),
+        Token::Breakpoint(ref exp) => env.visit_breakpoint(exp.as_ref(), None),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | Token::Defw(_) | Token::Str(_) => visit_db_or_dw_or_str(token, env),
         Token::Defs(_) => visit_defs(token, env),

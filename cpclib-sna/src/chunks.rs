@@ -216,12 +216,12 @@ impl WinapeBreakPointChunk {
     }
 
     pub fn add_breakpoint_raw(&mut self, raw: &[u8]) {
-        assert!(raw.len() == 4);
+        assert!(raw.len() == 5);
         self.add_bytes(raw);
     }
 
     pub fn nb_breakpoints(&self) -> usize {
-        self.size() / 4
+        self.size() / 5
     }
 
     delegate!{
