@@ -27,7 +27,7 @@ jobs:
     - name: Basm tests
       run: cd basm/tests/asm && ./launch_tests.sh
     - uses: ncipollo/release-action@v1
-        with:
+      with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           allowUpdates: true
           removeArtifacts: false
