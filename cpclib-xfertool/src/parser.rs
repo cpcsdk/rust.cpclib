@@ -1,3 +1,5 @@
+use std::str;
+
 use cpclib_common::nom;
 use nom::branch::*;
 use nom::bytes::complete::*;
@@ -7,8 +9,6 @@ use nom::combinator::*;
 use nom::multi::*;
 use nom::sequence::*;
 use nom::*;
-
-use std::str;
 
 #[derive(Debug, Clone)]
 pub(crate) enum XferCommand {
@@ -29,7 +29,7 @@ pub(crate) enum XferCommand {
     /// Launch a file from the M4
     LaunchM4(String),
     /// Launch a command on the host machine
-    LocalCommand(String),
+    LocalCommand(String)
 }
 
 // TODO find a way to reduce code duplicaiton
@@ -37,7 +37,7 @@ pub(crate) enum XferCommand {
 fn ls_path(input: &str) -> IResult<&str, XferCommand> {
     map(
         preceded(tuple((tag_no_case("ls"), space1)), rest),
-        |path: &str| XferCommand::Ls(Some(path.to_string())),
+        |path: &str| XferCommand::Ls(Some(path.to_string()))
     )(input)
 }
 
@@ -52,7 +52,7 @@ fn ls(input: &str) -> IResult<&str, XferCommand> {
 fn cd_path(input: &str) -> IResult<&str, XferCommand> {
     map(
         preceded(tuple((tag_no_case("cd"), space1)), rest),
-        |path: &str| XferCommand::Cd(Some(path.to_string())),
+        |path: &str| XferCommand::Cd(Some(path.to_string()))
     )(input)
 }
 
@@ -67,14 +67,14 @@ fn cd(input: &str) -> IResult<&str, XferCommand> {
 fn launch(input: &str) -> IResult<&str, XferCommand> {
     map(
         preceded(tuple((tag_no_case("launch"), space1)), rest),
-        |path: &str| XferCommand::LaunchHost(path.to_string()),
+        |path: &str| XferCommand::LaunchHost(path.to_string())
     )(input)
 }
 
 fn local(input: &str) -> IResult<&str, XferCommand> {
     map(
         preceded(tuple((tag_no_case("!"), space0)), rest),
-        |path: &str| XferCommand::LocalCommand(path.to_string()),
+        |path: &str| XferCommand::LocalCommand(path.to_string())
     )(input)
 }
 
@@ -83,9 +83,9 @@ fn put(input: &str) -> IResult<&str, XferCommand> {
     map(
         preceded(
             tuple((tag_no_case("put"), space1)),
-            take_till(|c: char| c.is_whitespace()),
+            take_till(|c: char| c.is_whitespace())
         ),
-        |path: &str| XferCommand::Put(path.to_string()),
+        |path: &str| XferCommand::Put(path.to_string())
     )(input)
 }
 
@@ -98,13 +98,13 @@ fn rm(input: &str) -> IResult<&str, XferCommand> {
                     tag_no_case("rm"),
                     tag_no_case("delete"),
                     tag_no_case("del"),
-                    tag_no_case("era"),
+                    tag_no_case("era")
                 )),
-                space1,
+                space1
             )),
-            take_till(|c: char| c.is_whitespace()),
+            take_till(|c: char| c.is_whitespace())
         ),
-        |path: &str| XferCommand::Era(path.to_string()),
+        |path: &str| XferCommand::Era(path.to_string())
     )(input)
 }
 
@@ -119,7 +119,7 @@ fn no_arg(input: &str) -> IResult<&str, XferCommand> {
         }),
         map(rest, {
             |fname: &str| XferCommand::LaunchM4(fname.to_string())
-        }),
+        })
     ))(input)
 }
 

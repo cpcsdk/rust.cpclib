@@ -1,15 +1,15 @@
-use image as im;
-
-use self::im::Pixel;
-use crate::image::Mode;
-use cpclib_common::itertools::Itertools;
-use cpclib_common::num::Integer;
-use serde::ser::SerializeSeq;
-use serde::{Deserialize, Serialize};
-use serde::{Deserializer, Serializer};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter, Result};
 use std::ops::Add;
+
+use cpclib_common::itertools::Itertools;
+use cpclib_common::num::Integer;
+use image as im;
+use serde::ser::SerializeSeq;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use self::im::Pixel;
+use crate::image::Mode;
 
 const INK0: im::Rgba<u8> = im::Rgba([0, 0, 0, 255]);
 const INK1: im::Rgba<u8> = im::Rgba([0x00, 0x00, 0x80, 255]);
@@ -48,45 +48,45 @@ const NB_PENS: u8 = 16 + 1;
 /// RGB color for each ink
 pub const INKS_RGB_VALUES: [im::Rgba<u8>; 27] = [
     INK0, INK1, INK2, INK3, INK4, INK5, INK6, INK7, INK8, INK9, INK10, INK11, INK12, INK13, INK14,
-    INK15, INK16, INK17, INK18, INK19, INK20, INK21, INK22, INK23, INK24, INK25, INK26,
+    INK15, INK16, INK17, INK18, INK19, INK20, INK21, INK22, INK23, INK24, INK25, INK26
 ];
 
 /// Ga value for each ink
 pub const INKS_GA_VALUE: [u8; 27] = [
-    0x54, //0
-    0x44, //1
-    0x55, //2
-    0x5c, //3
-    0x58, //4
-    0x5d, //5
-    0x4c, //6
-    0x45, //7
-    0x4d, //8
-    0x56, //9
-    0x46, //10
-    0x57, //11
-    0x5e, //12
-    0x40, //13
-    0x5f, //14
-    0x4e, //15
-    0x47, //16
-    0x4f, //17
-    0x52, //18
-    0x42, //19
-    0x53, //20
-    0x5a, //21
-    0x59, //22
-    0x5b, //23
-    0x4a, //24
-    0x43, //25
-    0x4b, //26
+    0x54, // 0
+    0x44, // 1
+    0x55, // 2
+    0x5C, // 3
+    0x58, // 4
+    0x5D, // 5
+    0x4C, // 6
+    0x45, // 7
+    0x4D, // 8
+    0x56, // 9
+    0x46, // 10
+    0x57, // 11
+    0x5E, // 12
+    0x40, // 13
+    0x5F, // 14
+    0x4E, // 15
+    0x47, // 16
+    0x4F, // 17
+    0x52, // 18
+    0x42, // 19
+    0x53, // 20
+    0x5A, // 21
+    0x59, // 22
+    0x5B, // 23
+    0x4A, // 24
+    0x43, // 25
+    0x4B  // 26
 ];
 
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 /// Amstrad INK
 pub struct Ink {
     /// Ink value
-    value: u8,
+    value: u8
 }
 
 /// Describes the quantity for a given component
@@ -97,7 +97,7 @@ pub enum InkComponentQuantity {
     /// 50%
     Half,
     /// 100%
-    Full,
+    Full
 }
 
 impl InkComponentQuantity {
@@ -106,7 +106,7 @@ impl InkComponentQuantity {
         match self {
             Self::Zero => Self::Zero,
             Self::Half => Self::Zero,
-            Self::Full => Self::Half,
+            Self::Full => Self::Half
         }
     }
 }
@@ -116,161 +116,161 @@ impl
     From<(
         InkComponentQuantity,
         InkComponentQuantity,
-        InkComponentQuantity,
+        InkComponentQuantity
     )> for Ink
 {
     fn from(
         d: (
             InkComponentQuantity,
             InkComponentQuantity,
-            InkComponentQuantity,
-        ),
+            InkComponentQuantity
+        )
     ) -> Self {
         let value = match d {
             //   R           G           B
             (
                 InkComponentQuantity::Zero,
                 InkComponentQuantity::Zero,
-                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero
             ) => 0,
             (
                 InkComponentQuantity::Zero,
                 InkComponentQuantity::Zero,
-                InkComponentQuantity::Half,
+                InkComponentQuantity::Half
             ) => 1,
             (
                 InkComponentQuantity::Zero,
                 InkComponentQuantity::Zero,
-                InkComponentQuantity::Full,
+                InkComponentQuantity::Full
             ) => 2,
 
             (
                 InkComponentQuantity::Zero,
                 InkComponentQuantity::Half,
-                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero
             ) => 9,
             (
                 InkComponentQuantity::Zero,
                 InkComponentQuantity::Half,
-                InkComponentQuantity::Half,
+                InkComponentQuantity::Half
             ) => 10,
             (
                 InkComponentQuantity::Zero,
                 InkComponentQuantity::Half,
-                InkComponentQuantity::Full,
+                InkComponentQuantity::Full
             ) => 11,
 
             (
                 InkComponentQuantity::Zero,
                 InkComponentQuantity::Full,
-                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero
             ) => 18,
             (
                 InkComponentQuantity::Zero,
                 InkComponentQuantity::Full,
-                InkComponentQuantity::Half,
+                InkComponentQuantity::Half
             ) => 19,
             (
                 InkComponentQuantity::Zero,
                 InkComponentQuantity::Full,
-                InkComponentQuantity::Full,
+                InkComponentQuantity::Full
             ) => 20,
 
             (
                 InkComponentQuantity::Half,
                 InkComponentQuantity::Zero,
-                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero
             ) => 3,
             (
                 InkComponentQuantity::Half,
                 InkComponentQuantity::Zero,
-                InkComponentQuantity::Half,
+                InkComponentQuantity::Half
             ) => 4,
             (
                 InkComponentQuantity::Half,
                 InkComponentQuantity::Zero,
-                InkComponentQuantity::Full,
+                InkComponentQuantity::Full
             ) => 5,
 
             (
                 InkComponentQuantity::Half,
                 InkComponentQuantity::Half,
-                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero
             ) => 12,
             (
                 InkComponentQuantity::Half,
                 InkComponentQuantity::Half,
-                InkComponentQuantity::Half,
+                InkComponentQuantity::Half
             ) => 13,
             (
                 InkComponentQuantity::Half,
                 InkComponentQuantity::Half,
-                InkComponentQuantity::Full,
+                InkComponentQuantity::Full
             ) => 14,
 
             (
                 InkComponentQuantity::Half,
                 InkComponentQuantity::Full,
-                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero
             ) => 21,
             (
                 InkComponentQuantity::Half,
                 InkComponentQuantity::Full,
-                InkComponentQuantity::Half,
+                InkComponentQuantity::Half
             ) => 22,
             (
                 InkComponentQuantity::Half,
                 InkComponentQuantity::Full,
-                InkComponentQuantity::Full,
+                InkComponentQuantity::Full
             ) => 23,
 
             (
                 InkComponentQuantity::Full,
                 InkComponentQuantity::Zero,
-                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero
             ) => 6,
             (
                 InkComponentQuantity::Full,
                 InkComponentQuantity::Zero,
-                InkComponentQuantity::Half,
+                InkComponentQuantity::Half
             ) => 7,
             (
                 InkComponentQuantity::Full,
                 InkComponentQuantity::Zero,
-                InkComponentQuantity::Full,
+                InkComponentQuantity::Full
             ) => 8,
 
             (
                 InkComponentQuantity::Full,
                 InkComponentQuantity::Half,
-                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero
             ) => 15,
             (
                 InkComponentQuantity::Full,
                 InkComponentQuantity::Half,
-                InkComponentQuantity::Half,
+                InkComponentQuantity::Half
             ) => 16,
             (
                 InkComponentQuantity::Full,
                 InkComponentQuantity::Half,
-                InkComponentQuantity::Full,
+                InkComponentQuantity::Full
             ) => 17,
 
             (
                 InkComponentQuantity::Full,
                 InkComponentQuantity::Full,
-                InkComponentQuantity::Zero,
+                InkComponentQuantity::Zero
             ) => 24,
             (
                 InkComponentQuantity::Full,
                 InkComponentQuantity::Full,
-                InkComponentQuantity::Half,
+                InkComponentQuantity::Half
             ) => 25,
             (
                 InkComponentQuantity::Full,
                 InkComponentQuantity::Full,
-                InkComponentQuantity::Full,
-            ) => 26,
+                InkComponentQuantity::Full
+            ) => 26
         };
         value.into()
     }
@@ -284,7 +284,7 @@ pub enum InkComponent {
     /// Green component
     Green,
     /// Blue component
-    Blue,
+    Blue
 }
 
 #[allow(missing_docs)]
@@ -301,7 +301,7 @@ impl Ink {
             0 | 1 | 2 | 9 | 10 | 11 | 18 | 19 | 20 => InkComponentQuantity::Zero,
             3 | 4 | 5 | 12 | 13 | 14 | 21 | 22 | 23 => InkComponentQuantity::Half,
             6 | 7 | 8 | 15 | 16 | 17 | 24 | 25 | 26 => InkComponentQuantity::Full,
-            _ => unreachable!(),
+            _ => unreachable!()
         }
     }
 
@@ -312,7 +312,7 @@ impl Ink {
             0 | 3 | 6 | 9 | 12 | 15 | 18 | 21 | 24 => InkComponentQuantity::Zero,
             1 | 4 | 7 | 10 | 13 | 16 | 19 | 22 | 25 => InkComponentQuantity::Half,
             2 | 5 | 8 | 11 | 14 | 17 | 20 | 23 | 26 => InkComponentQuantity::Full,
-            _ => unreachable!(),
+            _ => unreachable!()
         }
     }
 
@@ -323,7 +323,7 @@ impl Ink {
             0 | 3 | 6 | 1 | 4 | 7 | 2 | 5 | 8 => InkComponentQuantity::Zero,
             9 | 12 | 15 | 10 | 13 | 16 | 11 | 14 | 17 => InkComponentQuantity::Half,
             18 | 21 | 24 | 19 | 22 | 25 | 20 | 23 | 26 => InkComponentQuantity::Full,
-            _ => unreachable!(),
+            _ => unreachable!()
         }
     }
 
@@ -332,7 +332,7 @@ impl Ink {
         match comp {
             InkComponent::Red => self.red_quantity(),
             InkComponent::Green => self.green_quantity(),
-            InkComponent::Blue => self.blue_quantity(),
+            InkComponent::Blue => self.blue_quantity()
         }
     }
 
@@ -341,12 +341,12 @@ impl Ink {
         let (mut r, mut g, mut b) = (
             self.red_quantity(),
             self.green_quantity(),
-            self.blue_quantity(),
+            self.blue_quantity()
         );
         match comp {
             InkComponent::Red => r = r.decrease(),
             InkComponent::Green => g = g.decrease(),
-            InkComponent::Blue => b = b.decrease(),
+            InkComponent::Blue => b = b.decrease()
         };
         let new_ink: Ink = (r, g, b).into();
 
@@ -392,7 +392,7 @@ impl Ink {
             10 => 24,
             3 => 25,
             11 => 26,
-            _ => panic!("{} bad value", col),
+            _ => panic!("{} bad value", col)
         }
         .into()
     }
@@ -485,7 +485,7 @@ impl From<String> for Ink {
 
             "GRAY" | "GREY" => "WHITE".into(),
 
-            _ => panic!("{} color does not exist", item),
+            _ => panic!("{} color does not exist", item)
         }
     }
 }
@@ -520,7 +520,7 @@ impl Debug for Ink {
             24 => "BRIGHTYELLOW",
             25 => "PASTELYELLOW",
             26 => "BRIGHTWHITE",
-            _ => panic!(),
+            _ => panic!()
         };
 
         write!(f, "{} ({})", repr, self.value)
@@ -561,20 +561,19 @@ pub const INKS: [Ink; NB_INKS as usize] = [
     Ink { value: 23 },
     Ink { value: 24 },
     Ink { value: 25 },
-    Ink { value: 26 },
+    Ink { value: 26 }
 ];
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Serialize, Deserialize)]
 /// Represents a Pen. There a 16 pens + the border in the Amstrad CPC
 pub struct Pen {
     /// pen value
-    value: u8,
+    value: u8
 }
 
 // Constructor of Pen from an integer
 impl<T: Integer> From<T> for Pen
-where
-    i32: From<T>,
+where i32: From<T>
 {
     fn from(item: T) -> Self {
         let item: i32 = item.into();
@@ -584,8 +583,7 @@ where
 
 // Constructor of Pen reference from an integer
 impl<'a, T: Integer> From<T> for &'a Pen
-where
-    i32: From<T>,
+where i32: From<T>
 {
     fn from(item: T) -> Self {
         let pos: i32 = item.into();
@@ -606,7 +604,7 @@ impl Pen {
         self.value = match mode {
             Mode::Zero => self.value,
             Mode::Three | Mode::One => self.value & 3,
-            Mode::Two => self.value & 1,
+            Mode::Two => self.value & 1
         };
     }
 }
@@ -616,7 +614,7 @@ impl Add<i8> for Pen {
 
     fn add(self, delta: i8) -> Self {
         Self {
-            value: (self.value as i8 + delta) as u8,
+            value: (self.value as i8 + delta) as u8
         }
     }
 }
@@ -639,13 +637,13 @@ pub const PENS: [Pen; NB_PENS as usize] = [
     Pen { value: 13 },
     Pen { value: 14 },
     Pen { value: 15 },
-    Pen { value: 16 }, // Border
+    Pen { value: 16 } // Border
 ];
 
 /// The palette maps one Ink for each Pen
 pub struct Palette {
     /// Values for the palette. Some items may be absent
-    values: HashMap<Pen, Ink>,
+    values: HashMap<Pen, Ink>
 }
 
 impl Clone for Palette {
@@ -683,7 +681,7 @@ impl Default for Palette {
 impl<T> From<Vec<T>> for Palette
 where
     Ink: From<T>,
-    T: Copy,
+    T: Copy
 {
     fn from(items: Vec<T>) -> Self {
         let mut p = Self::new();
@@ -699,7 +697,7 @@ where
 impl<T> From<[T; 16]> for Palette
 where
     Ink: From<T>,
-    T: Copy,
+    T: Copy
 {
     fn from(items: [T; 16]) -> Self {
         items.to_vec().into()
@@ -751,8 +749,7 @@ impl<'de> Deserialize<'de> for Palette {
 }
 
 impl<P> std::ops::Index<P> for Palette
-where
-    P: Into<Pen>,
+where P: Into<Pen>
 {
     type Output = Ink;
 
@@ -779,7 +776,7 @@ impl Palette {
     /// An empty palette does not contains all the inks and must make crash most of the code that has been previously written !
     pub fn empty() -> Self {
         Self {
-            values: HashMap::<Pen, Ink>::default(),
+            values: HashMap::<Pen, Ink>::default()
         }
     }
 
@@ -891,7 +888,14 @@ impl Palette {
         self.values
             .iter()
             .sorted_by(|a, b| Ord::cmp(&a.0.number(), &b.0.number()))
-            .filter_map(|(&p, _)| if p.number() == 16 { None } else { Some(p) })
+            .filter_map(|(&p, _)| {
+                if p.number() == 16 {
+                    None
+                }
+                else {
+                    Some(p)
+                }
+            })
             .collect::<Vec<Pen>>()
     }
 
@@ -899,14 +903,14 @@ impl Palette {
     pub fn get(&self, pen: &Pen) -> &Ink {
         match self.values.get(pen) {
             Some(ink) => ink,
-            None => panic!("Wrong pen {:?}", pen),
+            None => panic!("Wrong pen {:?}", pen)
         }
     }
 
     pub fn get_with_default<'a>(&'a self, pen: &'a Pen, default: &'a Ink) -> &'a Ink {
         match self.values.get(pen) {
             Some(ink) => ink,
-            None => default,
+            None => default
         }
     }
 
@@ -931,7 +935,14 @@ impl Palette {
         self.values
             .iter()
             .filter(|(&p, _)| p.number() != 16)
-            .find_map(move |(p, &i)| if i == ink { Some(*p) } else { None })
+            .find_map(move |(p, &i)| {
+                if i == ink {
+                    Some(*p)
+                }
+                else {
+                    None
+                }
+            })
     }
 
     /// Returns true if the palette contains the inks in one of its pens (except border)
@@ -990,7 +1001,7 @@ impl Palette {
             loop {
                 let current = match decreased_palettes.last() {
                     Some(palette) => palette,
-                    None => p,
+                    None => p
                 };
                 if is_finished(current, c) {
                     break;
@@ -1009,7 +1020,7 @@ impl Palette {
             //  println!("Decrease for {:?}", &component);
             let current = match palettes.last() {
                 Some(palette) => palette,
-                None => self,
+                None => self
             };
             let new_palettes = decrease_component(current, *component);
             palettes.extend_from_slice(&new_palettes);
@@ -1026,7 +1037,8 @@ impl Into<Vec<u8>> for &Palette {
             let pen = Pen::from(pen);
             if self.contains_pen(pen) {
                 vec.push(self.get(&pen).into());
-            } else {
+            }
+            else {
                 vec.push(0x54); // No pens => ink black
             }
         }

@@ -268,7 +268,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
                     generated.to_string().to_lowercase()
                 );
             }
-            _ => unreachable!(),
+            _ => unreachable!()
         }
     }
 
@@ -281,7 +281,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
             Ok((next, _res)) => {
                 assert!(next.len() == 0);
             }
-            _ => unreachable!(),
+            _ => unreachable!()
         }
     }
 
@@ -334,44 +334,42 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         println!("{:?}", cfg);
         let track_info = cfg.track_information_for_track(3, 0).unwrap();
         assert_eq!(track_info.sector_size_human_readable(), 512);
-        assert_eq!(track_info.gap3(), 0x4e);
+        assert_eq!(track_info.gap3(), 0x4E);
         assert_eq!(track_info.nb_sectors(), 9);
 
         let track_info = dbg!(cfg.track_information_for_track(3, 18).unwrap());
         assert_eq!(track_info.sector_size_human_readable(), 512);
         assert_eq!(track_info.gap3(), 0x30);
         assert_eq!(track_info.nb_sectors(), 10);
-        assert_eq!(track_info.sector_id_at(0), 0xb4);
-        assert_eq!(track_info.sector_id_at(9), 0xb3);
+        assert_eq!(track_info.sector_id_at(0), 0xB4);
+        assert_eq!(track_info.sector_id_at(9), 0xB3);
 
         let cfgb = cfg.explode();
         let track_info = dbg!(cfgb.track_information_for_track(3, 18).unwrap());
         assert_eq!(track_info.sector_size_human_readable(), 512);
         assert_eq!(track_info.gap3(), 0x30);
         assert_eq!(track_info.nb_sectors(), 10);
-        assert_eq!(track_info.sector_id_at(0), 0xb4);
-        assert_eq!(track_info.sector_id_at(9), 0xb3);
-        /*
+        assert_eq!(track_info.sector_id_at(0), 0xB4);
+        assert_eq!(track_info.sector_id_at(9), 0xB3);
         // This comment code compare the result with the one of Ramlaid.
         // It fails, but I'm not sure the error comes from us
-                let dsk2 = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/SingleSided_3i.dsk").unwrap();
-
-                dbg!(&dsk2);
-                let cfg2 = dsk2.to_cfg();
-
-                let track_info = dbg!(cfg2.track_information_for_track(3, 18).unwrap());
-                assert_eq!(track_info.sector_size_human_readable(), 512);
-                assert_eq!(track_info.gap3(), 0x30);
-                assert_eq!(track_info.nb_sectors(),10);
-                assert_eq!(track_info.sector_id_at(0), 0xb4);
-                assert_eq!(track_info.sector_id_at(9), 0xb3);
-
-                assert_eq!(
-                    cfg.explode(),
-                    cfg2.explode()
-                );
-
-        */
+        // let dsk2 = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/SingleSided_3i.dsk").unwrap();
+        //
+        // dbg!(&dsk2);
+        // let cfg2 = dsk2.to_cfg();
+        //
+        // let track_info = dbg!(cfg2.track_information_for_track(3, 18).unwrap());
+        // assert_eq!(track_info.sector_size_human_readable(), 512);
+        // assert_eq!(track_info.gap3(), 0x30);
+        // assert_eq!(track_info.nb_sectors(),10);
+        // assert_eq!(track_info.sector_id_at(0), 0xb4);
+        // assert_eq!(track_info.sector_id_at(9), 0xb3);
+        //
+        // assert_eq!(
+        // cfg.explode(),
+        // cfg2.explode()
+        // );
+        //
         let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);
@@ -400,14 +398,14 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         check_track(
             0,
             512,                                                     // sector size
-            &[0xc1, 0xc6, 0xc2, 0xc7, 0xc3, 0xc8, 0xc4, 0xc9, 0xc5], // sectors ids
+            &[0xC1, 0xC6, 0xC2, 0xC7, 0xC3, 0xC8, 0xC4, 0xC9, 0xC5]  // sectors ids
         );
 
         for track in &[1, 11, 21, 31, 41] {
             check_track(
                 *track,
                 512, // sector size
-                &[0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba],
+                &[0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA]
             );
         }
 
@@ -415,7 +413,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
             check_track(
                 *track,
                 512, // sector size
-                &[0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xb1, 0xb2, 0xb3],
+                &[0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xB1, 0xB2, 0xB3]
             );
         }
 
@@ -429,9 +427,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         let catalog = amsdos.catalog();
         let nb_entries = catalog.used_entries().count();
         assert_eq!(0, nb_entries);
-        /*
-        let dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
-        assert_eq!(dsk, dsk2)
-        */
+        // let dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
+        // assert_eq!(dsk, dsk2)
     }
 }

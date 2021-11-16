@@ -12,16 +12,16 @@ mod tests {
         visit_token(&Token::Org(Expr::Value(10), None), &mut env);
         visit_token(
             &Token::Defb(vec![Expr::Value(10), Expr::Value(5)]),
-            &mut env,
+            &mut env
         );
         visit_token(
             &Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
                 Some(DataAccess::Register8(Register8::L)),
-                None,
+                None
             ),
-            &mut env,
+            &mut env
         );
     }
 
@@ -35,31 +35,31 @@ mod tests {
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
                 Some(DataAccess::Register8(Register8::A)),
-                None,
+                None
             ),
-            &mut env,
+            &mut env
         );
-        assert_eq!(env.peek(&0x0000.into()), 0x7f);
+        assert_eq!(env.peek(&0x0000.into()), 0x7F);
 
         visit_token(
             &Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
                 Some(DataAccess::Register8(Register8::L)),
-                None,
+                None
             ),
-            &mut env,
+            &mut env
         );
-        assert_eq!(env.peek(&0x0001.into()), 0x7d);
+        assert_eq!(env.peek(&0x0001.into()), 0x7D);
 
         visit_token(
             &Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::C)),
                 Some(DataAccess::Register8(Register8::C)),
-                None,
+                None
             ),
-            &mut env,
+            &mut env
         );
         assert_eq!(env.peek(&0x0002.into()), 0x49);
     }
@@ -72,7 +72,7 @@ mod tests {
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
                 Some(DataAccess::Register8(Register8::L)),
-                None,
+                None
             ),
         ];
 
@@ -95,7 +95,7 @@ mod tests {
 .other_lines
     defs 64 - 4
     dec a               ; 1
-    jr nz, .other_lines ; 3",
+    jr nz, .other_lines ; 3"
         )
         .expect("Unable to assemble");
 

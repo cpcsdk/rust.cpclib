@@ -1,13 +1,15 @@
-use cpclib_common::nom::{
-    error::{ErrorKind, ParseError},
-    Compare, CompareResult, Err, FindSubstring, IResult, InputIter, InputLength, InputTake, Needed,
-    Offset, Slice,
-};
-use cpclib_common::nom_locate::LocatedSpan;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use super::{ParsingState, context::ParserContext};
+use cpclib_common::nom::error::{ErrorKind, ParseError};
+use cpclib_common::nom::{
+    Compare, CompareResult, Err, FindSubstring, IResult, InputIter, InputLength, InputTake, Needed,
+    Offset, Slice
+};
+use cpclib_common::nom_locate::LocatedSpan;
+
+use super::context::ParserContext;
+use super::ParsingState;
 
 #[derive(Clone, PartialEq)]
 pub struct Z80Span(
@@ -18,9 +20,9 @@ pub struct Z80Span(
             // The full source (same as the &str)
             Arc<String>,
             // The parsing context
-            Arc<ParserContext>,
-        ),
-    >,
+            Arc<ParserContext>
+        )
+    >
 );
 
 impl From<&'src str> for Z80Span {
@@ -32,12 +34,12 @@ impl From<&'src str> for Z80Span {
 
         Self(LocatedSpan::new_extra(
             // The string is safe on the heap
-            unsafe { 
+            unsafe {
                 std::str::from_utf8_unchecked(
                     &*std::ptr::slice_from_raw_parts(src.as_ptr(), len) as _
                 )
             },
-            (src, ctx),
+            (src, ctx)
         ))
     }
 }
@@ -50,7 +52,7 @@ impl From<String> for Z80Span {
         Self(LocatedSpan::new_extra(
             // The string is safe on the heap
             unsafe { &*(src.as_str() as *const str) as &'static str },
-            (src, ctx),
+            (src, ctx)
         ))
     }
 }
@@ -58,12 +60,12 @@ impl From<String> for Z80Span {
 impl Z80Span {
     pub fn from_standard_span(
         span: LocatedSpan<&'static str, ()>,
-        extra: (Arc<String>, Arc<ParserContext>),
+        extra: (Arc<String>, Arc<ParserContext>)
     ) -> Self {
         {
             let span_addr = span.fragment().as_ptr();
             let extra_addr = extra.0.as_ptr();
-         // TODO; no idea why it fails :()
+            // TODO; no idea why it fails :()
             //   assert!(std::ptr::eq(span_addr, extra_addr));
         }
 
@@ -72,7 +74,7 @@ impl Z80Span {
                 span.location_offset(),
                 span.location_line(),
                 span.fragment(),
-                extra,
+                extra
             )
         })
     }
@@ -85,7 +87,7 @@ impl<'a> Into<LocatedSpan<&'a str>> for Z80Span {
                 self.location_offset(),
                 self.location_line(),
                 self.fragment(),
-                (),
+                ()
             )
         }
     }
@@ -93,6 +95,7 @@ impl<'a> Into<LocatedSpan<&'a str>> for Z80Span {
 
 impl Deref for Z80Span {
     type Target = LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)>;
+
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -116,6 +119,7 @@ impl Compare<&'static str> for Z80Span {
     fn compare(&self, t: &'static str) -> CompareResult {
         self.deref().compare(t)
     }
+
     fn compare_no_case(&self, t: &'static str) -> CompareResult {
         self.deref().compare_no_case(t)
     }
@@ -123,10 +127,8 @@ impl Compare<&'static str> for Z80Span {
 impl cpclib_common::nom::InputIter for Z80Span {
     type Item =
         <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::Item;
-
     type Iter =
         <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::Iter;
-
     type IterElem =
         <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::IterElem;
 
@@ -139,9 +141,7 @@ impl cpclib_common::nom::InputIter for Z80Span {
     }
 
     fn position<P>(&self, predicate: P) -> Option<usize>
-    where
-        P: Fn(Self::Item) -> bool,
-    {
+    where P: Fn(Self::Item) -> bool {
         self.deref().position(predicate)
     }
 
@@ -178,50 +178,48 @@ impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
         <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::Item;
 
     fn split_at_position<P, E: ParseError<Self>>(&self, predicate: P) -> IResult<Self, Self, E>
-    where
-        P: Fn(Self::Item) -> bool,
-    {
+    where P: Fn(Self::Item) -> bool {
         match self.deref().position(predicate) {
             Some(n) => Ok(self.take_split(n)),
-            None => Err(Err::Incomplete(cpclib_common::nom::Needed::new(1))),
+            None => Err(Err::Incomplete(cpclib_common::nom::Needed::new(1)))
         }
     }
 
     fn split_at_position1<P, E: ParseError<Self>>(
         &self,
         predicate: P,
-        e: ErrorKind,
+        e: ErrorKind
     ) -> IResult<Self, Self, E>
     where
-        P: Fn(Self::Item) -> bool,
+        P: Fn(Self::Item) -> bool
     {
         match self.deref().position(predicate) {
             Some(0) => Err(Err::Error(E::from_error_kind(self.clone(), e))),
             Some(n) => Ok(self.take_split(n)),
-            None => Err(Err::Incomplete(cpclib_common::nom::Needed::new(1))),
+            None => Err(Err::Incomplete(cpclib_common::nom::Needed::new(1)))
         }
     }
 
     fn split_at_position_complete<P, E: ParseError<Self>>(
         &self,
-        predicate: P,
+        predicate: P
     ) -> IResult<Self, Self, E>
     where
-        P: Fn(Self::Item) -> bool,
+        P: Fn(Self::Item) -> bool
     {
         match self.split_at_position(predicate) {
             Err(Err::Incomplete(_)) => Ok(self.take_split(self.input_len())),
-            res => res,
+            res => res
         }
     }
 
     fn split_at_position1_complete<P, E: ParseError<Self>>(
         &self,
         predicate: P,
-        e: ErrorKind,
+        e: ErrorKind
     ) -> IResult<Self, Self, E>
     where
-        P: Fn(Self::Item) -> bool,
+        P: Fn(Self::Item) -> bool
     {
         match self.fragment().position(predicate) {
             Some(0) => Err(Err::Error(E::from_error_kind(self.clone(), e))),
@@ -229,7 +227,8 @@ impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
             None => {
                 if self.fragment().input_len() == 0 {
                     Err(Err::Error(E::from_error_kind(self.clone(), e)))
-                } else {
+                }
+                else {
                     Ok(self.take_split(self.input_len()))
                 }
             }
@@ -237,8 +236,7 @@ impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
     }
 }
 impl<'src, 'ctx, U> FindSubstring<U> for Z80Span
-where
-    &'src str: FindSubstring<U>,
+where &'src str: FindSubstring<U>
 {
     #[inline]
     fn find_substring(&self, substr: U) -> Option<usize> {
@@ -274,23 +272,20 @@ impl Z80Span {
         Self(LocatedSpan::new_extra(
             // pointer is always good as source is store in a Arc
             unsafe { &*(src.as_str() as *const str) as &'static str },
-            (Arc::clone(&src), Arc::clone(&ctx)),
+            (Arc::clone(&src), Arc::clone(&ctx))
         ))
     }
 
-    pub fn context(& self) -> & ParserContext {
-        & self.0.extra.1
+    pub fn context(&self) -> &ParserContext {
+        &self.0.extra.1
     }
 }
 
 impl Z80Span {
-    pub fn clone_with_state(&self, state: ParsingState ) -> Self {
+    pub fn clone_with_state(&self, state: ParsingState) -> Self {
         let ctx = self.context().clone_with_state(state);
         let mut clone = self.clone();
-        clone.extra = (
-            self.extra.0.clone(),
-            Arc::new(ctx)
-        );
+        clone.extra = (self.extra.0.clone(), Arc::new(ctx));
         clone
     }
 

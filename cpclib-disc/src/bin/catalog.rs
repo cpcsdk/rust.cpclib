@@ -13,12 +13,11 @@
 #![deny(clippy::pedantic)]
 #![cfg(feature = "catalog")]
 
-/// Catalog tool manipulator.
-///
-use cpclib_common::clap::{App, Arg};
 use std::fs::File;
 use std::io::{Read, Write};
 
+/// Catalog tool manipulator.
+use cpclib_common::clap::{App, Arg};
 use cpclib_common::num::Num;
 use cpclib_disc::amsdos::*;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
@@ -28,18 +27,21 @@ use simplelog::*;
 pub fn to_number<T>(repr: &str) -> T
 where
     T: Num,
-    <T as cpclib_common::num::Num>::FromStrRadixErr: std::fmt::Debug,
+    <T as cpclib_common::num::Num>::FromStrRadixErr: std::fmt::Debug
 {
     dbg!(repr);
     let repr = repr.trim();
     let repr = &repr;
     if repr.starts_with("0x") {
         T::from_str_radix(dbg!(&repr[2..]), 16)
-    } else if repr.starts_with("\\$") || repr.starts_with('&') {
+    }
+    else if repr.starts_with("\\$") || repr.starts_with('&') {
         T::from_str_radix(dbg!(&repr[1..]), 16)
-    } else if repr.starts_with('0') {
+    }
+    else if repr.starts_with('0') {
         T::from_str_radix(dbg!(repr), 8)
-    } else {
+    }
+    else {
         T::from_str_radix(dbg!(repr), 10)
     }
     .expect("Unable to parse number")
@@ -50,7 +52,7 @@ fn main() -> std::io::Result<()> {
         LevelFilter::Debug,
         Config::default(),
         TerminalMode::Mixed,
-        ColorChoice::Auto,
+        ColorChoice::Auto
     )
     .expect("Unable to build logger");
 
@@ -176,7 +178,8 @@ fn main() -> std::io::Result<()> {
             let dsk = ExtendedDsk::open(catalog_fname).expect("unable to read the dsk file");
             let manager = AmsdosManager::new_from_disc(dsk, Head::A);
             manager.catalog()
-        } else {
+        }
+        else {
             // Read a catalog file
             let mut file = File::open(catalog_fname)?;
             file.read_to_end(&mut content)?;
@@ -210,9 +213,11 @@ fn main() -> std::io::Result<()> {
 
                 print!(" {}Kb {:?}", entry.used_space(), entry.used_blocs());
                 println!();
-            } else if is_present && contains_control_chars && listall {
+            }
+            else if is_present && contains_control_chars && listall {
                 println!("{}. => CONTROL CHARS <=", idx);
-            } else if !is_present {
+            }
+            else if !is_present {
                 println!("{}. => EMPTY SLOT <=", idx);
             }
         }
@@ -266,7 +271,8 @@ fn main() -> std::io::Result<()> {
         // Write the result
         if catalog_fname.contains("dsk") {
             unimplemented!("Need to implement that");
-        } else {
+        }
+        else {
             let mut file = File::create(catalog_fname)?;
             file.write_all(&catalog_content.as_bytes())?;
         }

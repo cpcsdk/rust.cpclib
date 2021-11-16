@@ -1,8 +1,10 @@
 use std::io::Write;
 
+use super::delayed_command::*;
+use super::report::SavedFile;
+use super::save_command::SaveCommand;
+use super::Env;
 use crate::error::AssemblerError;
-
-use super::{delayed_command::*, report::SavedFile, save_command::SaveCommand, Env};
 pub type ProtectedArea = std::ops::RangeInclusive<u16>;
 
 /// Store all the compilation information for the currently selected 64kb page
@@ -24,7 +26,7 @@ pub struct PageInformation {
     pub(crate) fail_next_write_if_zero: bool,
 
     /// List of save commands  that will be executed ONLY after full assembling (they are emptied at the beginning of each pass)
-    delayed_commands: DelayedCommands,
+    delayed_commands: DelayedCommands
 }
 
 impl Default for PageInformation {
@@ -34,26 +36,15 @@ impl Default for PageInformation {
             maxadr: 0,
             logical_outputadr: 0,
             logical_codeadr: 0,
-            limit: 0xffff,
+            limit: 0xFFFF,
             protected_areas: Vec::new(),
             fail_next_write_if_zero: false,
-            delayed_commands: DelayedCommands::default(),
+            delayed_commands: DelayedCommands::default()
         }
     }
 }
 
 impl PageInformation {
-    /// Properly set the information for a new pass
-    pub fn new_pass(&mut self) {
-        self.startadr = None;
-        self.maxadr = 0;
-        self.logical_outputadr = 0;
-        self.logical_codeadr = 0;
-        self.limit = 0xffff;
-        self.fail_next_write_if_zero = false;
-        self.delayed_commands.clear();
-    }
-
     delegate::delegate! {
         to self.delayed_commands {
             pub fn add_breakpoint_command(&mut self, command: BreakpointCommand);
@@ -77,5 +68,16 @@ impl PageInformation {
             pub fn collect_breakpoints(&self)-> &[BreakpointCommand];
         }
 
+    }
+
+    /// Properly set the information for a new pass
+    pub fn new_pass(&mut self) {
+        self.startadr = None;
+        self.maxadr = 0;
+        self.logical_outputadr = 0;
+        self.logical_codeadr = 0;
+        self.limit = 0xFFFF;
+        self.fail_next_write_if_zero = false;
+        self.delayed_commands.clear();
     }
 }

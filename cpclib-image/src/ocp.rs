@@ -1,5 +1,4 @@
-///! Utility code related to OCP
-///
+/// ! Utility code related to OCP
 
 pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D) -> Vec<u8> {
     eprintln!("[WARNING] OCP compression has never been tested");
@@ -36,21 +35,25 @@ pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D) -> Vec<u8> {
             res.push(MARKER);
             res.push(1);
             res.push(MARKER);
-        } else {
+        }
+        else {
             if previous == current {
                 if count == 255 {
                     res.push(MARKER);
                     res.push(0);
                     res.push(current);
                     count = 0;
-                } else {
+                }
+                else {
                     count += 1;
                 }
-            } else {
+            }
+            else {
                 if count == 1 {
                     debug_assert!(MARKER != current);
                     res.push(current);
-                } else {
+                }
+                else {
                     res.push(MARKER);
                     res.push(count);
                     res.push(current);
@@ -64,7 +67,8 @@ pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D) -> Vec<u8> {
 
     if count == 1 {
         res.push(previous);
-    } else if count > 1 {
+    }
+    else if count > 1 {
         res.push(MARKER);
         res.push(count);
         res.push(previous);

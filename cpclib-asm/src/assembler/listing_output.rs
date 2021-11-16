@@ -1,12 +1,13 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
+use std::io::Write;
+use std::ops::Deref;
 use std::sync::{Arc, RwLock};
-use std::{fmt::Debug, io::Write};
 
-use crate::preamble::LocatedToken;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::Token;
-use std::ops::Deref;
+
+use crate::preamble::LocatedToken;
 /// Generate an output listing.
 /// Can be useful to detect issues
 pub struct ListingOutput {
@@ -26,14 +27,14 @@ pub struct ListingOutput {
 
     current_first_address: u32,
     current_address_kind: AddressKind,
-    crunched_section_counter: usize,
+    crunched_section_counter: usize
 }
 #[derive(PartialEq)]
 pub enum AddressKind {
     Address,
     CrunchedArea,
     Mixed,
-    None,
+    None
 }
 
 impl Display for AddressKind {
@@ -45,7 +46,7 @@ impl Display for AddressKind {
                 AddressKind::Address => ' ',
                 AddressKind::CrunchedArea => 'C',
                 AddressKind::Mixed => 'M',
-                AddressKind::None => 'N',
+                AddressKind::None => 'N'
             }
         )
     }
@@ -69,7 +70,7 @@ impl ListingOutput {
             current_source: None,
             current_first_address: 0,
             current_address_kind: AddressKind::None,
-            crunched_section_counter: 0,
+            crunched_section_counter: 0
         }
     }
 
@@ -80,11 +81,13 @@ impl ListingOutput {
     /// Check if the token is for the same source
     fn token_is_on_same_source(&self, token: &LocatedToken) -> bool {
         match &self.current_source {
-            Some(current_source) => std::ptr::eq(
-                token.context().0.deref().as_ptr(),
-                current_source.as_str().as_ptr(),
-            ),
-            None => false,
+            Some(current_source) => {
+                std::ptr::eq(
+                    token.context().0.deref().as_ptr(),
+                    current_source.as_str().as_ptr()
+                )
+            }
+            None => false
         }
     }
 
@@ -95,7 +98,7 @@ impl ListingOutput {
                 self.token_is_on_same_source(token)
                     && *current_location == token.span().location_line()
             }
-            None => false,
+            None => false
         }
     }
 
@@ -103,14 +106,14 @@ impl ListingOutput {
         match token {
             LocatedToken::Standard {
                 token: Token::Macro(..),
-                span,
+                span
             } => {
-                //		self.need_to_cut = true;
+                // 		self.need_to_cut = true;
                 dbg!(span.fragment().to_string())
             }
 
             _ => {
-                //			self.need_to_cut = false;
+                // 			self.need_to_cut = false;
                 unsafe { std::str::from_utf8_unchecked(token.span().get_line_beginning()) }
                     .to_owned()
             }
@@ -123,7 +126,7 @@ impl ListingOutput {
         token: &LocatedToken,
         bytes: &[u8],
         address: u32,
-        address_kind: AddressKind,
+        address_kind: AddressKind
     ) {
         if !self.activated {
             return;
@@ -138,7 +141,7 @@ impl ListingOutput {
             self.current_source = Some(token.context().0.clone());
 
             // TODO manage differently for macros and so on
-            //let current_line = current_line.split("\n").next().unwrap_or(current_line);
+            // let current_line = current_line.split("\n").next().unwrap_or(current_line);
             self.current_line_group =
                 Some((token.span().location_line(), Self::extract_code(token)));
             self.current_first_address = address;
@@ -149,9 +152,11 @@ impl ListingOutput {
         self.current_line_bytes.extend_from_slice(bytes);
         self.current_address_kind = if self.current_address_kind == AddressKind::None {
             address_kind
-        } else if self.current_address_kind != address_kind {
+        }
+        else if self.current_address_kind != address_kind {
             AddressKind::Mixed
-        } else {
+        }
+        else {
             address_kind
         };
 
@@ -164,7 +169,7 @@ impl ListingOutput {
         // retrieve the line
         let (line_number, line) = match &self.current_line_group {
             Some((idx, line)) => (idx, line),
-            None => return,
+            None => return
         };
 
         // build the iterators over the line representation of source code and data
@@ -191,10 +196,11 @@ impl ListingOutput {
             }
 
             let loc_representation = if false
-            /*(data_representation.is_empty() && !self.current_address_is_value) || idx!=0 */
+            // (data_representation.is_empty() && !self.current_address_is_value) || idx!=0
             {
                 "    ".to_owned()
-            } else {
+            }
+            else {
                 format!(
                     "{:04X}{} ",
                     self.current_first_address, self.current_address_kind
@@ -203,7 +209,8 @@ impl ListingOutput {
 
             let line_nb_representation = if current_inner_line.is_none() {
                 "    ".to_owned()
-            } else {
+            }
+            else {
                 format!("{:4}", line_number + idx)
             };
 
@@ -233,7 +240,7 @@ impl ListingOutput {
 
     /// Print filename if needed
     pub fn manage_fname(&mut self, token: &LocatedToken) -> Option<String> {
-        //	dbg!(token);
+        // 	dbg!(token);
 
         let ctx = &token.span().extra.1;
         let fname = ctx
@@ -246,17 +253,18 @@ impl ListingOutput {
             Some(fname) => {
                 let print = match self.current_fname.as_ref() {
                     Some(current_fname) => *current_fname != fname,
-                    None => true,
+                    None => true
                 };
 
                 if print {
                     self.current_fname = Some(fname.clone());
                     Some(format!("Context: {}", fname))
-                } else {
+                }
+                else {
                     None
                 }
             }
-            None => None,
+            None => None
         }
     }
 
@@ -287,13 +295,14 @@ pub struct ListingOutputTrigger {
     /// the bytes progressively collected
     pub(crate) bytes: Vec<u8>,
     pub(crate) start: u32,
-    pub(crate) builder: Arc<RwLock<ListingOutput>>,
+    pub(crate) builder: Arc<RwLock<ListingOutput>>
 }
 
 impl ListingOutputTrigger {
     pub fn write_byte(&mut self, b: u8) {
         self.bytes.push(b);
     }
+
     pub fn new_token(&mut self, new: &LocatedToken, address: u32, kind: AddressKind) {
         if let Some(token) = &self.token {
             self.builder
@@ -306,13 +315,14 @@ impl ListingOutputTrigger {
         self.bytes.clear();
         self.start = address;
     }
+
     pub fn finish(&mut self) {
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(
                 token,
                 &self.bytes,
                 self.start,
-                AddressKind::Address,
+                AddressKind::Address
             );
         }
         self.builder.write().unwrap().finish();

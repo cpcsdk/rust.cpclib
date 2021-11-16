@@ -1,10 +1,10 @@
 use cpclib_asm::preamble::{
     BinaryFunction, DataAccess, Expr, FlagTest, Listing, Mnemonic, Register16, Register8,
-    StableTickerAction, Token, UnaryFunction,
+    StableTickerAction, Token, UnaryFunction
 };
+use cpclib_common::smol_str::SmolStr;
 use proc_macro2::*;
 use quote::TokenStreamExt;
-use cpclib_common::smol_str::SmolStr;
 
 fn upper_first(repr: &str) -> String {
     format!("{}{}", repr[0..=0].to_uppercase(), repr[1..].to_lowercase())
@@ -16,8 +16,7 @@ pub trait MyToTokens {
 }
 
 impl<T> MyToTokens for Option<T>
-where
-    T: MyToTokens,
+where T: MyToTokens
 {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
@@ -54,7 +53,7 @@ impl MyToTokens for SmolStr {
         tokens.append(Punct::new(':', Spacing::Joint));
         tokens.append(Punct::new(':', Spacing::Joint));
         tokens.append(Ident::new("new", Span::call_site()));
-        
+
         let mut inner_token = TokenStream::new();
         (**self).to_tokens(&mut inner_token);
         tokens.append(Group::new(Delimiter::Parenthesis, inner_token));
@@ -97,13 +96,11 @@ impl<T: Sized + MyToTokens> MyToTokens for &[T] {
     }
 }
 
-/*
-impl<T> MyToTokens for T where T: ToTokens {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        self.to_tokens()
-    }
-}
-*/
+// impl<T> MyToTokens for T where T: ToTokens {
+// fn to_tokens(&self, tokens: &mut TokenStream) {
+// self.to_tokens()
+// }
+// }
 
 impl MyToTokens for Listing {
     fn to_tokens(&self, tokens: &mut TokenStream) {
@@ -133,9 +130,7 @@ fn no_param(name: &str, tokens: &mut TokenStream) {
 }
 
 fn one_param<T>(name: &str, t: &T, tokens: &mut TokenStream)
-where
-    T: MyToTokens,
-{
+where T: MyToTokens {
     tokens.append(Ident::new(name, Span::call_site()));
     let mut inside = TokenStream::new();
     t.to_tokens(&mut inside);
@@ -145,7 +140,7 @@ where
 fn two_params<T1, T2>(name: &str, t1: &T1, t2: &T2, tokens: &mut TokenStream)
 where
     T1: MyToTokens,
-    T2: MyToTokens,
+    T2: MyToTokens
 {
     tokens.append(Ident::new(name, Span::call_site()));
 
@@ -161,7 +156,7 @@ fn three_params<T1, T2, T3>(name: &str, t1: &T1, t2: &T2, t3: &T3, tokens: &mut 
 where
     T1: MyToTokens,
     T2: MyToTokens,
-    T3: MyToTokens,
+    T3: MyToTokens
 {
     tokens.append(Ident::new(name, Span::call_site()));
 
@@ -181,12 +176,12 @@ fn four_params<T1, T2, T3, T4>(
     t2: &T2,
     t3: &T3,
     t4: &T4,
-    tokens: &mut TokenStream,
+    tokens: &mut TokenStream
 ) where
     T1: MyToTokens,
     T2: MyToTokens,
     T3: MyToTokens,
-    T4: MyToTokens,
+    T4: MyToTokens
 {
     tokens.append(Ident::new(name, Span::call_site()));
 
@@ -269,7 +264,7 @@ impl MyToTokens for Token {
                 four_params("Repeat", exp, lst, lab, count, tokens);
             }
 
-            _ => unimplemented!("impl MyToTokens for Token {{ fn to_tokens ...}} {:?}", self),
+            _ => unimplemented!("impl MyToTokens for Token {{ fn to_tokens ...}} {:?}", self)
         }
     }
 }
@@ -303,7 +298,7 @@ impl MyToTokens for Mnemonic {
             Mnemonic::ExHlDe => "ExHlDe".to_owned(),
             Mnemonic::ExMemSp => "ExMemSp".to_owned(),
             Mnemonic::Nop2 => "Nops2".to_owned(),
-            _ => upper_first(&self.to_string()),
+            _ => upper_first(&self.to_string())
         };
 
         tokens.append(Ident::new(&mnemo, Span::call_site()));
@@ -357,7 +352,7 @@ impl MyToTokens for DataAccess {
                 tokens.append(Group::new(Delimiter::Parenthesis, inside))
             }
 
-            _ => unimplemented!("DataAccess::{:?}", self),
+            _ => unimplemented!("DataAccess::{:?}", self)
         }
     }
 }
@@ -467,7 +462,7 @@ impl MyToTokens for Expr {
                 three_params("BinaryFunction", func, arg1, arg2, tokens);
             }
 
-            _ => unimplemented!("Expr::{:?}", self),
+            _ => unimplemented!("Expr::{:?}", self)
         }
     }
 }

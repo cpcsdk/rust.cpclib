@@ -1,25 +1,24 @@
+use std::fmt;
+use std::fs::File;
+use std::io::Read;
+use std::iter::Iterator;
+use std::path::Path;
+use std::str::FromStr;
+
 use cpclib_common::itertools;
 use cpclib_common::nom::branch::*;
 use cpclib_common::nom::bytes::complete::*;
 use cpclib_common::nom::character::complete::*;
 use cpclib_common::nom::combinator::*;
+use cpclib_common::nom::lib::std::convert::Into;
 use cpclib_common::nom::multi::*;
 use cpclib_common::nom::sequence::*;
 /// Parser of the disc configuraiton used by the Arkos Loader
 use cpclib_common::nom::*;
 use custom_error::custom_error;
 use itertools::Itertools;
-use std::iter::Iterator;
 
 use crate::edsk::*;
-use std::fmt;
-
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-
-use cpclib_common::nom::lib::std::convert::Into;
-use std::str::FromStr;
 
 const DATA_FORMAT_CFG: &str = "
 NbTrack = 40
@@ -59,7 +58,7 @@ pub struct DiscConfig {
     /// Number of heads in the disc (1 or 2)
     pub(crate) nb_heads: u8,
     /// List of tracks description
-    pub(crate) track_groups: Vec<TrackGroup>,
+    pub(crate) track_groups: Vec<TrackGroup>
 }
 
 impl FromStr for DiscConfig {
@@ -72,18 +71,21 @@ impl FromStr for DiscConfig {
             Ok((next, res)) => {
                 if next.trim().is_empty() {
                     Ok(res)
-                } else {
+                }
+                else {
                     Err(DiscConfigError::ParseError {
                         msg: format!(
                             "Bug in the parser, there is still content to parse: {}",
                             next
-                        ),
+                        )
                     })
                 }
             }
-            Err(error) => Err(DiscConfigError::ParseError {
-                msg: format!("{:?}", error),
-            }),
+            Err(error) => {
+                Err(DiscConfigError::ParseError {
+                    msg: format!("{:?}", error)
+                })
+            }
         }
     }
 }
@@ -128,7 +130,7 @@ impl DiscConfig {
     pub fn track_information_for_track<S: Into<Head>>(
         &self,
         head: S,
-        track: u8,
+        track: u8
     ) -> Option<&TrackGroup> {
         let head = head.into();
         self.track_groups
@@ -140,7 +142,7 @@ impl DiscConfig {
         let head_iterator = match self.nb_heads {
             2 => [Head::A, Head::B].iter(),
             1 => [Head::Unspecified].iter(),
-            _ => unreachable!(),
+            _ => unreachable!()
         };
         let track_iterator = 0..self.nb_tracks;
 
@@ -162,7 +164,7 @@ impl DiscConfig {
                     sector_size: track_group.sector_size,
                     gap3: track_group.gap3,
                     sector_id: track_group.sector_id.clone(),
-                    sector_id_head: track_group.sector_id_head.clone(),
+                    sector_id_head: track_group.sector_id_head.clone()
                 });
             }
         }
@@ -172,7 +174,7 @@ impl DiscConfig {
         Self {
             nb_tracks: self.nb_tracks,
             nb_heads: self.nb_heads,
-            track_groups: groups,
+            track_groups: groups
         }
     }
 }
@@ -190,7 +192,7 @@ pub struct TrackGroup {
     /// List of id of the sectors
     pub(crate) sector_id: Vec<u8>,
     /// List of logical head of the sectors
-    pub(crate) sector_id_head: Vec<u8>,
+    pub(crate) sector_id_head: Vec<u8>
 }
 
 #[allow(missing_docs)]
@@ -199,7 +201,7 @@ impl fmt::Display for TrackGroup {
         let head_info = match self.head {
             Head::A => "-A",
             Head::B => "-B",
-            Head::Unspecified => "",
+            Head::Unspecified => ""
         };
         let tracks_info = self.tracks.iter().map(|t| format!("{}", t)).join(",");
         let sector_id = self
@@ -268,7 +270,7 @@ impl TrackInformationList {
                 item.sector_size,
                 item.gap3,
                 item.sector_id.clone(),
-                item.sector_id_head.clone(),
+                item.sector_id_head.clone()
             )
         });
         // group_by
@@ -280,7 +282,7 @@ impl TrackInformationList {
                     item.sector_size,
                     item.gap3,
                     item.sector_id.clone(),
-                    item.sector_id_head.clone(),
+                    item.sector_id_head.clone()
                 )
             })
             .into_iter()
@@ -293,7 +295,7 @@ impl TrackInformationList {
                     sector_size: k.1,
                     gap3: k.2,
                     sector_id: k.3,
-                    sector_id_head: k.4,
+                    sector_id_head: k.4
                 }
             })
             .collect::<Vec<TrackGroup>>();
@@ -312,7 +314,8 @@ impl TrackInformation {
         let tracks = vec![self.track_number];
         let head: Head = if double_head {
             self.head_number.into()
-        } else {
+        }
+        else {
             Head::Unspecified
         };
         let sector_size = convert_fdc_sector_size_to_real_sector_size(self.sector_size);
@@ -344,7 +347,7 @@ impl TrackInformation {
             sector_size,
             gap3,
             sector_id,
-            sector_id_head,
+            sector_id_head
         }
     }
 }
@@ -356,7 +359,7 @@ impl ExtendedDsk {
         DiscConfig {
             nb_tracks: self.nb_tracks_per_head(),
             nb_heads: self.nb_heads(),
-            track_groups: self.track_list.to_cfg(2 == self.nb_heads()),
+            track_groups: self.track_list.to_cfg(2 == self.nb_heads())
         }
     }
 }
@@ -395,7 +398,7 @@ fn is_dec_digit(c: char) -> bool {
 fn hex(input: &str) -> IResult<&str, u16> {
     preceded(
         tag("0x"),
-        map_res(take_while_m_n(1, 2, is_hex_digit), from_hex),
+        map_res(take_while_m_n(1, 2, is_hex_digit), from_hex)
     )(input)
 }
 
@@ -408,7 +411,7 @@ fn value_of_key<'a>(key: &'static str) -> impl Fn(&'a str) -> IResult<&'a str, u
         delimited(
             tuple((space0, tag_no_case(key), space0, tag("="), space0)),
             number,
-            tuple((space0, opt(line_ending))),
+            tuple((space0, opt(line_ending)))
         )(input)
     }
 }
@@ -418,7 +421,7 @@ fn list_of_key<'a>(key: &'static str) -> impl Fn(&'a str) -> IResult<&'a str, Ve
         delimited(
             tuple((space0, tag_no_case(key), space0, tag("="), space0)),
             list_of_values,
-            tuple((space0, opt(line_ending))),
+            tuple((space0, opt(line_ending)))
         )(input)
     }
 }
@@ -433,11 +436,11 @@ fn track_group_head(input: &str) -> IResult<&str, TrackGroup> {
             tag_no_case("[Track-"),
             alt((
                 value(Head::A, tag_no_case("A")),
-                value(Head::B, tag_no_case("B")),
+                value(Head::B, tag_no_case("B"))
             )),
-            tag_no_case(":"),
+            tag_no_case(":")
         ),
-        value(Head::Unspecified, tag_no_case("[Track:")),
+        value(Head::Unspecified, tag_no_case("[Track:"))
     ))(input)?;
 
     let (input, tracks) =
@@ -461,8 +464,8 @@ fn track_group_head(input: &str) -> IResult<&str, TrackGroup> {
             sector_size,
             gap3: gap3 as u8,
             sector_id: sector_id.iter().map(|&v| v as u8).collect::<Vec<_>>(),
-            sector_id_head: sector_id_head.iter().map(|&v| v as u8).collect::<Vec<_>>(),
-        },
+            sector_id_head: sector_id_head.iter().map(|&v| v as u8).collect::<Vec<_>>()
+        }
     ))
 }
 
@@ -472,7 +475,7 @@ pub fn parse_config(input: &str) -> IResult<&str, DiscConfig> {
 
     let (input, nb_heads) = preceded(
         many0(empty_line),
-        alt((value_of_key("NbHead"), value_of_key("NbSide"))),
+        alt((value_of_key("NbHead"), value_of_key("NbSide")))
     )(input)?;
 
     let (input, track_groups) = fold_many1(
@@ -481,7 +484,7 @@ pub fn parse_config(input: &str) -> IResult<&str, DiscConfig> {
         |mut acc: Vec<_>, item| {
             acc.push(item);
             acc
-        },
+        }
     )(input)?;
 
     Ok((
@@ -489,8 +492,8 @@ pub fn parse_config(input: &str) -> IResult<&str, DiscConfig> {
         DiscConfig {
             nb_tracks: nb_tracks as _,
             nb_heads: nb_heads as _,
-            track_groups,
-        },
+            track_groups
+        }
     ))
 }
 

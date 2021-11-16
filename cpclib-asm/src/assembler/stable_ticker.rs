@@ -6,7 +6,7 @@ use crate::error::AssemblerError;
 /// They are updated each time an opcode is visited
 #[derive(Default, Clone)]
 pub struct StableTickerCounters {
-    counters: Vec<(String, usize)>,
+    counters: Vec<(String, usize)>
 }
 
 #[allow(missing_docs)]

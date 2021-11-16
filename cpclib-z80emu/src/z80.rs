@@ -1,15 +1,16 @@
 // trick to not be distirb by Register8/16
-use crate::preamble::*;
+use std::fmt;
+use std::fmt::Debug;
+/// ! Manage z80 CPU
+/// ! Could be used to simulate or generate code
+use std::mem::swap;
 
 use cpclib_asm::assembler::Env;
 use cpclib_common::num::integer::Integer;
 use cpclib_common::num::traits::{WrappingAdd, WrappingSub};
 use cpclib_common::num::One;
-use std::fmt;
-use std::fmt::Debug;
-///! Manage z80 CPU
-///! Could be used to simulate or generate code
-use std::mem::swap;
+
+use crate::preamble::*;
 
 /// Common trait for Register 8 and 6 bits
 #[allow(missing_docs)]
@@ -47,7 +48,7 @@ pub trait HasValue {
 /// Represents an 8 bit register
 #[derive(Copy, Clone, Debug)]
 pub struct Register8 {
-    val: u8,
+    val: u8
 }
 
 /// By default a Register8 is set to 0
@@ -102,7 +103,7 @@ impl Register8 {
 #[derive(Copy, Clone, Default)]
 pub struct Register16 {
     low: Register8,
-    high: Register8,
+    high: Register8
 }
 
 impl Debug for Register16 {
@@ -147,7 +148,7 @@ impl Register16 {
 #[derive(Default, Debug, Clone)]
 pub struct EmulationContext {
     /// The symbol table that can be used when ev
-    pub(crate) env: Env,
+    pub(crate) env: Env
 }
 
 impl EmulationContext {
@@ -185,7 +186,7 @@ pub struct Z80 {
     reg_de_prime: Register16,
     reg_hl_prime: Register16,
 
-    pub(crate) context: EmulationContext,
+    pub(crate) context: EmulationContext
 }
 
 #[allow(missing_docs)]
@@ -194,6 +195,7 @@ impl Z80 {
     pub fn pc(&self) -> &Register16 {
         &self.reg_pc
     }
+
     pub fn sp(&self) -> &Register16 {
         &self.reg_sp
     }
@@ -205,9 +207,11 @@ impl Z80 {
     pub fn bc(&self) -> &Register16 {
         &self.reg_bc
     }
+
     pub fn de(&self) -> &Register16 {
         &self.reg_de
     }
+
     pub fn hl(&self) -> &Register16 {
         &self.reg_hl
     }
@@ -215,6 +219,7 @@ impl Z80 {
     pub fn ix(&self) -> &Register16 {
         &self.reg_ix
     }
+
     pub fn iy(&self) -> &Register16 {
         &self.reg_iy
     }
@@ -223,6 +228,7 @@ impl Z80 {
         let tmp = self.af();
         tmp.high()
     }
+
     pub fn f(&self) -> &Register8 {
         let tmp = self.af();
         tmp.low()
@@ -232,6 +238,7 @@ impl Z80 {
         let tmp = self.bc();
         tmp.high()
     }
+
     pub fn c(&self) -> &Register8 {
         let tmp = self.bc();
         tmp.low()
@@ -241,6 +248,7 @@ impl Z80 {
         let tmp = self.de();
         tmp.high()
     }
+
     pub fn e(&self) -> &Register8 {
         let tmp = self.de();
         tmp.low()
@@ -250,6 +258,7 @@ impl Z80 {
         let tmp = self.hl();
         tmp.high()
     }
+
     pub fn l(&self) -> &Register8 {
         let tmp = self.hl();
         tmp.low()
@@ -259,6 +268,7 @@ impl Z80 {
         let tmp = self.ix();
         tmp.high()
     }
+
     pub fn ixl(&self) -> &Register8 {
         let tmp = self.ix();
         tmp.low()
@@ -268,6 +278,7 @@ impl Z80 {
         let tmp = self.iy();
         tmp.high()
     }
+
     pub fn iyl(&self) -> &Register8 {
         let tmp = self.iy();
         tmp.low()
@@ -277,6 +288,7 @@ impl Z80 {
     pub fn pc_mut(&mut self) -> &mut Register16 {
         &mut self.reg_pc
     }
+
     pub fn sp_mut(&mut self) -> &mut Register16 {
         &mut self.reg_sp
     }
@@ -288,9 +300,11 @@ impl Z80 {
     pub fn bc_mut(&mut self) -> &mut Register16 {
         &mut self.reg_bc
     }
+
     pub fn de_mut(&mut self) -> &mut Register16 {
         &mut self.reg_de
     }
+
     pub fn hl_mut(&mut self) -> &mut Register16 {
         &mut self.reg_hl
     }
@@ -298,6 +312,7 @@ impl Z80 {
     pub fn ix_mut(&mut self) -> &mut Register16 {
         &mut self.reg_ix
     }
+
     pub fn iy_mut(&mut self) -> &mut Register16 {
         &mut self.reg_iy
     }
@@ -306,6 +321,7 @@ impl Z80 {
         let tmp = self.af_mut();
         tmp.high_mut()
     }
+
     pub fn f_mut(&mut self) -> &mut Register8 {
         let tmp = self.af_mut();
         tmp.low_mut()
@@ -315,6 +331,7 @@ impl Z80 {
         let tmp = self.bc_mut();
         tmp.high_mut()
     }
+
     pub fn c_mut(&mut self) -> &mut Register8 {
         let tmp = self.bc_mut();
         tmp.low_mut()
@@ -324,6 +341,7 @@ impl Z80 {
         let tmp = self.de_mut();
         tmp.high_mut()
     }
+
     pub fn e_mut(&mut self) -> &mut Register8 {
         let tmp = self.de_mut();
         tmp.low_mut()
@@ -333,6 +351,7 @@ impl Z80 {
         let tmp = self.hl_mut();
         tmp.high_mut()
     }
+
     pub fn l_mut(&mut self) -> &mut Register8 {
         let tmp = self.hl_mut();
         tmp.low_mut()
@@ -342,6 +361,7 @@ impl Z80 {
         let tmp = self.ix_mut();
         tmp.high_mut()
     }
+
     pub fn ixl_mut(&mut self) -> &mut Register8 {
         let tmp = self.ix_mut();
         tmp.low_mut()
@@ -351,6 +371,7 @@ impl Z80 {
         let tmp = self.iy_mut();
         tmp.high_mut()
     }
+
     pub fn iyl_mut(&mut self) -> &mut Register8 {
         let tmp = self.iy_mut();
         tmp.low_mut()
@@ -369,13 +390,14 @@ impl Z80 {
     pub fn ex_de_hl(&mut self) {
         swap(&mut self.reg_hl, &mut self.reg_de);
     }
+
     // To reduce copy paste/implementation errors, all manipulation are translated as token usage
     pub fn copy_to_from(&mut self, to: tokens::Register8, from: tokens::Register8) {
         self.execute(&Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(to)),
             Some(DataAccess::Register8(from)),
-            None,
+            None
         ));
     }
 }
@@ -405,13 +427,13 @@ pub enum FlagPos {
     N = 1,
 
     // Bit 0, CF, Carry flag = Overflow bit. This bit is the most high bit that did not fit to the result. In addition to large calculations and bit transfers it is mostly used in comparisons to see if the subtraction result was smaller or greater than zero. If the carry flag was set (= 1 = "C") the result did overflow. Other ways the flag is reset (= 0 = "NC") "No carry". Please note that 8bit INC/DEC commands do not update this flag.
-    Carry = 0,
+    Carry = 0
 }
 
 #[allow(unused)]
 struct ExtraFlags {
     iff1: u8,
-    iff2: u8,
+    iff2: u8
 }
 
 #[cfg(test)]
@@ -449,7 +471,7 @@ mod tests {
         assert_eq!(bc.high().value(), 50);
         assert_eq!(bc.value(), 50 * 256);
 
-        bc.set(0xffff);
+        bc.set(0xFFFF);
         bc.add(1);
         assert_eq!(bc.value(), 0);
 
@@ -491,7 +513,7 @@ mod tests {
         z80.a_mut().dec();
         assert_eq!(0, z80.a().value());
         z80.a_mut().dec();
-        assert_eq!(0xff, z80.a().value());
+        assert_eq!(0xFF, z80.a().value());
         z80.a_mut().inc();
         assert_eq!(0, z80.a().value());
     }
@@ -501,26 +523,26 @@ mod tests {
         let mut z80 = Z80::default();
         z80.pc_mut().set(0x4000);
         z80.hl_mut().set(0x8000);
-        z80.de_mut().set(0xc000);
+        z80.de_mut().set(0xC000);
         z80.a_mut().set(0);
 
         let pop_bc = Token::OpCode(
             Mnemonic::Pop,
             Some(DataAccess::Register16(tokens::Register16::Bc)),
             None,
-            None,
+            None
         );
         let ld_l_a = Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(tokens::Register8::L)),
             Some(DataAccess::Register8(tokens::Register8::A)),
-            None,
+            None
         );
         let add_a_b = Token::OpCode(
             Mnemonic::Add,
             Some(DataAccess::Register8(tokens::Register8::A)),
             Some(DataAccess::Register8(tokens::Register8::B)),
-            None,
+            None
         );
         let ldi = Token::OpCode(Mnemonic::Ldi, None, None, None);
 
@@ -538,6 +560,6 @@ mod tests {
 
         z80.execute(&ldi);
         assert_eq!(z80.pc().value(), 0x4005);
-        assert_eq!(z80.de().value(), 0xc001);
+        assert_eq!(z80.de().value(), 0xC001);
     }
 }

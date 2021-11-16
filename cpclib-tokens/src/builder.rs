@@ -1,7 +1,7 @@
-///! Utility code to build more easily tokens to manipulate in code generators
-use crate::tokens::*;
-
 use paste;
+
+/// ! Utility code to build more easily tokens to manipulate in code generators
+use crate::tokens::*;
 
 /// NOP instruction
 pub fn nop() -> Token {
@@ -23,9 +23,7 @@ pub fn label<S: AsRef<str>>(label: S) -> Token {
     Token::Label(label.as_ref().into())
 }
 
-/**
- * Generate an ASSERT token from the string description of the expression
- */
+/// Generate an ASSERT token from the string description of the expression
 pub fn assert_str<S: AsRef<str>>(expr: S) -> Token {
     Token::Assert(expr.as_ref().into(), None)
 }
@@ -54,9 +52,7 @@ pub fn defb<E: Into<Expr>>(val: E) -> Token {
 
 /// Generate defb directive from a slice of expression
 pub fn defb_elements<E: Into<Expr>>(elements: &[E]) -> Token
-where
-    E: Copy,
-{
+where E: Copy {
     let mut data = Vec::new();
     for val in elements {
         let val = *val;
@@ -172,7 +168,7 @@ pub fn push_ix() -> Token {
         Mnemonic::Push,
         Some(DataAccess::IndexRegister16(IndexRegister16::Ix)),
         None,
-        None,
+        None
     )
 }
 
@@ -182,7 +178,7 @@ pub fn push_iy() -> Token {
         Mnemonic::Push,
         Some(DataAccess::IndexRegister16(IndexRegister16::Iy)),
         None,
-        None,
+        None
     )
 }
 
@@ -192,7 +188,7 @@ pub fn pop_ix() -> Token {
         Mnemonic::Pop,
         Some(DataAccess::IndexRegister16(IndexRegister16::Ix)),
         None,
-        None,
+        None
     )
 }
 
@@ -202,7 +198,7 @@ pub fn pop_iy() -> Token {
         Mnemonic::Pop,
         Some(DataAccess::IndexRegister16(IndexRegister16::Iy)),
         None,
-        None,
+        None
     )
 }
 
@@ -213,7 +209,7 @@ pub fn ret() -> Token {
 
 #[allow(missing_docs)]
 pub fn breakpoint_winape() -> Token {
-    Token::Defb(vec![Expr::Value(0xed), Expr::Value(0xff)])
+    Token::Defb(vec![Expr::Value(0xED), Expr::Value(0xFF)])
 }
 
 #[allow(missing_docs)]
@@ -240,7 +236,7 @@ pub fn incbin<S: AsRef<str>>(fname: S) -> Token {
         length: None,
         extended_offset: None,
         off: false,
-        content: None.into(),
+        content: None.into()
     }
 }
 
@@ -280,7 +276,7 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
         Register8::L.into(),
-        DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, expr),
+        DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, expr)
     )
 }
 
@@ -347,7 +343,7 @@ pub fn ld_register8_mem_hl(reg: Register8) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
         reg.into(),
-        DataAccess::MemoryRegister16(Register16::Hl),
+        DataAccess::MemoryRegister16(Register16::Hl)
     )
 }
 
@@ -386,7 +382,7 @@ pub fn ld_mem_hl_register8(reg: Register8) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
         DataAccess::MemoryRegister16(Register16::Hl),
-        reg.into(),
+        reg.into()
     )
 }
 

@@ -262,7 +262,7 @@ pub const TABINSTRFDCB: [&'static str; 256] = [
     "SET 7,(IY+nn), H",
     "SET 7,(IY+nn), L",
     "SET 7,(IY+nn)",
-    "SET 7,(IY+nn), A",
+    "SET 7,(IY+nn), A"
 ];
 
 pub const TABINSTRDDCB: [&'static str; 256] = [
@@ -521,7 +521,7 @@ pub const TABINSTRDDCB: [&'static str; 256] = [
     "SET 7,(IX+nn), H",
     "SET 7,(IX+nn), L",
     "SET 7,(IX+nn)",
-    "SET 7,(IX+nn), A",
+    "SET 7,(IX+nn), A"
 ];
 
 pub const TABINSTRCB: [&'static str; 256] = [
@@ -780,7 +780,7 @@ pub const TABINSTRCB: [&'static str; 256] = [
     "SET 7,H",
     "SET 7,L",
     "SET 7,(HL)",
-    "SET 7,A",
+    "SET 7,A"
 ];
 
 pub const TABINSTRED: [&'static str; 256] = [
@@ -1039,7 +1039,7 @@ pub const TABINSTRED: [&'static str; 256] = [
     "",
     "",
     "",
-    "",
+    ""
 ];
 
 pub const TABINSTRDD: [&'static str; 256] = [
@@ -1298,7 +1298,7 @@ pub const TABINSTRDD: [&'static str; 256] = [
     "",
     "",
     "",
-    "",
+    ""
 ];
 
 pub const TABINSTRFD: [&'static str; 256] = [
@@ -1557,7 +1557,7 @@ pub const TABINSTRFD: [&'static str; 256] = [
     "",
     "",
     "",
-    "",
+    ""
 ];
 
 pub const TABINSTR: [&'static str; 256] = [
@@ -1788,7 +1788,7 @@ pub const TABINSTR: [&'static str; 256] = [
     "RET PO",
     "POP HL",
     "JP PO,nnnn",
-    "EX (SP),HL", //PO and PE have been exchanged acoarding to Zack book and this page
+    "EX (SP),HL", // PO and PE have been exchanged acoarding to Zack book and this page
     "CALL PO,nnnn",
     "PUSH HL",
     "AND nn",
@@ -1816,7 +1816,7 @@ pub const TABINSTR: [&'static str; 256] = [
     "CALL M,nnnn",
     "",
     "CP nn",
-    "RST 38",
+    "RST 38"
 ];
 
 /// Generate a listing from the list of bytes. An error is generated if it is impossible to disassemble the flux
@@ -1837,33 +1837,34 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
             // Current mnemonic is nop
             [0, rest @ ..] => continue_disassembling(nop(), rest),
 
-            [ref prefix, 0xCB, param, opcode, rest @ ..] if *prefix == 0xfd || *prefix == 0xdd => {
+            [ref prefix, 0xCB, param, opcode, rest @ ..] if *prefix == 0xFD || *prefix == 0xDD => {
                 let token = disassemble_with_one_argument(
                     *opcode,
                     *param,
-                    if *prefix == 0xfd {
+                    if *prefix == 0xFD {
                         &TABINSTRFDCB
-                    } else {
+                    }
+                    else {
                         &TABINSTRDDCB
-                    },
+                    }
                 )
-                .unwrap_or_else(|_| defb_elements(&[*prefix, 0xcb, *param, *opcode]));
+                .unwrap_or_else(|_| defb_elements(&[*prefix, 0xCB, *param, *opcode]));
                 continue_disassembling(token, rest)
             }
 
             [prefix, ref opcode, rest @ ..]
-                if *prefix == 0xcb || *prefix == 0xed || *prefix == 0xdd || *prefix == 0xfd =>
+                if *prefix == 0xCB || *prefix == 0xED || *prefix == 0xDD || *prefix == 0xFD =>
             {
                 let (token, rest) = disassemble_with_potential_argument(
                     *opcode,
                     match prefix {
-                        0xcb => &TABINSTRCB,
-                        0xed => &TABINSTRED,
-                        0xdd => &TABINSTRDD,
-                        0xfd => &TABINSTRFD,
-                        _ => unreachable!(),
+                        0xCB => &TABINSTRCB,
+                        0xED => &TABINSTRED,
+                        0xDD => &TABINSTRDD,
+                        0xFD => &TABINSTRFD,
+                        _ => unreachable!()
                     },
-                    rest,
+                    rest
                 )
                 .unwrap_or_else(|_| (defb_elements(&[*prefix, *opcode]), rest));
                 continue_disassembling(token, rest)
@@ -1877,7 +1878,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
         }
     }
 
-    //reverse_tokens.reverse();
+    // reverse_tokens.reverse();
     reverse_tokens.into()
 }
 
@@ -1886,7 +1887,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
 pub fn disassemble_with_potential_argument<'stream>(
     opcode: u8,
     lut: &[&'static str; 256],
-    bytes: &'stream [u8],
+    bytes: &'stream [u8]
 ) -> Result<(Token, &'stream [u8]), String> {
     let representation: &'static str = lut[opcode as usize];
 
@@ -1895,11 +1896,13 @@ pub fn disassemble_with_potential_argument<'stream>(
         let word = bytes[0] as u16 + 256 * (bytes[1] as u16);
         let representation = representation.replacen("nnnn", &format!("{:#03x}", word), 1);
         (representation, &bytes[2..])
-    } else if representation.contains("nn") {
+    }
+    else if representation.contains("nn") {
         let byte = bytes[0];
         let representation = representation.replacen("nn", &format!("{:#01x}", byte), 1);
         (representation.to_owned(), &bytes[1..])
-    } else {
+    }
+    else {
         (representation.to_owned(), bytes)
     };
 
@@ -1908,7 +1911,8 @@ pub fn disassemble_with_potential_argument<'stream>(
         let byte = bytes[0];
         let representation = representation.replacen("nn", &format!("{:#01x}", byte), 1);
         (representation, &bytes[1..])
-    } else {
+    }
+    else {
         (representation, bytes)
     };
 
@@ -1919,7 +1923,7 @@ pub fn disassemble_with_potential_argument<'stream>(
 pub fn disassemble_with_one_argument(
     opcode: u8,
     argument: u8,
-    lut: &[&'static str; 256],
+    lut: &[&'static str; 256]
 ) -> Result<Token, String> {
     let representation: &'static str = lut[opcode as usize];
     let representation = representation.replacen("nn", &format!("{:#01x}", argument), 1);
@@ -1929,7 +1933,7 @@ pub fn disassemble_with_one_argument(
 /// No argument is expected
 pub fn disassemble_without_argument(
     opcode: u8,
-    lut: &[&'static str; 256],
+    lut: &[&'static str; 256]
 ) -> Result<Token, String> {
     let representation: &'static str = lut[opcode as usize];
     string_to_token(&representation)
@@ -1939,7 +1943,8 @@ pub fn disassemble_without_argument(
 pub fn string_to_token(representation: &str) -> Result<Token, String> {
     if representation.len() == 0 {
         Err("Empty opcode".to_string())
-    } else {
+    }
+    else {
         Token::parse_token(&["\t", &representation].join("")).and_then(|mut token| {
             token.fix_relative_jumps_after_disassembling();
             Ok(token)
@@ -1953,24 +1958,24 @@ mod test {
 
     #[test]
     fn disass_from_bytes() {
-        assert_eq!("PUSH HL", disassemble(&[0xe5]).to_string().trim());
-        assert_eq!("RES 0x3, E", disassemble(&[0xcb, 0x9b]).to_string().trim());
+        assert_eq!("PUSH HL", disassemble(&[0xE5]).to_string().trim());
+        assert_eq!("RES 0x3, E", disassemble(&[0xCB, 0x9B]).to_string().trim());
         assert_eq!(
             "SBC HL, DE",
-            disassemble(&[0xed, 0b01010010]).to_string().trim()
+            disassemble(&[0xED, 0b01010010]).to_string().trim()
         );
 
         assert_eq!(
             "RLC (IX + 0x1)",
-            disassemble(&[0xdd, 0xcb, 01, 06]).to_string().trim()
+            disassemble(&[0xDD, 0xCB, 01, 06]).to_string().trim()
         );
         assert_eq!(
             "RLC (IX + 0x1), B",
-            disassemble(&[0xdd, 0xcb, 01, 00]).to_string().trim()
+            disassemble(&[0xDD, 0xCB, 01, 00]).to_string().trim()
         );
         assert_eq!(
             "RLC (IY + 0x2), C",
-            disassemble(&[0xfd, 0xcb, 02, 01]).to_string().trim()
+            disassemble(&[0xFD, 0xCB, 02, 01]).to_string().trim()
         );
     }
 
@@ -1978,37 +1983,35 @@ mod test {
     fn disass_instruction_with_arg() {
         assert_eq!(
             "CALL NZ, 0x123",
-            disassemble(&[0xc4, 0x23, 0x01]).to_string().trim()
+            disassemble(&[0xC4, 0x23, 0x01]).to_string().trim()
         );
         assert_eq!(
             "LD IX, (0x4321)",
-            disassemble(&[0xdd, 0x2a, 0x21, 0x43]).to_string().trim()
+            disassemble(&[0xDD, 0x2A, 0x21, 0x43]).to_string().trim()
         );
         assert_eq!(
             "LD (IX + 0x21), 0x43",
-            disassemble(&[0xdd, 0x36, 0x21, 0x43]).to_string().trim()
+            disassemble(&[0xDD, 0x36, 0x21, 0x43]).to_string().trim()
         );
         assert_eq!(
             "BIT 0x6, (IX + 0x1)",
-            disassemble(&[0xdd, 0xcb, 0x01, 0x76]).to_string().trim()
+            disassemble(&[0xDD, 0xCB, 0x01, 0x76]).to_string().trim()
         );
     }
-    /*
-        #[test]
-        fn disass_unknwon_opcode(){
-            assert!(disassemble(&[0xfd, 0x00]).is_err());
-        }
-    */
+    // #[test]
+    // fn disass_unknwon_opcode(){
+    // assert!(disassemble(&[0xfd, 0x00]).is_err());
+    // }
     //   #[test] // disable because incorrect test due to the several possible views of instructions
     fn disass_check_representation_equality() {
         disass_for_table_and_prefix(&TABINSTR, &[]);
-        disass_for_table_and_prefix(&TABINSTRCB, &[0xcb]);
-        disass_for_table_and_prefix(&TABINSTRDD, &[0xdd]);
-        disass_for_table_and_prefix(&TABINSTRED, &[0xed]);
-        disass_for_table_and_prefix(&TABINSTRFD, &[0xfd]);
+        disass_for_table_and_prefix(&TABINSTRCB, &[0xCB]);
+        disass_for_table_and_prefix(&TABINSTRDD, &[0xDD]);
+        disass_for_table_and_prefix(&TABINSTRED, &[0xED]);
+        disass_for_table_and_prefix(&TABINSTRFD, &[0xFD]);
 
-        disass_for_double_prefix(&TABINSTRFDCB, 0xfd, 0xcb);
-        disass_for_double_prefix(&TABINSTRDDCB, 0xdd, 0xcb);
+        disass_for_double_prefix(&TABINSTRFDCB, 0xFD, 0xCB);
+        disass_for_double_prefix(&TABINSTRDDCB, 0xDD, 0xCB);
     }
 
     fn disass_for_double_prefix(tab: &[&'static str; 256], first: u8, second: u8) {
@@ -2044,7 +2047,8 @@ mod test {
                 let obtained_bytes =
                     assemble_opcode(*mnemonic, arg1, arg2, arg3, &mut env).unwrap();
                 assert_eq!(&expected_bytes[..], &obtained_bytes[..]);
-            } else {
+            }
+            else {
                 println!("ERROR, this is not a Token {:?}", obtained);
                 assert!(false);
             }
@@ -2073,17 +2077,20 @@ mod test {
             let (expected, bytes) = if repr.contains("nnnn") {
                 (
                     repr.replace("nnnn", "0x3412"),
-                    merge(&[prefix, &[code], &[0x12, 0x34]]),
+                    merge(&[prefix, &[code], &[0x12, 0x34]])
                 )
-            } else if repr.contains("nn") {
+            }
+            else if repr.contains("nn") {
                 let repr = repr.replacen("nn", "0x12", 1);
                 let (repr, bytes) = if repr.contains("nn") {
                     (repr.replace("nn", "0x34"), [0x12, 0x34].to_vec())
-                } else {
+                }
+                else {
                     (repr, [0x12].to_vec())
                 };
                 (repr, merge(&[prefix, &[code], &bytes]))
-            } else {
+            }
+            else {
                 (repr.to_owned(), merge(&[prefix, &[code]]))
             };
 
@@ -2123,7 +2130,8 @@ mod test {
                         &obtained.listing()[0]
                     );
                 }
-            } else {
+            }
+            else {
                 println!("ERROR, this is not a Token {:?}", obtained);
                 assert!(false);
             }

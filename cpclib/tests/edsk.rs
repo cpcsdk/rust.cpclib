@@ -10,11 +10,11 @@ mod tests {
         assert_eq!(*track.number_of_sectors(), 9);
 
         for (sector_idx, sum) in &[
-            (0xc1, 21413),
-            (0xc6, 60263),
-            (0xc2, 22014),
-            (0xc7, 49447),
-            (0xc3, 85780),
+            (0xC1, 21413),
+            (0xC6, 60263),
+            (0xC2, 22014),
+            (0xC7, 49447),
+            (0xC3, 85780)
         ] {
             let sector = track.sector(*sector_idx).unwrap();
             let values = sector
@@ -37,16 +37,16 @@ mod tests {
 
         // Check catalgo access
 
-        assert!(dsk.sector(0, 0, 0xc1).is_some());
-        assert!(dsk.sector(0, 0, 0xc2).is_some());
-        assert!(dsk.sector(0, 0, 0xc3).is_some());
-        assert!(dsk.sector(0, 0, 0xc4).is_some());
+        assert!(dsk.sector(0, 0, 0xC1).is_some());
+        assert!(dsk.sector(0, 0, 0xC2).is_some());
+        assert!(dsk.sector(0, 0, 0xC3).is_some());
+        assert!(dsk.sector(0, 0, 0xC4).is_some());
 
         assert!(dsk
             .sectors_bytes(
                 0,    // track
-                0xc1, // sector
-                4,    //nb sector
+                0xC1, // sector
+                4,    // nb sector
                 0.into()
             )
             .is_some());
@@ -54,8 +54,8 @@ mod tests {
         assert!(dsk
             .sectors_bytes(
                 0,    // track
-                0xc1, // sector
-                4,    //nb sector
+                0xC1, // sector
+                4,    // nb sector
                 1.into()
             )
             .is_none());
@@ -63,8 +63,8 @@ mod tests {
         assert!(dsk
             .sectors_bytes(
                 0,    // track
-                0xc1, // sector
-                4,    //nb sector
+                0xC1, // sector
+                4,    // nb sector
                 2.into()
             )
             .is_none());
@@ -109,8 +109,10 @@ mod tests {
 
     #[test]
     fn sector_size() {
-        use cpclib::disc::edsk::convert_fdc_sector_size_to_real_sector_size;
-        use cpclib::disc::edsk::convert_real_sector_size_to_fdc_sector_size;
+        use cpclib::disc::edsk::{
+            convert_fdc_sector_size_to_real_sector_size,
+            convert_real_sector_size_to_fdc_sector_size
+        };
 
         for real_human_size in [256, 512, 1024, 2048].iter() {
             let computed_fdc_size = convert_real_sector_size_to_fdc_sector_size(*real_human_size);
@@ -132,7 +134,7 @@ mod tests {
             1055232, 1055232, 1055232, 1055232, 1055232, 1055232, 1055232, 1055232, 1055232,
             1055232, 1055232, 1055232, 1055232, 1055232, 1055232, 1055232, 1055232, 1055232,
             1055232, 1055232, 1055232, 1055232, 1055232, 1055232, 1055232, 1055232, 1055232,
-            1055232, 1055232, 1055232, 1055232, 1055232,
+            1055232, 1055232, 1055232, 1055232, 1055232
         ];
 
         for (idx, value) in tracks_content.iter().enumerate() {
@@ -270,7 +272,7 @@ mod tests {
             117248, 40, 0xC9, 512, 512, 117248, 40, 0xC5, 512, 512, 117248, 41, 0xC1, 512, 512,
             117248, 41, 0xC6, 512, 512, 117248, 41, 0xC2, 512, 512, 117248, 41, 0xC7, 512, 512,
             117248, 41, 0xC3, 512, 512, 117248, 41, 0xC8, 512, 512, 117248, 41, 0xC4, 512, 512,
-            117248, 41, 0xC9, 512, 512, 117248, 41, 0xC5, 512, 512, 117248,
+            117248, 41, 0xC9, 512, 512, 117248, 41, 0xC5, 512, 512, 117248
         ];
 
         for mut chunk in &sectors_content.iter().chunks(5) {
@@ -291,12 +293,10 @@ mod tests {
         }
 
         // TODO find a way to count the sectors iused
-        /*
-        assert_eq!(
-            dsk.sectors_used().count(),
-            65
-        );
-        */
+        // assert_eq!(
+        // dsk.sectors_used().count(),
+        // 65
+        // );
 
         use cpclib::disc::amsdos::*;
         let amsdos = AmsdosManager::new_from_disc(dsk, cpclib::disc::edsk::Head::A);
@@ -324,7 +324,7 @@ mod tests {
         use cpclib_common::itertools::Itertools;
 
         let dsk = cpclib::disc::edsk::ExtendedDsk::open(
-            "tests/dsk/Turlogh Le Rodeur (F) (Face A) (1987) [Original] (GAPS).dsk",
+            "tests/dsk/Turlogh Le Rodeur (F) (Face A) (1987) [Original] (GAPS).dsk"
         )
         .unwrap();
 
@@ -419,7 +419,7 @@ mod tests {
             0xC7, 512, 54993, 38, 0xC8, 512, 117248, 38, 0xC9, 512, 117248, 39, 0x41, 512, 117248,
             39, 0x46, 512, 117248, 39, 0x42, 512, 117248, 39, 0x47, 512, 117248, 39, 0x43, 512,
             117248, 39, 0x48, 512, 117248, 39, 0x44, 512, 117248, 39, 0x49, 512, 117248, 39, 0x45,
-            512, 117248,
+            512, 117248
         ];
 
         for mut chunk in &sectors_content.iter().chunks(4) {
@@ -444,7 +444,7 @@ mod tests {
             494279, 550396, 529390, 552966, 598805, 591019, 601475, 556186, 594971, 592668, 602404,
             376845, 359686, 347200, 395356, 429818, 429007, 597495, 513222, 599514, 468723, 462045,
             533030, 466295, 569636, 631156, 522249, 476454, 456379, 520724, 501739, 370663, 548114,
-            563875, 413639, 432743, 507678, 587941, 686284, 1055232,
+            563875, 413639, 432743, 507678, 587941, 686284, 1055232
         ];
 
         for (idx, value) in tracks_content.iter().enumerate() {
@@ -517,7 +517,7 @@ mod tests {
             (0, "BOOT ", "BAS", "1 Ko"),
             (0, "BOOT1 ", "BAS", "1 Ko"),
             (0, "GENER ", "CPT", "7 Ko"),
-            (0, "JEU ", "BAS", "1 Ko"),
+            (0, "JEU ", "BAS", "1 Ko")
         ];
 
         for (idx, expected_entry) in expected_values.iter().enumerate() {

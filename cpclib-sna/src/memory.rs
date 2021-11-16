@@ -2,7 +2,6 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{MemoryChunk, SnapshotChunk};
 
-
 pub const PAGE_SIZE: usize = 0x4000;
 
 /// 3 different states are possible. No memory, 64kb or 128kb
@@ -28,7 +27,7 @@ pub enum SnapshotMemory {
     //  512
     FiveHundredTwelveKb(Box<[u8; PAGE_SIZE * 32]>),
     //  576
-    FiveHundredSeventySixKb(Box<[u8; PAGE_SIZE * 36]>),
+    FiveHundredSeventySixKb(Box<[u8; PAGE_SIZE * 36]>)
 }
 
 impl Default for SnapshotMemory {
@@ -49,7 +48,7 @@ impl std::fmt::Debug for SnapshotMemory {
             SnapshotMemory::ThreeHundredHeightyFourKb(_) => "384kb",
             SnapshotMemory::FourHundredFortyHeightKb(_) => "448kb",
             SnapshotMemory::FiveHundredTwelveKb(_) => "512kb",
-            SnapshotMemory::FiveHundredSeventySixKb(_) => "576kb",
+            SnapshotMemory::FiveHundredSeventySixKb(_) => "576kb"
         };
         write!(f, "SnapshotMemory ({})", code)
     }
@@ -60,21 +59,21 @@ impl SnapshotMemory {
     pub fn is_empty(&self) -> bool {
         match self {
             Self::Empty(_) => true,
-            _ => false,
+            _ => false
         }
     }
 
     pub fn is_64k(&self) -> bool {
         match self {
             Self::SixtyFourKb(_) => true,
-            _ => false,
+            _ => false
         }
     }
 
     pub fn is_128k(&self) -> bool {
         match self {
             Self::OneHundredTwentyHeightKb(_) => true,
-            _ => false,
+            _ => false
         }
     }
 
@@ -90,7 +89,7 @@ impl SnapshotMemory {
             SnapshotMemory::ThreeHundredHeightyFourKb(ref mem) => mem.deref(),
             SnapshotMemory::FourHundredFortyHeightKb(ref mem) => mem.deref(),
             SnapshotMemory::FiveHundredTwelveKb(ref mem) => mem.deref(),
-            SnapshotMemory::FiveHundredSeventySixKb(ref mem) => mem.deref(),
+            SnapshotMemory::FiveHundredSeventySixKb(ref mem) => mem.deref()
         }
     }
 
@@ -106,7 +105,7 @@ impl SnapshotMemory {
             SnapshotMemory::ThreeHundredHeightyFourKb(ref mut mem) => mem.deref_mut(),
             SnapshotMemory::FourHundredFortyHeightKb(ref mut mem) => mem.deref_mut(),
             SnapshotMemory::FiveHundredTwelveKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::FiveHundredSeventySixKb(ref mut mem) => mem.deref_mut(),
+            SnapshotMemory::FiveHundredSeventySixKb(ref mut mem) => mem.deref_mut()
         }
     }
 
@@ -158,7 +157,7 @@ impl SnapshotMemory {
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
             }
-            SnapshotMemory::FiveHundredSeventySixKb(_) => unreachable!(),
+            SnapshotMemory::FiveHundredSeventySixKb(_) => unreachable!()
         }
     }
 
@@ -167,7 +166,7 @@ impl SnapshotMemory {
             0 => Self::default(),
             0x10000 => Self::new_64(source),
             0x20000 => Self::new_128(source),
-            _ => unreachable!(),
+            _ => unreachable!()
         }
     }
 
@@ -212,9 +211,11 @@ impl SnapshotMemory {
     pub fn default_128() -> Self {
         Self::OneHundredTwentyHeightKb(Box::new([0; PAGE_SIZE * 8]))
     }
+
     pub fn default_192() -> Self {
         Self::OneHundredNinetyTwoKb(Box::new([0; PAGE_SIZE * 12]))
     }
+
     pub fn default_256() -> Self {
         Self::TwoHundredFiftySixKb(Box::new([0; PAGE_SIZE * 16]))
     }
@@ -222,15 +223,19 @@ impl SnapshotMemory {
     pub fn default_320() -> Self {
         Self::ThreeHundredTwentyKb(Box::new([0; PAGE_SIZE * 20]))
     }
+
     pub fn default_384() -> Self {
         Self::ThreeHundredHeightyFourKb(Box::new([0; PAGE_SIZE * 24]))
     }
+
     pub fn default_448() -> Self {
         Self::FourHundredFortyHeightKb(Box::new([0; PAGE_SIZE * 28]))
     }
+
     pub fn default_512() -> Self {
         Self::FiveHundredTwelveKb(Box::new([0; PAGE_SIZE * 32]))
     }
+
     pub fn default_576() -> Self {
         Self::FiveHundredSeventySixKb(Box::new([0; PAGE_SIZE * 36]))
     }

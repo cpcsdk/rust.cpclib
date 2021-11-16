@@ -15,20 +15,19 @@
 
 /// (unfinished) conversion of hideur maker
 use std::fs::File;
-use std::io::Read;
-use std::io::Write;
+use std::io::{Read, Write};
+
 use cpclib_common::clap;
 use cpclib_disc::amsdos::*;
 
-/**
- * Convert a string to its unsigned 32 bits representation (to access to extra memory)
- * TODO share implementation
- */
+/// Convert a string to its unsigned 32 bits representation (to access to extra memory)
+/// TODO share implementation
 pub fn string_to_nb(source: &str) -> u32 {
     let error = format!("Unable to read the value: {}", source);
     if source.starts_with("0x") {
         u32::from_str_radix(&source[2..], 16).expect(&error)
-    } else {
+    }
+    else {
         source.parse::<u32>().expect(&error)
     }
 }
@@ -38,7 +37,7 @@ fn main() -> std::io::Result<()> {
         .arg(
             clap::Arg::with_name("INPUT")
                 .required(true)
-                .help("Input file to manipulate"),
+                .help("Input file to manipulate")
         )
         .arg(clap::Arg::with_name("INFO").long("info"))
         .arg(
@@ -47,7 +46,7 @@ fn main() -> std::io::Result<()> {
                 .long("output")
                 .required_unless("INFO")
                 .help("Output file to generate")
-                .takes_value(true),
+                .takes_value(true)
         )
         .arg(
             clap::Arg::with_name("USER")
@@ -55,7 +54,7 @@ fn main() -> std::io::Result<()> {
                 .long("user")
                 .conflicts_with("INFO")
                 .help("User where to put the file")
-                .takes_value(true),
+                .takes_value(true)
         )
         .arg(
             clap::Arg::with_name("TYPE")
@@ -66,7 +65,7 @@ fn main() -> std::io::Result<()> {
                 .help("File type")
                 .case_insensitive(true)
                 .possible_values(&["0", "1", "2", "Basic", "Protected", "Binary"])
-                .takes_value(true),
+                .takes_value(true)
         )
         .arg(
             clap::Arg::with_name("EXEC")
@@ -74,7 +73,7 @@ fn main() -> std::io::Result<()> {
                 .long("execution")
                 .conflicts_with("INFO")
                 .help("Execution address")
-                .takes_value(true),
+                .takes_value(true)
         )
         .arg(
             clap::Arg::with_name("LOAD")
@@ -82,7 +81,7 @@ fn main() -> std::io::Result<()> {
                 .long("load")
                 .conflicts_with("INFO")
                 .help("Loading address")
-                .takes_value(true),
+                .takes_value(true)
         )
         .get_matches();
 
@@ -111,7 +110,7 @@ fn main() -> std::io::Result<()> {
                     );
                     (
                         parts[..parts.len() - 1].join("_").to_owned(),
-                        parts[parts.len() - 1].to_owned(),
+                        parts[parts.len() - 1].to_owned()
                     )
                 }
             };
@@ -119,14 +118,16 @@ fn main() -> std::io::Result<()> {
             let filename = if filename.len() > 8 {
                 eprintln!("[Warning] Filename is too large and has been cropped. If it is not the expected behavior provide a file with the right filename");
                 filename[..8].to_owned()
-            } else {
+            }
+            else {
                 filename
             };
 
             let extension = if extension.len() > 3 {
                 eprintln!("[Warning] Extension is too large and has been cropped. If it is not the expected behavior provide a file with the right extension");
                 extension[..3].to_owned()
-            } else {
+            }
+            else {
                 extension
             };
 
@@ -143,10 +144,12 @@ fn main() -> std::io::Result<()> {
         let header = amsfile.header();
         if header.is_checksum_valid() {
             println!("{:?}", header);
-        } else {
+        }
+        else {
             eprintln!("This is not an Amsdos file");
         }
-    } else {
+    }
+    else {
         // In this branch, we build the file with its header
 
         // Get the type of file
@@ -160,7 +163,7 @@ fn main() -> std::io::Result<()> {
                 "0" | "basic" => AmsdosFileType::Basic,
                 "1" | "protected" => AmsdosFileType::Protected,
                 "2" | "binary" => AmsdosFileType::Binary,
-                _ => unreachable!(),
+                _ => unreachable!()
             }
         };
 
@@ -170,18 +173,18 @@ fn main() -> std::io::Result<()> {
                 let exec = string_to_nb(
                     &matches
                         .value_of("EXEC")
-                        .expect("The execution address is expected for a binary target"),
+                        .expect("The execution address is expected for a binary target")
                 ) as u16;
                 let load = string_to_nb(
                     &matches
                         .value_of("LOAD")
-                        .expect("The load address is expected for a binary target"),
+                        .expect("The load address is expected for a binary target")
                 ) as u16;
 
                 AmsdosManager::compute_binary_header(&filename, load, exec, &content)
             }
             AmsdosFileType::Basic => AmsdosManager::compute_basic_header(&filename, &content),
-            _ => unimplemented!(),
+            _ => unimplemented!()
         };
 
         // Write the final file

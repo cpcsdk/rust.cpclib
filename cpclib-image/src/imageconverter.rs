@@ -1,12 +1,12 @@
 // This module manage high level image conversion functions
 
-use image as im;
-
-use cpclib_common::bitfield::BitRange;
-use cpclib_common::itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::path::Path;
+
+use cpclib_common::bitfield::BitRange;
+use cpclib_common::itertools::Itertools;
+use image as im;
 
 use crate::ga::*;
 use crate::image::*;
@@ -19,7 +19,7 @@ pub enum TransformationPosition {
     /// This is the very last line or column of the image
     Last,
     /// This is a specific index
-    Index(usize),
+    Index(usize)
 }
 
 impl TransformationPosition {
@@ -31,7 +31,8 @@ impl TransformationPosition {
             TransformationLinePosition::Index(idx) => {
                 if idx >= size {
                     None
-                } else {
+                }
+                else {
                     Some(idx)
                 }
             }
@@ -56,7 +57,7 @@ pub enum Transformation {
         /// The location of the line within the image
         position: TransformationPosition,
         /// The amount of lines to add
-        amount: u16,
+        amount: u16
     },
 
     /// Add artificial blank columns given a pattern
@@ -66,8 +67,8 @@ pub enum Transformation {
         /// The location of the column within the image
         position: TransformationPosition,
         /// The amount of columns to add
-        amount: u16,
-    },
+        amount: u16
+    }
 }
 
 impl Transformation {
@@ -93,7 +94,7 @@ impl Transformation {
             Self::BlankLines {
                 pattern,
                 position,
-                amount,
+                amount
             } => {
                 // Build the line according to the background pattern
                 let line = {
@@ -118,7 +119,7 @@ impl Transformation {
             Self::BlankColumns {
                 pattern,
                 position,
-                amount,
+                amount
             } => {
                 let column = {
                     let mut column = Vec::new();
@@ -144,12 +145,12 @@ impl Transformation {
     pub fn blank_lines<I: Into<Ink> + Copy>(
         pattern: &[I],
         position: TransformationLinePosition,
-        amount: u16,
+        amount: u16
     ) -> Self {
         Self::BlankLines {
             pattern: pattern.iter().map(|&i| i.into()).collect::<Vec<Ink>>(),
             position,
-            amount,
+            amount
         }
     }
 
@@ -157,12 +158,12 @@ impl Transformation {
     pub fn blank_columns<I: Into<Ink> + Copy>(
         pattern: &[I],
         position: TransformationColumnPosition,
-        amount: u16,
+        amount: u16
     ) -> Self {
         Self::BlankColumns {
             pattern: pattern.iter().map(|&i| i.into()).collect::<Vec<_>>(),
             position,
-            amount,
+            amount
         }
     }
 }
@@ -171,13 +172,13 @@ impl Transformation {
 #[derive(Clone, Debug)]
 pub struct TransformationsList {
     /// list of transformations
-    transformations: Vec<Transformation>,
+    transformations: Vec<Transformation>
 }
 
 impl Default for TransformationsList {
     fn default() -> Self {
         Self {
-            transformations: Vec::new(),
+            transformations: Vec::new()
         }
     }
 }
@@ -187,7 +188,7 @@ impl TransformationsList {
     /// Create an empty list of transformations
     pub fn new(transformations: &[Transformation]) -> Self {
         TransformationsList {
-            transformations: transformations.to_vec(),
+            transformations: transformations.to_vec()
         }
     }
 
@@ -216,7 +217,7 @@ pub struct CPCScreenDimension {
     /// Number of chars in height
     vertical_displayed: u8,
     /// Number of pixel line per char line
-    maximum_raster_address: u8,
+    maximum_raster_address: u8
 }
 
 impl Debug for CPCScreenDimension {
@@ -240,7 +241,7 @@ impl CPCScreenDimension {
             horizontal_displayed: 80 / 2,
             vertical_displayed: 25,
             /// Unsure of this value
-            maximum_raster_address: 7,
+            maximum_raster_address: 7
         }
     }
 
@@ -249,7 +250,7 @@ impl CPCScreenDimension {
         Self {
             horizontal_displayed: 96 / 2,
             vertical_displayed: 39, // it was 36 before? need to find why,
-            maximum_raster_address: 7,
+            maximum_raster_address: 7
         }
     }
 
@@ -257,12 +258,12 @@ impl CPCScreenDimension {
     pub fn new(
         horizontal_displayed: u8,
         vertical_displayed: u8,
-        maximum_raster_address: u8,
+        maximum_raster_address: u8
     ) -> Self {
         Self {
             horizontal_displayed,
             vertical_displayed,
-            maximum_raster_address,
+            maximum_raster_address
         }
     }
 
@@ -311,14 +312,12 @@ pub type DisplayCRTCAddress = DisplayAddress;
 
 #[allow(missing_docs)]
 impl DisplayAddress {
-    const OFFSET_START: usize = 9;
-    const OFFSET_END: usize = 0;
-
-    const BUFFER_START: usize = 11;
     const BUFFER_END: usize = 10;
-
-    const PAGE_START: usize = 13;
+    const BUFFER_START: usize = 11;
+    const OFFSET_END: usize = 0;
+    const OFFSET_START: usize = 9;
     const PAGE_END: usize = 12;
+    const PAGE_START: usize = 13;
 
     /// Create the display address
     pub fn new_from(val: u16) -> Self {
@@ -357,6 +356,7 @@ impl DisplayAddress {
     pub fn new_overscan_from_address(_address: u16) -> Self {
         unimplemented!()
     }
+
     /// Return the offset part of the address
     pub fn offset(self) -> u16 {
         self.0.bit_range(Self::OFFSET_START, Self::OFFSET_END)
@@ -384,7 +384,8 @@ impl DisplayAddress {
     pub fn set_overscan(&mut self, is_overscan: bool) {
         if is_overscan {
             self.set_buffer(0b11);
-        } else {
+        }
+        else {
             self.set_buffer(0b00);
         }
     }
@@ -416,8 +417,8 @@ impl DisplayAddress {
             0 => 0x0000,
             1 => 0x4000,
             2 => 0x8000,
-            3 => 0xc000,
-            _ => panic!(),
+            3 => 0xC000,
+            _ => panic!()
         }
     }
 
@@ -426,7 +427,7 @@ impl DisplayAddress {
         match self.buffer() {
             0 | 1 | 2 => false,
             3 => true,
-            _ => panic!(),
+            _ => panic!()
         }
     }
 
@@ -490,7 +491,7 @@ pub enum OutputFormat {
     /// CPC memory encoded. The binary can be directly included in a snapshot
     CPCMemory {
         output_dimension: CPCScreenDimension,
-        display_address: DisplayAddress,
+        display_address: DisplayAddress
     },
 
     /// CPC memory encoded to be used with hardware splitting. The vector only contains the Variant CPCMemory
@@ -509,8 +510,8 @@ pub enum OutputFormat {
         /// The width of the grid (i.e., the number of tiles present in a row)
         grid_width: GridWidthCapture,
         /// The height of the gris (i.e., the number of tiles present in a column)
-        grid_height: GridHeightCapture,
-    },
+        grid_height: GridHeightCapture
+    }
 }
 
 #[allow(missing_docs)]
@@ -520,13 +521,14 @@ impl OutputFormat {
         match self {
             Self::CPCMemory {
                 output_dimension,
-                display_address,
+                display_address
             } => {
                 if delta >= 0 {
                     for _ in 0..delta * i32::from(output_dimension.nb_word_columns()) {
                         display_address.move_to_next_word();
                     }
-                } else {
+                }
+                else {
                     for _ in 0..(-delta) * i32::from(output_dimension.nb_word_columns()) {
                         display_address.move_to_previous_word();
                     }
@@ -548,11 +550,12 @@ impl OutputFormat {
     pub fn create_zigzag_graycode_encoded_sprite() -> Self {
         Self::ZigZagGrayCodedSprite
     }
+
     /// Generate output format for an overscan screen
     pub fn create_overscan_cpc_memory() -> Self {
         Self::CPCMemory {
             output_dimension: CPCScreenDimension::overscan(),
-            display_address: DisplayAddress::new_overscan_from_page(2), // we do not care of the page
+            display_address: DisplayAddress::new_overscan_from_page(2) /* we do not care of the page */
         }
     }
 
@@ -561,18 +564,18 @@ impl OutputFormat {
         let output_dimension = CPCScreenDimension::overscan();
         let display_address = DisplayAddress::new_overscan_from_page_one_bank_per_line(
             2,
-            output_dimension.nb_word_columns() as _,
+            output_dimension.nb_word_columns() as _
         );
         Self::CPCMemory {
             output_dimension,
-            display_address,
+            display_address
         }
     }
 
     pub fn create_standard_cpc_memory() -> Self {
         Self::CPCMemory {
             output_dimension: CPCScreenDimension::standard(),
-            display_address: DisplayAddress::new_standard_from_page(2),
+            display_address: DisplayAddress::new_standard_from_page(2)
         }
     }
 }
@@ -583,7 +586,7 @@ pub enum TileWidthCapture {
     /// All the width is captured
     FullWidth,
     /// Only the given number of bytes is captured
-    NbBytes(usize),
+    NbBytes(usize)
 }
 
 /// Defines the width of the capture
@@ -592,7 +595,7 @@ pub enum TileHeightCapture {
     /// All the height is captured
     FullHeight,
     /// Only the given number of lines is captured
-    NbLines(usize),
+    NbLines(usize)
 }
 
 /// Defines the width of the capture
@@ -601,7 +604,7 @@ pub enum GridWidthCapture {
     /// All the width is captured
     FullWidth,
     /// Only the given number of tiles are capture in a row
-    TilesInRow(usize),
+    TilesInRow(usize)
 }
 
 /// Defines the width of the capture
@@ -610,7 +613,7 @@ pub enum GridHeightCapture {
     /// All the height is captured
     FullHeight,
     /// Only the given number of tiles is captured in a column
-    TilesInColumn(usize),
+    TilesInColumn(usize)
 }
 
 /// Defines the horizontal movement when capturing bytes
@@ -623,7 +626,7 @@ pub enum TileHorizontalCapture {
     /// Bytes are read in a right-left left-right way
     StartFromRightAndFlipAtTheEndOfLine,
     /// Bytes are read in a left-right right-left way
-    StartFromLeftAndFlipAtTheEndOfLine,
+    StartFromLeftAndFlipAtTheEndOfLine
 }
 
 #[allow(missing_docs)]
@@ -646,7 +649,7 @@ pub trait HorizontalWordCounter {
 #[allow(missing_docs)]
 pub struct StartFromLeftAndFlipAtTheEndOfLine {
     current_column: usize,
-    left_to_right: bool,
+    left_to_right: bool
 }
 
 #[allow(missing_docs)]
@@ -654,7 +657,7 @@ impl Default for StartFromLeftAndFlipAtTheEndOfLine {
     fn default() -> Self {
         Self {
             current_column: 0,
-            left_to_right: true,
+            left_to_right: true
         }
     }
 }
@@ -667,7 +670,8 @@ impl HorizontalWordCounter for StartFromLeftAndFlipAtTheEndOfLine {
     fn next(&mut self) {
         if self.left_to_right {
             self.current_column += 1;
-        } else {
+        }
+        else {
             self.current_column -= 1
         }
     }
@@ -683,7 +687,7 @@ pub struct StandardHorizontalCounter {
     left_to_right: bool,
     current_step: usize,
     // We cannot have sprite of width
-    nb_columns: Option<std::num::NonZeroUsize>,
+    nb_columns: Option<std::num::NonZeroUsize>
 }
 
 impl StandardHorizontalCounter {
@@ -692,7 +696,7 @@ impl StandardHorizontalCounter {
         StandardHorizontalCounter {
             left_to_right: true,
             current_step: 0,
-            nb_columns: None,
+            nb_columns: None
         }
     }
 
@@ -702,7 +706,7 @@ impl StandardHorizontalCounter {
         StandardHorizontalCounter {
             left_to_right: false,
             current_step: 0,
-            nb_columns: None,
+            nb_columns: None
         }
     }
 }
@@ -712,7 +716,8 @@ impl HorizontalWordCounter for StandardHorizontalCounter {
     fn get_column_index(&self) -> usize {
         if self.left_to_right {
             self.current_step
-        } else {
+        }
+        else {
             usize::from(self.nb_columns.unwrap()) - self.current_step
         }
     }
@@ -766,12 +771,11 @@ impl TileHorizontalCapture {
 /// 5 111 => 7
 /// 6 101 => 5
 /// 7 100 => 4
-///
 #[derive(Debug, Copy, Clone)]
 #[allow(missing_docs)]
 pub struct GrayCodeLineCounter {
     char_line: usize,
-    pos_in_char: u8, // in gray code space
+    pos_in_char: u8 // in gray code space
 }
 
 /// Standard line counter
@@ -779,7 +783,7 @@ pub struct GrayCodeLineCounter {
 #[allow(missing_docs)]
 pub struct StandardLineCounter {
     pos_in_screen: usize,
-    top_to_bottom: bool,
+    top_to_bottom: bool
 }
 
 /// LineCounter manage the choice of the line when iterateing a sprite vertically
@@ -798,14 +802,14 @@ impl StandardLineCounter {
     pub fn top_to_bottom() -> Self {
         Self {
             pos_in_screen: 0,
-            top_to_bottom: true,
+            top_to_bottom: true
         }
     }
 
     pub fn bottom_to_top(start: usize) -> Self {
         Self {
             pos_in_screen: start,
-            top_to_bottom: false,
+            top_to_bottom: false
         }
     }
 }
@@ -815,10 +819,12 @@ impl LineCounter for StandardLineCounter {
     fn get_line_index_in_screen(&self) -> usize {
         self.pos_in_screen
     }
+
     fn next(&mut self) {
         if self.top_to_bottom {
             self.pos_in_screen += 1;
-        } else {
+        }
+        else {
             self.pos_in_screen -= 1;
         }
     }
@@ -828,7 +834,7 @@ impl Default for GrayCodeLineCounter {
     fn default() -> Self {
         Self {
             char_line: 0,
-            pos_in_char: 0,
+            pos_in_char: 0
         }
     }
 }
@@ -859,7 +865,8 @@ impl GrayCodeLineCounter {
         if self.pos_in_char == 0 {
             self.pos_in_char = 7;
             self.char_line -= 1;
-        } else {
+        }
+        else {
             self.pos_in_char -= 1;
         }
     }
@@ -878,6 +885,7 @@ impl LineCounter for GrayCodeLineCounter {
     fn get_line_index_in_screen(&self) -> usize {
         self.char_line * 8 + self.get_line_index_in_char() as usize
     }
+
     fn next(&mut self) {
         self.goto_next_line()
     }
@@ -897,7 +905,7 @@ pub enum TileVerticalCapture {
     /// Lines are captured following a gray-code way that starts from the top
     GrayCodeFromTop,
     /// Lines are captured following a gray-code way that starts from the bottom
-    GrayCodeFromBottom,
+    GrayCodeFromBottom
 }
 
 #[allow(missing_docs)]
@@ -909,7 +917,7 @@ impl TileVerticalCapture {
             Self::AlwaysFromTopToBottom => Box::new(StandardLineCounter::top_to_bottom()),
             Self::AlwaysFromBottomToTop => panic!("A parameter is needed there"),
             Self::GrayCodeFromTop => Box::new(GrayCodeLineCounter::new()),
-            _ => unimplemented!(),
+            _ => unimplemented!()
         }
     }
 
@@ -927,28 +935,28 @@ pub enum Output {
         data: Vec<u8>,
         palette: Palette,
         bytes_width: usize,
-        height: usize,
+        height: usize
     },
 
     GrayCodedSprite {
         data: Vec<u8>,
         palette: Palette,
         bytes_width: usize,
-        height: usize,
+        height: usize
     },
 
     ZigZagGrayCodedSprite {
         data: Vec<u8>,
         palette: Palette,
         bytes_width: usize,
-        height: usize,
+        height: usize
     },
 
     LinearEncodedChuncky {
         data: Vec<u8>,
         palette: Palette,
         bytes_width: usize,
-        height: usize,
+        height: usize
     },
 
     /// Result using one bank
@@ -967,8 +975,8 @@ pub enum Output {
         horizontal_movement: TileHorizontalCapture,
         vertical_movement: TileVerticalCapture,
         palette: Palette,
-        list: Vec<Vec<u8>>,
-    },
+        list: Vec<Vec<u8>>
+    }
 }
 
 impl Debug for Output {
@@ -981,21 +989,23 @@ impl Debug for Output {
             Output::ZigZagGrayCodedSprite { .. } => writeln!(fmt, "ZigZagGrayCodedSprite"),
 
             Output::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
-            Output::CPCMemoryStandard(_, _) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
-            Output::CPCMemoryOverscan(_, _, _) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
+            Output::CPCMemoryStandard(..) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
+            Output::CPCMemoryOverscan(..) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
             Output::CPCSplittingMemory(ref vec) => writeln!(fmt, "CPCSplitteringMemory {:?}", &vec),
             Output::TilesList {
                 ref tile_height,
                 ref tile_width,
                 ref list,
                 ..
-            } => writeln!(
-                fmt,
-                "{} tiles of {}x{}",
-                list.len(),
-                tile_width,
-                tile_height
-            ),
+            } => {
+                writeln!(
+                    fmt,
+                    "{} tiles of {}x{}",
+                    list.len(),
+                    tile_width,
+                    tile_height
+                )
+            }
         }
     }
 }
@@ -1005,8 +1015,8 @@ impl Output {
     /// Returns the bank that contains the first half of the screen
     pub fn overscan_screen1(&self) -> Option<&[u8; 0x4000]> {
         match self {
-            Self::CPCMemoryOverscan(ref s1, _, _) => Some(s1),
-            _ => None,
+            Self::CPCMemoryOverscan(ref s1, ..) => Some(s1),
+            _ => None
         }
     }
 
@@ -1014,7 +1024,7 @@ impl Output {
     pub fn overscan_screen2(&self) -> Option<&[u8; 0x4000]> {
         match self {
             Self::CPCMemoryOverscan(_, ref s1, _) => Some(s1),
-            _ => None,
+            _ => None
         }
     }
 
@@ -1022,7 +1032,7 @@ impl Output {
     pub fn tiles_list(&self) -> Option<&[Vec<u8>]> {
         match self {
             Self::TilesList { ref list, .. } => Some(list),
-            _ => None,
+            _ => None
         }
     }
 }
@@ -1042,7 +1052,7 @@ pub struct ImageConverter<'a> {
     output: &'a OutputFormat,
 
     /// List of transformations
-    transformations: TransformationsList,
+    transformations: TransformationsList
 }
 
 #[allow(missing_docs)]
@@ -1053,10 +1063,10 @@ impl<'a> ImageConverter<'a> {
         palette: Option<Palette>,
         mode: Mode,
         transformations: TransformationsList,
-        output: &'a OutputFormat,
+        output: &'a OutputFormat
     ) -> anyhow::Result<Output>
     where
-        P: AsRef<Path>,
+        P: AsRef<Path>
     {
         Self::convert_impl(input_file.as_ref(), palette, mode, transformations, output)
     }
@@ -1066,13 +1076,13 @@ impl<'a> ImageConverter<'a> {
         palette: Option<Palette>,
         mode: Mode,
         transformations: TransformationsList,
-        output: &'a OutputFormat,
+        output: &'a OutputFormat
     ) -> anyhow::Result<Output> {
         let mut converter = ImageConverter {
             palette: palette.clone(),
             mode,
             transformations: transformations.clone(),
-            output,
+            output
         };
 
         if let OutputFormat::LinearEncodedChuncky = output {
@@ -1081,18 +1091,19 @@ impl<'a> ImageConverter<'a> {
             let sprite = matrix.as_sprite(mode, None);
             Ok(Output::LinearEncodedChuncky {
                 data: sprite.to_linear_vec(),
-                palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set
+                palette: sprite.palette.as_ref().unwrap().clone(), /* By definition, we expect the palette to be set */
                 bytes_width: sprite.bytes_width() as _,
-                height: sprite.height() as _,
+                height: sprite.height() as _
             })
-        } else if let OutputFormat::GrayCodedSprite = output {
+        }
+        else if let OutputFormat::GrayCodedSprite = output {
             // get the linear version
             let linear = Self::convert_impl(
                 input_file,
                 palette,
                 mode,
                 transformations,
-                &OutputFormat::LinearEncodedSprite,
+                &OutputFormat::LinearEncodedSprite
             )?;
 
             match linear {
@@ -1100,7 +1111,7 @@ impl<'a> ImageConverter<'a> {
                     data,
                     palette,
                     bytes_width,
-                    height,
+                    height
                 } => {
                     assert_eq!(height % 8, 0);
 
@@ -1111,7 +1122,7 @@ impl<'a> ImageConverter<'a> {
                             let line_idx = *line_idx as usize;
                             let start = line_idx + 8 * char_idx;
                             new_data.extend_from_slice(
-                                &data[start * bytes_width..(start + 1) * bytes_width],
+                                &data[start * bytes_width..(start + 1) * bytes_width]
                             );
                         }
                     }
@@ -1120,18 +1131,19 @@ impl<'a> ImageConverter<'a> {
                         data: new_data,
                         palette: palette.clone(),
                         bytes_width: bytes_width,
-                        height: height,
+                        height: height
                     })
                 }
-                _ => unreachable!(),
+                _ => unreachable!()
             }
-        } else if let OutputFormat::ZigZagGrayCodedSprite = output {
+        }
+        else if let OutputFormat::ZigZagGrayCodedSprite = output {
             let graycoded = Self::convert_impl(
                 input_file,
                 palette,
                 mode,
                 transformations,
-                &OutputFormat::GrayCodedSprite,
+                &OutputFormat::GrayCodedSprite
             )?;
 
             match graycoded {
@@ -1139,7 +1151,7 @@ impl<'a> ImageConverter<'a> {
                     data,
                     palette,
                     bytes_width,
-                    height,
+                    height
                 } => {
                     let mut new_data = Vec::new();
                     new_data.reserve_exact(data.len());
@@ -1159,12 +1171,13 @@ impl<'a> ImageConverter<'a> {
                         data: new_data,
                         palette,
                         bytes_width,
-                        height,
+                        height
                     })
                 }
-                _ => unreachable!(),
+                _ => unreachable!()
             }
-        } else {
+        }
+        else {
             let sprite = converter.load_sprite(input_file);
             converter.apply_sprite_conversion(&sprite)
         }
@@ -1176,7 +1189,7 @@ impl<'a> ImageConverter<'a> {
             palette: None,
             mode: Mode::Zero, // TODO make the mode an optional argument,
             output,
-            transformations: TransformationsList::default(),
+            transformations: TransformationsList::default()
         };
 
         converter.apply_sprite_conversion(&sprite)
@@ -1208,7 +1221,7 @@ impl<'a> ImageConverter<'a> {
             OutputFormat::LinearEncodedSprite => self.linearize_sprite(sprite),
             OutputFormat::CPCMemory {
                 ref output_dimension,
-                ref display_address,
+                ref display_address
             } => {
                 self.build_memory_blocks(sprite, output_dimension.clone(), display_address.clone())
             }
@@ -1219,18 +1232,20 @@ impl<'a> ImageConverter<'a> {
                 horizontal_movement,
                 vertical_movement,
                 grid_width,
-                grid_height,
-            } => self.extract_tiles(
-                tile_width,
-                tile_height,
-                horizontal_movement,
-                vertical_movement,
-                grid_width,
-                grid_height,
-                sprite,
-            ),
+                grid_height
+            } => {
+                self.extract_tiles(
+                    tile_width,
+                    tile_height,
+                    horizontal_movement,
+                    vertical_movement,
+                    grid_width,
+                    grid_height,
+                    sprite
+                )
+            }
 
-            _ => unreachable!(),
+            _ => unreachable!()
         }
     }
 
@@ -1239,9 +1254,9 @@ impl<'a> ImageConverter<'a> {
     fn linearize_sprite(&mut self, sprite: &Sprite) -> anyhow::Result<Output> {
         Ok(Output::LinearEncodedSprite {
             data: sprite.to_linear_vec(),
-            palette: sprite.palette.as_ref().unwrap().clone(), // By definition, we expect the palette to be set
+            palette: sprite.palette.as_ref().unwrap().clone(), /* By definition, we expect the palette to be set */
             bytes_width: sprite.bytes_width() as _,
-            height: sprite.height() as _,
+            height: sprite.height() as _
         })
     }
 
@@ -1254,24 +1269,24 @@ impl<'a> ImageConverter<'a> {
         vertical_movement: TileVerticalCapture,
         grid_width: GridWidthCapture,
         grid_height: GridHeightCapture,
-        sprite: &Sprite,
+        sprite: &Sprite
     ) -> anyhow::Result<Output> {
         // Compute the real value of the arguments
         let tile_width = match tile_width {
             TileWidthCapture::FullWidth => sprite.bytes_width(),
-            TileWidthCapture::NbBytes(nb) => nb as _,
+            TileWidthCapture::NbBytes(nb) => nb as _
         };
         let tile_height = match tile_height {
             TileHeightCapture::FullHeight => sprite.height(),
-            TileHeightCapture::NbLines(nb) => nb as _,
+            TileHeightCapture::NbLines(nb) => nb as _
         };
         let nb_columns = match grid_width {
             GridWidthCapture::TilesInRow(nb) => nb,
-            GridWidthCapture::FullWidth => sprite.bytes_width() as usize / tile_width as usize,
+            GridWidthCapture::FullWidth => sprite.bytes_width() as usize / tile_width as usize
         };
         let nb_rows = match grid_height {
             GridHeightCapture::TilesInColumn(nb) => nb,
-            GridHeightCapture::FullHeight => sprite.height() as usize / tile_height as usize,
+            GridHeightCapture::FullHeight => sprite.height() as usize / tile_height as usize
         };
 
         // Really makes the extraction
@@ -1315,7 +1330,7 @@ impl<'a> ImageConverter<'a> {
             horizontal_movement,
             vertical_movement,
             palette: sprite.palette().unwrap(),
-            list: tiles_list,
+            list: tiles_list
         })
     }
 
@@ -1325,7 +1340,7 @@ impl<'a> ImageConverter<'a> {
         &mut self,
         sprite: &Sprite,
         dim: CPCScreenDimension,
-        display_address: DisplayAddress,
+        display_address: DisplayAddress
     ) -> anyhow::Result<Output> {
         let screen_width = u32::from(dim.width(sprite.mode().unwrap()));
         let screen_height = u32::from(dim.height());
@@ -1337,7 +1352,8 @@ impl<'a> ImageConverter<'a> {
                 sprite.pixel_width(),
                 screen_width
             ));
-        } else if screen_width > sprite.pixel_width() {
+        }
+        else if screen_width > sprite.pixel_width() {
             eprintln!(
                 "[Warning] The image width ({}) is smaller than the cpc screen width ({})",
                 sprite.pixel_width(),
@@ -1351,7 +1367,8 @@ impl<'a> ImageConverter<'a> {
                 sprite.height(),
                 screen_height
             ));
-        } else if screen_height > sprite.height() {
+        }
+        else if screen_height > sprite.height() {
             eprintln!(
                 "[Warning] The image height ({}) is smaller than the cpc screen height ({})",
                 sprite.height(),
@@ -1395,11 +1412,11 @@ impl<'a> ImageConverter<'a> {
                         let y_coord = dim.nb_lines_per_char() as usize * char_y + line_in_char;
 
                         let value = sprite.get_byte_safe(x_coord, y_coord);
-                        //let value = Some(sprite.get_byte(x_coord as _, y_coord as _));
+                        // let value = Some(sprite.get_byte(x_coord as _, y_coord as _));
 
                         match value {
                             None => {
-                                //eprintln!("Unable to access byte in {}, {}", x_coord, y_coord);
+                                // eprintln!("Unable to access byte in {}, {}", x_coord, y_coord);
                             }
                             Some(byte) => {
                                 let page = current_address.page() as usize;
@@ -1427,12 +1444,10 @@ impl<'a> ImageConverter<'a> {
             .collect::<Vec<_>>();
 
         if is_overscan && used_pages.len() != 2 {
-            /*
-            return Err(anyhow::anyhow!(
-                "An overscan screen is requested but {} pages has been feed",
-                used_pages.len()
-            ));
-            */
+            // return Err(anyhow::anyhow!(
+            // "An overscan screen is requested but {} pages has been feed",
+            // used_pages.len()
+            // ));
 
             eprintln!(
                 "An overscan screen is requested but {} pages has been feed",
@@ -1446,9 +1461,10 @@ impl<'a> ImageConverter<'a> {
             Ok(Output::CPCMemoryOverscan(
                 used_pages[0],
                 used_pages[1],
-                palette,
+                palette
             ))
-        } else {
+        }
+        else {
             Ok(Output::CPCMemoryStandard(used_pages[0], palette))
         }
     }

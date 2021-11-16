@@ -3,10 +3,10 @@ pub mod parser;
 /// Basic token encoding.
 pub mod tokens;
 
-use parser::parse_basic_program;
+use std::fmt;
 
 use failure::Fail;
-use std::fmt;
+use parser::parse_basic_program;
 use tokens::BasicToken;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -15,7 +15,7 @@ pub enum BasicProgramLineIdx {
     /// The basic line is indexed by its position in the listing
     Index(usize),
     /// The basic line is indexed by its real number
-    Number(u16),
+    Number(u16)
 }
 
 #[derive(Debug, Fail, PartialEq, Clone)]
@@ -24,7 +24,7 @@ pub enum BasicError {
     #[fail(display = "Line does not exist: {:?}", idx)]
     UnknownLine { idx: BasicProgramLineIdx },
     #[fail(display = "{}", msg)]
-    ParseError { msg: String },
+    ParseError { msg: String }
 }
 
 /// Basic line of code representation
@@ -35,7 +35,7 @@ pub struct BasicLine {
     /// Tokens of the basic line
     tokens: Vec<BasicToken>,
     /// Length of the line when we do not have to use the real lenght (ie, we play to hide lines)
-    forced_length: Option<u16>,
+    forced_length: Option<u16>
 }
 
 impl fmt::Display for BasicLine {
@@ -59,7 +59,7 @@ impl BasicLine {
         Self {
             line_number,
             tokens: tokens.to_vec(),
-            forced_length: None,
+            forced_length: None
         }
     }
 
@@ -71,11 +71,12 @@ impl BasicLine {
     pub fn set_length(&mut self, length: u16) {
         self.forced_length = Some(length);
     }
+
     /// Return the forced line length or the real line length if not specified
     pub fn forced_length(&self) -> u16 {
         match self.forced_length {
             Some(val) => val,
-            None => (self.real_length() + 2 + 2 + 1),
+            None => (self.real_length() + 2 + 2 + 1)
         }
     }
 
@@ -130,7 +131,7 @@ impl BasicLine {
 #[derive(Debug, Clone)]
 pub struct BasicProgram {
     /// The ensemble of lines of the basic program
-    lines: Vec<BasicLine>,
+    lines: Vec<BasicLine>
 }
 
 impl fmt::Display for BasicProgram {
@@ -155,15 +156,18 @@ impl BasicProgram {
             Ok((res, prog)) => {
                 if res.trim().is_empty() {
                     Ok(prog)
-                } else {
+                }
+                else {
                     Err(BasicError::ParseError {
-                        msg: format!("Basic content has not been totally parsed: `{}`", res),
+                        msg: format!("Basic content has not been totally parsed: `{}`", res)
                     })
                 }
             }
-            Err(e) => Err(BasicError::ParseError {
-                msg: format!("Error while parsing the Basic content: {:?}", e),
-            }),
+            Err(e) => {
+                Err(BasicError::ParseError {
+                    msg: format!("Error while parsing the Basic content: {:?}", e)
+                })
+            }
         }
     }
 
@@ -176,7 +180,7 @@ impl BasicProgram {
     pub fn get_line_mut(&mut self, idx: BasicProgramLineIdx) -> Option<&mut BasicLine> {
         match self.line_idx_as_valid_index(idx) {
             Ok(BasicProgramLineIdx::Index(index)) => self.lines.get_mut(index),
-            _ => None,
+            _ => None
         }
     }
 
@@ -184,7 +188,7 @@ impl BasicProgram {
     pub fn get_line(&mut self, idx: BasicProgramLineIdx) -> Option<&BasicLine> {
         match self.line_idx_as_valid_index(idx) {
             Ok(BasicProgramLineIdx::Index(index)) => self.lines.get(index),
-            _ => None,
+            _ => None
         }
     }
 
@@ -192,7 +196,7 @@ impl BasicProgram {
     pub fn is_first_line(&self, idx: BasicProgramLineIdx) -> bool {
         match self.line_idx_as_valid_index(idx) {
             Ok(BasicProgramLineIdx::Index(0)) => true,
-            _ => false,
+            _ => false
         }
     }
 
@@ -202,12 +206,13 @@ impl BasicProgram {
             Ok(BasicProgramLineIdx::Index(index)) => {
                 if index == 0 {
                     None
-                } else {
+                }
+                else {
                     Some(BasicProgramLineIdx::Index(index - 1))
                 }
             }
             Err(_e) => None,
-            _ => unreachable!(),
+            _ => unreachable!()
         }
     }
 
@@ -219,21 +224,24 @@ impl BasicProgram {
     /// Return the line index in the index format if the line exists
     fn line_idx_as_valid_index(
         &self,
-        idx: BasicProgramLineIdx,
+        idx: BasicProgramLineIdx
     ) -> Result<BasicProgramLineIdx, BasicError> {
         match &idx {
             BasicProgramLineIdx::Index(index) => {
                 if self.lines.len() <= *index {
                     Err(BasicError::UnknownLine { idx })
-                } else {
+                }
+                else {
                     Ok(idx)
                 }
             }
 
-            BasicProgramLineIdx::Number(number) => match self.get_index_of_line_number(*number) {
-                Some(index) => Ok(BasicProgramLineIdx::Index(index)),
-                None => Err(BasicError::UnknownLine { idx }),
-            },
+            BasicProgramLineIdx::Number(number) => {
+                match self.get_index_of_line_number(*number) {
+                    Some(index) => Ok(BasicProgramLineIdx::Index(index)),
+                    None => Err(BasicError::UnknownLine { idx })
+                }
+            }
         }
     }
 
@@ -245,7 +253,8 @@ impl BasicProgram {
             .filter_map(move |(index, line)| {
                 if line.line_number == number {
                     Some(index)
-                } else {
+                }
+                else {
                     None
                 }
             })
@@ -258,11 +267,13 @@ impl BasicProgram {
     pub fn hide_line(&mut self, idx: BasicProgramLineIdx) -> Result<(), BasicError> {
         if !self.has_line(idx) {
             Err(BasicError::UnknownLine { idx })
-        } else if self.is_first_line(idx) {
+        }
+        else if self.is_first_line(idx) {
             // Locomotive basic stat to list lines from 1
             self.lines[0].line_number = 0;
             Ok(())
-        } else {
+        }
+        else {
             match self.previous_idx(idx) {
                 Some(previous_idx) => {
                     let current_length = self.get_line(idx).unwrap().real_length();
@@ -272,7 +283,7 @@ impl BasicProgram {
                     self.get_line_mut(idx).unwrap().set_length(0);
                     Ok(())
                 }
-                None => Err(BasicError::UnknownLine { idx }),
+                None => Err(BasicError::UnknownLine { idx })
             }
         }
     }

@@ -27,7 +27,7 @@ impl Z80 {
                 lst.listing().iter().map(|token| self.execute(token)).sum()
             }
 
-            _ => panic!("{:?} is not yet handled", opcode),
+            _ => panic!("{:?} is not yet handled", opcode)
         }
     }
 
@@ -39,7 +39,7 @@ impl Z80 {
         mnemonic: Mnemonic,
         arg1: Option<&DataAccess>,
         arg2: Option<&DataAccess>,
-        arg3: Option<&cpclib_asm::preamble::Register8>,
+        arg3: Option<&cpclib_asm::preamble::Register8>
     ) -> usize {
         let opcode = Token::OpCode(mnemonic, arg1.cloned(), arg2.cloned(), arg3.cloned());
 
@@ -55,30 +55,35 @@ impl Z80 {
         };
 
         match mnemonic {
-            Mnemonic::Add => match (arg1, arg2) {
-                (Some(&DataAccess::Register8(tokens::Register8::A)), Some(_)) => {
-                    let val = self.get_value(arg1.unwrap()).unwrap();
-                    self.get_register_8_mut(arg1.unwrap()).add(val as _);
-                }
-
-                (Some(&DataAccess::Register16(tokens::Register16::Hl)), Some(_)) => {
-                    let val = self.get_value(arg2.unwrap()).unwrap();
-                    if mnemonic == Mnemonic::Add {
-                        self.get_register_16_mut(arg1.unwrap()).add(val);
-                    } else {
-                        self.get_register_16_mut(arg1.unwrap()).sub(val);
+            Mnemonic::Add => {
+                match (arg1, arg2) {
+                    (Some(&DataAccess::Register8(tokens::Register8::A)), Some(_)) => {
+                        let val = self.get_value(arg1.unwrap()).unwrap();
+                        self.get_register_8_mut(arg1.unwrap()).add(val as _);
                     }
-                }
-                _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2),
-            },
 
-            Mnemonic::Sub => match (arg1, arg2) {
-                (Some(_), None) => {
-                    let val = self.get_value(arg1.unwrap()).unwrap();
-                    self.a_mut().sub(val as _);
+                    (Some(&DataAccess::Register16(tokens::Register16::Hl)), Some(_)) => {
+                        let val = self.get_value(arg2.unwrap()).unwrap();
+                        if mnemonic == Mnemonic::Add {
+                            self.get_register_16_mut(arg1.unwrap()).add(val);
+                        }
+                        else {
+                            self.get_register_16_mut(arg1.unwrap()).sub(val);
+                        }
+                    }
+                    _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
                 }
-                _ => unimplemented!(),
-            },
+            }
+
+            Mnemonic::Sub => {
+                match (arg1, arg2) {
+                    (Some(_), None) => {
+                        let val = self.get_value(arg1.unwrap()).unwrap();
+                        self.a_mut().sub(val as _);
+                    }
+                    _ => unimplemented!()
+                }
+            }
 
             Mnemonic::And => {
                 let val = self.get_value(arg1.unwrap()).unwrap() as _;
@@ -114,25 +119,29 @@ impl Z80 {
 
             Mnemonic::ExHlDe => self.ex_de_hl(),
 
-            Mnemonic::Inc => match arg1 {
-                Some(&DataAccess::Register8(ref _reg)) => {
-                    self.get_register_8_mut(arg1.unwrap()).inc()
+            Mnemonic::Inc => {
+                match arg1 {
+                    Some(&DataAccess::Register8(ref _reg)) => {
+                        self.get_register_8_mut(arg1.unwrap()).inc()
+                    }
+                    Some(&DataAccess::Register16(ref _reg)) => {
+                        self.get_register_16_mut(arg1.unwrap()).inc()
+                    }
+                    _ => unreachable!()
                 }
-                Some(&DataAccess::Register16(ref _reg)) => {
-                    self.get_register_16_mut(arg1.unwrap()).inc()
-                }
-                _ => unreachable!(),
-            },
+            }
 
-            Mnemonic::Dec => match arg1 {
-                Some(&DataAccess::Register8(ref _reg)) => {
-                    self.get_register_8_mut(arg1.unwrap()).dec()
+            Mnemonic::Dec => {
+                match arg1 {
+                    Some(&DataAccess::Register8(ref _reg)) => {
+                        self.get_register_8_mut(arg1.unwrap()).dec()
+                    }
+                    Some(&DataAccess::Register16(ref _reg)) => {
+                        self.get_register_16_mut(arg1.unwrap()).dec()
+                    }
+                    _ => unreachable!()
                 }
-                Some(&DataAccess::Register16(ref _reg)) => {
-                    self.get_register_16_mut(arg1.unwrap()).dec()
-                }
-                _ => unreachable!(),
-            },
+            }
 
             Mnemonic::Djnz => {
                 // dec b
@@ -150,14 +159,16 @@ impl Z80 {
                                     .unwrap() as i32
                                 - 2
                         }
-                        _ => self.get_value(arg2.unwrap()).unwrap() as i32,
+                        _ => self.get_value(arg2.unwrap()).unwrap() as i32
                     };
 
                     if delta > 0 {
                         self.pc_mut().add(delta as _);
-                    } else if delta < 0 {
+                    }
+                    else if delta < 0 {
                         self.pc_mut().sub(-delta as _);
-                    } else {
+                    }
+                    else {
                         // go back at the beginning of the instruction
                         self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
                     }
@@ -174,76 +185,83 @@ impl Z80 {
                                 .unwrap() as i32
                             - 2
                     }
-                    _ => self.get_value(arg2.unwrap()).unwrap() as i32,
+                    _ => self.get_value(arg2.unwrap()).unwrap() as i32
                 };
                 if match arg1 {
                     None => true,
                     Some(DataAccess::FlagTest(ref flag)) => self.is_flag_active(flag),
-                    _ => unreachable!(),
+                    _ => unreachable!()
                 } {
                     inc_duration();
 
                     if delta > 0 {
                         self.pc_mut().add(delta as _);
-                    } else if delta < 0 {
+                    }
+                    else if delta < 0 {
                         self.pc_mut().sub(-delta as _);
-                    } else if delta == 0 {
+                    }
+                    else if delta == 0 {
                         self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
                     }
                 }
             }
 
-            Mnemonic::Jp => match (arg1, arg2) {
-                (None, Some(_)) => {
-                    let value = self.get_value(arg2.unwrap()).unwrap();
-                    self.pc_mut().set(value);
-                }
-
-                (Some(DataAccess::FlagTest(ref flag)), _) => {
-                    if self.is_flag_active(flag) {
-                        // BUGGY when label are used
-                        // it would be better to ensure there are never labels in the stream of opcodes
+            Mnemonic::Jp => {
+                match (arg1, arg2) {
+                    (None, Some(_)) => {
                         let value = self.get_value(arg2.unwrap()).unwrap();
                         self.pc_mut().set(value);
-                        inc_duration();
-                    } else {
-                        self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
                     }
+
+                    (Some(DataAccess::FlagTest(ref flag)), _) => {
+                        if self.is_flag_active(flag) {
+                            // BUGGY when label are used
+                            // it would be better to ensure there are never labels in the stream of opcodes
+                            let value = self.get_value(arg2.unwrap()).unwrap();
+                            self.pc_mut().set(value);
+                            inc_duration();
+                        }
+                        else {
+                            self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
+                        }
+                    }
+
+                    _ => unreachable!()
                 }
+            }
 
-                _ => unreachable!(),
-            },
+            Mnemonic::Ld => {
+                match (arg1, arg2) {
+                    // Load in reg8
+                    (Some(&DataAccess::Register8(_)), Some(_)) => {
+                        let val = self
+                            .get_value(arg2.unwrap())
+                            .unwrap_or_else(|| panic!("Unable to get value of {:?}", &arg2));
+                        self.get_register_8_mut(arg1.unwrap()).set(val as u8);
+                    }
 
-            Mnemonic::Ld => match (arg1, arg2) {
-                // Load in reg8
-                (Some(&DataAccess::Register8(_)), Some(_)) => {
-                    let val = self
-                        .get_value(arg2.unwrap())
-                        .unwrap_or_else(|| panic!("Unable to get value of {:?}", &arg2));
-                    self.get_register_8_mut(arg1.unwrap()).set(val as u8);
+                    // Load in reg16
+                    (Some(&DataAccess::Register16(ref _reg16)), Some(_)) => {
+                        let val = self.get_value(arg2.unwrap()).unwrap();
+                        self.get_register_16_mut(arg1.unwrap()).set(val);
+                    }
+
+                    // Write in memory
+                    (Some(&DataAccess::MemoryRegister16(ref _reg)), Some(_)) => {
+                        let address = self.get_value(arg1.unwrap()).unwrap();
+                        let value = self.get_value(arg2.unwrap()).unwrap();
+                        self.write_memory_byte(address, value as _);
+                    }
+
+                    _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
                 }
-
-                // Load in reg16
-                (Some(&DataAccess::Register16(ref _reg16)), Some(_)) => {
-                    let val = self.get_value(arg2.unwrap()).unwrap();
-                    self.get_register_16_mut(arg1.unwrap()).set(val);
-                }
-
-                // Write in memory
-                (Some(&DataAccess::MemoryRegister16(ref _reg)), Some(_)) => {
-                    let address = self.get_value(arg1.unwrap()).unwrap();
-                    let value = self.get_value(arg2.unwrap()).unwrap();
-                    self.write_memory_byte(address, value as _);
-                }
-
-                _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2),
-            },
+            }
 
             Mnemonic::Nop => {
                 // nothing to do
             }
 
-            _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2),
+            _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
         }
 
         duration
@@ -271,22 +289,25 @@ impl Z80 {
     /// TODO better emulation to never return None
     fn get_value(&self, access: &DataAccess) -> Option<u16> {
         match access {
-            DataAccess::Memory(ref exp) => self
-                .eval_expr(exp)
-                .map(|address| u16::from(self.read_memory_byte(address))),
-            DataAccess::IndexRegister16WithIndex(_, _) => None,
+            DataAccess::Memory(ref exp) => {
+                self.eval_expr(exp)
+                    .map(|address| u16::from(self.read_memory_byte(address)))
+            }
+            DataAccess::IndexRegister16WithIndex(..) => None,
             DataAccess::IndexRegister16(_) | &DataAccess::Register16(_) => {
                 Some(self.get_register_16(access).value())
             }
             DataAccess::IndexRegister8(_) | &DataAccess::Register8(_) => {
                 Some(self.get_register_8(access).value().into())
             }
-            DataAccess::MemoryRegister16(ref reg) => Some(u16::from(
-                self.read_memory_byte(self.get_register_16(&DataAccess::Register16(*reg)).value()),
-            )),
+            DataAccess::MemoryRegister16(ref reg) => {
+                Some(u16::from(self.read_memory_byte(
+                    self.get_register_16(&DataAccess::Register16(*reg)).value()
+                )))
+            }
             DataAccess::Expression(ref expr) => self.eval_expr(expr),
             DataAccess::FlagTest(_) => panic!(),
-            _ => unimplemented!(),
+            _ => unimplemented!()
         }
     }
 
@@ -298,80 +319,96 @@ impl Z80 {
     /// Returns the register encoded by the DataAccess
     fn get_register_16(&self, reg: &DataAccess) -> &crate::z80::Register16 {
         match reg {
-            DataAccess::IndexRegister16(ref reg) => match reg {
-                IndexRegister16::Ix => self.ix(),
-                IndexRegister16::Iy => self.iy(),
-            },
-            DataAccess::Register16(ref reg) => match reg {
-                tokens::Register16::Af => self.af(),
-                tokens::Register16::Bc => self.bc(),
-                tokens::Register16::De => self.de(),
-                tokens::Register16::Hl => self.hl(),
-                tokens::Register16::Sp => self.sp(),
-            },
-            _ => unreachable!(),
+            DataAccess::IndexRegister16(ref reg) => {
+                match reg {
+                    IndexRegister16::Ix => self.ix(),
+                    IndexRegister16::Iy => self.iy()
+                }
+            }
+            DataAccess::Register16(ref reg) => {
+                match reg {
+                    tokens::Register16::Af => self.af(),
+                    tokens::Register16::Bc => self.bc(),
+                    tokens::Register16::De => self.de(),
+                    tokens::Register16::Hl => self.hl(),
+                    tokens::Register16::Sp => self.sp()
+                }
+            }
+            _ => unreachable!()
         }
     }
 
     fn get_register_16_mut(&mut self, reg: &DataAccess) -> &mut crate::z80::Register16 {
         match reg {
-            DataAccess::IndexRegister16(ref reg) => match reg {
-                IndexRegister16::Ix => self.ix_mut(),
-                IndexRegister16::Iy => self.iy_mut(),
-            },
-            DataAccess::Register16(ref reg) => match reg {
-                tokens::Register16::Af => self.af_mut(),
-                tokens::Register16::Bc => self.bc_mut(),
-                tokens::Register16::De => self.de_mut(),
-                tokens::Register16::Hl => self.hl_mut(),
-                tokens::Register16::Sp => self.sp_mut(),
-            },
-            _ => unreachable!(),
+            DataAccess::IndexRegister16(ref reg) => {
+                match reg {
+                    IndexRegister16::Ix => self.ix_mut(),
+                    IndexRegister16::Iy => self.iy_mut()
+                }
+            }
+            DataAccess::Register16(ref reg) => {
+                match reg {
+                    tokens::Register16::Af => self.af_mut(),
+                    tokens::Register16::Bc => self.bc_mut(),
+                    tokens::Register16::De => self.de_mut(),
+                    tokens::Register16::Hl => self.hl_mut(),
+                    tokens::Register16::Sp => self.sp_mut()
+                }
+            }
+            _ => unreachable!()
         }
     }
 
     fn get_register_8(&self, reg: &DataAccess) -> &crate::z80::Register8 {
         match reg {
-            DataAccess::Register8(ref reg) => match reg {
-                tokens::Register8::A => self.a(),
-                tokens::Register8::B => self.b(),
-                tokens::Register8::D => self.d(),
-                tokens::Register8::H => self.h(),
-                tokens::Register8::C => self.c(),
-                tokens::Register8::E => self.e(),
-                tokens::Register8::L => self.l(),
-            },
+            DataAccess::Register8(ref reg) => {
+                match reg {
+                    tokens::Register8::A => self.a(),
+                    tokens::Register8::B => self.b(),
+                    tokens::Register8::D => self.d(),
+                    tokens::Register8::H => self.h(),
+                    tokens::Register8::C => self.c(),
+                    tokens::Register8::E => self.e(),
+                    tokens::Register8::L => self.l()
+                }
+            }
 
-            DataAccess::IndexRegister8(ref reg) => match reg {
-                IndexRegister8::Ixl => self.ixl(),
-                IndexRegister8::Ixh => self.ixh(),
-                IndexRegister8::Iyl => self.iyl(),
-                IndexRegister8::Iyh => self.iyh(),
-            },
-            _ => panic!(),
+            DataAccess::IndexRegister8(ref reg) => {
+                match reg {
+                    IndexRegister8::Ixl => self.ixl(),
+                    IndexRegister8::Ixh => self.ixh(),
+                    IndexRegister8::Iyl => self.iyl(),
+                    IndexRegister8::Iyh => self.iyh()
+                }
+            }
+            _ => panic!()
         }
     }
 
     // Mutable version to be synced with the immutable one
     fn get_register_8_mut(&mut self, reg: &DataAccess) -> &mut crate::z80::Register8 {
         match reg {
-            DataAccess::Register8(ref reg) => match reg {
-                tokens::Register8::A => self.a_mut(),
-                tokens::Register8::B => self.b_mut(),
-                tokens::Register8::D => self.d_mut(),
-                tokens::Register8::H => self.h_mut(),
-                tokens::Register8::C => self.c_mut(),
-                tokens::Register8::E => self.e_mut(),
-                tokens::Register8::L => self.l_mut(),
-            },
+            DataAccess::Register8(ref reg) => {
+                match reg {
+                    tokens::Register8::A => self.a_mut(),
+                    tokens::Register8::B => self.b_mut(),
+                    tokens::Register8::D => self.d_mut(),
+                    tokens::Register8::H => self.h_mut(),
+                    tokens::Register8::C => self.c_mut(),
+                    tokens::Register8::E => self.e_mut(),
+                    tokens::Register8::L => self.l_mut()
+                }
+            }
 
-            DataAccess::IndexRegister8(ref reg) => match reg {
-                IndexRegister8::Ixl => self.ixl_mut(),
-                IndexRegister8::Ixh => self.ixh_mut(),
-                IndexRegister8::Iyl => self.iyl_mut(),
-                IndexRegister8::Iyh => self.iyh_mut(),
-            },
-            _ => panic!(),
+            DataAccess::IndexRegister8(ref reg) => {
+                match reg {
+                    IndexRegister8::Ixl => self.ixl_mut(),
+                    IndexRegister8::Ixh => self.ixh_mut(),
+                    IndexRegister8::Iyl => self.iyl_mut(),
+                    IndexRegister8::Iyh => self.iyh_mut()
+                }
+            }
+            _ => panic!()
         }
     }
 
@@ -379,7 +416,7 @@ impl Z80 {
     fn eval_expr(&self, expr: &Expr) -> Option<u16> {
         match expr.resolve(&self.context.env) {
             Ok(val) => Some(val.abs().unwrap().int().unwrap() as u16),
-            Err(_) => None,
+            Err(_) => None
         }
     }
 
@@ -414,7 +451,7 @@ impl FlagIsActive for &FlagTest {
             FlagTest::PE => !(f_value & (1 << FlagPos::Parity as u8)),
 
             FlagTest::P => f_value & (1 << FlagPos::Sign as u8),
-            FlagTest::M => !(f_value & (1 << FlagPos::Sign as u8)),
+            FlagTest::M => !(f_value & (1 << FlagPos::Sign as u8))
         }) != 0
     }
 }
@@ -440,7 +477,7 @@ mod test {
             Mnemonic::Jp,
             None,
             Some(DataAccess::Expression(Expr::Value(0x4000))),
-            None,
+            None
         ));
 
         assert_eq!(z80.pc().value(), 0x4000);
@@ -461,7 +498,7 @@ mod test {
             Mnemonic::Jp,
             None,
             Some(DataAccess::Expression(Expr::Label("LABEL".into()))),
-            None,
+            None
         ));
 
         assert_eq!(z80.pc().value(), 0x4000);
@@ -478,7 +515,7 @@ mod test {
             Mnemonic::Jp,
             None,
             Some(DataAccess::Expression(Expr::Label("$".into()))),
-            None,
+            None
         ));
 
         assert_eq!(z80.pc().value(), 0x4000);
@@ -495,7 +532,7 @@ mod test {
             Mnemonic::Jr,
             None,
             Some(DataAccess::Expression(Expr::Label("$".into()))),
-            None,
+            None
         ));
 
         assert_eq!(z80.pc().value(), 0x4000);

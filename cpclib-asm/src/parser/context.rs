@@ -1,11 +1,11 @@
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::sync::RwLock;
 
 use super::Z80Span;
-use crate::LocatedToken;
 use crate::error::AssemblerError;
 use crate::preamble::*;
-use std::sync::RwLock;
+use crate::LocatedToken;
 
 /// State to limit the parsing abilities depending on the parsing context
 #[derive(Debug, Clone)]
@@ -16,7 +16,6 @@ pub enum ParsingState {
     GeneratedLimited
 }
 
-
 pub trait ParsingStateVerified {
     fn is_accepted(&self, state: &ParsingState) -> bool;
 }
@@ -25,23 +24,25 @@ impl ParsingStateVerified for LocatedToken {
     fn is_accepted(&self, state: &ParsingState) -> bool {
         match state {
             ParsingState::GeneratedLimited => !self.is_directive(),
-            ParsingState::Standard => match self {
-                LocatedToken::Standard{token, span:_span} => token.is_accepted(state), // because of return
-                _ => true
-
-            },
+            ParsingState::Standard => {
+                match self {
+                    LocatedToken::Standard { token, span: _span } => token.is_accepted(state), /* because of return */
+                    _ => true
+                }
+            }
             ParsingState::FunctionLimited => {
                 match self {
-                    LocatedToken::Standard{token, span:_span} => token.is_accepted(state),
-                    LocatedToken::If{..} | LocatedToken::Repeat{..} 
-                    | LocatedToken::Switch{..} | LocatedToken::Iterate{..} => true,
+                    LocatedToken::Standard { token, span: _span } => token.is_accepted(state),
+                    LocatedToken::If { .. }
+                    | LocatedToken::Repeat { .. }
+                    | LocatedToken::Switch { .. }
+                    | LocatedToken::Iterate { .. } => true,
                     _ => false
                 }
-            },
+            }
             ParsingState::StructLimited => todo!()
         }
     }
-
 }
 
 impl ParsingStateVerified for Token {
@@ -49,27 +50,31 @@ impl ParsingStateVerified for Token {
         match state {
             ParsingState::GeneratedLimited => !self.is_directive(),
 
-            ParsingState::Standard => match self {
-                Token::Return(_) => false,
-                _ => true
-            },
+            ParsingState::Standard => {
+                match self {
+                    Token::Return(_) => false,
+                    _ => true
+                }
+            }
             ParsingState::FunctionLimited => {
                 match self {
-                    Token::Equ(_,_ ) | Token::Let(_, _) => true,
-                    Token::If{..} | Token::Repeat{..} | Token::Break |
-                    Token::Switch{..} | 
-                    Token::Iterate{..} => true,
+                    Token::Equ(..) | Token::Let(..) => true,
+                    Token::If { .. }
+                    | Token::Repeat { .. }
+                    | Token::Break
+                    | Token::Switch { .. }
+                    | Token::Iterate { .. } => true,
                     Token::Return(_) => true,
-                    Token::Assert(_, _) | Token::Print(_) | Token::Fail(_) | Token::Comment(_)=> true,
+                    Token::Assert(..) | Token::Print(_) | Token::Fail(_) | Token::Comment(_) => {
+                        true
+                    }
                     _ => false
                 }
             }
             ParsingState::StructLimited => todo!()
         }
     }
-
 }
-
 
 /// Context information that can guide the parser
 /// TODO add assembling flags
@@ -88,7 +93,7 @@ pub struct ParserContext {
     /// Set to true when directives must start by a dot
     pub dotted_directive: bool,
     /// indicate we are parsing a listing generating by a struct
-    pub parse_warning: RwLock<Vec<AssemblerError>>,
+    pub parse_warning: RwLock<Vec<AssemblerError>>
 }
 
 impl Clone for ParserContext {
@@ -103,7 +108,6 @@ impl Clone for ParserContext {
             dotted_directive: self.dotted_directive.clone()
         }
     }
-
 }
 
 impl Default for ParserContext {
@@ -118,12 +122,10 @@ impl Default for ParserContext {
             dotted_directive: false
         }
     }
-
 }
 
 impl ParserContext {
-    pub fn clone_with_state(&self, state: ParsingState ) -> Self {
-
+    pub fn clone_with_state(&self, state: ParsingState) -> Self {
         Self {
             current_filename: self.current_filename.clone(),
             context_name: self.context_name.clone(),
@@ -132,7 +134,6 @@ impl ParserContext {
             parse_warning: self.parse_warning.write().unwrap().clone().into(),
             dotted_directive: self.dotted_directive.clone(),
             state
-        
         }
     }
 }
@@ -178,19 +179,21 @@ impl ParserContext {
             const prefix: &'static str = "\\\\?\\";
             let path = if path.starts_with(prefix) {
                 path[prefix.len()..].to_string()
-            } else {
+            }
+            else {
                 path.to_string()
             };
 
             // Really add
             self.search_path.push(path.into());
             Ok(())
-        } else {
+        }
+        else {
             Err(AssemblerError::IOError {
                 msg: format!(
                     "{} is not a path and cannot be added in the search path",
                     path.to_str().unwrap().to_string()
-                ),
+                )
             })
         }
     }
@@ -198,7 +201,7 @@ impl ParserContext {
     /// Add the folder that contains the given file. Ignore if there are issues with the filename
     pub fn add_search_path_from_file<P: Into<PathBuf>>(
         &mut self,
-        file: P,
+        file: P
     ) -> Result<(), AssemblerError> {
         let file = file.into();
         let path = file.canonicalize();
@@ -209,13 +212,15 @@ impl ParserContext {
                 self.add_search_path(path)
             }
 
-            Err(err) => Err(AssemblerError::IOError {
-                msg: format!(
-                    "Unable to add search path for {}. {}",
-                    file.to_str().unwrap().to_string(),
-                    err.to_string()
-                ),
-            }),
+            Err(err) => {
+                Err(AssemblerError::IOError {
+                    msg: format!(
+                        "Unable to add search path for {}. {}",
+                        file.to_str().unwrap().to_string(),
+                        err.to_string()
+                    )
+                })
+            }
         }
     }
 
@@ -231,10 +236,12 @@ impl ParserContext {
         if self.search_path.is_empty() {
             if fname.is_file() {
                 return Ok(fname);
-            } else {
+            }
+            else {
                 does_not_exists.push(fname.to_str().unwrap().to_owned());
             }
-        } else {
+        }
+        else {
             // loop over all possibilities
             for search in &self.search_path {
                 assert!(std::path::Path::new(&search).is_dir());
@@ -242,7 +249,8 @@ impl ParserContext {
 
                 if current_path.is_file() {
                     return Ok(current_path);
-                } else {
+                }
+                else {
                     let glob =
                         GlobBuilder::new(current_path.as_path().display().to_string().as_str())
                             .case_insensitive(true)
@@ -280,16 +288,13 @@ impl ParserContext {
         self.parse_warning.write().unwrap().pop() // TODO investigate why I cannot return a reference
     }
 }
-/*
-pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
-    context_name: None,
-    current_filename: None,
-    read_referenced_files: false,
-    search_path: Vec::new(),
-    parse_warning: Default::default()
-};
-*/
-
+// pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
+// context_name: None,
+// current_filename: None,
+// read_referenced_files: false,
+// search_path: Vec::new(),
+// parse_warning: Default::default()
+// };
 
 #[cfg(test)]
 mod test_super {

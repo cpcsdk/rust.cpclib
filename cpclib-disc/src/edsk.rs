@@ -1,13 +1,13 @@
 // http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
 
-use cpclib_common::bitflags::bitflags;
-use cpclib_common::itertools::zip;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
 use std::string::ToString;
 
+use cpclib_common::bitflags::bitflags;
+use cpclib_common::itertools::zip;
 use delegate::delegate;
 use getset::Getters;
 
@@ -39,7 +39,7 @@ pub enum Head {
     /// Side B of the disc for double sided discs
     B,
     /// Side not specified for single sided discs. Should be deprecated in favor of A
-    Unspecified,
+    Unspecified
 }
 
 #[allow(missing_docs)]
@@ -48,7 +48,7 @@ impl From<u8> for Head {
         match val {
             0 => Self::A,
             1 => Self::B,
-            _ => Self::Unspecified,
+            _ => Self::Unspecified
         }
     }
 }
@@ -58,7 +58,7 @@ impl Into<u8> for Head {
     fn into(self) -> u8 {
         match self {
             Self::A | Self::Unspecified => 0,
-            Self::B => 1,
+            Self::B => 1
         }
     }
 }
@@ -68,7 +68,7 @@ impl Into<u8> for &Head {
     fn into(self) -> u8 {
         match self {
             Head::A | &Head::Unspecified => 0,
-            Head::B => 1,
+            Head::B => 1
         }
     }
 }
@@ -115,7 +115,7 @@ pub struct DiscInformation {
     pub(crate) number_of_heads: u8,
     #[get = "pub"]
     /// high bytes of track sizes for all tracks
-    pub(crate) track_size_table: Vec<u8>, // XXX for standard DSK only one value is provided It should be duplicated there
+    pub(crate) track_size_table: Vec<u8> /* XXX for standard DSK only one value is provided It should be duplicated there */
 }
 
 #[allow(missing_docs)]
@@ -137,7 +137,7 @@ impl DiscInformation {
             "EXTENDED CPC DSK File\r\nDisk-Info\r\n".to_ascii_uppercase()
         );
 
-        let creator_name = String::from_utf8_lossy(&buffer[0x22..=0x2f]);
+        let creator_name = String::from_utf8_lossy(&buffer[0x22..=0x2F]);
         let number_of_tracks = buffer[0x30];
         let number_of_heads = buffer[0x31];
         let track_size_table = &buffer[0x34..(0x34 + number_of_tracks * number_of_heads) as usize];
@@ -148,7 +148,7 @@ impl DiscInformation {
             creator_name: creator_name.to_string(),
             number_of_tracks,
             number_of_heads,
-            track_size_table: track_size_table.to_vec(),
+            track_size_table: track_size_table.to_vec()
         }
     }
 
@@ -202,7 +202,8 @@ impl DiscInformation {
         let head = head as usize;
         let idx = if self.is_single_head() {
             track
-        } else {
+        }
+        else {
             track * 2 + head
         };
 
@@ -294,7 +295,7 @@ pub struct TrackInformation {
     pub(crate) sector_information_list: SectorInformationList,
     /// The size taken by the track + header in the dsk. This is a duplicated information obtained in the DiscInformation bloc
     #[get = "pub"]
-    pub(crate) track_size: u16,
+    pub(crate) track_size: u16
 }
 
 #[allow(missing_docs)]
@@ -312,6 +313,13 @@ impl TrackInformation {
 
 #[allow(missing_docs)]
 impl TrackInformation {
+    delegate! {
+        to self.sector_information_list {
+            pub fn sector(&self, sector_id: u8) -> Option<&Sector>;
+            pub fn sector_mut(&mut self, sector_id: u8) -> Option<&mut Sector>;
+        }
+    }
+
     #[deprecated(
         note = "Note sure it should be used as each sector store this information and different sizes are possible"
     )]
@@ -359,12 +367,12 @@ impl TrackInformation {
 
     #[allow(clippy::cast_possible_truncation)]
     pub fn from_buffer(buffer: &[u8]) -> Self {
-        if String::from_utf8_lossy(&buffer[..0xc]).to_ascii_uppercase()
+        if String::from_utf8_lossy(&buffer[..0xC]).to_ascii_uppercase()
             != "Track-info\r\n".to_ascii_uppercase()
         {
             panic!(
                 "Track buffer does not seem coherent\n{:?}...",
-                &buffer[..0xc]
+                &buffer[..0xC]
             );
         }
 
@@ -395,7 +403,7 @@ impl TrackInformation {
             data_rate,
             recording_mode,
             sector_information_list,
-            track_size,
+            track_size
         };
 
         assert!(track_info.track_size != 0);
@@ -486,19 +494,17 @@ impl TrackInformation {
             buffer.extend_from_slice(&s.values);
         });
 
-        /*
-            // TODO find why this coded was previously present as it raise issues
-            // Ensure the size is correct
-            let added_bytes = (buffer.len() - start_size) as u16;
-            assert!(
-                added_bytes <= self.track_size,
-                format!("{} != {}", added_bytes, self.track_size)
-            );
-            let missing_bytes = self.track_size - added_bytes;
-            if missing_bytes != 0 {
-                buffer.resize(buffer.len() + missing_bytes as usize, 0);
-            }
-        */
+        // TODO find why this coded was previously present as it raise issues
+        // Ensure the size is correct
+        // let added_bytes = (buffer.len() - start_size) as u16;
+        // assert!(
+        // added_bytes <= self.track_size,
+        // format!("{} != {}", added_bytes, self.track_size)
+        // );
+        // let missing_bytes = self.track_size - added_bytes;
+        // if missing_bytes != 0 {
+        // buffer.resize(buffer.len() + missing_bytes as usize, 0);
+        // }
         // Add padding
         assert!(buffer.len() % 256 == 0);
     }
@@ -517,20 +523,14 @@ impl TrackInformation {
         let size = self.total_size();
         if size % 256 == 0 {
             size
-        } else {
+        }
+        else {
             let mut s = dbg!(size);
             // TODO implement an efficient version
             while s % 256 != 0 {
                 s += 1;
             }
             s
-        }
-    }
-
-    delegate! {
-        to self.sector_information_list {
-            pub fn sector(&self, sector_id: u8) -> Option<&Sector>;
-            pub fn sector_mut(&mut self, sector_id: u8) -> Option<&mut Sector>;
         }
     }
 }
@@ -541,7 +541,7 @@ pub enum DataRate {
     Unknown = 0,
     SingleOrDoubleDensity = 1,
     HighDensity = 2,
-    ExtendedDensity = 3,
+    ExtendedDensity = 3
 }
 
 #[allow(missing_docs)]
@@ -559,7 +559,7 @@ impl From<u8> for DataRate {
             1 => Self::SingleOrDoubleDensity,
             2 => Self::HighDensity,
             3 => Self::ExtendedDensity,
-            _ => unreachable!(),
+            _ => unreachable!()
         }
     }
 }
@@ -571,7 +571,7 @@ impl Into<u8> for DataRate {
             Self::Unknown => 0,
             Self::SingleOrDoubleDensity => 1,
             Self::HighDensity => 2,
-            Self::ExtendedDensity => 3,
+            Self::ExtendedDensity => 3
         }
     }
 }
@@ -581,7 +581,7 @@ impl Into<u8> for DataRate {
 pub enum RecordingMode {
     Unknown = 0,
     FM = 1,
-    MFM = 2,
+    MFM = 2
 }
 
 #[allow(missing_docs)]
@@ -598,7 +598,7 @@ impl From<u8> for RecordingMode {
             0 => Self::Unknown,
             1 => Self::FM,
             2 => Self::MFM,
-            _ => unreachable!(),
+            _ => unreachable!()
         }
     }
 }
@@ -609,7 +609,7 @@ impl Into<u8> for RecordingMode {
         match self {
             Self::Unknown => 0,
             Self::FM => 1,
-            Self::MFM => 2,
+            Self::MFM => 2
         }
     }
 }
@@ -637,7 +637,7 @@ pub struct SectorInformation {
     pub(crate) fdc_status_register_2: u8,
     /// actual data length in bytes
     #[get = "pub"]
-    pub(crate) data_length: u16, // in bytes, little endian notation
+    pub(crate) data_length: u16 // in bytes, little endian notation
 }
 
 #[allow(missing_docs)]
@@ -661,7 +661,7 @@ impl SectorInformation {
             sector_size: buffer[0x03],
             fdc_status_register_1: buffer[0x04],
             fdc_status_register_2: buffer[0x05],
-            data_length: u16::from(buffer[0x06]) + (u16::from(buffer[0x07]) * 256),
+            data_length: u16::from(buffer[0x06]) + (u16::from(buffer[0x07]) * 256)
         }
     }
 
@@ -690,8 +690,8 @@ impl SectorInformation {
 #[derive(Debug, Default, PartialEq, Clone)]
 #[allow(missing_docs)]
 pub struct SectorInformationList {
-    //sectors: Vec<Sector>
-    pub(crate) sectors: Vec<Sector>,
+    // sectors: Vec<Sector>
+    pub(crate) sectors: Vec<Sector>
 }
 
 #[allow(missing_docs)]
@@ -747,7 +747,7 @@ impl SectorInformationList {
                 assert_eq!(info.data_length as usize, data.len());
                 Sector {
                     sector_information_bloc: info,
-                    values: data,
+                    values: data
                 }
             })
             .collect::<Vec<Sector>>();
@@ -776,7 +776,7 @@ impl SectorInformationList {
         heads: &[u8],
         track_number: u8,
         sector_size: u8,
-        filler_byte: u8,
+        filler_byte: u8
     ) {
         assert_eq!(ids.len(), heads.len());
         assert_eq!(self.len(), 0);
@@ -790,7 +790,7 @@ impl SectorInformationList {
             sector.sector_information_bloc.head = heads[idx];
 
             let data_size = convert_fdc_sector_size_to_real_sector_size(
-                sector.sector_information_bloc.sector_size,
+                sector.sector_information_bloc.sector_size
             ) as usize;
             sector.values.resize(data_size, filler_byte);
             sector.sector_information_bloc.data_length = sector.values.len() as u16;
@@ -824,11 +824,17 @@ pub struct Sector {
     #[get]
     pub(crate) sector_information_bloc: SectorInformation,
     /// Some DSK seem to have a vector with not the right size. In tFor this reason, it is better to not give access to it directly
-    pub(crate) values: Vec<u8>,
+    pub(crate) values: Vec<u8>
 }
 
 #[allow(missing_docs)]
 impl Sector {
+    delegate! {
+        to self.sector_information_bloc {
+            pub fn sector_id(&self) -> &u8;
+        }
+    }
+
     /// Number of bytes stored in the sector
     #[allow(clippy::cast_possible_truncation)]
     pub fn real_size(&self) -> u16 {
@@ -877,18 +883,12 @@ impl Sector {
         self.values[..].clone_from_slice(data);
         Ok(())
     }
-
-    delegate! {
-        to self.sector_information_bloc {
-            pub fn sector_id(&self) -> &u8;
-        }
-    }
 }
 
 #[derive(Default, PartialEq, Debug, Clone)]
 #[allow(missing_docs)]
 pub struct TrackInformationList {
-    pub(crate) list: Vec<TrackInformation>,
+    pub(crate) list: Vec<TrackInformation>
 }
 
 #[allow(missing_docs)]
@@ -904,7 +904,8 @@ impl TrackInformationList {
                 let track_buffer = &buffer[consummed_bytes..(consummed_bytes + current_track_size)];
                 if current_track_size > 0 {
                     list.push(TrackInformation::from_buffer(track_buffer));
-                } else {
+                }
+                else {
                     eprintln!("Track {} is unformatted", track_number);
                     list.push(TrackInformation::unformatted());
                 }
@@ -956,16 +957,14 @@ impl TrackInformationList {
 #[allow(missing_docs)]
 pub struct ExtendedDsk {
     pub(crate) disc_information_bloc: DiscInformation,
-    pub(crate) track_list: TrackInformationList,
+    pub(crate) track_list: TrackInformationList
 }
 
 #[allow(missing_docs)]
 impl ExtendedDsk {
     /// open an extended dsk from an existing file
     pub fn open<P>(path: P) -> io::Result<Self>
-    where
-        P: AsRef<Path>,
-    {
+    where P: AsRef<Path> {
         // Read the whole file
         let buffer = {
             let mut f = File::open(path)?;
@@ -991,7 +990,7 @@ impl ExtendedDsk {
 
         Self {
             disc_information_bloc: disc_info,
-            track_list,
+            track_list
         }
     }
 
@@ -1007,7 +1006,7 @@ impl ExtendedDsk {
         head: u8,
         track: u8,
         sector: u8,
-        buffer: &[u8],
+        buffer: &[u8]
     ) -> Result<(u8, u8, u8), String> {
         let mut pos = (head, track, sector);
         let mut consummed = 0;
@@ -1037,7 +1036,7 @@ impl ExtendedDsk {
         // Retrieve the current track and exit if does not exist
         let current_track = self.get_track_information(
             head, // Physical
-            track,
+            track
         )?;
 
         // Return the next sector if exist
@@ -1051,15 +1050,13 @@ impl ExtendedDsk {
         Some((
             *next_track.head_number(), // XXX  logical
             *next_track.track_number(),
-            next_track.min_sector(),
+            next_track.min_sector()
         ))
     }
 
     /// Save the dsk in a file one disc
     pub fn save<P>(&self, path: P) -> io::Result<()>
-    where
-        P: AsRef<Path>,
-    {
+    where P: AsRef<Path> {
         let mut file_buffer = File::create(path)?;
         let mut memory_buffer = Vec::new();
         self.to_buffer(&mut memory_buffer);
@@ -1082,10 +1079,11 @@ impl ExtendedDsk {
     pub fn nb_tracks_per_head(&self) -> u8 {
         let val = if self.disc_information_bloc.is_single_head() {
             self.track_list.list.len()
-        } else {
+        }
+        else {
             self.track_list.list.len() / 2
         };
-        (val & 0xff) as u8
+        (val & 0xFF) as u8
     }
 
     #[deprecated]
@@ -1100,7 +1098,7 @@ impl ExtendedDsk {
     pub fn get_track_information<S: Into<Head>>(
         &self,
         head: S,
-        track: u8,
+        track: u8
     ) -> Option<&TrackInformation> {
         let idx = self.get_track_idx(head.into(), track);
         self.track_list.list.get(idx)
@@ -1109,7 +1107,7 @@ impl ExtendedDsk {
     pub fn get_track_information_mut<S: Into<Head>>(
         &mut self,
         head: S,
-        track: u8,
+        track: u8
     ) -> Option<&mut TrackInformation> {
         let idx = self.get_track_idx(head.into(), track);
         self.track_list.list.get_mut(idx)
@@ -1126,7 +1124,7 @@ impl ExtendedDsk {
         &mut self,
         head: S,
         track: u8,
-        sector_id: u8,
+        sector_id: u8
     ) -> Option<&mut Sector> {
         self.get_track_information_mut(head.into(), track)
             .and_then(|track| track.sector_mut(sector_id))
@@ -1137,10 +1135,11 @@ impl ExtendedDsk {
             let head = match head {
                 Head::A => 0,
                 Head::B => 1,
-                Head::Unspecified => panic!("You must specify a Head for a double Headed disc."),
+                Head::Unspecified => panic!("You must specify a Head for a double Headed disc.")
             };
             track as usize * 2 + head
-        } else {
+        }
+        else {
             if let Head::B = head {
                 panic!("You cannot select Head B in a single Headd disc");
             }
@@ -1154,7 +1153,7 @@ impl ExtendedDsk {
         head: S,
         track: u8,
         sector_id: u8,
-        nb_sectors: u8,
+        nb_sectors: u8
     ) -> Option<Vec<u8>> {
         let mut res = Vec::new();
         let head = head.into();
@@ -1162,7 +1161,7 @@ impl ExtendedDsk {
         for count in 0..nb_sectors {
             match self.sector(head, track, sector_id + count) {
                 None => return None,
-                Some(s) => res.extend(s.values.iter()),
+                Some(s) => res.extend(s.values.iter())
             }
         }
 
@@ -1179,7 +1178,7 @@ impl ExtendedDsk {
                 }
                 Some(bytes)
             }
-            _ => None,
+            _ => None
         }
     }
 

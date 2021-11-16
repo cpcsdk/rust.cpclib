@@ -1,11 +1,25 @@
+use std::borrow::Borrow;
+use std::collections::HashMap;
+use std::fmt::Display;
 
-use crate::{Visited, assembler::{delayed_command::FailedAssertCommand, list::{list_new, list_set}, matrix::{matrix_new, matrix_set}}, error::{AssemblerError, ExpressionError}, preamble::{LocatedToken, ParserContext, ParsingState}};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
-use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
-use super::{Env, delayed_command::PrintCommand, list::{list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push}, matrix::{matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width}};
+use super::delayed_command::PrintCommand;
+use super::list::{
+    list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push
+};
+use super::matrix::{
+    matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width
+};
+use super::Env;
+use crate::assembler::delayed_command::FailedAssertCommand;
+use crate::assembler::list::{list_new, list_set};
+use crate::assembler::matrix::{matrix_new, matrix_set};
+use crate::error::{AssemblerError, ExpressionError};
+use crate::preamble::{LocatedToken, ParserContext, ParsingState};
+use crate::Visited;
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -16,7 +30,7 @@ impl ReturnExpr for Token {
     fn return_expr(&self) -> Option<&Expr> {
         match self {
             Token::Return(exp) => Some(exp),
-            _ => None,
+            _ => None
         }
     }
 }
@@ -25,7 +39,7 @@ impl ReturnExpr for LocatedToken {
     fn return_expr(&self) -> Option<&Expr> {
         match self {
             LocatedToken::Standard { token, .. } => token.return_expr(),
-            _ => None,
+            _ => None
         }
     }
 }
@@ -34,26 +48,30 @@ impl ReturnExpr for LocatedToken {
 pub struct AnyFunction<T: ListingElement + Visited> {
     name: String,
     args: Vec<String>,
-    inner: Vec<T>,
+    inner: Vec<T>
 }
 
 impl<T: ListingElement + Visited + Clone> AnyFunction<T> {
-    fn new<S :Borrow<str>>(name: &str, args: &[S], inner: &[T]) -> Self {
+    fn new<S: Borrow<str>>(name: &str, args: &[S], inner: &[T]) -> Self {
         AnyFunction {
             name: name.to_owned(),
             args: args.iter().map(|s| s.borrow().into()).collect_vec(),
-            inner: inner.to_vec(),
+            inner: inner.to_vec()
         }
     }
 }
 
 impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
-    pub fn eval(&self, init_env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(
+        &self,
+        init_env: &Env,
+        params: &[ExprResult]
+    ) -> Result<ExprResult, AssemblerError> {
         if self.args.len() != params.len() {
             return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
                 self.name.clone(),
                 self.args.len(),
-                params.len(),
+                params.len()
             ));
         }
         // we copy the environement to be sure no bug can modify it
@@ -66,7 +84,7 @@ impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
             // TODO modify the code according to the value
             env.add_function_parameter_to_symbols_table(
                 format!("{{{}}}", param.0),
-                param.1.clone(),
+                param.1.clone()
             )
             .unwrap();
         }
@@ -77,11 +95,21 @@ impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
                 .map_err(|e| AssemblerError::FunctionError(self.name.clone(), box e))?;
 
             if env.return_value.is_some() {
-                let extra_print = &env.active_page_info().print_commands()[init_env.active_page_info().print_commands().len()..];
-                let extra_assert = &env.active_page_info().failed_assert_commands()[init_env.active_page_info().failed_assert_commands().len()..];
+                let extra_print = &env.active_page_info().print_commands()
+                    [init_env.active_page_info().print_commands().len()..];
+                let extra_assert = &env.active_page_info().failed_assert_commands()
+                    [init_env.active_page_info().failed_assert_commands().len()..];
 
-                init_env.extra_print_from_function.write().unwrap().extend_from_slice(extra_print);
-                init_env.extra_failed_assert_from_function.write().unwrap().extend_from_slice(extra_assert);
+                init_env
+                    .extra_print_from_function
+                    .write()
+                    .unwrap()
+                    .extend_from_slice(extra_print);
+                init_env
+                    .extra_failed_assert_from_function
+                    .write()
+                    .unwrap()
+                    .extend_from_slice(extra_assert);
 
                 return Ok(env.return_value.take().unwrap());
             }
@@ -95,7 +123,7 @@ impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
 pub enum Function {
     Located(AnyFunction<LocatedToken>),
     Standard(AnyFunction<Token>),
-    HardCoded(HardCodedFunction),
+    HardCoded(HardCodedFunction)
 }
 
 lazy_static::lazy_static! {
@@ -171,7 +199,7 @@ pub enum HardCodedFunction {
     StringPush,
     StringConcat,
 
-    Assemble,
+    Assemble
 }
 
 impl HardCodedFunction {
@@ -201,7 +229,7 @@ impl HardCodedFunction {
             HardCodedFunction::StringNew => Some(2),
             HardCodedFunction::StringPush => Some(2),
             HardCodedFunction::StringConcat => None,
-            
+
             HardCodedFunction::Assemble => Some(1),
 
             HardCodedFunction::MatrixNew => Some(3),
@@ -213,7 +241,7 @@ impl HardCodedFunction {
             HardCodedFunction::MatrixSetCol => Some(3),
 
             HardCodedFunction::MatrixWidth => Some(1),
-            HardCodedFunction::MatrixHeight => Some(1),
+            HardCodedFunction::MatrixHeight => Some(1)
         }
     }
 
@@ -222,58 +250,75 @@ impl HardCodedFunction {
     }
 
     pub fn name(&self) -> &str {
-        HARD_CODED_FUNCTIONS.iter()
-            .find_map(|(k,v)| match v {
-                Function::HardCoded(v) => if v == self {Some(k)} else {None},
-                _ => None
+        HARD_CODED_FUNCTIONS
+            .iter()
+            .find_map(|(k, v)| {
+                match v {
+                    Function::HardCoded(v) => {
+                        if v == self {
+                            Some(k)
+                        }
+                        else {
+                            None
+                        }
+                    }
+                    _ => None
+                }
             })
-            .unwrap()// Cannot fail by definition
+            .unwrap() // Cannot fail by definition
     }
 
     pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
-
         match self.nb_expected_params() {
             Some(nb) => {
                 if nb != params.len() {
                     return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
                         self.name().into(),
                         nb,
-                        params.len(),
+                        params.len()
                     ));
                 }
-            },
+            }
             _ => {}
         }
-        
 
         match self {
-            HardCodedFunction::Mode0ByteToPenAt => Ok(cpclib_image::pixels::mode0::byte_to_pens(
-                params[0].int()? as _,
-            )[params[1].int()? as usize % 2]
-                .number()
-                .into()),
-            HardCodedFunction::Mode1ByteToPenAt => Ok(cpclib_image::pixels::mode1::byte_to_pens(
-                params[0].int()? as _,
-            )[params[1].int()? as usize % 4]
-                .number()
-                .into()),
-            HardCodedFunction::Mode2ByteToPenAt => Ok(cpclib_image::pixels::mode2::byte_to_pens(
-                params[0].int()? as _,
-            )[params[1].int()? as usize % 8]
-                .number()
-                .into()),
+            HardCodedFunction::Mode0ByteToPenAt => {
+                Ok(
+                    cpclib_image::pixels::mode0::byte_to_pens(params[0].int()? as _)
+                        [params[1].int()? as usize % 2]
+                        .number()
+                        .into()
+                )
+            }
+            HardCodedFunction::Mode1ByteToPenAt => {
+                Ok(
+                    cpclib_image::pixels::mode1::byte_to_pens(params[0].int()? as _)
+                        [params[1].int()? as usize % 4]
+                        .number()
+                        .into()
+                )
+            }
+            HardCodedFunction::Mode2ByteToPenAt => {
+                Ok(
+                    cpclib_image::pixels::mode2::byte_to_pens(params[0].int()? as _)
+                        [params[1].int()? as usize % 8]
+                        .number()
+                        .into()
+                )
+            }
 
             HardCodedFunction::PenAtToMode0Byte => {
                 Ok(cpclib_image::pixels::mode0::pen_to_pixel_byte(
                     (params[0].int()? as u8 % 16).into(),
-                    (params[1].int()? as u8 % 2).into(),
+                    (params[1].int()? as u8 % 2).into()
                 )
                 .into())
             }
             HardCodedFunction::PenAtToMode1Byte => {
                 Ok(cpclib_image::pixels::mode1::pen_to_pixel_byte(
                     (params[0].int()? as u8 % 4).into(),
-                    (params[1].int()? as u8 % 4).into(),
+                    (params[1].int()? as u8 % 4).into()
                 )
                 .into())
             }
@@ -281,60 +326,54 @@ impl HardCodedFunction {
             HardCodedFunction::PenAtToMode2Byte => {
                 Ok(cpclib_image::pixels::mode2::pen_to_pixel_byte(
                     (params[0].int()? as u8 % 2).into(),
-                    (params[1].int()? as u8 % 8).into(),
+                    (params[1].int()? as u8 % 8).into()
                 )
                 .into())
             }
 
-            HardCodedFunction::PensToMode0Byte => Ok(cpclib_image::pixels::mode0::pens_to_byte(
-                params[0].int()?.into(),
-                params[1].int()?.into(),
-            )
-            .into()),
-            HardCodedFunction::PensToMode1Byte => Ok(cpclib_image::pixels::mode1::pens_to_byte(
-                params[0].int()?.into(),
-                params[1].int()?.into(),
-                params[2].int()?.into(),
-                params[3].int()?.into(),
-            )
-            .into()),
-            HardCodedFunction::PensToMode2Byte => Ok(cpclib_image::pixels::mode2::pens_to_byte(
-                params[0].int()?.into(),
-                params[1].int()?.into(),
-                params[2].int()?.into(),
-                params[3].int()?.into(),
-                params[4].int()?.into(),
-                params[5].int()?.into(),
-                params[6].int()?.into(),
-                params[7].int()?.into(),
-            )
-            .into()),
+            HardCodedFunction::PensToMode0Byte => {
+                Ok(cpclib_image::pixels::mode0::pens_to_byte(
+                    params[0].int()?.into(),
+                    params[1].int()?.into()
+                )
+                .into())
+            }
+            HardCodedFunction::PensToMode1Byte => {
+                Ok(cpclib_image::pixels::mode1::pens_to_byte(
+                    params[0].int()?.into(),
+                    params[1].int()?.into(),
+                    params[2].int()?.into(),
+                    params[3].int()?.into()
+                )
+                .into())
+            }
+            HardCodedFunction::PensToMode2Byte => {
+                Ok(cpclib_image::pixels::mode2::pens_to_byte(
+                    params[0].int()?.into(),
+                    params[1].int()?.into(),
+                    params[2].int()?.into(),
+                    params[3].int()?.into(),
+                    params[4].int()?.into(),
+                    params[5].int()?.into(),
+                    params[6].int()?.into(),
+                    params[7].int()?.into()
+                )
+                .into())
+            }
             HardCodedFunction::ListNew => Ok(list_new(params[0].int()? as _, params[1].clone())),
-            HardCodedFunction::ListSet => list_set(
-                params[0].clone(), 
-                params[1].int()? as _, 
-                params[2].clone()),
-            HardCodedFunction::ListGet => list_get(
-                &params[0],
-                params[1].int()? as _
-            ),
-            HardCodedFunction::ListPush => list_push(
-                params[0].clone(),
-                params[1].clone()
-            ),
+            HardCodedFunction::ListSet => {
+                list_set(params[0].clone(), params[1].int()? as _, params[2].clone())
+            }
+            HardCodedFunction::ListGet => list_get(&params[0], params[1].int()? as _),
+            HardCodedFunction::ListPush => list_push(params[0].clone(), params[1].clone()),
 
             HardCodedFunction::StringNew => string_new(params[0].int()? as _, params[1].clone()),
             HardCodedFunction::ListLen => list_len(&params[0]),
-            HardCodedFunction::ListSublist => list_sublist(
-                &params[0],
-                params[1].int()? as _,
-                params[2].int()? as _
-            ),
+            HardCodedFunction::ListSublist => {
+                list_sublist(&params[0], params[1].int()? as _, params[2].int()? as _)
+            }
 
-            HardCodedFunction::StringPush => string_push(
-                params[0].clone(),
-                params[1].clone()
-            ),
+            HardCodedFunction::StringPush => string_push(params[0].clone(), params[1].clone()),
 
             HardCodedFunction::Assemble => assemble(params[0].clone(), env),
             HardCodedFunction::StringConcat => {
@@ -343,44 +382,39 @@ impl HardCodedFunction {
                     base = string_push(base, params[i].clone())?
                 }
                 Ok(base)
-            },
+            }
             HardCodedFunction::ListSort => list_sort(params[0].clone()),
             HardCodedFunction::ListArgsort => list_argsort(&params[0]),
 
-            HardCodedFunction::MatrixNew => Ok(matrix_new(
-                params[0].int()? as _, 
-                params[1].int()? as _, 
-            params[2].clone())),
-            HardCodedFunction::MatrixSet => matrix_set(
-                params[0].clone(), 
-                params[1].int()? as _, 
-                params[2].int()? as _, 
-                params[3].clone()),
-            HardCodedFunction::MatrixGet => matrix_get(
-                    &params[0], 
-                    params[1].int()? as _, 
-                    params[2].int()? as _),
-            HardCodedFunction::MatrixCol => matrix_col(
-                &params[0],
-                params[1].int()? as _
-            ),
-            HardCodedFunction::MatrixRow => matrix_row(
-                &params[0],
-                params[1].int()? as _
-            ),
-            HardCodedFunction::MatrixSetRow => matrix_set_row(
-                params[0].clone(),
-                params[1].int()? as _,
-                &params[2]
-            ),
+            HardCodedFunction::MatrixNew => {
+                Ok(matrix_new(
+                    params[0].int()? as _,
+                    params[1].int()? as _,
+                    params[2].clone()
+                ))
+            }
+            HardCodedFunction::MatrixSet => {
+                matrix_set(
+                    params[0].clone(),
+                    params[1].int()? as _,
+                    params[2].int()? as _,
+                    params[3].clone()
+                )
+            }
+            HardCodedFunction::MatrixGet => {
+                matrix_get(&params[0], params[1].int()? as _, params[2].int()? as _)
+            }
+            HardCodedFunction::MatrixCol => matrix_col(&params[0], params[1].int()? as _),
+            HardCodedFunction::MatrixRow => matrix_row(&params[0], params[1].int()? as _),
+            HardCodedFunction::MatrixSetRow => {
+                matrix_set_row(params[0].clone(), params[1].int()? as _, &params[2])
+            }
 
-            HardCodedFunction::MatrixSetCol => matrix_set_col(
-                params[0].clone(),
-                params[1].int()? as _,
-                &params[2]
-            ),
+            HardCodedFunction::MatrixSetCol => {
+                matrix_set_col(params[0].clone(), params[1].int()? as _, &params[2])
+            }
             HardCodedFunction::MatrixWidth => matrix_width(&params[0]),
-            HardCodedFunction::MatrixHeight => matrix_height(&params[0]),
+            HardCodedFunction::MatrixHeight => matrix_height(&params[0])
         }
     }
 }
@@ -389,28 +423,28 @@ impl Function {
     pub fn new_located<S: Borrow<str> + Display>(
         name: &str,
         args: &[S],
-        inner: &[LocatedToken],
+        inner: &[LocatedToken]
     ) -> Result<Self, AssemblerError> {
         if inner.is_empty() {
             return Err(AssemblerError::FunctionWithEmptyBody(name.to_owned()));
         }
         return Ok(Function::Located(AnyFunction::<LocatedToken>::new(
-            name, args, inner,
+            name, args, inner
         )));
     }
 
     pub fn new_standard<S: Borrow<str> + Display>(
         name: &str,
         args: &[S],
-        inner: &[Token],
+        inner: &[Token]
     ) -> Result<Self, AssemblerError> {
         if inner.is_empty() {
             return Err(AssemblerError::FunctionWithEmptyBody(name.to_owned()));
         }
         else {
             return Ok(Function::Standard(AnyFunction::<Token>::new(
-            name, args, inner,
-        )));
+                name, args, inner
+            )));
         }
     }
 
@@ -418,33 +452,27 @@ impl Function {
         match self {
             Self::Located(f) => f.eval(env, params),
             Self::Standard(f) => f.eval(env, params),
-            Self::HardCoded(f) => f.eval(env, params),
+            Self::HardCoded(f) => f.eval(env, params)
         }
     }
 }
 
-pub trait FunctionBuilder <S: Borrow<str> + Display>{
+pub trait FunctionBuilder<S: Borrow<str> + Display> {
     fn new(name: &str, args: &[S], inner: &[Self]) -> Result<Function, AssemblerError>
-    where
-        Self: Sized;
+    where Self: Sized;
 }
 
 impl<S: Borrow<str> + Display> FunctionBuilder<S> for LocatedToken {
-    fn new(
-        name: &str,
-        args: &[S],
-        inner: &[LocatedToken],
-    ) -> Result<Function, AssemblerError> {
+    fn new(name: &str, args: &[S], inner: &[LocatedToken]) -> Result<Function, AssemblerError> {
         Function::new_located(name, args, inner)
     }
 }
 
-impl<S: Borrow<str> + Display> FunctionBuilder<S>for Token {
+impl<S: Borrow<str> + Display> FunctionBuilder<S> for Token {
     fn new(name: &str, args: &[S], inner: &[Token]) -> Result<Function, AssemblerError> {
         Function::new_standard(name, args, inner)
     }
 }
-
 
 /// Assemble a simple listing with no directives.
 /// Warning !!! As the env is read only, we cannot assemble directly inside
@@ -452,18 +480,19 @@ impl<S: Borrow<str> + Display> FunctionBuilder<S>for Token {
 pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, AssemblerError> {
     let code = match code {
         ExprResult::String(code) => code,
-        _ => {return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(box AssemblerError::AssemblingError{
-            msg: "Wrong type".to_owned()
-        })));}
+        _ => {
+            return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                box AssemblerError::AssemblingError {
+                    msg: "Wrong type".to_owned()
+                }
+            )));
+        }
     };
 
     let mut parser_context = ParserContext::default();
     parser_context.state = ParsingState::GeneratedLimited;
     parser_context.context_name = Some("Generated source".to_owned());
-    let tokens = crate::parse_z80_str_with_context(
-        code,
-        parser_context
-    )?;
+    let tokens = crate::parse_z80_str_with_context(code, parser_context)?;
 
     let mut env = Env::default();
     env.symbols = base_env.symbols().clone();
@@ -473,15 +502,12 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
     let bank_info = env.banks.pop().unwrap();
     match &bank_info.1.startadr {
         Some(startadr) => {
-            let bytes = bank_info.0[
-                *startadr as _ ..= bank_info.1.maxadr as _
-            ].iter()
-            .map(|b| ExprResult::from(*b))
-            .collect_vec();
+            let bytes = bank_info.0[*startadr as _..=bank_info.1.maxadr as _]
+                .iter()
+                .map(|b| ExprResult::from(*b))
+                .collect_vec();
             Ok(ExprResult::List(bytes))
         }
         None => Ok(ExprResult::List(Default::default()))
     }
-    
-    
 }

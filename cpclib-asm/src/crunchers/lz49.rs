@@ -1,13 +1,12 @@
-///! Dummy manual c to rust adaptation of lz49 cruncher of Roudoudou
-///
+/// ! Dummy manual c to rust adaptation of lz49 cruncher of Roudoudou
 
 fn lz49_encode_extended_length(odata: &mut Vec<u8>, mut length: usize) {
     while length >= 255 {
         odata.push(0xFF);
         length -= 255;
     }
-    /* if the last value is 255 we must encode 0 to end extended length */
-    /*if (length==0) rasm_printf(ae,"bugfixed!\n");*/
+    // if the last value is 255 we must encode 0 to end extended length
+    // if (length==0) rasm_printf(ae,"bugfixed!\n");
     odata.push(length as u8);
 }
 
@@ -17,20 +16,21 @@ fn lz49_encode_block(
     mut literaloffset: usize,
     literalcpt: usize,
     mut offset: usize,
-    maxlength: usize,
+    maxlength: usize
 ) {
     odata.push(0x00); // Will be overriden at the very last instruction
     let first_idx = odata.len() - 1; // by construction is >0
 
     if
-    /*offset<0 ||*/
+    // offset<0 ||
     offset > 511 {
         panic!("internal offset error!\n");
     }
 
     let mut token = if literalcpt < 7 {
         literalcpt << 4
-    } else {
+    }
+    else {
         lz49_encode_extended_length(odata, literalcpt - 7);
         0x70
     };
@@ -43,10 +43,12 @@ fn lz49_encode_block(
     if maxlength < 18 {
         if maxlength > 2 {
             token |= maxlength - 3;
-        } else {
-            /* endoffset has no length */
         }
-    } else {
+        else {
+            // endoffset has no length
+        }
+    }
+    else {
         token |= 0xF;
         lz49_encode_extended_length(odata, maxlength - 18);
     }
@@ -57,7 +59,8 @@ fn lz49_encode_block(
     }
     if offset != 0 {
         odata.push((offset - 1) as u8);
-    } else {
+    }
+    else {
         odata.push(255);
     }
 
@@ -79,12 +82,12 @@ pub fn lz49_encode_legacy(data: &[u8]) -> Vec<u8> {
     let mut odata = Vec::new();
     odata.reserve(data.len() + data.len() / 2 + 10);
 
-    /* first byte always literal */
+    // first byte always literal
     let mut current = 0;
     odata.push(data[current]);
     current += 1;
 
-    /* force short data encoding */
+    // force short data encoding
     if length < 5 {
         token = (length - 1) << 4;
         odata.push(token as u8);
@@ -137,12 +140,13 @@ pub fn lz49_encode_legacy(data: &[u8]) -> Vec<u8> {
                 literaloffset,
                 literal,
                 current - maxoffset,
-                maxlength,
+                maxlength
             );
             current += maxlength;
             literaloffset = current;
             literal = 0;
-        } else {
+        }
+        else {
             literal += 1;
             current += 1;
         }

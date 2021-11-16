@@ -3,7 +3,7 @@ extern "C" {
         data: *const libc::c_uchar,
         len: libc::c_int,
         dataout: *mut *mut libc::c_uchar,
-        lenout: *mut libc::c_int,
+        lenout: *mut libc::c_int
     ) -> libc::c_int;
 
     fn apultra_decompress(
@@ -11,7 +11,7 @@ extern "C" {
         pOutBuffer: *const libc::c_uchar,
         nInputSize: libc::c_int,
         nMaxOutBufferSize: libc::c_int,
-        nFlags: libc::c_uint,
+        nFlags: libc::c_uint
     ) -> libc::c_int;
 }
 

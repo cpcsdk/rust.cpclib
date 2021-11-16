@@ -1,7 +1,5 @@
 use std::fs::File;
-
 use std::io::prelude::*;
-
 use std::path::Path;
 
 use cpclib_common::bitsets;
@@ -10,8 +8,8 @@ use num_enum::TryFromPrimitive;
 
 mod chunks;
 mod error;
-mod memory;
 pub mod flags;
+mod memory;
 pub mod parse;
 
 pub use chunks::*;
@@ -19,34 +17,30 @@ pub use error::*;
 pub use flags::*;
 pub use memory::*;
 
-///! Re-implementation of createsnapshot by Ramlaid/Arkos
-///! in rust by Krusty/Benediction
+/// ! Re-implementation of createsnapshot by Ramlaid/Arkos
+/// ! in rust by Krusty/Benediction
 
-/**
- * Original options
-
-     {'i',"inSnapshot",0,1,1,"Load <$1> snapshot file"},
-    {'l',"loadFileData",0,0,2,"Load <$1> file data at <$2> address in snapshot memory (or use AMSDOS header load address if <$2> is negative)"},
-    {'p',"putData",0,0,2,"Put <$2> byte at <$1> address in snapshot memory"},
-    {'s',"setToken",0,0,2,"Set snapshot token <$1> to value <$2>\n\t\t"
-        "Use <$1>:<val> to set array value\n\t\t"
-        "ex '-s CRTC_REG:6 20' : Set CRTC register 6 to 20"},
-    {'x',"clearMemory",0,1,0,"Clear snapshot memory"},
-    {'r',"romDeconnect",0,1,0,"Disconnect lower and upper rom"},
-    {'e',"enableInterrupt",0,1,0,"Enable interrupt"},
-    {'d',"disableInterrupt",0,1,0,"Disable interrupt"},
-    {'c',"configFile",0,1,1,"Load a config file with createSnapshot option"},
-    {'t',"tokenList",0,1,0,"Display setable snapshot token ID"},
-    {'o',"output",0,0,3,"Output <$3> bytes of data from address <$2> to file <$1>"},
-    {'f',"fillData",0,0,3,"Fill snapshot from <$1> over <$2> bytes, with <$3> datas"},
-    {'g',"fillText",0,0,3,"Fill snapshot from <$1> over <$2> bytes, with <$3> text"},
-    {'j',"loadIniFile",0,1,1,"Load <$1> init file"},
-{'k',"saveIniFile",0,1,1,"Save <$1> init file"},
-
-*/
+/// Original options
+///
+/// {'i',"inSnapshot",0,1,1,"Load <$1> snapshot file"},
+/// {'l',"loadFileData",0,0,2,"Load <$1> file data at <$2> address in snapshot memory (or use AMSDOS header load address if <$2> is negative)"},
+/// {'p',"putData",0,0,2,"Put <$2> byte at <$1> address in snapshot memory"},
+/// {'s',"setToken",0,0,2,"Set snapshot token <$1> to value <$2>\n\t\t"
+/// "Use <$1>:<val> to set array value\n\t\t"
+/// "ex '-s CRTC_REG:6 20' : Set CRTC register 6 to 20"},
+/// {'x',"clearMemory",0,1,0,"Clear snapshot memory"},
+/// {'r',"romDeconnect",0,1,0,"Disconnect lower and upper rom"},
+/// {'e',"enableInterrupt",0,1,0,"Enable interrupt"},
+/// {'d',"disableInterrupt",0,1,0,"Disable interrupt"},
+/// {'c',"configFile",0,1,1,"Load a config file with createSnapshot option"},
+/// {'t',"tokenList",0,1,0,"Display setable snapshot token ID"},
+/// {'o',"output",0,0,3,"Output <$3> bytes of data from address <$2> to file <$1>"},
+/// {'f',"fillData",0,0,3,"Fill snapshot from <$1> over <$2> bytes, with <$3> datas"},
+/// {'g',"fillText",0,0,3,"Fill snapshot from <$1> over <$2> bytes, with <$3> text"},
+/// {'j',"loadIniFile",0,1,1,"Load <$1> init file"},
+/// {'k',"saveIniFile",0,1,1,"Save <$1> init file"},
 
 pub const HEADER_SIZE: usize = 256;
-
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
 #[repr(u8)]
@@ -56,7 +50,7 @@ pub enum SnapshotVersion {
     /// Version 2 of Snapshsots
     V2,
     /// Version 3 of Snapshsots (use of chunks)
-    V3,
+    V3
 }
 
 impl SnapshotVersion {
@@ -64,12 +58,12 @@ impl SnapshotVersion {
     pub fn is_v3(self) -> bool {
         if let SnapshotVersion::V3 = self {
             true
-        } else {
+        }
+        else {
             false
         }
     }
 }
-
 
 /// Snapshot V3 representation. Can be saved in snapshot V1 or v2.
 #[derive(Clone)]
@@ -84,7 +78,7 @@ pub struct Snapshot {
     chunks: Vec<SnapshotChunk>,
 
     // nothing to do with the snapshot. Should be moved elsewhere
-    pub debug: bool,
+    pub debug: bool
 }
 
 impl std::fmt::Debug for Snapshot {
@@ -103,7 +97,7 @@ impl Default for Snapshot {
             header: [
                 0x4D, 0x56, 0x20, 0x2D, 0x20, 0x53, 0x4E, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
                 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x0C, 0x8D, 0xC0, 0x00, 0x3F, 0x28, 0x2E,
                 0x8E, 0x26, 0x00, 0x19, 0x1E, 0x00, 0x07, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00,
@@ -119,12 +113,12 @@ impl Default for Snapshot {
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00
             ],
             memory: SnapshotMemory::default_128(),
             chunks: Vec::new(),
             memory_already_written: bitsets::DenseBitSet::with_capacity_and_state(PAGE_SIZE * 8, 0),
-            debug: false,
+            debug: false
         }
     }
 }
@@ -174,12 +168,12 @@ impl Snapshot {
     }
 
     pub fn memory_size_header(&self) -> u16 {
-        u16::from(self.header[0x6b]) + 256 * u16::from(self.header[0x6c])
+        u16::from(self.header[0x6B]) + 256 * u16::from(self.header[0x6C])
     }
 
     fn set_memory_size_header(&mut self, size: u16) {
-        self.header[0x6b] = (size % 256) as _;
-        self.header[0x6c] = (size / 256) as _;
+        self.header[0x6B] = (size % 256) as _;
+        self.header[0x6C] = (size / 256) as _;
     }
 
     pub fn version_header(&self) -> u8 {
@@ -196,12 +190,12 @@ impl Snapshot {
         // Delete un-needed data
         match version {
             SnapshotVersion::V1 => {
-                for idx in 0x6d..=0xff {
+                for idx in 0x6D..=0xFF {
                     cloned.header[idx] = 0;
                 }
             }
             SnapshotVersion::V2 => {
-                for idx in 0x75..=0xff {
+                for idx in 0x75..=0xFF {
                     cloned.header[idx] = 0;
                 }
             }
@@ -278,12 +272,11 @@ impl Snapshot {
             new_code
         };
         let chunk = match code {
-            [b'M', b'E', b'M', _] => MemoryChunk::from(code, content).into(), /*
-            ['B', 'R', 'K', 'S'] => BreakpointChunk::from(content),
-            ['D', 'S', 'C', _] => InsertedDiscChunk::from(code, content)
-            ['C', 'P', 'C', '+'] => CPCPlusChunk::from(content)
-             */
-            _ => UnknownChunk::from(code, content).into(),
+            [b'M', b'E', b'M', _] => MemoryChunk::from(code, content).into(), //
+            // ['B', 'R', 'K', 'S'] => BreakpointChunk::from(content),
+            // ['D', 'S', 'C', _] => InsertedDiscChunk::from(code, content)
+            // ['C', 'P', 'C', '+'] => CPCPlusChunk::from(content)
+            _ => UnknownChunk::from(code, content).into()
         };
 
         Some(chunk)
@@ -302,7 +295,7 @@ impl Snapshot {
     pub fn save<P: AsRef<Path>>(
         &self,
         fname: P,
-        version: SnapshotVersion,
+        version: SnapshotVersion
     ) -> Result<(), std::io::Error> {
         let mut buffer = File::create(fname.as_ref())?;
         self.write(&mut buffer, version)
@@ -327,7 +320,10 @@ impl Snapshot {
 
         // Write chunks if any
         for chunk in &sna.chunks {
-            println!("Add chunk: {}", chunk.code().iter().map(|c|*c as char).collect::<String>());
+            println!(
+                "Add chunk: {}",
+                chunk.code().iter().map(|c| *c as char).collect::<String>()
+            );
             buffer.write_all(chunk.code())?;
             buffer.write_all(&chunk.size_as_array())?;
             buffer.write_all(chunk.data())?;
@@ -391,14 +387,13 @@ impl Snapshot {
     /// let mut sna = Snapshot::default();
     /// let data = vec![0,2,3,5];
     /// sna.add_data(&data, 0x4000);
-    ///
     /// ```
     /// TODO: re-implement with set_byte
-    ///
     pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError> {
         if address + data.len() > 0x10000 * 2 {
             Err(SnapshotError::NotEnougSpaceAvailable)
-        } else {
+        }
+        else {
             if address < 0x10000 && (address + data.len()) >= 0x10000 {
                 eprintln!("[Warning] Start of file is in main memory (0x{:x}) and  end of file is in extra banks (0x{:x}).", address, (address + data.len()));
             }
@@ -438,7 +433,8 @@ impl Snapshot {
             while idx < self.chunks.len() {
                 if self.chunks[0].is_memory_chunk() {
                     self.chunks.remove(idx);
-                } else {
+                }
+                else {
                     idx += 1;
                 }
             }
@@ -465,7 +461,8 @@ impl Snapshot {
             1 => {
                 if value > 255 {
                     Err(SnapshotError::InvalidValue)
-                } else {
+                }
+                else {
                     self.header[offset] = value as u8;
                     Ok(())
                 }
@@ -476,7 +473,7 @@ impl Snapshot {
                 self.header[offset + 1] = (value / 256) as u8;
                 Ok(())
             }
-            _ => panic!("Unable to handle size != 1 or 2"),
+            _ => panic!("Unable to handle size != 1 or 2")
         }
     }
 
@@ -486,12 +483,15 @@ impl Snapshot {
             let offset = flag.offset();
             match flag.elem_size() {
                 1 => FlagValue::Byte(self.header[offset]),
-                2 => FlagValue::Word(
-                    u16::from(self.header[offset + 1]) * 256 + u16::from(self.header[offset]),
-                ),
-                _ => panic!(),
+                2 => {
+                    FlagValue::Word(
+                        u16::from(self.header[offset + 1]) * 256 + u16::from(self.header[offset])
+                    )
+                }
+                _ => panic!()
             }
-        } else {
+        }
+        else {
             // Here we treat the case where we read an array
             let mut vals: Vec<FlagValue> = Vec::new();
             for idx in 0..flag.nb_elems() {

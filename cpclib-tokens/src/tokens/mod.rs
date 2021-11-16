@@ -9,10 +9,9 @@ pub use data_access::*;
 pub use expression::*;
 pub use instructions::*;
 pub use listing::*;
+pub use ordered_float;
 pub use registers::*;
 pub use tokens::*;
-
-pub use ordered_float;
 
 #[cfg(test)]
 mod test {}

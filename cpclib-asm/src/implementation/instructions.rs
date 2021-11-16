@@ -17,16 +17,22 @@ impl Cruncher for CrunchType {
         match self {
             CrunchType::LZ48 => Ok(crunchers::lz48::lz48_encode_legacy(raw)),
             CrunchType::LZ49 => Ok(crunchers::lz49::lz49_encode_legacy(raw)),
-            CrunchType::LZ4 => Err(AssemblerError::AssemblingError {
-                msg: "LZ4 compression not implemented".to_owned(),
-            }),
-            CrunchType::LZX7 => Err(AssemblerError::AssemblingError {
-                msg: "LZX7 compression not implemented".to_owned(),
-            }),
-            CrunchType::LZEXO => Err(AssemblerError::AssemblingError {
-                msg: "LZEXO compression not implemented".to_owned(),
-            }),
-            CrunchType::LZAPU => Ok(crunchers::apultra::compress(raw)),
+            CrunchType::LZ4 => {
+                Err(AssemblerError::AssemblingError {
+                    msg: "LZ4 compression not implemented".to_owned()
+                })
+            }
+            CrunchType::LZX7 => {
+                Err(AssemblerError::AssemblingError {
+                    msg: "LZX7 compression not implemented".to_owned()
+                })
+            }
+            CrunchType::LZEXO => {
+                Err(AssemblerError::AssemblingError {
+                    msg: "LZEXO compression not implemented".to_owned()
+                })
+            }
+            CrunchType::LZAPU => Ok(crunchers::apultra::compress(raw))
         }
     }
 }

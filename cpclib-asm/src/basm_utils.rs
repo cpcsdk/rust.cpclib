@@ -1,15 +1,15 @@
 use std::fmt::Display;
 use std::fs::File;
 use std::io;
-use std::io::{Write};
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::preamble::*;
-use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
-
 use cpclib_common::clap;
 use cpclib_common::clap::{App, Arg, ArgGroup, ArgMatches};
+use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
+
+use crate::preamble::*;
 
 #[derive(Debug)]
 pub enum BasmError {
@@ -51,7 +51,7 @@ impl Display for BasmError {
             }
             BasmError::InvalidArgument(msg) => {
                 write!(f, "Invalid argument: {}", msg)
-            },
+            }
         }
     }
 }
@@ -65,9 +65,8 @@ impl From<AssemblerError> for BasmError {
 /// Parse the given code.
 /// TODO read options to configure the search path
 pub fn parse<'arg>(
-    matches: &'arg ArgMatches<'_>,
+    matches: &'arg ArgMatches<'_>
 ) -> Result<(LocatedListing, Vec<AssemblerError>), BasmError> {
-
     let inline_fname = "<inline code>";
     let filename = matches.value_of("INPUT").unwrap_or(inline_fname);
 
@@ -81,7 +80,7 @@ pub fn parse<'arg>(
         for directory in directories {
             if !Path::new(directory).is_dir() {
                 return Err(BasmError::NotAValidDirectory {
-                    path: directory.to_owned(),
+                    path: directory.to_owned()
                 });
             }
             context.add_search_path(directory)?;
@@ -91,13 +90,13 @@ pub fn parse<'arg>(
     // get the source code if any
     let code = if matches.is_present("INPUT") {
         read_source(filename, &context)?
-    } else if let Some(code) = matches.value_of("INLINE") {
-            format!(" {}", code)
-    } else {
+    }
+    else if let Some(code) = matches.value_of("INLINE") {
+        format!(" {}", code)
+    }
+    else {
         panic!("No code provided to assemble");
     };
-
-
 
     // Continue the creation of the context
     let code = Arc::new(code);
@@ -114,7 +113,7 @@ pub fn parse<'arg>(
 /// TODO use options to configure the base symbole table
 pub fn assemble<'arg>(
     matches: &'arg ArgMatches<'_>,
-    listing: &LocatedListing,
+    listing: &LocatedListing
 ) -> Result<Env, BasmError> {
     let mut options = AssemblingOptions::default();
     options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
@@ -124,37 +123,40 @@ pub fn assemble<'arg>(
         for file in files {
             if !Path::new(file).is_file() {
                 return Err(BasmError::NotAValidFile {
-                    file: file.to_owned(),
+                    file: file.to_owned()
                 });
             }
         }
     }
 
-        // Get the variables definition
-        if let Some(definitions) = matches.values_of("DEFINE_SYMBOL") {
-            for definition in definitions {
-                let mut split = definition.split("=");
-                let symbol = split.next().unwrap();
-                let value = split.next().unwrap_or("1");
-                let value = /*cpclib_common::*/parse_value(value.into())
+    // Get the variables definition
+    if let Some(definitions) = matches.values_of("DEFINE_SYMBOL") {
+        for definition in definitions {
+            let mut split = definition.split("=");
+            let symbol = split.next().unwrap();
+            let value = split.next().unwrap_or("1");
+            let value = /*cpclib_common::*/parse_value(value.into())
                     .map_err(|e| BasmError::InvalidArgument(definition.to_string()))
                     ?
                     .1;
-    
-                options.symbols_mut()
-                    .assign_symbol_to_value(symbol, value.eval()?)
-                    .map_err(|e| BasmError::InvalidArgument(definition.to_string()))?;
-            }
+
+            options
+                .symbols_mut()
+                .assign_symbol_to_value(symbol, value.eval()?)
+                .map_err(|e| BasmError::InvalidArgument(definition.to_string()))?;
         }
-    
+    }
 
     if let Some(dest) = matches.value_of("LISTING_OUTPUT") {
         if dest == "-" {
             options.write_listing_output(std::io::stdout());
-        } else {
-            let file = File::create(dest).map_err(|e| BasmError::Io {
-                io: e,
-                ctx: format!("creating {}", dest),
+        }
+        else {
+            let file = File::create(dest).map_err(|e| {
+                BasmError::Io {
+                    io: e,
+                    ctx: format!("creating {}", dest)
+                }
             })?;
             options.write_listing_output(file);
         }
@@ -166,15 +168,20 @@ pub fn assemble<'arg>(
     if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
         if dest == "-" {
             env.generate_symbols_output(&mut std::io::stdout())
-        } else {
-            let mut f = File::create(dest).map_err(|e| BasmError::Io {
-                io: e,
-                ctx: format!("creating {}", dest),
+        }
+        else {
+            let mut f = File::create(dest).map_err(|e| {
+                BasmError::Io {
+                    io: e,
+                    ctx: format!("creating {}", dest)
+                }
             })?;
             env.generate_symbols_output(&mut f)
         }
-        .map_err(|err| BasmError::ListingGeneration {
-            msg: err.to_string(),
+        .map_err(|err| {
+            BasmError::ListingGeneration {
+                msg: err.to_string()
+            }
         })?;
     }
 
@@ -186,11 +193,14 @@ pub fn assemble<'arg>(
 pub fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
     if matches.is_present("SNAPSHOT") {
         let pc_filename = matches.value_of("OUTPUT").unwrap();
-        env.save_sna(pc_filename).map_err(|e| BasmError::Io {
-            io: e,
-            ctx: format!("saving \"{}\"", pc_filename),
+        env.save_sna(pc_filename).map_err(|e| {
+            BasmError::Io {
+                io: e,
+                ctx: format!("saving \"{}\"", pc_filename)
+            }
         })?;
-    } else if matches.is_present("OUTPUT") || matches.is_present("DB_LIST") {
+    }
+    else if matches.is_present("OUTPUT") || matches.is_present("DB_LIST") {
         // Collect the produced bytes
         let binary = env.produced_bytes();
 
@@ -200,7 +210,8 @@ pub fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
                 let listing = Listing::from(bytes.as_ref());
                 println!("{}", PrintableListing::from(&Listing::from(listing)));
             }
-        } else {
+        }
+        else {
             use std::convert::TryFrom;
 
             let pc_filename = matches.value_of("OUTPUT").unwrap();
@@ -209,7 +220,7 @@ pub fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
             // Raise an error if the filename is not compatible with the header
             if matches.is_present("HEADER") && amsdos_filename.is_err() {
                 return Err(BasmError::InvalidAmsdosFilename {
-                    filename: pc_filename.to_string(),
+                    filename: pc_filename.to_string()
                 });
             }
 
@@ -219,32 +230,40 @@ pub fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
                     &amsdos_filename.unwrap(),
                     env.loading_address().unwrap(),
                     env.execution_address().unwrap(),
-                    &binary,
+                    &binary
                 )
                 .as_bytes()
                 .to_vec()
-            } else if matches.is_present("BASIC_HEADER") {
+            }
+            else if matches.is_present("BASIC_HEADER") {
                 AmsdosManager::compute_basic_header(&amsdos_filename.unwrap(), &binary)
                     .as_bytes()
                     .to_vec()
-            } else {
+            }
+            else {
                 Vec::new()
             };
 
             // Save file on disc
-            let mut f = File::create(pc_filename).map_err(|e| BasmError::Io {
-                io: e,
-                ctx: format!("creating \"{}\"", pc_filename),
+            let mut f = File::create(pc_filename).map_err(|e| {
+                BasmError::Io {
+                    io: e,
+                    ctx: format!("creating \"{}\"", pc_filename)
+                }
             })?;
             if !header.is_empty() {
-                f.write_all(&header).map_err(|e| BasmError::Io {
-                    io: e,
-                    ctx: format!("saving \"{}\"", pc_filename),
+                f.write_all(&header).map_err(|e| {
+                    BasmError::Io {
+                        io: e,
+                        ctx: format!("saving \"{}\"", pc_filename)
+                    }
                 })?;
             }
-            f.write_all(&binary).map_err(|e| BasmError::Io {
-                io: e,
-                ctx: format!("saving \"{}\"", pc_filename),
+            f.write_all(&binary).map_err(|e| {
+                BasmError::Io {
+                    io: e,
+                    ctx: format!("saving \"{}\"", pc_filename)
+                }
             })?;
         }
     }
@@ -261,7 +280,8 @@ pub fn process(matches: &ArgMatches<'_>) -> Result<(Env, Vec<AssemblerError>), B
 
     if matches.is_present("WERROR") && !warnings.is_empty() {
         return Err(AssemblerError::MultipleErrors { errors: warnings }.into());
-    } else {
+    }
+    else {
         save(matches, &env)?;
         return Ok((env, warnings));
     }

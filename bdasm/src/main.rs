@@ -1,8 +1,8 @@
-use clap;
-use clap::{App, Arg};
 use std::fs::File;
 use std::io::Read;
 
+use clap;
+use clap::{App, Arg};
 use cpclib_asm::preamble::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 
@@ -84,10 +84,12 @@ fn main() {
         if header.is_checksum_valid() {
             println!("Amsdos header detected and removed");
             (&input_bytes[128..], Some(header.loading_address()))
-        } else {
+        }
+        else {
             (input_bytes.as_ref(), None)
         }
-    } else {
+    }
+    else {
         (input_bytes.as_ref(), None)
     };
 
@@ -96,7 +98,8 @@ fn main() {
         let skip = skip.parse::<usize>().expect("Unable to convert SKIP value");
         eprintln!("; Skip {} bytes", skip);
         &input_bytes[skip..]
-    } else {
+    }
+    else {
         input_bytes
     };
 
@@ -115,7 +118,7 @@ fn main() {
                 let start = usize::from_str_radix(split[0], 16).unwrap();
                 let length = match usize::from_str_radix(split[1], 10) {
                     Ok(l) => Some(l),
-                    Err(_) => None,
+                    Err(_) => None
                 };
                 (start, length)
             })
@@ -129,22 +132,23 @@ fn main() {
             let &(bloc_idx, bloc_length) = blocs.first().unwrap();
             if current_idx < bloc_idx {
                 listings.push(cpclib_asm::disass::disassemble(
-                    &input_bytes[current_idx..(bloc_idx - current_idx)],
+                    &input_bytes[current_idx..(bloc_idx - current_idx)]
                 ));
                 current_idx = bloc_idx;
-            } else {
+            }
+            else {
                 assert_eq!(current_idx, bloc_idx);
                 listings.push(
                     defb_elements(match bloc_length {
                         Some(l) => &input_bytes[current_idx..(current_idx + l)],
-                        None => &input_bytes[current_idx..],
+                        None => &input_bytes[current_idx..]
                     })
-                    .into(),
+                    .into()
                 );
                 blocs.remove(0);
                 current_idx += match bloc_length {
                     Some(l) => l,
-                    None => input_bytes.len() - current_idx,
+                    None => input_bytes.len() - current_idx
                 };
             }
         }
@@ -159,7 +163,8 @@ fn main() {
                 lst.inject_listing(&current);
                 lst
             })
-    } else {
+    }
+    else {
         // no blocs
         cpclib_asm::disass::disassemble(&input_bytes)
     };
@@ -168,7 +173,8 @@ fn main() {
     if let Some(address) = matches.value_of("ORIGIN") {
         let origin = u16::from_str_radix(address, 16).unwrap();
         listing.insert(0, org(origin));
-    } else {
+    }
+    else {
         if let Some(origin) = amsdos_load {
             listing.insert(0, org(origin));
         }
@@ -192,7 +198,8 @@ fn main() {
 
     if matches.is_present("COMPRESS") {
         println!("{}", listing.to_string());
-    } else {
+    }
+    else {
         println!("{}", listing.to_enhanced_string());
     }
 }

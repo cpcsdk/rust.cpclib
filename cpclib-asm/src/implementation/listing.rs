@@ -1,17 +1,19 @@
+use std::fmt;
+
+use cpclib_tokens::symbols::PhysicalAddress;
+use cpclib_tokens::tokens::*;
+
 use crate::error::*;
 use crate::implementation::expression::*;
 use crate::implementation::tokens::*;
 use crate::preamble::parse_z80_str;
 use crate::AssemblingOptions;
-use cpclib_tokens::symbols::PhysicalAddress;
-use cpclib_tokens::tokens::*;
-use std::fmt;
 
 /// Additional methods for the listings
 pub trait ListingExt {
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
-        code: S,
+        code: S
     ) -> Result<(), AssemblerError>;
 
     /// Assemble the listing (without context) and returns the bytes
@@ -57,7 +59,7 @@ impl ListingExt for Listing {
     /// Add additional tokens, that need to be parsed from a string, to the listing
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
-        code: S,
+        code: S
     ) -> Result<(), AssemblerError> {
         parse_z80_str(code.as_ref().trim_end()).map(|local_tokens| {
             let mut local_tokens = local_tokens.as_listing();
@@ -67,7 +69,7 @@ impl ListingExt for Listing {
 
     fn to_bytes_with_options(
         &self,
-        options: &AssemblingOptions,
+        options: &AssemblingOptions
     ) -> Result<Vec<u8>, AssemblerError> {
         let env = crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), options)?;
         Ok(env.produced_bytes())
@@ -78,7 +80,8 @@ impl ListingExt for Listing {
     fn estimated_duration(&self) -> Result<usize, AssemblerError> {
         if let Some(duration) = self.duration() {
             Ok(duration)
-        } else {
+        }
+        else {
             let mut duration = 0;
             for token in self.listing().iter() {
                 duration += token.estimated_duration()?;
@@ -109,7 +112,7 @@ impl ListingExt for Listing {
                     res += &format!("{:4x} ", address);
                     options
                         .symbols_mut()
-                        .set_current_address(PhysicalAddress::new(*address, 0xc0));
+                        .set_current_address(PhysicalAddress::new(*address, 0xC0));
                 }
                 None => {
                     res += "???? ";
@@ -121,7 +124,8 @@ impl ListingExt for Listing {
                     for i in 0..4 {
                         if bytes.len() > i {
                             res += &format!("{:2X} ", bytes[i]);
-                        } else {
+                        }
+                        else {
                             res += "   ";
                         }
                     }
@@ -134,7 +138,8 @@ impl ListingExt for Listing {
                                 c = '.';
                             }
                             res += &format!("{} ", c);
-                        } else {
+                        }
+                        else {
                             res += " ";
                         }
                     }
@@ -145,7 +150,8 @@ impl ListingExt for Listing {
 
                     if bytes.len() > 4 {
                         bytes[4..].to_vec()
-                    } else {
+                    }
+                    else {
                         Vec::new()
                     }
                 }
@@ -171,7 +177,8 @@ impl ListingExt for Listing {
                     for i in 0..4 {
                         if remaining.len() > (i + idx) {
                             res += &format!("{:2X} ", remaining[i + idx]);
-                        } else {
+                        }
+                        else {
                             res += "   ";
                         }
                     }
@@ -184,7 +191,8 @@ impl ListingExt for Listing {
                                 c = '.';
                             }
                             res += &format!("{} ", c);
-                        } else {
+                        }
+                        else {
                             res += " ";
                         }
                     }
@@ -200,8 +208,7 @@ impl ListingExt for Listing {
 
     /// Panic if Org is not one of the first instructions
     fn inject_labels(&mut self, sorted_labels: &[(u16, &str)]) {
-        use cpclib_tokens::builder::equ;
-        use cpclib_tokens::builder::label;
+        use cpclib_tokens::builder::{equ, label};
 
         let mut current_address: Option<u16> = None;
         let mut current_idx = 0;
@@ -213,14 +220,16 @@ impl ListingExt for Listing {
             let next_address = if let Token::Org(address, _) = current_instruction {
                 current_address = Some(address.eval().unwrap().int().unwrap() as u16);
                 current_address.clone()
-            } else {
+            }
+            else {
                 let nb_bytes = current_instruction.number_of_bytes().unwrap();
                 match current_address {
                     Some(address) => Some(address + nb_bytes as u16),
                     None => {
                         if nb_bytes != 0 {
                             panic!("Unable to run if assembling address is unknown")
-                        } else {
+                        }
+                        else {
                             None
                         }
                     }
@@ -234,17 +243,19 @@ impl ListingExt for Listing {
                     if current == expected {
                         self.listing_mut().insert(current_idx, label(new_label));
                         nb_labels_added += 1;
-                    } else if current < expected && next > expected {
+                    }
+                    else if current < expected && next > expected {
                         self.listing_mut().insert(
                             current_idx,
                             equ(new_label, expected), // TODO check if realtive address is better or not
                         );
                         nb_labels_added += 1;
-                    } else {
+                    }
+                    else {
                         current_idx += 1;
                     }
                 }
-                (_, _) => {
+                (..) => {
                     current_idx += 1;
                 }
             }
@@ -258,8 +269,8 @@ impl ListingExt for Listing {
                 0,
                 equ(
                     sorted_labels[nb_labels_added].1,
-                    sorted_labels[nb_labels_added].0,
-                ),
+                    sorted_labels[nb_labels_added].0
+                )
             );
             nb_labels_added += 1;
         }
@@ -277,12 +288,12 @@ impl<'a> fmt::Display for PrintableListing<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for token in self.0.listing().iter() {
             match token {
-                Token::Label(_) | Token::Equ(_, _) | Token::Comment(_) => (),
+                Token::Label(_) | Token::Equ(..) | Token::Comment(_) => (),
                 _ => {
                     write!(f, "\t")?;
                 }
             }
-            //write!(f, "{} ; {:?} {:?} nops {:?} bytes\n", token, token, token.estimated_duration(), token.number_of_bytes())?;
+            // write!(f, "{} ; {:?} {:?} nops {:?} bytes\n", token, token, token.estimated_duration(), token.number_of_bytes())?;
             writeln!(f, "{}", token)?;
         }
 

@@ -1,13 +1,14 @@
 use std::ops::Neg;
 
-use crate::assembler::Env;
-use crate::error::*;
-use crate::implementation::tokens::*;
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
 
-///! Add all important methods to expresison-like structure sthat are not availalbe in the cpclib_tokens crate.
+use crate::assembler::Env;
+use crate::error::*;
+use crate::implementation::tokens::*;
+
+/// ! Add all important methods to expresison-like structure sthat are not availalbe in the cpclib_tokens crate.
 
 /// The result of expression (without taking into account the strings) is either a int (no complex mathematical expression) or a float (division/sinus and so on)
 
@@ -59,21 +60,19 @@ impl ExprEvaluationExt for Expr {
             | Expr::StrictlyGreater(a, b)
             | Expr::StrictlyLower(a, b)
             | Expr::BinaryFunction(_, a, b)
-            | Expr::BooleanOr(a, b) => a
-                .symbols_used()
-                .into_iter()
-                .chain(b.symbols_used().into_iter())
-                .collect_vec(),
+            | Expr::BooleanOr(a, b) => {
+                a.symbols_used()
+                    .into_iter()
+                    .chain(b.symbols_used().into_iter())
+                    .collect_vec()
+            }
 
             Expr::BinaryNot(a) | Expr::Neg(a) | Expr::Paren(a) | Expr::UnaryFunction(_, a) => {
                 a.symbols_used()
-            },
+            }
 
-            Expr::AnyFunction(_, l) | Expr::List(l)=> {
-                l.iter()
-                    .map(|e| e.symbols_used())
-                    .flatten()
-                    .collect_vec()
+            Expr::AnyFunction(_, l) | Expr::List(l) => {
+                l.iter().map(|e| e.symbols_used()).flatten().collect_vec()
             }
         }
     }
@@ -87,46 +86,58 @@ impl ExprEvaluationExt for Expr {
             let res_right = right.resolve(env);
 
             match (res_left, res_right) {
-                (Ok(a), Ok(b)) => match oper {
-                    Oper::Add => (a + b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-                    Oper::Sub => (a - b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-                    Oper::Div => (a / b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-                    Oper::Mod => (a % b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-                    Oper::Mul => (a * b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-                    Oper::RightShift => (a >> b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-                    Oper::LeftShift => (a << b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                (Ok(a), Ok(b)) => {
+                    match oper {
+                        Oper::Add => (a + b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                        Oper::Sub => (a - b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                        Oper::Div => (a / b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                        Oper::Mod => (a % b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                        Oper::Mul => (a * b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                        Oper::RightShift => {
+                            (a >> b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                        }
+                        Oper::LeftShift => {
+                            (a << b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                        }
 
-                    Oper::BinaryAnd => (a & b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-                    Oper::BinaryOr => (a | b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-                    Oper::BinaryXor => (a ^ b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                        Oper::BinaryAnd => {
+                            (a & b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                        }
+                        Oper::BinaryOr => {
+                            (a | b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                        }
+                        Oper::BinaryXor => {
+                            (a ^ b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                        }
 
-                    Oper::BooleanAnd => Ok(ExprResult::from(a.bool()? && (b.bool()?))),
-                    Oper::BooleanOr => Ok(ExprResult::from(a.bool()? || (b.bool()?))),
+                        Oper::BooleanAnd => Ok(ExprResult::from(a.bool()? && (b.bool()?))),
+                        Oper::BooleanOr => Ok(ExprResult::from(a.bool()? || (b.bool()?))),
 
-                    Oper::Equal => Ok((a == b).into()),
-                    Oper::Different => Ok((a != b).into()),
+                        Oper::Equal => Ok((a == b).into()),
+                        Oper::Different => Ok((a != b).into()),
 
-                    Oper::LowerOrEqual => Ok((a <= b).into()),
-                    Oper::StrictlyLower => Ok((a < b).into()),
-                    Oper::GreaterOrEqual => Ok((a >= b).into()),
-                    Oper::StrictlyGreater => Ok((a > b).into()),
-                },
-                (Err(a), Ok(_b)) => Err(
-                    AssemblerError::ExpressionError(
-                        ExpressionError::LeftError(oper, box a)
-                    )
-                ),
-             
-                (Ok(_a), Err(b)) => Err(
-                    AssemblerError::ExpressionError(
+                        Oper::LowerOrEqual => Ok((a <= b).into()),
+                        Oper::StrictlyLower => Ok((a < b).into()),
+                        Oper::GreaterOrEqual => Ok((a >= b).into()),
+                        Oper::StrictlyGreater => Ok((a > b).into())
+                    }
+                }
+                (Err(a), Ok(_b)) => {
+                    Err(AssemblerError::ExpressionError(ExpressionError::LeftError(
+                        oper, box a
+                    )))
+                }
+
+                (Ok(_a), Err(b)) => {
+                    Err(AssemblerError::ExpressionError(
                         ExpressionError::RightError(oper, box b)
-                    )
-                ),
-                (Err(a), Err(b)) => Err(
-                    AssemblerError::ExpressionError(
+                    ))
+                }
+                (Err(a), Err(b)) => {
+                    Err(AssemblerError::ExpressionError(
                         ExpressionError::LeftAndRightError(oper, box a, box b)
-                    )
-                )
+                    ))
+                }
             }
         };
 
@@ -253,7 +264,7 @@ impl ExprEvaluationExt for Expr {
 /// utility class for unary function evaluation
 struct UnaryFunctionWrapper<'a> {
     func: &'a UnaryFunction,
-    arg: &'a Expr,
+    arg: &'a Expr
 }
 
 impl<'a> UnaryFunctionWrapper<'a> {
@@ -272,36 +283,48 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
         let arg = self.arg.resolve(env)?;
 
         match self.func {
-            UnaryFunction::High => ((arg >> 8.into())? & 0xff.into()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::Low => (arg & 0xff.into()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::High => {
+                ((arg >> 8.into())? & 0xFF.into())
+                    .map_err(|e| AssemblerError::ExpressionTypeError(e))
+            }
+            UnaryFunction::Low => {
+                (arg & 0xFF.into()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+            }
             UnaryFunction::Memory => {
-                if arg < 0.into() || arg > 0xffff.into() {
-
-                    return Err(AssemblerError::ExpressionError(
-                        ExpressionError::OwnError(
-                            box AssemblerError::AssemblingError{msg:format!("Impossible to read memory address {}", arg)}
-                        )
-                    ));
-
-                } else {
+                if arg < 0.into() || arg > 0xFFFF.into() {
+                    return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                        box AssemblerError::AssemblingError {
+                            msg: format!("Impossible to read memory address {}", arg)
+                        }
+                    )));
+                }
+                else {
                     Ok(env
                         .peek(&env.logical_to_physical_address(arg.int()? as _))
                         .into())
                 }
             }
-            UnaryFunction::Floor => (arg.floor()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Floor => {
+                (arg.floor()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+            }
             UnaryFunction::Ceil => (arg.ceil()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::Frac => (arg.frac()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::Int => (arg.int()).map(|i| i.into()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Int => {
+                (arg.int())
+                    .map(|i| i.into())
+                    .map_err(|e| AssemblerError::ExpressionTypeError(e))
+            }
             UnaryFunction::Sin => (arg.sin()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::Cos => (arg.cos()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::ASin => (arg.asin()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::ACos => (arg.acos()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::Abs => (arg.abs()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::Ln => (arg.ln()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::Log10 => (arg.log10()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Log10 => {
+                (arg.log10()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+            }
             UnaryFunction::Exp => (arg.exp()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::Sqrt => (arg.sqrt()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Sqrt => (arg.sqrt()).map_err(|e| AssemblerError::ExpressionTypeError(e))
         }
     }
 }
@@ -310,7 +333,7 @@ impl<'a> ExprEvaluationExt for UnaryFunctionWrapper<'a> {
 struct BinaryFunctionWrapper<'a> {
     func: &'a BinaryFunction,
     arg1: &'a Expr,
-    arg2: &'a Expr,
+    arg2: &'a Expr
 }
 
 impl<'a> BinaryFunctionWrapper<'a> {
@@ -340,16 +363,20 @@ impl<'a> ExprEvaluationExt for BinaryFunctionWrapper<'a> {
                 match arg1 {
                     ExprResult::Float(f) => Ok(f.into_inner().powf(power as f64).into()),
                     ExprResult::Value(v) => Ok(v.pow(power as _).into()),
-                    _=> Err(AssemblerError::ExpressionError(
-                        ExpressionError::OwnError(
-                            box AssemblerError::AssemblingError{msg:format!("pow cannot be applied to a string")}
-                        )
-                    )),
-                    ExprResult::List(_) => Err(AssemblerError::ExpressionError(
-                        ExpressionError::OwnError(
-                            box AssemblerError::AssemblingError{msg:format!("pow cannot be applied to a list")}
-                        )
-                    )),
+                    _ => {
+                        Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                            box AssemblerError::AssemblingError {
+                                msg: format!("pow cannot be applied to a string")
+                            }
+                        )))
+                    }
+                    ExprResult::List(_) => {
+                        Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                            box AssemblerError::AssemblingError {
+                                msg: format!("pow cannot be applied to a list")
+                            }
+                        )))
+                    }
                 }
             }
         }

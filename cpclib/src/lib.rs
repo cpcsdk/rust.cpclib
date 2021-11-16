@@ -44,37 +44,32 @@
 
 #![recursion_limit = "512"]
 
-pub use cpclib_asm as assembler;
-pub use cpclib_basic as basic;
-pub use cpclib_sna as sna;
-pub use cpclib_z80emu as z80emu;
-pub use cpclib_common as common;
-pub use cpclib_image as image;
-pub use cpclib_disc as disc;
-
 /// CPC Wifi extension related stuff. Useable
 #[cfg(any(feature = "xferlib", feature = "xfer"))]
 pub use cpclib_xfer as xfer;
-
+pub use {
+    cpclib_asm as assembler, cpclib_basic as basic, cpclib_common as common, cpclib_disc as disc,
+    cpclib_image as image, cpclib_sna as sna, cpclib_z80emu as z80emu
+};
 
 /// ???
 pub mod asm;
 
+pub use cpclib_image::ga::{Ink, Palette, Pen};
+
 /// Disk (edsk) manipulation. WIP
 // Some reexports
 pub use crate::disc::edsk::ExtendedDsk;
-pub use cpclib_image::ga::{Ink, Palette, Pen};
 
 /// `util` namespace contain various utility functions that could be used by any module and are not specific to the project.
 pub mod util {
-    /**
-     * Convert a string to its unsigned 32 bits representation (to access to extra memory)
-     */
+    /// Convert a string to its unsigned 32 bits representation (to access to extra memory)
     pub fn string_to_nb(source: &str) -> u32 {
         let error = format!("Unable to read the value: {}", source);
         if source.starts_with("0x") {
             u32::from_str_radix(&source[2..], 16).expect(&error)
-        } else {
+        }
+        else {
             source.parse::<u32>().expect(&error)
         }
     }

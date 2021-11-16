@@ -76,7 +76,7 @@ pub enum SnapshotFlag {
     CRTC_STATE,
     GA_VSC,
     GA_ISC,
-    INT_REQ,
+    INT_REQ
 }
 
 #[allow(missing_docs)]
@@ -151,7 +151,7 @@ impl SnapshotFlag {
             CRTC_STATE,
             GA_VSC,
             GA_ISC,
-            INT_REQ,
+            INT_REQ
         ]
     }
 
@@ -162,7 +162,7 @@ impl SnapshotFlag {
             GA_PAL(ref idx) | CRTC_REG(ref idx) | PSG_REG(ref idx) | &GA_MULTIMODE(ref idx) => {
                 self.base() + idx.unwrap_or(0) * self.elem_size()
             }
-            _ => self.base(),
+            _ => self.base()
         }
     }
 
@@ -172,7 +172,7 @@ impl SnapshotFlag {
             | Self::CRTC_REG(ref idx)
             | Self::PSG_REG(ref idx)
             | &Self::GA_MULTIMODE(ref idx) => *idx,
-            _ => Some(0), // For standard stuff indice is considered to be 0
+            _ => Some(0) // For standard stuff indice is considered to be 0
         }
     }
 
@@ -185,7 +185,7 @@ impl SnapshotFlag {
                 *idx = Some(indice);
                 Ok(())
             }
-            _ => Err(SnapshotError::InvalidIndex),
+            _ => Err(SnapshotError::InvalidIndex)
         }
     }
 
@@ -203,12 +203,12 @@ impl SnapshotFlag {
             &Z80_HL | &Z80_L => 0x17,
             &Z80_H => 0x18,
             &Z80_R => 0x19,
-            &Z80_I => 0x1a,
-            &Z80_IFF0 => 0x1b,
-            &Z80_IFF1 => 0x1c,
-            &Z80_IX | &Z80_IXL => 0x1d,
-            &Z80_IXH => 0x1e,
-            &Z80_IY | &Z80_IYL => 0x1f,
+            &Z80_I => 0x1A,
+            &Z80_IFF0 => 0x1B,
+            &Z80_IFF1 => 0x1C,
+            &Z80_IX | &Z80_IXL => 0x1D,
+            &Z80_IXH => 0x1E,
+            &Z80_IY | &Z80_IYL => 0x1F,
             &Z80_IYH => 0x20,
             &Z80_SP => 0x21,
             &Z80_PC => 0x23,
@@ -217,12 +217,12 @@ impl SnapshotFlag {
             &Z80_AX => 0x27,
             &Z80_BCX | &Z80_CX => 0x28,
             &Z80_BX => 0x29,
-            &Z80_DEX | &Z80_EX => 0x2a,
-            &Z80_DX => 0x2b,
-            &Z80_HLX | &Z80_LX => 0x2c,
-            &Z80_HX => 0x2d,
-            &GA_PEN => 0x2e,
-            &GA_PAL(_) => 0x2f,
+            &Z80_DEX | &Z80_EX => 0x2A,
+            &Z80_DX => 0x2B,
+            &Z80_HLX | &Z80_LX => 0x2C,
+            &Z80_HX => 0x2D,
+            &GA_PEN => 0x2E,
+            &GA_PAL(_) => 0x2F,
             &GA_ROMCFG => 0x40,
             &GA_RAMCFG => 0x41,
             &CRTC_SEL => 0x42,
@@ -232,25 +232,25 @@ impl SnapshotFlag {
             &PPI_B => 0x57,
             &PPI_C => 0x58,
             &PPI_CTL => 0x59,
-            &PSG_SEL => 0x5a,
-            &PSG_REG(_) => 0x5b,
-            &CPC_TYPE => 0x6d,
-            &INT_NUM => 0x6e,
-            &GA_MULTIMODE(_) => 0x6f,
-            &FDD_MOTOR => 0x9c,
-            &FDD_TRACK => 0x9d,
-            &PRNT_DATA => 0xa1,
-            &CRTC_TYPE => 0xa4,
-            &CRTC_HCC => 0xa9,
-            &CRTC_CLC => 0xab,
-            &CRTC_RLC => 0xac,
-            &CRTC_VAC => 0xad,
-            &CRTC_VSWC => 0xae,
-            &CRTC_HSWC => 0xaf,
-            &CRTC_STATE => 0xb0,
-            &GA_VSC => 0xb2,
-            &GA_ISC => 0xb3,
-            &INT_REQ => 0xb4,
+            &PSG_SEL => 0x5A,
+            &PSG_REG(_) => 0x5B,
+            &CPC_TYPE => 0x6D,
+            &INT_NUM => 0x6E,
+            &GA_MULTIMODE(_) => 0x6F,
+            &FDD_MOTOR => 0x9C,
+            &FDD_TRACK => 0x9D,
+            &PRNT_DATA => 0xA1,
+            &CRTC_TYPE => 0xA4,
+            &CRTC_HCC => 0xA9,
+            &CRTC_CLC => 0xAB,
+            &CRTC_RLC => 0xAC,
+            &CRTC_VAC => 0xAD,
+            &CRTC_VSWC => 0xAE,
+            &CRTC_HSWC => 0xAF,
+            &CRTC_STATE => 0xB0,
+            &GA_VSC => 0xB2,
+            &GA_ISC => 0xB3,
+            &INT_REQ => 0xB4
         }
     }
 
@@ -262,7 +262,7 @@ impl SnapshotFlag {
             CRTC_REG(_) => 18,
             PSG_REG(_) => 16,
             GA_MULTIMODE(_) => 6,
-            _ => 1,
+            _ => 1
         }
     }
 
@@ -285,7 +285,7 @@ impl SnapshotFlag {
             &GA_PAL(_) => 1,
             &CRTC_REG(_) => 1,
             &PSG_REG(_) => 1,
-            &GA_MULTIMODE(_) => 1,
+            &GA_MULTIMODE(_) => 1
         }
     }
 
@@ -374,7 +374,7 @@ impl FromStr for SnapshotFlag {
             let elems = s.split(':').collect::<Vec<_>>();
             let idx = match elems[1].parse::<usize>() {
                 Ok(idx) => idx,
-                Err(_) => return Err(String::from("Unable to parse index")),
+                Err(_) => return Err(String::from("Unable to parse index"))
             };
 
             let indexed_flag = match elems[0] {
@@ -389,15 +389,17 @@ impl FromStr for SnapshotFlag {
 
             if indexed_flag.indice().unwrap() < indexed_flag.nb_elems() {
                 Ok(indexed_flag)
-            } else {
+            }
+            else {
                 Err(format!("Wrong index size {:?}", indexed_flag))
             }
-        } else {
+        }
+        else {
             match s.as_str() {
-                /*           "GA_PAL" => Ok(SnapshotFlag::GA_PAL(None)),
-                "CRTC_REG" => Ok(SnapshotFlag::CRTC_REG(None)),
-                "PSG_REG" => Ok(SnapshotFlag::PSG_REG(None)),
-                "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(None)),*/
+                //           "GA_PAL" => Ok(SnapshotFlag::GA_PAL(None)),
+                // "CRTC_REG" => Ok(SnapshotFlag::CRTC_REG(None)),
+                // "PSG_REG" => Ok(SnapshotFlag::PSG_REG(None)),
+                // "GA_MULTIMODE" => Ok(SnapshotFlag::GA_MULTIMODE(None)),
                 "Z80_AF" => Ok(SnapshotFlag::Z80_AF),
                 "Z80_F" => Ok(SnapshotFlag::Z80_F),
                 "Z80_A" => Ok(SnapshotFlag::Z80_A),
@@ -465,7 +467,7 @@ impl FromStr for SnapshotFlag {
                 "GA_PAL" | "CRTC_REG" | "PSG_REG" | "GA_MULTIMODE" => {
                     Err(format!("{} requires an indice", s))
                 }
-                _ => Err(String::from("Unable to convert string to a flag")),
+                _ => Err(String::from("Unable to convert string to a flag"))
             }
         }
     }
@@ -479,7 +481,7 @@ pub enum FlagValue {
     /// The flag is a word
     Word(u16),
     /// The flag is a list of bytes or words
-    Array(Vec<FlagValue>), // Restr$icted to Byte or Word
+    Array(Vec<FlagValue>) // Restr$icted to Byte or Word
 }
 
 impl fmt::Display for FlagValue {
@@ -487,15 +489,17 @@ impl fmt::Display for FlagValue {
         match *self {
             FlagValue::Byte(ref val) => write!(f, "0x{:x}", val),
             FlagValue::Word(ref val) => write!(f, "0x{:x}", val),
-            FlagValue::Array(ref array) => write!(f, "[")
-                .and_then(|_x| {
-                    write!(
-                        f,
-                        "{:?}",
-                        &array.iter().map(|b| format!("{}", b)).collect::<Vec<_>>()
-                    )
-                })
-                .and_then(|_x| write!(f, "]")),
+            FlagValue::Array(ref array) => {
+                write!(f, "[")
+                    .and_then(|_x| {
+                        write!(
+                            f,
+                            "{:?}",
+                            &array.iter().map(|b| format!("{}", b)).collect::<Vec<_>>()
+                        )
+                    })
+                    .and_then(|_x| write!(f, "]"))
+            }
         }
     }
 }
@@ -505,7 +509,7 @@ impl FlagValue {
         match self {
             Self::Byte(b) => Some(*b as u16),
             Self::Word(w) => Some(*w),
-            _ => None,
+            _ => None
         }
     }
 }

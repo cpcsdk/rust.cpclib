@@ -3,11 +3,11 @@ extern crate pretty_assertions;
 
 #[cfg(test)]
 mod tests {
+    use std::convert::{TryFrom, TryInto};
+
     use cpclib::disc::amsdos::*;
     use cpclib::disc::cfg::*;
     use cpclib::disc::edsk::ExtendedDsk;
-    use std::convert::TryFrom;
-    use std::convert::TryInto;
 
     #[test]
     fn new_data() {
@@ -70,13 +70,13 @@ mod tests {
 
     #[test]
     fn test_hideur() {
-        let content = [0x41, 0x42, 0x43, 0x0a];
+        let content = [0x41, 0x42, 0x43, 0x0A];
         let result = [
             0, 116, 101, 115, 116, 32, 32, 32, 32, 98, 105, 110, 0, 0, 0, 0, 0, 0, 2, 0, 0, 16, 50,
             0, 4, 0, 52, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 11, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 66, 67, 10,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 66, 67, 10
         ];
         let header = &result[0..128];
 
@@ -95,13 +95,13 @@ mod tests {
 
     #[test]
     fn test_amsdos_file() {
-        let content = [0x41, 0x42, 0x43, 0x0a];
+        let content = [0x41, 0x42, 0x43, 0x0A];
         let result = [
             0, 116, 101, 115, 116, 32, 32, 32, 32, 98, 105, 110, 0, 0, 0, 0, 0, 0, 2, 0, 0, 16, 50,
             0, 4, 0, 52, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 11, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 66, 67, 10,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 65, 66, 67, 10
         ];
         let _header = &result[0..128];
 
@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn test_filename_bytes() {
         let bytes = [
-            0x00, 0x2D, 0x47, 0x57, 0x2D, 0x46, 0x52, 0x20, 0x20, 0x42, 0x41, 0x53,
+            0x00, 0x2D, 0x47, 0x57, 0x2D, 0x46, 0x52, 0x20, 0x20, 0x42, 0x41, 0x53
         ];
         let filename = AmsdosFileName::from_slice(&bytes);
         let result = filename.to_entry_format(false, false);
@@ -160,7 +160,7 @@ mod tests {
         let bytes = [
             0x00, 0x2D, 0x47, 0x57, 0x2D, 0x46, 0x52, 0x20, 0x20, 0x42, 0x41, 0x53, 0x00, 0x00,
             0x00, 0x06, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00
         ];
         let entry = AmsdosEntry::from_buffer(0, &bytes);
         let file_results = entry.amsdos_filename().to_entry_format(false, false);
@@ -199,7 +199,7 @@ mod tests {
             &filename,
             0x3210,
             0x1234,
-            &[0x41, 0x42, 0x43, 0x0a],
+            &[0x41, 0x42, 0x43, 0x0A]
         )
         .unwrap();
         manager
@@ -214,7 +214,7 @@ mod tests {
         assert_eq!(file.header().execution_address(), 0x1234);
         assert_eq!(file.header().loading_address(), 0x3210);
 
-        let catalog_data = manager.dsk().sectors_bytes(0, 0, 0xc1, 4).unwrap();
+        let catalog_data = manager.dsk().sectors_bytes(0, 0, 0xC1, 4).unwrap();
         let entry_data = &catalog_data[..32];
         let entry = AmsdosEntry::from_slice(0, &entry_data);
         println!("{:?}", entry_data);

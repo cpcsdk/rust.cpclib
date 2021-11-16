@@ -1,14 +1,12 @@
-use std::borrow::Cow;
-use std::ops::Deref;
-use std::ops::DerefMut;
-
 use core::fmt::Debug;
+use std::borrow::Cow;
 use std::iter::FromIterator;
+use std::ops::{Deref, DerefMut};
 
 use crate::Token;
 /// The ListingElement trati contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
-pub trait ListingElement : Debug {}
+pub trait ListingElement: Debug {}
 
 impl<'t> ListingElement for Cow<'t, Token> {}
 /// A listing is simply a list of things similar to token
@@ -17,14 +15,14 @@ pub struct BaseListing<T: Clone + ListingElement> {
     /// Ordered list of the tokens
     pub(crate) listing: Vec<T>,
     /// Duration of the listing execution. Manually set by user
-    pub(crate) duration: Option<usize>,
+    pub(crate) duration: Option<usize>
 }
 
 impl<T: Clone + ListingElement> From<Vec<T>> for BaseListing<T> {
     fn from(listing: Vec<T>) -> Self {
         Self {
             listing,
-            duration: None,
+            duration: None
         }
     }
 }
@@ -47,7 +45,7 @@ impl<T: Clone + ListingElement> Default for BaseListing<T> {
     fn default() -> Self {
         Self {
             listing: Vec::new(),
-            duration: None,
+            duration: None
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::io::Write;
 
-use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait};
 use cpclib_common::itertools::Itertools;
+use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait};
 
 /// Manage the generation of the symbols output.
 /// Could be parametrize by some directives
@@ -11,7 +11,7 @@ pub struct SymbolOutputGenerator {
     allowed: Vec<Symbol>,
 
     all_forbidden: bool,
-    all_allowed: bool,
+    all_allowed: bool
 }
 
 impl Default for SymbolOutputGenerator {
@@ -21,7 +21,7 @@ impl Default for SymbolOutputGenerator {
             allowed: Vec::new(),
 
             all_forbidden: false,
-            all_allowed: true,
+            all_allowed: true
         }
     }
 }
@@ -31,9 +31,8 @@ impl SymbolOutputGenerator {
     pub fn generate<W: Write>(
         &self,
         w: &mut W,
-        symbs: &impl SymbolsTableTrait,
+        symbs: &impl SymbolsTableTrait
     ) -> std::io::Result<()> {
-       
         for &k in symbs
             .integer_symbols()
             .iter()
@@ -61,10 +60,12 @@ impl SymbolOutputGenerator {
         }
         if sym.value() == "$$" {
             return false;
-        } else if self.all_allowed {
+        }
+        else if self.all_allowed {
             !Self::is_included(&self.forbidden, sym)
-        } else
-        /*if self.all_forbidden*/
+        }
+        else
+        // if self.all_forbidden
         {
             Self::is_included(&self.allowed, sym)
         }
@@ -76,7 +77,7 @@ impl SymbolOutputGenerator {
                 if **s2 == *sym {
                     return true;
                 }
-                //if !s2.value().contains(".") {return false;}
+                // if !s2.value().contains(".") {return false;}
                 sym.value().starts_with(&format!("{}.", s2.value()))
             })
             .is_some()

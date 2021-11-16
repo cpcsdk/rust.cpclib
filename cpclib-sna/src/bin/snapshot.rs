@@ -24,16 +24,16 @@ pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-/**
- * Convert a string to its unsigned 32 bits representation (to access to extra memory)
- */
+/// Convert a string to its unsigned 32 bits representation (to access to extra memory)
 pub fn string_to_nb(source: &str) -> u32 {
     let error = format!("Unable to read the value: {}", source);
     if source.starts_with("0x") {
         u32::from_str_radix(&source[2..], 16).expect(&error)
-    } else if source.starts_with("%") {
+    }
+    else if source.starts_with("%") {
         u32::from_str_radix(&source[1..], 2).expect(&error)
-    } else {
+    }
+    else {
         source.parse::<u32>().expect(&error)
     }
 }
@@ -142,7 +142,8 @@ fn main() {
         let fname = matches.value_of("inSnapshot").unwrap();
         let path = Path::new(&fname);
         Snapshot::load(path)
-    } else {
+    }
+    else {
         Snapshot::default()
     };
 
@@ -164,9 +165,11 @@ fn main() {
             let address = {
                 if place.starts_with("0x") {
                     u32::from_str_radix(&place[2..], 16).unwrap()
-                } else if place.starts_with('0') {
+                }
+                else if place.starts_with('0') {
                     u32::from_str_radix(&place[1..], 8).unwrap()
-                } else {
+                }
+                else {
                     place.parse::<u32>().unwrap()
                 }
             };

@@ -1,20 +1,13 @@
-use path_absolutize;
+use std::fs;
+use std::path::Path;
 
 use curl::easy::{Easy, Form};
 use curl::Error;
+use custom_error::custom_error;
 use path_absolutize::*;
-
-use cpclib_disc as disc;
-use cpclib_sna as sna;
+use {cpclib_disc as disc, cpclib_sna as sna, path_absolutize};
 
 use crate::disc::amsdos::AmsdosFileType;
-
-use std::fs;
-
-use std::path::Path;
-
-use custom_error::custom_error;
-
 use crate::sna::{Snapshot, SnapshotVersion};
 
 custom_error! {#[allow(missing_docs)] pub XferError
@@ -39,7 +32,7 @@ pub struct M4File {
     /// TODO search what it is
     unknown: String,
     /// File size
-    size: String,
+    size: String
 }
 
 impl M4File {
@@ -55,7 +48,7 @@ impl From<&str> for M4File {
         Self {
             fname: splitted.next().unwrap().into(),
             unknown: splitted.next().unwrap().into(),
-            size: splitted.next().unwrap().into(),
+            size: splitted.next().unwrap().into()
         }
     }
 }
@@ -66,7 +59,7 @@ pub struct M4FilesList {
     /// Directory of the list
     cwd: String,
     /// List of files
-    files: Vec<M4File>,
+    files: Vec<M4File>
 }
 
 impl From<&str> for M4FilesList {
@@ -85,10 +78,12 @@ impl From<&str> for M4FilesList {
             // check if current line is ok
             if lines[idx].match_indices(';').count() >= 2 && lines[lines.len() - 1] == "K" {
                 idx = idx + 1; // we can assume it is a standard file even if it may not be one
-            } else if lines[idx].ends_with(",0,0") {
+            }
+            else if lines[idx].ends_with(",0,0") {
                 // we can assume it is a directory
                 idx = idx + 1;
-            } else {
+            }
+            else {
                 // we can consider it is a mistake because of cat art
                 let new_string = format!("{}\n{}", lines[idx], lines[idx + 1]);
                 lines[idx] = new_string;
@@ -100,7 +95,7 @@ impl From<&str> for M4FilesList {
             .collect::<Vec<M4File>>();
         Self {
             cwd: path.into(),
-            files,
+            files
         }
     }
 }
@@ -125,7 +120,7 @@ impl M4FilesList {
 #[derive(Debug)]
 pub struct CpcXfer {
     /// CPC Wifi hostname
-    hostname: String,
+    hostname: String
 }
 
 #[allow(missing_docs)]
@@ -133,7 +128,7 @@ impl CpcXfer {
     /// Create the CpcXfer given an address
     pub fn new<S: AsRef<str>>(hostname: S) -> Self {
         Self {
-            hostname: String::from(hostname.as_ref()),
+            hostname: String::from(hostname.as_ref())
         }
     }
 
@@ -192,10 +187,10 @@ impl CpcXfer {
         &self,
         path: P,
         m4_path: &str,
-        header: Option<(AmsdosFileType, u16, u16)>,
+        header: Option<(AmsdosFileType, u16, u16)>
     ) -> Result<(), XferError>
     where
-        P: AsRef<Path>,
+        P: AsRef<Path>
     {
         self.upload_impl(path.as_ref(), m4_path, header)
     }
@@ -205,7 +200,7 @@ impl CpcXfer {
         &self,
         path: &Path,
         m4_path: &str,
-        header: Option<(AmsdosFileType, u16, u16)>,
+        header: Option<(AmsdosFileType, u16, u16)>
     ) -> Result<(), XferError> {
         let local_fname = path.to_str().unwrap();
 
@@ -234,7 +229,7 @@ impl CpcXfer {
         let destination = Path::new(m4_path).join(
             Path::new(local_fname)
                 .file_name()
-                .expect("Unable to retreive the filename of the file to upload"),
+                .expect("Unable to retreive the filename of the file to upload")
         );
         let destination = destination.to_str().unwrap().to_owned();
 
@@ -264,14 +259,14 @@ impl CpcXfer {
             .tempfile()
             .or_else(|e| {
                 Err(XferError::InternalError {
-                    reason: e.to_string(),
+                    reason: e.to_string()
                 })
             })?;
         let temp_path = file.into_temp_path();
 
         sna.save(&temp_path, SnapshotVersion::V2).or_else(|e| {
             Err(XferError::InternalError {
-                reason: format!("Unable to save the snapshot. {}", e),
+                reason: format!("Unable to save the snapshot. {}", e)
             })
         })?;
         self.upload_and_run(&temp_path, None)?;
@@ -285,7 +280,7 @@ impl CpcXfer {
     pub fn upload_and_run<P: AsRef<Path>>(
         &self,
         path: P,
-        header: Option<(AmsdosFileType, u16, u16)>,
+        header: Option<(AmsdosFileType, u16, u16)>
     ) -> Result<(), XferError> {
         self.upload_and_run_impl(path.as_ref(), header)
     }
@@ -293,7 +288,7 @@ impl CpcXfer {
     fn upload_and_run_impl(
         &self,
         path: &Path,
-        header: Option<(AmsdosFileType, u16, u16)>,
+        header: Option<(AmsdosFileType, u16, u16)>
     ) -> Result<(), XferError> {
         // We are sure it is not a snapshot there
         self.upload_impl(path, "/tmp", header)?;
@@ -339,7 +334,8 @@ impl CpcXfer {
         // Get the absolute directory
         let mut directory = if let Some('/') = directory.chars().next() {
             directory.to_owned()
-        } else {
+        }
+        else {
             self.absolute_path(directory)?
         };
 
@@ -353,19 +349,22 @@ impl CpcXfer {
 
         if cwd == directory {
             Ok(())
-        } else {
+        }
+        else {
             Err(XferError::CdError {
                 from: directory,
-                to: cwd,
+                to: cwd
             })
         }
     }
 
     fn absolute_path(&self, relative: &str) -> Result<String, XferError> {
         match relative.chars().next() {
-            None => Err(XferError::InternalError {
-                reason: "No path provided".into(),
-            }),
+            None => {
+                Err(XferError::InternalError {
+                    reason: "No path provided".into()
+                })
+            }
             Some('/') => Ok(relative.to_owned()),
             _ => {
                 let cwd = self.current_working_directory()?;

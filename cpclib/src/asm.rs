@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Formatter, Result};
-///! Simple managment of ASM code through strings.
+/// ! Simple managment of ASM code through strings.
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -23,7 +23,7 @@ pub enum Bank {
     Four,
     Five,
     Six,
-    Seven,
+    Seven
 }
 
 #[allow(missing_docs)]
@@ -32,7 +32,7 @@ impl Bank {
         use self::Bank::*;
         match self {
             Zero | One | Two | Three => true,
-            _ => false,
+            _ => false
         }
     }
 
@@ -50,7 +50,7 @@ impl Bank {
             Four => 4,
             Five => 5,
             Six => 6,
-            Seven => 7,
+            Seven => 7
         }
     }
 
@@ -61,8 +61,8 @@ impl Bank {
             Zero => 0x0000,
             One => 0x4000,
             Two => 0x8000,
-            Three => 0xc000,
-            _ => 0x4000,
+            Three => 0xC000,
+            _ => 0x4000
         }
     }
 }
@@ -73,7 +73,7 @@ pub struct PageDefinition {
     bank: Bank,
     start: u16,
     end: Option<u16>,
-    name: Option<String>,
+    name: Option<String>
 }
 
 impl Debug for PageDefinition {
@@ -86,7 +86,8 @@ impl Debug for PageDefinition {
                 &self.start,
                 self.end().unwrap()
             )
-        } else {
+        }
+        else {
             write!(
                 f,
                 "PageDefinition( bank: {:?}, start: 0x{:x}, end: None)",
@@ -111,7 +112,7 @@ impl PageDefinition {
             bank,
             start,
             end,
-            name: None,
+            name: None
         }
     }
 
@@ -156,7 +157,8 @@ impl PageDefinition {
         if self.end.is_none() && other.end.is_none() {
             // We do not test overlap when end is not specified
             false
-        } else {
+        }
+        else {
             let memory_overlaps = (self.start >= other.start && self.start <= other.end.unwrap())
                 || (self.end.unwrap() >= other.start && self.end.unwrap() <= other.end.unwrap());
 
@@ -165,15 +167,17 @@ impl PageDefinition {
                 if self.bank() == other.bank() {
                     // Same bank meens overlap
                     true
-                } else {
+                }
+                else {
                     // overlap only when start/end is not in 0x4000-0x7fff
                     // get intersection (there IS an intersection)
                     let start = other.start;
                     let end = self.end.unwrap();
 
-                    start < 0x4000 || start > 0x7fff || end < 0x4000 || end > 0x7fff
+                    start < 0x4000 || start > 0x7FFF || end < 0x4000 || end > 0x7FFF
                 }
-            } else {
+            }
+            else {
                 false
             }
         }
@@ -200,7 +204,7 @@ impl PageDefinition {
 pub struct StringCodePage {
     code: Vec<String>,
     current_address: u16,
-    definition: PageDefinition,
+    definition: PageDefinition
 }
 
 #[allow(missing_docs)]
@@ -209,7 +213,7 @@ impl StringCodePage {
         Self {
             code: Vec::new(),
             current_address: definition.start(),
-            definition,
+            definition
         }
     }
 
@@ -227,7 +231,8 @@ impl StringCodePage {
         if size.is_some() {
             assert!(self.remaining_space() >= size);
             self.current_address += size.unwrap();
-        } else {
+        }
+        else {
             assert!(!self.maximum_address().is_some());
         }
     }
@@ -235,7 +240,7 @@ impl StringCodePage {
     pub fn remaining_space(&self) -> Option<u16> {
         match self.maximum_address() {
             None => None,
-            Some(address) => Some(address - self.current_address),
+            Some(address) => Some(address - self.current_address)
         }
     }
 
@@ -245,7 +250,7 @@ impl StringCodePage {
                 assert!(!self.maximum_address().is_some());
                 true
             }
-            Some(_) => self.remaining_space().unwrap() >= size.unwrap(),
+            Some(_) => self.remaining_space().unwrap() >= size.unwrap()
         }
     }
 
@@ -266,7 +271,7 @@ impl StringCodePage {
 #[derive(Debug)]
 pub struct StringCodePageContainer {
     pages: Vec<StringCodePage>,
-    possibilities: Vec<PageDefinition>,
+    possibilities: Vec<PageDefinition>
 }
 
 #[allow(missing_docs)]
@@ -285,7 +290,7 @@ impl StringCodePageContainer {
 
         Self {
             pages: Vec::new(),
-            possibilities,
+            possibilities
         }
     }
 
@@ -304,7 +309,8 @@ impl StringCodePageContainer {
     pub fn get_current_page_definition(&self) -> Option<&PageDefinition> {
         if self.pages.is_empty() {
             None
-        } else {
+        }
+        else {
             Some(self.pages.last().unwrap().get_page_definition())
         }
     }

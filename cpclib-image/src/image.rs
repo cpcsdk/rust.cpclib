@@ -1,13 +1,13 @@
 #![allow(clippy::needless_range_loop)]
 
-use image as im;
+use std::collections::HashSet;
+
+use anyhow::Context;
+use cpclib_common::itertools::Itertools;
+use {anyhow, image as im};
 
 use crate::ga::*;
 use crate::pixels;
-use anyhow;
-use anyhow::Context;
-use cpclib_common::itertools::Itertools;
-use std::collections::HashSet;
 
 /// Screen mode
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -19,7 +19,7 @@ pub enum Mode {
     /// Mode 2 - 2 colors
     Two,
     /// Mode 3 - 4 colors / same resolution than Mode 0
-    Three,
+    Three
 }
 
 impl From<u8> for Mode {
@@ -29,7 +29,7 @@ impl From<u8> for Mode {
             1 => Mode::One,
             2 => Mode::Two,
             3 => Mode::Three,
-            _ => panic!("{} is not a valid mode.", val),
+            _ => panic!("{} is not a valid mode.", val)
         }
     }
 }
@@ -41,7 +41,7 @@ impl Mode {
         match self {
             Mode::Zero => 16,
             Mode::One | Mode::Three => 4,
-            Mode::Two => 2,
+            Mode::Two => 2
         }
     }
 
@@ -50,7 +50,7 @@ impl Mode {
         match self {
             Mode::Zero | Mode::Three => 2,
             Mode::One => 4,
-            Mode::Two => 8,
+            Mode::Two => 8
         }
     }
 }
@@ -61,7 +61,7 @@ pub enum ConversionRule {
     /// All pixels are used
     AnyModeUseAllPixels,
     /// One pixel out of two is skiped (used for mode0 pictures where the graphician has doubled each pixel)
-    ZeroSkipOddPixels,
+    ZeroSkipOddPixels
 }
 
 /// Browse the image and returns the list of colors
@@ -99,7 +99,7 @@ fn encode(pens: &[Vec<Pen>], mode: Mode) -> Vec<Vec<u8>> {
                 Mode::Zero => pixels::mode0::pens_to_vec(input_row),
                 Mode::One => pixels::mode1::pens_to_vec(input_row),
                 Mode::Two => pixels::mode2::pens_to_vec(input_row),
-                _ => panic!("Unimplemented yet ..."),
+                _ => panic!("Unimplemented yet ...")
             }
         };
         rows.push(row);
@@ -154,7 +154,7 @@ fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
 #[derive(Clone, Debug)]
 pub struct ColorMatrix {
     /// List of inks
-    data: Vec<Vec<Ink>>,
+    data: Vec<Vec<Ink>>
 }
 
 /// We have to choose a strategy when reducing the number of colors of an image.
@@ -166,7 +166,7 @@ pub enum ColorConversionStrategy {
     /// The color is replaced by the closest one
     ReplaceWrongColorByClosestInk,
     /// An error is generated
-    Fail,
+    Fail
 }
 
 #[allow(missing_docs)]
@@ -174,7 +174,7 @@ impl ColorMatrix {
     /// Create a new empty color matrix for the given dimensions
     pub fn new(width: usize, height: usize) -> Self {
         Self {
-            data: vec![vec![Ink::from(0); width]; height],
+            data: vec![vec![Ink::from(0); width]; height]
         }
     }
 
@@ -185,7 +185,7 @@ impl ColorMatrix {
     /// Create a new ColorMatrix that encodes a new image full of black
     pub fn empty_like(&self) -> Self {
         Self {
-            data: vec![vec![Ink::from(0); self.width() as usize]; self.height() as usize],
+            data: vec![vec![Ink::from(0); self.width() as usize]; self.height() as usize]
         }
     }
 
@@ -305,7 +305,7 @@ impl ColorMatrix {
     pub fn reduce_colors_for_mode(
         &mut self,
         mode: Mode,
-        strategy: ColorConversionStrategy,
+        strategy: ColorConversionStrategy
     ) -> Result<(), anyhow::Error> {
         // Get the reduced palette
         let inks = self
@@ -325,7 +325,7 @@ impl ColorMatrix {
     pub fn reduce_colors_with(
         &mut self,
         inks: &[Ink],
-        strategy: ColorConversionStrategy,
+        strategy: ColorConversionStrategy
     ) -> Result<(), anyhow::Error> {
         for y in 0..(self.height() as usize) {
             for x in 0..(self.width() as usize) {
@@ -358,7 +358,7 @@ impl ColorMatrix {
     pub fn width(&self) -> u32 {
         match self.height() {
             0 => 0,
-            _ => self.data[0].len() as u32,
+            _ => self.data[0].len() as u32
         }
     }
 
@@ -369,14 +369,14 @@ impl ColorMatrix {
 
     pub fn convert(
         img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>,
-        conversion: ConversionRule,
+        conversion: ConversionRule
     ) -> Self {
         // Get destination image size
         let height = img.height();
         let width = {
             match conversion {
                 ConversionRule::AnyModeUseAllPixels => img.width(),
-                ConversionRule::ZeroSkipOddPixels => img.width() / 2,
+                ConversionRule::ZeroSkipOddPixels => img.width() / 2
             }
         };
 
@@ -391,7 +391,7 @@ impl ColorMatrix {
                 let src_x = {
                     match conversion {
                         ConversionRule::AnyModeUseAllPixels => x,
-                        ConversionRule::ZeroSkipOddPixels => x * 2,
+                        ConversionRule::ZeroSkipOddPixels => x * 2
                     }
                 };
 
@@ -466,7 +466,7 @@ impl ColorMatrix {
         Sprite {
             mode: Some(mode),
             palette: Some(palette),
-            data: encode(&pens, mode),
+            data: encode(&pens, mode)
         }
     }
 
@@ -474,7 +474,7 @@ impl ColorMatrix {
     pub fn as_mode1_sprite_with_different_inks_per_line(
         &self,
         palette: &[(Ink, Ink, Ink, Ink)],
-        dummy_palette: &Palette,
+        dummy_palette: &Palette
     ) -> Sprite {
         // Build the matrix of pens
         let mut data: Vec<Vec<Pen>> = Vec::new();
@@ -500,14 +500,15 @@ impl ColorMatrix {
                     let pen = line_palette.get_pen_for_ink(*ink);
                     if let Some(pen) = pen {
                         pen
-                    } else {
-                        /* eprintln!("
-                            [ERROR] In line {}, pixel {} color ({:?}) is not in the palette {:?}. Background is used insted",
-                            y,
-                            x,
-                            ink,
-                            line_palette
-                        );*/
+                    }
+                    else {
+                        // eprintln!("
+                        // [ERROR] In line {}, pixel {} color ({:?}) is not in the palette {:?}. Background is used insted",
+                        // y,
+                        // x,
+                        // ink,
+                        // line_palette
+                        // );
                         Pen::from(0)
                     } // If the color is not in the palette, use pen 0
                 })
@@ -523,7 +524,7 @@ impl ColorMatrix {
         Sprite {
             mode: Some(Mode::One),
             palette: Some(dummy_palette.clone()),
-            data: encoded_pixels,
+            data: encoded_pixels
         }
     }
 
@@ -534,7 +535,7 @@ impl ColorMatrix {
             x: 0,
             y: 0,
             width: self.width(),
-            height: self.height(),
+            height: self.height()
         }
     }
 }
@@ -546,7 +547,7 @@ pub struct Inks<'a> {
     x: u32,
     y: u32,
     width: u32,
-    height: u32,
+    height: u32
 }
 
 impl<'a> Iterator for Inks<'a> {
@@ -560,7 +561,8 @@ impl<'a> Iterator for Inks<'a> {
 
         if self.y >= self.height {
             None
-        } else {
+        }
+        else {
             let ink = self.image.get_ink(self.x as _, self.y as _);
             let i = (self.x, self.y, *ink);
 
@@ -589,6 +591,7 @@ impl Into<Vec<ColorMatrix>> for &ColorMatrixList {
 
 impl std::ops::Deref for ColorMatrixList {
     type Target = Vec<ColorMatrix>;
+
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -600,7 +603,7 @@ pub enum HorizontalCropConstraint {
     /// No constrain at all
     None,
     /// Consider we are working in a specific and screen mode and bytes must be full
-    CompleteByteForMode(Mode),
+    CompleteByteForMode(Mode)
 }
 
 /// Defines how cropping occurs horizontally
@@ -613,7 +616,7 @@ pub enum HorizontalCrop {
     /// Cropping on left and right
     Both(HorizontalCropConstraint, HorizontalCropConstraint),
     /// No horinzotnalropping
-    None,
+    None
 }
 
 /// Defines how cropping occurs vertically
@@ -626,7 +629,7 @@ pub enum VerticalCrop {
     /// Cropping on top and bottom
     Both,
     /// No vertical cropping
-    None,
+    None
 }
 
 impl ColorMatrixList {
@@ -660,7 +663,7 @@ impl ColorMatrixList {
                     .iter()
                     .map(|pix| [pix.r, pix.g, pix.b].to_vec())
                     .flatten()
-                    .collect::<Vec<u8>>(),
+                    .collect::<Vec<u8>>()
             )
             .unwrap();
 
@@ -676,7 +679,7 @@ impl ColorMatrixList {
     pub fn reduce_colors_with(
         &mut self,
         inks: &[Ink],
-        strategy: ColorConversionStrategy,
+        strategy: ColorConversionStrategy
     ) -> Result<(), anyhow::Error> {
         self.0
             .iter_mut()
@@ -729,32 +732,32 @@ impl ColorMatrixList {
 
             (
                 modified_x.iter().map(|x| *x as u32).collect::<Vec<_>>(),
-                modified_y.iter().map(|y| *y as u32).collect::<Vec<_>>(),
+                modified_y.iter().map(|y| *y as u32).collect::<Vec<_>>()
             )
         };
 
         // Make the croping on the left (first column to keep)
         let mut start_x = match hor_conf {
-            HorizontalCrop::Both(_, _) | HorizontalCrop::Left(_) => {
+            HorizontalCrop::Both(..) | HorizontalCrop::Left(_) => {
                 let mut current_x = 0;
                 while current_x < self.width() - 1 && current_x < modified_x[0] {
                     current_x += 1;
                 }
                 current_x
             }
-            _ => 0,
+            _ => 0
         } as usize;
 
         // Make the cropping on the right (last column to keep)
         let mut stop_x = match hor_conf {
-            HorizontalCrop::Both(_, _) | HorizontalCrop::Right(_) => {
+            HorizontalCrop::Both(..) | HorizontalCrop::Right(_) => {
                 let mut current_x = self.width() - 1;
                 while current_x > 0 && current_x > *modified_x.last().unwrap() {
                     current_x -= 1;
                 }
                 current_x
             }
-            _ => self.width() - 1,
+            _ => self.width() - 1
         } as usize;
 
         // Make the cropping to the top
@@ -766,7 +769,7 @@ impl ColorMatrixList {
                 }
                 current_y
             }
-            _ => 0,
+            _ => 0
         } as usize;
 
         // Make the cropping to the bottom
@@ -778,7 +781,7 @@ impl ColorMatrixList {
                 }
                 current_y
             }
-            _ => self.height() - 1,
+            _ => self.height() - 1
         } as usize;
 
         // Ensure horizontal start constraint is respected
@@ -829,6 +832,7 @@ impl From<Vec<Sprite>> for SpriteList {
 
 impl std::ops::Deref for SpriteList {
     type Target = Vec<Sprite>;
+
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -845,7 +849,7 @@ pub struct Sprite {
     /// Optinal palete of the sprite
     pub(crate) palette: Option<Palette>,
     /// Content of the sprite
-    pub(crate) data: Vec<Vec<u8>>,
+    pub(crate) data: Vec<Vec<u8>>
 }
 
 #[allow(missing_docs)]
@@ -861,20 +865,21 @@ impl Sprite {
         let p = self.palette.as_ref().unwrap();
         for line in &self.data {
             let inks = match self.mode {
-                Some(Mode::Zero) | Some(Mode::Three) => line
-                    .iter()
-                    .flat_map(|b: &u8| {
-                        let pens = {
-                            let mut pens = pixels::mode0::byte_to_pens(*b);
-                            pens[0].limit(self.mode.unwrap());
-                            pens[1].limit(self.mode.unwrap());
-                            pens
-                        };
-                        vec![*p.get(&pens[0]), *p.get(&pens[1])]
-                    })
-                    .collect::<Vec<Ink>>(),
+                Some(Mode::Zero) | Some(Mode::Three) => {
+                    line.iter()
+                        .flat_map(|b: &u8| {
+                            let pens = {
+                                let mut pens = pixels::mode0::byte_to_pens(*b);
+                                pens[0].limit(self.mode.unwrap());
+                                pens[1].limit(self.mode.unwrap());
+                                pens
+                            };
+                            vec![*p.get(&pens[0]), *p.get(&pens[1])]
+                        })
+                        .collect::<Vec<Ink>>()
+                }
 
-                _ => unimplemented!(),
+                _ => unimplemented!()
             };
             data.push(inks);
         }
@@ -924,7 +929,7 @@ impl Sprite {
     pub fn bytes_width(&self) -> u32 {
         match self.height() {
             0 => 0,
-            _ => self.data[0].len() as u32,
+            _ => self.data[0].len() as u32
         }
     }
 
@@ -933,7 +938,7 @@ impl Sprite {
     pub fn pixel_width(&self) -> u32 {
         match self.mode {
             None => panic!("Unable to get the pixel width when mode is not specified"),
-            Some(mode) => mode.nb_pixels_per_byte() as u32 * self.bytes_width(),
+            Some(mode) => mode.nb_pixels_per_byte() as u32 * self.bytes_width()
         }
     }
 
@@ -963,7 +968,7 @@ impl Sprite {
         img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>,
         mode: Mode,
         conversion: ConversionRule,
-        palette: Option<Palette>,
+        palette: Option<Palette>
     ) -> Self {
         // Get the list of Inks that represent the image
         let matrix = ColorMatrix::convert(img, conversion);
@@ -974,7 +979,7 @@ impl Sprite {
         fname: P,
         mode: Mode,
         conversion: ConversionRule,
-        palette: Option<Palette>,
+        palette: Option<Palette>
     ) -> Result<Self, im::ImageError> {
         let img = im::open(fname.as_ref())?;
         Ok(Self::convert(&img.to_rgb8(), mode, conversion, palette))
@@ -983,9 +988,7 @@ impl Sprite {
     /// Apply a transformation function on each line
     /// It can change there size
     pub fn horizontal_transform<F>(&mut self, f: F)
-    where
-        F: Fn(&Vec<u8>) -> Vec<u8>,
-    {
+    where F: Fn(&Vec<u8>) -> Vec<u8> {
         let mut transformed = self.data.iter().map(f).collect::<Vec<_>>();
         ::std::mem::swap(&mut transformed, &mut self.data);
     }
@@ -998,14 +1001,14 @@ impl Sprite {
 pub struct MultiModeSprite {
     mode: Vec<Mode>,
     palette: Palette,
-    data: Vec<Vec<u8>>,
+    data: Vec<Vec<u8>>
 }
 
 #[derive(Copy, Clone, Debug)]
 #[allow(missing_docs)]
 pub enum MultiModeConversion {
     FirstHalfSecondHalf,
-    OddEven,
+    OddEven
 }
 
 #[allow(missing_docs)]
@@ -1015,7 +1018,7 @@ impl MultiModeSprite {
         Self {
             palette: p,
             mode: Vec::new(), // Color modes for the real lines
-            data: Vec::new(), // Data for texture lines (twice less than real ones
+            data: Vec::new()  // Data for texture lines (twice less than real ones
         }
     }
 
@@ -1039,7 +1042,7 @@ impl MultiModeSprite {
         Sprite {
             mode: Some(Mode::Zero),
             palette: Some(self.palette.clone()),
-            data: self.data.clone(),
+            data: self.data.clone()
         }
     }
 
@@ -1047,7 +1050,7 @@ impl MultiModeSprite {
         Sprite {
             mode: Some(Mode::Three),
             palette: Some(self.palette.clone()),
-            data: self.data.clone(),
+            data: self.data.clone()
         }
     }
 
@@ -1071,7 +1074,7 @@ impl MultiModeSprite {
                 (0, [5, 6, 7]),
                 (1, [8, 10, 11]),
                 (2, [12, 13, 15]),
-                (3, [4, 9, 14]),
+                (3, [4, 9, 14])
             ];
 
             // Fill inks depending on the lut
@@ -1090,7 +1093,8 @@ impl MultiModeSprite {
                 let sprite_height = sprite.height() as usize;
                 let encoded_height = if sprite_height % 2 == 1 {
                     sprite_height / 2 + 1
-                } else {
+                }
+                else {
                     sprite_height / 2 + 0
                 };
 
@@ -1101,7 +1105,8 @@ impl MultiModeSprite {
                 for i in 0..sprite_height {
                     let mode = if i < encoded_height {
                         Mode::Zero
-                    } else {
+                    }
+                    else {
                         Mode::Three
                     };
                     modes.push(mode);
@@ -1114,7 +1119,7 @@ impl MultiModeSprite {
 
                     let line = match line2 {
                         Some(line2) => merge_mode0_mode3(line1, line2),
-                        None => line1.clone(),
+                        None => line1.clone()
                     };
 
                     lines.push(line);
@@ -1123,13 +1128,13 @@ impl MultiModeSprite {
                 (modes, lines)
             }
 
-            _ => unimplemented!(),
+            _ => unimplemented!()
         };
 
         Self {
             palette: p,
             mode: modes,
-            data: lines,
+            data: lines
         }
     }
 }

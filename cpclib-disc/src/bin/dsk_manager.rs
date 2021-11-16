@@ -12,15 +12,14 @@
 )]
 #![deny(clippy::pedantic)]
 
-use cpclib_common::clap::{App, Arg, ArgGroup, SubCommand};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 
+use cpclib_common::clap::{App, Arg, ArgGroup, SubCommand};
 use cpclib_disc::amsdos::*;
 use cpclib_disc::edsk::ExtendedDsk;
-
 use custom_error::custom_error;
 
 custom_error! {pub DskManagerError
@@ -243,7 +242,8 @@ fn main() -> Result<(), DskManagerError> {
         } else {
             panic!("Error - missing argument");
         }
-    } else if let Some(sub) = matches.subcommand_matches("put") {
+    }
+    else if let Some(sub) = matches.subcommand_matches("put") {
         use cpclib_tokens::*;
 
         // Add files in a sectorial way
@@ -280,7 +280,8 @@ fn main() -> Result<(), DskManagerError> {
             track = next_position.1;
             sector = next_position.2;
         }
-    } else if let Some(sub) = matches.subcommand_matches("add") {
+    }
+    else if let Some(sub) = matches.subcommand_matches("add") {
         // Add files in an Amsdos compatible disc
 
         // Get the input dsk
@@ -314,27 +315,31 @@ fn main() -> Result<(), DskManagerError> {
 
         // Save the dsk on disc
         manager.dsk().save(dsk_fname)?;
-    } else if let Some(sub) = matches.subcommand_matches("format") {
+    }
+    else if let Some(sub) = matches.subcommand_matches("format") {
         // Manage the formating of a disc
         use cpclib_disc::cfg::DiscConfig;
 
         // Retrieve the format description
         let cfg = if let Some(desc_fname) = sub.value_of("FORMAT_FILE") {
             cpclib_disc::cfg::DiscConfig::new(desc_fname)?
-        } else if let Some(desc) = sub.value_of("FORMAT_NAME") {
+        }
+        else if let Some(desc) = sub.value_of("FORMAT_NAME") {
             match desc {
                 "data42" => DiscConfig::single_head_data42_format(),
                 "data" => DiscConfig::single_head_data_format(),
-                _ => unreachable!(),
+                _ => unreachable!()
             }
-        } else {
+        }
+        else {
             unreachable!();
         };
 
         // Make the dsk based on the format
         let dsk = cpclib_disc::builder::build_disc_from_cfg(&cfg);
         dsk.save(dsk_fname)?;
-    } else {
+    }
+    else {
         eprintln!("Missing command\n{}", matches.usage());
     }
 

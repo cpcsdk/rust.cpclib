@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
+use std::ops::{Deref, DerefMut};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{smallvec, SmallVec};
@@ -12,9 +13,6 @@ use regex::Regex;
 use crate::tokens::expression::LabelPrefix;
 use crate::{ExprResult, ListingElement, MacroParam, Token};
 
-use std::ops::Deref;
-use std::ops::DerefMut;
-
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone)]
 pub struct PhysicalAddress {
@@ -23,12 +21,12 @@ pub struct PhysicalAddress {
     /// Bank number in the page: 0 to 3
     bank: u8,
     /// Address manipulate by CPU 0x0000 to 0xffff
-    address: u16,
+    address: u16
 }
 
 impl From<u16> for PhysicalAddress {
     fn from(nb: u16) -> Self {
-        PhysicalAddress::new(nb, 0xc0)
+        PhysicalAddress::new(nb, 0xC0)
     }
 }
 
@@ -39,25 +37,28 @@ impl PhysicalAddress {
         let standard_bank = match address {
             0x0000..0x4000 => 0,
             0x4000..0x8000 => 1,
-            0x8000..0xc000 => 2,
-            0xc000.. => 3,
+            0x8000..0xC000 => 2,
+            0xC000.. => 3
         };
         let is_4000 = address >= 0x4000 && address < 0x8000;
-        let is_c000 = address >= 0xc000;
+        let is_c000 = address >= 0xC000;
 
         let (page, bank) = if (mmr & 0b100) != 0 {
             if is_4000 {
                 (possible_page, possible_bank)
-            } else {
+            }
+            else {
                 (0, possible_bank)
             }
-        } else {
+        }
+        else {
             match mmr & 0b11 {
                 0b000 => (0, standard_bank),
                 0b001 => {
                     if is_c000 {
                         (possible_page, standard_bank)
-                    } else {
+                    }
+                    else {
                         (0, standard_bank)
                     }
                 }
@@ -65,38 +66,45 @@ impl PhysicalAddress {
                 0b011 => {
                     if is_4000 {
                         (0, 3)
-                    } else if is_c000 {
+                    }
+                    else if is_c000 {
                         (possible_page, 3)
-                    } else {
+                    }
+                    else {
                         (0, standard_bank)
                     }
                 }
-                _ => unreachable!(),
+                _ => unreachable!()
             }
         };
 
         Self {
             address,
             bank,
-            page,
+            page
         }
     }
 
     pub fn offset_in_bank(&self) -> u16 {
         self.address % 0x4000
     }
+
     pub fn offset_in_page(&self) -> u16 {
         self.offset_in_bank() + self.bank as u16 * 0x4000
     }
+
     pub fn offset_in_cpc(&self) -> u32 {
         self.offset_in_page() as u32 + self.page as u32 * 0x1_0000
     }
+
     pub fn address(&self) -> u16 {
         self.address
     }
+
     pub fn bank(&self) -> u8 {
         self.bank
     }
+
     pub fn page(&self) -> u8 {
         self.page
     }
@@ -104,19 +112,21 @@ impl PhysicalAddress {
     pub fn ga_bank(&self) -> u16 {
         let low = if self.page() == 0 {
             0b11_000_0_00
-        } else {
+        }
+        else {
             0b11_000_1_00 + ((self.page() - 1) << 3) + self.bank
         } as u16;
-        low + 0x7f00
+        low + 0x7F00
     }
 
     pub fn ga_page(&self) -> u16 {
         let low = if self.page() == 0 {
             0b11_000_0_00
-        } else {
+        }
+        else {
             0b11_000_0_10 + ((self.page() - 1) << 3)
         } as u16;
-        low + 0x7f00
+        low + 0x7F00
     }
 }
 
@@ -125,14 +135,14 @@ pub enum SymbolError {
     UnknownAssemblingAddress,
     CannotModify(Symbol),
     WrongSymbol(Symbol),
-    NoNamespaceActive,
+    NoNamespaceActive
 }
 
 /// Encode the data for the structure directive
 #[derive(Debug, Clone)]
 pub struct Struct {
     name: SmolStr,
-    content: Vec<(SmolStr, Token)>,
+    content: Vec<(SmolStr, Token)>
 }
 
 impl Struct {
@@ -142,7 +152,7 @@ impl Struct {
             content: content
                 .iter()
                 .map(|(s, t)| (s.clone(), t.clone()))
-                .collect_vec(),
+                .collect_vec()
         }
     }
 
@@ -164,7 +174,7 @@ impl Struct {
                 let s = dbg!(table.struct_value(n)).ok().unwrap().unwrap(); // TODO handle error here
                 s.len(table)
             }
-            _ => unreachable!("{:?}", token),
+            _ => unreachable!("{:?}", token)
         }
     }
 
@@ -194,13 +204,15 @@ impl Struct {
 
                         let tok = if matches!(token, Token::Defb(_)) {
                             "db"
-                        } else {
+                        }
+                        else {
                             "dw"
                         };
 
                         if current_param.is_empty() {
                             format!(" {} {}", tok, c[0].to_string())
-                        } else {
+                        }
+                        else {
                             format!(" {} {}", tok, current_param.expand())
                         }
                     }
@@ -219,7 +231,8 @@ impl Struct {
                             (_, 1) => {
                                 let val = if current_param.is_empty() {
                                     &current_default_arg[0]
-                                } else {
+                                }
+                                else {
                                     current_param
                                 };
                                 vec![val.expand()]
@@ -232,7 +245,8 @@ impl Struct {
                                 let mut collected = Vec::new();
                                 collected.push(if current_param.is_empty() {
                                     first_default
-                                } else {
+                                }
+                                else {
                                     current_param
                                 });
                                 collected.extend(default_iter);
@@ -248,15 +262,18 @@ impl Struct {
                                 for idx2 in 0..max_size {
                                     if idx2 >= all_curr.len() {
                                         collected.push(current_default_arg[idx2].expand());
-                                    } else if idx2 >= nb_default {
+                                    }
+                                    else if idx2 >= nb_default {
                                         collected.push(all_curr[idx2].expand());
-                                    } else {
+                                    }
+                                    else {
                                         let current = &all_curr[idx2];
                                         let default = &current_default_arg[idx2];
 
                                         if current.is_empty() {
                                             collected.push(default.expand());
-                                        } else {
+                                        }
+                                        else {
                                             collected.push(current.expand());
                                         }
                                     }
@@ -268,7 +285,7 @@ impl Struct {
                         call.push_str(&args.join(","));
                         call
                     }
-                    _ => unreachable!("{:?}", token),
+                    _ => unreachable!("{:?}", token)
                 }
             })
             .join("\n");
@@ -289,12 +306,16 @@ pub struct Macro {
     // The name of its arguments
     args: Vec<SmolStr>,
     // The content
-    code: String,
+    code: String
 }
 
 impl Macro {
     pub fn new(name: SmolStr, args: &[SmolStr], code: String) -> Self {
-        Macro { name, args: args.to_vec(), code }
+        Macro {
+            name,
+            args: args.to_vec(),
+            code
+        }
     }
 
     pub fn code(&self) -> &str {
@@ -337,7 +358,7 @@ pub enum Value {
     /// Structure information
     Struct(Struct),
     /// Counter for a repetition
-    Counter(i32),
+    Counter(i32)
 }
 
 #[derive(Copy, Clone)]
@@ -347,7 +368,7 @@ pub enum SymbolFor {
     Macro,
     Struct,
     Counter,
-    Any,
+    Any
 }
 
 impl Value {
@@ -355,34 +376,35 @@ impl Value {
         match self {
             Value::Expr(ExprResult::Value(i)) => Some(*i),
             Value::Address(addr) => Some(addr.address as _),
-            _ => None,
+            _ => None
         }
     }
 
     pub fn address(&self) -> Option<&PhysicalAddress> {
         match self {
             Value::Address(addr) => Some(addr),
-            _ => None,
+            _ => None
         }
     }
 
     pub fn counter(&self) -> Option<i32> {
         match self {
             Value::Counter(i) => Some(*i),
-            _ => None,
+            _ => None
         }
     }
 
     pub fn r#macro(&self) -> Option<&Macro> {
         match self {
             Value::Macro(m) => Some(m),
-            _ => None,
+            _ => None
         }
     }
+
     pub fn r#struct(&self) -> Option<&Struct> {
         match self {
             Value::Struct(m) => Some(m),
-            _ => None,
+            _ => None
         }
     }
 }
@@ -408,7 +430,7 @@ impl From<Macro> for Value {
 impl<I: Into<ExprResult>> From<I> for Value {
     fn from(i: I) -> Self {
         let value = i.into();
-        match  &value {
+        match &value {
             ExprResult::String(s) => Value::String(s.clone()),
             _ => Value::Expr(value)
         }
@@ -487,7 +509,7 @@ pub trait SymbolsTableTrait {
     fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError>;
     fn address_value<S: Into<Symbol>>(
         &self,
-        symbol: S,
+        symbol: S
     ) -> Result<Option<&PhysicalAddress>, SymbolError>;
 
     fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>;
@@ -495,7 +517,7 @@ pub trait SymbolsTableTrait {
     fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
         &mut self,
         symbol: S,
-        value: V,
+        value: V
     ) -> Result<Option<Value>, SymbolError>;
 
     fn enter_namespace(&mut self, namespace: &str);
@@ -506,11 +528,12 @@ pub trait SymbolsTableTrait {
 #[derive(Debug, Clone, Default)]
 struct ModuleSymbolTable {
     current: HashMap<Symbol, Value>,
-    children: HashMap<Symbol, ModuleSymbolTable>,
+    children: HashMap<Symbol, ModuleSymbolTable>
 }
 
 impl Deref for ModuleSymbolTable {
     type Target = HashMap<Symbol, Value>;
+
     fn deref(&self) -> &Self::Target {
         &self.current
     }
@@ -548,14 +571,14 @@ impl ModuleSymbolTable {
 
 struct ModuleSymbolTableIterator<'t> {
     others: Vec<&'t ModuleSymbolTable>,
-    current: std::collections::hash_map::Iter<'t, Symbol, Value>,
+    current: std::collections::hash_map::Iter<'t, Symbol, Value>
 }
 
 impl<'t> ModuleSymbolTableIterator<'t> {
     fn new(table: &'t ModuleSymbolTable) -> Self {
         Self {
             others: table.children.values().collect_vec(),
-            current: table.current.iter(),
+            current: table.current.iter()
         }
     }
 }
@@ -566,13 +589,15 @@ impl<'t> Iterator for ModuleSymbolTableIterator<'t> {
         let current = self.current.next();
         if current.is_some() {
             return current;
-        } else {
+        }
+        else {
             if let Some(next) = self.others.pop() {
                 let current = next.current.iter();
                 self.others.extend(next.children.values());
                 self.current = current;
                 return self.current.next();
-            } else {
+            }
+            else {
                 return None;
             }
         }
@@ -598,7 +623,7 @@ pub struct SymbolsTable {
     seed_stack: Vec<usize>, // stack of seeds for nested repeat to properly interpret the @ symbol
 
     /// Contains all the symbols that have been used in expressions
-    used_symbols: HashSet<Symbol>,
+    used_symbols: HashSet<Symbol>
 }
 
 impl Default for SymbolsTable {
@@ -613,23 +638,22 @@ impl Default for SymbolsTable {
             assignable: Default::default(),
             seed_stack: Vec::new(),
             namespace_stack: Vec::new(),
-            used_symbols: HashSet::new(),
+            used_symbols: HashSet::new()
         }
     }
 }
 
 /// Local/global label handling code
 impl SymbolsTable {
-
-     pub fn new_pass(&mut self) {
-         self.current_pass_map = ModuleSymbolTable::default();
-         self.current_pass_map.add_children("".to_owned().into());
-     }
+    pub fn new_pass(&mut self) {
+        self.current_pass_map = ModuleSymbolTable::default();
+        self.current_pass_map.add_children("".to_owned().into());
+    }
 
     /// Setup the current label for local to global labels conversions
     pub fn set_current_global_label<S: Into<Symbol>>(
         &mut self,
-        symbol: S,
+        symbol: S
     ) -> Result<(), SymbolError> {
         let label = symbol.into();
 
@@ -646,12 +670,12 @@ impl SymbolsTable {
     /// Some symbols are local and need to be converted to their global value.
     fn extend_local_and_patterns_for_symbol<S: Into<Symbol>>(
         &self,
-        symbol: S,
+        symbol: S
     ) -> Result<Symbol, SymbolError> {
         let symbol = symbol.into();
         let mut symbol = symbol.value().to_owned();
 
-                // handle the labels build with patterns
+        // handle the labels build with patterns
         // Get the replacement strings
         lazy_static::lazy_static! {
             static ref RE: Regex = Regex::new(r"\{+[^\}]+\}+").unwrap();
@@ -665,7 +689,7 @@ impl SymbolsTable {
 
         // make the replacement
         for model in replace.iter() {
-            let local_symbol = &model[1..model.len()-1]; // remove {}
+            let local_symbol = &model[1..model.len() - 1]; // remove {}
             let local_value = match self.value(local_symbol)? {
                 Some(Value::String(s)) => s.to_string(),
                 Some(Value::Expr(e)) => e.to_string(),
@@ -697,8 +721,6 @@ impl SymbolsTable {
             }
         }
 
-
-
         Ok(symbol.into())
     }
 }
@@ -709,7 +731,8 @@ impl SymbolsTable {
     fn current_module_map(&self) -> &ModuleSymbolTable {
         if self.namespace_stack.is_empty() {
             &self.map
-        } else {
+        }
+        else {
             self.module_map(&self.namespace_stack)
         }
     }
@@ -718,7 +741,8 @@ impl SymbolsTable {
     fn current_module_map_mut(&mut self) -> &mut ModuleSymbolTable {
         if self.namespace_stack.is_empty() {
             &mut self.map
-        } else {
+        }
+        else {
             let stack = self.namespace_stack.clone();
             self.module_map_mut(&stack)
         }
@@ -756,9 +780,11 @@ impl SymbolsTableTrait for SymbolsTable {
     fn integer_symbols(&self) -> Vec<&Symbol> {
         self.map
             .iter()
-            .filter(|(_k, v)| match v {
-                Value::Expr(_) | Value::Address(_) => true,
-                _ => false,
+            .filter(|(_k, v)| {
+                match v {
+                    Value::Expr(_) | Value::Address(_) => true,
+                    _ => false
+                }
             })
             .map(|(k, _v)| k)
             .collect_vec()
@@ -770,13 +796,20 @@ impl SymbolsTableTrait for SymbolsTable {
             .map(|v| v.integer())
             .filter(|v| v.is_some())
             .map(|v| v.unwrap())
-            .or_else(|| if self.dummy { Some(1i32) } else { None }))
+            .or_else(|| {
+                if self.dummy {
+                    Some(1i32)
+                }
+                else {
+                    None
+                }
+            }))
     }
 
     fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
         &mut self,
         symbol: S,
-        value: V,
+        value: V
     ) -> Result<Option<Value>, SymbolError> {
         let symbol = self.extend_readable_symbol(symbol)?;
 
@@ -798,7 +831,7 @@ impl SymbolsTableTrait for SymbolsTable {
     fn leave_namespace(&mut self) -> Result<Symbol, SymbolError> {
         match self.namespace_stack.pop() {
             Some(s) => Ok(s),
-            None => Err(SymbolError::NoNamespaceActive),
+            None => Err(SymbolError::NoNamespaceActive)
         }
     }
 
@@ -813,18 +846,27 @@ impl SymbolsTableTrait for SymbolsTable {
             .value(symbol.into())?
             .map(|v| v.counter())
             .map(|v| v.unwrap())
-            .or_else(|| if self.dummy { Some(1i32) } else { None }))
+            .or_else(|| {
+                if self.dummy {
+                    Some(1i32)
+                }
+                else {
+                    None
+                }
+            }))
     }
 
     fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError> {
         Ok(self.value(symbol)?.map(|v| v.r#macro()).unwrap_or(None))
     }
+
     fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError> {
         Ok(self.value(symbol)?.map(|v| v.r#struct()).unwrap_or(None))
     }
+
     fn address_value<S: Into<Symbol>>(
         &self,
-        symbol: S,
+        symbol: S
     ) -> Result<Option<&PhysicalAddress>, SymbolError> {
         Ok(self.value(symbol)?.map(|v| v.address()).unwrap_or(None))
     }
@@ -859,7 +901,7 @@ impl SymbolsTable {
             assignable: HashSet::new(),
             seed_stack: Vec::new(),
             namespace_stack: Vec::new(),
-            used_symbols: HashSet::new(),
+            used_symbols: HashSet::new()
         }
     }
 
@@ -879,9 +921,11 @@ impl SymbolsTable {
     pub fn get_potential_candidates(&self, symbol: Symbol) -> SmallVec<[Symbol; 2]> {
         if symbol.value().starts_with("::") {
             smallvec![symbol.value()[2..].to_owned().into()]
-        } else if self.namespace_stack.is_empty() {
+        }
+        else if self.namespace_stack.is_empty() {
             smallvec![symbol]
-        } else {
+        }
+        else {
             let full = symbol.clone();
 
             let _global = self.namespace_stack.clone();
@@ -903,10 +947,12 @@ impl SymbolsTable {
 
         if candidates.len() == 1 {
             Ok(candidates[0].clone())
-        } else {
+        }
+        else {
             if self.map.contains_key(&candidates[0]) {
                 Ok(candidates[0].clone())
-            } else {
+            }
+            else {
                 Ok(candidates[1].clone())
             }
         }
@@ -923,7 +969,7 @@ impl SymbolsTable {
     pub fn current_address(&self) -> Result<u16, SymbolError> {
         match self.value("$")? {
             Some(address) => Ok(address.integer().unwrap() as u16),
-            None => Err(SymbolError::UnknownAssemblingAddress),
+            None => Err(SymbolError::UnknownAssemblingAddress)
         }
     }
 
@@ -931,6 +977,7 @@ impl SymbolsTable {
     pub fn set_current_address(&mut self, address: PhysicalAddress) {
         self.map.insert("$".into(), Value::Address(address));
     }
+
     pub fn set_current_output_address(&mut self, address: PhysicalAddress) {
         self.map.insert("$$".into(), Value::Address(address));
     }
@@ -938,7 +985,7 @@ impl SymbolsTable {
     /// Set the given symbol to $ value
     pub fn set_symbol_to_current_address<S: Into<Symbol>>(
         &mut self,
-        symbol: S,
+        symbol: S
     ) -> Result<(), SymbolError> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
@@ -954,7 +1001,7 @@ impl SymbolsTable {
     pub fn set_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
         &mut self,
         symbol: S,
-        value: V,
+        value: V
     ) -> Result<Option<Value>, SymbolError> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.inject_current_namespace(symbol);
@@ -968,7 +1015,7 @@ impl SymbolsTable {
     pub fn update_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
         &mut self,
         symbol: S,
-        value: V,
+        value: V
     ) -> Result<(), SymbolError> {
         let symbol = self.extend_readable_symbol(symbol)?;
         let symbols = self.get_potential_candidates(symbol);
@@ -991,7 +1038,7 @@ impl SymbolsTable {
     pub fn prefixed_value<S: Into<Symbol>>(
         &self,
         prefix: &LabelPrefix,
-        key: S,
+        key: S
     ) -> Result<Option<u16>, SymbolError> {
         let key = key.into();
         let addr = self.address_value(key.clone())?;
@@ -1003,27 +1050,25 @@ impl SymbolsTable {
             }
         } as _))
 
-        /*
-        Ok(match prefix {
-                    LabelPrefix::Bank => Some(bank as _),
-
-                    LabelPrefix::Page => {
-                        if page == 0 {
-                            Some(0x7fc0)
-                        } else {
-                            Some(0x7FC4 + (bank & 3) + ((bank & 31) >> 2) * 8 - 0x100 * (bank >> 5))
-                        }
-                    }
-
-                    LabelPrefix::Pageset => {
-                        if page == 0 {
-                            Some(0x7fc0)
-                        } else {
-                            Some(0x7FC2 + ((bank & 31) >> 2) * 8 - 0x100 * (bank >> 5))
-                        }
-                    }
-                })
-                */
+        // Ok(match prefix {
+        // LabelPrefix::Bank => Some(bank as _),
+        //
+        // LabelPrefix::Page => {
+        // if page == 0 {
+        // Some(0x7fc0)
+        // } else {
+        // Some(0x7FC4 + (bank & 3) + ((bank & 31) >> 2) * 8 - 0x100 * (bank >> 5))
+        // }
+        // }
+        //
+        // LabelPrefix::Pageset => {
+        // if page == 0 {
+        // Some(0x7fc0)
+        // } else {
+        // Some(0x7FC2 + ((bank & 31) >> 2) * 8 - 0x100 * (bank >> 5))
+        // }
+        // }
+        // })
     }
 
     /// Check if the symbol table contains the expected symbol, whatever is the pass
@@ -1032,53 +1077,60 @@ impl SymbolsTable {
         let symbols = self.get_potential_candidates(symbol);
         Ok(symbols.iter().any(|symbol| self.map.contains_key(&symbol)))
     }
+
     /// Check if the symbol table contains the expected symbol, added during the current pass
-    pub fn symbol_exist_in_current_pass<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
+    pub fn symbol_exist_in_current_pass<S: Into<Symbol>>(
+        &self,
+        symbol: S
+    ) -> Result<bool, SymbolError> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbols = self.get_potential_candidates(symbol);
-        Ok(symbols.iter().any(|symbol| self.current_pass_map.contains_key(&symbol)))
+        Ok(symbols
+            .iter()
+            .any(|symbol| self.current_pass_map.contains_key(&symbol)))
     }
 
     /// Returns the closest Value
     pub fn closest_symbol<S: Into<Symbol>>(
         &self,
         symbol: S,
-        r#for: SymbolFor,
+        r#for: SymbolFor
     ) -> Result<Option<SmolStr>, SymbolError> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self
             .map
             .iter()
-            .filter(|(_k, v)| match (v, r#for) {
-                (Value::Expr(_), SymbolFor::Number)
-                | (Value::Expr(_), SymbolFor::Address)
-                | (Value::Address(_), SymbolFor::Address)
-                | (Value::Address(_), SymbolFor::Number)
-                | (Value::Macro(_), SymbolFor::Macro)
-                | (Value::Struct(_), SymbolFor::Struct)
-                | (Value::Counter(_), SymbolFor::Counter)
-                | (_, SymbolFor::Any) => true,
-                _ => false,
+            .filter(|(_k, v)| {
+                match (v, r#for) {
+                    (Value::Expr(_), SymbolFor::Number)
+                    | (Value::Expr(_), SymbolFor::Address)
+                    | (Value::Address(_), SymbolFor::Address)
+                    | (Value::Address(_), SymbolFor::Number)
+                    | (Value::Macro(_), SymbolFor::Macro)
+                    | (Value::Struct(_), SymbolFor::Struct)
+                    | (Value::Counter(_), SymbolFor::Counter)
+                    | (_, SymbolFor::Any) => true,
+                    _ => false
+                }
             })
             .map(|(k, _v)| k)
             .map(move |symbol2| {
                 let symbol_upper = symbol.0.to_ascii_uppercase();
                 let symbol2_upper = symbol2.0.to_ascii_uppercase();
-                let levenshtein_distance = 
-                    strsim::levenshtein(&symbol2.0, &symbol.0).min(strsim::levenshtein(
-                        &symbol2_upper,
-                        &symbol_upper,
-                    ));
-                let included = if symbol2_upper.contains(&symbol_upper) {0} else {1};
+                let levenshtein_distance = strsim::levenshtein(&symbol2.0, &symbol.0)
+                    .min(strsim::levenshtein(&symbol2_upper, &symbol_upper));
+                let included = if symbol2_upper.contains(&symbol_upper) {
+                    0
+                }
+                else {
+                    1
+                };
 
-                (
-                    (included, levenshtein_distance),
-                    symbol2.0.clone(),
-                )
+                ((included, levenshtein_distance), symbol2.0.clone())
             })
             .min()
-            .map(|(_distance, symbol2)| { symbol2}))
+            .map(|(_distance, symbol2)| symbol2))
     }
 
     pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> Result<&'static str, SymbolError> {
@@ -1089,7 +1141,7 @@ impl SymbolsTable {
             Some(Value::Struct(_)) => "struct",
             Some(Value::Counter(_)) => "counter",
             Some(Value::String(_)) => "string",
-            None => "any",
+            None => "any"
         })
     }
 }
@@ -1099,7 +1151,7 @@ impl SymbolsTable {
 #[allow(missing_docs)]
 pub struct SymbolsTableCaseDependent {
     table: SymbolsTable,
-    case_sensitive: bool,
+    case_sensitive: bool
 }
 
 /// By default, the assembler is case sensitive
@@ -1107,7 +1159,7 @@ impl Default for SymbolsTableCaseDependent {
     fn default() -> Self {
         Self {
             table: SymbolsTable::default(),
-            case_sensitive: true,
+            case_sensitive: true
         }
     }
 }
@@ -1120,10 +1172,21 @@ impl AsRef<SymbolsTable> for SymbolsTableCaseDependent {
 
 #[allow(missing_docs)]
 impl SymbolsTableCaseDependent {
+    delegate! {
+        to self.table {
+            pub fn current_address(&self) -> Result<u16, SymbolError>;
+            pub fn set_current_address(&mut self, addr: PhysicalAddress);
+            pub fn set_current_output_address(&mut self, addr: PhysicalAddress);
+            pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<SmolStr>, SymbolError>;
+            pub fn push_seed(&mut self, seed: usize);
+            pub fn pop_seed(&mut self);
+        }
+    }
+
     pub fn new(table: SymbolsTable, case_sensitive: bool) -> Self {
         Self {
             table,
-            case_sensitive,
+            case_sensitive
         }
     }
 
@@ -1144,7 +1207,8 @@ impl SymbolsTableCaseDependent {
     fn normalize_symbol<S: Into<Symbol>>(&self, symbol: S) -> Symbol {
         if self.case_sensitive {
             symbol.into()
-        } else {
+        }
+        else {
             symbol.into().to_uppercase()
         }
     }
@@ -1161,7 +1225,7 @@ impl SymbolsTableCaseDependent {
 
     pub fn set_symbol_to_current_address<S: Into<Symbol>>(
         &mut self,
-        symbol: S,
+        symbol: S
     ) -> Result<(), SymbolError> {
         self.table
             .set_symbol_to_current_address(self.normalize_symbol(symbol))
@@ -1170,7 +1234,7 @@ impl SymbolsTableCaseDependent {
     pub fn set_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
         &mut self,
         symbol: S,
-        value: V,
+        value: V
     ) -> Result<Option<Value>, SymbolError> {
         self.table
             .set_symbol_to_value(self.normalize_symbol(symbol), value)
@@ -1179,7 +1243,7 @@ impl SymbolsTableCaseDependent {
     pub fn update_symbol_to_value<S: Into<Symbol>, E: Into<Value>>(
         &mut self,
         symbol: S,
-        value: E,
+        value: E
     ) -> Result<(), SymbolError> {
         self.table
             .update_symbol_to_value(self.normalize_symbol(symbol), value.into())
@@ -1188,7 +1252,7 @@ impl SymbolsTableCaseDependent {
     pub fn prefixed_value<S: Into<Symbol>>(
         &self,
         prefix: &LabelPrefix,
-        symbol: S,
+        symbol: S
     ) -> Result<Option<u16>, SymbolError> {
         self.table
             .prefixed_value(prefix, self.normalize_symbol(symbol))
@@ -1198,8 +1262,12 @@ impl SymbolsTableCaseDependent {
         self.table.contains_symbol(self.normalize_symbol(symbol))
     }
 
-    pub fn symbol_exist_in_current_pass<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
-        self.table.symbol_exist_in_current_pass(self.normalize_symbol(symbol))
+    pub fn symbol_exist_in_current_pass<S: Into<Symbol>>(
+        &self,
+        symbol: S
+    ) -> Result<bool, SymbolError> {
+        self.table
+            .symbol_exist_in_current_pass(self.normalize_symbol(symbol))
     }
 
     pub fn new_pass(&mut self) {
@@ -1208,16 +1276,6 @@ impl SymbolsTableCaseDependent {
 
     pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> Result<&'static str, SymbolError> {
         self.table.kind(symbol)
-    }
-    delegate! {
-        to self.table {
-            pub fn current_address(&self) -> Result<u16, SymbolError>;
-            pub fn set_current_address(&mut self, addr: PhysicalAddress);
-            pub fn set_current_output_address(&mut self, addr: PhysicalAddress);
-            pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<SmolStr>, SymbolError>;
-            pub fn push_seed(&mut self, seed: usize);
-            pub fn pop_seed(&mut self);
-        }
     }
 }
 
@@ -1245,6 +1303,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError> {
         self.table.macro_value(self.normalize_symbol(symbol))
     }
+
     fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError> {
         self.table.struct_value(self.normalize_symbol(symbol))
     }
@@ -1259,7 +1318,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
 
     fn address_value<S: Into<Symbol>>(
         &self,
-        symbol: S,
+        symbol: S
     ) -> Result<Option<&PhysicalAddress>, SymbolError> {
         self.table.address_value(self.normalize_symbol(symbol))
     }
@@ -1267,7 +1326,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
         &mut self,
         symbol: S,
-        value: V,
+        value: V
     ) -> Result<Option<Value>, SymbolError> {
         self.table
             .assign_symbol_to_value(self.normalize_symbol(symbol), value)

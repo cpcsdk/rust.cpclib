@@ -3,12 +3,12 @@ extern crate matches;
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::RwLock, u32};
+    use std::ops::Deref;
+    use std::sync::RwLock;
+    use std::u32;
 
     use cpclib_asm::preamble::*;
     use cpclib_common::lazy_static;
-    use std::ops::Deref;
-
     use cpclib_common::nom::IResult;
 
     lazy_static::lazy_static! {
@@ -28,7 +28,7 @@ mod tests {
             Err(e) => panic!("{:?}", e),
             Ok((_, opcode)) => {
                 let mut res = false;
-                if let Token::OpCode(expected, _, _, _) = opcode {
+                if let Token::OpCode(expected, ..) = opcode {
                     res = expected == mnemonic
                 }
                 res
@@ -39,12 +39,12 @@ mod tests {
     fn get_opcode(code: &str) -> Token {
         match parse_org(CTX.build_span(code.to_owned())) {
             Err(e) => panic!("{:?}", e),
-            Ok((_, opcode)) => opcode,
+            Ok((_, opcode)) => opcode
         }
     }
 
     fn get_val<'src, 'ctx, T: core::fmt::Debug>(
-        res: IResult<Z80Span, T, cpclib_common::nom::error::VerboseError<Z80Span>>,
+        res: IResult<Z80Span, T, cpclib_common::nom::error::VerboseError<Z80Span>>
     ) -> T {
         match res {
             Err(e) => panic!("{:?}", e),
@@ -60,7 +60,7 @@ mod tests {
     fn is_error<T>(res: IResult<&str, T>) -> bool {
         match res {
             Err(_e) => true,
-            Ok((_, _)) => false,
+            Ok((..)) => false
         }
     }
 
@@ -85,7 +85,7 @@ mod tests {
         );
         assert_eq!(
             get_val::<u32>(hex_number_inner(CTX.build_span("0xffff"))),
-            0xffff
+            0xFFFF
         );
         assert_eq!(
             get_val::<u32>(hex_number_inner(CTX.build_span("0x0000"))),
@@ -93,7 +93,7 @@ mod tests {
         );
         assert_eq!(
             get_val::<u32>(hex_number_inner(CTX.build_span("0xc9fb"))),
-            0xc9fb
+            0xC9FB
         );
     }
 
@@ -117,7 +117,7 @@ mod tests {
         println!("{:?}", res);
         assert_eq!(
             res.ok().unwrap().1.eval().unwrap(),
-            (0xbd00 + 0x20 + 0b00001100).into()
+            (0xBD00 + 0x20 + 0b00001100).into()
         );
     }
 
@@ -140,7 +140,7 @@ mod tests {
         let arg1 = opcode.org_expr().expect("expression expected");
         let value = arg1.eval();
         assert!(value.is_ok());
-        //assert_matches!(arg1, &Expr::Value(0x123));
+        // assert_matches!(arg1, &Expr::Value(0x123));
         assert_eq!(arg1.eval().ok().unwrap(), 0x123.into());
     }
 
@@ -258,7 +258,7 @@ mod tests {
         assert_matches!(tokens[1].deref(), Token::Org(_, _));
 
         let tokens = get_val(parse_z80_line(
-            CTX.build_span("label ORG 0x1000 : ORG 0x000 : ORG 10"),
+            CTX.build_span("label ORG 0x1000 : ORG 0x000 : ORG 10")
         ));
         assert_eq!(tokens.len(), 4);
         assert_matches!(tokens[0].deref(), Token::Label(_));
@@ -266,7 +266,7 @@ mod tests {
         assert_matches!(tokens[2].deref(), Token::Org(_, _));
 
         let tokens = get_val(parse_z80_line(
-            CTX.build_span("label ORG 0x1000 : ORG 0x000 : ORG 10 ; fdfs"),
+            CTX.build_span("label ORG 0x1000 : ORG 0x000 : ORG 10 ; fdfs")
         ));
         assert_eq!(tokens.len(), 5);
         assert_matches!(tokens[0].deref(), Token::Label(_));
@@ -274,7 +274,7 @@ mod tests {
         assert_matches!(tokens[2].deref(), Token::Org(_, _));
 
         let tokens = get_val(parse_z80_line(
-            CTX.build_span("label ORG 0x1000 ; : ORG 0x000 : ORG 10 ; fdfs"),
+            CTX.build_span("label ORG 0x1000 ; : ORG 0x000 : ORG 10 ; fdfs")
         ));
         assert_eq!(tokens.len(), 3);
         assert_matches!(tokens[0].deref(), Token::Label(_));
@@ -349,35 +349,32 @@ mod tests {
         assert_eq!(tokens.len(), 2);
         assert_matches!(tokens[0].deref(), Token::OpCode(Mnemonic::Jp, _, _, _));
     }
-    /*
-        #[test]
-        #[should_panic]
-        pub fn ld_16_8() {
-            // XXX Currently do not panic as de can be considered has being a label
-            // XXX Do we allow that ? The parse knows de is not a register but a label
-            // XXX Do we forbid labels with the same name as a register ? => Probably better
-            let code = " ld hl, a";
-            let _tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
-        }
-    */
+    // #[test]
+    // #[should_panic]
+    // pub fn ld_16_8() {
+    // XXX Currently do not panic as de can be considered has being a label
+    // XXX Do we allow that ? The parse knows de is not a register but a label
+    // XXX Do we forbid labels with the same name as a register ? => Probably better
+    // let code = " ld hl, a";
+    // let _tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
+    // }
 
-    /* // deactivated -- there is a segfault however
-    #[test]
-    pub fn ld_16_16() {
-        let code = " ld hl, de";
-        let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
-        println!("{:?}", tokens);
-        assert_matches!(
-            tokens[0].deref(),
-            Token::OpCode(
-                Mnemonic::Ld,
-                Some(DataAccess::Register16(_)),
-                Some(DataAccess::Register16(_)),
-                None
-            )
-        );
-    }
-    */
+    // // deactivated -- there is a segfault however
+    // #[test]
+    // pub fn ld_16_16() {
+    // let code = " ld hl, de";
+    // let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
+    // println!("{:?}", tokens);
+    // assert_matches!(
+    // tokens[0].deref(),
+    // Token::OpCode(
+    // Mnemonic::Ld,
+    // Some(DataAccess::Register16(_)),
+    // Some(DataAccess::Register16(_)),
+    // None
+    // )
+    // );
+    // }
 
     #[test]
     #[should_panic]
@@ -956,11 +953,9 @@ INC_H equ opcode(inc h)
         let _tokens = get_val(parse_conditional(CTX.build_span(code.to_owned())));
 
         // TODO modify the parser to handle this case
-        /*
-        let code = "IF expression : ld a, b : ld a, b : ld a, b : ENDIF";
-        println!("{:?}", parse_conditional(code));
-        let tokens = get_val(parse_conditional(code));
-        */
+        // let code = "IF expression : ld a, b : ld a, b : ld a, b : ENDIF";
+        // println!("{:?}", parse_conditional(code));
+        // let tokens = get_val(parse_conditional(code));
 
         let code = "IF expression
         ld a, b
@@ -988,7 +983,7 @@ INC_H equ opcode(inc h)
         get_val(parse_z80_code(CTX.build_span(
             "
         \n\tif FDC_Is_Musical_Loader\r\n\t\tei\r\n\telse\r\n\t\tdi\r\n\tendif\n
-        ",
+        "
         )));
 
         let code = "\t	ifdef ENABLE_CATART_DISPLAY
@@ -1159,14 +1154,12 @@ INC_H equ opcode(inc h)
         assert_eq!(res, String::from("0x0 == 0x1"))
     }
 
-    /*
-        #[test]
-        fn include_test() {
-            let code = "  include \"file.asm\"";
-            let tokens = parse_z80_str(code).unwrap();
-            assert_eq!(tokens.len(), 1);
-        }
-    */
+    // #[test]
+    // fn include_test() {
+    // let code = "  include \"file.asm\"";
+    // let tokens = parse_z80_str(code).unwrap();
+    // assert_eq!(tokens.len(), 1);
+    // }
 
     #[test]
     fn quoted_string() {
@@ -1237,7 +1230,7 @@ INC_H equ opcode(inc h)
         get_val(parse_db_or_dw_or_str(code));
 
         let code = CTX.build_span(
-            "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector and %1111, Gfx1_bin_size",
+            "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector and %1111, Gfx1_bin_size"
         );
         get_val(parse_db_or_dw_or_str(code));
     }
@@ -1336,7 +1329,7 @@ FDC_GetST3
 	call FDC_PutFDC
 	jr FDC_GetFDC
         "
-            .into(),
+            .into()
         ));
 
         get_val(parse_z80_code(
@@ -1353,7 +1346,7 @@ FDC_GetST3
 		call FDC_GotoTrack
 	endif
     "
-            .into(),
+            .into()
         ));
     }
 
@@ -1362,7 +1355,7 @@ FDC_GetST3
         get_val(parse_macro(
             "macro MYMACRO
             endm"
-                .into(),
+                .into()
         ));
 
         get_val(parse_macro(
@@ -1371,13 +1364,13 @@ FDC_GetST3
         out (c), c
         ld (go_back_main_memory_from_extra_memory+1), bc
     endm"
-                .into(),
+                .into()
         ));
 
         get_val(parse_z80_code(
             "macro MYMACRO
             endm"
-                .into(),
+                .into()
         ));
 
         get_val(parse_z80_code(
@@ -1386,7 +1379,7 @@ FDC_GetST3
         out (c), c
         ld (go_back_main_memory_from_extra_memory+1), bc
     endm"
-                .into(),
+                .into()
         ));
     }
 }

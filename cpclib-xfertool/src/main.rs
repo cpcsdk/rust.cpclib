@@ -15,20 +15,14 @@
 pub mod interact;
 pub mod parser;
 
-use anyhow;
-use clap;
 use std::env;
 use std::path::Path;
-
-use hotwatch::{Event, Hotwatch};
-
-use crossbeam_channel::unbounded;
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::time::Duration;
 
-use cpclib_disc as disc;
-use cpclib_sna as sna;
-use cpclib_xfer as xfer;
+use crossbeam_channel::unbounded;
+use hotwatch::{Event, Hotwatch};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use {anyhow, clap, cpclib_disc as disc, cpclib_sna as sna, cpclib_xfer as xfer};
 
 /// Send and run the file on the CPC.
 /// Snapshot V3 are downgraded to the V2 version
@@ -57,7 +51,8 @@ fn send_and_run_file(xfer: &xfer::CpcXfer, fname: &str, run: bool) {
         if run {
             xfer.upload_and_run(fname, None)
                 .expect("Unable to launch file");
-        } else {
+        }
+        else {
             xfer.upload(fname, "/", None)
                 .expect("Unable to put the file");
         }
@@ -163,24 +158,31 @@ fn main() -> anyhow::Result<()> {
     // Retreivethe hostname from the args or from the environment
     let hostname: String = match matches.value_of("CPCADDR") {
         Some(cpcaddr) => cpcaddr.to_string(),
-        None => match env::var("CPCIP") {
-            Ok(cpcaddr) => cpcaddr.to_string(),
-            Err(_) => panic!(
+        None => {
+            match env::var("CPCIP") {
+                Ok(cpcaddr) => cpcaddr.to_string(),
+                Err(_) => {
+                    panic!(
                 "You should provide the CPCADDR argument or set the CPCIP environmeent variable"
-            ),
-        },
+            )
+                }
+            }
+        }
     };
 
     let xfer = xfer::CpcXfer::new(hostname);
 
     if matches.is_present("-r") {
         xfer.reset_m4()?;
-    } else if matches.is_present("-s") {
+    }
+    else if matches.is_present("-s") {
         xfer.reset_cpc()?;
-    } else if let Some(p_opt) = matches.subcommand_matches("-p") {
+    }
+    else if let Some(p_opt) = matches.subcommand_matches("-p") {
         let fname: String = p_opt.value_of("fname").unwrap().to_string();
         send_and_run_file(&xfer, &fname, false);
-    } else if let Some(y_opt) = matches.subcommand_matches("-y") {
+    }
+    else if let Some(y_opt) = matches.subcommand_matches("-y") {
         let fname: String = y_opt.value_of("fname").unwrap().to_string();
 
         // Simple file sending
@@ -208,21 +210,26 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
-    } else if let Some(x_opt) = matches.subcommand_matches("-x") {
+    }
+    else if let Some(x_opt) = matches.subcommand_matches("-x") {
         let fname = x_opt.value_of("fname").unwrap();
-        xfer.run(fname)?; /*.expect("Unable to launch file on CPC.");*/
-    } else if let Some(_ls_opt) = matches.subcommand_matches("--ls") {
+        xfer.run(fname)?; // .expect("Unable to launch file on CPC.");
+    }
+    else if let Some(_ls_opt) = matches.subcommand_matches("--ls") {
         let content = xfer.current_folder_content()?;
         for file in content.files() {
             println!("{:?}", file);
         }
-    } else if let Some(_pwd_opt) = matches.subcommand_matches("--pwd") {
+    }
+    else if let Some(_pwd_opt) = matches.subcommand_matches("--pwd") {
         let cwd = xfer.current_working_directory()?;
         println!("{}", cwd);
-    } else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
+    }
+    else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
         xfer.cd(cd_opt.value_of("directory").unwrap())
             .expect("Unable to move in the requested folder.");
-    } else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
+    }
+    else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
         println!("Benediction welcomes you to the interactive mode for M4.");
         interact::XferInteractor::start(&xfer);
     }

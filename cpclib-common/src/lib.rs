@@ -1,24 +1,5 @@
-pub use bitfield;
-pub use bitflags;
-pub use bitsets;
-pub use bitvec;
-pub use itertools;
-pub use lazy_static;
-pub use nom;
-pub use nom_locate;
-pub use num;
-pub use rayon;
-pub use smallvec;
-pub use strsim;
-pub use smol_str;
-
-#[cfg(feature="cmdline")]
+#[cfg(feature = "cmdline")]
 pub use clap;
-#[cfg(feature="cmdline")]
-pub use semver;
-#[cfg(feature="cmdline")]
-pub use time;
-
 use nom::branch::*;
 use nom::bytes::complete::*;
 use nom::character::complete::*;
@@ -28,31 +9,33 @@ use nom::multi::*;
 use nom::sequence::*;
 use nom::*;
 use nom_locate::LocatedSpan;
-
+#[cfg(feature = "cmdline")]
+pub use semver;
+#[cfg(feature = "cmdline")]
+pub use time;
+pub use {
+    bitfield, bitflags, bitsets, bitvec, itertools, lazy_static, nom, nom_locate, num, rayon,
+    smallvec, smol_str, strsim
+};
 
 /// Read a valuepub
 pub fn parse_value<'src, T>(
-    input: LocatedSpan<&'src str, T>,
+    input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where
-    T: Clone,
-{
+where T: Clone {
     alt((hex_number, bin_number, dec_number))(input)
 }
 
 #[inline]
 /// Parse an usigned 32 bit number
 pub fn dec_number<'src, T>(
-    input: LocatedSpan<&'src str, T>,
+    input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where
-    T: Clone,
-{
-    let (input, digits) = 
-        verify(
-            recognize(many1(is_a("0123456789_"))), 
-            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
-)(input)?;
+where T: Clone {
+    let (input, digits) = verify(
+        recognize(many1(is_a("0123456789_"))),
+        |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
+    )(input)?;
     let number = digits
         .chars()
         .filter(|c| *c != '_')
@@ -63,25 +46,22 @@ where
 }
 
 pub fn hex_number<'src, T>(
-    input: LocatedSpan<&'src str, T>,
+    input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where
-    T: Clone,
-{
+where T: Clone {
     alt((hex_number1, hex_number2))(input)
 }
 
 pub fn hex_number1<'src, T>(
-    input: LocatedSpan<&'src str, T>,
+    input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where
-    T: Clone,
-{
-    let (input, digits) =
-        preceded(alt((tag("0x"), tag("#"), tag("$"), tag("&"))), 
+where T: Clone {
+    let (input, digits) = preceded(
+        alt((tag("0x"), tag("#"), tag("$"), tag("&"))),
         verify(
-            recognize(many1(is_a("0123456789abcdefABCDEF_"))), 
-            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_"))
+            recognize(many1(is_a("0123456789abcdefABCDEF_"))),
+            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
+        )
     )(input)?;
     let number = digits
         .chars()
@@ -93,16 +73,16 @@ where
 }
 
 pub fn hex_number2<'src, T>(
-    input: LocatedSpan<&'src str, T>,
+    input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where
-    T: Clone,
-{
+where T: Clone {
     let (input, digits) = terminated(
         verify(
-            recognize(many1(is_a("0123456789abcdefABCDEF_"))), 
-            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_"))
-        , terminated(tag_no_case("h"), not(alpha1)))(input)?;
+            recognize(many1(is_a("0123456789abcdefABCDEF_"))),
+            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
+        ),
+        terminated(tag_no_case("h"), not(alpha1))
+    )(input)?;
     let number = digits
         .chars()
         .filter(|c| *c != '_')
@@ -113,16 +93,16 @@ where
 }
 
 pub fn bin_number<'src, T>(
-    input: LocatedSpan<&'src str, T>,
+    input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where
-    T: Clone,
-{
-    let (input, digits) =
-        preceded(alt((tag("0b"), tag("%"))), verify(
-            recognize(many1(is_a("01_"))), 
+where T: Clone {
+    let (input, digits) = preceded(
+        alt((tag("0b"), tag("%"))),
+        verify(
+            recognize(many1(is_a("01_"))),
             |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
-))(input)?;
+        )
+    )(input)?;
     let number = digits
         .chars()
         .filter(|c| *c != '_')
@@ -132,14 +112,12 @@ where
     Ok((input, number))
 }
 
-
 #[cfg(test)]
 mod tests {
-	use super::*;
+    use super::*;
 
     #[test]
     fn test_parse_value() {
         assert!(parse_value(LocatedSpan::new("0x12")).is_ok());
     }
-
 }

@@ -1,7 +1,6 @@
-use num_enum::IntoPrimitive;
 use std::fmt;
 
-use num_enum::TryFromPrimitive;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 #[derive(IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Debug)]
 #[repr(u8)]
@@ -19,14 +18,14 @@ pub enum BasicTokenNoPrefix {
     VarUnknown2 = 7,
     VarUnknown3 = 8,
     VarUnknown4 = 9,
-    VarUnknown5 = 0xa,
+    VarUnknown5 = 0xA,
 
-    VariableDefinition1 = 0xb,
-    VariableDefinition2 = 0xc,
-    VariableDefinition3 = 0xd,
+    VariableDefinition1 = 0xB,
+    VariableDefinition2 = 0xC,
+    VariableDefinition3 = 0xD,
 
-    ConstantNumber0 = 0x0e,
-    ConstantNumber1 = 0x0f,
+    ConstantNumber0 = 0x0E,
+    ConstantNumber1 = 0x0F,
     ConstantNumber2 = 0x10,
     ConstantNumber3 = 0x11,
     ConstantNumber4 = 0x12,
@@ -39,14 +38,14 @@ pub enum BasicTokenNoPrefix {
 
     ValueIntegerDecimal8bits = 0x19,
 
-    ValueIntegerDecimal16bits = 0x1a,
-    ValueIntegerBinary16bits = 0x1b,
-    ValueIntegerHexadecimal16bits = 0x1c,
+    ValueIntegerDecimal16bits = 0x1A,
+    ValueIntegerBinary16bits = 0x1B,
+    ValueIntegerHexadecimal16bits = 0x1C,
 
-    LineMemoryAddressPointer = 0x1d,
-    LineNumber = 0x1e,
+    LineMemoryAddressPointer = 0x1D,
+    LineNumber = 0x1E,
 
-    ValueFloatingPoint = 0x1f,
+    ValueFloatingPoint = 0x1F,
 
     CharSpace = 0x20,
     CharExclamation = 0x21,
@@ -108,11 +107,11 @@ pub enum BasicTokenNoPrefix {
     CharLowerY,
     CharLowerZ,
 
-    Pipe = 0x7c,
+    Pipe = 0x7C,
 
-    Unused7d = 0x7d,
-    Unused7e = 0x7e,
-    Unused7f = 0x7f,
+    Unused7d = 0x7D,
+    Unused7e = 0x7E,
+    Unused7f = 0x7F,
 
     After = 0x80,
     Auto,
@@ -240,7 +239,7 @@ pub enum BasicTokenNoPrefix {
     Mod,
     Or,
     Xor,
-    AdditionalTokenMarker,
+    AdditionalTokenMarker
 }
 
 impl fmt::Display for BasicTokenNoPrefix {
@@ -255,7 +254,7 @@ impl fmt::Display for BasicTokenNoPrefix {
 
             Self::CharSpace => " ",
 
-            _ => unimplemented!("{:?}", self),
+            _ => unimplemented!("{:?}", self)
         };
         write!(f, "{}", tag)
     }
@@ -299,7 +298,7 @@ pub enum BasicTokenPrefixed {
     Tan,
     Unt,
     UpperDollar,
-    Val = 0x1d,
+    Val = 0x1D,
 
     Eof = 0x40,
     Err,
@@ -326,26 +325,24 @@ pub enum BasicTokenPrefixed {
     Test,
     Teststr,
     CopycharDollar,
-    Vpos = 0x7f,
+    Vpos = 0x7F
 }
 
 impl fmt::Display for BasicTokenPrefixed {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let tag = match self {
             Self::Abs => "ABS",
-            _ => unimplemented!("{}", self),
+            _ => unimplemented!("{}", self)
         };
         write!(f, "{}", tag)
     }
 }
 
-/*
-impl From<u8> for BasicTokenPrefixed {
-    fn from(val: u8) -> BasicTokenPrefixed {
-        val.try_into().unwrap()
-    }
-}
-*/
+// impl From<u8> for BasicTokenPrefixed {
+// fn from(val: u8) -> BasicTokenPrefixed {
+// val.try_into().unwrap()
+// }
+// }
 
 impl BasicTokenPrefixed {
     /// Returns the 8bits code that represents the prefixed token
@@ -362,7 +359,7 @@ pub enum BasicValue {
     /// 5bytes float value
     Float(u8, u8, u8, u8, u8),
     /// String
-    String(String),
+    String(String)
 }
 
 #[allow(missing_docs)]
@@ -382,7 +379,7 @@ impl BasicValue {
     pub fn as_bytes(&self) -> Vec<u8> {
         match self {
             Self::Integer(ref low, ref high) => vec![*low, *high],
-            _ => unimplemented!(),
+            _ => unimplemented!()
         }
     }
 
@@ -390,7 +387,7 @@ impl BasicValue {
     pub fn as_integer(&self) -> Option<u16> {
         match self {
             Self::Integer(ref low, ref high) => Some(u16::from(*low) + 256 * u16::from(*high)),
-            _ => None,
+            _ => None
         }
     }
 
@@ -417,7 +414,7 @@ pub enum BasicToken {
     /// Encode a constant. The first field can only take ValueIntegerDecimal8bits, ValueIntegerDecimal16bits, ValueIntegerBinary16bits, ValueIntegerHexadecimal16bits
     Constant(BasicTokenNoPrefix, BasicValue),
     /// Encode a comment
-    Comment(BasicTokenNoPrefix, Vec<u8>),
+    Comment(BasicTokenNoPrefix, Vec<u8>)
 }
 
 impl fmt::Display for BasicToken {
@@ -441,11 +438,11 @@ impl fmt::Display for BasicToken {
                     BasicTokenNoPrefix::ValueIntegerDecimal16bits => {
                         constant.int_decimal_representation().unwrap()
                     }
-                    _ => unimplemented!("{:?}", kind),
+                    _ => unimplemented!("{:?}", kind)
                 };
                 write!(f, "{}", repr)?;
             }
-            _ => unimplemented!("{:?}", self),
+            _ => unimplemented!("{:?}", self)
         }
 
         Ok(())
@@ -458,10 +455,12 @@ impl BasicToken {
         match self {
             BasicToken::SimpleToken(ref tok) => vec![tok.value()],
 
-            BasicToken::PrefixedToken(ref tok) => vec![
-                BasicTokenNoPrefix::AdditionalTokenMarker.value(),
-                tok.value(),
-            ],
+            BasicToken::PrefixedToken(ref tok) => {
+                vec![
+                    BasicTokenNoPrefix::AdditionalTokenMarker.value(),
+                    tok.value(),
+                ]
+            }
 
             BasicToken::Rsx(ref _name) => {
                 let encoded_name = self.rsx_encoded_name().unwrap();
@@ -482,7 +481,7 @@ impl BasicToken {
                 data
             }
 
-            _ => unimplemented!(),
+            _ => unimplemented!()
         }
     }
 
@@ -490,14 +489,14 @@ impl BasicToken {
     pub fn rsx_encoded_name(&self) -> Option<Vec<u8>> {
         match self {
             BasicToken::Rsx(ref name) => Some(Self::encode_string(name)),
-            _ => None,
+            _ => None
         }
     }
 
     pub fn variable_encoded_name(&self) -> Option<Vec<u8>> {
         match self {
             BasicToken::Variable(ref name, _) => Some(Self::encode_string(name)),
-            _ => None,
+            _ => None
         }
     }
 
@@ -514,25 +513,26 @@ impl BasicToken {
 
 #[cfg(test)]
 mod test {
-    use crate::tokens::*;
     use std::convert::TryInto;
+
+    use crate::tokens::*;
 
     #[test]
     fn test_conversion() {
-        assert_eq!(BasicTokenNoPrefix::Pipe.value(), 0x7c);
+        assert_eq!(BasicTokenNoPrefix::Pipe.value(), 0x7C);
         assert_eq!(BasicTokenNoPrefix::After.value(), 0x80);
 
-        assert_eq!(BasicTokenNoPrefix::Goto.value(), 0xa0);
+        assert_eq!(BasicTokenNoPrefix::Goto.value(), 0xA0);
 
-        assert_eq!(BasicTokenNoPrefix::SymbolQuote.value(), 0xc0);
+        assert_eq!(BasicTokenNoPrefix::SymbolQuote.value(), 0xC0);
 
-        assert_eq!(BasicTokenNoPrefix::Frame.value(), 0xe0);
+        assert_eq!(BasicTokenNoPrefix::Frame.value(), 0xE0);
 
-        assert_eq!(BasicTokenNoPrefix::GreaterOrEqual.value(), 0xf0);
+        assert_eq!(BasicTokenNoPrefix::GreaterOrEqual.value(), 0xF0);
 
-        assert_eq!(BasicTokenNoPrefix::Division.value(), 0xf7);
+        assert_eq!(BasicTokenNoPrefix::Division.value(), 0xF7);
 
-        let token: BasicTokenNoPrefix = 0xf7.try_into().unwrap();
+        let token: BasicTokenNoPrefix = 0xF7.try_into().unwrap();
         assert_eq!(token, BasicTokenNoPrefix::Division);
     }
 }

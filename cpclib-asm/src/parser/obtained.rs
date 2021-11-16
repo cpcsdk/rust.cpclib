@@ -1,56 +1,52 @@
+use std::borrow::Cow;
+use std::convert::TryFrom;
+use std::fs::File;
+use std::io::Read;
+use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, RwLock};
+
 use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::{
-    BaseListing, BinaryTransformation, CrunchType, Expr, ListingElement, TestKind, Token,
-};
-use std::sync::Arc;
-use std::{
-    borrow::Cow,
-    convert::TryFrom,
-    fs::File,
-    io::Read,
-    ops::{Deref, DerefMut},
-    sync::RwLock,
-};
-
-use crate::{
-    error::AssemblerError,
-    implementation::expression::ExprEvaluationExt,
-    preamble::{parse_z80_str, parse_z80_strrc_with_contextrc},
+    BaseListing, BinaryTransformation, CrunchType, Expr, ListingElement, TestKind, Token
 };
 
 use super::{ParserContext, Z80Span};
+use crate::error::AssemblerError;
+use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Cruncher;
+use crate::preamble::{parse_z80_str, parse_z80_strrc_with_contextrc};
 
-///! This crate is related to the adaptation of tokens and listing for the case where they are parsed
+/// ! This crate is related to the adaptation of tokens and listing for the case where they are parsed
 
 /// Read the content of the source file.
 /// Uses the context to obtain the appropriate file other the included directories
-pub fn read_source(fname: &str, ctx: & ParserContext) -> Result<String, AssemblerError> {
+pub fn read_source(fname: &str, ctx: &ParserContext) -> Result<String, AssemblerError> {
     match ctx.get_path_for(fname) {
         Err(e) => {
             Err(AssemblerError::IOError {
-                msg: format!("{:?} not found. {:?}", fname, e),
+                msg: format!("{:?} not found. {:?}", fname, e)
             })
         }
         Ok(ref fname) => {
-            let mut f = File::open(&fname)
-                    .map_err(|e| AssemblerError::IOError {
-                        msg: format!("Unable to open {:?}. {}", fname, e),
-                    })?;
+            let mut f = File::open(&fname).map_err(|e| {
+                AssemblerError::IOError {
+                    msg: format!("Unable to open {:?}. {}", fname, e)
+                }
+            })?;
 
             let mut content = Vec::new();
-            f.read_to_end(&mut content)
-                .map_err(|e| AssemblerError::IOError {
-                    msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
-                })?;
+            f.read_to_end(&mut content).map_err(|e| {
+                AssemblerError::IOError {
+                    msg: format!("Unable to read {:?}. {}", fname, e.to_string())
+                }
+            })?;
 
             let result = chardet::detect(&content);
-            let coder = encoding::label::encoding_from_whatwg_label(
-                chardet::charset2encoding(&result.0),
-            );
+            let coder =
+                encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
 
             let content = match coder {
                 Some(coder) => {
@@ -61,19 +57,18 @@ pub fn read_source(fname: &str, ctx: & ParserContext) -> Result<String, Assemble
                 }
                 None => {
                     return Err(AssemblerError::IOError {
-                        msg: format!("Encoding error for {:?}.", fname),
+                        msg: format!("Encoding error for {:?}.", fname)
                     });
                 }
             };
 
             Ok(content)
-
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct LocatedExpr (Expr, Z80Span);
+pub struct LocatedExpr(Expr, Z80Span);
 
 impl LocatedExpr {
     pub fn as_expr(&self) -> &Expr {
@@ -90,86 +85,86 @@ pub enum LocatedToken {
         /// The original token without any span information
         token: Token,
         /// The span that correspond to the token
-        span: Z80Span,
+        span: Z80Span
     },
-    Function(
-        SmolStr,
-        Vec<SmolStr>,
-        LocatedListing,
-        Z80Span
-    ),
+    Function(SmolStr, Vec<SmolStr>, LocatedListing, Z80Span),
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
     Include(
-        String, // fname
+        String,                         // fname
         RwLock<Option<LocatedListing>>, // content
-        Option<SmolStr>, // optional module name
-        bool, // must be included only one time
-        Z80Span,
+        Option<SmolStr>,                // optional module name
+        bool,                           // must be included only one time
+        Z80Span
     ),
     If(
         Vec<(TestKind, LocatedListing)>,
         Option<LocatedListing>,
-        Z80Span,
+        Z80Span
     ),
     Repeat(Expr, LocatedListing, Option<SmolStr>, Option<Expr>, Z80Span),
-    Iterate(SmolStr, either::Either<Vec<Expr>, Expr>, LocatedListing, Z80Span),
+    Iterate(
+        SmolStr,
+        either::Either<Vec<Expr>, Expr>,
+        LocatedListing,
+        Z80Span
+    ),
     RepeatUntil(Expr, LocatedListing, Z80Span),
     Rorg(Expr, LocatedListing, Z80Span),
-    Switch(Expr, Vec<(Expr, LocatedListing, bool)>, Option<LocatedListing>, Z80Span),
+    Switch(
+        Expr,
+        Vec<(Expr, LocatedListing, bool)>,
+        Option<LocatedListing>,
+        Z80Span
+    ),
     While(Expr, LocatedListing, Z80Span),
-    Module(SmolStr, LocatedListing, Z80Span),
+    Module(SmolStr, LocatedListing, Z80Span)
 }
 
 impl Clone for LocatedToken {
     fn clone(&self) -> Self {
         match self {
-            LocatedToken::Standard { token, span } => LocatedToken::Standard {
-                token: token.clone(),
-                span: span.clone(),
-            },
+            LocatedToken::Standard { token, span } => {
+                LocatedToken::Standard {
+                    token: token.clone(),
+                    span: span.clone()
+                }
+            }
             LocatedToken::CrunchedSection(a, b, c) => {
                 LocatedToken::CrunchedSection(a.clone(), b.clone(), c.clone())
-            },
+            }
             LocatedToken::Function(a, b, c, d) => {
                 LocatedToken::Function(a.clone(), b.clone(), c.clone(), d.clone())
-            },
-            LocatedToken::Include(filename, listing, namespace, once, span) => Self::Include(
-                filename.clone(),
-                RwLock::new(listing.read().unwrap().clone()),
-                namespace.clone(),
-                once.clone(),
-                span.clone(),
-            ),
+            }
+            LocatedToken::Include(filename, listing, namespace, once, span) => {
+                Self::Include(
+                    filename.clone(),
+                    RwLock::new(listing.read().unwrap().clone()),
+                    namespace.clone(),
+                    once.clone(),
+                    span.clone()
+                )
+            }
             LocatedToken::If(a, b, c) => LocatedToken::If(a.clone(), b.clone(), c.clone()),
             LocatedToken::Repeat(a, b, c, d, e) => {
                 LocatedToken::Repeat(a.clone(), b.clone(), c.clone(), d.clone(), e.clone())
             }
             LocatedToken::Iterate(a, b, c, d) => {
-                LocatedToken::Iterate(a.clone(), b.clone(), c.clone(), d.clone())},
-            LocatedToken::RepeatUntil(_, _, _) => todo!(),
-            LocatedToken::Rorg(_, _, _) => todo!(),
+                LocatedToken::Iterate(a.clone(), b.clone(), c.clone(), d.clone())
+            }
+            LocatedToken::RepeatUntil(..) => todo!(),
+            LocatedToken::Rorg(..) => todo!(),
             LocatedToken::Switch(value, cases, default, span) => {
-                LocatedToken::Switch(
-                    value.clone(),
-                    cases.clone(),
-                    default.clone(),
-                    span.clone()
-                )
-            },
-            LocatedToken::While(a, b, c) => {
-                LocatedToken::While(
-                    a.clone(),
-                    b.clone(),
-                    c.clone()
-                )
-            },
-            LocatedToken::Module(_, _, _) => todo!(),
+                LocatedToken::Switch(value.clone(), cases.clone(), default.clone(), span.clone())
+            }
+            LocatedToken::While(a, b, c) => LocatedToken::While(a.clone(), b.clone(), c.clone()),
+            LocatedToken::Module(..) => todo!()
         }
     }
 }
 
 impl Deref for LocatedToken {
     type Target = Token;
+
     fn deref(&self) -> &Self::Target {
         match self.token() {
             Ok(t) => t,
@@ -185,7 +180,7 @@ impl LocatedToken {
     pub fn token(&self) -> Result<&Token, ()> {
         match self {
             Self::Standard { token, .. } => Ok(token),
-            _ => Err(()),
+            _ => Err(())
         }
     }
 
@@ -202,8 +197,8 @@ impl LocatedToken {
             | Self::Repeat(_, _, _, _, span)
             | Self::RepeatUntil(_, _, span)
             | Self::Rorg(_, _, span)
-            | Self::Switch(_,_,_, span)
-            | Self::While(_, _, span) => span,
+            | Self::Switch(_, _, _, span)
+            | Self::While(_, _, span) => span
         }
     }
 
@@ -220,40 +215,52 @@ impl LocatedToken {
                 Cow::Owned(Token::CrunchedSection(*c, l.as_listing()))
             }
             LocatedToken::Function(name, params, inner, _span) => {
-                Cow::Owned(Token::Function(name.clone(), params.clone(), inner.as_listing()))
+                Cow::Owned(Token::Function(
+                    name.clone(),
+                    params.clone(),
+                    inner.as_listing()
+                ))
             }
-            LocatedToken::Include(s, l, module, once, _span) => Cow::Owned(Token::Include(
-                s.clone(),
-                l.read().unwrap().as_ref().map(|l| l.as_listing()).into(),
-                module.clone(),
-                *once
-            )),
-            LocatedToken::If(v, e, _span) => Cow::Owned(Token::If(
-                v.iter()
-                    .map(|(k, l)| (k.clone(), l.as_listing()))
-                    .collect_vec(),
-                e.as_ref().map(|l| l.as_listing()),
-            )),
-            LocatedToken::Repeat(e, l, s, start, _span) => Cow::Owned(Token::Repeat(
-                e.clone(),
-                l.as_listing(),
-                s.clone(),
-                start.clone(),
-            )),
+            LocatedToken::Include(s, l, module, once, _span) => {
+                Cow::Owned(Token::Include(
+                    s.clone(),
+                    l.read().unwrap().as_ref().map(|l| l.as_listing()).into(),
+                    module.clone(),
+                    *once
+                ))
+            }
+            LocatedToken::If(v, e, _span) => {
+                Cow::Owned(Token::If(
+                    v.iter()
+                        .map(|(k, l)| (k.clone(), l.as_listing()))
+                        .collect_vec(),
+                    e.as_ref().map(|l| l.as_listing())
+                ))
+            }
+            LocatedToken::Repeat(e, l, s, start, _span) => {
+                Cow::Owned(Token::Repeat(
+                    e.clone(),
+                    l.as_listing(),
+                    s.clone(),
+                    start.clone()
+                ))
+            }
             LocatedToken::RepeatUntil(e, l, _span) => {
                 Cow::Owned(Token::RepeatUntil(e.clone(), l.as_listing()))
             }
             LocatedToken::Rorg(e, l, _span) => Cow::Owned(Token::Rorg(e.clone(), l.as_listing())),
-            LocatedToken::Switch(v, c, d, span) => Cow::Owned(Token::Switch(
-                v.clone(),
-                c.iter()
-                    .map(|(e, l, b)| (e.clone(), l.as_listing(), b.clone()))
-                    .collect_vec(),
+            LocatedToken::Switch(v, c, d, span) => {
+                Cow::Owned(Token::Switch(
+                    v.clone(),
+                    c.iter()
+                        .map(|(e, l, b)| (e.clone(), l.as_listing(), b.clone()))
+                        .collect_vec(),
                     d.as_ref().map(|d| d.as_listing())
-            )),
+                ))
+            }
             LocatedToken::While(e, l, _span) => Cow::Owned(Token::While(e.clone(), l.as_listing())),
             LocatedToken::Iterate(_name, _values, _code, _span) => todo!(),
-            LocatedToken::Module(_, _, _) => todo!(),
+            LocatedToken::Module(..) => todo!()
         }
     }
 
@@ -273,10 +280,12 @@ impl LocatedToken {
                 let token = tokens[0].clone();
                 Ok(token)
             }
-            _ => Err(format!(
-                "{} tokens are present instead of one",
-                tokens.len()
-            )),
+            _ => {
+                Err(format!(
+                    "{} tokens are present instead of one",
+                    tokens.len()
+                ))
+            }
         }
     }
 
@@ -308,28 +317,31 @@ impl LocatedToken {
                         extended_offset: _,
                         off: _,
                         ref content,
-                        transformation,
+                        transformation
                     },
-                span,
+                span
             } if content.read().unwrap().is_none() => {
-                //TODO manage the optional arguments
+                // TODO manage the optional arguments
                 match ctx.get_path_for(&fname) {
                     Err(_e) => {
                         return Err(AssemblerError::IOError {
-                            msg: format!("{:?} not found", fname),
+                            msg: format!("{:?} not found", fname)
                         });
                     }
                     Ok(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|_e| AssemblerError::IOError {
-                            msg: format!("Unable to open {:?}", fname),
+                        let mut f = File::open(&fname).map_err(|_e| {
+                            AssemblerError::IOError {
+                                msg: format!("Unable to open {:?}", fname)
+                            }
                         })?;
 
                         // load the full file
                         let mut data = Vec::new();
-                        f.read_to_end(&mut data)
-                            .map_err(|e| AssemblerError::IOError {
-                                msg: format!("Unable to read {:?}. {}", fname, e.to_string()),
-                            })?;
+                        f.read_to_end(&mut data).map_err(|e| {
+                            AssemblerError::IOError {
+                                msg: format!("Unable to read {:?}. {}", fname, e.to_string())
+                            }
+                        })?;
 
                         // get a slice on the data to ease its cut
                         let mut data = &data[..];
@@ -347,7 +359,8 @@ impl LocatedToken {
                                     ),
                                     span: span.clone()
                                 }
-                            } else {
+                            }
+                            else {
                                 AssemblerError::RelocatedInfo{
                                     info: Box::new(
                                         AssemblerError::AssemblingError{
@@ -369,7 +382,7 @@ impl LocatedToken {
                                         "Unable to read {:?}. Only {} are available",
                                         fname,
                                         data.len()
-                                    ),
+                                    )
                                 });
                             }
                             data = &data[offset..];
@@ -384,7 +397,7 @@ impl LocatedToken {
                                         "Unable to read {:?}. Only {} are available",
                                         fname,
                                         data.len()
-                                    ),
+                                    )
                                 });
                             }
                         }
@@ -397,7 +410,7 @@ impl LocatedToken {
                             other => {
                                 if data.len() == 0 {
                                     return Err(AssemblerError::EmptyBinaryFile(
-                                        fname.to_string_lossy().to_string(),
+                                        fname.to_string_lossy().to_string()
                                     ));
                                 }
 
@@ -422,46 +435,44 @@ impl LocatedToken {
         Ok(())
     }
 
-    /*
-    fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
-        match self {
-            LocatedToken::Standard { token, span } => {
-                token.fix_local_macro_labels_with_seed(seed)
-            },
-            LocatedToken::CrunchedSection(_, _, _) => todo!(),
-            LocatedToken::Include(_, _, _) => todo!(),
-
-            Self::If(v, o, _) => {
-                v.iter_mut()
-                    .map(|(t, l)| l)
-                    .for_each(|l| l.fix_local_macro_labels_with_seed(seed));
-                o.as_mut().map(|l| l.fix_local_macro_labels_with_seed(seed));
-            }
-
-            Self::Switch(l, _) => {
-                l.iter_mut().for_each(|(e, l)| {
-                    e.fix_local_macro_labels_with_seed(seed);
-                    l.fix_local_macro_labels_with_seed(seed);
-                });
-            }
-
-
-            Self::RepeatUntil(e, l, _)
-            | Self::Rorg(e, l, _)
-            | Self::While(e, l, _) => {
-                e.fix_local_macro_labels_with_seed(seed);
-                l.fix_local_macro_labels_with_seed(seed);
-            }
-
-            Self::Repeat(e, l, _, s, _) => {
-
-                e.fix_local_macro_labels_with_seed(seed);
-                l.fix_local_macro_labels_with_seed(seed);
-                s.as_mut().map(|s| s.fix_local_macro_labels_with_seed(seed));
-            }
-        }
-    }
-    */
+    // fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+    // match self {
+    // LocatedToken::Standard { token, span } => {
+    // token.fix_local_macro_labels_with_seed(seed)
+    // },
+    // LocatedToken::CrunchedSection(_, _, _) => todo!(),
+    // LocatedToken::Include(_, _, _) => todo!(),
+    //
+    // Self::If(v, o, _) => {
+    // v.iter_mut()
+    // .map(|(t, l)| l)
+    // .for_each(|l| l.fix_local_macro_labels_with_seed(seed));
+    // o.as_mut().map(|l| l.fix_local_macro_labels_with_seed(seed));
+    // }
+    //
+    // Self::Switch(l, _) => {
+    // l.iter_mut().for_each(|(e, l)| {
+    // e.fix_local_macro_labels_with_seed(seed);
+    // l.fix_local_macro_labels_with_seed(seed);
+    // });
+    // }
+    //
+    //
+    // Self::RepeatUntil(e, l, _)
+    // | Self::Rorg(e, l, _)
+    // | Self::While(e, l, _) => {
+    // e.fix_local_macro_labels_with_seed(seed);
+    // l.fix_local_macro_labels_with_seed(seed);
+    // }
+    //
+    // Self::Repeat(e, l, _, s, _) => {
+    //
+    // e.fix_local_macro_labels_with_seed(seed);
+    // l.fix_local_macro_labels_with_seed(seed);
+    // s.as_mut().map(|s| s.fix_local_macro_labels_with_seed(seed));
+    // }
+    // }
+    // }
 }
 /// Implement this trait for type previousy defined without source location.
 
@@ -484,37 +495,38 @@ impl Locate for Token {
 
     fn locate(self, span: Z80Span) -> LocatedToken {
         if self.has_at_least_one_listing() {
-            /*/
-            match self {
-                Token::CrunchedSection(a, b) => {
-                    LocatedToken::CrunchedSection(a, b, span)
-                },
-                Token::Include(a,b) => {
-                    LocatedToken::Include(a, b, span)
-                },
-                Token::If(a, b) => {
-                    LocatedToken::If(a, b, span)
-                },
-                Token::Repeat(a,b, c,) => {
-                    LocatedToken::Repeat(a,b,c,span)
-                },
-                Token::RepeatUntil(a, b) => {
-                    LocatedToken::RepeatUntil(a, b, span)
-                },
-                Token::Rorg(a, b) => {
-                    LocatedToken::Rorg(a, b, span)
-                },
-                Token::Switch(a) => {
-                    LocatedToken::Switch(a, span)
-                },
-                Token::While(a, b) => {
-                    LocatedToken::While(a, b, span)
-                },
-                _ => unreachable!()
-
-            }*/
+            // /
+            // match self {
+            // Token::CrunchedSection(a, b) => {
+            // LocatedToken::CrunchedSection(a, b, span)
+            // },
+            // Token::Include(a,b) => {
+            // LocatedToken::Include(a, b, span)
+            // },
+            // Token::If(a, b) => {
+            // LocatedToken::If(a, b, span)
+            // },
+            // Token::Repeat(a,b, c,) => {
+            // LocatedToken::Repeat(a,b,c,span)
+            // },
+            // Token::RepeatUntil(a, b) => {
+            // LocatedToken::RepeatUntil(a, b, span)
+            // },
+            // Token::Rorg(a, b) => {
+            // LocatedToken::Rorg(a, b, span)
+            // },
+            // Token::Switch(a) => {
+            // LocatedToken::Switch(a, span)
+            // },
+            // Token::While(a, b) => {
+            // LocatedToken::While(a, b, span)
+            // },
+            // _ => unreachable!()
+            //
+            // }
             unreachable!()
-        } else {
+        }
+        else {
             LocatedToken::Standard { token: self, span }
         }
     }
@@ -533,7 +545,7 @@ pub struct LocatedListing {
     /// Its source code
     src: Arc<String>,
     /// Its Parsing Context
-    ctx: Arc<ParserContext>,
+    ctx: Arc<ParserContext>
 }
 
 impl LocatedListing {
@@ -542,7 +554,7 @@ impl LocatedListing {
         Self {
             listing: Default::default(),
             src: Arc::new(str),
-            ctx: Arc::new(ctx),
+            ctx: Arc::new(ctx)
         }
     }
 
@@ -550,7 +562,7 @@ impl LocatedListing {
         Self {
             listing: Default::default(),
             src: Arc::clone(&span.extra.0),
-            ctx: Arc::clone(&span.extra.1),
+            ctx: Arc::clone(&span.extra.1)
         }
     }
 
@@ -566,16 +578,15 @@ impl LocatedListing {
         Z80Span::new_extra_from_rc(Arc::clone(&self.src), Arc::clone(&self.ctx))
     }
 
-    /*
-    pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
-        self.iter_mut()
-            .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
-    }
-    */
+    // pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+    // self.iter_mut()
+    // .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
+    // }
 }
 
 impl Deref for LocatedListing {
     type Target = InnerLocatedListing;
+
     fn deref(&self) -> &Self::Target {
         &self.listing
     }
@@ -601,10 +612,10 @@ impl TryFrom<Vec<LocatedToken>> for LocatedListing {
                 Ok(LocatedListing {
                     listing: tokens.into(),
                     ctx,
-                    src,
+                    src
                 })
             }
-            None => Err(()),
+            None => Err(())
         }
     }
 }
@@ -635,6 +646,7 @@ pub trait ParseToken {
 
 impl ParseToken for Token {
     type Output = Token;
+
     fn parse_token(src: &str) -> Result<Self::Output, String> {
         let token = LocatedToken::parse_token(src);
         token.map(|lt| lt.as_token().into_owned())

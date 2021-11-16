@@ -28,13 +28,14 @@ mod crunchers;
 #[cfg(feature = "basm")]
 pub mod basm_utils;
 
+use std::fmt::Debug;
+use std::io::Write;
+use std::sync::{Arc, RwLock};
+
 use cpclib_disc::amsdos::*;
-use std::sync::Arc;
-use std::sync::RwLock;
-use std::{fmt::Debug, io::Write};
+use preamble::*;
 
 use self::listing_output::ListingOutput;
-use preamble::*;
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
 #[derive(Debug)]
@@ -43,7 +44,7 @@ pub struct AssemblingOptions {
     case_sensitive: bool,
     /// Contains some symbols that could be used during assembling
     symbols: cpclib_tokens::symbols::SymbolsTable,
-    output_builder: Option<Arc<RwLock<ListingOutput>>>,
+    output_builder: Option<Arc<RwLock<ListingOutput>>>
 }
 
 impl Default for AssemblingOptions {
@@ -51,7 +52,7 @@ impl Default for AssemblingOptions {
         Self {
             case_sensitive: true,
             symbols: cpclib_tokens::symbols::SymbolsTable::default(),
-            output_builder: None,
+            output_builder: None
         }
     }
 }
@@ -101,7 +102,7 @@ impl AssemblingOptions {
 
     pub fn write_listing_output<W: 'static + Write + Send + Sync>(
         &mut self,
-        writer: W,
+        writer: W
     ) -> &mut Self {
         self.output_builder = Some(Arc::new(RwLock::new(ListingOutput::new(writer))));
         self.output_builder
@@ -114,14 +115,14 @@ impl AssemblingOptions {
 /// Assemble a piece of code and returns the associated list of bytes.
 pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
     let options = AssemblingOptions::default();
-    //let options = AssemblingOptions::new_with_table(table);
+    // let options = AssemblingOptions::new_with_table(table);
     assemble_with_options(code, &options).map(|(bytes, _symbols)| bytes)
 }
 
 /// Assemble a piece of code and returns the associates liste of bytes as well as the generated reference table.
 pub fn assemble_with_options(
     code: &str,
-    options: &AssemblingOptions,
+    options: &AssemblingOptions
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let tokens = parser::parse_z80_str(code)?;
     assemble_tokens_with_options(&tokens, &options)
@@ -130,7 +131,7 @@ pub fn assemble_with_options(
 /// Assemble the predifined list of tokens
 pub fn assemble_tokens_with_options<T: Visited>(
     tokens: &[T],
-    options: &AssemblingOptions,
+    options: &AssemblingOptions
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
@@ -140,7 +141,7 @@ pub fn assemble_tokens_with_options<T: Visited>(
 /// XXX probably crash if filename is not coherent
 pub fn assemble_to_amsdos_file(
     code: &str,
-    amsdos_filename: &str,
+    amsdos_filename: &str
 ) -> Result<AmsdosFile, AssemblerError> {
     use std::convert::TryFrom;
 
@@ -155,7 +156,7 @@ pub fn assemble_to_amsdos_file(
         &amsdos_filename,
         env.loading_address().unwrap() as u16,
         env.execution_address().unwrap() as u16,
-        &env.produced_bytes(),
+        &env.produced_bytes()
     )?)
 }
 
@@ -304,50 +305,47 @@ label2
         nop";
         code_test(code);
     }
-    /* /// This test currently does not pass
-        #[test]
-        fn rasm_pagetag2() {
-            let code = "
-            bankset 0
-            call maroutine
-
-            bank 4
-            org #C000
-    autreroutine
-            nop
-            ret
-
-            bank 5
-            org #8000
-    maroutine
-            ldir
-            ret
-
-            bankset 2
-            org #9000
-    troize
-            nop
-            assert {page}maroutine==#7FC5
-            assert {pageset}maroutine==#7FC2
-            assert {page}autreroutine==#7FC4
-            assert {pageset}autreroutine==#7FC2
-            assert {page}troize==#7FCE
-            assert {pageset}troize==#7FCA";
-            rasm_test(code);
-
-        }
-        */
-    /*
-    #define AUTOTEST_PAGETAG3	"buildsna:bank 2:assert {bank}$==2:assert {page}$==0x7FC0:assert {pageset}$==#7FC0:" \
-                                "bankset 1:org #4000:assert {bank}$==5:assert {page}$==0x7FC5:assert {pageset}$==#7FC2"
-        */
+    // /// This test currently does not pass
+    // #[test]
+    // fn rasm_pagetag2() {
+    // let code = "
+    // bankset 0
+    // call maroutine
+    //
+    // bank 4
+    // org #C000
+    // autreroutine
+    // nop
+    // ret
+    //
+    // bank 5
+    // org #8000
+    // maroutine
+    // ldir
+    // ret
+    //
+    // bankset 2
+    // org #9000
+    // troize
+    // nop
+    // assert {page}maroutine==#7FC5
+    // assert {pageset}maroutine==#7FC2
+    // assert {page}autreroutine==#7FC4
+    // assert {pageset}autreroutine==#7FC2
+    // assert {page}troize==#7FCE
+    // assert {pageset}troize==#7FCA";
+    // rasm_test(code);
+    //
+    // }
+    // #define AUTOTEST_PAGETAG3	"buildsna:bank 2:assert {bank}$==2:assert {page}$==0x7FC0:assert {pageset}$==#7FC0:" \
+    // "bankset 1:org #4000:assert {bank}$==5:assert {page}$==0x7FC5:assert {pageset}$==#7FC2"
 
     #[test]
     fn test_duration() {
         let listing = Listing::from_str(
             "
             pop de      ; 3
-        ",
+        "
         )
         .expect("Unable to assemble this code");
         println!("{}", listing.to_string());
@@ -356,7 +354,7 @@ label2
         let listing = Listing::from_str(
             "
             inc l       ; 1
-        ",
+        "
         )
         .expect("Unable to assemble this code");
         println!("{}", listing.to_string());
@@ -365,7 +363,7 @@ label2
         let listing = Listing::from_str(
             "
             ld (hl), e  ; 2
-        ",
+        "
         )
         .expect("Unable to assemble this code");
         println!("{}", listing.to_string());
@@ -374,7 +372,7 @@ label2
         let listing = Listing::from_str(
             "
             ld (hl), d  ; 2
-        ",
+        "
         )
         .expect("Unable to assemble this code");
         println!("{}", listing.to_string());
@@ -387,7 +385,7 @@ label2
             ld (hl), e  ; 2
             inc l       ; 1
             ld (hl), d  ; 2
-        ",
+        "
         )
         .expect("Unable to assemble this code");
         println!("{}", listing.to_string());

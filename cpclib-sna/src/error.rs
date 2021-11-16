@@ -5,5 +5,5 @@ pub enum SnapshotError {
     NotEnougSpaceAvailable,
     InvalidValue,
     FlagDoesNotExists,
-    InvalidIndex,
+    InvalidIndex
 }

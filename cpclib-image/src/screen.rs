@@ -19,7 +19,7 @@ pub struct SimpleMonitor {
     pub mode: u8,
     pub pixels: Vec<Vec<u8>>,
     pub palette: Vec<char>,
-    pub buffer: im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
+    pub buffer: im::ImageBuffer<im::Rgba<u8>, Vec<u8>>
 }
 
 #[allow(missing_docs)]
@@ -31,7 +31,7 @@ impl SimpleMonitor {
             mode,
             pixels: vec![vec![0_u8; width as usize]; height as usize],
             palette: vec![0 as char; 16],
-            buffer: im::ImageBuffer::new(width, height),
+            buffer: im::ImageBuffer::new(width, height)
         }
     }
 

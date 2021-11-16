@@ -12,16 +12,14 @@
 )]
 #![deny(clippy::pedantic)]
 
-///! Locomotive BASIC manipulation tool.
-use clap;
-
-use cpclib_basic::BasicProgram;
-use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
-
-use clap::*;
-
 use std::fs::File;
 use std::io::{Read, Write};
+
+/// ! Locomotive BASIC manipulation tool.
+use clap;
+use clap::*;
+use cpclib_basic::BasicProgram;
+use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 fn main() -> std::io::Result<()> {
     let matches = App::new("locomotive")
@@ -33,19 +31,19 @@ fn main() -> std::io::Result<()> {
                 .short("b")
                 .help("Source file that contains the basic program")
                 .takes_value(true)
-                .required(true),
+                .required(true)
         )
         .arg(
             Arg::with_name("HEADER")
                 .long("header")
                 .short("h")
-                .help("Add the Amsdos header to the generated file"),
+                .help("Add the Amsdos header to the generated file")
         )
         .arg(
             Arg::with_name("OUTPUT")
                 .help("Output file")
                 .takes_value(true)
-                .required(true),
+                .required(true)
         )
         .get_matches();
 
@@ -60,7 +58,7 @@ fn main() -> std::io::Result<()> {
     // Extract the basic tokens
     let basic_tokens = match BasicProgram::parse(basic_content) {
         Ok(tokens) => tokens,
-        Err(msg) => panic!("Unable to parse Basic: {}", msg),
+        Err(msg) => panic!("Unable to parse Basic: {}", msg)
     };
 
     // Bytes of the basic program
@@ -73,7 +71,7 @@ fn main() -> std::io::Result<()> {
         if matches.is_present("HEADER") {
             let header = AmsdosManager::compute_basic_header(
                 &AmsdosFileName::from_slice(output.as_bytes()),
-                &basic_bytes,
+                &basic_bytes
             );
             f.write_all(header.as_bytes().as_ref())?;
         }

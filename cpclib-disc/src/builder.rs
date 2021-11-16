@@ -29,7 +29,7 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
 
         track.head_number = match *head {
             Head::A | Head::Unspecified => Head::A,
-            Head::B => Head::B,
+            Head::B => Head::B
         }
         .into();
         track.track_size =
@@ -56,13 +56,13 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
         track_info.sector_size = track_model.sector_size_dsk_format();
         track_info.number_of_sectors = track_model.sector_id.len() as _;
         track_info.gap3_length = track_model.gap3; // TODO ensure a 8buts value is in the cfg
-        track_info.filler_byte = 0xe5;
+        track_info.filler_byte = 0xE5;
         track_info.sector_information_list.fill_with(
             &track_model.sector_id,
             &track_model.sector_id_head,
             track_idx,
             track_model.sector_size_dsk_format(),
-            track_info.filler_byte,
+            track_info.filler_byte
         )
     }
     edsk

@@ -1,17 +1,20 @@
 use std::io::Write;
 
-use super::{report::SavedFile, save_command::SaveCommand, Env};
-use crate::error::build_simple_error_message;
-use crate::{error::AssemblerError, preamble::Z80Span};
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::prelude::*;
+
+use super::report::SavedFile;
+use super::save_command::SaveCommand;
+use super::Env;
+use crate::error::{build_simple_error_message, AssemblerError};
+use crate::preamble::Z80Span;
 trait DelayedCommand {}
 
 #[derive(Debug, Clone)]
 pub struct PrintCommand {
     pub(crate) span: Option<Z80Span>,
-    pub(crate) print_or_error: either::Either<String, AssemblerError>,
+    pub(crate) print_or_error: either::Either<String, AssemblerError>
 }
 
 impl PrintCommand {
@@ -21,7 +24,7 @@ impl PrintCommand {
 }
 #[derive(Debug, Clone)]
 pub struct FailedAssertCommand {
-    failure: AssemblerError,
+    failure: AssemblerError
 }
 
 /// Expect an assert error or a exval error
@@ -41,17 +44,19 @@ impl PrintCommand {
             either::Either::Left(msg) => {
                 // TODO improve printting + integrate z80span information
                 write!(
-                    writer, 
-                    "{}", 
+                    writer,
+                    "{}",
                     if let Some(span) = &self.span {
                         build_simple_error_message(msg, &span, Severity::Note)
-                    } else {
+                    }
+                    else {
                         msg.to_owned()
                     }
-                ).unwrap();
+                )
+                .unwrap();
                 Ok(())
             }
-            either::Either::Right(e) => Err(e.clone()),
+            either::Either::Right(e) => Err(e.clone())
         }
     }
 }
@@ -69,23 +74,25 @@ impl PauseCommand {
     pub fn execute(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
         let msg = "PAUSE - press enter to continue.";
         write!(
-            writer, 
-            "{}", 
+            writer,
+            "{}",
             if let Some(span) = &self.0 {
                 build_simple_error_message(msg, &span, Severity::Note)
-            } else {
+            }
+            else {
                 msg.to_owned()
             }
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut buf = String::new();
         std::io::stdin().read_line(&mut buf).unwrap();
         Ok(())
     }
+
     pub fn relocate(&mut self, span: Z80Span) {
         self.0.replace(span);
     }
-    
 }
 
 #[derive(Debug, Clone)]
@@ -140,9 +147,9 @@ impl BreakpointCommand {
         }
     }
 
-    pub fn winape_raw(&self) -> [u8;5] {
+    pub fn winape_raw(&self) -> [u8; 5] {
         [
-            (self.address & 0xff) as u8,
+            (self.address & 0xFF) as u8,
             (self.address >> 8) as u8,
             self.page,
             0,
@@ -150,7 +157,6 @@ impl BreakpointCommand {
         ]
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct DelayedCommands {
@@ -185,6 +191,7 @@ impl DelayedCommands {
     pub fn add_breakpoint_command(&mut self, command: BreakpointCommand) {
         self.breakpoint_commands.push(command);
     }
+
     pub fn add_save_command(&mut self, command: SaveCommand) {
         self.save_commands.push(command);
     }
@@ -204,7 +211,6 @@ impl DelayedCommands {
     pub fn add_print_or_pause_command(&mut self, command: PrintOrPauseCommand) {
         self.print_commands.push(command)
     }
-
 }
 
 /// Commands execution
@@ -223,13 +229,14 @@ impl DelayedCommands {
     pub fn collect_assert_failure(&self) -> Result<(), AssemblerError> {
         if self.failed_assert_commands.is_empty() {
             Ok(())
-        } else {
+        }
+        else {
             Err(AssemblerError::MultipleErrors {
                 errors: self
                     .failed_assert_commands
                     .iter()
                     .map(|a| a.failure.clone())
-                    .collect_vec(),
+                    .collect_vec()
             })
         }
     }
@@ -244,34 +251,33 @@ impl DelayedCommands {
             .collect_vec();
         if res.is_empty() {
             Ok(())
-        } else {
+        }
+        else {
             Err(AssemblerError::MultipleErrors { errors: res })
         }
     }
 }
 
-
 impl DelayedCommands {
     pub fn print_commands(&self) -> &[PrintOrPauseCommand] {
-        & self.print_commands
+        &self.print_commands
     }
+
     pub fn print_commands_mut(&mut self) -> &mut [PrintOrPauseCommand] {
         &mut self.print_commands
     }
 
-
     pub fn failed_assert_commands(&self) -> &[FailedAssertCommand] {
-        & self.failed_assert_commands
+        &self.failed_assert_commands
     }
+
     pub fn failed_assert_commands_mut(&mut self) -> &mut [FailedAssertCommand] {
         &mut self.failed_assert_commands
     }
-
 }
 
 impl DelayedCommands {
-    pub fn collect_breakpoints(&self)-> &[BreakpointCommand] {
+    pub fn collect_breakpoints(&self) -> &[BreakpointCommand] {
         &self.breakpoint_commands
     }
-
 }

@@ -1,7 +1,6 @@
+use crate::tokens::expression::*;
 use crate::tokens::instructions::*;
 use crate::tokens::listing::*;
-
-use crate::tokens::expression::*;
 
 impl ListingElement for Token {}
 
@@ -33,14 +32,12 @@ impl Listing {
 
     // Macro can have labels like @stuff.
     // They must be replaced by unique values to be sure they can be called several times
-    /*
-    pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
-        self.iter_mut()
-            .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
-
-        //     dbg!(&self);
-    }
-    */
+    // pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+    // self.iter_mut()
+    // .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
+    //
+    //     dbg!(&self);
+    // }
 }
 
 impl From<&[u8]> for Listing {

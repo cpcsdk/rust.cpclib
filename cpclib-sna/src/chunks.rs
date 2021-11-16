@@ -1,5 +1,5 @@
-use std::ops::AddAssign;
-use std::ops::DerefMut;
+use std::ops::{AddAssign, DerefMut};
+
 use delegate::delegate;
 
 #[derive(Clone, Debug)]
@@ -8,7 +8,7 @@ pub struct SnapshotChunkData {
     /// Identifier of the chunk
     code: [u8; 4],
     /// Content of the chunk
-    data: Vec<u8>,
+    data: Vec<u8>
 }
 
 #[allow(missing_docs)]
@@ -46,11 +46,20 @@ impl SnapshotChunkData {
 /// Memory chunk that superseeds the snapshot memory if any.
 pub struct MemoryChunk {
     /// Raw content of the memory chunk (i.e. compressed version)
-    pub(crate) data: SnapshotChunkData,
+    pub(crate) data: SnapshotChunkData
 }
 
 #[allow(missing_docs)]
 impl MemoryChunk {
+    delegate! {
+        to self.data {
+        pub fn code(&self) -> &[u8; 4];
+            pub fn size(&self) -> usize;
+            pub fn size_as_array(&self) -> [u8; 4];
+            pub fn data(&self) -> &[u8];
+        }
+    }
+
     /// Create a memory chunk.
     /// `code` identify with memory block is concerned
     /// `data` contains the crunched version of the code
@@ -70,7 +79,7 @@ impl MemoryChunk {
                 || code[3] == b'8'
         );
         Self {
-            data: SnapshotChunkData { code, data },
+            data: SnapshotChunkData { code, data }
         }
     }
 
@@ -84,7 +93,8 @@ impl MemoryChunk {
             res.extend(data);
             assert_eq!(res.len(), data.len());
             res.resize(0x100000, 0);
-        } else {
+        }
+        else {
             let mut previous = None;
             let mut count = 0;
 
@@ -95,26 +105,28 @@ impl MemoryChunk {
                         count = 1;
                     }
                     Some(previous_value) => {
-                        if *current == 0xe5 || previous_value != *current || count == 255 {
+                        if *current == 0xE5 || previous_value != *current || count == 255 {
                             if previous.is_some() {
                                 // previous value has been repeated several times
                                 if count > 1 {
-                                    res.push(0xe5);
+                                    res.push(0xE5);
                                     res.push(count);
                                 }
                                 res.push(previous_value); // store the value to be replaced
                             }
 
-                            if *current == 0xe5 {
+                            if *current == 0xE5 {
                                 previous = None;
                                 count = 0;
-                                res.push(0xe5);
+                                res.push(0xE5);
                                 res.push(0);
-                            } else {
+                            }
+                            else {
                                 previous = Some(*current);
                                 count = 1;
                             }
-                        } else {
+                        }
+                        else {
                             assert_eq!(previous_value, *current);
                             count += 1;
                             previous = Some(*current);
@@ -126,7 +138,7 @@ impl MemoryChunk {
             if previous.is_some() {
                 // previous value has been repeated several times
                 if count > 1 {
-                    res.push(0xe5);
+                    res.push(0xE5);
                     res.push(count);
                 }
                 res.push(previous.unwrap()); // store the value to be replaced
@@ -152,11 +164,12 @@ impl MemoryChunk {
         };
         while *idx.borrow() != self.data.data.len() {
             match read_byte() {
-                0xe5 => {
+                0xE5 => {
                     let amount = read_byte();
                     if amount == 0 {
-                        content.push(0xe5)
-                    } else {
+                        content.push(0xE5)
+                    }
+                    else {
                         let val = read_byte();
                         for _idx in 0..amount {
                             // TODO use resize
@@ -184,15 +197,6 @@ impl MemoryChunk {
     pub fn is_crunched(&self) -> bool {
         self.data.data.len() == 64 * 1024
     }
-
-    delegate!{
-        to self.data {
-        pub fn code(&self) -> &[u8; 4];
-            pub fn size(&self) -> usize;
-            pub fn size_as_array(&self) -> [u8; 4];
-            pub fn data(&self) -> &[u8];
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -201,14 +205,25 @@ pub struct WinapeBreakPointChunk {
 }
 
 impl WinapeBreakPointChunk {
-    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
+    delegate! {
+        to self.data {
+        pub fn code(&self) -> &[u8; 4];
+        pub fn size(&self) -> usize;
+            pub fn size_as_array(&self) -> [u8; 4];
+            pub fn data(&self) -> &[u8];
+            pub fn add_bytes(&mut self, data: &[u8]);
+
+        }
+    }
+
+    pub fn from(code: [u8; 4], content: Vec<u8>) -> Self {
         assert_eq!(code[0], b'B');
         assert_eq!(code[1], b'R');
         assert_eq!(code[2], b'K');
         assert_eq!(code[3], b'S');
 
         Self {
-            data: SnapshotChunkData{
+            data: SnapshotChunkData {
                 code,
                 data: content
             }
@@ -223,35 +238,17 @@ impl WinapeBreakPointChunk {
     pub fn nb_breakpoints(&self) -> usize {
         self.size() / 5
     }
-
-    delegate!{
-        to self.data {
-        pub fn code(&self) -> &[u8; 4];
-        pub fn size(&self) -> usize;
-            pub fn size_as_array(&self) -> [u8; 4];
-            pub fn data(&self) -> &[u8];
-            pub fn add_bytes(&mut self, data: &[u8]);
-
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
 /// Unknwon kind of chunk
 pub struct UnknownChunk {
     /// Raw data of the chunk
-    data: SnapshotChunkData,
+    data: SnapshotChunkData
 }
 
 impl UnknownChunk {
-    /// Generate the chunk from raw data
-    pub fn from(code: [u8; 4], data: Vec<u8>) -> Self {
-        Self {
-            data: SnapshotChunkData { code, data },
-        }
-    }
-
-    delegate!{
+    delegate! {
         to self.data {
         pub fn code(&self) -> &[u8; 4];
             pub fn size(&self) -> usize;
@@ -259,24 +256,26 @@ impl UnknownChunk {
             pub fn data(&self) -> &[u8];
         }
     }
-}
 
-
-/*
-
-
-pub struct InsertedDiscChunk {
-    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
-        unimplemented!()
+    /// Generate the chunk from raw data
+    pub fn from(code: [u8; 4], data: Vec<u8>) -> Self {
+        Self {
+            data: SnapshotChunkData { code, data }
+        }
     }
 }
 
-pub struct CPCPlusChunk {
-    pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
-        unimplemented!()
-    }
-}
-*/
+// pub struct InsertedDiscChunk {
+// pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
+// unimplemented!()
+// }
+// }
+//
+// pub struct CPCPlusChunk {
+// pub fn from(code: [u8;4], content: Vec<u8>) -> Self {
+// unimplemented!()
+// }
+// }
 
 #[derive(Clone, Debug)]
 /// Represents any kind of chunks in order to manipulate them easily based on their semantic
@@ -286,7 +285,7 @@ pub enum SnapshotChunk {
     /// The chunk is a breakpoint chunk for winape emulator
     WinapeBreakPoint(WinapeBreakPointChunk),
     /// The type of the chunk is unknown
-    Unknown(UnknownChunk),
+    Unknown(UnknownChunk)
 }
 
 #[allow(missing_docs)]
@@ -298,7 +297,7 @@ impl SnapshotChunk {
     pub fn memory_chunk(&self) -> Option<&MemoryChunk> {
         match self {
             SnapshotChunk::Memory(ref mem) => Some(mem),
-            _ => None,
+            _ => None
         }
     }
 
@@ -307,7 +306,7 @@ impl SnapshotChunk {
         match self {
             SnapshotChunk::Memory(chunk) => chunk.code(),
             SnapshotChunk::Unknown(chunk) => chunk.code(),
-            SnapshotChunk::WinapeBreakPoint(chunk) => chunk.code(),
+            SnapshotChunk::WinapeBreakPoint(chunk) => chunk.code()
         }
     }
 
@@ -316,7 +315,7 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.size(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.size(),
 
-            SnapshotChunk::Unknown(chunk) => chunk.size(),
+            SnapshotChunk::Unknown(chunk) => chunk.size()
         }
     }
 
@@ -325,7 +324,7 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.size_as_array(),
             SnapshotChunk::WinapeBreakPoint(ref chunk) => chunk.size_as_array(),
 
-            SnapshotChunk::Unknown(chunk) => chunk.size_as_array(),
+            SnapshotChunk::Unknown(chunk) => chunk.size_as_array()
         }
     }
 
@@ -334,7 +333,7 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.data(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.data(),
 
-            SnapshotChunk::Unknown(chunk) => chunk.data(),
+            SnapshotChunk::Unknown(chunk) => chunk.data()
         }
     }
 }

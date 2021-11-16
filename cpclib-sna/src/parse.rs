@@ -10,40 +10,38 @@ use cpclib_common::nom::sequence::*;
 use cpclib_common::nom::*;
 use cpclib_common::nom_locate::LocatedSpan;
 use cpclib_common::parse_value;
+use separated_list1 as separated_nonempty_list;
 
 use crate::flags::{FlagValue, SnapshotFlag};
 
-use separated_list1 as separated_nonempty_list;
-
 pub fn parse_flag<'src, T>(
-    input: LocatedSpan<&'src str, T>,
+    input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&'src str, T>, SnapshotFlag, VerboseError<LocatedSpan<&'src str, T>>>
-where
-    T: Clone,
-{
+where T: Clone {
     let (input, word) =
         is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:")(input)?;
 
     match SnapshotFlag::from_str(&word.to_string().to_uppercase()) {
         Ok(flag) => Ok((input, flag)),
-        Err(_e) => Err(cpclib_common::nom::Err::Error(error_position!(
-            input,
-            ErrorKind::OneOf
-        ))),
+        Err(_e) => {
+            Err(cpclib_common::nom::Err::Error(error_position!(
+                input,
+                ErrorKind::OneOf
+            )))
+        }
     }
 }
 
 pub fn parse_flag_value<'src, T>(
-    input: LocatedSpan<&'src str, T>,
+    input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&'src str, T>, FlagValue, VerboseError<LocatedSpan<&'src str, T>>>
-where
-    T: Clone,
-{
+where T: Clone {
     alt((
         map(parse_value, |val| {
             if val > 255 {
                 FlagValue::Word(val as _)
-            } else {
+            }
+            else {
                 FlagValue::Byte(val as u8)
             }
         }),
@@ -52,12 +50,12 @@ where
                 char('['),
                 separated_nonempty_list(
                     preceded(space0, char(',')),
-                    preceded(space0, parse_flag_value),
+                    preceded(space0, parse_flag_value)
                 ),
-                char(']'),
+                char(']')
             ),
-            |val| FlagValue::Array(val.to_vec()),
-        ),
+            |val| FlagValue::Array(val.to_vec())
+        )
     ))(input)
 }
 

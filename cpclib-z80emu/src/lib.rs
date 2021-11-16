@@ -1,5 +1,5 @@
-///! Z80 emulator
-///! This should be deprecated in favor of a real emulator (WIP in another repo)
+/// ! Z80 emulator
+/// ! This should be deprecated in favor of a real emulator (WIP in another repo)
 pub mod emul;
 mod preamble;
 mod z80;
@@ -12,7 +12,7 @@ pub use self::z80::{HasValue, Z80};
 #[derive(Default, Debug, Copy, Clone)]
 pub struct ListingExecution {
     /// Number of nops needed to execute the listing
-    nops: usize,
+    nops: usize
 }
 
 impl ListingExecution {

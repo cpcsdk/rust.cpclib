@@ -13,33 +13,27 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
-use cpclib::common::clap;
-
-use crossbeam_channel::unbounded;
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use std::time::Duration;
 
+use anyhow;
 use clap::{App, Arg, ArgMatches, SubCommand};
-use std::path::Path;
-use tempfile::Builder;
-
-use cpclib::image::ga::Palette;
 use cpclib::assembler::preamble::*;
-
+use cpclib::common::clap;
+use cpclib::disc::amsdos::*;
+use cpclib::disc::edsk::ExtendedDsk;
+use cpclib::image::ga::Palette;
 use cpclib::image::imageconverter::*;
 use cpclib::image::ocp;
 use cpclib::sna;
 use cpclib::sna::*;
-use cpclib::disc::amsdos::*;
-use cpclib::disc::edsk::ExtendedDsk;
-
-use std::fs::File;
-use std::io::Write;
-
-use anyhow;
-
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
+use crossbeam_channel::unbounded;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use tempfile::Builder;
 
 macro_rules! export_palette {
     ($e: expr) => {
@@ -202,20 +196,20 @@ fn standard_display_code(mode: u8) -> String {
         jp $
     ",
         match mode {
-            0 => 0x8c,
-            1 => 0x8d,
-            2 => 0x8e,
-            _ => unreachable!(),
+            0 => 0x8C,
+            1 => 0x8D,
+            2 => 0x8E,
+            _ => unreachable!()
         }
     )
 }
 
 fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> String {
     let code_mode = match mode {
-        0 => 0x8c,
-        1 => 0x8d,
-        2 => 0x8e,
-        _ => unreachable!(),
+        0 => 0x8C,
+        1 => 0x8D,
+        2 => 0x8E,
+        _ => unreachable!()
     };
 
     let r12 = 0x20 + 0b0000_1100;
@@ -301,28 +295,32 @@ fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
             "linear" => OutputFormat::LinearEncodedSprite,
             "graycoded" => OutputFormat::GrayCodedSprite,
             "zigzag+graycoded" => OutputFormat::ZigZagGrayCodedSprite,
-            _ => unimplemented!(),
+            _ => unimplemented!()
         }
-    } else if let Some(_tile_mathces) = matches.subcommand_matches("tile") {
+    }
+    else if let Some(_tile_mathces) = matches.subcommand_matches("tile") {
         // will be postprocessed
         OutputFormat::LinearEncodedSprite
-    } else {
+    }
+    else {
         // Standard case
         if matches.is_present("OVERSCAN") {
             OutputFormat::CPCMemory {
                 output_dimension: CPCScreenDimension::overscan(),
-                display_address: DisplayCRTCAddress::new_overscan_from_page(2),
+                display_address: DisplayCRTCAddress::new_overscan_from_page(2)
             }
-        } else if matches.is_present("FULLSCREEN") {
+        }
+        else if matches.is_present("FULLSCREEN") {
             OutputFormat::CPCMemory {
                 output_dimension: CPCScreenDimension::overscan(),
-                display_address: DisplayCRTCAddress::new_overscan_from_page(2),
+                display_address: DisplayCRTCAddress::new_overscan_from_page(2)
             }
-        } else {
+        }
+        else {
             // assume it is a standard screen
             OutputFormat::CPCMemory {
                 output_dimension: CPCScreenDimension::standard(),
-                display_address: DisplayCRTCAddress::new_standard_from_page(3),
+                display_address: DisplayCRTCAddress::new_standard_from_page(3)
             }
         }
     }
@@ -337,7 +335,8 @@ fn get_requested_palette(matches: &ArgMatches<'_>) -> Option<Palette> {
             .map(|ink| ink.parse::<u8>().unwrap())
             .collect::<Vec<_>>();
         return Some(numbers.into());
-    } else {
+    }
+    else {
         let mut one_pen_set = false;
         let mut palette = Palette::new();
         for i in 0..16 {
@@ -350,7 +349,8 @@ fn get_requested_palette(matches: &ArgMatches<'_>) -> Option<Palette> {
 
         if one_pen_set {
             return Some(palette);
-        } else {
+        }
+        else {
             return None;
         }
     }
@@ -376,7 +376,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         palette,
         output_mode.into(),
         transformations,
-        &output_format,
+        &output_format
     )?;
 
     let sub_sna = matches.subcommand_matches("sna");
@@ -396,19 +396,19 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 data,
                 bytes_width,
                 height,
-                palette,
+                palette
             }
             | Output::GrayCodedSprite {
                 data,
                 bytes_width,
                 height,
-                palette,
+                palette
             }
             | Output::ZigZagGrayCodedSprite {
                 data,
                 bytes_width,
                 height,
-                palette,
+                palette
             } => {
                 // Save the palette
                 do_export_palette!(sub_sprite, palette);
@@ -436,9 +436,10 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                         Some(())
                     });
             }
-            _ => unreachable!(),
+            _ => unreachable!()
         }
-    } else if let Some(sub_tile) = sub_tile {
+    }
+    else if let Some(sub_tile) = sub_tile {
         // TODO share code with the sprite branch
         match &conversion {
             Output::LinearEncodedSprite {
@@ -470,16 +471,18 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                     }
                 }
             }
-            _ => unreachable! {},
+            _ => unreachable! {}
         }
-    } else if let Some(sub_scr) = sub_scr {
+    }
+    else if let Some(sub_scr) = sub_scr {
         let fname = dbg!(sub_scr.value_of("SCR").unwrap());
 
         match &conversion {
             Output::CPCMemoryStandard(scr, palette) => {
                 let scr = if sub_scr.is_present("COMPRESSED") {
                     ocp::compress(&scr)
-                } else {
+                }
+                else {
                     scr.to_vec()
                 };
 
@@ -499,9 +502,10 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 do_export_palette!(sub_scr, palette);
             }
 
-            _ => unreachable!(),
+            _ => unreachable!()
         };
-    } else {
+    }
+    else {
         // Make the conversion before feeding sna or dsk
 
         /// TODO manage the presence/absence of file in the dsk, the choice of filename and so on
@@ -513,13 +517,14 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
 
                 Output::CPCMemoryOverscan(_memory1, _memory2, pal) => unimplemented!(),
 
-                _ => unreachable!(),
+                _ => unreachable!()
             };
 
             let filename = {
                 if sub_dsk.is_some() {
                     "test.bin"
-                } else {
+                }
+                else {
                     sub_exec.as_ref().unwrap().value_of("FILENAME").unwrap()
                 }
             };
@@ -531,11 +536,13 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 let folder = filename.parent().unwrap();
                 let folder = if folder == Path::new("") {
                     std::env::current_dir().unwrap()
-                } else {
+                }
+                else {
                     folder.canonicalize().unwrap()
                 };
                 file.save_in_folder(folder)?;
-            } else {
+            }
+            else {
                 use cpclib::disc::cfg::DiscConfig;
                 let cfg = cpclib::disc::cfg::DiscConfig::single_head_data_format();
                 let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
@@ -559,7 +566,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                     (pal, code)
                 }
 
-                _ => unreachable!(),
+                _ => unreachable!()
             };
 
             // Create a snapshot with a standard screen
@@ -567,16 +574,16 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
 
             match &conversion {
                 Output::CPCMemoryStandard(memory, _) => {
-                    sna.add_data(&memory.to_vec(), 0xc000)
+                    sna.add_data(&memory.to_vec(), 0xC000)
                         .expect("Unable to add the image in the snapshot");
                 }
                 Output::CPCMemoryOverscan(memory1, memory2, _) => {
                     sna.add_data(&memory1.to_vec(), 0x8000)
                         .expect("Unable to add the image in the snapshot");
-                    sna.add_data(&memory2.to_vec(), 0xc000)
+                    sna.add_data(&memory2.to_vec(), 0xC000)
                         .expect("Unable to add the image in the snapshot");
                 }
-                _ => unreachable!(),
+                _ => unreachable!()
             };
 
             sna.add_data(&code, 0x4000).unwrap();
@@ -585,7 +592,7 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
             for i in 0..16 {
                 sna.set_value(
                     SnapshotFlag::GA_PAL(Some(i)),
-                    u16::from(palette.get((i as i32).into()).gate_array()),
+                    u16::from(palette.get((i as i32).into()).gate_array())
                 )
                 .unwrap();
             }
@@ -594,7 +601,8 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                 let sna_fname = sub_sna.value_of("SNA").unwrap();
                 sna.save(sna_fname, sna::SnapshotVersion::V2)
                     .expect("Unable to save the snapshot");
-            } else if let Some(sub_m4) = sub_m4 {
+            }
+            else if let Some(sub_m4) = sub_m4 {
                 #[cfg(feature = "xferlib")]
                 {
                     let mut f = Builder::new()
@@ -1024,7 +1032,7 @@ fn main() -> anyhow::Result<()> {
                 RecommendedWatcher::new(move |res| tx.send(res).unwrap())?;
             watcher.watch(
                 &std::path::Path::new(matches.value_of("SOURCE").unwrap()),
-                RecursiveMode::NonRecursive,
+                RecursiveMode::NonRecursive
             )?;
 
             for res in rx {

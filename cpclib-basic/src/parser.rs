@@ -5,7 +5,7 @@ use cpclib_common::nom::combinator::*;
 use cpclib_common::nom::error::*;
 use cpclib_common::nom::multi::*;
 use cpclib_common::nom::sequence::*;
-///! Locomotive basic parser routines.
+/// ! Locomotive basic parser routines.
 use cpclib_common::nom::*;
 
 use crate::tokens::*;
@@ -19,7 +19,7 @@ pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram> {
         |mut acc: Vec<_>, item| {
             acc.push(item);
             acc
-        },
+        }
     )(input)?;
 
     let (input, last) = terminated(opt(parse_basic_line), opt(line_ending))(input)?;
@@ -44,7 +44,7 @@ pub fn parse_basic_line(input: &str) -> IResult<&str, BasicLine> {
         |mut acc: Vec<_>, item| {
             acc.push(item);
             acc
-        },
+        }
     )(input)?;
 
     Ok((input, BasicLine::new(line_number, &tokens)))
@@ -62,7 +62,7 @@ pub fn parse_token(input: &str) -> IResult<&str, BasicToken> {
         parse_simple_instruction,
         parse_prefixed_instruction,
         parse_basic_value,
-        parse_char,
+        parse_char
     ))(input)
 }
 
@@ -70,7 +70,7 @@ pub fn parse_token(input: &str) -> IResult<&str, BasicToken> {
 pub fn parse_rem(input: &str) -> IResult<&str, BasicToken> {
     let (input, sym) = alt((
         map(tag_no_case("REM"), |_| BasicTokenNoPrefix::Rem),
-        map(char('\''), |_| BasicTokenNoPrefix::SymbolQuote),
+        map(char('\''), |_| BasicTokenNoPrefix::SymbolQuote)
     ))(input)?;
 
     let (input, list) = take_till(|ch| ch == ':' || ch == '\n')(input)?;
@@ -85,9 +85,9 @@ pub fn parse_simple_instruction(input: &str) -> IResult<&str, BasicToken> {
         alt((
             map(tag_no_case("CALL"), |_| BasicTokenNoPrefix::Call),
             map(tag_no_case("INPUT"), |_| BasicTokenNoPrefix::Input),
-            map(tag_no_case("PRINT"), |_| BasicTokenNoPrefix::Print),
+            map(tag_no_case("PRINT"), |_| BasicTokenNoPrefix::Print)
         )),
-        |token| BasicToken::SimpleToken(token),
+        |token| BasicToken::SimpleToken(token)
     )(input)
 }
 
@@ -115,7 +115,7 @@ pub fn parse_char(input: &str) -> IResult<&str, BasicToken> {
                 map(char('O'), |_| BasicTokenNoPrefix::CharUpperO),
                 map(char('P'), |_| BasicTokenNoPrefix::CharUpperP),
                 map(char('Q'), |_| BasicTokenNoPrefix::CharUpperQ),
-                map(char('R'), |_| BasicTokenNoPrefix::CharUpperR),
+                map(char('R'), |_| BasicTokenNoPrefix::CharUpperR)
             )),
             alt((
                 map(char('S'), |_| BasicTokenNoPrefix::CharUpperS),
@@ -125,7 +125,7 @@ pub fn parse_char(input: &str) -> IResult<&str, BasicToken> {
                 map(char('W'), |_| BasicTokenNoPrefix::CharUpperW),
                 map(char('X'), |_| BasicTokenNoPrefix::CharUpperX),
                 map(char('Y'), |_| BasicTokenNoPrefix::CharUpperY),
-                map(char('Z'), |_| BasicTokenNoPrefix::CharUpperZ),
+                map(char('Z'), |_| BasicTokenNoPrefix::CharUpperZ)
             )),
             alt((
                 map(char('a'), |_| BasicTokenNoPrefix::CharLowerA),
@@ -142,7 +142,7 @@ pub fn parse_char(input: &str) -> IResult<&str, BasicToken> {
                 map(char('l'), |_| BasicTokenNoPrefix::CharLowerL),
                 map(char('m'), |_| BasicTokenNoPrefix::CharLowerM),
                 map(char('n'), |_| BasicTokenNoPrefix::CharLowerN),
-                map(char('o'), |_| BasicTokenNoPrefix::CharLowerO),
+                map(char('o'), |_| BasicTokenNoPrefix::CharLowerO)
             )),
             alt((
                 map(char('p'), |_| BasicTokenNoPrefix::CharLowerP),
@@ -155,10 +155,10 @@ pub fn parse_char(input: &str) -> IResult<&str, BasicToken> {
                 map(char('w'), |_| BasicTokenNoPrefix::CharLowerW),
                 map(char('x'), |_| BasicTokenNoPrefix::CharLowerX),
                 map(char('y'), |_| BasicTokenNoPrefix::CharLowerY),
-                map(char('z'), |_| BasicTokenNoPrefix::CharLowerZ),
-            )),
+                map(char('z'), |_| BasicTokenNoPrefix::CharLowerZ)
+            ))
         )),
-        |token| BasicToken::SimpleToken(token),
+        |token| BasicToken::SimpleToken(token)
     )(input)
 }
 
@@ -168,9 +168,9 @@ pub fn parse_prefixed_instruction(input: &str) -> IResult<&str, BasicToken> {
     map(
         alt((
             value(BasicTokenPrefixed::Abs, tag_no_case("ABS")),
-            value(BasicTokenPrefixed::Abs, tag_no_case("ABS")), //TODO put the others
+            value(BasicTokenPrefixed::Abs, tag_no_case("ABS")) // TODO put the others
         )),
-        |token| BasicToken::PrefixedToken(token),
+        |token| BasicToken::PrefixedToken(token)
     )(input)
 }
 
@@ -184,7 +184,7 @@ pub fn parse_hexadecimal_value_16bits(input: &str) -> IResult<&str, BasicToken> 
     map(preceded(char('&'), hex_u16_inner), |val| {
         BasicToken::Constant(
             BasicTokenNoPrefix::ValueIntegerHexadecimal16bits,
-            BasicValue::new_integer(val),
+            BasicValue::new_integer(val)
         )
     })(input)
 }
@@ -194,7 +194,7 @@ pub fn parse_decimal_value_16bits(input: &str) -> IResult<&str, BasicToken> {
     map(dec_u16_inner, |val| {
         BasicToken::Constant(
             BasicTokenNoPrefix::ValueIntegerDecimal16bits,
-            BasicValue::new_integer(val),
+            BasicValue::new_integer(val)
         )
     })(input)
 }
@@ -211,7 +211,8 @@ pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
                     input,
                     ErrorKind::OneOf
                 )))
-            } else {
+            }
+            else {
                 let mut res = 0_u32;
                 for e in parsed.iter_elements() {
                     let digit = e;
@@ -223,7 +224,8 @@ pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
                         input,
                         ErrorKind::OneOf
                     )))
-                } else {
+                }
+                else {
                     Ok((remaining, res as u16))
                 }
             }
@@ -243,7 +245,8 @@ pub fn dec_u16_inner(input: &str) -> IResult<&str, u16> {
                     input,
                     ErrorKind::OneOf
                 )))
-            } else {
+            }
+            else {
                 let mut res = 0_u32;
                 for e in parsed.iter_elements() {
                     let digit = e;
@@ -253,9 +256,10 @@ pub fn dec_u16_inner(input: &str) -> IResult<&str, u16> {
                 if res > u32::from(u16::max_value()) {
                     Err(cpclib_common::nom::Err::Error(error_position!(
                         input,
-                        ErrorKind::TooLarge /*Custom(0)*/
+                        ErrorKind::TooLarge // Custom(0)
                     )))
-                } else {
+                }
+                else {
                     Ok((remaining, res as u16))
                 }
             }

@@ -1,15 +1,13 @@
 use std::path::PathBuf;
 
 use cpclib_asm::basm_utils::*;
-use eframe::{
-    egui::{self, ScrollArea},
-    epi::{self},
-};
+use eframe::egui::{self, ScrollArea};
+use eframe::epi::{self};
 
 enum AssembleState {
     Ok,
     Error,
-    Waiting,
+    Waiting
 }
 pub struct BasmApp {
     fname: String,
@@ -20,7 +18,7 @@ pub struct BasmApp {
     lst_content: String,
     case_insensitive: bool,
     assemble_state: AssembleState,
-    generate_sna: bool,
+    generate_sna: bool
 }
 
 impl Default for BasmApp {
@@ -34,7 +32,7 @@ impl Default for BasmApp {
             lst_content: String::new(),
             case_insensitive: false,
             assemble_state: AssembleState::Waiting,
-            generate_sna: false,
+            generate_sna: false
         }
     }
 }
@@ -63,7 +61,8 @@ impl BasmApp {
         command.push("-o".to_owned());
         if self.generate_sna {
             command.push(fname.clone() + ".sna");
-        } else {
+        }
+        else {
             command.push(fname.clone() + "o");
         }
 
@@ -71,6 +70,7 @@ impl BasmApp {
 
         command
     }
+
     fn assemble(&mut self) {
         let cmd = self.build_command_line();
         eprintln!("Assemble with: {:?}", cmd);
@@ -138,7 +138,8 @@ impl epi::App for BasmApp {
                 Some(path) => {
                     if path.is_file() {
                         modified_path = Some(path.clone());
-                    } else if path.is_dir() {
+                    }
+                    else if path.is_dir() {
                         added_dir = Some(path.clone());
                     }
                 }
@@ -228,7 +229,7 @@ impl epi::App for BasmApp {
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                 ui.add(
                     egui::Hyperlink::new("https://github.com/cpcsdk/rust.cpclib")
-                        .text("powered by basm"),
+                        .text("powered by basm")
                 );
             });
         });
@@ -257,7 +258,7 @@ impl epi::App for BasmApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            //	ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+            // 	ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
             ScrollArea::auto_sized()
                 .always_show_scroll(true)
                 .show(ui, |ui| {
@@ -268,7 +269,7 @@ impl epi::App for BasmApp {
                     });
                 });
         });
-        //	});
+        // 	});
 
         if let Some(path) = modified_path {
             self.set_file(&path);

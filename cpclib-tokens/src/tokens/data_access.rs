@@ -1,8 +1,9 @@
-use crate::tokens::expression::*;
-use crate::tokens::registers::*;
+use std::fmt;
 
 use paste;
-use std::fmt;
+
+use crate::tokens::expression::*;
+use crate::tokens::registers::*;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// Encode the way mnemonics access to data
@@ -32,7 +33,7 @@ pub enum DataAccess {
     /// Used for in/out instructions
     PortC,
     /// Used for in/out instructions
-    PortN(Expr),
+    PortN(Expr)
 }
 
 impl From<u8> for DataAccess {
@@ -89,7 +90,8 @@ impl fmt::Display for DataAccess {
             DataAccess::IndexRegister16WithIndex(ref reg, ref delta) => {
                 if delta.is_negated() {
                     write!(f, "({} - {})", reg, delta)
-                } else {
+                }
+                else {
                     write!(f, "({} + {})", reg, delta)
                 }
             }
@@ -105,28 +107,26 @@ impl fmt::Display for DataAccess {
             DataAccess::SpecialRegisterI => write!(f, "I"),
             DataAccess::SpecialRegisterR => write!(f, "R"),
             DataAccess::PortC => write!(f, "(C)"),
-            DataAccess::PortN(n) => write!(f, "({})", n),
+            DataAccess::PortN(n) => write!(f, "({})", n)
         }
     }
 }
 
 impl DataAccess {
-    /*
-    /// Rename the local labels used in macros (with @)
-    pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
-        match self {
-            Self::Expression(e)
-            | Self::IndexRegister16WithIndex(_, e)
-            | Self::Memory(e)
-            | Self::PortN(e) => {
-                e.fix_local_macro_labels_with_seed(seed);
-            }
-            _ => {
-                // nothing to do there
-            }
-        }
-    }
-    */
+    // Rename the local labels used in macros (with @)
+    // pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
+    // match self {
+    // Self::Expression(e)
+    // | Self::IndexRegister16WithIndex(_, e)
+    // | Self::Memory(e)
+    // | Self::PortN(e) => {
+    // e.fix_local_macro_labels_with_seed(seed);
+    // }
+    // _ => {
+    // nothing to do there
+    // }
+    // }
+    // }
 }
 
 #[allow(missing_docs)]
@@ -134,90 +134,92 @@ impl DataAccess {
     pub fn expr(&self) -> Option<&Expr> {
         match self {
             DataAccess::Expression(ref expr) => Some(expr),
-            _ => None,
+            _ => None
         }
     }
 
     pub fn is_portc(&self) -> bool {
         match self {
             DataAccess::PortC => true,
-            _ => false,
+            _ => false
         }
     }
 
     pub fn is_register_i(&self) -> bool {
         match self {
             DataAccess::SpecialRegisterI => true,
-            _ => false,
+            _ => false
         }
     }
 
     pub fn is_register_r(&self) -> bool {
         match self {
             DataAccess::SpecialRegisterR => true,
-            _ => false,
+            _ => false
         }
     }
 
     pub fn is_register8(&self) -> bool {
         match self {
             DataAccess::Register8(_) => true,
-            _ => false,
+            _ => false
         }
     }
 
     pub fn is_register16(&self) -> bool {
         match self {
             DataAccess::Register16(_) => true,
-            _ => false,
+            _ => false
         }
     }
 
     pub fn is_indexregister8(&self) -> bool {
         match self {
             DataAccess::IndexRegister8(_) => true,
-            _ => false,
+            _ => false
         }
     }
 
     pub fn is_indexregister16(&self) -> bool {
         match self {
             DataAccess::IndexRegister16(_) => true,
-            _ => false,
+            _ => false
         }
     }
 
     pub fn is_indexregister_with_index(&self) -> bool {
         match self {
-            DataAccess::IndexRegister16WithIndex(_, _) => true,
-            _ => false,
+            DataAccess::IndexRegister16WithIndex(..) => true,
+            _ => false
         }
     }
 
     pub fn is_memory(&self) -> bool {
         match self {
             DataAccess::Memory(_) => true,
-            _ => false,
+            _ => false
         }
     }
 
     pub fn is_address_in_register16(&self) -> bool {
         match self {
             DataAccess::MemoryRegister16(_) => true,
-            _ => false,
+            _ => false
         }
     }
+
     pub fn is_address_in_indexregister16(&self) -> bool {
         match self {
             DataAccess::MemoryIndexRegister16(_) => true,
-            _ => false,
+            _ => false
         }
     }
+
     pub fn get_register16(&self) -> Option<Register16> {
         match self {
             DataAccess::Register16(ref reg) => Some(*reg),
             DataAccess::MemoryRegister16(ref reg) => Some(*reg),
-            _ => None,
+            _ => None
         }
     }
 
@@ -226,7 +228,7 @@ impl DataAccess {
             DataAccess::IndexRegister16(ref reg) => Some(*reg),
             DataAccess::MemoryIndexRegister16(ref reg) => Some(*reg),
             &DataAccess::IndexRegister16WithIndex(ref reg, _) => Some(*reg),
-            _ => None,
+            _ => None
         }
     }
 
@@ -234,7 +236,7 @@ impl DataAccess {
         match self {
             DataAccess::IndexRegister16(ref reg) => Some(reg.low().into()),
             DataAccess::Register16(ref reg) => Some(reg.low().unwrap().into()),
-            _ => None,
+            _ => None
         }
     }
 
@@ -242,28 +244,28 @@ impl DataAccess {
         match self {
             DataAccess::IndexRegister16(ref reg) => Some(reg.high().into()),
             DataAccess::Register16(ref reg) => Some(reg.high().unwrap().into()),
-            _ => None,
+            _ => None
         }
     }
 
     pub fn get_register8(&self) -> Option<Register8> {
         match self {
             DataAccess::Register8(ref reg) => Some(*reg),
-            _ => None,
+            _ => None
         }
     }
 
     pub fn get_expression(&self) -> Option<&Expr> {
         match self {
             DataAccess::Expression(ref exp) => Some(&exp),
-            _ => None,
+            _ => None
         }
     }
 
     pub fn expression_mut(&mut self) -> Option<&mut Expr> {
         match self {
             DataAccess::Expression(ref mut exp) => Some(exp),
-            _ => None,
+            _ => None
         }
     }
 }

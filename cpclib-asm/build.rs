@@ -10,7 +10,7 @@ fn main() {
     built::write_built_file_with_opts(
         built::Options::default().set_time(true),
         Path::new(&src),
-        &dst,
+        &dst
     )
     .expect("Failed to acquire build-time information");
 

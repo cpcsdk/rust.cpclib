@@ -1,8 +1,7 @@
 use cpclib_asm::preamble::*;
 use proc_macro::TokenStream;
 use quote::ToTokens;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
+use syn::parse::{Parse, ParseStream};
 use syn::{parse_macro_input, Result};
 mod tokens;
 
@@ -10,7 +9,7 @@ mod tokens;
 /// Will be updated once we'll have additional parameters
 struct AssemblyMacroInput {
     /// Code provided by the user of the macro
-    code: String,
+    code: String
 }
 
 mod kw {
@@ -30,16 +29,18 @@ impl Parse for AssemblyMacroInput {
             let content = std::fs::read_to_string(&fname).or_else(|e| {
                 Err(syn::Error::new(
                     proc_macro2::Span::call_site(),
-                    format!("Unable to load {}.\n{}", fname, e.to_string()),
+                    format!("Unable to load {}.\n{}", fname, e.to_string())
                 ))
             })?;
 
             Ok(AssemblyMacroInput { code: content })
-        } else if lookahead.peek(syn::LitStr) {
+        }
+        else if lookahead.peek(syn::LitStr) {
             Ok(AssemblyMacroInput {
-                code: (input.parse::<syn::LitStr>()?).value(),
+                code: (input.parse::<syn::LitStr>()?).value()
             })
-        } else {
+        }
+        else {
             Err(lookahead.error())
         }
     }
@@ -69,7 +70,7 @@ pub fn parse_z80(tokens: TokenStream) -> TokenStream {
 }
 
 fn get_listing(
-    input: AssemblyMacroInput,
+    input: AssemblyMacroInput
 ) -> std::result::Result<Listing, cpclib_asm::error::AssemblerError> {
     Listing::from_str(&input.code)
 }
@@ -81,17 +82,19 @@ pub fn assemble(tokens: TokenStream) -> TokenStream {
     let listing = get_listing(input);
 
     match listing {
-        Ok(listing) => match listing.to_bytes() {
-            Ok(ref bytes) => {
-                let mut tokens = proc_macro2::TokenStream::default();
-                proc_macro2::Literal::byte_string(&bytes).to_tokens(&mut tokens);
-                return tokens.into();
-            }
+        Ok(listing) => {
+            match listing.to_bytes() {
+                Ok(ref bytes) => {
+                    let mut tokens = proc_macro2::TokenStream::default();
+                    proc_macro2::Literal::byte_string(&bytes).to_tokens(&mut tokens);
+                    return tokens.into();
+                }
 
-            Err(e) => {
-                panic!("Unable to assemble the provided code. {:?}", e);
+                Err(e) => {
+                    panic!("Unable to assemble the provided code. {:?}", e);
+                }
             }
-        },
+        }
         Err(e) => {
             panic!("[ERROR] {:?}", e);
         }
