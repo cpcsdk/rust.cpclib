@@ -27,7 +27,7 @@ jobs:
     - name: Build
       run: cargo +nightly build --bins --release
     - name: Run tests
-      if: ${{ matrix.target == x86_64-unknown-linux-gnu }}
+      if: ${{ matrix.target }}  == x86_64-unknown-linux-gnu
       run: cargo +nightly test --all-features
     - name: Basm tests
       if: ${{ matrix.target }} == x86_64-unknown-linux-gnu
