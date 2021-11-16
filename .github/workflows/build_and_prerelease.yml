@@ -22,18 +22,24 @@ jobs:
             toolchain: nightly
             profile: minimal
             target: ${{matrix.target}}
+    - uses: Swatinem/rust-cache@v1
     - name: Dependencies
       run: sudo apt update && sudo apt install libgtk-3-dev libcogl-pango-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev
-    - name: Build
-      run: cargo +nightly build --bins --release
-    - name: Run tests
-      if: ${{ matrix.target }}  == x86_64-unknown-linux-gnu
-      run: cargo +nightly test --all-features
+    - if: ${{ matrix.target  == 'i686-pc-windows-gnu '}}
+      run: sudo apt install mingw-w64
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --bins --release
+    - if: ${{ matrix.target == 'x86_64-unknown-linux-gnu'}}  
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
     - name: Basm tests
-      if: ${{ matrix.target }} == x86_64-unknown-linux-gnu
+      if: ${{ matrix.target == 'x86_64-unknown-linux-gnu'}}
       run: cd basm/tests/asm && ./launch_tests.sh
     - uses: ncipollo/release-action@v1
-      if: ${{ matrix.target }}== x86_64-unknown-linux-gnu 
+      if: ${{ matrix.target  == 'x86_64-unknown-linux-gnu'}}
       with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           allowUpdates: true
@@ -52,7 +58,7 @@ jobs:
             target/release/snapshot,
             target/release/locomotive
     - uses: ncipollo/release-action@v1
-      if: ${{ matrix.target }}== i686-pc-windows-gnu 
+      if: ${{ matrix.target  == 'i686-pc-windows-gnu '}}
       with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           allowUpdates: true
@@ -62,12 +68,12 @@ jobs:
           tag: latest
           name: "Windows Development Build"
           artifacts: |
-            target/i686-pc-windows-gnu/release/basm,
-            target/i686-pc-windows-gnu/release/visual-basm,
-            target/i686-pc-windows-gnu/release/bdasm,
-            target/i686-pc-windows-gnu/release/catalog,
-            target/i686-pc-windows-gnu/release/hideur,
-            target/i686-pc-windows-gnu/release/imgconverter,
-            target/i686-pc-windows-gnu/release/snapshot,
-            target/i686-pc-windows-gnu/release/locomotive
+            target/i686-pc-windows-gnu/release/basm.exe,
+            target/i686-pc-windows-gnu/release/visual-basm.exe,
+            target/i686-pc-windows-gnu/release/bdasm.exe,
+            target/i686-pc-windows-gnu/release/catalog.exe,
+            target/i686-pc-windows-gnu/release/hideur.exe,
+            target/i686-pc-windows-gnu/release/imgconverter.exe,
+            target/i686-pc-windows-gnu/release/snapshot.exe,
+            target/i686-pc-windows-gnu/release/locomotive.exe
   
