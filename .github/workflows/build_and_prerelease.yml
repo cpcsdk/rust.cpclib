@@ -21,30 +21,27 @@ jobs:
     - name: Dependencies
       run: sudo apt update && sudo apt install libgtk-3-dev libcogl-pango-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev
     - name: Build
-      run: cargo +nightly build --verbose --all-features
+      run: cargo +nightly build --bins
     - name: Run tests
-      run: cargo +nightly test --verbose --all-features
+      run: cargo +nightly test --all-features
     - name: Basm tests
       run: cd basm/tests/asm && ./launch_tests.sh
-  pre-release-linux:
-    runs-on: ubuntu-latest
-    needs: build-linux
-    environment: Linux
-    steps:
-      - uses: "marvinpinto/action-automatic-releases@latest"
+    - uses: ncipollo/release-action@v1
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "latest"
+          token: "${{ secrets.GITHUB_TOKEN }}"
+          allowUpdates: true
+          removeArtifacts: false
           prerelease: false
           draft: true
-          title: "Linux Development Build"
-          files: |
-            target/debug/basm
-            target/debug/visual-basm
-            target/debug/bdasm
-            target/debug/catalog
-            target/debug/hideur
-            target/debug/imgconverter
-            target/debug/snapshot
+          tag: latest
+          name: "Linux Development Build"
+          artifacts: |
+            target/debug/basm,
+            target/debug/visual-basm,
+            target/debug/bdasm,
+            target/debug/catalog,
+            target/debug/hideur,
+            target/debug/imgconverter,
+            target/debug/snapshot,
             target/debug/locomotive
   
