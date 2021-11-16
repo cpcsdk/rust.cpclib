@@ -98,6 +98,7 @@ fn encode(pens: &[Vec<Pen>], mode: Mode) -> Vec<Vec<u8>> {
             match mode {
                 Mode::Zero => pixels::mode0::pens_to_vec(input_row),
                 Mode::One => pixels::mode1::pens_to_vec(input_row),
+                Mode::Two => pixels::mode2::pens_to_vec(input_row),
                 _ => panic!("Unimplemented yet ..."),
             }
         };

@@ -4,6 +4,7 @@ use cpclib_asm::preamble::{
 };
 use proc_macro2::*;
 use quote::TokenStreamExt;
+use cpclib_common::smol_str::SmolStr;
 
 fn upper_first(repr: &str) -> String {
     format!("{}{}", repr[0..=0].to_uppercase(), repr[1..].to_lowercase())
@@ -47,9 +48,9 @@ impl MyToTokens for String {
     }
 }
 
-impl MyToTokens for SmallStr {
+impl MyToTokens for SmolStr {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        tokens.append(Ident::new("SmallStr", Span::call_site()));
+        tokens.append(Ident::new("SmolStr", Span::call_site()));
         tokens.append(Punct::new(':', Spacing::Joint));
         tokens.append(Punct::new(':', Spacing::Joint));
         tokens.append(Ident::new("new", Span::call_site()));

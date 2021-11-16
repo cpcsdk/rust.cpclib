@@ -84,6 +84,29 @@ pub mod mode2 {
         ]
     }
 
+
+    /// Convert a vector of pens into a vector of bytes
+    pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
+        assert!(pens.len() % 8 == 0);
+
+        let mut res = Vec::new();
+        for idx in 0..(pens.len() / 8) {
+            res.push(pens_to_byte(
+                pens[idx * 8 + 0],
+                pens[idx * 8 + 1],
+                pens[idx * 8 + 2],
+                pens[idx * 8 + 3],
+                pens[idx * 8 + 4],
+                pens[idx * 8 + 5],
+                pens[idx * 8 + 6],
+                pens[idx * 8 + 7],
+            ));
+        }
+
+        res
+    }
+
+
     pub fn pens_to_byte(pen0: Pen, pen1: Pen, pen2: Pen, pen3: Pen, pen4: Pen, pen5: Pen, pen6: Pen, pen7: Pen) -> u8 {
         pen_to_pixel_byte(pen0, PixelPosition::First)
             + pen_to_pixel_byte(pen1, PixelPosition::Second)

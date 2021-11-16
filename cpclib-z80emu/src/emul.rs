@@ -450,7 +450,7 @@ mod test {
     fn jp_symbol() {
         let mut z80 = Z80::default();
         let mut symbols = SymbolsTableCaseDependent::default();
-        symbols.set_symbol_to_value("LABEL", 0x4000);
+        symbols.set_symbol_to_value("LABEL", 0x4000u16);
         z80.setup_symbol_table(&symbols);
 
         z80.pc_mut().set(0x4000);
@@ -460,7 +460,7 @@ mod test {
         z80.execute(&Token::OpCode(
             Mnemonic::Jp,
             None,
-            Some(DataAccess::Expression(Expr::Label("LABEL".to_owned()))),
+            Some(DataAccess::Expression(Expr::Label("LABEL".into()))),
             None,
         ));
 
@@ -477,7 +477,7 @@ mod test {
         z80.execute(&Token::OpCode(
             Mnemonic::Jp,
             None,
-            Some(DataAccess::Expression(Expr::Label("$".to_owned()))),
+            Some(DataAccess::Expression(Expr::Label("$".into()))),
             None,
         ));
 
@@ -494,7 +494,7 @@ mod test {
         z80.execute(&Token::OpCode(
             Mnemonic::Jr,
             None,
-            Some(DataAccess::Expression(Expr::Label("$".to_owned()))),
+            Some(DataAccess::Expression(Expr::Label("$".into()))),
             None,
         ));
 
