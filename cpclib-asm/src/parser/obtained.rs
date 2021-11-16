@@ -249,7 +249,7 @@ impl LocatedToken {
                 Cow::Owned(Token::RepeatUntil(e.clone(), l.as_listing()))
             }
             LocatedToken::Rorg(e, l, _span) => Cow::Owned(Token::Rorg(e.clone(), l.as_listing())),
-            LocatedToken::Switch(v, c, d, span) => {
+            LocatedToken::Switch(v, c, d, _span) => {
                 Cow::Owned(Token::Switch(
                     v.clone(),
                     c.iter()

@@ -136,14 +136,14 @@ pub fn assemble<'arg>(
             let symbol = split.next().unwrap();
             let value = split.next().unwrap_or("1");
             let value = /*cpclib_common::*/parse_value(value.into())
-                    .map_err(|e| BasmError::InvalidArgument(definition.to_string()))
+                    .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))
                     ?
                     .1;
 
             options
                 .symbols_mut()
                 .assign_symbol_to_value(symbol, value.eval()?)
-                .map_err(|e| BasmError::InvalidArgument(definition.to_string()))?;
+                .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))?;
         }
     }
 

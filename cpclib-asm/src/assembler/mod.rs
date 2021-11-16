@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::Display;
 use std::io::Write;
-use std::ops::DerefMut;
+
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -29,7 +29,7 @@ use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::*;
 
-use self::function::{AnyFunction, Function, FunctionBuilder, HardCodedFunction};
+use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
 use self::report::SavedFile;
 use self::symbols_output::SymbolOutputGenerator;
@@ -843,7 +843,7 @@ impl Env {
         let mut winape_raw = Vec::new();
 
         let pages_mmr = MMR_PAGES_SELECTION;
-        for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
+        for (activepage, _page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
             for brk in self.pages_info_sna[activepage].collect_breakpoints() {
                 let info = AssemblerError::RelocatedInfo {
                     info: Box::new(AssemblerError::AssemblingError {
@@ -2069,7 +2069,7 @@ impl Env {
         info: &[FormattedExpr]
     ) -> Result<String, AssemblerError> {
         let mut repr = String::default();
-        for (idx, current) in info.iter().enumerate() {
+        for (_idx, current) in info.iter().enumerate() {
             // if idx != 0 {
             // repr += " ";
             // }
@@ -2377,7 +2377,7 @@ impl Env {
         name: &str,
         params: &[S],
         inner: &[T],
-        span: Option<&Z80Span>
+        _span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
         if !self.functions.contains_key(name) {
             let f = FunctionBuilder::new(name, params, inner)?;
@@ -2868,7 +2868,7 @@ impl Env {
         value: &Expr,
         cases: impl Iterator<Item = (&'a Expr, &'a [T], bool)>,
         default: Option<&'a [T]>,
-        span: Option<Z80Span>
+        _span: Option<Z80Span>
     ) -> Result<(), AssemblerError> {
         let value = self.resolve_expr_must_never_fail(value)?;
         let mut met = false;

@@ -5,7 +5,7 @@ use std::ops::Deref;
 use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::termcolor::Buffer;
-use codespan_reporting::term::{self, Chars, Config, DisplayStyle};
+use codespan_reporting::term::{self, Chars, DisplayStyle};
 use cpclib_basic::BasicError;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::error::{VerboseError, VerboseErrorKind};
@@ -495,7 +495,7 @@ impl AssemblerError {
                     ExpressionError::OwnError(error) => {
                         format!("{}", error)
                     }
-                    ExpressionError::InvalidSize(expected, index) => {
+                    ExpressionError::InvalidSize(_expected, index) => {
                         format!("{} index incompatible with size {}", index, index)
                     }
                 };

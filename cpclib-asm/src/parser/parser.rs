@@ -1504,7 +1504,7 @@ pub fn parse_assign(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
 
 /// Parse the opcodes. TODO rename as parse_opcode ...
 pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
-    let mut parsing_state = input.context().state.clone();
+    let parsing_state = input.context().state.clone();
 
     verify(
         alt((
@@ -1666,7 +1666,7 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
 
 /// Parse any directive
 pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
-    let mut parsing_state = input.context().state.clone();
+    let parsing_state = input.context().state.clone();
     verify(alt((parse_directive1, parse_directive2)), move |d| {
         d.is_accepted(&parsing_state)
     })(input.clone())

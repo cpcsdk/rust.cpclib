@@ -6,7 +6,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
 
-use super::delayed_command::PrintCommand;
+
 use super::list::{
     list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push
 };
@@ -14,7 +14,7 @@ use super::matrix::{
     matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width
 };
 use super::Env;
-use crate::assembler::delayed_command::FailedAssertCommand;
+
 use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};

@@ -5,13 +5,13 @@ use std::ops::{Deref, DerefMut};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{smallvec, SmallVec};
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::strsim::levenshtein;
+
 use cpclib_common::{lazy_static, strsim};
 use delegate::delegate;
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{ExprResult, ListingElement, MacroParam, Token};
+use crate::{ExprResult, MacroParam, Token};
 
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone)]

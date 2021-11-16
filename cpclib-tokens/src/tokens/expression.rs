@@ -920,7 +920,7 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.abs().into()),
             ExprResult::Value(v) => Ok(v.abs().into()),
-            ExprResult::Bool(b) => Ok(self.clone()),
+            ExprResult::Bool(_b) => Ok(self.clone()),
             _ => Err(ExpressionTypeError(format!("Try to apply abs to {}", self)))
         }
     }
@@ -1196,7 +1196,7 @@ impl std::fmt::LowerHex for ExprResult {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:x}", v),
             ExprResult::Bool(v) => write!(f, "{:x}", *v as u8),
-            ExprResult::String(v) => write!(f, "STRING REPRESENTATION ISSUE"),
+            ExprResult::String(_v) => write!(f, "STRING REPRESENTATION ISSUE"),
             ExprResult::List(v) => {
                 write!(
                     f,
@@ -1224,7 +1224,7 @@ impl std::fmt::UpperHex for ExprResult {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:X}", v),
             ExprResult::Bool(v) => write!(f, "{:X}", *v as u8),
-            ExprResult::String(v) => write!(f, "STRING REPRESENTATION ISSUE"),
+            ExprResult::String(_v) => write!(f, "STRING REPRESENTATION ISSUE"),
             ExprResult::List(v) => {
                 write!(
                     f,

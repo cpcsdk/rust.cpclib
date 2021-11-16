@@ -3,7 +3,7 @@ use std::io::prelude::*;
 use std::path::Path;
 
 use cpclib_common::bitsets;
-use cpclib_common::itertools::Chunk;
+
 use num_enum::TryFromPrimitive;
 
 mod chunks;

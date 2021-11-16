@@ -2,12 +2,12 @@ use std::borrow::Borrow;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_tokens::{ExprResult, ExpressionTypeError};
+use cpclib_tokens::{ExprResult};
 use substring::Substring;
 
 use crate::error::{AssemblerError, ExpressionError};
 
-pub fn fix_string<S: Borrow<str>>(mut s: S) -> SmolStr {
+pub fn fix_string<S: Borrow<str>>(s: S) -> SmolStr {
     s.borrow().replace("\\n", "\n").into()
 }
 
@@ -30,7 +30,7 @@ pub fn list_set(
     value: ExprResult
 ) -> Result<ExprResult, crate::AssemblerError> {
     match list {
-        ExprResult::String(mut s) => {
+        ExprResult::String(s) => {
             if index >= s.len() {
                 return Err(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(s.len(), index)
@@ -63,7 +63,7 @@ pub fn list_set(
 }
 
 /// Get an item in a list of string
-pub fn list_get(mut list: &ExprResult, index: usize) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, crate::AssemblerError> {
     match list {
         ExprResult::String(s) => {
             if index >= s.len() {
@@ -94,7 +94,7 @@ pub fn list_get(mut list: &ExprResult, index: usize) -> Result<ExprResult, crate
 
 /// Get a sublist  a list of string
 pub fn list_sublist(
-    mut list: &ExprResult,
+    list: &ExprResult,
     start: usize,
     end: usize
 ) -> Result<ExprResult, crate::AssemblerError> {
@@ -151,8 +151,8 @@ pub fn list_len(list: &ExprResult) -> Result<ExprResult, crate::AssemblerError> 
 }
 
 pub fn list_push(
-    mut list: ExprResult,
-    mut elem: ExprResult
+    list: ExprResult,
+    elem: ExprResult
 ) -> Result<ExprResult, crate::AssemblerError> {
     match list {
         ExprResult::List(mut l) => {
@@ -169,7 +169,7 @@ pub fn list_push(
     }
 }
 
-pub fn list_sort(mut list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_sort(list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
     match list {
         ExprResult::List(mut l) => {
             l.sort();
@@ -209,15 +209,15 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
 }
 
 pub fn string_push(
-    mut s1: ExprResult,
-    mut s2: ExprResult
+    s1: ExprResult,
+    s2: ExprResult
 ) -> Result<ExprResult, crate::AssemblerError> {
     match (s1, s2) {
-        (ExprResult::String(mut s1), ExprResult::String(mut s2)) => {
+        (ExprResult::String(s1), ExprResult::String(s2)) => {
             let s1 = s1.to_string() + &fix_string(s2);
             Ok(ExprResult::String(s1.into()))
         }
-        (ExprResult::String(mut s1), ExprResult::List(mut l)) => {
+        (ExprResult::String(s1), ExprResult::List(l)) => {
             let mut s1 = s1.to_string() + "[";
 
             for (i, e) in l.into_iter().enumerate() {
@@ -232,20 +232,20 @@ pub fn string_push(
             Ok(ExprResult::String(s1.into()))
         }
 
-        (ExprResult::String(mut s1), ExprResult::Float(s2)) => {
+        (ExprResult::String(s1), ExprResult::Float(s2)) => {
             let mut s1 = s1.to_string();
             s1 += &s2.into_inner().to_string();
             Ok(ExprResult::String(s1.into()))
         }
 
-        (ExprResult::String(mut s1), ExprResult::Value(s2)) => {
+        (ExprResult::String(s1), ExprResult::Value(s2)) => {
             let mut s1 = s1.to_string();
 
             s1 += &s2.to_string();
             Ok(ExprResult::String(s1.into()))
         }
 
-        (ExprResult::String(mut s1), ExprResult::Bool(s2)) => {
+        (ExprResult::String(s1), ExprResult::Bool(s2)) => {
             let mut s1 = s1.to_string();
 
             s1 += &s2.to_string();

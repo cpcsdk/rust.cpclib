@@ -325,7 +325,7 @@ pub mod mode1 {
 #[allow(clippy::identity_op)]
 pub mod mode0 {
     use contracts::{ensures, requires};
-    use cpclib_common::num;
+    
 
     use crate::ga::Pen;
 

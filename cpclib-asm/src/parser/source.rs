@@ -63,8 +63,8 @@ impl Z80Span {
         extra: (Arc<String>, Arc<ParserContext>)
     ) -> Self {
         {
-            let span_addr = span.fragment().as_ptr();
-            let extra_addr = extra.0.as_ptr();
+            let _span_addr = span.fragment().as_ptr();
+            let _extra_addr = extra.0.as_ptr();
             // TODO; no idea why it fails :()
             //   assert!(std::ptr::eq(span_addr, extra_addr));
         }
