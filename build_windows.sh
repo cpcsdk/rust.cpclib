@@ -1,1 +1,1 @@
-cargo build --release --target=i686-pc-windows-gnu --all-features
+cargo +nightly  build --release --target=i686-pc-windows-gnu --bins

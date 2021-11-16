@@ -1,2 +1,17 @@
 format_strings = false
 reorder_imports = true
+control_brace_style = "ClosingNextLine"
+brace_style = "SameLineWhere"
+condense_wildcard_suffixes = true
+edition = "2021"
+force_multiline_blocks = true
+hex_literal_case = "Upper"
+indent_style = "Visual"
+imports_granularity = "Module"
+new_line_style = "Unix"
+normalize_comments = true
+reorder_impl_items = true
+group_imports = "StdExternalCrate"
+space_after_colon = false
+unstable_features = true
+where_single_line = true
