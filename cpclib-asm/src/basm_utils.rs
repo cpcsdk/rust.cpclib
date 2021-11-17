@@ -290,7 +290,7 @@ pub fn process(matches: &ArgMatches<'_>) -> Result<(Env, Vec<AssemblerError>), B
 pub fn build_args_parser() -> clap::App<'static, 'static> {
     App::new("basm")
 					.author("Krusty/Benediction")
-					.about("Benediction ASM -- z80 assembler that taylor Amstrad CPC")
+					.about("Benediction ASM -- z80 assembler that tailor Amstrad CPC")
                     .after_help("Work In Progress")
                     .arg(
                         Arg::with_name("INLINE")

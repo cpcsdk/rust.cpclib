@@ -288,6 +288,11 @@ fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) -> String {
     fullscreen_display_code(mode, crtc_width, pal)
 }
 
+fn parse_int(repr: &str) -> usize {
+    repr.parse::<usize>()
+    .expect(&format!("Error when converting {} as integer", repr))
+}
+
 #[allow(clippy::if_same_then_else)] // false positive
 fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
     if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
@@ -298,9 +303,25 @@ fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
             _ => unimplemented!()
         }
     }
-    else if let Some(_tile_mathces) = matches.subcommand_matches("tile") {
-        // will be postprocessed
-        OutputFormat::LinearEncodedSprite
+    else if let Some(tile_matches) = matches.subcommand_matches("tile") {
+        OutputFormat::TileEncoded{
+            tile_width: TileWidthCapture::NbBytes(parse_int(tile_matches.value_of("WIDTH").expect("--width argument missing"))),
+
+            tile_height: TileHeightCapture::NbLines(parse_int(tile_matches.value_of("HEIGHT").expect("--height argument missing"))),
+
+            horizontal_movement: TileHorizontalCapture::AlwaysFromLeftToRight,
+            vertical_movement: TileVerticalCapture::AlwaysFromBottomToTop,
+
+            grid_width: tile_matches.value_of("HORIZ_COUNT")
+                .map(|v| parse_int(v))
+                .map(|v| GridWidthCapture::TilesInRow(v))
+                .unwrap_or(GridWidthCapture::FullWidth),
+
+            grid_height:  tile_matches.value_of("VERT_COUNT")
+            .map(|v| parse_int(v))
+            .map(|v| GridHeightCapture::TilesInColumn(v))
+            .unwrap_or(GridHeightCapture::FullHeight),
+        }
     }
     else {
         // Standard case
@@ -370,6 +391,16 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         transformations = transformations.skip_odd_pixels();
     }
 
+    let sub_sna = matches.subcommand_matches("sna");
+    let sub_m4 = matches.subcommand_matches("m4");
+    let sub_dsk = matches.subcommand_matches("dsk");
+    let sub_sprite = matches.subcommand_matches("sprite");
+    let sub_tile = matches.subcommand_matches("tile");
+    let sub_exec = matches.subcommand_matches("exec");
+    let sub_scr = matches.subcommand_matches("scr");
+
+    
+
     let output_format = get_output_format(&matches);
     let conversion = ImageConverter::convert(
         input_file,
@@ -379,13 +410,6 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         &output_format
     )?;
 
-    let sub_sna = matches.subcommand_matches("sna");
-    let sub_m4 = matches.subcommand_matches("m4");
-    let sub_dsk = matches.subcommand_matches("dsk");
-    let sub_sprite = matches.subcommand_matches("sprite");
-    let sub_tile = matches.subcommand_matches("tile");
-    let sub_exec = matches.subcommand_matches("exec");
-    let sub_scr = matches.subcommand_matches("scr");
 
     if sub_sprite.is_some() {
         // TODO share code with the tile branch
@@ -442,33 +466,24 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     else if let Some(sub_tile) = sub_tile {
         // TODO share code with the sprite branch
         match &conversion {
-            Output::LinearEncodedSprite {
-                data,
-                bytes_width,
-                height,
+            Output::TilesList {
+                palette,
+                list: tile_set,
                 ..
             } => {
-                let tile_width = sub_tile
-                    .value_of("WIDTH")
-                    .unwrap()
-                    .parse::<usize>()
-                    .unwrap();
-                let tile_height = sub_tile
-                    .value_of("HEIGHT")
-                    .unwrap()
-                    .parse::<usize>()
-                    .unwrap();
+                // Save the palette
+                do_export_palette!(sub_tile, palette);
 
-                let nb_tiles_width = bytes_width / tile_width;
-                let nb_tiles_height = height / tile_height;
-                let mut idx = 0;
-
-                // individually extract each tile
-                for j in 0..nb_tiles_height {
-                    for i in 0..nb_tiles_width {
-                        // Collect only the bytes
-                        let tile_data = { unimplemented!("Need to finish this implementation") };
-                    }
+                // Save the binary data of the tiles
+                let tile_fname = Path::new(sub_tile.value_of("SPRITE_FNAME").expect("Missing tileset name"));
+                let base = tile_fname.with_extension("").as_os_str().to_str().unwrap().to_owned();
+                let extension = tile_fname.extension().unwrap().to_str().unwrap();
+                for (i, data) in tile_set.iter().enumerate() {
+                    let current_filename = format!("{}_{:03}.{}", base, i, extension);
+                    let mut file =
+                        File::create(current_filename.clone())
+                            .expect(&format!("Unable to build {}", current_filename));
+                    file.write_all(data).unwrap();
                 }
             }
             _ => unreachable! {}
@@ -626,11 +641,22 @@ fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub mod built_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
 fn main() -> anyhow::Result<()> {
+    let desc_before = format!(
+        "Profile {} compiled: {}",
+        built_info::PROFILE,
+        built_info::BUILT_TIME_UTC
+    );
+
     let args = App::new("CPC image conversion tool")
                     .version("0.1.2")
                     .author("Krusty/Benediction")
                     .about("Simple CPC image conversion tool")
+                    .before_help(&desc_before[..])
 
                     .subcommand(
                         SubCommand::with_name("sna")
@@ -772,11 +798,18 @@ fn main() -> anyhow::Result<()> {
                                 .help("Height (in lines) of a tile")
                             )
                             .arg(
-                                Arg::with_name("COUNT")
-                                .long("count")
+                                Arg::with_name("HORIZ_COUNT")
+                                .long("horiz_count")
                                 .takes_value(true)
                                 .required(false)
-                                .help("Number of tiles to extract. Extra tiles are ignored")
+                                .help("Horizontal number of tiles to extract. Extra tiles are ignored")
+                            )
+                            .arg(
+                                Arg::with_name("VERT_COUNT")
+                                .long("vert_count")
+                                .takes_value(true)
+                                .required(false)
+                                .help("Vertical number of tiles to extract. Extra tiles are ignored")
                             )
                             .arg(
                                 Arg::with_name("CONFIGURATION")

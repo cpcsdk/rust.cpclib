@@ -1868,6 +1868,7 @@ name = "imgconverter"
 version = "0.5.0"
 dependencies = [
  "anyhow",
+ "built",
  "cpclib",
  "crossbeam-channel 0.5.1",
  "exitcode",

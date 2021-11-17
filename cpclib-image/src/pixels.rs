@@ -85,7 +85,11 @@ pub mod mode2 {
 
     /// Convert a vector of pens into a vector of bytes
     pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
-        assert!(pens.len() % 8 == 0);
+        let pens = if pens.len() % 8 == 0 {
+            &pens[.. (pens.len()/8)*8]
+        } else {
+            pens
+        };
 
         let mut res = Vec::new();
         for idx in 0..(pens.len() / 8) {
