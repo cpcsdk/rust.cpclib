@@ -1,0 +1,48 @@
+name: Windows cross-build
+
+on:
+  push:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+            toolchain: nightly
+            profile: minimal
+            target: i686-pc-windows-gnu
+    - uses: Swatinem/rust-cache@v1
+    - name: Dependencies
+      run: sudo apt update && sudo apt install libgtk-3-dev libcogl-pango-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev mingw-w64
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        toolchain: nightly
+        use-cross: true
+        args: --bins --release --target i686-pc-windows-gnu
+    - uses: ncipollo/release-action@v1
+      with:
+          token: "${{ secrets.GITHUB_TOKEN }}"
+          allowUpdates: true
+          removeArtifacts: false
+          prerelease: false
+          draft: true
+          tag: latest
+          name: "Windows Development Build"
+          artifacts: |
+            target/i686-pc-windows-gnu/release/basm.exe,
+            target/i686-pc-windows-gnu/release/visual-basm.exe,
+            target/i686-pc-windows-gnu/release/bdasm.exe,
+            target/i686-pc-windows-gnu/release/catalog.exe,
+            target/i686-pc-windows-gnu/release/hideur.exe,
+            target/i686-pc-windows-gnu/release/imgconverter.exe,
+            target/i686-pc-windows-gnu/release/snapshot.exe,
+            target/i686-pc-windows-gnu/release/locomotive.exe
+  
