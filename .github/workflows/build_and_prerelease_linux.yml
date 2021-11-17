@@ -37,8 +37,8 @@ jobs:
           token: "${{ secrets.GITHUB_TOKEN }}"
           allowUpdates: true
           removeArtifacts: false
-          prerelease: false
-          draft: true
+          prerelease: true
+          draft: false
           tag: latest
           name: "Development Build"
           artifacts: |
