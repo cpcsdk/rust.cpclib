@@ -36,14 +36,14 @@ jobs:
           prerelease: false
           draft: true
           tag: latest
-          name: "Windows Development Build"
+          name: "Development Build"
           artifacts: |
-            target/i686-pc-windows-gnu/release/basm.exe,
-            target/i686-pc-windows-gnu/release/visual-basm.exe,
-            target/i686-pc-windows-gnu/release/bdasm.exe,
-            target/i686-pc-windows-gnu/release/catalog.exe,
-            target/i686-pc-windows-gnu/release/hideur.exe,
-            target/i686-pc-windows-gnu/release/imgconverter.exe,
-            target/i686-pc-windows-gnu/release/snapshot.exe,
-            target/i686-pc-windows-gnu/release/locomotive.exe
+            target/x86_64-pc-windows-gnu/release/basm.exe,
+            target/x86_64-pc-windows-gnu/release/visual-basm.exe,
+            target/x86_64-pc-windows-gnu/release/bdasm.exe,
+            target/x86_64-pc-windows-gnu/release/catalog.exe,
+            target/x86_64-pc-windows-gnu/release/hideur.exe,
+            target/x86_64-pc-windows-gnu/release/imgconverter.exe,
+            target/x86_64-pc-windows-gnu/release/snapshot.exe,
+            target/x86_64-pc-windows-gnu/release/locomotive.exe
   
