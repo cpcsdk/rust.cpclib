@@ -10,14 +10,14 @@ env:
 jobs:
   build-windows:
 
-    runs-on: ubuntu-latest
+    runs-on:  -latest
     steps:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
             toolchain: nightly
             profile: minimal
-            target: i686-pc-windows-gnu
+            target: x86_64-pc-windows-gnu
             override: true
     - uses: Swatinem/rust-cache@v1
     - name: Dependencies
@@ -27,7 +27,7 @@ jobs:
         command: build
         toolchain: nightly
         use-cross: true
-        args:  --target i686-pc-windows-gnu --bins --release
+        args:  --target x86_64-pc-windows-gnu --bins --release
     - uses: ncipollo/release-action@v1
       with:
           token: "${{ secrets.GITHUB_TOKEN }}"
