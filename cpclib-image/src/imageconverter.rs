@@ -1289,11 +1289,19 @@ impl<'a> ImageConverter<'a> {
             GridHeightCapture::FullHeight => sprite.height() as usize / tile_height as usize
         };
 
+
+        if (sprite.height() as usize) < tile_height as usize *nb_rows {
+            return Err(anyhow::anyhow!("{} lines expected on a tileset of {} lines.", tile_height as usize *nb_rows, sprite.height()).into());
+        }
+        if (sprite.bytes_width() as usize) < tile_width as usize *nb_columns {
+            return Err(anyhow::anyhow!("{} byte-columns  expected on a tileset of {} byte-columns.", tile_width as usize *nb_columns, sprite.bytes_width()));
+        }
+
         // Really makes the extraction
         let mut tiles_list: Vec<Vec<u8>> = Vec::new();
         for row in 0..nb_rows {
             for column in 0..nb_columns {
-                // TODO add an additional parametr to read x before y
+                // TODO add an additional parameter to read x before y
                 // Manage the sprite in this cell
                 let mut y_counter = vertical_movement.counter();
                 let mut x_counter = horizontal_movement.counter();

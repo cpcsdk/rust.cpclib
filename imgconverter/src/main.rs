@@ -310,7 +310,7 @@ fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
             tile_height: TileHeightCapture::NbLines(parse_int(tile_matches.value_of("HEIGHT").expect("--height argument missing"))),
 
             horizontal_movement: TileHorizontalCapture::AlwaysFromLeftToRight,
-            vertical_movement: TileVerticalCapture::AlwaysFromBottomToTop,
+            vertical_movement: TileVerticalCapture::AlwaysFromTopToBottom,
 
             grid_width: tile_matches.value_of("HORIZ_COUNT")
                 .map(|v| parse_int(v))
