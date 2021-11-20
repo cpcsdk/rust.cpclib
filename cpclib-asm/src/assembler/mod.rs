@@ -1210,7 +1210,7 @@ impl Env {
         self.written_bytes().set(abstract_address as _, true);
 
         // Add the byte to the listing space
-        if self.pass.is_second_pass() && self.output_trigger.is_some() {
+        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
             self.output_trigger.as_mut().unwrap().write_byte(v);
         }
 

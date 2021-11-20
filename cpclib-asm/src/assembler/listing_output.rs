@@ -174,8 +174,8 @@ impl ListingOutput {
 
         // build the iterators over the line representation of source code and data
         let mut line_representation = line.split("\n");
-        let data_representation = self
-            .current_line_bytes
+        let data_representation = dbg!(&self
+            .current_line_bytes)
             .iter()
             .chunks(self.bytes_per_line())
             .into_iter()
