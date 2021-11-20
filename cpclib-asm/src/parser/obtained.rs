@@ -152,7 +152,8 @@ impl Clone for LocatedToken {
                 LocatedToken::Iterate(a.clone(), b.clone(), c.clone(), d.clone())
             }
             LocatedToken::RepeatUntil(..) => todo!(),
-            LocatedToken::Rorg(..) => todo!(),
+            LocatedToken::Rorg(a, b, c) => LocatedToken
+            ::Rorg(a.clone(), b.clone(), c.clone()),
             LocatedToken::Switch(value, cases, default, span) => {
                 LocatedToken::Switch(value.clone(), cases.clone(), default.clone(), span.clone())
             }

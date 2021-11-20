@@ -726,9 +726,13 @@ impl Env {
         if self.pass.is_listing_pass() && self.output_trigger.is_some() {
             let addr = match new {
                 LocatedToken::Standard {
-                    token: Token::Equ(label, _),
+                    token: Token::Equ(label, _) 
+                        |   Token::Assign(label, _)
+                        | Token::SetN(_,label,_),
                     ..
-                } => self.symbols().int_value(label).unwrap().unwrap(),
+                } => self.symbols()
+                            .int_value(label).unwrap()
+                            .unwrap_or_else(|| self.logical_output_address() as i32),
                 _ => self.logical_output_address() as i32
             };
             let trigg = self.output_trigger.as_mut().unwrap();

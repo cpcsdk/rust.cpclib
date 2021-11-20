@@ -372,6 +372,12 @@ pub enum SymbolFor {
 }
 
 impl Value {
+    pub fn expr(&self) -> Option<&ExprResult> {
+        match self {
+            Value::Expr(e) => Some(e),
+            _ => None
+        }
+    }
     pub fn integer(&self) -> Option<i32> {
         match self {
             Value::Expr(ExprResult::Value(i)) => Some(*i),
@@ -493,7 +499,7 @@ impl Symbol {
 /// TODO add all the other methods
 pub trait SymbolsTableTrait {
     /// Return the symbols that correspond to integer values
-    fn integer_symbols(&self) -> Vec<&Symbol>;
+    fn expression_symbol(&self) -> Vec<(&Symbol, &Value)>;
 
     /// Return true if the symbol has already been used in an expression
     fn is_used<S: Into<Symbol>>(&self, symbol: S) -> bool;
@@ -777,7 +783,7 @@ impl SymbolsTable {
 }
 
 impl SymbolsTableTrait for SymbolsTable {
-    fn integer_symbols(&self) -> Vec<&Symbol> {
+    fn expression_symbol(&self) -> Vec<(&Symbol, &Value)> {
         self.map
             .iter()
             .filter(|(_k, v)| {
@@ -786,7 +792,6 @@ impl SymbolsTableTrait for SymbolsTable {
                     _ => false
                 }
             })
-            .map(|(k, _v)| k)
             .collect_vec()
     }
 
@@ -1288,8 +1293,8 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
         self.table.use_symbol(self.normalize_symbol(symbol))
     }
 
-    fn integer_symbols(&self) -> Vec<&Symbol> {
-        self.table.integer_symbols()
+    fn expression_symbol(&self) -> Vec<(&Symbol, &Value)> {
+        self.table.expression_symbol()
     }
 
     fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {

@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait};
+use cpclib_tokens::{ExprResult, symbols::{Symbol, SymbolsTableTrait, Value}};
 
 /// Manage the generation of the symbols output.
 /// Could be parametrize by some directives
@@ -33,19 +33,38 @@ impl SymbolOutputGenerator {
         w: &mut W,
         symbs: &impl SymbolsTableTrait
     ) -> std::io::Result<()> {
-        for &k in symbs
-            .integer_symbols()
+        for (k,v) in symbs
+            .expression_symbol()
             .iter()
-            .filter(|s| self.keep_symbol(s))
-            .sorted()
+            .filter(|(s, v)| self.keep_symbol(s))
+            .sorted_by_key(|(s,v)| s.to_string().to_ascii_lowercase())
         {
-            // TODO add some filtering stuffs based on the directives
-            writeln!(
-                w,
-                "{} equ 0x{:04X}",
-                k.value(),
-                symbs.int_value(k.clone()).unwrap().unwrap()
-            )?;
+            match v {
+                Value::Address(a) => {
+                    writeln!(w, "{} equ #{:04X}", k.value(), a.address())
+                },
+                Value::Expr(ExprResult::Value(i)) => {
+                    writeln!(w, "{} equ #{:04X}", k.value(), i)
+                },
+                Value::Expr(ExprResult::Bool(b)) => {
+                    writeln!(w, "{} equ {}", k.value(), *b)
+                },
+                Value::Expr(e @ ExprResult::Float(_f)) => {
+                    writeln!(w, "{} equ #{:04X}", k.value(), e.int().unwrap())
+                },
+                Value::Expr(ExprResult::String(s)) => {
+                    writeln!(w, "{} equ {}", k.value(), s)
+                },
+                Value::Expr(l @ ExprResult::List(_)) => {
+                    writeln!(w, "{} equ {}", k.value(), l)
+                },
+                Value::Expr(m @ ExprResult::Matrix {..}) => {
+                    writeln!(w, "{} equ {}", k.value(), m)
+                },
+
+                _ => unimplemented!("{:?}", v)
+            }?;
+
         }
 
         Ok(())
