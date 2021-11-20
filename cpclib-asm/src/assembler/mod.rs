@@ -724,17 +724,7 @@ impl Env {
     /// Manage the play with data for the output listing
     fn handle_output_trigger(&mut self, new: &LocatedToken) {
         if self.pass.is_listing_pass() && self.output_trigger.is_some() {
-            let addr = match new {
-                LocatedToken::Standard {
-                    token: Token::Equ(label, _) 
-                        |   Token::Assign(label, _)
-                        | Token::SetN(_,label,_),
-                    ..
-                } => self.symbols()
-                            .int_value(label).unwrap()
-                            .unwrap_or_else(|| self.logical_output_address() as i32),
-                _ => self.logical_output_address() as i32
-            };
+            let addr = self.logical_output_address();
             let trigg = self.output_trigger.as_mut().unwrap();
             trigg.new_token(
                 new,
@@ -1808,6 +1798,7 @@ impl Env {
         else {
             self.add_symbol_to_symbol_table(destination, value.clone())?;
         }
+        self.output_trigger.as_mut().unwrap().replace_address(value.clone());
 
         // increase next one
         let delta = match delta {
@@ -1815,6 +1806,7 @@ impl Env {
             None => 1.into()
         };
         let value = (value + delta)?;
+
         self.symbols_mut().assign_symbol_to_value(source, value)?;
 
         Ok(())
@@ -2459,7 +2451,9 @@ pub fn visit_located_token(
 
     // cheat on the lifetime of tokens
     let outer_token = unsafe { (outer_token as *const LocatedToken).as_ref().unwrap() };
+
     env.handle_output_trigger(outer_token);
+
 
     let span = outer_token.span();
     match outer_token {
@@ -2614,6 +2608,7 @@ pub fn visit_located_token(
             env.visit_iterate(name.as_str(), values.as_ref(), code, Some(span.clone()))
         }
     }?;
+
 
     // Patch the warnings to inject them a location
     let nb_additional_warnings = env.warnings.len() - nb_warnings;
@@ -3213,13 +3208,18 @@ fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerErro
     }
     else {
         let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
+        env.output_trigger.as_mut().unwrap().replace_address(value.clone());
         env.add_symbol_to_symbol_table(label, value)
     }
 }
 
 fn visit_assign(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
     let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
+
+    env.output_trigger.as_mut().unwrap().replace_address(value.clone());
+
     env.symbols_mut().assign_symbol_to_value(label, value)?;
+
     Ok(())
 }
 

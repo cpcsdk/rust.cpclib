@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
-use cpclib_tokens::Token;
+use cpclib_tokens::{ExprResult, Token};
 
 use crate::preamble::LocatedToken;
 /// Generate an output listing.
@@ -314,6 +314,19 @@ impl ListingOutputTrigger {
         self.token.replace(new.clone()); // TODO remove that clone that is memory/time eager
         self.bytes.clear();
         self.start = address;
+    }
+
+    /// Override the address value by the expressio nresult
+    /// BUGGY when it is not a number ...
+    pub fn replace_address(&mut self, address: ExprResult) {
+        match address {
+            ExprResult::Float(f) => {},
+            ExprResult::Value(v) => self.start = v as _,
+            ExprResult::Bool(b) => self.start = if b {1} else {0},
+            ExprResult::String(s) => self.start = s.len() as _,
+            ExprResult::List(l) => self.start = l.len() as _,
+            ExprResult::Matrix { width, height, content } => self.start = (width+height) as _
+        }
     }
 
     pub fn finish(&mut self) {
