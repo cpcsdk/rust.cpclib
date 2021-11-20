@@ -1075,8 +1075,10 @@ impl Env {
         let addr = self.logical_to_physical_address(self.logical_code_address());
         self.symbols.set_current_address(addr);
 
+
         let addr = self.logical_to_physical_address(self.logical_output_address());
         self.symbols.set_current_output_address(addr);
+
     }
 
     /// Produce the memory for the required limits
@@ -1741,6 +1743,8 @@ impl Env {
         self.active_page_info_mut().logical_codeadr = code_adr;
 
         self.update_dollar();
+        self.output_trigger.as_mut()
+        .map(|o| o.replace_address(code_adr.into()));
         Ok(())
     }
 
@@ -1798,7 +1802,8 @@ impl Env {
         else {
             self.add_symbol_to_symbol_table(destination, value.clone())?;
         }
-        self.output_trigger.as_mut().unwrap().replace_address(value.clone());
+        self.output_trigger.as_mut()
+            .map(|o| o.replace_address(value.clone()));
 
         // increase next one
         let delta = match delta {
@@ -3001,6 +3006,10 @@ impl Env {
         }
 
         self.update_dollar();
+        let value = self.active_page_info().logical_codeadr;
+        
+        self.output_trigger.as_mut()
+        .map(|o| o.replace_address(value.into()));
 
         // execute the listing
         self.nested_rorg += 1; // used to disable page functionalities
@@ -3010,6 +3019,9 @@ impl Env {
         // restore the appropriate  address
         let page_info = self.active_page_info_mut();
         page_info.logical_codeadr = page_info.logical_outputadr;
+
+
+
 
         Ok(())
     }
@@ -3208,7 +3220,8 @@ fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerErro
     }
     else {
         let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
-        env.output_trigger.as_mut().unwrap().replace_address(value.clone());
+        env.output_trigger.as_mut()
+            .map(|o| o.replace_address(value.clone()));
         env.add_symbol_to_symbol_table(label, value)
     }
 }
@@ -3216,7 +3229,8 @@ fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerErro
 fn visit_assign(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
     let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
 
-    env.output_trigger.as_mut().unwrap().replace_address(value.clone());
+    env.output_trigger.as_mut()
+            .map(|o| o.replace_address(value.clone()));
 
     env.symbols_mut().assign_symbol_to_value(label, value)?;
 
