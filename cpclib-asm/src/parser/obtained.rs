@@ -391,16 +391,18 @@ impl LocatedToken {
 
                         if length.is_some() {
                             let length = length.as_ref().unwrap().eval()?.int()? as usize;
-                            data = &data[..length];
-                            if data.len() != length {
+                            if data.len() < length {
                                 return Err(AssemblerError::AssemblingError {
                                     msg: format!(
-                                        "Unable to read {:?}. Only {} are available",
+                                        "Unable to read {:?}. Only {} bytes are available ({} expected)",
                                         fname,
-                                        data.len()
+                                        data.len(),
+                                        length
                                     )
                                 });
                             }
+                            data = &data[..length];
+
                         }
 
                         match transformation {

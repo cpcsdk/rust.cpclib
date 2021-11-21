@@ -2498,6 +2498,7 @@ pub fn visit_located_token(
                         outer_token
                             .read_referenced_file(&outer_token.context().1)
                             .and_then(|_| visit_located_token(outer_token, env))
+                            .map_err(|e| e.locate(span.clone()))
                     }
                     else {
                         env.visit_incbin(content.read().unwrap().as_ref().unwrap())
@@ -2552,6 +2553,7 @@ pub fn visit_located_token(
                     outer_token
                         .read_referenced_file(&outer_token.context().1)
                         .and_then(|_| visit_located_token(outer_token, env))
+                        .map_err(|e| e.locate(span.clone()))
                 }
                 .map_err(|err| {
                     AssemblerError::IncludedFileError {
@@ -3191,6 +3193,9 @@ impl Env {
     fn visit_run(&mut self, address: &Expr, ga: Option<&Expr>) -> Result<(), AssemblerError> {
         let address = self.resolve_expr_may_fail_in_first_pass(address)?.int()?;
 
+        self.output_trigger.as_mut()
+        .map(|o| o.replace_address(address.into()));
+
         if self.run_options.is_some() {
             return Err(AssemblerError::RunAlreadySpecified);
         }
@@ -3395,7 +3400,7 @@ impl Env {
     ) -> Result<Vec<u8>, AssemblerError> {
         // Build the final basic code by replacing variables by value
         // Hexadecimal is used to ensure a consistent 2 bytes representation
-        let basic_src = dbg!({
+        let basic_src = {
             let mut basic = code.to_owned();
             match variables {
                 None => {}
@@ -3413,7 +3418,7 @@ impl Env {
                 }
             }
             basic
-        });
+        };
 
         // build the basic tokens
         let mut basic = BasicProgram::parse(basic_src)?;
