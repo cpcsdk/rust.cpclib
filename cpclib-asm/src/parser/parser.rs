@@ -1240,10 +1240,13 @@ pub fn parse_fname(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80
 
 /// Parser for file names in appropriate directives
 pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
-    //  alt((
-    preceded(tag("\""), terminated(take_until("\""), take(1usize)))
-  //      preceded(tag("'"), terminated(take_until("'"), take(1usize))),
-  //  )) // single quote is stricly reserved for chars now
+      alt((
+    preceded(tag("\""), terminated(take_until("\""), take(1usize))),
+    verify(
+        preceded(tag("'"), terminated(take_until("'"), take(1usize))),
+        |s: &Z80Span| s.len() > 1
+    ),
+    )) // single quote is stricly reserved for chars now, so we accept strings with 2 chars at minimum
     (input)
 }
 
