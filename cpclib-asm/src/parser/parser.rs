@@ -127,6 +127,7 @@ const END_DIRECTIVE: &[&str] = &[
     "ENDITER",
     "ENDITERATE",
     "ENDM",
+    "ENDMACRO",
     "ENDMODULE",
     "ENDR",
     "ENDREP", // repeat directive
@@ -476,7 +477,11 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
             alt((space0, line_ending, tag(":"))),
             many_till(
                 take(1usize),
-                alt((parse_directive_word("ENDM"), parse_directive_word("MEND")))
+                alt((
+                    parse_directive_word("ENDM"), 
+                    parse_directive_word("ENDMACRO"), 
+                    parse_directive_word("MEND")
+                ))
             )
         )
     ))(input)?;
@@ -3679,7 +3684,11 @@ pub fn parse_decoded_string(input: Z80Span) -> IResult<Z80Span, String, VerboseE
 
 /// Get a factor
 pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
-    let (input, neg) = opt(delimited(space0, tag("!"), space0))(input)?;
+    let (input, neg) = opt(delimited(space0, 
+        alt((
+            tag("!"),
+            parse_word("NOT")
+        )), space0))(input)?;
 
     let (input, not) = opt(delimited(space0, tag("~"), space0))(input)?;
 
