@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
+use std::path::PathBuf;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{smallvec, SmallVec};
@@ -142,18 +143,25 @@ pub enum SymbolError {
 #[derive(Debug, Clone)]
 pub struct Struct {
     name: SmolStr,
-    content: Vec<(SmolStr, Token)>
+    content: Vec<(SmolStr, Token)>,
+    source: Option<Source>
+
 }
 
 impl Struct {
-    pub fn new(name: impl AsRef<str>, content: &[(SmolStr, Token)]) -> Self {
+    pub fn new(name: impl AsRef<str>, content: &[(SmolStr, Token)], source: Option<Source>) -> Self {
         Self {
             name: name.as_ref().into(),
             content: content
                 .iter()
                 .map(|(s, t)| (s.clone(), t.clone()))
-                .collect_vec()
+                .collect_vec(),
+                source
         }
+    }
+
+    pub fn source(&self) -> Option<&Source> {
+        self.source.as_ref()
     }
 
     /// Get the size of each field
@@ -300,22 +308,59 @@ impl Struct {
 }
 
 #[derive(Debug, Clone)]
+pub struct Source {
+    fname: String,
+    line: usize,
+    column: usize
+}
+
+impl Source {
+    pub fn new(fname: String, line: usize, column: usize) -> Self {
+        Source {
+            fname,
+            line,
+            column
+        }
+    }
+
+    pub fn fname(&self) -> &str {
+        &self.fname
+    }
+
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    pub fn column(&self) -> usize {
+        self.column
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub struct Macro {
     // The name of the macro
     name: SmolStr,
     // The name of its arguments
     args: Vec<SmolStr>,
     // The content
-    code: String
+    code: String,
+    // Origin of the macro (for error messages)
+    source: Option<Source>
 }
 
 impl Macro {
-    pub fn new(name: SmolStr, args: &[SmolStr], code: String) -> Self {
+    pub fn new(name: SmolStr, args: &[SmolStr], code: String, source: Option<Source>) -> Self {
         Macro {
             name,
             args: args.to_vec(),
-            code
+            code,
+            source
         }
+    }
+
+    pub fn source(&self) -> Option<&Source> {
+        self.source.as_ref()
     }
 
     pub fn code(&self) -> &str {

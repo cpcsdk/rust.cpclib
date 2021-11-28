@@ -1639,7 +1639,8 @@ impl Env {
         &mut self,
         name: &str,
         arguments: &[SmolStr],
-        code: &str
+        code: &str,
+        source: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
@@ -1647,8 +1648,15 @@ impl Env {
             });
         }
 
+        let source = source.map(|s| s.into());
+
         self.symbols_mut()
-            .set_symbol_to_value(name, Macro::new(name.into(), arguments, code.to_owned()))?;
+            .set_symbol_to_value(name, Macro::new(
+                name.into(), 
+                arguments, 
+                code.to_owned(),
+                source
+            ))?;
         Ok(())
     }
 
@@ -1665,7 +1673,8 @@ impl Env {
     pub fn visit_struct_definition(
         &mut self,
         name: &str,
-        content: &[(SmolStr, Token)]
+        content: &[(SmolStr, Token)],
+        source: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
@@ -1673,7 +1682,7 @@ impl Env {
             });
         }
 
-        let r#struct = Struct::new(name, content);
+        let r#struct = Struct::new(name, content, source.map(|s| s.into()));
         // add inner index BEFORE the structure. It should reduce infinite loops
         let mut index = 0;
         for (f, s) in r#struct.fields_size(self.symbols()) {
@@ -1963,15 +1972,21 @@ impl Env {
 
             // get the generated code
             // TODO handle some errors there
-            let code = if r#macro.is_some() {
-                r#macro.unwrap().develop(parameters)
+            let (source, code) = if let Some(r#macro) = r#macro {
+                (
+                    r#macro.source(),
+                    r#macro.develop(parameters)
+                )
             }
             else {
                 let r#struct = r#struct.unwrap();
                 let mut parameters = parameters.to_vec();
                 parameters.resize(r#struct.nb_args(), MacroParam::empty());
-                r#struct.develop(&parameters)
-            };
+                (
+                    r#struct.source(),
+                    r#struct.develop(&parameters)
+                )
+        };
 
             // Tokenize with the same parsing  parameters and context when possible
             let listing = match caller_span {
@@ -1979,9 +1994,12 @@ impl Env {
                     let mut ctx = span.extra.1.deref().clone();
                     ctx.remove_filename();
                     ctx.set_context_name(&format!(
-                        "{}: {}",
+                        "{}:{}:{} > {} {}:",
+                        source.map(|s| s.fname()).unwrap_or_else(|| "???"),
+                        source.map(|s| s.line()).unwrap_or(0),
+                        source.map(|s| s.column()).unwrap_or(0),
                         if r#macro.is_some() { "MACRO" } else { "STRUCT" },
-                        name
+                        name,
                     ));
                     let code = Box::new(code);
                     parse_z80_str_with_context(code.as_ref(), ctx)?
@@ -2471,6 +2489,15 @@ pub fn visit_located_token(
 
                 Token::Breakpoint(expr) => env.visit_breakpoint(expr.as_ref(), Some(span.clone())),
 
+                        
+                Token::Macro(name, arguments, code) => env.visit_macro_definition(name, arguments, code, Some(span))
+                .map_err(|e| e.locate(span.clone()))
+                ,
+                Token::MacroCall(..) => {
+                    env.visit_call_macro_or_build_struct(outer_token)
+                        .map_err(|e| e.locate(span.clone()))
+                }
+
                 Token::Pause => {
                     env.visit_pause(Some(span.clone()));
                     Ok(())
@@ -2480,10 +2507,12 @@ pub fn visit_located_token(
                     env.visit_print(exp.as_ref(), Some(span.clone()));
                     Ok(())
                 }
-                Token::MacroCall(..) => {
-                    env.visit_call_macro_or_build_struct(outer_token)
-                        .map_err(|e| e.locate(span.clone()))
-                }
+
+                Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice(), Some(span))
+                .map_err(|e| e.locate(span.clone()))
+                ,
+
+
 
                 Token::Incbin {
                     fname: _,
@@ -2762,9 +2791,9 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::SnaSet(flag, value) => env.visit_snaset(flag, value),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
-        Token::Macro(name, arguments, code) => env.visit_macro_definition(name, arguments, code),
+        Token::Macro(name, arguments, code) => env.visit_macro_definition(name, arguments, code, None),
         Token::MacroCall(_name, _parameters) => env.visit_call_macro_or_build_struct(token),
-        Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice()),
+        Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice(), None),
         Token::WaitNops(count) => env.visit_waitnops(count),
         Token::Next(label, source, delta) => {
             env.visit_next_and_co(label, source, delta.as_ref(), false)

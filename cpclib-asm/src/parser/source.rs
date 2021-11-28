@@ -7,6 +7,7 @@ use cpclib_common::nom::{
     Offset, Slice
 };
 use cpclib_common::nom_locate::LocatedSpan;
+use cpclib_tokens::symbols::Source;
 
 use super::context::ParserContext;
 use super::ParsingState;
@@ -24,6 +25,16 @@ pub struct Z80Span(
         )
     >
 );
+
+impl Into<Source> for &Z80Span {
+    fn into(self) -> Source {
+        Source::new(
+            self.context().current_filename.as_ref().unwrap().display().to_string(),
+            self.0.location_line() as _,
+            self.0.get_utf8_column()
+        )
+    }
+}
 
 impl From<&'src str> for Z80Span {
     fn from(s: &'src str) -> Self {
