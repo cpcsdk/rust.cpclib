@@ -238,6 +238,13 @@ impl TokenExt for Token {
                         }
                     }
 
+                    Mnemonic::Call => {
+                        match arg1 {
+                            Some(_) => 3,// unstable (5 if jump)
+                            None => 5
+                        }
+                    }
+
                     // XXX Not stable timing
                     &Mnemonic::Djnz => 3, // or 4
 

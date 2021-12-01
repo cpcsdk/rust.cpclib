@@ -46,7 +46,8 @@ const INSTRUCTIONS: &[&str] = &[
     "INIR", "JP", "JR", "LD", "LDD", "LDDR", "LDI", "LDIR", "NEG", "NOP", "OR", "OTDR", "OTIR",
     "OUT", "OUTD", "OUTI", "POP", "PUSH", "RES", "RET", "RETI", "RETN", "RL", "RLA", "RLC", "RLCA",
     "RLD", "RR", "RRA", "RRC", "RRCA", "RRD", "RST", "SBC", "SCF", "SET", "SLA", "SRA", "SRL",
-    "SUB", "XOR", "SL1", "SLL", "EXA"
+    "SUB", "XOR", "SL1", "SLL", 
+    "EXA", "EXD"
 ];
 
 const STAND_ALONE_DIRECTIVE: &[&str] = &[
@@ -1556,7 +1557,7 @@ pub fn parse_ex_af(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
                     parse_word("AF'")
                 ))
             ),
-            value((), parse_word("exa"))
+            value((), parse_word("EXA"))
         )),
         |_| Token::new_opcode(Mnemonic::ExAf, None, None)
     )(input)
@@ -1566,20 +1567,21 @@ pub fn parse_ex_af(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
 pub fn parse_ex_hl_de(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
         alt((
-            tuple((
+            value((),tuple((
                 tag_no_case("EX"),
                 space1,
                 parse_register_hl,
                 parse_comma,
                 parse_register_de
-            )),
-            tuple((
+            ))),
+            value((),tuple((
                 tag_no_case("EX"),
                 space1,
                 parse_register_de,
                 parse_comma,
                 parse_register_hl
-            ))
+            ))),
+            value((), parse_word("EXD"))
         )),
         |_| Token::new_opcode(Mnemonic::ExHlDe, None, None)
     )(input)
