@@ -815,10 +815,6 @@ impl Env {
             self.symbols.new_pass();
         }
 
-        dbg!(
-            &self.pass,
-            &self.request_additional_pass.read().unwrap().deref()
-        );
     }
 
     /// Handle the actions to do after assembling.

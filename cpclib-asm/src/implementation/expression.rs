@@ -165,9 +165,18 @@ impl ExprEvaluationExt for Expr {
                     symbol: label.clone(),
                     isnot: "a value".into(),
                 })},
-                None => Err(AssemblerError::UnknownSymbol {
-                    symbol: label.to_owned(),
-                    closest: sym.closest_symbol(label, SymbolFor::Number)?,
+                None => Err(if env.pass().is_first_pass() {
+                    // no need to lost time to make the leveinstein search
+                    AssemblerError::UnknownSymbol {
+                        symbol: label.to_owned(),
+                        closest: None,
+                    }
+                } else {
+                    // here it is more problematic
+                    AssemblerError::UnknownSymbol {
+                        symbol: label.to_owned(),
+                        closest: sym.closest_symbol(label, SymbolFor::Number)?,
+                    }
                 }),
             },
 
