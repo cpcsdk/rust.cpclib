@@ -13,6 +13,7 @@ use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
 use crate::{ExprResult, MacroParam, Token};
+use cpclib_common::rayon::prelude::*;
 
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone)]
@@ -1146,11 +1147,12 @@ impl SymbolsTable {
         symbol: S,
         r#for: SymbolFor
     ) -> Result<Option<SmolStr>, SymbolError> {
+        use cpclib_common::rayon::iter::IntoParallelRefIterator;
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self
             .map
-            .iter()
+            .par_iter()
             .filter(|(_k, v)| {
                 match (v, r#for) {
                     (Value::Expr(_), SymbolFor::Number)
