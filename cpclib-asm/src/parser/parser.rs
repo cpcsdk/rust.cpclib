@@ -144,6 +144,7 @@ const END_DIRECTIVE: &[&str] = &[
     "WEND"
 ];
 
+// tODO use hash-based structures
 lazy_static::lazy_static! {
     static ref _DOTTED_STAND_ALONE_DIRECTIVE: Vec<String> = STAND_ALONE_DIRECTIVE
                                                 .iter()
@@ -344,7 +345,6 @@ pub fn parse_z80_line(
 fn inner_code(mut input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     let mut tokens = Vec::new();
     loop {
-        dbg!("loop", &input);
         // check if the line need to be parsed (ie there is no end directive)
         let must_break = input.trim().is_empty() || {
             // TODO take into account potential label
@@ -355,12 +355,11 @@ fn inner_code(mut input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, Verbose
             }
         };
         if must_break {
-            dbg!("LEAVE the inner code loop", &input);
             break;
         };
 
         // really parse the line
-        let (line_input, mut tok) = dbg!(cut(context("[DBG] Inner loop", parse_z80_line))(input))?;
+        let (line_input, mut tok) = cut(context("[DBG] Inner loop", parse_z80_line))(input)?;
         input = line_input;
         tokens.append(&mut tok);
     }
@@ -658,16 +657,12 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
 
         let (input, value) = preceded(my_space0, opt(parse_directive_word("CASE")))(input)?;
         loop_start = if value.is_some() {
-            dbg!("Handle new case");
             let (input, value) = cut(context(
                 "SWITCH: case value error.",
                 delimited(space0, expr, opt(tag(":")))
             ))(input)?;
-            dbg!(&value);
-            dbg!("Before reading listing");
 
             let (input, inner) = cut(context("SWITCH: error in case code", inner_code))(input)?;
-            dbg!("after reading listing");
 
             let (input, do_break) = opt(preceded(space0, parse_directive_word("BREAK")))(input)?;
 
@@ -677,10 +672,14 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
                     .unwrap_or_else(|_| LocatedListing::new_empty_span(input.clone())),
                 do_break.is_some()
             ));
-            dbg!(input)
+            input
         }
         else {
-            let (input, _) = preceded(space0, parse_directive_word("DEFAULT"))(input)?;
+            let (input, _) = cut(context("Only CASE, DEFAULT or ENDSWITCH are expected.", delimited(
+                space0, 
+                parse_directive_word("DEFAULT"),
+                opt(pair(space0, tag(":")))
+            )))(input)?;
             let (input, default) =
                 cut(context("SWITCH: error in default case", inner_code))(input)?;
             default_listing = Some(
@@ -1106,9 +1105,6 @@ pub fn parse_z80_line_complete(
         ))
     )(input)?;
 
-    dbg!(input.clone());
-    dbg!(preceded(tag(":"), parse_forbidden_keyword)(input.clone()));
-
     let (input, comment) = if preceded(tag(":"), parse_forbidden_keyword)(input.clone()).is_err() {
         // we have not an ending keyword here
 
@@ -1122,10 +1118,10 @@ pub fn parse_z80_line_complete(
         let (input, _) = space0(input)?;
 
         // Ensure it is the end of line of file or a forbidden keyword
-        let (input, _) = cut(context("We expect nothng else at the end of the line", alt((line_ending, eof))))(input)?;
-        (input, Some(comment.unwrap().locate(before_comment)))
+        let (input, _) = cut(context("We expect nothing else at the end of the line", alt((line_ending, eof))))(input)?;
+        (input,comment.map(|c| c.locate(before_comment)))
     } else  {
-        (input, None)
+        (input.take_split(1).0, None) // Remove the #
     };
 
 
@@ -1135,8 +1131,6 @@ pub fn parse_z80_line_complete(
     if comment.is_some() {
         tokens.push(unsafe{comment.unwrap_unchecked()});
     }
-
-    dbg!(&tokens);
 
     Ok((input, tokens))
 }
@@ -2263,18 +2257,17 @@ pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, Z80Span, Verb
         END_DIRECTIVE.iter()
     };
     if !end_directive_iter
-        .find(|&&a| dbg!(a) == dbg!(name.to_uppercase()))
+        .find(|&&a| a == name.to_uppercase())
         .is_some()
     {
-        return dbg!(Err(Err::Error(VerboseError::from_error_kind(
+        return Err(Err::Error(VerboseError::from_error_kind(
             name,
             ErrorKind::AlphaNumeric
-        ))));
+        )));
     }
 
     let (input, _) = space0(input)?;
 
-    dbg!(&name);
     Ok((input, name))
 }
 pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseError<Z80Span>> {
