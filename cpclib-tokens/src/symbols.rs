@@ -161,8 +161,16 @@ impl Struct {
         }
     }
 
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
     pub fn source(&self) -> Option<&Source> {
         self.source.as_ref()
+    }
+
+    pub fn content(&self) -> &[(SmolStr, Token)] {
+        self.content.as_ref()
     }
 
     /// Get the size of each field
@@ -196,116 +204,7 @@ impl Struct {
         self.content.len()
     }
 
-    /// Generate the token that correspond to the current structure
-    /// Current bersion does not handle at all directive with several arguments
-    pub fn develop(&self, args: &[MacroParam]) -> String {
-        assert_eq!(args.len(), self.content.len());
 
-        let mut developped = self
-            .content
-            .iter()
-            .zip(args.iter())
-            .enumerate()
-            .map(|(_idx, ((_name, token), current_param))| {
-                match token {
-                    Token::Defb(c) | Token::Defw(c) => {
-                        assert_eq!(c.len(), 1);
-
-                        let tok = if matches!(token, Token::Defb(_)) {
-                            "db"
-                        }
-                        else {
-                            "dw"
-                        };
-
-                        if current_param.is_empty() {
-                            format!(" {} {}", tok, c[0].to_string())
-                        }
-                        else {
-                            format!(" {} {}", tok, current_param.expand())
-                        }
-                    }
-
-                    Token::MacroCall(n, current_default_arg) => {
-                        let mut call = format!(" {} ", n);
-
-                        // The way to manage default/provided params differ depending on the combination
-                        let args = match (current_param, current_default_arg.len()) {
-                            // no default
-                            (_, 0) => {
-                                vec![current_param.expand()]
-                            }
-
-                            // one default
-                            (_, 1) => {
-                                let val = if current_param.is_empty() {
-                                    &current_default_arg[0]
-                                }
-                                else {
-                                    current_param
-                                };
-                                vec![val.expand()]
-                            }
-
-                            // default is several, provided is single. Use provided only if not empty
-                            (MacroParam::Single(_), _nb_default) => {
-                                let mut default_iter = current_default_arg.iter();
-                                let first_default = default_iter.next().unwrap();
-                                let mut collected = Vec::new();
-                                collected.push(if current_param.is_empty() {
-                                    first_default
-                                }
-                                else {
-                                    current_param
-                                });
-                                collected.extend(default_iter);
-
-                                collected.iter().map(|p| p.expand()).collect_vec()
-                            }
-
-                            // default and provided are several
-                            (MacroParam::List(all_curr), nb_default) => {
-                                let max_size = all_curr.len().max(nb_default);
-
-                                let mut collected = Vec::new();
-                                for idx2 in 0..max_size {
-                                    if idx2 >= all_curr.len() {
-                                        collected.push(current_default_arg[idx2].expand());
-                                    }
-                                    else if idx2 >= nb_default {
-                                        collected.push(all_curr[idx2].expand());
-                                    }
-                                    else {
-                                        let current = &all_curr[idx2];
-                                        let default = &current_default_arg[idx2];
-
-                                        if current.is_empty() {
-                                            collected.push(default.expand());
-                                        }
-                                        else {
-                                            collected.push(current.expand());
-                                        }
-                                    }
-                                }
-                                collected
-                            }
-                        };
-
-                        call.push_str(&args.join(","));
-                        call
-                    }
-                    _ => unreachable!("{:?}", token)
-                }
-            })
-            .join("\n");
-
-        let last = developped.pop().unwrap();
-        developped.push(last);
-        if last != 'n' {
-            developped.push('\n');
-        }
-        developped
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -343,7 +242,7 @@ pub struct Macro {
     // The name of the macro
     name: SmolStr,
     // The name of its arguments
-    args: Vec<SmolStr>,
+    params: Vec<SmolStr>,
     // The content
     code: String,
     // Origin of the macro (for error messages)
@@ -351,13 +250,17 @@ pub struct Macro {
 }
 
 impl Macro {
-    pub fn new(name: SmolStr, args: &[SmolStr], code: String, source: Option<Source>) -> Self {
+    pub fn new(name: SmolStr, params: &[SmolStr], code: String, source: Option<Source>) -> Self {
         Macro {
             name,
-            args: args.to_vec(),
+            params: params.to_vec(),
             code,
             source
         }
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_str()
     }
 
     pub fn source(&self) -> Option<&Source> {
@@ -368,27 +271,15 @@ impl Macro {
         self.code.as_ref()
     }
 
-    pub fn args(&self) -> &[SmolStr] {
-        &self.args
+    pub fn params(&self) -> &[SmolStr] {
+        &self.params
     }
 
     pub fn nb_args(&self) -> usize {
-        self.args.len()
+        self.params.len()
     }
 
-    /// Develop the macro with the given arguments
-    pub fn develop(&self, args: &[MacroParam]) -> String {
-        //        assert_eq!(args.len(), self.nb_args());
 
-        let mut listing = self.code.to_string();
-
-        // replace the arguments for the listing
-        for (argname, argvalue) in self.args.iter().zip(args.iter()) {
-            listing = listing.replace(&format!("{{{}}}", argname), &argvalue.expand());
-        }
-
-        listing
-    }
 }
 
 #[derive(Debug, Clone)]

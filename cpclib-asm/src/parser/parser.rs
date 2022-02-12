@@ -97,6 +97,7 @@ const STAND_ALONE_DIRECTIVE: &[&str] = &[
     "RUN",
     "SAVE",
     "SECTION",
+    "SNAINIT", "SNAPINIT",
     "SNASET",
     "STR",
     "TICKER",
@@ -292,7 +293,7 @@ pub fn parse_z80_line(
     let (input2, tokens) = tuple((
         context("[DBG]not eof", not(eof)),
         alt((
-            context("[DBG]empty line", parse_empty_line),
+            context("[DBG] empty line", parse_empty_line),
             context(
                 "[DBG] code embeders",
                 delimited(
@@ -301,7 +302,7 @@ pub fn parse_z80_line(
                         map(context("basic", parse_basic), |t| {
                             vec![t.locate(before_elem.clone())]
                         }),
-                        map(
+                        map(context("block instruction",
                             alt((
                                 context("macro definition", parse_macro),
                                 context("[DBG] crunched section", parse_crunched_section),
@@ -313,7 +314,7 @@ pub fn parse_z80_line(
                                 context("[DBG] while", parse_while),
                                 context("[DBG] rorg", parse_rorg),
                                 context("[DBG] condition", parse_conditional)
-                            )),
+                            ))),
                             |lt| vec![lt]
                         )
                     )),
@@ -343,23 +344,23 @@ pub fn parse_z80_line(
 fn inner_code(mut input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     let mut tokens = Vec::new();
     loop {
-        // dbg!("loop");
+        dbg!("loop", &input);
         // check if the line need to be parsed (ie there is no end directive)
         let must_break = input.trim().is_empty() || {
             // TODO take into account potential label
-            let maybe_keyword = opt(preceded(space0, parse_end_directive))(input.clone());
+            let maybe_keyword = opt(preceded(delimited(space0, opt(tag(":")), space0), parse_end_directive))(input.clone());
             match maybe_keyword {
                 Ok((_, Some(_))) => true,
                 _ => false
             }
         };
         if must_break {
-            //   dbg!("LEAVE the inner code loop", &input);
+            dbg!("LEAVE the inner code loop", &input);
             break;
         };
 
         // really parse the line
-        let (line_input, mut tok) = cut(context("[DBG] Inner loop", parse_z80_line))(input)?;
+        let (line_input, mut tok) = dbg!(cut(context("[DBG] Inner loop", parse_z80_line))(input))?;
         input = line_input;
         tokens.append(&mut tok);
     }
@@ -657,11 +658,17 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
 
         let (input, value) = preceded(my_space0, opt(parse_directive_word("CASE")))(input)?;
         loop_start = if value.is_some() {
+            dbg!("Handle new case");
             let (input, value) = cut(context(
                 "SWITCH: case value error.",
                 delimited(space0, expr, opt(tag(":")))
             ))(input)?;
+            dbg!(&value);
+            dbg!("Before reading listing");
+
             let (input, inner) = cut(context("SWITCH: error in case code", inner_code))(input)?;
+            dbg!("after reading listing");
+
             let (input, do_break) = opt(preceded(space0, parse_directive_word("BREAK")))(input)?;
 
             cases_listing.push((
@@ -670,7 +677,7 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
                     .unwrap_or_else(|_| LocatedListing::new_empty_span(input.clone())),
                 do_break.is_some()
             ));
-            input
+            dbg!(input)
         }
         else {
             let (input, _) = preceded(space0, parse_directive_word("DEFAULT"))(input)?;
@@ -966,11 +973,11 @@ pub fn parse_z80_line_complete(
     // Eat optional label (or macro call)
     let before_label = input.clone();
     let (input, label_or_macro) = opt(preceded(space0, parse_label(false)))(input)?;
-    let (mut input, mut know_it_is_label) = if label_or_macro.is_some() {
-        alt((
+    let (mut input, mut i_know_it_is_a_label) = if label_or_macro.is_some() {
+        context("chec label :", alt((
             value(true, tuple((space0, char(':'), space0))),
             value(false, space1)
-        ))(input)?
+        )))(input)?
     }
     else {
         (input, false)
@@ -978,10 +985,10 @@ pub fn parse_z80_line_complete(
 
     let mut tokens = Vec::new();
     // Try to parse a macro if it is not a label
-    let mut know_it_is_macro = false;
+    let mut i_know_it_is_a_macro = false;
     let nb_warnings = input.extra.1.warnings().len();
 
-    let r#macro = if label_or_macro.is_some() && !know_it_is_label {
+    let r#macro = if label_or_macro.is_some() && !i_know_it_is_a_label {
         match context(
             "MACRO or struct call",
             preceded(space0, parse_macro_or_struct_call(false, false))
@@ -992,7 +999,7 @@ pub fn parse_z80_line_complete(
                 let res: IResult<Z80Span, _, VerboseError<Z80Span>> =
                     preceded(space0, alt((line_ending, tag(":"), tag(";"))))(input2.clone());
                 if res.is_ok() {
-                    know_it_is_macro = true;
+                    i_know_it_is_a_macro = true;
                     input = input2;
                     Some(LocatedToken::Standard {
                         token: r#macro,
@@ -1001,13 +1008,13 @@ pub fn parse_z80_line_complete(
                     // we know it is a macro and not a label, so we can stop here
                 }
                 else {
-                    know_it_is_label = true;
+                    i_know_it_is_a_label = true;
                     None
                 }
             }
             Err(_) => {
                 // no change of input that is still after the label
-                know_it_is_label = true;
+                i_know_it_is_a_label = true;
                 None
             }
         }
@@ -1016,7 +1023,7 @@ pub fn parse_z80_line_complete(
         None
     };
 
-    if know_it_is_label {
+    if i_know_it_is_a_label {
         // remove the unwanted  warnings
         while nb_warnings < input.extra.1.warnings().len() {
             input.extra.1.pop_warning();
@@ -1024,7 +1031,7 @@ pub fn parse_z80_line_complete(
     }
 
     // We add first token as a label or macro
-    if label_or_macro.is_some() && know_it_is_label {
+    if label_or_macro.is_some() && i_know_it_is_a_label {
         tokens.push(Token::Label(label_or_macro.clone().unwrap()).locate(before_label.clone()));
     }
     else if r#macro.is_some() {
@@ -1036,7 +1043,7 @@ pub fn parse_z80_line_complete(
 
     // here either we detected a label, either there was no macro
     // and we want to add the corresponding opcode
-    let input = if !know_it_is_macro {
+    let input = if !i_know_it_is_a_macro {
         // input is after the label if any
         let (input2, _) = cut(context(
             "Parse issue, no end directive expected here",
@@ -1099,24 +1106,37 @@ pub fn parse_z80_line_complete(
         ))
     )(input)?;
 
+    dbg!(input.clone());
+    dbg!(preceded(tag(":"), parse_forbidden_keyword)(input.clone()));
+
+    let (input, comment) = if preceded(tag(":"), parse_forbidden_keyword)(input.clone()).is_err() {
+        // we have not an ending keyword here
+
     // eat extra : as in Targhans code
-    let (input, _) = opt(delimited(space0, tag(":"), space0))(input)?;
+        let (input, _) = opt(delimited(space0, tag(":"), space0))(input)?;
 
-    // Eat final comment
-    let (input, _) = space0(input)?;
-    let before_comment = input.clone();
-    let (input, comment) = opt(parse_comment)(input)?;
-    let (input, _) = space0(input)?;
+        // Eat final comment
+        let (input, _) = space0(input)?;
+        let before_comment = input.clone();
+        let (input, comment) = opt(parse_comment)(input)?;
+        let (input, _) = space0(input)?;
 
-    // Ensure it is the end of line of file
-    let (input, _) = cut(alt((line_ending, eof)))(input)?;
+        // Ensure it is the end of line of file or a forbidden keyword
+        let (input, _) = cut(context("We expect nothng else at the end of the line", alt((line_ending, eof))))(input)?;
+        (input, Some(comment.unwrap().locate(before_comment)))
+    } else  {
+        (input, None)
+    };
+
 
     for opcode in additional_opcodes {
         tokens.push(opcode);
     }
     if comment.is_some() {
-        tokens.push(comment.unwrap().locate(before_comment));
+        tokens.push(unsafe{comment.unwrap_unchecked()});
     }
+
+    dbg!(&tokens);
 
     Ok((input, tokens))
 }
@@ -1656,6 +1676,7 @@ pub fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Verbos
         context("[DBG] assign", parse_assign),
         context("[DBG] range", parse_range),
         context("[DBG] section", parse_section),
+        context("[DBG] snainit", parse_snainit),
         context(
             "[DBG] macro or struct call",
             parse_macro_or_struct_call(true, false)
@@ -2231,9 +2252,9 @@ pub fn parse_db_or_dw_or_str(input: Z80Span) -> IResult<Z80Span, Token, VerboseE
 }
 
 // Fail if we do not read a forbidden keyword
-pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, SmolStr, VerboseError<Z80Span>> {
+pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
     let (input, _) = space0(input)?;
-    let (input, name) = parse_label(false)(input)?;
+    let (input, name) = context("Unable to read directive name",is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"))(input)?;
 
     let mut end_directive_iter = if input.context().dotted_directive {
         DOTTED_END_DIRECTIVE.iter()
@@ -2242,17 +2263,18 @@ pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, SmolStr, Verb
         END_DIRECTIVE.iter()
     };
     if !end_directive_iter
-        .find(|&&a| a == name.to_uppercase())
+        .find(|&&a| dbg!(a) == dbg!(name.to_uppercase()))
         .is_some()
     {
-        return Err(Err::Error(VerboseError::from_error_kind(
-            input,
+        return dbg!(Err(Err::Error(VerboseError::from_error_kind(
+            name,
             ErrorKind::AlphaNumeric
-        )));
+        ))));
     }
 
     let (input, _) = space0(input)?;
 
+    dbg!(&name);
     Ok((input, name))
 }
 pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, MacroParam, VerboseError<Z80Span>> {
@@ -3343,6 +3365,16 @@ fn parse_opcode_no_arg3(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<
     ))(input)?;
 
     Ok((input, Token::new_opcode(mnemonic, None, None)))
+}
+
+fn parse_snainit(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+    let (input, _) = alt((
+        parse_directive_word("SNAPINIT"),
+        parse_directive_word("SNAINIT")
+    ))(input)?;
+    let (input, fname) = parse_fname(input)?;
+
+    Ok((input, Token::SnaInit(fname.to_string())))
 }
 
 fn parse_struct(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {

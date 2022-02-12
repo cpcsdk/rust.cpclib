@@ -1,0 +1,40 @@
+[cpclib-asm\src/bin/basm.rs:48] &e = AssemblerError {
+    error: RelocatedError {
+        error: OutputProtected {
+            area: 32768..=49151,
+            address: 32775,
+        },
+        span: LocatedSpan {
+            offset: 49,
+            line: 6,
+            fragment: "defb \"memory issue\"",
+            extra: (
+                "\n    org 0x8007\n\n    protect 0x8000, 0xbfff\n\n    defb \"memory issue\"",
+                ParserContext {
+                    current_filename: Some(
+                        "\\\\?\\C:\\Users\\giotr\\perso\\CPC\\rust.cpclib\\cpclib-asm\\tests\\asm\\bad_protect.asm",
+                    ),
+                    context_name: None,
+                    search_path: [
+                        "C:\\Users\\giotr\\perso\\CPC\\rust.cpclib\\cpclib-asm\\tests\\asm",
+                    ],
+                    read_referenced_files: true,
+                    parse_warning: RwLock {
+                        data: [],
+                        poisoned: false,
+                        ..
+                    },
+                },
+            ),
+        },
+    },
+}
+Error while assembling.
+Assembling error:
+[0m[1m[38;5;9merror[0m[1m: Forbidden output[0m
+  [0m[36m┌─[0m \\?\C:\Users\giotr\perso\CPC\rust.cpclib\cpclib-asm\tests\asm\bad_protect.asm:6:5
+  [0m[36m│[0m
+[0m[36m6[0m [0m[36m│[0m     [0m[31mdefb "memory issue"[0m
+  [0m[36m│[0m     [0m[31m^^^^^^^^^^^^^^^^^^^[0m [0m[31mTentative to write in 0x8007 in a protected area [0x8000:0xBFFF][0m
+
+

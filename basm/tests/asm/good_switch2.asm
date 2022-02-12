@@ -1,0 +1,9 @@
+
+	switch 3
+	; one comment
+	case 1: db 1 : 	break
+	case 3: db 3 	; another comment
+	case 4: db 4 : break
+	case 5 : db 5
+	default : db 6
+	endswitch

@@ -1,0 +1,762 @@
+{
+    // Utilisez IntelliSense pour en savoir plus sur les attributs possibles.
+    // Pointez pour afficher la description des attributs existants.
+    // Pour plus d'informations, visitez : https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'cpclib-asm'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=cpclib-asm"
+                ],
+                "filter": {
+                    "name": "cpclib-asm",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'basm'",
+            "cargo": {
+                "args": [
+                    "+nightly",
+                    "build",
+                    "--bin=basm",
+                    "--package=cpclib-asm",
+                    "--all-features"
+                    
+                ],
+                "filter": {
+                    "name": "basm",
+                    "kind": "bin"
+                }
+            },
+            "args": ["cpclib-asm\\tests\\asm\\good_repeat.asm", "--lst", "-"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'basm'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=basm",
+                    "--package=cpclib-asm"
+                ],
+                "filter": {
+                    "name": "basm",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'bdasm'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=bdasm",
+                    "--package=cpclib-asm"
+                ],
+                "filter": {
+                    "name": "bdasm",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'bdasm'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=bdasm",
+                    "--package=cpclib-asm"
+                ],
+                "filter": {
+                    "name": "bdasm",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'expr_regressions'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=expr_regressions",
+                    "--package=cpclib-asm"
+                ],
+                "filter": {
+                    "name": "expr_regressions",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'parse_regression'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=parse_regression",
+                    "--package=cpclib-asm"
+                ],
+                "filter": {
+                    "name": "parse_regression",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'regression_assembler'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=regression_assembler",
+                    "--package=cpclib-asm"
+                ],
+                "filter": {
+                    "name": "regression_assembler",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'cpclib-basic'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=cpclib-basic"
+                ],
+                "filter": {
+                    "name": "cpclib-basic",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'locomotive'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=locomotive",
+                    "--package=cpclib-basic"
+                ],
+                "filter": {
+                    "name": "locomotive",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'locomotive'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=locomotive",
+                    "--package=cpclib-basic"
+                ],
+                "filter": {
+                    "name": "locomotive",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'cpclib-disc'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=cpclib-disc"
+                ],
+                "filter": {
+                    "name": "cpclib-disc",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'dskmanager'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=dskmanager",
+                    "--package=cpclib-disc"
+                ],
+                "filter": {
+                    "name": "dskmanager",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'dskmanager'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=dskmanager",
+                    "--package=cpclib-disc"
+                ],
+                "filter": {
+                    "name": "dskmanager",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'hideur'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=hideur",
+                    "--package=cpclib-disc"
+                ],
+                "filter": {
+                    "name": "hideur",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'hideur'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=hideur",
+                    "--package=cpclib-disc"
+                ],
+                "filter": {
+                    "name": "hideur",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'catalog'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=catalog",
+                    "--package=cpclib-disc"
+                ],
+                "filter": {
+                    "name": "catalog",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'catalog'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=catalog",
+                    "--package=cpclib-disc"
+                ],
+                "filter": {
+                    "name": "catalog",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'cpclib-sna'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=cpclib-sna"
+                ],
+                "filter": {
+                    "name": "cpclib-sna",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'snapshot'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=snapshot",
+                    "--package=cpclib-sna"
+                ],
+                "filter": {
+                    "name": "snapshot",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'snapshot'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=snapshot",
+                    "--package=cpclib-sna"
+                ],
+                "filter": {
+                    "name": "snapshot",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'cpclib-tokens'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=cpclib-tokens"
+                ],
+                "filter": {
+                    "name": "cpclib-tokens",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'cpclib-xfer'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=cpclib-xfer"
+                ],
+                "filter": {
+                    "name": "cpclib-xfer",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'cpclib-xfertool'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=cpclib-xfertool",
+                    "--package=cpclib-xfertool"
+                ],
+                "filter": {
+                    "name": "cpclib-xfertool",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'cpclib-xfertool'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=cpclib-xfertool",
+                    "--package=cpclib-xfertool"
+                ],
+                "filter": {
+                    "name": "cpclib-xfertool",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'cpclib-z80emu'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=cpclib-z80emu"
+                ],
+                "filter": {
+                    "name": "cpclib-z80emu",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'cpclib'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "cpclib",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'imgconverter'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=imgconverter",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "imgconverter",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'imgconverter'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=imgconverter",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "imgconverter",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'amsdos'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=amsdos",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "amsdos",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'assemble'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=assemble",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "assemble",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'builder'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=builder",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "builder",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'disccfgparser'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=disccfgparser",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "disccfgparser",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'edsk'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=edsk",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "edsk",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'errors'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=errors",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "errors",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'ga'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=ga",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "ga",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'macros'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=macros",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "macros",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'parser'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=parser",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "parser",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'sna'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=sna",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "sna",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'z80'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=z80",
+                    "--package=cpclib"
+                ],
+                "filter": {
+                    "name": "z80",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

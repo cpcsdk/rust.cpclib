@@ -43,15 +43,7 @@ impl MacroParam {
         }
     }
 
-    /// Expansion is slightly different thant to_string has it does not print the bracket
-    pub fn expand(&self) -> String {
-        match self {
-            Self::Single(s) => s.clone(),
-            Self::List(l) => {
-                format!("{}", l.iter().map(|p| p.to_string()).join(","))
-            }
-        }
-    }
+
 
     /// Rename the arguments when they are a macro call
     /// XXX I am pretty sure such implementation is faulty when there are nested calls !!! It needs to be checked (maybe nested stuff has to be removed)
@@ -406,6 +398,10 @@ pub enum CharsetFormat {
     Interval(char, char, Expr)
 }
 
+
+/// TODO use a more complete type that can use a subset of functions to generate a string
+pub type Filename = String;
+
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]
 #[derive(Debug)]
@@ -446,7 +442,7 @@ pub enum Token {
 
     /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
     Incbin {
-        fname: String,
+        fname: Filename,
         offset: Option<Expr>,
         length: Option<Expr>,
         extended_offset: Option<Expr>,
@@ -455,7 +451,7 @@ pub enum Token {
         transformation: BinaryTransformation
     },
     // file may or may not be read during parse. If not, it is read on demand when assembling
-    Include(String, RwLock<Option<Listing>>, Option<SmolStr>, bool),
+    Include(Filename, RwLock<Option<Listing>>, Option<SmolStr>, bool),
     Iterate(SmolStr, Vec<Expr>, Listing),
 
     Label(SmolStr),
@@ -508,7 +504,7 @@ pub enum Token {
     Run(Expr, Option<Expr>),
 
     Save {
-        filename: String,
+        filename: Filename,
         address: Option<Expr>,
         size: Option<Expr>,
         save_type: Option<SaveType>,
@@ -520,6 +516,7 @@ pub enum Token {
     SetCrtc(Expr),
     SetN(SmolStr, SmolStr, Option<Expr>),
     /// This directive setup a value for a given flag of the snapshot
+    SnaInit(Filename),
     SnaSet(
         cpclib_sna::flags::SnapshotFlag,
         cpclib_sna::flags::FlagValue
@@ -632,6 +629,7 @@ impl Clone for Token {
             Token::SetCPC(b) => Token::SetCPC(b.clone()),
             Token::SetCrtc(c) => Token::SetCrtc(c.clone()),
             Token::SetN(a, b, c) => Token::SetN(a.clone(), b.clone(), c.clone()),
+            Token::SnaInit(a) => Token::SnaInit(a.clone()),
             Token::SnaSet(a, b) => Token::SnaSet(a.clone(), b.clone()),
             Token::StableTicker(a) => Token::StableTicker(a.clone()),
             Token::Str(a) => Token::Str(a.clone()),
