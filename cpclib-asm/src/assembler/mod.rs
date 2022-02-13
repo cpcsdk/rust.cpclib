@@ -2156,7 +2156,12 @@ impl Env {
                 ),
             });
         }
-        self.sna = Snapshot::load(fname);
+        self.sna = Snapshot::load(fname).map_err(|e| AssemblerError::AssemblingError{msg: format!("Error while loading snapshot. {}", e)})?;
+        dbg!(self.sna.memory_size_header());
+        dbg!(self.sna.chunks().iter().map(|c| String::from_utf8_lossy(c.code())).collect_vec());
+        self.sna.unwrap_memory_chunks();
+        dbg!(self.sna.memory_size_header());
+        dbg!(self.sna.chunks().iter().map(|c| String::from_utf8_lossy(c.code())).collect_vec());
         Ok(())
     }
 

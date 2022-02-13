@@ -14,6 +14,7 @@
         addy = ({y}&7) + #800 + ({y}>>3)*80
         adr = #C000 + delta + addy
 
+        print "Plot in ", {hex}adr
         ld hl, adr : ld a, pix : or (hl) : ld (hl),a
     
          

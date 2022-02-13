@@ -132,24 +132,25 @@ impl Snapshot {
         }
     }
 
-    pub fn load<P: AsRef<Path>>(filename: P) -> Self {
+    pub fn load<P: AsRef<Path>>(filename: P) -> Result<Self, String> {
         let mut sna = Self::default();
         let filename = filename.as_ref();
 
         // Read the full content of the file
         let mut file_content = {
-            let mut f = File::open(filename).expect("file not found");
+            let mut f = File::open(filename)
+                .map_err(|e| e.to_string())?;
             let mut content = Vec::new();
             f.read_to_end(&mut content);
             content
         };
+
         // Copy the header
-        sna.header
-            .copy_from_slice(file_content.drain(0..0x100).as_slice());
+        sna.header.copy_from_slice(file_content.drain(0..0x100).as_slice());
         let memory_dump_size = sna.memory_size_header() as usize;
         let version = sna.version_header();
 
-        assert!(memory_dump_size * 1024 <= file_content.len());
+        assert!(dbg!(memory_dump_size * 1024) <= dbg!(file_content.len()));
         sna.memory = SnapshotMemory::new(file_content.drain(0..memory_dump_size * 1024).as_slice());
 
         if version == 3 {
@@ -158,7 +159,7 @@ impl Snapshot {
             }
         }
 
-        sna
+        Ok(sna)
     }
 
     /// Count the number of kilobytes that are within chunks
@@ -241,51 +242,6 @@ impl Snapshot {
         cloned
     }
 
-    /// Read a chunk if available
-    fn read_chunk(file_content: &mut Vec<u8>, _sna: &mut Self) -> Option<SnapshotChunk> {
-        if file_content.len() < 4 {
-            return None;
-        }
-
-        let code = file_content.drain(0..4).as_slice().to_vec();
-        let data_length = file_content.drain(0..4).as_slice().to_vec();
-
-        // eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
-
-        // compute the data length based on the 4 bytes that represent it
-        let data_length = {
-            let mut count = 0;
-            for i in 0..4 {
-                count = 256 * count + data_length[3 - i] as usize;
-            }
-            count
-        };
-
-        // read the appropriate number of bytes
-        let content = file_content.drain(0..data_length).as_slice().to_vec();
-
-        // Generate the 4 size array
-        let code = {
-            let mut new_code = [0; 4];
-            assert_eq!(code.len(), 4);
-            new_code.copy_from_slice(&code);
-            new_code
-        };
-        let chunk = match code {
-            [b'M', b'E', b'M', _] => MemoryChunk::from(code, content).into(), //
-            // ['B', 'R', 'K', 'S'] => BreakpointChunk::from(content),
-            // ['D', 'S', 'C', _] => InsertedDiscChunk::from(code, content)
-            // ['C', 'P', 'C', '+'] => CPCPlusChunk::from(content)
-            _ => UnknownChunk::from(code, content).into()
-        };
-
-        Some(chunk)
-    }
-
-    pub fn nb_chunks(&self) -> usize {
-        self.chunks.len()
-    }
-
     /// Save the snapshot V3 on disc
     #[deprecated]
     pub fn save_sna<P: AsRef<Path>>(&self, fname: P) -> Result<(), std::io::Error> {
@@ -332,127 +288,9 @@ impl Snapshot {
         Ok(())
     }
 
-    /// Returns all the memory of the snapshot in a linear way by mixing both the hardcoded memory of the snapshot and the memory of chunks
-    pub fn memory_dump(&self) -> Vec<u8> {
-        // by default, the memory i already coded
-        let mut memory = self.memory.clone();
 
-        let mut max_memory = self.memory_size_header() as usize * 1024;
 
-        // but it can be patched by chunks
-        for chunk in &self.chunks {
-            if let Some(memory_chunk) = chunk.memory_chunk() {
-                let address = memory_chunk.abstract_address();
-                let content = memory_chunk.uncrunched_memory();
-                max_memory = address + 64 * 1024;
 
-                if memory.len() < max_memory {
-                    memory = memory.increased_size();
-                }
-                memory.memory_mut()[address..max_memory].copy_from_slice(&content);
-                // TODO treat the case where extra memory is used as `memroy` may need to be extended
-            }
-        }
-        memory.memory()[..max_memory].to_vec()
-    }
-
-    /// Check if the snapshot has some memory chunk
-    pub fn has_memory_chunk(&self) -> bool {
-        self.chunks.iter().any(|c| c.is_memory_chunk())
-    }
-
-    /// Returns the memory that is hardcoded in the snapshot
-    pub fn memory_block(&self) -> &SnapshotMemory {
-        &self.memory
-    }
-
-    /// Add the content of a file at the required position
-    pub fn add_file(&mut self, fname: &str, address: usize) -> Result<(), SnapshotError> {
-        let f = File::open(fname).unwrap();
-        let data: Vec<u8> = f.bytes().map(Result::unwrap).collect();
-        let size = data.len();
-
-        self.log(format!(
-            "Add {} in 0x{:x} (0x{:x} bytes)",
-            fname, address, size
-        ));
-        self.add_data(&data, address)
-    }
-
-    /// Add the memory content at the required posiiton
-    ///
-    /// ```
-    /// use cpclib_sna::Snapshot;
-    ///
-    /// let mut sna = Snapshot::default();
-    /// let data = vec![0,2,3,5];
-    /// sna.add_data(&data, 0x4000);
-    /// ```
-    /// TODO: re-implement with set_byte
-    pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError> {
-        if address + data.len() > 0x10000 * 2 {
-            Err(SnapshotError::NotEnougSpaceAvailable)
-        }
-        else {
-            if address < 0x10000 && (address + data.len()) >= 0x10000 {
-                eprintln!("[Warning] Start of file is in main memory (0x{:x}) and  end of file is in extra banks (0x{:x}).", address, (address + data.len()));
-            }
-            // TODO add warning when writting in other banks
-
-            for (idx, byte) in data.iter().enumerate() {
-                let current_pos = address + idx;
-                if self.memory_already_written.test(current_pos) {
-                    eprintln!("[WARNING] Replace memory in 0x{:x}", current_pos);
-                }
-                self.memory.memory_mut()[current_pos] = *byte;
-                self.memory_already_written.set(current_pos);
-            }
-
-            Ok(())
-        }
-    }
-
-    pub fn add_chunk<C: Into<SnapshotChunk>>(&mut self, c: C) {
-        self.chunks.push(c.into());
-    }
-
-    #[deprecated]
-    pub fn set_memory(&mut self, address: u32, value: u8) {
-        self.set_byte(address, value);
-    }
-
-    /// Change a memory value. Panic if memory size is not appropriate
-    /// If memory is saved insided chuncks, the chuncks are unwrapped
-    pub fn set_byte(&mut self, address: u32, value: u8) {
-        let address = address as usize;
-
-        // unroll chuncks if any
-        if self.memory.is_empty() {
-            self.memory = SnapshotMemory::new(&self.memory_dump());
-            let mut idx = 0;
-            while idx < self.chunks.len() {
-                if self.chunks[0].is_memory_chunk() {
-                    self.chunks.remove(idx);
-                }
-                else {
-                    idx += 1;
-                }
-            }
-            self.set_memory_size_header((self.memory.len() / 1024) as u16);
-        }
-
-        // resize if needed
-        while self.memory.len() - 1 < address {
-            self.memory = self.memory.increased_size();
-        }
-
-        // finally write in memory
-        self.memory.memory_mut()[address] = value;
-    }
-
-    pub fn get_byte(&self, address: u32) -> u8 {
-        self.memory.memory()[address as usize]
-    }
 
     /// Change the value of a flag
     pub fn set_value(&mut self, flag: SnapshotFlag, value: u16) -> Result<(), SnapshotError> {
@@ -509,6 +347,200 @@ impl Snapshot {
             println!("{:?} => {}", &flag, &self.get_value(flag));
         }
     }
+}
+
+/// Memory relaterd code
+impl Snapshot {
+
+
+    #[deprecated]
+    pub fn set_memory(&mut self, address: u32, value: u8) {
+        self.set_byte(address, value);
+    }
+
+    /// To play easier with memory, remove all the memory chunks and use a linearized memory version
+    /// Memory array MUST be empty before calling this method
+    pub fn unwrap_memory_chunks(&mut  self) {
+        if self.memory.is_empty() {
+            // uncrunch the memory blocks
+            self.memory = SnapshotMemory::new(&self.memory_dump());
+
+            // remove the memory chunks
+            let mut idx = 0;
+            while idx < self.chunks.len() {
+                if self.chunks[idx].is_memory_chunk() {
+                    self.chunks.remove(idx);
+                    // no need to increment idx as the next chunk is at the same position
+                }
+                else {
+                    idx += 1;
+                }
+            }
+
+            // update the memory size
+            self.set_memory_size_header((self.memory.len() / 1024) as u16);
+        }
+    }
+
+    /// Change a memory value. Panic if memory size is not appropriate
+    /// If memory is saved insided chuncks, the chuncks are unwrapped
+    pub fn set_byte(&mut self, address: u32, value: u8) {
+        self.unwrap_memory_chunks();
+        let address = address as usize;
+
+        // resize if needed
+        while self.memory.len() - 1 < address {
+            self.memory = self.memory.increased_size();
+        }
+
+        // finally write in memory
+        self.memory.memory_mut()[address] = value;
+    }
+
+    /// Can only work on snapshot where memory is not stored in chunks.
+    /// TODO modify this behavior
+    pub fn get_byte(&self, address: u32) -> u8 {
+        self.memory.memory()[address as usize]
+    }
+
+        /// Returns all the memory of the snapshot in a linear way by mixing both the hardcoded memory of the snapshot and the memory of chunks
+        pub fn memory_dump(&self) -> Vec<u8> {
+            // by default, the memory i already coded
+            let mut memory = self.memory.clone();
+    
+            let mut max_memory = self.memory_size_header() as usize * 1024;
+    
+            // but it can be patched by chunks
+            for chunk in &self.chunks {
+                if let Some(memory_chunk) = chunk.memory_chunk() {
+                    let address = memory_chunk.abstract_address();
+                    let content = memory_chunk.uncrunched_memory();
+                    max_memory = address + 64 * 1024;
+    
+                    if memory.len() < max_memory {
+                        memory = memory.increased_size();
+                    }
+                    memory.memory_mut()[address..max_memory].copy_from_slice(&content);
+                    // TODO treat the case where extra memory is used as `memroy` may need to be extended
+                }
+            }
+            memory.memory()[..max_memory].to_vec()
+        }
+    
+        /// Check if the snapshot has some memory chunk
+        pub fn has_memory_chunk(&self) -> bool {
+            self.chunks.iter().any(|c| c.is_memory_chunk())
+        }
+    
+        /// Returns the memory that is hardcoded in the snapshot
+        pub fn memory_block(&self) -> &SnapshotMemory {
+            &self.memory
+        }
+    
+        /// Add the content of a file at the required position
+        pub fn add_file(&mut self, fname: &str, address: usize) -> Result<(), SnapshotError> {
+            let f = File::open(fname).unwrap();
+            let data: Vec<u8> = f.bytes().map(Result::unwrap).collect();
+            let size = data.len();
+    
+            self.log(format!(
+                "Add {} in 0x{:x} (0x{:x} bytes)",
+                fname, address, size
+            ));
+            self.add_data(&data, address)
+        }
+    
+        /// Add the memory content at the required posiiton
+        ///
+        /// ```
+        /// use cpclib_sna::Snapshot;
+        ///
+        /// let mut sna = Snapshot::default();
+        /// let data = vec![0,2,3,5];
+        /// sna.add_data(&data, 0x4000);
+        /// ```
+        /// TODO: re-implement with set_byte
+        pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError> {
+            if address + data.len() > 0x10000 * 2 {
+                Err(SnapshotError::NotEnougSpaceAvailable)
+            }
+            else {
+                if address < 0x10000 && (address + data.len()) >= 0x10000 {
+                    eprintln!("[Warning] Start of file is in main memory (0x{:x}) and  end of file is in extra banks (0x{:x}).", address, (address + data.len()));
+                }
+                // TODO add warning when writting in other banks
+    
+                for (idx, byte) in data.iter().enumerate() {
+                    let current_pos = address + idx;
+                    if self.memory_already_written.test(current_pos) {
+                        eprintln!("[WARNING] Replace memory in 0x{:x}", current_pos);
+                    }
+                    self.memory.memory_mut()[current_pos] = *byte;
+                    self.memory_already_written.set(current_pos);
+                }
+    
+                Ok(())
+            }
+        }
+}
+
+/// Chunks related code
+impl Snapshot {
+
+    /// Read a chunk if available
+    fn read_chunk(file_content: &mut Vec<u8>, _sna: &mut Self) -> Option<SnapshotChunk> {
+        if file_content.len() < 4 {
+            return None;
+        }
+
+        let code = file_content.drain(0..4).as_slice().to_vec();
+        let data_length = file_content.drain(0..4).as_slice().to_vec();
+
+        // eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
+
+        // compute the data length based on the 4 bytes that represent it
+        let data_length = {
+            let mut count = 0;
+            for i in 0..4 {
+                count = 256 * count + data_length[3 - i] as usize;
+            }
+            count
+        };
+
+        // read the appropriate number of bytes
+        let content = file_content.drain(0..data_length).as_slice().to_vec();
+
+        // Generate the 4 size array
+        let code = {
+            let mut new_code = [0; 4];
+            assert_eq!(code.len(), 4);
+            new_code.copy_from_slice(&code);
+            new_code
+        };
+        let chunk = match code {
+            [b'M', b'E', b'M', _] => MemoryChunk::from(code, content).into(), //
+            // ['B', 'R', 'K', 'S'] => BreakpointChunk::from(content),
+            // ['D', 'S', 'C', _] => InsertedDiscChunk::from(code, content)
+            // ['C', 'P', 'C', '+'] => CPCPlusChunk::from(content)
+            _ => UnknownChunk::from(code, content).into()
+        };
+
+        Some(chunk)
+    }
+
+    pub fn nb_chunks(&self) -> usize {
+        self.chunks.len()
+    }
+
+    pub fn chunks(&self) -> &[SnapshotChunk] {
+        &self.chunks
+    }
+
+
+    pub fn add_chunk<C: Into<SnapshotChunk>>(&mut self, c: C) {
+        self.chunks.push(c.into());
+    }
+
 }
 
 #[cfg(test)]
