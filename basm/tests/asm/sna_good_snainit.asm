@@ -11,10 +11,10 @@
             CASE 3: pix=%00010000 : BREAK
         ENDSWITCH
             
-        addy = ({y}&7) + #800 + ({y}>>3)*80
+        addy = ({y}&7)*#800 + ({y}>>3)*80
         adr = #C000 + delta + addy
 
-        print "Plot in ", {hex}adr
+        print "Plot in ", {hex}adr, " for ", {x}, ",", {y}
         ld hl, adr : ld a, pix : or (hl) : ld (hl),a
     
          
