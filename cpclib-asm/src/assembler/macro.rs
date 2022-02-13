@@ -7,6 +7,7 @@ use crate::error::AssemblerError;
 use crate::Env;
 use crate::preamble::Z80Span;
 use cpclib_common::itertools::Itertools;
+use cpclib_common::itertools::EitherOrBoth;
 
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
@@ -132,70 +133,76 @@ impl<'s,'a> StructWithArgs<'s,'a> {
 impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
         /// Generate the token that correspond to the current structure
     /// Current bersion does not handle at all directive with several arguments
+    /// BUG does not work when directives have a prefix
     fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
-        assert_eq!(self.args.len(), self.r#struct().content().len());
+        dbg!("{:?} != {:?}", self.args, self.r#struct().content());
+
+        let prefix = ""; // TODO acquire this prefix
 
         let mut developped: String = self
             .r#struct()
             .content()
             .iter()
-            .zip(self.args.iter())
+            .zip_longest(self.args.iter()) // by construction longest is the struct template
             .enumerate()
-            .map(|(_idx, ((_name, token), current_param))| -> Result<String, AssemblerError> {
+            .map(|(_idx, current_information)| -> Result<String, AssemblerError> {
+                let ((_name, token), current_param) = {
+                    match current_information {
+                        EitherOrBoth::Both((name, token), current_param) => ((name, token), Some(current_param)),
+                        EitherOrBoth::Left((name, token)) => ((name, token), None),
+                        _ => unreachable!()
+                    }
+                };
+
                 match token {
                     Token::Defb(c) | Token::Defw(c) => {
                         assert_eq!(c.len(), 1);
 
                         let tok = if matches!(token, Token::Defb(_)) {
-                            "db"
+                            "DB"
                         }
                         else {
-                            "dw"
+                            "DW"
                         };
 
-                        if current_param.is_empty() {
-                            Ok(format!(" {} {}", tok, c[0].to_string()))
-                        }
-                        else {
-                            let elem = current_param.expand(env)?;
-                            Ok(format!(" {} {}", tok, elem))
-                        }
+                        let elem = match  current_param {
+                            Some(current_param) => {
+                                let elem = current_param.expand(env)?;
+                                if elem.is_empty() {
+                                    c[0].to_string()
+                                } else {
+                                    elem
+                                }
+                            },
+                            None => c[0].to_string()
+                        };
+                        Ok(format!(" {}{} {}", prefix, tok, elem))
                     }
 
                     Token::MacroCall(n, current_default_arg) => {
-                        let mut call = format!(" {} ", n);
+                        let mut call = format!(" {}{} ", prefix, n);
 
                         // The way to manage default/provided params differ depending on the combination
                         let args = match (current_param, current_default_arg.len()) {
                             // no default
                             (_, 0) => {
-                                let elem = current_param.expand(env)?;
+                                let elem = current_param.unwrap().expand(env)?;
                                 vec![elem]
                             }
 
                             // one default
                             (_, 1) => {
-                                let val = if current_param.is_empty() {
-                                    &current_default_arg[0]
-                                }
-                                else {
-                                    current_param
-                                };
+                                let val = current_param.unwrap_or(&current_default_arg[0]);
                                 let elem = val.expand(env)?;
                                 vec![elem]
                             }
 
                             // default is several, provided is single. Use provided only if not empty
-                            (MacroParam::Single(_), _nb_default) => {
+                            (Some(MacroParam::Single(_)), _nb_default) => {
                                 let mut default_iter = current_default_arg.iter();
                                 let first_default = default_iter.next().unwrap();
                                 let mut collected = Vec::new();
-                                collected.push(if current_param.is_empty() {
-                                    first_default
-                                }
-                                else {
-                                    current_param
-                                });
+                                collected.push(current_param.unwrap_or(first_default));
                                 collected.extend(default_iter);
 
                                 collected.iter().map(|p| p.expand(env))
@@ -203,7 +210,7 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
                             }
 
                             // default and provided are several
-                            (MacroParam::List(all_curr), nb_default) => {
+                            (Some(MacroParam::List(all_curr)), nb_default) => {
                                 let max_size = all_curr.len().max(nb_default);
 
                                 let mut collected = Vec::new();
@@ -218,7 +225,7 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
                                         let current = &all_curr[idx2];
                                         let default = &current_default_arg[idx2];
 
-                                        if current.is_empty() {
+                                        if !current.is_empty() {
                                             collected.push(default.expand(env)?);
                                         }
                                         else {
@@ -227,7 +234,9 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
                                     }
                                 }
                                 collected
-                            }
+                            },
+
+                            (None, _) => unimplemented!()
                         };
 
                         call.push_str(&args.join(","));
