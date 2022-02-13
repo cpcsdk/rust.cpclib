@@ -489,7 +489,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
 
     Ok((
         input.clone(),
-        dbg!(Token::Macro(
+        Token::Macro(
             name,
             arguments
                 .iter()
@@ -500,7 +500,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
                 .iter()
                 .map(|s| -> String { s.to_string() })
                 .collect::<String>()
-        ))
+        )
         .locate(Z80Span(unsafe {
             LocatedSpan::new_from_raw_offset(
                 dir_start.location_offset(),
@@ -961,6 +961,16 @@ fn eof(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
     }
 }
 
+#[derive(Clone, Copy)]
+enum LabelModifier {
+    Equ,
+    Set,
+    Equal,
+    SetN,
+    Next
+}
+
+
 /// Parse a line
 /// TODO add an argument o manage cases like '... : ENDIF'
 pub fn parse_z80_line_complete(
@@ -971,128 +981,200 @@ pub fn parse_z80_line_complete(
 
     // Eat optional label (or macro call)
     let before_label = input.clone();
+
+    let (input, r#let) = opt(delimited(space0, parse_directive_word("LET"), space0))(input)?;
+
+    // Guess the kind of label previously acquired
     let (input, label_or_macro) = opt(preceded(space0, parse_label(false)))(input)?;
-    let (mut input, mut i_know_it_is_a_label) = if label_or_macro.is_some() {
-        context("chec label :", alt((
-            value(true, tuple((space0, char(':'), space0))),
-            value(false, space1)
+    let (mut input, (mut i_know_it_is_a_label, label_modifier)) = if label_or_macro.is_some() {
+        context("check label  modifier", alt((
+            value((true, None), tuple((space0, char(':'), space0))),
+            value((true, Some(LabelModifier::Set)), tuple((space0, char('='), space0))),
+
+            value((true, Some(LabelModifier::Equ)), tuple((space0, parse_directive_word("DEFL"), space0))),
+            value((true, Some(LabelModifier::Equ)), tuple((space0, parse_directive_word("EQU"), space0))),
+            value((true, Some(LabelModifier::SetN)), tuple((space0, parse_directive_word("SETN"), space0))),
+            value((true, Some(LabelModifier::Next)), tuple((space0, parse_directive_word("NEXT"), space0))),
+
+            value((true, Some(LabelModifier::Set)), delimited(
+                space0,
+                parse_directive_word("SET"),
+                not(tuple((space0, expr, parse_comma))))), // disambiguate with SET mnemonic
+
+            value((false, None), space1)
         )))(input)?
     }
     else {
-        (input, false)
+        (input, (false, None))
     };
+
+
+    // ensure let uses =
+    if r#let.is_some() {
+        if let Some(LabelModifier::Equal) = &label_modifier {
+            // ok
+        }
+        else {
+            return Err(cpclib_common::nom::Err::Failure(
+                VerboseError::from_error_kind(before_label, ErrorKind::Char)
+            ));
+        }
+    }
+    
+
+    // Get the missing information for the standard label
+    let (input, expr_arg) = match &label_modifier {
+        Some(LabelModifier::Equ | LabelModifier::Equal | LabelModifier::Set) => {
+            cut(context("Value error", map(expr, |e| Some(e))))(input)?
+        }
+        _ => (input, None)
+    };
+    // Get the target label for the enumeration like label
+    let (input, source_label) = match &label_modifier {
+        Some(LabelModifier::Next | LabelModifier::SetN) => {
+            cut(context(
+                "Label expected",
+                map(parse_label(false), |l| Some(l))
+            ))(input)?
+        }
+        _ => (input, None)
+    };
+    // optional expression to control the displacement
+    let (input, additional_arg) = match &label_modifier {
+        Some(LabelModifier::Next | LabelModifier::SetN) => opt(preceded(parse_comma, expr))(input)?,
+        _ => (input, None)
+    };
+
 
     let mut tokens = Vec::new();
-    // Try to parse a macro if it is not a label
-    let mut i_know_it_is_a_macro = false;
-    let nb_warnings = input.extra.1.warnings().len();
 
-    let r#macro = if label_or_macro.is_some() && !i_know_it_is_a_label {
-        match context(
-            "MACRO or struct call",
-            preceded(space0, parse_macro_or_struct_call(false, false))
-        )(before_label.clone())
-        {
-            Ok((input2, r#macro)) => {
-                // check if there is nothing usefull after
-                let res: IResult<Z80Span, _, VerboseError<Z80Span>> =
-                    preceded(space0, alt((line_ending, tag(":"), tag(";"))))(input2.clone());
-                if res.is_ok() {
-                    i_know_it_is_a_macro = true;
-                    input = input2;
-                    Some(LocatedToken::Standard {
-                        token: r#macro,
-                        span: before_label.clone()
-                    })
-                    // we know it is a macro and not a label, so we can stop here
-                }
-                else {
-                    i_know_it_is_a_label = true;
-                    None
-                }
+    let input = if label_modifier.is_some() {
+        let label = label_or_macro.unwrap();
+        // Here we know it was a modified label; so we handle it before treating next opcode
+        let token = match label_modifier {
+            Some(LabelModifier::Equ) => Token::Equ(label, expr_arg.unwrap()),
+            Some(LabelModifier::Equal | LabelModifier::Set) => {
+                Token::Assign(label, expr_arg.unwrap())
             }
-            Err(_) => {
-                // no change of input that is still after the label
-                i_know_it_is_a_label = true;
-                None
-            }
-        }
-    }
-    else {
-        None
-    };
+            Some(LabelModifier::SetN) => Token::SetN(label, source_label.unwrap(), additional_arg),
+            Some(LabelModifier::Next) => Token::Next(label, source_label.unwrap(), additional_arg),
+            None => Token::Label(label)
+        };
+        tokens.push(token.locate(before_label));
+        input
+    } else {
+        // Here we know it was not a modified label; the following can be a macro or any instruction
+        
+        // Try to parse a macro if it is not a label
+        let mut i_know_it_is_a_macro = false;
+        let nb_warnings = input.extra.1.warnings().len();
 
-    if i_know_it_is_a_label {
-        // remove the unwanted  warnings
-        while nb_warnings < input.extra.1.warnings().len() {
-            input.extra.1.pop_warning();
-        }
-    }
-
-    // We add first token as a label or macro
-    if label_or_macro.is_some() && i_know_it_is_a_label {
-        tokens.push(Token::Label(label_or_macro.clone().unwrap()).locate(before_label.clone()));
-    }
-    else if r#macro.is_some() {
-        tokens.push(r#macro.unwrap());
-    }
-    else {
-        assert!(label_or_macro.is_none())
-    }
-
-    // here either we detected a label, either there was no macro
-    // and we want to add the corresponding opcode
-    let input = if !i_know_it_is_a_macro {
-        // input is after the label if any
-        let (input2, _) = cut(context(
-            "Parse issue, no end directive expected here",
-            not(parse_forbidden_keyword)
-        ))(input)?;
-
-        // label/macro instruction?
-        let nb_warnings = input2.extra.1.warnings().len();
-        // try to parse a token. if it fails, fall back to the macro call parser
-        let (input2, opcode) = match parse_single_token(true)(input2.clone()) {
-            Ok((
-                _input3,
-                LocatedToken::Standard {
-                    token: Token::Label(_),
-                    ..
-                }
-            )) => {
-                // we cannot have a label; it corresponds to a macro call
-                while nb_warnings < input2.extra.1.warnings().len() {
-                    input2.extra.1.pop_warning();
-                }
-                let (input3, macro_call) = cut(context(
-                    "MACRO or struct call",
-                    preceded(space0, parse_macro_or_struct_call(false, false))
-                ))(input2.clone())?;
-                (
-                    input3,
-                    LocatedToken::Standard {
-                        token: macro_call,
-                        span: before_label.clone()
+        let (input, r#macro) = if label_or_macro.is_some() && !i_know_it_is_a_label {
+            match context(
+                "MACRO or struct call",
+                preceded(space0, parse_macro_or_struct_call(false, false))
+            )(before_label.clone())
+            {
+                Ok((input2, r#macro)) => {
+                    // check if there is nothing usefull after
+                    let res: IResult<Z80Span, _, VerboseError<Z80Span>> =
+                        preceded(space0, alt((line_ending, tag(":"), tag(";"))))(input2.clone());
+                    if res.is_ok() {
+                        i_know_it_is_a_macro = true;
+                        (input2, Some(LocatedToken::Standard {
+                            token: r#macro,
+                            span: before_label.clone()
+                        }))
+                        // we know it is a macro and not a label, so we can stop here
                     }
-                )
+                    else {
+                        i_know_it_is_a_label = true;
+                        (input, None)
+                    }
+                }
+                Err(_) => {
+                    // no change of input that is still after the label
+                    i_know_it_is_a_label = true;
+                    (input, None)
+                }
             }
-
-            Ok((input2, opcode)) => {
-                // any other token is a normal token
-                (input2, opcode)
-            }
-
-            Err(e) => return Err(e)
+        }
+        else {
+            (input, None)
         };
 
-        tokens.push(opcode);
-        input2
-    }
-    else {
-        input
+        if i_know_it_is_a_label {
+            // remove the unwanted  warnings
+            while nb_warnings < input.extra.1.warnings().len() {
+                input.extra.1.pop_warning();
+            }
+        }
+
+        // We add first token as a label or macro
+        if label_or_macro.is_some() && i_know_it_is_a_label {
+            tokens.push(Token::Label(label_or_macro.clone().unwrap()).locate(before_label.clone()));
+        }
+        else if r#macro.is_some() {
+            tokens.push(r#macro.unwrap());
+        }
+        else {
+            assert!(label_or_macro.is_none())
+        }
+
+        // here either we detected a label, either there was no macro
+        // and we want to add the corresponding opcode
+        if !i_know_it_is_a_macro {
+            // input is after the label if any
+            let (input2, _) = cut(context(
+                "Parse issue, no end directive expected here",
+                not(parse_forbidden_keyword)
+            ))(input)?;
+
+            // label/macro instruction?
+            let nb_warnings = input2.extra.1.warnings().len();
+            // try to parse a token. if it fails, fall back to the macro call parser
+            let (input2, opcode) = match parse_single_token(true)(input2.clone()) {
+                Ok((
+                    _input3,
+                    LocatedToken::Standard {
+                        token: Token::Label(_),
+                        ..
+                    }
+                )) => {
+                    // we cannot have a label; it corresponds to a macro call
+                    while nb_warnings < input2.extra.1.warnings().len() {
+                        input2.extra.1.pop_warning();
+                    }
+                    let (input3, macro_call) = cut(context(
+                        "MACRO or struct call",
+                        preceded(space0, parse_macro_or_struct_call(false, false))
+                    ))(input2.clone())?;
+                    (
+                        input3,
+                        LocatedToken::Standard {
+                            token: macro_call,
+                            span: before_label.clone()
+                        }
+                    )
+                }
+
+                Ok((input2, opcode)) => {
+                    // any other token is a normal token
+                    (input2, opcode)
+                }
+
+                Err(e) => return Err(e)
+            };
+
+            tokens.push(opcode);
+            input2
+        }
+        else {
+            input
+        }
     };
 
-    // Eat the additional opcodes
+    // Eat the additional opcodes after the label (with modifier or not, the macro or the opcode)
     let (input, additional_opcodes) = context(
         "[DBG] other tokens",
         cut(fold_many0(
@@ -1138,6 +1220,7 @@ pub fn parse_z80_line_complete(
 /// No opcodes are expected there.
 /// Initially it was supposed to manage lines with only labels, however it has been extended
 /// to labels fallowed by specific commands.
+/// TODO this complete piece of code MUST be removed and integrated within parse_z80_line_complete
 pub fn parse_z80_line_label_only(
     input: Z80Span
 ) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
@@ -2401,7 +2484,7 @@ pub fn parse_macro_or_struct_call(
                 }
             }
 
-            Ok((input, dbg!(Token::MacroCall(name, args))))
+            Ok((input, Token::MacroCall(name, args)))
         }
     }
 }
