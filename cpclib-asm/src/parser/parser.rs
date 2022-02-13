@@ -466,7 +466,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
             // parse_label(false)
             delimited(
                 space0,
-                take_till(|c| c == '\n' || c == '\r' || c == ':' || c == ',' || c == ' '),
+                verify(take_till(|c| c == '\n' || c == '\r' || c == ':' || c == ',' || c == ' '), |s: &Z80Span| !s.is_empty() ),
                 space0
             )
         )
@@ -489,7 +489,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
 
     Ok((
         input.clone(),
-        Token::Macro(
+        dbg!(Token::Macro(
             name,
             arguments
                 .iter()
@@ -500,7 +500,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
                 .iter()
                 .map(|s| -> String { s.to_string() })
                 .collect::<String>()
-        )
+        ))
         .locate(Z80Span(unsafe {
             LocatedSpan::new_from_raw_offset(
                 dir_start.location_offset(),
@@ -2401,7 +2401,7 @@ pub fn parse_macro_or_struct_call(
                 }
             }
 
-            Ok((input, Token::MacroCall(name, args)))
+            Ok((input, dbg!(Token::MacroCall(name, args))))
         }
     }
 }
