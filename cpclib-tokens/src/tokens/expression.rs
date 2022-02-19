@@ -988,7 +988,7 @@ impl AsRef<ExprResult> for ExprResult {
 impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
-    fn add(self, rhs:T) -> Self::Output {
+    fn add(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
         match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 + f2).into()),
@@ -1007,7 +1007,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
     }
 }
 
-impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Sub<T> for ExprResult {
+impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn sub(self, rhs: T) -> Self::Output {
@@ -1031,7 +1031,7 @@ impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Sub<T> for ExprResult {
     }
 }
 
-impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Mul<T> for ExprResult {
+impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn mul(self, rhs: T) -> Self::Output {
@@ -1055,7 +1055,7 @@ impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Mul<T> for ExprResult {
     }
 }
 
-impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Div<T> for ExprResult {
+impl<T: AsRef<Self> + std::fmt::Display> std::ops::Div<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn div(self, rhs: T) -> Self::Output {
@@ -1081,7 +1081,7 @@ impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Div<T> for ExprResult {
     }
 }
 
-impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Rem<T> for ExprResult {
+impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn rem(self, rhs: T) -> Self::Output {
@@ -1155,14 +1155,15 @@ impl std::cmp::PartialEq for ExprResult {
 
             (Self::String(s), Self::List(l)) | (Self::List(l), Self::String(s)) => {
                 let s = s.as_bytes();
-                if s.len() != l.len() {return false;}
-                s.iter().zip(l.iter())
-                    .all(|(a, b)| {
-                        match b.int() {
-                            Ok(b) => (*a as i32) == b,
-                            Err(_) => false
-                        }
-                    })
+                if s.len() != l.len() {
+                    return false;
+                }
+                s.iter().zip(l.iter()).all(|(a, b)| {
+                    match b.int() {
+                        Ok(b) => (*a as i32) == b,
+                        Err(_) => false
+                    }
+                })
             }
 
             (Self::String(_), _) | (_, Self::String(_)) => false,

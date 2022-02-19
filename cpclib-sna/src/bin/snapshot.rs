@@ -17,7 +17,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use cpclib_common::clap::{Command, Arg};
+use cpclib_common::clap::{Arg, Command};
 use cpclib_sna::*;
 
 pub mod built_info {

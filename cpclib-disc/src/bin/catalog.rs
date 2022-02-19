@@ -17,7 +17,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 /// Catalog tool manipulator.
-use cpclib_common::clap::{Command, Arg};
+use cpclib_common::clap::{Arg, Command};
 use cpclib_common::num::Num;
 use cpclib_disc::amsdos::*;
 use cpclib_disc::edsk::{ExtendedDsk, Head};

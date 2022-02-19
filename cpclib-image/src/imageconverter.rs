@@ -1289,12 +1289,20 @@ impl<'a> ImageConverter<'a> {
             GridHeightCapture::FullHeight => sprite.height() as usize / tile_height as usize
         };
 
-
-        if (sprite.height() as usize) < tile_height as usize *nb_rows {
-            return Err(anyhow::anyhow!("{} lines expected on a tileset of {} lines.", tile_height as usize *nb_rows, sprite.height()).into());
+        if (sprite.height() as usize) < tile_height as usize * nb_rows {
+            return Err(anyhow::anyhow!(
+                "{} lines expected on a tileset of {} lines.",
+                tile_height as usize * nb_rows,
+                sprite.height()
+            )
+            .into());
         }
-        if (sprite.bytes_width() as usize) < tile_width as usize *nb_columns {
-            return Err(anyhow::anyhow!("{} byte-columns  expected on a tileset of {} byte-columns.", tile_width as usize *nb_columns, sprite.bytes_width()));
+        if (sprite.bytes_width() as usize) < tile_width as usize * nb_columns {
+            return Err(anyhow::anyhow!(
+                "{} byte-columns  expected on a tileset of {} byte-columns.",
+                tile_width as usize * nb_columns,
+                sprite.bytes_width()
+            ));
         }
 
         // Really makes the extraction

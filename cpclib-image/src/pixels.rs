@@ -86,8 +86,9 @@ pub mod mode2 {
     /// Convert a vector of pens into a vector of bytes
     pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
         let pens = if pens.len() % 8 == 0 {
-            &pens[.. (pens.len()/8)*8]
-        } else {
+            &pens[..(pens.len() / 8) * 8]
+        }
+        else {
             pens
         };
 
@@ -329,7 +330,6 @@ pub mod mode1 {
 #[allow(clippy::identity_op)]
 pub mod mode0 {
     use contracts::{ensures, requires};
-    
 
     use crate::ga::Pen;
 

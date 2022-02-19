@@ -17,7 +17,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 
-use cpclib_common::clap::{Command, Arg, ArgGroup};
+use cpclib_common::clap::{Arg, ArgGroup, Command};
 use cpclib_disc::amsdos::*;
 use cpclib_disc::edsk::ExtendedDsk;
 use custom_error::custom_error;

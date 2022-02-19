@@ -19,7 +19,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow;
-use clap::{Command, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command};
 use cpclib::assembler::preamble::*;
 use cpclib::common::clap;
 use cpclib::disc::amsdos::*;
@@ -290,7 +290,7 @@ fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) -> String {
 
 fn parse_int(repr: &str) -> usize {
     repr.parse::<usize>()
-    .expect(&format!("Error when converting {} as integer", repr))
+        .expect(&format!("Error when converting {} as integer", repr))
 }
 
 #[allow(clippy::if_same_then_else)] // false positive
@@ -304,23 +304,33 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         }
     }
     else if let Some(tile_matches) = matches.subcommand_matches("tile") {
-        OutputFormat::TileEncoded{
-            tile_width: TileWidthCapture::NbBytes(parse_int(tile_matches.value_of("WIDTH").expect("--width argument missing"))),
+        OutputFormat::TileEncoded {
+            tile_width: TileWidthCapture::NbBytes(parse_int(
+                tile_matches
+                    .value_of("WIDTH")
+                    .expect("--width argument missing")
+            )),
 
-            tile_height: TileHeightCapture::NbLines(parse_int(tile_matches.value_of("HEIGHT").expect("--height argument missing"))),
+            tile_height: TileHeightCapture::NbLines(parse_int(
+                tile_matches
+                    .value_of("HEIGHT")
+                    .expect("--height argument missing")
+            )),
 
             horizontal_movement: TileHorizontalCapture::AlwaysFromLeftToRight,
             vertical_movement: TileVerticalCapture::AlwaysFromTopToBottom,
 
-            grid_width: tile_matches.value_of("HORIZ_COUNT")
+            grid_width: tile_matches
+                .value_of("HORIZ_COUNT")
                 .map(|v| parse_int(v))
                 .map(|v| GridWidthCapture::TilesInRow(v))
                 .unwrap_or(GridWidthCapture::FullWidth),
 
-            grid_height:  tile_matches.value_of("VERT_COUNT")
-            .map(|v| parse_int(v))
-            .map(|v| GridHeightCapture::TilesInColumn(v))
-            .unwrap_or(GridHeightCapture::FullHeight),
+            grid_height: tile_matches
+                .value_of("VERT_COUNT")
+                .map(|v| parse_int(v))
+                .map(|v| GridHeightCapture::TilesInColumn(v))
+                .unwrap_or(GridHeightCapture::FullHeight)
         }
     }
     else {
@@ -399,8 +409,6 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     let sub_exec = matches.subcommand_matches("exec");
     let sub_scr = matches.subcommand_matches("scr");
 
-    
-
     let output_format = get_output_format(&matches);
     let conversion = ImageConverter::convert(
         input_file,
@@ -409,7 +417,6 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         transformations,
         &output_format
     )?;
-
 
     if sub_sprite.is_some() {
         // TODO share code with the tile branch
@@ -475,14 +482,22 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 do_export_palette!(sub_tile, palette);
 
                 // Save the binary data of the tiles
-                let tile_fname = Path::new(sub_tile.value_of("SPRITE_FNAME").expect("Missing tileset name"));
-                let base = tile_fname.with_extension("").as_os_str().to_str().unwrap().to_owned();
+                let tile_fname = Path::new(
+                    sub_tile
+                        .value_of("SPRITE_FNAME")
+                        .expect("Missing tileset name")
+                );
+                let base = tile_fname
+                    .with_extension("")
+                    .as_os_str()
+                    .to_str()
+                    .unwrap()
+                    .to_owned();
                 let extension = tile_fname.extension().unwrap().to_str().unwrap();
                 for (i, data) in tile_set.iter().enumerate() {
                     let current_filename = format!("{}_{:03}.{}", base, i, extension);
-                    let mut file =
-                        File::create(current_filename.clone())
-                            .expect(&format!("Unable to build {}", current_filename));
+                    let mut file = File::create(current_filename.clone())
+                        .expect(&format!("Unable to build {}", current_filename));
                     file.write_all(data).unwrap();
                 }
             }

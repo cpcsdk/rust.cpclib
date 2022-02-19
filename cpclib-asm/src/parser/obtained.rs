@@ -87,7 +87,7 @@ pub enum LocatedToken {
         /// The span that correspond to the token
         span: Z80Span
     },
-    For{
+    For {
         label: SmolStr,
         start: Expr,
         stop: Expr,
@@ -160,21 +160,29 @@ impl Clone for LocatedToken {
                 LocatedToken::Iterate(a.clone(), b.clone(), c.clone(), d.clone())
             }
             LocatedToken::RepeatUntil(..) => todo!(),
-            LocatedToken::Rorg(a, b, c) => LocatedToken
-            ::Rorg(a.clone(), b.clone(), c.clone()),
+            LocatedToken::Rorg(a, b, c) => LocatedToken::Rorg(a.clone(), b.clone(), c.clone()),
             LocatedToken::Switch(value, cases, default, span) => {
                 LocatedToken::Switch(value.clone(), cases.clone(), default.clone(), span.clone())
             }
             LocatedToken::While(a, b, c) => LocatedToken::While(a.clone(), b.clone(), c.clone()),
             LocatedToken::Module(..) => todo!(),
-            LocatedToken::For { label, start, stop, step, listing, span } => LocatedToken::For{
-                label: label.clone(),
-                start: start.clone(),
-                stop: stop.clone(),
-                step: step.clone(),
-                span: span.clone(),
-                listing: listing.clone()
-            },
+            LocatedToken::For {
+                label,
+                start,
+                stop,
+                step,
+                listing,
+                span
+            } => {
+                LocatedToken::For {
+                    label: label.clone(),
+                    start: start.clone(),
+                    stop: stop.clone(),
+                    step: step.clone(),
+                    span: span.clone(),
+                    listing: listing.clone()
+                }
+            }
         }
     }
 }
@@ -206,7 +214,7 @@ impl LocatedToken {
         match self {
             Self::Standard { span, .. }
             | Self::CrunchedSection(_, _, span)
-            | Self::For{span, ..}
+            | Self::For { span, .. }
             | Self::Function(_, _, _, span)
             | Self::Include(_, _, _, _, span)
             | Self::If(_, _, span)
@@ -279,13 +287,22 @@ impl LocatedToken {
             LocatedToken::While(e, l, _span) => Cow::Owned(Token::While(e.clone(), l.as_listing())),
             LocatedToken::Iterate(_name, _values, _code, _span) => todo!(),
             LocatedToken::Module(..) => todo!(),
-            LocatedToken::For { label, start, stop, step, listing, span } => Cow::Owned(Token::For{
-                label: label.clone(),
-                start: start.clone(),
-                stop: stop.clone(),
-                step: step.clone(),
-                listing: listing.as_listing()
-            }),
+            LocatedToken::For {
+                label,
+                start,
+                stop,
+                step,
+                listing,
+                span
+            } => {
+                Cow::Owned(Token::For {
+                    label: label.clone(),
+                    start: start.clone(),
+                    stop: stop.clone(),
+                    step: step.clone(),
+                    listing: listing.as_listing()
+                })
+            }
         }
     }
 
@@ -426,7 +443,6 @@ impl LocatedToken {
                                 });
                             }
                             data = &data[..length];
-
                         }
 
                         match transformation {

@@ -29,9 +29,11 @@ pub struct Z80Span(
 impl Into<Source> for &Z80Span {
     fn into(self) -> Source {
         Source::new(
-            self.context().current_filename.as_ref()
-                    .map(|fname| fname.display().to_string())
-                    .unwrap_or_else(|| "<INLINE>".into()),
+            self.context()
+                .current_filename
+                .as_ref()
+                .map(|fname| fname.display().to_string())
+                .unwrap_or_else(|| "<INLINE>".into()),
             self.0.location_line() as _,
             self.0.get_utf8_column()
         )

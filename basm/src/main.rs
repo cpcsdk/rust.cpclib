@@ -29,8 +29,6 @@ static ref DESC_BEFORE: String = format!(
 }
 
 fn main() {
-
-
     let matches = build_args_parser()
         .version(built_info::PKG_VERSION)
         .before_help(DESC_BEFORE.as_str())

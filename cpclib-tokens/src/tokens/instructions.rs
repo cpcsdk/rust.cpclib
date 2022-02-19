@@ -43,8 +43,6 @@ impl MacroParam {
         }
     }
 
-
-
     /// Rename the arguments when they are a macro call
     /// XXX I am pretty sure such implementation is faulty when there are nested calls !!! It needs to be checked (maybe nested stuff has to be removed)
     pub fn do_apply_macro_labels_modification(&mut self, seed: usize) {
@@ -398,7 +396,6 @@ pub enum CharsetFormat {
     Interval(char, char, Expr)
 }
 
-
 /// TODO use a more complete type that can use a subset of functions to generate a string
 pub type Filename = String;
 
@@ -433,12 +430,12 @@ pub enum Token {
     Export(Vec<SmolStr>),
 
     Fail(Vec<FormattedExpr>),
-    For{
+    For {
         label: SmolStr,
         start: Expr,
         stop: Expr,
         step: Option<Expr>,
-        listing: Listing,
+        listing: Listing
     },
 
     /// Function embeds a listing with a limited number of possible instructions and return a value
@@ -645,7 +642,21 @@ impl Clone for Token {
             Token::Undef(a) => Token::Undef(a.clone()),
             Token::WaitNops(b) => Token::WaitNops(b.clone()),
             Token::While(a, b) => Token::While(a.clone(), b.clone()),
-            Token::For { label, start, stop, step , listing} => Token::For{label: label.clone(), start: start.clone(), stop: stop.clone(), step: step.clone(), listing: listing.clone()},
+            Token::For {
+                label,
+                start,
+                stop,
+                step,
+                listing
+            } => {
+                Token::For {
+                    label: label.clone(),
+                    start: start.clone(),
+                    stop: stop.clone(),
+                    step: step.clone(),
+                    listing: listing.clone()
+                }
+            }
         }
     }
 }

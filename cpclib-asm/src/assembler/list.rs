@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_tokens::{ExprResult};
+use cpclib_tokens::ExprResult;
 use substring::Substring;
 
 use crate::error::{AssemblerError, ExpressionError};
@@ -150,10 +150,7 @@ pub fn list_len(list: &ExprResult) -> Result<ExprResult, crate::AssemblerError> 
     }
 }
 
-pub fn list_push(
-    list: ExprResult,
-    elem: ExprResult
-) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
     match list {
         ExprResult::List(mut l) => {
             l.push(elem);
@@ -208,10 +205,7 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
     }
 }
 
-pub fn string_push(
-    s1: ExprResult,
-    s2: ExprResult
-) -> Result<ExprResult, crate::AssemblerError> {
+pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
     match (s1, s2) {
         (ExprResult::String(s1), ExprResult::String(s2)) => {
             let s1 = s1.to_string() + &fix_string(s2);

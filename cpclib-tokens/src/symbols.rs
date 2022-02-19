@@ -4,16 +4,15 @@ use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 
 use cpclib_common::itertools::Itertools;
+use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::{smallvec, SmallVec};
 use cpclib_common::smol_str::SmolStr;
-
 use cpclib_common::{lazy_static, strsim};
 use delegate::delegate;
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
 use crate::{ExprResult, MacroParam, Token};
-use cpclib_common::rayon::prelude::*;
 
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone)]
@@ -146,18 +145,21 @@ pub struct Struct {
     name: SmolStr,
     content: Vec<(SmolStr, Token)>,
     source: Option<Source>
-
 }
 
 impl Struct {
-    pub fn new(name: impl AsRef<str>, content: &[(SmolStr, Token)], source: Option<Source>) -> Self {
+    pub fn new(
+        name: impl AsRef<str>,
+        content: &[(SmolStr, Token)],
+        source: Option<Source>
+    ) -> Self {
         Self {
             name: name.as_ref().into(),
             content: content
                 .iter()
                 .map(|(s, t)| (s.clone(), t.clone()))
                 .collect_vec(),
-                source
+            source
         }
     }
 
@@ -202,8 +204,6 @@ impl Struct {
     pub fn nb_args(&self) -> usize {
         self.content.len()
     }
-
-
 }
 
 #[derive(Debug, Clone)]
@@ -234,7 +234,6 @@ impl Source {
         self.column
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct Macro {
@@ -277,8 +276,6 @@ impl Macro {
     pub fn nb_args(&self) -> usize {
         self.params.len()
     }
-
-
 }
 
 #[derive(Debug, Clone)]
@@ -314,6 +311,7 @@ impl Value {
             _ => None
         }
     }
+
     pub fn integer(&self) -> Option<i32> {
         match self {
             Value::Expr(ExprResult::Value(i)) => Some(*i),

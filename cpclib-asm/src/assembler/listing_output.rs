@@ -320,12 +320,16 @@ impl ListingOutputTrigger {
     /// BUGGY when it is not a number ...
     pub fn replace_address(&mut self, address: ExprResult) {
         match address {
-            ExprResult::Float(f) => {},
+            ExprResult::Float(f) => {}
             ExprResult::Value(v) => self.start = v as _,
-            ExprResult::Bool(b) => self.start = if b {1} else {0},
+            ExprResult::Bool(b) => self.start = if b { 1 } else { 0 },
             ExprResult::String(s) => self.start = s.len() as _,
             ExprResult::List(l) => self.start = l.len() as _,
-            ExprResult::Matrix { width, height, content } => self.start = (width+height) as _
+            ExprResult::Matrix {
+                width,
+                height,
+                content
+            } => self.start = (width + height) as _
         }
     }
 
