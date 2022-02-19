@@ -2,6 +2,8 @@
 name = "basm"
 version = "0.5.0"
 edition = "2021"
+description = "z80 assembler relying on cpclib-asm"
+repository = "https://github.com/cpcsdk/rust.cpclib"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

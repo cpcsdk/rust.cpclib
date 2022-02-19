@@ -5,7 +5,7 @@ version = "0.5.0"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2021"
 license = "MIT"
-description = "cpclib libraries related to assembling"
+description = "cpclib libraries related to z80 assembling"
 repository = "https://github.com/cpcsdk/rust.cpclib"
 
 
