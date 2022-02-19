@@ -141,7 +141,7 @@ fn main() {
     let mut sna = if matches.is_present("inSnapshot") {
         let fname = matches.value_of("inSnapshot").unwrap();
         let path = Path::new(&fname);
-        Snapshot::load(path)
+        Snapshot::load(path).expect("Error while loading the snapshot")
     }
     else {
         Snapshot::default()

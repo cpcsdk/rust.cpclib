@@ -32,7 +32,7 @@ fn send_and_run_file(xfer: &xfer::CpcXfer, fname: &str, run: bool) {
     if let Some(extension) = std::path::Path::new(fname).extension() {
         let extension = extension.to_str().unwrap().to_ascii_lowercase();
         if extension == "sna" {
-            let sna = sna::Snapshot::load(fname);
+            let sna = sna::Snapshot::load(fname).expect("Error while loading snapshot");
             if sna.version_header() == 3 {
                 eprintln!("Need to downgrade SNA version. TODO check if it is sill necessary (I thinl not)");
                 let sna_fname = std::path::Path::new(fname)

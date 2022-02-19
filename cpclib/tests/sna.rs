@@ -4,7 +4,7 @@ mod tests {
 
     #[test]
     pub fn sna_various() {
-        let sna1 = Snapshot::load("tests/viewer.sna");
+        let sna1 = Snapshot::load("tests/viewer.sna").unwrap();
         assert_eq!(3, sna1.nb_chunks());
         assert_eq!(sna1.memory_dump().len(), 64 * 1024);
         assert_eq!(sna1.memory_size_header(), 0);
@@ -68,7 +68,7 @@ mod tests {
         v2.save(tmp_fname, SnapshotVersion::V2)
             .expect("Unable to save");
 
-        let sna2 = Snapshot::load(tmp_fname);
+        let sna2 = Snapshot::load(tmp_fname).unwrap();
         assert_eq!(2, sna2.version_header());
         assert_eq!(sna1.memory_dump().len(), sna2.memory_dump().len());
 
@@ -88,7 +88,7 @@ mod tests {
         sna1.save(tmp_fname, SnapshotVersion::V2)
             .expect("Unable to save");
 
-        let sna2 = Snapshot::load(tmp_fname);
+        let sna2 = Snapshot::load(tmp_fname).unwrap();
         assert_eq!(2, sna2.version_header());
         assert_eq!(sna1.memory_dump().len(), sna2.memory_dump().len());
 
