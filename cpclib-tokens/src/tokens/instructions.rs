@@ -433,6 +433,13 @@ pub enum Token {
     Export(Vec<SmolStr>),
 
     Fail(Vec<FormattedExpr>),
+    For{
+        label: SmolStr,
+        start: Expr,
+        stop: Expr,
+        step: Option<Expr>,
+        listing: Listing,
+    },
 
     /// Function embeds a listing with a limited number of possible instructions and return a value
     Function(SmolStr, Vec<SmolStr>, Listing),
@@ -637,7 +644,8 @@ impl Clone for Token {
             Token::Switch(a, b, c) => Token::Switch(a.clone(), b.clone(), c.clone()),
             Token::Undef(a) => Token::Undef(a.clone()),
             Token::WaitNops(b) => Token::WaitNops(b.clone()),
-            Token::While(a, b) => Token::While(a.clone(), b.clone())
+            Token::While(a, b) => Token::While(a.clone(), b.clone()),
+            Token::For { label, start, stop, step , listing} => Token::For{label: label.clone(), start: start.clone(), stop: stop.clone(), step: step.clone(), listing: listing.clone()},
         }
     }
 }

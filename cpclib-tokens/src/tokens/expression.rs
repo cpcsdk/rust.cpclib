@@ -973,11 +973,18 @@ impl std::ops::Neg for ExprResult {
     }
 }
 
-impl std::ops::Add for ExprResult {
+impl AsRef<ExprResult> for ExprResult {
+    fn as_ref(&self) -> &ExprResult {
+        self
+    }
+}
+
+impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        match (&self, &rhs) {
+    fn add(self, rhs:T) -> Self::Output {
+        let rhs = rhs.as_ref();
+        match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 + f2).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1 + rhs.float()?).into()),
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
@@ -994,11 +1001,12 @@ impl std::ops::Add for ExprResult {
     }
 }
 
-impl std::ops::Sub for ExprResult {
+impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Sub<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
-    fn sub(self, rhs: Self) -> Self::Output {
-        match (&self, &rhs) {
+    fn sub(self, rhs: T) -> Self::Output {
+        let rhs = rhs.as_ref();
+        match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 - f2).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() - rhs.float()?).into())
@@ -1017,11 +1025,12 @@ impl std::ops::Sub for ExprResult {
     }
 }
 
-impl std::ops::Mul for ExprResult {
+impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Mul<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
-    fn mul(self, rhs: Self) -> Self::Output {
-        match (&self, &rhs) {
+    fn mul(self, rhs: T) -> Self::Output {
+        let rhs = rhs.as_ref();
+        match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 * f2).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() * rhs.float()?).into())
@@ -1040,11 +1049,12 @@ impl std::ops::Mul for ExprResult {
     }
 }
 
-impl std::ops::Div for ExprResult {
+impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Div<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
-    fn div(self, rhs: Self) -> Self::Output {
-        match (&self, &rhs) {
+    fn div(self, rhs: T) -> Self::Output {
+        let rhs = rhs.as_ref();
+        match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 / f2).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() / rhs.float()?).into())
@@ -1065,10 +1075,11 @@ impl std::ops::Div for ExprResult {
     }
 }
 
-impl std::ops::Rem for ExprResult {
+impl<T: AsRef<Self> + std::fmt::Display>  std::ops::Rem<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
-    fn rem(self, rhs: Self) -> Self::Output {
+    fn rem(self, rhs: T) -> Self::Output {
+        let rhs = rhs.as_ref();
         match (&self, &rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 % f2).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => {

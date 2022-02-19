@@ -142,7 +142,7 @@ impl ExprEvaluationExt for Expr {
         };
 
         match self {
-            RelativeDelta(delta) => (Expr::Label("$".into()).resolve(env)? + delta.clone().into()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            RelativeDelta(delta) => (Expr::Label("$".into()).resolve(env)? + ExprResult::from(delta.clone())).map_err(|e| AssemblerError::ExpressionTypeError(e)),
 
             Value(val) => Ok(val.clone().into()),
             Bool(b) => {

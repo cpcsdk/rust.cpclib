@@ -208,6 +208,11 @@ pub enum AssemblerError {
         span: Z80Span
     },
 
+    ForIssue {
+        error: Box<AssemblerError>,
+        span: Option<Z80Span>
+    },
+
     RepeatIssue {
         error: Box<AssemblerError>,
         span: Option<Z80Span>,
@@ -742,6 +747,20 @@ impl AssemblerError {
                 }
                 else {
                     write!(f, "Repeat issue\n{}", error)
+                }
+            }
+
+            AssemblerError::ForIssue { error, span } => {
+                if span.is_some() {
+                    let msg = build_simple_error_message(
+                        &format!("FOR: error in loop"),
+                        span.as_ref().unwrap(),
+                        Severity::Error
+                    );
+                    write!(f, "{}\n{}", msg, error)
+                }
+                else {
+                    write!(f, "FOR issue\n{}", error)
                 }
             }
 

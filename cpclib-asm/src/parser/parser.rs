@@ -110,7 +110,8 @@ const STAND_ALONE_DIRECTIVE: &[&str] = &[
 ];
 
 const START_DIRECTIVE: &[&str] = &[
-    "IF", "IFDEF", "IFNDEF", "IFUSED", "ITER", "ITERATE", "LZ4", "LZ48", "LZ49", "LZAPU", "LZEXO",
+"FOR",    
+"IF", "IFDEF", "IFNDEF", "IFUSED", "ITER", "ITERATE", "LZ4", "LZ48", "LZ49", "LZAPU", "LZEXO",
     "LZX7", "MACRO", "MODULE", "PHASE", "REPEAT", "REPT", "STRUCT", "SWITCH", "WHILE"
 ];
 
@@ -122,6 +123,7 @@ const END_DIRECTIVE: &[&str] = &[
     "DEPHASE",
     "ELSE",
     "ENDF",
+    "ENDFOR",
     "ENDFUNCTION",
     "ENDI",
     "ENDIF",
@@ -137,6 +139,7 @@ const END_DIRECTIVE: &[&str] = &[
     "ENDS",
     "ENDSWITCH",
     "ENDW",
+    "FEND",
     "IEND",
     "LZCLOSE",
     "REND", // rorg directive
@@ -309,6 +312,7 @@ pub fn parse_z80_line(
                                 context("[DBG] crunched section", parse_crunched_section),
                                 context("[DBG] module", parse_module),
                                 context("[DBG] repeat", parse_repeat),
+                                context("[DBG] for", parse_for),
                                 context("Function definition", parse_function),
                                 context("SWITCH parse error", parse_switch),
                                 context("[DBG] iterate", parse_iterate),
@@ -690,7 +694,49 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         }
     }
 }
-/// TODO
+
+pub fn parse_for(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let for_start = input.clone();
+    let (input, _) = preceded(space0, parse_directive_word("FOR"))(input)?;
+    
+    // Get parameters
+    let (input, counter) = cut(parse_label(false))(input)?;
+    let (input, start) = cut(preceded(parse_comma, expr))(input)?;
+    let (input, stop) = cut(preceded(parse_comma, expr))(input)?;
+    let (input, step) = opt(preceded(parse_comma, expr))(input)?;
+
+    // Get loop content
+    let (input, inner) = cut(context("FOR: issue in the content", inner_code))(input)?;
+    
+    // Collect end of loop
+    let (input, _) = cut(context(
+        "FOR: not closed",
+        preceded(
+            space0,
+            alt((
+                parse_directive_word("ENDFOR"),
+                parse_directive_word("FEND"),
+                parse_directive_word("ENDF"),
+            ))
+        )
+    ))(input)?;
+
+    let for_span = for_start.take(for_start.input_len()-input.input_len());
+    Ok((
+        input.clone(),
+        LocatedToken::For{
+            label: counter,
+            start,
+            stop,
+            step,
+            listing: LocatedListing::try_from(inner)
+            .unwrap_or_else(|_| LocatedListing::new_empty_span(input)),
+            span: for_span
+        }
+    ))
+}
+
+
 pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let repeat_start = input.clone();
     let (input, _) = preceded(

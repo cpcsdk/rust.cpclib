@@ -2579,24 +2579,27 @@ pub fn visit_located_token(
             code,
             counter.as_ref().map(|s| s.as_str()),
             counter_start.as_ref(),
-            Some(span.clone()),
+            Some(span),
         ),
         LocatedToken::RepeatUntil(cond, code, span) => {
-            env.visit_repeat_until(cond, code, Some(span.clone()))
+            env.visit_repeat_until(cond, code, Some(span))
         }
         LocatedToken::Rorg(address, code, span) => {
-            env.visit_rorg(address, code, Some(span.clone()))
+            env.visit_rorg(address, code, Some(span))
         }
         LocatedToken::Switch(value, cases, default, span) => env.visit_switch(
             value,
             cases.iter().map(|c| (&c.0, &c.1[..], c.2)),
             default.as_ref().map(|l| &l[..]),
-            Some(span.clone()),
+            Some(span),
         ),
         LocatedToken::While(cond, inner, span) => env.visit_while(cond, inner, Some(span.clone())),
         LocatedToken::Iterate(name, values, code, span) => {
-            env.visit_iterate(name.as_str(), values.as_ref(), code, Some(span.clone()))
+            env.visit_iterate(name.as_str(), values.as_ref(), code, Some(span))
         }
+        LocatedToken::For { label, start, stop, step, listing, span } => {
+            env.visit_for(label.as_str(), start, stop, step.as_ref(), listing, Some(span))
+        },
     }?;
 
     // Patch the warnings to inject them a location
@@ -2848,7 +2851,7 @@ impl Env {
         value: &Expr,
         cases: impl Iterator<Item = (&'a Expr, &'a [T], bool)>,
         default: Option<&'a [T]>,
-        _span: Option<Z80Span>,
+        _span: Option<&Z80Span>,
     ) -> Result<(), AssemblerError> {
         let value = self.resolve_expr_must_never_fail(value)?;
         let mut met = false;
@@ -2885,7 +2888,7 @@ impl Env {
         counter_name: &str,
         values: either::Either<&Vec<Expr>, &Expr>,
         code: &[T],
-        span: Option<Z80Span>,
+        span: Option<&Z80Span>,
     ) -> Result<(), AssemblerError> {
         let counter_name = format!("{{{}}}", counter_name);
         let counter_name = counter_name.as_str();
@@ -2897,7 +2900,7 @@ impl Env {
                     },
                 ))
                 .into(),
-                span: span.clone(),
+                span: span.cloned(),
                 repetition: 0,
             });
         }
@@ -2910,7 +2913,7 @@ impl Env {
                     let counter_value = self.resolve_expr_must_never_fail(value).map_err(|e| {
                         AssemblerError::RepeatIssue {
                             error: Box::new(e),
-                            span: span.clone(),
+                            span: span.cloned(),
                             repetition: i as _,
                         }
                     })?;
@@ -2919,7 +2922,7 @@ impl Env {
                         Some(counter_value),
                         i as _,
                         code,
-                        span.clone(),
+                        span,
                     )?;
                 }
             }
@@ -2955,7 +2958,7 @@ impl Env {
         &mut self,
         address: &Expr,
         code: &[T],
-        span: Option<Z80Span>,
+        span: Option<&Z80Span>,
     ) -> Result<(), AssemblerError> {
         // Get the next code address
         let address = self
@@ -2963,7 +2966,7 @@ impl Env {
             .map_err(|error| match span {
                 Some(span) => AssemblerError::RelocatedError {
                     error: Box::new(error),
-                    span,
+                    span: span.clone(),
                 },
                 None => error,
             })?
@@ -2994,12 +2997,61 @@ impl Env {
         Ok(())
     }
 
-    /// Handle the statndard repetition directive
+    /// Handle the for directive
+    pub fn visit_for<T: ListingElement + Visited>(
+        &mut self,
+        label: &str, 
+        start: &Expr, 
+        stop: &Expr, 
+        step: Option<&Expr>, 
+        code: &[T],
+        span: Option<&Z80Span>) -> Result<(), AssemblerError>  {
+
+        let counter_name = format!("{{{}}}", label);
+        if self.symbols().contains_symbol(&counter_name)? {
+            return Err(AssemblerError::ForIssue {
+                error: AssemblerError::ExpressionError(ExpressionError::OwnError(
+                    box AssemblerError::AssemblingError {
+                        msg: format!("Counter {} already exists", &counter_name),
+                    },
+                ))
+                .into(),
+                span: span.cloned(),
+            });
+        }
+
+
+        let mut counter_value = self.resolve_expr_must_never_fail(start)?;
+        let stop = self.resolve_expr_must_never_fail(stop)?;
+        let step = match step {
+            Some(step) => self.resolve_expr_must_never_fail(step)?,
+            None => 1i32.into()
+        };
+
+        let mut i = 1;
+        while counter_value <= stop {
+            self.inner_visit_repeat(
+                Some(counter_name.as_str()),
+                Some(counter_value.clone()),
+                i as _,
+                code,
+                span,
+            )?;
+            counter_value = (counter_value + &step)?;
+            i+=1;
+        }
+
+        self.symbols_mut().remove_symbol(counter_name)?;
+        
+        Ok(())
+    }
+
+    /// Handle the standard repetition directive
     pub fn visit_repeat_until<T: ListingElement + Visited>(
         &mut self,
         cond: &Expr,
         code: &[T],
-        span: Option<Z80Span>,
+        span: Option<&Z80Span>,
     ) -> Result<(), AssemblerError> {
         let mut i = 0;
         loop {
@@ -3021,7 +3073,7 @@ impl Env {
         code: &[T],
         counter: Option<&str>,
         counter_start: Option<&Expr>,
-        span: Option<Z80Span>,
+        span: Option<&Z80Span>,
     ) -> Result<(), AssemblerError> {
         // get the number of loops
         let count = self.resolve_expr_must_never_fail(count)?.int()?;
@@ -3038,7 +3090,7 @@ impl Env {
                         },
                     ))
                     .into(),
-                    span: span.clone(),
+                    span: span.cloned(),
                     repetition: 0,
                 });
             }
@@ -3059,7 +3111,7 @@ impl Env {
                 span.clone(),
             )?;
             // handle the counter update
-            counter_value += 1.into();
+            counter_value += 1i32.into();
         }
 
         if let Some(counter_name) = counter_name {
@@ -3075,7 +3127,7 @@ impl Env {
         counter_value: Option<ExprResult>,
         iteration: i32,
         code: &[T],
-        span: Option<Z80Span>,
+        span: Option<&Z80Span>,
     ) -> Result<(), AssemblerError> {
         // handle symbols unicity
         {
@@ -3119,7 +3171,7 @@ impl Env {
 
             AssemblerError::RepeatIssue {
                 error: Box::new(e),
-                span: span.clone(),
+                span: span.cloned(),
                 repetition: iteration as _,
             }
         })?;

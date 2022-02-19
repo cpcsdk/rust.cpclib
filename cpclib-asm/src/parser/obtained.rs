@@ -87,6 +87,14 @@ pub enum LocatedToken {
         /// The span that correspond to the token
         span: Z80Span
     },
+    For{
+        label: SmolStr,
+        start: Expr,
+        stop: Expr,
+        step: Option<Expr>,
+        listing: LocatedListing,
+        span: Z80Span
+    },
     Function(SmolStr, Vec<SmolStr>, LocatedListing, Z80Span),
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
     Include(
@@ -158,7 +166,15 @@ impl Clone for LocatedToken {
                 LocatedToken::Switch(value.clone(), cases.clone(), default.clone(), span.clone())
             }
             LocatedToken::While(a, b, c) => LocatedToken::While(a.clone(), b.clone(), c.clone()),
-            LocatedToken::Module(..) => todo!()
+            LocatedToken::Module(..) => todo!(),
+            LocatedToken::For { label, start, stop, step, listing, span } => LocatedToken::For{
+                label: label.clone(),
+                start: start.clone(),
+                stop: stop.clone(),
+                step: step.clone(),
+                span: span.clone(),
+                listing: listing.clone()
+            },
         }
     }
 }
@@ -190,6 +206,7 @@ impl LocatedToken {
         match self {
             Self::Standard { span, .. }
             | Self::CrunchedSection(_, _, span)
+            | Self::For{span, ..}
             | Self::Function(_, _, _, span)
             | Self::Include(_, _, _, _, span)
             | Self::If(_, _, span)
@@ -261,7 +278,14 @@ impl LocatedToken {
             }
             LocatedToken::While(e, l, _span) => Cow::Owned(Token::While(e.clone(), l.as_listing())),
             LocatedToken::Iterate(_name, _values, _code, _span) => todo!(),
-            LocatedToken::Module(..) => todo!()
+            LocatedToken::Module(..) => todo!(),
+            LocatedToken::For { label, start, stop, step, listing, span } => Cow::Owned(Token::For{
+                label: label.clone(),
+                start: start.clone(),
+                stop: stop.clone(),
+                step: step.clone(),
+                listing: listing.as_listing()
+            }),
         }
     }
 
