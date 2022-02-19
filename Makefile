@@ -10,7 +10,8 @@ CRATES = cpclib-image \
 		cpclib-macros \
 		cpclib \
 		basm \
-		bdasm
+		bdasm \
+		imgconverter
 publish:
 	for project in $(CRATES) ; \
 	do cd $$project ; \
