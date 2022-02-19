@@ -1,10 +1,10 @@
 #CRATES= cpclib-sna \
 		cpclib-tokens\
-		cpclib-disc
-CRATES =		cpclib-basic\
+		cpclib-disc \
+		cpclib-basic\
 		cpclib-xfer\
-		cpclib-xfertool\
-		cpclib-asm\
+		cpclib-xfertool
+CRATES =		cpclib-asm\
 		cpclib-z80emu\
 		cpclib-macros \
 		cpclib \
@@ -17,3 +17,7 @@ publish:
 	   sleep 10 ; \
 	   cd ..; \
 	done
+
+
+fmt:
+	cargo fmt
