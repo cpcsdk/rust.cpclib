@@ -65,7 +65,7 @@ impl From<AssemblerError> for BasmError {
 /// Parse the given code.
 /// TODO read options to configure the search path
 pub fn parse<'arg>(
-    matches: &'arg ArgMatches<'_>
+    matches: &'arg ArgMatches
 ) -> Result<(LocatedListing, Vec<AssemblerError>), BasmError> {
     let inline_fname = "<inline code>";
     let filename = matches.value_of("INPUT").unwrap_or(inline_fname);
@@ -112,7 +112,7 @@ pub fn parse<'arg>(
 /// Assemble the given code
 /// TODO use options to configure the base symbole table
 pub fn assemble<'arg>(
-    matches: &'arg ArgMatches<'_>,
+    matches: &'arg ArgMatches,
     listing: &LocatedListing
 ) -> Result<Env, BasmError> {
     let mut options = AssemblingOptions::default();
@@ -190,7 +190,7 @@ pub fn assemble<'arg>(
 
 /// Save the provided result
 /// TODO manage the various save options and delegate them with save commands
-pub fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
+pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
     if matches.is_present("SNAPSHOT") {
         let pc_filename = matches.value_of("OUTPUT").unwrap();
         env.save_sna(pc_filename).map_err(|e| {
@@ -274,7 +274,7 @@ pub fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
 }
 
 /// Launch the assembling of everythin
-pub fn process(matches: &ArgMatches<'_>) -> Result<(Env, Vec<AssemblerError>), BasmError> {
+pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     // standard assembling
     let (listing, mut warnings) = parse(matches)?;
     let env = assemble(matches, &listing)?;
@@ -290,122 +290,122 @@ pub fn process(matches: &ArgMatches<'_>) -> Result<(Env, Vec<AssemblerError>), B
     }
 }
 
-pub fn build_args_parser() -> clap::App<'static, 'static> {
+pub fn build_args_parser() -> clap::App<'static> {
     App::new("basm")
 					.author("Krusty/Benediction")
 					.about("Benediction ASM -- z80 assembler that tailor Amstrad CPC")
                     .after_help("Work In Progress")
                     .arg(
-                        Arg::with_name("INLINE")
+                        Arg::new("INLINE")
                             .help("Z80 code is provided inline")
                             .long("inline")
                             .takes_value(true)
                     )
                     .arg(
-						Arg::with_name("INPUT")
+						Arg::new("INPUT")
 							.help("Input file to read.")
 							.takes_value(true)
                     )
                     .group(
-                        ArgGroup::with_name("ANY_INPUT")
+                        ArgGroup::new("ANY_INPUT")
                             .args(&["INLINE", "INPUT"])
                             .required(true)
                     )
 					.arg(
-						Arg::with_name("OUTPUT")
+						Arg::new("OUTPUT")
 							.help("Filename of the output.")
-							.short("o")
+							.short('o')
 							.long("output")
 							.takes_value(true)
 					)
 					.arg(
-                        Arg::with_name("DB_LIST")
+                        Arg::new("DB_LIST")
                         .help("Write a db list on screen (usefull to get the value of an opcode)")
                         .long("db")
                     )
-                    .arg(Arg::with_name("LISTING_OUTPUT")
+                    .arg(Arg::new("LISTING_OUTPUT")
                         .help("Filename of the listing output.")
                         .long("lst")
                         .takes_value(true)
                     )
-                    .arg(Arg::with_name("SYMBOLS_OUTPUT")
+                    .arg(Arg::new("SYMBOLS_OUTPUT")
                         .help("Filename of the output symbols file.")
                         .long("sym")
                         .takes_value(true)
                     )
                     .group(
-                        ArgGroup::with_name("ANY_OUTPUT")
+                        ArgGroup::new("ANY_OUTPUT")
                             .args(&["DB_LIST", "OUTPUT"])
                     )
 					.arg(
-						Arg::with_name("BASIC_HEADER")
+						Arg::new("BASIC_HEADER")
 							.help("Request a Basic header (the very first instruction has to be the LOCOMOTIVE directive.")
 							.long("basic")
 							.alias("basicheader")
 					)
 					.arg(
-						Arg::with_name("BINARY_HEADER")
+						Arg::new("BINARY_HEADER")
 							.help("Request a binary header")
 							.long("binary")
 							.alias("header")
 							.alias("binaryheader")
                     )
                     .arg(
-                        Arg::with_name("SNAPSHOT")
+                        Arg::new("SNAPSHOT")
                             .help("Generate a snapshot")
                             .long("snapshot")
                             .alias("sna")
                     )
 					.arg(
-						Arg::with_name("CASE_INSENSITIVE")
+						Arg::new("CASE_INSENSITIVE")
 							.help("Configure the assembler to be case insensitive.")
 							.long("case-insensitive")
-							.short("i") 
+							.short('i') 
 					)
                     .arg(
-                        Arg::with_name("DOTTED_DIRECTIVES")
+                        Arg::new("DOTTED_DIRECTIVES")
                             .help("Expect directives to by prefixed with a dot")
                             .long("directives-prefixed-by-dot")
-                            .short("d")
+                            .short('d')
                     )
                     .arg(
-                        Arg::with_name("INCLUDE_DIRECTORIES")
+                        Arg::new("INCLUDE_DIRECTORIES")
                             .help("Provide additional directories used to search files.")
                             .long("include")
-                            .short("I")
+                            .short('I')
                             .takes_value(true)
-                            .multiple(true)
+                            .multiple_occurrences(true)
                             .number_of_values(1)
                     )
                     .arg(
-                        Arg::with_name("DEFINE_SYMBOL")
+                        Arg::new("DEFINE_SYMBOL")
                             .help("Provide a symbol with its value (default set to 1")
                             .long("define")
-                            .short("D")
+                            .short('D')
                             .takes_value(true)
-                            .multiple(true)
+                            .multiple_occurrences(true)
                             .number_of_values(1)
                     )
                     .arg(
-                        Arg::with_name("LOAD_SYMBOLS")
+                        Arg::new("LOAD_SYMBOLS")
                             .help("Load symbols from the given file")
-                            .short("-l")
+                            .short('l')
                             .takes_value(true)
-                            .multiple(true)
+                            .multiple_occurrences(true)
                             .number_of_values(1)
                     )
                     .arg(
-                        Arg::with_name("WERROR")
+                        Arg::new("WERROR")
                         .help("Warning are considered to be errors")
                         .long("Werror")
                         .takes_value(false)
                     )
 					.group( // only one type of header can be provided
-						ArgGroup::with_name("HEADER")
+						ArgGroup::new("HEADER")
 							.args(&["BINARY_HEADER", "BASIC_HEADER"])
                     )
                     .group( // only one type of output can be provided
-                        ArgGroup::with_name("ARTEFACT_TYPE")
+                        ArgGroup::new("ARTEFACT_TYPE")
                         .args(&["BINARY_HEADER", "BASIC_HEADER", "SNAPSHOT"])
                     )
 }

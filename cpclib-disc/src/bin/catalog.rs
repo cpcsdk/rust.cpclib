@@ -17,7 +17,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 /// Catalog tool manipulator.
-use cpclib_common::clap::{App, Arg};
+use cpclib_common::clap::{Command, Arg};
 use cpclib_common::num::Num;
 use cpclib_disc::amsdos::*;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
@@ -56,31 +56,31 @@ fn main() -> std::io::Result<()> {
     )
     .expect("Unable to build logger");
 
-    let matches = App::new("catalog")
+    let matches = Command::new("catalog")
 					.about("Amsdos catalog manipulation tool.")
 					.author("Krusty/Benediction")
 					.arg(
-						Arg::with_name("LIST")
+						Arg::new("LIST")
 						.help("List the content of the catalog ONLY for files having no control chars")
 						.long("list")
-						.short("l")
+						.short('l')
 					)
 					.arg(
-						Arg::with_name("LISTALL")
+						Arg::new("LISTALL")
 						.help("List the content of the catalog EVEN for files having no control chars")
 						.long("listall")
-						.short("a")
+						.short('a')
 					)
 					.arg(
-						Arg::with_name("INPUT_FILE")
+						Arg::new("INPUT_FILE")
 						.help("Input/Output file that contains the entries of the catalog (a binary file or a dsk)")
 						.takes_value(true)
 						.required(true)
 						.long("input")
-						.short("i")
+						.short('i')
 					)
 					.arg(
-						Arg::with_name("ENTRY")
+						Arg::new("ENTRY")
 						.help("Selects the entry to modify")
 						.takes_value(true)
 						.long("entry")
@@ -99,31 +99,31 @@ fn main() -> std::io::Result<()> {
 						})
 					)
 					.arg(
-						Arg::with_name("SETREADONLY")
+						Arg::new("SETREADONLY")
 							.help("Set the selected entry readonly")
 							.long("readonly")
 							.requires("ENTRY")
 					)
 					.arg(
-						Arg::with_name("SETSYSTEM")
+						Arg::new("SETSYSTEM")
 							.help("Set the selected entry hidden")
 							.long("system")
 							.requires("ENTRY")
 					)
 					.arg(
-						Arg::with_name("UNSETREADONLY")
+						Arg::new("UNSETREADONLY")
 							.help("Set the selected entry read and write")
 							.long("noreadonly")
 							.requires("ENTRY")
 					)
 					.arg(
-						Arg::with_name("UNSETSYSTEM")
+						Arg::new("UNSETSYSTEM")
 							.help("Set the selected entry visible")
 							.long("nosystem")
 							.requires("ENTRY")
 					)
 					.arg(
-						Arg::with_name("USER")
+						Arg::new("USER")
 							.help("Set the user value")
 							.long("user")
 							.takes_value(true)
@@ -138,29 +138,28 @@ fn main() -> std::io::Result<()> {
 							})
 					)
 					.arg(
-						Arg::with_name("FILENAME")
+						Arg::new("FILENAME")
 							.help("Set the filename of the entry")
 							.takes_value(true)
 							.long("filename")
 							.requires("ENTRY")
 					)
 					.arg(
-						Arg::with_name("BLOCS")
+						Arg::new("BLOCS")
 							.help("Set the blocs to load (and update the number of blocs accordingly to that)")
 							.long("blocs")
 							.takes_value(true)
 							.requires("ENTRY")
-							.multiple(false)
 							.max_values(16)
 					)
 					.arg(
-						Arg::with_name("NUMPAGE")
+						Arg::new("NUMPAGE")
 						.help("Set the page number")
 						.long("numpage")
 						.takes_value(true)
 					)
 					.arg(
-						Arg::with_name("SIZE")
+						Arg::new("SIZE")
 						.help("Force the size of the entry")
 						.long("size")
 						.takes_value(true)

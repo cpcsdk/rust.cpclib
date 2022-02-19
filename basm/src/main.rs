@@ -14,21 +14,26 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use cpclib_asm::basm_utils::*;
+use cpclib_common::lazy_static;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
+lazy_static::lazy_static! {
+static ref DESC_BEFORE: String = format!(
+    "Profile {} compiled: {}",
+    built_info::PROFILE,
+    built_info::BUILT_TIME_UTC
+);
+}
+
 fn main() {
-    let desc_before = format!(
-        "Profile {} compiled: {}",
-        built_info::PROFILE,
-        built_info::BUILT_TIME_UTC
-    );
+
 
     let matches = build_args_parser()
         .version(built_info::PKG_VERSION)
-        .before_help(&desc_before[..])
+        .before_help(DESC_BEFORE.as_str())
         .get_matches();
 
     let start = std::time::Instant::now();

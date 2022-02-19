@@ -17,7 +17,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 
-use cpclib_common::clap::{App, Arg, ArgGroup, SubCommand};
+use cpclib_common::clap::{Command, Arg, ArgGroup};
 use cpclib_disc::amsdos::*;
 use cpclib_disc::edsk::ExtendedDsk;
 use custom_error::custom_error;
@@ -30,71 +30,71 @@ custom_error! {pub DskManagerError
 // Still everything to do
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<(), DskManagerError> {
-    let matches = App::new("dsk_manager")
+    let app = Command::new("dsk_manager")
                        .about("Manipulate DSK files")
                        .author("Krusty/Benediction")
                        .after_help("Pale buggy copy of an old Ramlaid's tool")
                        .arg(
-                           Arg::with_name("DSK_FILE")
+                           Arg::new("DSK_FILE")
                             .help("DSK file to manipulate")
                             .required(true)
                             .index(1)
                        )
                        .subcommand(
-                           SubCommand::with_name("format")
+                           Command::new("format")
                             .about("Format a dsk")
                             .arg(
-                                Arg::with_name("FORMAT_FILE")
+                                Arg::new("FORMAT_FILE")
                                     .help("Provide a file that describes the format of the disc")
                                     .long("description")
-                                    .short("d")
+                                    .short('d')
                                     .takes_value(true)
                             )
                             .arg(
-                                Arg::with_name("FORMAT_NAME")
+                                Arg::new("FORMAT_NAME")
                                     .help("Provide the name of a format that can be used")
-                                    .short("f")
+                                    .short('f')
                                     .long("format")
                                     .takes_value(true)
                                     .possible_values(&["data", "data42"])
                             )
                             .group(
-                                ArgGroup::with_name("command")
+                                ArgGroup::new("command")
                                     .arg("FORMAT_FILE")
                                     .arg("FORMAT_NAME")
                                     .required(true)
                             )
                        )
                        .subcommand(
-                           SubCommand::with_name("catalog")
+                           Command::new("catalog")
                            .about("Manipulate the catalog. Can only works for DSK having a Track 0 compatible with Amsdos")
                            .arg(
-                               Arg::with_name("IMPORT")
+                               Arg::new("IMPORT")
                                 .help("Import an existing catalog in the dsk. All entries are thus erased")
                                 .long("import")
-                                .short("-i")
+                                .short('i')
                                 .takes_value(true)
                            )
                            .arg(
-                               Arg::with_name("EXPORT")
+                               Arg::new("EXPORT")
                                 .help("Export the catalog in a specific file")
                                 .long("export")
-                                .short("-e")
+                                .short('e')
                                 .takes_value(true)
                            )
                            .arg(
-                               Arg::with_name("LIST")
+                               Arg::new("LIST")
                                .help("Display the catalog on screen")
                                .long("list")
-                               .short("l")
+                               .short('l')
                            )
                            .arg(
-                               Arg::with_name("CATART")
+                               Arg::new("CATART")
                                .help("[unimplemented] Display the catart version")
                                .long("--catart")
                            )
                            .group(
-                               ArgGroup::with_name("command")
+                               ArgGroup::new("command")
                                 .arg("IMPORT")
                                 .arg("EXPORT")
                                 .arg("LIST")
@@ -103,74 +103,74 @@ fn main() -> Result<(), DskManagerError> {
                            )
                        )
                        .subcommand(
-                           SubCommand::with_name("add")
+                           Command::new("add")
                            .about("Add files in the disc in an Amsdos way")
                            .arg(
-                               Arg::with_name("INPUT_FILES")
+                               Arg::new("INPUT_FILES")
                                 .help("The files to add. They MUST have a header")
                                 .takes_value(true)
-                                .multiple(true)
+                                .multiple_occurrences(true)
                                 .required(true)
                             )
                             .arg(
-                                Arg::with_name("SYSTEM")
+                                Arg::new("SYSTEM")
                                 .help("Indicates if the files are system files")
                                 .long("system")
-                                .short("s")
+                                .short('s')
                             )
                             .arg(
-                                Arg::with_name("READ_ONLY")
+                                Arg::new("READ_ONLY")
                                 .help("Indicates if the files are read only")
                                 .long("read_only")
-                                .short("r")
+                                .short('r')
                             )
                             .arg(
-                                Arg::with_name("AS_AMSDOS")
+                                Arg::new("AS_AMSDOS")
                                 .help("[unimplemented] Uses the same strategy as amsdos when adding a file: add .???, delete .BAK, rename other as .BAK, rename .??? with real extension")
                                 .long("secure")
                             )
                        )
                        .subcommand(
-                           SubCommand::with_name("put")
+                           Command::new("put")
                            .about("Add files in the disc in a sectorial way")
                            .arg(
-                               Arg::with_name("TRACK")
+                               Arg::new("TRACK")
                                 .help("The track of interest")
-                                .short("a")
+                                .short('a')
                                 .takes_value(true)
                                 .required(true)
                            )
                            .arg(
-                               Arg::with_name("SECTOR")
+                               Arg::new("SECTOR")
                                 .help("The sector of interest")
-                                .short("o")
+                                .short('o')
                                 .takes_value(true)
                                 .required(true)
                            )
                            .arg(
-                               Arg::with_name("SIDE")
+                               Arg::new("SIDE")
                                 .help("The head of interest")
-                                .short("p")
+                                .short('p')
                                 .takes_value(true)
                                 .required(true)
                            )
                            .arg(
-                               Arg::with_name("Z80_EXPORT")
+                               Arg::new("Z80_EXPORT")
                                .help("The path to the z80 files that will contains all the import information")
-                                .short("z")
+                                .short('z')
                                 .takes_value(true)
                                 .required(false)
                            )
                            .arg(
-                               Arg::with_name("FILES")
+                               Arg::new("FILES")
                                .help("The ordered list of files to import in the dsk")
                                 .takes_value(true)
-                                .multiple(true)
+                                .multiple_occurrences(true)
                                 .required(true)
                                 .last(true)
                            )
-                       )
-                       .get_matches();
+                       );
+    let matches = app.get_matches();
 
     let dsk_fname = matches.value_of("DSK_FILE").unwrap();
 
@@ -340,7 +340,7 @@ fn main() -> Result<(), DskManagerError> {
         dsk.save(dsk_fname)?;
     }
     else {
-        eprintln!("Missing command\n{}", matches.usage());
+        eprintln!("Missing command\n");
     }
 
     Ok(())

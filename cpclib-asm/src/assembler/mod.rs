@@ -794,7 +794,7 @@ impl Env {
 
             self.stable_counters = StableTickerCounters::default();
             self.run_options = None;
-            self.written_bytes().set_all(false);
+            self.written_bytes().fill(false);
             self.warnings.retain(|elem| !elem.is_override_memory());
             self.pages_info_sna.iter_mut().for_each(|p| p.new_pass());
 
@@ -805,7 +805,7 @@ impl Env {
 
             self.banks.iter_mut().for_each(|bank| {
                 bank.1.new_pass();
-                bank.2.set_all(false);
+                bank.2.fill(false);
             });
             self.selected_bank = None;
             self.output_address = 0;

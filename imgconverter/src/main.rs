@@ -19,7 +19,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow;
-use clap::{App, Arg, ArgMatches, SubCommand};
+use clap::{Command, Arg, ArgMatches};
 use cpclib::assembler::preamble::*;
 use cpclib::common::clap;
 use cpclib::disc::amsdos::*;
@@ -38,30 +38,30 @@ use tempfile::Builder;
 macro_rules! export_palette {
     ($e: expr) => {
         $e.arg(
-            Arg::with_name("EXPORT_PALETTE")
+            Arg::new("EXPORT_PALETTE")
                 .long("palette")
-                .short("p")
+                .short('p')
                 .takes_value(true)
                 .required(false)
                 .help("Name of the binary file that contains the palette (Gate Array format)"),
         )
         .arg(
-            Arg::with_name("EXPORT_INKS")
+            Arg::new("EXPORT_INKS")
             .long("inks")
-            .short("i")
+            .short('i')
             .takes_value(true)
             .required(false)
             .help("Name of the binary file that contains the ink numbers (usefull for system based color change)")
         )
         .arg(
-            Arg::with_name("EXPORT_PALETTE_FADEOUT")
+            Arg::new("EXPORT_PALETTE_FADEOUT")
                 .long("palette_fadeout")
                 .takes_value(true)
                 .required(false)
                 .help("Name of the file that will contain all the steps for a fade out transition (Gate Array format)")
         )
         .arg(
-            Arg::with_name("EXPORT_INK_FADEOUT")
+            Arg::new("EXPORT_INK_FADEOUT")
                 .long("ink_fadeout")
                 .takes_value(true)
                 .required(false)
@@ -294,7 +294,7 @@ fn parse_int(repr: &str) -> usize {
 }
 
 #[allow(clippy::if_same_then_else)] // false positive
-fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
+fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
         match sprite_matches.value_of("FORMAT").unwrap() {
             "linear" => OutputFormat::LinearEncodedSprite,
@@ -347,7 +347,7 @@ fn get_output_format(matches: &ArgMatches<'_>) -> OutputFormat {
     }
 }
 
-fn get_requested_palette(matches: &ArgMatches<'_>) -> Option<Palette> {
+fn get_requested_palette(matches: &ArgMatches) -> Option<Palette> {
     if matches.is_present("PENS") {
         let numbers = matches
             .value_of("PENS")
@@ -380,7 +380,7 @@ fn get_requested_palette(matches: &ArgMatches<'_>) -> Option<Palette> {
 // TODO - Add the ability to import a target palette
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
-fn convert(matches: &ArgMatches<'_>) -> anyhow::Result<()> {
+fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     let input_file = matches.value_of("SOURCE").unwrap();
     let output_mode = matches.value_of("MODE").unwrap().parse::<u8>().unwrap();
     let mut transformations = TransformationsList::default();
@@ -652,17 +652,17 @@ fn main() -> anyhow::Result<()> {
         built_info::BUILT_TIME_UTC
     );
 
-    let args = App::new("CPC image conversion tool")
+    let args = Command::new("CPC image conversion tool")
                     .version("0.1.2")
                     .author("Krusty/Benediction")
                     .about("Simple CPC image conversion tool")
                     .before_help(&desc_before[..])
 
                     .subcommand(
-                        SubCommand::with_name("sna")
+                        Command::new("sna")
                             .about("Generate a snapshot with the converted image.")
                             .arg(
-                                Arg::with_name("SNA")
+                                Arg::new("SNA")
                                     .takes_value(true)
                                     .help("snapshot filename to generate")
                                     .required(true)
@@ -678,10 +678,10 @@ fn main() -> anyhow::Result<()> {
                     )
 
                     .subcommand(
-                        SubCommand::with_name("dsk")
+                        Command::new("dsk")
                         .about("Generate a DSK with an executable of the converted image.")
                         .arg(
-                            Arg::with_name("DSK")
+                            Arg::new("DSK")
                             .takes_value(true)
                             .help("dsk filename to generate")
                             .required(true)
@@ -697,28 +697,28 @@ fn main() -> anyhow::Result<()> {
                     )
 
                     .subcommand(
-                        export_palette!(SubCommand::with_name("scr")
+                        export_palette!(Command::new("scr")
                         .about("Generate an OCP SCR file")
                         .arg(
-                            Arg::with_name("SCR")
+                            Arg::new("SCR")
                                 .takes_value(true)
                                 .help("SCR file to generate")
                                 .required(true)
                         )
                         .arg(
-                            Arg::with_name("COMPRESSED")
+                            Arg::new("COMPRESSED")
                                 .help("Request a compressed screen")
                                 .long("compress")
-                                .short("c")
+                                .short('c')
                                 .required(false)
                         )
                     ))
 
                     .subcommand(
-                        SubCommand::with_name("exec")
+                        Command::new("exec")
                         .about("Generate a binary file to manually copy in a DSK or M4 folder.")
                         .arg(
-                            Arg::with_name("FILENAME")
+                            Arg::new("FILENAME")
                             .takes_value(true)
                             .help("executable to generate")
                             .required(true)
@@ -744,26 +744,26 @@ fn main() -> anyhow::Result<()> {
                     )
 
                     .subcommand(
-                        export_palette!(SubCommand::with_name("sprite")
+                        export_palette!(Command::new("sprite")
                         .about("Generate a sprite file to be included inside an application")
                         .arg(
-                            Arg::with_name("CONFIGURATION")
+                            Arg::new("CONFIGURATION")
                             .long("configuration")
-                            .short("c")
+                            .short('c')
                             .takes_value(true)
                             .required(false)
                             .help("Name of the assembly file that contains the size of the sprite")
                         )
                         .arg(
-                            Arg::with_name("FORMAT")
+                            Arg::new("FORMAT")
                             .long("format")
-                            .short("f")
+                            .short('f')
                             .required(true)
                             .default_value("linear")
                             .possible_values(&["linear", "graycoded", "zigzag+graycoded"])
                         )
                         .arg(
-                            Arg::with_name("SPRITE_FNAME")
+                            Arg::new("SPRITE_FNAME")
                             .takes_value(true)
                             .help("Filename to generate")
                             .required(true)
@@ -771,63 +771,63 @@ fn main() -> anyhow::Result<()> {
                     ))
 
                     .subcommand(
-                        SubCommand::with_name("tile")
+                        Command::new("tile")
                             .about("Generate a list of sprites")
                             .arg(
-                                Arg::with_name("EXPORT_PALETTE")
+                                Arg::new("EXPORT_PALETTE")
                                 .long("palette")
-                                .short("p")
+                                .short('p')
                                 .takes_value(true)
                                 .required(false)
                                 .help("Name of the binary file that contains the palette")
                             )
                             .arg(
-                                Arg::with_name("WIDTH")
+                                Arg::new("WIDTH")
                                 .long("width")
-                                .short("w")
+                                .short('w')
                                 .takes_value(true)
                                 .required(true)
                                 .help("Width (in bytes) of a tile")
                             )
                             .arg(
-                                Arg::with_name("HEIGHT")
+                                Arg::new("HEIGHT")
                                 .long("height")
-                                .short("h")
+                                .short('h')
                                 .takes_value(true)
                                 .required(true)
                                 .help("Height (in lines) of a tile")
                             )
                             .arg(
-                                Arg::with_name("HORIZ_COUNT")
+                                Arg::new("HORIZ_COUNT")
                                 .long("horiz_count")
                                 .takes_value(true)
                                 .required(false)
                                 .help("Horizontal number of tiles to extract. Extra tiles are ignored")
                             )
                             .arg(
-                                Arg::with_name("VERT_COUNT")
+                                Arg::new("VERT_COUNT")
                                 .long("vert_count")
                                 .takes_value(true)
                                 .required(false)
                                 .help("Vertical number of tiles to extract. Extra tiles are ignored")
                             )
                             .arg(
-                                Arg::with_name("CONFIGURATION")
+                                Arg::new("CONFIGURATION")
                                 .long("configuration")
-                                .short("c")
+                                .short('c')
                                 .takes_value(true)
                                 .required(false)
                                 .help("Name of the assembly file that contains the size of the sprite")
                             )
                             .arg(
-                                Arg::with_name("FORMAT")
+                                Arg::new("FORMAT")
                                 .long("format")
-                                .short("f")
+                                .short('f')
                                 .required(true)
                                 .default_value("linear")
                             )
                             .arg(
-                                Arg::with_name("SPRITE_FNAME")
+                                Arg::new("SPRITE_FNAME")
                                 .takes_value(true)
                                 .help("Filename to generate. Will be postfixed by the number")
                                 .required(true)
@@ -836,8 +836,8 @@ fn main() -> anyhow::Result<()> {
                     )
 
                     .arg(
-                        Arg::with_name("MODE")
-                            .short("m")
+                        Arg::new("MODE")
+                            .short('m')
                             .long("mode")
                             .help("Screen mode of the image to convert.")
                             .value_name("MODE")
@@ -845,38 +845,37 @@ fn main() -> anyhow::Result<()> {
                             .possible_values(&["0", "1", "2"])
                     )
                     .arg(
-                        Arg::with_name("FULLSCREEN")
+                        Arg::new("FULLSCREEN")
                             .long("fullscreen")
                             .help("Specify a full screen displayed using 2 non consecutive banks.")
                             .conflicts_with("OVERSCAN")
                     )
                     .arg(
-                        Arg::with_name("OVERSCAN")
+                        Arg::new("OVERSCAN")
                             .long("overscan")
                             .help("Specify an overscan screen (crtc meaning).")
                     )
                     .arg(
-                        Arg::with_name("STANDARD")
+                        Arg::new("STANDARD")
                             .long("standard")
                             .help("Specify a standard screen manipulation.")
                             .conflicts_with("OVERSCAN")
                             .conflicts_with("FULLSCREEN")
                     )
                     .arg(
-                        Arg::with_name("SKIP_ODD_PIXELS")
+                        Arg::new("SKIP_ODD_PIXELS")
                             .long("skipoddpixels")
-                            .short("s")
+                            .short('s')
                             .help("Skip odd pixels when reading the image (usefull when the picture is mode 0 with duplicated pixels")
                     )
-                    .arg(Arg::with_name("PENS")
+                    .arg(Arg::new("PENS")
                             .long("pens")
-                            .short("")
                             .takes_value(true)
                             .required(false)
                             .help("Separated list of ink number. Use ',' as a separater")
                         )
                         .arg(
-                            Arg::with_name("PEN0")
+                            Arg::new("PEN0")
                             .long("pen0")
                             .takes_value(true)
                             .required(false)
@@ -884,7 +883,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN1")
+                            Arg::new("PEN1")
                             .long("pen1")
                             .takes_value(true)
                             .required(false)
@@ -892,7 +891,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN2")
+                            Arg::new("PEN2")
                             .long("pen2")
                             .takes_value(true)
                             .required(false)
@@ -900,7 +899,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN3")
+                            Arg::new("PEN3")
                             .long("pen3")
                             .takes_value(true)
                             .required(false)
@@ -908,7 +907,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN4")
+                            Arg::new("PEN4")
                             .long("pen4")
                             .takes_value(true)
                             .required(false)
@@ -916,7 +915,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN5")
+                            Arg::new("PEN5")
                             .long("pen5")
                             .takes_value(true)
                             .required(false)
@@ -924,7 +923,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN6")
+                            Arg::new("PEN6")
                             .long("pen6")
                             .takes_value(true)
                             .required(false)
@@ -932,7 +931,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN7")
+                            Arg::new("PEN7")
                             .long("pen7")
                             .takes_value(true)
                             .required(false)
@@ -940,7 +939,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN8")
+                            Arg::new("PEN8")
                             .long("pen8")
                             .takes_value(true)
                             .required(false)
@@ -948,7 +947,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN9")
+                            Arg::new("PEN9")
                             .long("pen9")
                             .takes_value(true)
                             .required(false)
@@ -956,7 +955,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN10")
+                            Arg::new("PEN10")
                             .long("pen10")
                             .takes_value(true)
                             .required(false)
@@ -964,7 +963,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN11")
+                            Arg::new("PEN11")
                             .long("pen11")
                             .takes_value(true)
                             .required(false)
@@ -972,7 +971,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN12")
+                            Arg::new("PEN12")
                             .long("pen12")
                             .takes_value(true)
                             .required(false)
@@ -980,7 +979,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN13")
+                            Arg::new("PEN13")
                             .long("pen13")
                             .takes_value(true)
                             .required(false)
@@ -988,7 +987,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN14")
+                            Arg::new("PEN14")
                             .long("pen14")
                             .takes_value(true)
                             .required(false)
@@ -996,7 +995,7 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                         .arg(
-                            Arg::with_name("PEN15")
+                            Arg::new("PEN15")
                             .long("pen15")
                             .takes_value(true)
                             .required(false)
@@ -1004,12 +1003,12 @@ fn main() -> anyhow::Result<()> {
                             .conflicts_with("PENS")
                         )
                     .arg(
-                        Arg::with_name("SOURCE")
+                        Arg::new("SOURCE")
                             .takes_value(true)
                             .help("Filename to convert")
 //                            .last(true)
                             .required(true)
-                            .empty_values(false)
+                            .forbid_empty_values(true)
                             .validator(|source| {
                               if Path::new(&source).exists() {
                                   Ok(())
@@ -1022,16 +1021,16 @@ fn main() -> anyhow::Result<()> {
 
     let matches = if cfg!(feature = "xferlib") {
         args.subcommand(
-                        SubCommand::with_name("m4")
+                        Command::new("m4")
                         .about("Directly send the code on the M4 through a snapshot")
                         .arg(
-                            Arg::with_name("CPCM4")
+                            Arg::new("CPCM4")
                                 .takes_value(true)
                             .help("Address of the M4")
                             .required(true)
                         )
                         .arg(
-                            Arg::with_name("WATCH")
+                            Arg::new("WATCH")
                             .takes_value(false)
                             .help("Monitor the source file modification and restart the conversion and transfer automatically. Picture must ALWAYS be valid.")
                             .long("watch")
