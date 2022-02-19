@@ -4043,7 +4043,7 @@ pub fn parse_unary_function_call(input: Z80Span) -> IResult<Z80Span, Expr, Verbo
             UnaryFunction::Low,
             alt((parse_word("LOW"), parse_word("LO")))
         ),
-        value(UnaryFunction::Memory, parse_word("MEMORY")),
+        value(UnaryFunction::Memory, alt((parse_word("PEEK"), parse_word("MEMORY")))),
         value(UnaryFunction::Floor, parse_word("FLOOR")),
         value(UnaryFunction::Ceil, parse_word("CEIL")),
         value(UnaryFunction::Frac, parse_word("FRAC")),

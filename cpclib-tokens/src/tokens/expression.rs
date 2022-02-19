@@ -659,6 +659,12 @@ impl From<char> for ExprResult {
     }
 }
 
+impl<T: Into<ExprResult> + Clone> From<&[T]> for ExprResult {
+    fn from(slice: &[T]) -> Self {
+        ExprResult::List(slice.iter().cloned().map(|e| e.into()).collect_vec())
+    }
+}
+
 impl ExprResult {
     pub fn is_float(&self) -> bool {
         match self {
@@ -1144,11 +1150,22 @@ impl std::cmp::PartialEq for ExprResult {
         match (self, other) {
             (Self::Float(l0), Self::Float(r0)) => l0 == r0,
             (Self::Value(l0), Self::Value(r0)) => l0 == r0,
-
             (Self::String(l0), Self::String(r0)) => l0 == r0,
-            (Self::String(_), _) | (_, Self::String(_)) => false,
-
             (Self::List(l0), Self::List(r0)) => l0 == r0,
+
+            (Self::String(s), Self::List(l)) | (Self::List(l), Self::String(s)) => {
+                let s = s.as_bytes();
+                if s.len() != l.len() {return false;}
+                s.iter().zip(l.iter())
+                    .all(|(a, b)| {
+                        match b.int() {
+                            Ok(b) => (*a as i32) == b,
+                            Err(_) => false
+                        }
+                    })
+            }
+
+            (Self::String(_), _) | (_, Self::String(_)) => false,
             (Self::List(_), _) | (_, Self::List(_)) => false,
 
             _ => self.int().unwrap() == other.int().unwrap()

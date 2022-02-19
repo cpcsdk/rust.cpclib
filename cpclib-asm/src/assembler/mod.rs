@@ -1,5 +1,6 @@
 pub mod delayed_command;
 pub mod function;
+pub mod file;
 pub mod list;
 pub mod listing_output;
 pub mod r#macro;
@@ -3028,6 +3029,32 @@ impl Env {
             None => 1i32.into()
         };
 
+        let zero = ExprResult::from(0i32);
+
+        if step == zero {
+            return Err(AssemblerError::ForIssue {
+                error: AssemblerError::ExpressionError(ExpressionError::OwnError(
+                    box AssemblerError::AssemblingError {
+                        msg: format!("Infinite loop"),
+                    },
+                ))
+                .into(),
+                span: span.cloned(),
+            });
+        }
+
+        if step < zero {
+            return Err(AssemblerError::ForIssue {
+                error: AssemblerError::ExpressionError(ExpressionError::OwnError(
+                    box AssemblerError::AssemblingError {
+                        msg: format!("Negative step is not yet handled"),
+                    },
+                ))
+                .into(),
+                span: span.cloned(),
+            });
+        }
+
         let mut i = 1;
         while counter_value <= stop {
             self.inner_visit_repeat(
@@ -3042,7 +3069,7 @@ impl Env {
         }
 
         self.symbols_mut().remove_symbol(counter_name)?;
-        
+
         Ok(())
     }
 

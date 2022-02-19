@@ -13,7 +13,7 @@ use super::list::{
 use super::matrix::{
     matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width
 };
-use super::Env;
+use super::{Env, file};
 
 use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
@@ -159,6 +159,7 @@ lazy_static::lazy_static! {
         "matrix_set_col": Function::HardCoded(HardCodedFunction::MatrixSetCol),
         "matrix_width": Function::HardCoded(HardCodedFunction::MatrixWidth),
         "matrix_height": Function::HardCoded(HardCodedFunction::MatrixHeight),
+        "load": Function::HardCoded(HardCodedFunction::Load)
     };
 }
 
@@ -199,6 +200,7 @@ pub enum HardCodedFunction {
     StringPush,
     StringConcat,
 
+    Load,
     Assemble
 }
 
@@ -241,7 +243,9 @@ impl HardCodedFunction {
             HardCodedFunction::MatrixSetCol => Some(3),
 
             HardCodedFunction::MatrixWidth => Some(1),
-            HardCodedFunction::MatrixHeight => Some(1)
+            HardCodedFunction::MatrixHeight => Some(1),
+
+            HardCodedFunction::Load => Some(1),
         }
     }
 
@@ -414,7 +418,12 @@ impl HardCodedFunction {
                 matrix_set_col(params[0].clone(), params[1].int()? as _, &params[2])
             }
             HardCodedFunction::MatrixWidth => matrix_width(&params[0]),
-            HardCodedFunction::MatrixHeight => matrix_height(&params[0])
+            HardCodedFunction::MatrixHeight => matrix_height(&params[0]),
+            HardCodedFunction::Load => {
+                let fname = params[0].string()?;
+                file::load_binary(fname)
+                    .map_err(|e| AssemblerError::AssemblingError{msg: format!("{} not found", fname)})
+            },
         }
     }
 }
