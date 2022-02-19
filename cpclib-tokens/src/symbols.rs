@@ -187,8 +187,7 @@ impl Struct {
             Token::Defb(c) => c.len() as i32,
             Token::Defw(c) => 2 * c.len() as i32,
             Token::MacroCall(n, _) => {
-                dbg!(n);
-                let s = dbg!(table.struct_value(n)).ok().unwrap().unwrap(); // TODO handle error here
+                let s = table.struct_value(n).ok().unwrap().unwrap(); // TODO handle error here
                 s.len(table)
             }
             _ => unreachable!("{:?}", token)

@@ -8,6 +8,7 @@ use crate::Env;
 use crate::preamble::Z80Span;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::itertools::EitherOrBoth;
+use std::ops::Deref;
 
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
@@ -135,20 +136,21 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
     /// Current bersion does not handle at all directive with several arguments
     /// BUG does not work when directives have a prefix
     fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
-        dbg!("{:?} != {:?}", self.args, self.r#struct().content());
+//        dbg!("{:?} != {:?}", self.args, self.r#struct().content());
 
         let prefix = ""; // TODO acquire this prefix
 
+        // self.args has priority over self.content information
         let mut developped: String = self
             .r#struct()
             .content()
             .iter()
-            .zip_longest(self.args.iter()) // by construction longest is the struct template
+            .zip_longest(self.args.iter())  // by construction longest is the struct template
             .enumerate()
             .map(|(_idx, current_information)| -> Result<String, AssemblerError> {
-                let ((_name, token), current_param) = {
+                let ((_name, token), provided_param) = {
                     match current_information {
-                        EitherOrBoth::Both((name, token), current_param) => ((name, token), Some(current_param)),
+                        EitherOrBoth::Both((name, token), provided_param) => ((name, token), Some(provided_param)),
                         EitherOrBoth::Left((name, token)) => ((name, token), None),
                         _ => unreachable!()
                     }
@@ -165,9 +167,9 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
                             "DW"
                         };
 
-                        let elem = match  current_param {
-                            Some(current_param) => {
-                                let elem = current_param.expand(env)?;
+                        let elem = match  provided_param {
+                            Some(provided_param) => {
+                                let elem = provided_param.expand(env)?;
                                 if elem.is_empty() {
                                     c[0].to_string()
                                 } else {
@@ -179,73 +181,54 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
                         Ok(format!(" {}{} {}", prefix, tok, elem))
                     }
 
-                    Token::MacroCall(r#macro, current_default_arg) => {
+                    Token::MacroCall(r#macro, current_default_args) => {
                         let mut call = format!(" {}{} ", prefix, r#macro);
 
-                        // The way to manage default/provided params differ depending on the combination
-                        let args = match (current_param, current_default_arg.len()) {
-                            // no default
-                            (_, 0) => {
-                                match current_param {
-                                    Some(current_param) => {
-                                        let elem = current_param.expand(env)?;
-                                        vec![elem]
-                                    }
-                                    None => {
-                                        vec![]
-                                    }
-                                }
-                            }
+                        let args = match provided_param {
+                            Some(MacroParam::Single(..)) => {
+                                provided_param.into_iter()
+                                    .zip_longest(current_default_args)
+                                    .map(|a| match a {
+                                        EitherOrBoth::Both(provided, _) | EitherOrBoth::Left(provided) => provided,
+                                        EitherOrBoth::Right(default) => default
 
-                            // one default
-                            (_, 1) => {
-                                let val = current_param.unwrap_or(&current_default_arg[0]);
-                                let elem = val.expand(env)?;
-                                vec![elem]
-                            }
-
-                            // default is several, provided is single. Use provided only if not empty
-                            (Some(MacroParam::Single(_)), _nb_default) => {
-                                let mut default_iter = current_default_arg.iter();
-                                let first_default = default_iter.next().unwrap();
-                                let mut collected = Vec::new();
-                                collected.push(current_param.unwrap_or(first_default));
-                                collected.extend(default_iter);
-
-                                collected.iter().map(|p| p.expand(env))
-                                    .collect::<Result<Vec<_>,_>>()?
-                            }
-
-                            // default and provided are several
-                            (Some(MacroParam::List(all_curr)), nb_default) => {
-                                let max_size = all_curr.len().max(nb_default);
-
-                                let mut collected = Vec::new();
-                                for idx2 in 0..max_size {
-                                    if idx2 >= all_curr.len() {
-                                        collected.push(current_default_arg[idx2].expand(env)?);
-                                    }
-                                    else if idx2 >= nb_default {
-                                        collected.push(all_curr[idx2].expand(env)?);
-                                    }
-                                    else {
-                                        let current = &all_curr[idx2];
-                                        let default = &current_default_arg[idx2];
-
-                                        if !current.is_empty() {
-                                            collected.push(default.expand(env)?);
+                                    })
+                                    .map(|a| a.expand(env)
+                                    .map(|repr| {
+                                        if a.is_single() {
+                                            repr
+                                        } else {
+                                            format!("[{}]", repr)
                                         }
-                                        else {
-                                            collected.push(current.expand(env)?);
-                                        }
-                                    }
-                                }
-                                collected
+                                    }))
+                                    .collect::<Result<Vec<String>, AssemblerError>>()?
                             },
+                            Some(MacroParam::List(l)) => {
+                                 l.into_iter()
+                                    .zip_longest(current_default_args)
+                                    .map(|a| match a {
+                                        EitherOrBoth::Both(provided, _) | EitherOrBoth::Left(provided) => provided.deref(),
+                                        EitherOrBoth::Right(default) => default
 
-                            (None, _) => unimplemented!()
+                                    })
+                                    .map(|a| 
+                                        a.expand(env)
+                                            .map(|repr| {
+                                                if a.is_single() {
+                                                    repr
+                                                } else {
+                                                    format!("[{}]", repr)
+                                                }
+                                            })
+                                    )
+                                    .collect::<Result<Vec<String>, AssemblerError>>()?
+                            }
+                            None => {
+                                current_default_args.iter()
+                                    .map(|a| a.expand(env))
+                                    .collect::<Result<Vec<String>, AssemblerError>>()?
+                            }
                         };
-
                         call.push_str(&args.join(","));
                         Ok(call)
                     }
@@ -260,6 +243,6 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
         if last != 'n' {
             developped.push('\n');
         }
-        Ok(developped)
+        dbg!(Ok(developped))
     }
 }

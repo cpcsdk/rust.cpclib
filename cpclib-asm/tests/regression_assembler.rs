@@ -95,13 +95,13 @@ p3 point 9
 	endstruct
 
 
-my_triangle1 triangle [1, 2, 3], [1, 2, 3], [1, 2, 3]
+my_triangle1 triangle [2, 3, 4], [10, 20, 30], [100, 200, 255]
 	";
 
     // just check that it assemble
     let binary = assemble(code).unwrap();
     assert_eq!(binary.len(), 3 * 3);
-    assert_eq!(&binary, &[1, 2, 3, 1, 2, 3, 1, 2, 3,])
+    assert_eq!(&binary, &[2, 3, 4, 10, 20, 30, 100, 200, 255])
 }
 
 #[test]
