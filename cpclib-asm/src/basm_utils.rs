@@ -215,6 +215,9 @@ pub fn save(matches: &ArgMatches<'_>, env: &Env) -> Result<(), BasmError> {
             use std::convert::TryFrom;
 
             let pc_filename = matches.value_of("OUTPUT").unwrap();
+            if pc_filename.to_lowercase().ends_with(".sna") && !matches.is_present("SNAPSHOT") {
+                eprintln!("[WARNING] You are saving a file with .sna extension without using --sna flag");
+            }
             let amsdos_filename = AmsdosFileName::try_from(pc_filename);
 
             // Raise an error if the filename is not compatible with the header
