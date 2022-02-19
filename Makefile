@@ -1,7 +1,7 @@
-CRATES= cpclib-sna \
+#CRATES= cpclib-sna \
 		cpclib-tokens\
-		cpclib-disc\
-		cpclib-basic\
+		cpclib-disc
+CRATES =		cpclib-basic\
 		cpclib-xfer\
 		cpclib-xfertool\
 		cpclib-asm\

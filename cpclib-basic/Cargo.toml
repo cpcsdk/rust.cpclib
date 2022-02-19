@@ -22,7 +22,7 @@ getset = "0.1.1"
 matches = "0.1.8"
 #memchr = "2.4.0"
 serde = { version = "1.0.126", features = ["derive"] }
-num_enum = "*"
+num_enum = "0.5.6"
 clap = { version = "2.33.3", optional = true }
 
 [build-dependencies]
