@@ -4,7 +4,8 @@
 		cpclib-basic\
 		cpclib-xfer\
 		cpclib-xfertool
-CRATES =		cpclib-asm\
+CRATES = cpclib-image \
+		cpclib-asm\
 		cpclib-z80emu\
 		cpclib-macros \
 		cpclib \
