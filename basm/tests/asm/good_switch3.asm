@@ -1,0 +1,2 @@
+
+	switch 3 : case 1: db 1 : break : case 3: db 3 : case 4: db 4 : break : case 5 : db 5 : 	default : db 6 : endswitch
