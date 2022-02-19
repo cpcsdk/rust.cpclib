@@ -7,7 +7,9 @@ CRATES= cpclib-sna \
 		cpclib-asm\
 		cpclib-z80emu\
 		cpclib-macros \
-		cpclib
+		cpclib \
+		basm \
+		bdasm
 publish:
 	for project in $(CRATES) ; \
 	do cd $$project ; \
