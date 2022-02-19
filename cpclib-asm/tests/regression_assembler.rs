@@ -61,6 +61,7 @@ yy    db 5
 zz    db 6
 	  endstruct
 
+; each point uses the default values if nothing is provided
 	struct triangle
 p1 point 
 p2 point 
@@ -68,6 +69,7 @@ p3 point
 	endstruct
 
 
+; triangle with default values (4,5,6) for each point
 my_triangle1: triangle
 	";
 

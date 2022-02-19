@@ -131,7 +131,7 @@ impl<'s,'a> StructWithArgs<'s,'a> {
 
 
 impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
-        /// Generate the token that correspond to the current structure
+    /// Generate the token that correspond to the current structure
     /// Current bersion does not handle at all directive with several arguments
     /// BUG does not work when directives have a prefix
     fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
@@ -179,15 +179,22 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
                         Ok(format!(" {}{} {}", prefix, tok, elem))
                     }
 
-                    Token::MacroCall(n, current_default_arg) => {
-                        let mut call = format!(" {}{} ", prefix, n);
+                    Token::MacroCall(r#macro, current_default_arg) => {
+                        let mut call = format!(" {}{} ", prefix, r#macro);
 
                         // The way to manage default/provided params differ depending on the combination
                         let args = match (current_param, current_default_arg.len()) {
                             // no default
                             (_, 0) => {
-                                let elem = current_param.unwrap().expand(env)?;
-                                vec![elem]
+                                match current_param {
+                                    Some(current_param) => {
+                                        let elem = current_param.expand(env)?;
+                                        vec![elem]
+                                    }
+                                    None => {
+                                        vec![]
+                                    }
+                                }
                             }
 
                             // one default
