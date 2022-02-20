@@ -338,10 +338,43 @@ impl<'token, T: Visited + AsSimpleToken + Debug>  ProcessedToken<'token, T> {
 		match &mut self.state {
 			None => self.token.visited(env),
             Some(ProcessedTokenState::Include(ref mut state)) => {
+                match self.token.as_simple_token().as_ref() {
+                    Token::Include(fname, namespace, once) => {
+                        let fname = env
+                            .ctx // TODO get span context if available
+                            .get_path_for(fname)
+                            .unwrap_or("will_fail".into());
+                        if (!*once) || (!env.has_included(&fname)) {
+                            // inclusion requested
+                            env.mark_included(fname);
 
-                state.with_processed_tokens_mut(|tokens| {
-                    visit_processed_tokens(tokens, env)
-                })
+                            // handle module if necessary
+                            if let Some(namespace) = namespace {
+                                env.enter_namespace(namespace)?;
+                                // TODO handle the locating of error
+                                    //.map_err(|e| e.locate(span.clone()))?;
+                            }
+                            
+                            // Visit the included listing
+                            state.with_processed_tokens_mut(|tokens| {
+                                visit_processed_tokens(tokens, env)
+                            });
+
+                            // Remove module if necessary
+                            if namespace.is_some() {
+                                env.leave_namespace()?;
+                                //.map_err(|e| e.locate(span.clone()))?;
+                            }
+
+                            Ok(())
+
+                        } else {
+                            // no inclusion
+                            Ok(())
+                        }
+                    },
+                    _ => unreachable!()
+                }
             },
 
             Some(ProcessedTokenState::Incbin{ref data}) => {
