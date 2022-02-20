@@ -358,7 +358,7 @@ impl<'token, T: Visited + AsSimpleToken + Debug>  ProcessedToken<'token, T> {
                             // Visit the included listing
                             state.with_processed_tokens_mut(|tokens| {
                                 visit_processed_tokens(tokens, env)
-                            });
+                            })?;
 
                             // Remove module if necessary
                             if namespace.is_some() {
