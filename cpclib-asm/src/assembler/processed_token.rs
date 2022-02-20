@@ -343,6 +343,10 @@ impl<'token, T: Visited + AsSimpleToken + Debug>  ProcessedToken<'token, T> {
                     visit_processed_tokens(tokens, env)
                 })
             },
+
+            Some(ProcessedTokenState::Incbin{ref data}) => {
+                env.visit_incbin(data)
+            }
 			other => unimplemented!("Specific behavior requiring a state not implemented. {:?}", other)
 		}
 	}
