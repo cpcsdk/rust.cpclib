@@ -8,7 +8,7 @@ use std::sync::Arc;
 use cpclib_common::clap;
 use cpclib_common::clap::{App, Arg, ArgGroup, ArgMatches};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
-
+use crate::processed_token::read_source;
 use crate::preamble::*;
 
 #[derive(Debug)]
@@ -66,7 +66,7 @@ impl From<AssemblerError> for BasmError {
 /// TODO read options to configure the search path
 pub fn parse<'arg>(
     matches: &'arg ArgMatches
-) -> Result<(LocatedListing, Vec<AssemblerError>), BasmError> {
+) -> Result<(ParserContext, LocatedListing, Vec<AssemblerError>), BasmError> {
     let inline_fname = "<inline code>";
     let filename = matches.value_of("INPUT").unwrap_or(inline_fname);
 
@@ -106,13 +106,14 @@ pub fn parse<'arg>(
         .map_err(|e| BasmError::from(e))?;
 
     let warnings = context.warnings();
-    Ok((res, warnings))
+    Ok((context.as_ref().clone(), res, warnings))
 }
 
 /// Assemble the given code
 /// TODO use options to configure the base symbole table
 pub fn assemble<'arg>(
     matches: &'arg ArgMatches,
+    ctx: &ParserContext,
     listing: &LocatedListing
 ) -> Result<Env, BasmError> {
     let mut options = AssemblingOptions::default();
@@ -162,7 +163,7 @@ pub fn assemble<'arg>(
         }
     }
 
-    let env = visit_tokens_all_passes_with_options(&listing, &options)
+    let env = visit_tokens_all_passes_with_options(&listing, &options, &ctx)
         .map_err(|e| BasmError::AssemblerError { error: e })?;
 
     if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
@@ -278,8 +279,8 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 /// Launch the assembling of everythin
 pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     // standard assembling
-    let (listing, mut warnings) = parse(matches)?;
-    let env = assemble(matches, &listing)?;
+    let (ctx, listing, mut warnings) = parse(matches)?;
+    let env = assemble(matches, &ctx, &listing)?;
 
     warnings.extend_from_slice(env.warnings());
 

@@ -36,6 +36,7 @@ use cpclib_disc::amsdos::*;
 use preamble::*;
 
 use self::listing_output::ListingOutput;
+use crate::processed_token::AsSimpleToken;
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
 #[derive(Debug)]
@@ -113,44 +114,47 @@ impl AssemblingOptions {
 }
 
 /// Assemble a piece of code and returns the associated list of bytes.
-pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
+pub fn assemble(code: &str, ctx: &ParserContext) -> Result<Vec<u8>, AssemblerError> {
     let options = AssemblingOptions::default();
     // let options = AssemblingOptions::new_with_table(table);
-    assemble_with_options(code, &options).map(|(bytes, _symbols)| bytes)
+    assemble_with_options(code, &options, ctx).map(|(bytes, _symbols)| bytes)
 }
 
 /// Assemble a piece of code and returns the associates liste of bytes as well as the generated reference table.
 pub fn assemble_with_options(
     code: &str,
-    options: &AssemblingOptions
+    options: &AssemblingOptions,
+    ctx: &ParserContext
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let tokens = parser::parse_z80_str(code)?;
-    assemble_tokens_with_options(&tokens, &options)
+    assemble_tokens_with_options(&tokens, &options, ctx)
 }
 
 /// Assemble the predifined list of tokens
-pub fn assemble_tokens_with_options<T: Visited>(
-    tokens: &[T],
-    options: &AssemblingOptions
+pub fn assemble_tokens_with_options<'tokens, T: Visited + AsSimpleToken + Clone + ListingElement >(
+    tokens: &'tokens [T],
+    options: &AssemblingOptions,
+    ctx: &ParserContext
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
-    let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
+    let env = assembler::visit_tokens_all_passes_with_options(tokens, &options, ctx)?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
 }
 
 /// Build the code and store it inside a file supposed to be injected in a dsk
 /// XXX probably crash if filename is not coherent
+/// //
 pub fn assemble_to_amsdos_file(
     code: &str,
-    amsdos_filename: &str
+    amsdos_filename: &str,
+    ctx: &ParserContext
 ) -> Result<AmsdosFile, AssemblerError> {
-    use std::convert::TryFrom;
 
     let amsdos_filename = AmsdosFileName::try_from(amsdos_filename)?;
 
     let tokens = parser::parse_z80_str(code)?;
     let options = AssemblingOptions::default();
 
-    let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options)?;
+    let env = assembler::visit_tokens_all_passes_with_options(&tokens, &options, ctx)?;
 
     Ok(AmsdosFile::binary_file_from_buffer(
         &amsdos_filename,
@@ -196,13 +200,17 @@ mod test_super {
 Truc
 		";
 
+        let ctx = ParserContext{
+            ..Default::default()
+        };
+
         let options = AssemblingOptions::new_case_sensitive();
-        println!("{:?}", assemble_with_options(code, &options));
-        assert!(assemble_with_options(code, &options).is_err());
+        println!("{:?}", assemble_with_options(code, &options, &ctx));
+        assert!(assemble_with_options(code, &options, &ctx).is_err());
 
         let options = AssemblingOptions::new_case_insensitive();
-        println!("{:?}", assemble_with_options(code, &options));
-        assert!(assemble_with_options(code, &options).is_ok());
+        println!("{:?}", assemble_with_options(code, &options, &ctx));
+        assert!(assemble_with_options(code, &options, &ctx).is_ok());
     }
 
     #[test]

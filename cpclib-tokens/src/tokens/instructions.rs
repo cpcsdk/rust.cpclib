@@ -1,5 +1,4 @@
 use std::fmt;
-use std::sync::RwLock;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
@@ -409,7 +408,7 @@ pub enum Token {
     Assign(SmolStr, Expr),
 
     /// Configure the bank - completely incompatible with rasm behavior
-    /// The expression corresponds to the GATE ARRAY value to select the banke of interest
+    /// The expression corresponds to the GATE ARRAY value to select the bank of interest
     Bank(Option<Expr>),
     Bankset(Expr),
     /// Basic code which tokens will be included in the code (imported variables, lines to hide,  code)
@@ -451,11 +450,10 @@ pub enum Token {
         length: Option<Expr>,
         extended_offset: Option<Expr>,
         off: bool,
-        content: RwLock<Option<Vec<u8>>>,
         transformation: BinaryTransformation
     },
     // file may or may not be read during parse. If not, it is read on demand when assembling
-    Include(Filename, RwLock<Option<Listing>>, Option<SmolStr>, bool),
+    Include(Filename, Option<SmolStr>, bool),
     Iterate(SmolStr, Vec<Expr>, Listing),
 
     Label(SmolStr),
@@ -566,7 +564,6 @@ impl Clone for Token {
                 length,
                 extended_offset,
                 off,
-                content,
                 transformation
             } => {
                 Token::Incbin {
@@ -575,16 +572,14 @@ impl Clone for Token {
                     length: length.clone(),
                     extended_offset: extended_offset.clone(),
                     off: off.clone(),
-                    content: content.read().unwrap().as_ref().map(|v| v.clone()).into(),
                     transformation: transformation.clone()
                 }
             }
-            Token::Include(a, b, c, d) => {
+            Token::Include(a, b, c) => {
                 Token::Include(
                     a.clone(),
-                    b.read().unwrap().as_ref().map(|l| l.clone()).into(),
-                    c.clone(),
-                    *d
+                    b.clone(),
+                    c.clone()
                 )
             }
             Token::Iterate(a, b, c) => Token::Iterate(a.clone(), b.clone(), c.clone()),
@@ -743,7 +738,6 @@ impl fmt::Display for Token {
                  length, 
                  extended_offset, 
                  off, 
-                 content: _, 
                  transformation
              } 
                  => {
@@ -778,10 +772,10 @@ impl fmt::Display for Token {
                  }
  
 
-                 Token::Include(ref fname, _, Some(module), once)
+                 Token::Include(ref fname, Some(module), once)
                  => write!(f, "INCLUDE {}\"{}\" namespace {}", fname, module.as_str(), if *once {"ONCE "} else {""}),
 
-                 Token::Include(ref fname, _, None, once)
+                 Token::Include(ref fname, None, once)
                  => write!(f, "INCLUDE {}\"{}\"", fname, if *once {"ONCE "} else {""}),
  
             Token::Label(ref string)

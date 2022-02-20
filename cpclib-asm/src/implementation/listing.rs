@@ -6,6 +6,7 @@ use cpclib_tokens::tokens::*;
 use crate::error::*;
 use crate::implementation::expression::*;
 use crate::implementation::tokens::*;
+use crate::preamble::ParserContext;
 use crate::preamble::parse_z80_str;
 use crate::AssemblingOptions;
 
@@ -71,7 +72,7 @@ impl ListingExt for Listing {
         &self,
         options: &AssemblingOptions
     ) -> Result<Vec<u8>, AssemblerError> {
-        let env = crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), options)?;
+        let env = crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), options, &ParserContext::default())?;
         Ok(env.produced_bytes())
     }
 

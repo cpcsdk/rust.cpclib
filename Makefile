@@ -1,10 +1,10 @@
-#CRATES= cpclib-sna \
+CRATES= cpclib-sna \
 		cpclib-tokens\
 		cpclib-disc \
 		cpclib-basic\
 		cpclib-xfer\
 		cpclib-xfertool
-CRATES = cpclib-image \
+		 cpclib-image \
 		cpclib-asm\
 		cpclib-z80emu\
 		cpclib-macros \

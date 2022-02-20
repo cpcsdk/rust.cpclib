@@ -12,6 +12,7 @@ use crate::error::*;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
 use crate::AssemblingOptions;
+use crate::ParserContext;
 
 /// Needed methods for the Token defined in cpclib_tokens
 pub trait TokenExt: ListingElement + Clone + Debug {
@@ -175,7 +176,7 @@ impl TokenExt for Token {
     }
 
     fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
-        let mut env = Env::new(option);
+        let mut env = Env::new(option, &ParserContext::default());
         // we need several passes in case the token is a directive that contains code
         loop {
             env.start_new_pass();

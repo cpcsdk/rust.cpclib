@@ -11,6 +11,8 @@ pub mod save_command;
 pub mod stable_ticker;
 pub mod symbols_output;
 
+pub mod processed_token;
+
 use std::any::Any;
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -42,6 +44,8 @@ use crate::report::Report;
 use crate::save_command::*;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, PhysicalAddress};
+use crate::assembler::processed_token::AsSimpleToken;
+use crate::processed_token::ProcessedToken;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -322,6 +326,7 @@ impl Section {
 pub struct Env {
     /// Current pass
     pass: AssemblingPass,
+    pub(crate) ctx: ParserContext,
     real_nb_passes: usize,
     /// If true at the end of the pass, can prematurely stop the assembling
     /// Hidden in a rwlock to allow a modification even in non mutable state
@@ -410,6 +415,7 @@ pub struct Env {
 impl Clone for Env {
     fn clone(&self) -> Self {
         Self {
+            ctx: self.ctx.clone(),
             can_skip_next_passes: (*self.can_skip_next_passes.read().unwrap().deref()).into(),
             request_additional_pass: (*self.request_additional_pass.read().unwrap().deref()).into(),
             pass: self.pass.clone(),
@@ -480,7 +486,7 @@ impl Default for Env {
         Self {
             pass: AssemblingPass::Uninitialized,
             stable_counters: StableTickerCounters::default(),
-
+            ctx: Default::default(),
             pages_info_sna: vec![Default::default(); 2],
             ga_mmr: 0xC0, // standard memory configuration
 
@@ -2368,14 +2374,15 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
-pub fn visit_tokens_all_passes<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerError> {
+pub fn visit_tokens_all_passes<T: Visited + AsSimpleToken>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> {
     let options = AssemblingOptions::default();
-    visit_tokens_all_passes_with_options(tokens, &options)
+    visit_tokens_all_passes_with_options(tokens, &options, ctx)
 }
 
 impl Env {
-    pub fn new(options: &AssemblingOptions) -> Self {
+    pub fn new(options: &AssemblingOptions, ctx: &ParserContext) -> Self {
         let mut env = Env::default();
+        env.ctx = ctx.clone();
         env.symbols =
             SymbolsTableCaseDependent::new(options.symbols().clone(), options.case_sensitive());
 
@@ -2444,11 +2451,16 @@ impl Env {
 
 /// Visit the tokens during several passes by providing a specific symbol table.
 /// Warning Listing output is only possible for LocatedToken
-pub fn visit_tokens_all_passes_with_options<T: Visited>(
-    tokens: &[T],
-    options: &AssemblingOptions
+pub fn visit_tokens_all_passes_with_options<'token, T: Visited + AsSimpleToken>(
+    tokens: &'token [T],
+    options: &AssemblingOptions,
+    ctx: &ParserContext
 ) -> Result<Env, AssemblerError> {
-    let mut env = Env::new(options);
+    let mut env = Env::new(options, ctx);
+    let mut tokens: Vec<ProcessedToken<'token, T>> = tokens.iter()
+                    .map(|t| processed_token::ProcessedToken::from(t)) // Build the processed token of each token
+                    .map(|mut t| {t.read_referenced_file(&env); t}) // Read its files but ignore errors if any (which must happen a lot for incbin)
+                    .collect_vec();
     loop {
         env.start_new_pass();
         // println!("[pass] {:?}", env.pass);
@@ -2457,7 +2469,7 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
             break;
         }
 
-        for token in tokens.iter() {
+        for token in tokens.iter_mut() {
             token.visited(&mut env)?;
         }
     }
@@ -2465,7 +2477,7 @@ pub fn visit_tokens_all_passes_with_options<T: Visited>(
     if options.output_builder.is_some() {
         env.pass = AssemblingPass::ListingPass;
         env.start_new_pass();
-        for token in tokens.iter() {
+        for token in tokens.iter_mut() {
             token
                 .visited(&mut env)
                 .expect("No error can arise in listing output mode; there is a bug somewhere")
@@ -2551,9 +2563,10 @@ pub fn visit_located_token(
                     length: _,
                     extended_offset: _,
                     off: _,
-                    content,
                     transformation: _
                 } => {
+                    panic!("Should never be called");
+                    /*
                     if content.read().unwrap().is_none() {
                         outer_token
                             .read_referenced_file(&outer_token.context().1)
@@ -2569,6 +2582,7 @@ pub fn visit_located_token(
                             error: Box::new(err)
                         }
                     })
+                    */
                 }
                 _ => {
                     token.visited(env).map_err(|err| {
@@ -2588,44 +2602,8 @@ pub fn visit_located_token(
         LocatedToken::Function(name, params, inner, span) => {
             env.visit_function_definition(name, params, inner, Some(span))
         }
-        LocatedToken::Include(fname, ref cell, namespace, once, span) => {
-            let fname = span
-                .context()
-                .get_path_for(fname)
-                .unwrap_or("will_fail".into());
-            if (!*once) || (!env.has_included(&fname)) {
-                env.mark_included(fname);
 
-                if cell.read().unwrap().is_some() {
-                    if let Some(namespace) = namespace {
-                        env.enter_namespace(namespace)
-                            .map_err(|e| e.locate(span.clone()))?;
-                    }
-
-                    env.visit_listing(cell.read().unwrap().as_ref().unwrap())?;
-
-                    if namespace.is_some() {
-                        env.leave_namespace().map_err(|e| e.locate(span.clone()))?;
-                    }
-                    Ok(())
-                }
-                else {
-                    outer_token
-                        .read_referenced_file(&outer_token.context().1)
-                        .and_then(|_| visit_located_token(outer_token, env))
-                        .map_err(|e| e.locate(span.clone()))
-                }
-                .map_err(|err| {
-                    AssemblerError::IncludedFileError {
-                        span: span.clone(),
-                        error: Box::new(err)
-                    }
-                })
-            }
-            else {
-                Ok(()) // we include nothing
-            }
-        }
+        
 
         LocatedToken::If(cases, other, span) => {
             env.visit_if(
@@ -2750,7 +2728,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             });
             Ok(())
         }
-        Token::Include(_, cell, namespace, once) if cell.read().unwrap().is_some() => {
+        Token::Include(_,  namespace, once) => {
+            panic!("ERROR - Should never be executed");/*
             if *once {
                 unimplemented!("ONCE on hardcoded tokens");
             }
@@ -2762,10 +2741,11 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             if namespace.is_some() {
                 env.leave_namespace()?;
             }
+            */
             Ok(())
         }
-        Token::Include(_fname, cell, _namespace, _once) if cell.read().unwrap().is_none() => {
-            todo!("Read the file (without being able to specify parser options)")
+        Token::Include(_fname, _namespace, _once) => {
+            panic!("ERROR - Should never be executed");
         }
         Token::Incbin {
             fname: _,
@@ -2773,9 +2753,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             length: _,
             extended_offset: _,
             off: _,
-            content,
             transformation: _
-        } => env.visit_incbin(content.read().unwrap().as_ref().unwrap()),
+        } => panic!("Error - should never be called"),
         Token::If(ref cases, ref other) => {
             env.visit_if(
                 cases

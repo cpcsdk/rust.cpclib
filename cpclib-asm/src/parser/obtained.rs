@@ -1,71 +1,20 @@
 use std::borrow::Cow;
 use std::convert::TryFrom;
-use std::fs::File;
-use std::io::Read;
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, RwLock};
-
+use std::sync::Arc;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::{
-    BaseListing, BinaryTransformation, CrunchType, Expr, ListingElement, TestKind, Token
+    BaseListing, CrunchType, Expr, ListingElement, TestKind, Token
 };
 
 use super::{ParserContext, Z80Span};
-use crate::error::AssemblerError;
-use crate::implementation::expression::ExprEvaluationExt;
-use crate::implementation::instructions::Cruncher;
-use crate::preamble::{parse_z80_str, parse_z80_strrc_with_contextrc};
+use crate::preamble::{parse_z80_str};
 
 /// ! This crate is related to the adaptation of tokens and listing for the case where they are parsed
 
-/// Read the content of the source file.
-/// Uses the context to obtain the appropriate file other the included directories
-pub fn read_source(fname: &str, ctx: &ParserContext) -> Result<String, AssemblerError> {
-    match ctx.get_path_for(fname) {
-        Err(e) => {
-            Err(AssemblerError::IOError {
-                msg: format!("{:?} not found. {:?}", fname, e)
-            })
-        }
-        Ok(ref fname) => {
-            let mut f = File::open(&fname).map_err(|e| {
-                AssemblerError::IOError {
-                    msg: format!("Unable to open {:?}. {}", fname, e)
-                }
-            })?;
 
-            let mut content = Vec::new();
-            f.read_to_end(&mut content).map_err(|e| {
-                AssemblerError::IOError {
-                    msg: format!("Unable to read {:?}. {}", fname, e.to_string())
-                }
-            })?;
-
-            let result = chardet::detect(&content);
-            let coder =
-                encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
-
-            let content = match coder {
-                Some(coder) => {
-                    let utf8reader = coder
-                        .decode(&content, encoding::DecoderTrap::Ignore)
-                        .expect("Error");
-                    utf8reader.to_string()
-                }
-                None => {
-                    return Err(AssemblerError::IOError {
-                        msg: format!("Encoding error for {:?}.", fname)
-                    });
-                }
-            };
-
-            Ok(content)
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct LocatedExpr(Expr, Z80Span);
@@ -97,13 +46,6 @@ pub enum LocatedToken {
     },
     Function(SmolStr, Vec<SmolStr>, LocatedListing, Z80Span),
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
-    Include(
-        String,                         // fname
-        RwLock<Option<LocatedListing>>, // content
-        Option<SmolStr>,                // optional module name
-        bool,                           // must be included only one time
-        Z80Span
-    ),
     If(
         Vec<(TestKind, LocatedListing)>,
         Option<LocatedListing>,
@@ -142,15 +84,6 @@ impl Clone for LocatedToken {
             }
             LocatedToken::Function(a, b, c, d) => {
                 LocatedToken::Function(a.clone(), b.clone(), c.clone(), d.clone())
-            }
-            LocatedToken::Include(filename, listing, namespace, once, span) => {
-                Self::Include(
-                    filename.clone(),
-                    RwLock::new(listing.read().unwrap().clone()),
-                    namespace.clone(),
-                    once.clone(),
-                    span.clone()
-                )
             }
             LocatedToken::If(a, b, c) => LocatedToken::If(a.clone(), b.clone(), c.clone()),
             LocatedToken::Repeat(a, b, c, d, e) => {
@@ -216,7 +149,6 @@ impl LocatedToken {
             | Self::CrunchedSection(_, _, span)
             | Self::For { span, .. }
             | Self::Function(_, _, _, span)
-            | Self::Include(_, _, _, _, span)
             | Self::If(_, _, span)
             | Self::Module(_, _, span)
             | Self::Iterate(_, _, _, span)
@@ -245,14 +177,6 @@ impl LocatedToken {
                     name.clone(),
                     params.clone(),
                     inner.as_listing()
-                ))
-            }
-            LocatedToken::Include(s, l, module, once, _span) => {
-                Cow::Owned(Token::Include(
-                    s.clone(),
-                    l.read().unwrap().as_ref().map(|l| l.as_listing()).into(),
-                    module.clone(),
-                    *once
                 ))
             }
             LocatedToken::If(v, e, _span) => {
@@ -331,152 +255,7 @@ impl LocatedToken {
         }
     }
 
-    /// Modify the few tokens that need to read files
-    /// Works in read only tokens thanks to RefCell
-    pub fn read_referenced_file(&self, ctx: &ParserContext) -> Result<(), AssemblerError> {
-        match self {
-            LocatedToken::Include(ref fname, ref cell, _namespace, _once, _span) => {
-                let content = read_source(fname, ctx)?;
-
-                let content = Arc::new(content);
-                let new_ctx = {
-                    let mut new_ctx = ctx.deref().clone();
-                    new_ctx.set_current_filename(fname);
-                    Arc::new(new_ctx)
-                };
-
-                let listing = parse_z80_strrc_with_contextrc(content, new_ctx)?;
-                cell.write().unwrap().replace(listing);
-                assert!(cell.read().unwrap().is_some());
-            }
-
-            LocatedToken::Standard {
-                token:
-                    Token::Incbin {
-                        fname,
-                        offset,
-                        length,
-                        extended_offset: _,
-                        off: _,
-                        ref content,
-                        transformation
-                    },
-                span
-            } if content.read().unwrap().is_none() => {
-                // TODO manage the optional arguments
-                match ctx.get_path_for(&fname) {
-                    Err(_e) => {
-                        return Err(AssemblerError::IOError {
-                            msg: format!("{:?} not found", fname)
-                        });
-                    }
-                    Ok(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|_e| {
-                            AssemblerError::IOError {
-                                msg: format!("Unable to open {:?}", fname)
-                            }
-                        })?;
-
-                        // load the full file
-                        let mut data = Vec::new();
-                        f.read_to_end(&mut data).map_err(|e| {
-                            AssemblerError::IOError {
-                                msg: format!("Unable to read {:?}. {}", fname, e.to_string())
-                            }
-                        })?;
-
-                        // get a slice on the data to ease its cut
-                        let mut data = &data[..];
-
-                        if data.len() >= 128 {
-                            let header = AmsdosHeader::from_buffer(&data);
-                            let info = if header.is_checksum_valid() {
-                                data = &data[128..];
-
-                                AssemblerError::RelocatedInfo{
-                                    info: Box::new(
-                                        AssemblerError::AssemblingError{
-                                            msg: format!("{:?} is a valid Amsdos file. It is included without its header.", fname)
-                                        }
-                                    ),
-                                    span: span.clone()
-                                }
-                            }
-                            else {
-                                AssemblerError::RelocatedInfo{
-                                    info: Box::new(
-                                        AssemblerError::AssemblingError{
-                                            msg: format!("{:?} does not contain a valid Amsdos file. It is fully included.", fname)
-                                        }
-                                    ),
-                                    span: span.clone()
-                                }
-                            };
-
-                            eprintln!("{}", info);
-                        }
-
-                        if offset.is_some() {
-                            let offset = offset.as_ref().unwrap().eval()?.int()? as usize;
-                            if offset >= data.len() {
-                                return Err(AssemblerError::AssemblingError {
-                                    msg: format!(
-                                        "Unable to read {:?}. Only {} are available",
-                                        fname,
-                                        data.len()
-                                    )
-                                });
-                            }
-                            data = &data[offset..];
-                        }
-
-                        if length.is_some() {
-                            let length = length.as_ref().unwrap().eval()?.int()? as usize;
-                            if data.len() < length {
-                                return Err(AssemblerError::AssemblingError {
-                                    msg: format!(
-                                        "Unable to read {:?}. Only {} bytes are available ({} expected)",
-                                        fname,
-                                        data.len(),
-                                        length
-                                    )
-                                });
-                            }
-                            data = &data[..length];
-                        }
-
-                        match transformation {
-                            BinaryTransformation::None => {
-                                content.write().unwrap().replace(data.to_vec());
-                            }
-
-                            other => {
-                                if data.len() == 0 {
-                                    return Err(AssemblerError::EmptyBinaryFile(
-                                        fname.to_string_lossy().to_string()
-                                    ));
-                                }
-
-                                let crunch_type = other.crunch_type().unwrap();
-                                let crunched = crunch_type.crunch(&data)?;
-                                content.write().unwrap().replace(crunched.into());
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Rorg may embed some instructions that read files
-            LocatedToken::Rorg(_, ref listing, _) => {
-                for token in listing.iter() {
-                    token.read_referenced_file(ctx)?;
-                }
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
+   
 
     // fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
     // match self {

@@ -2,7 +2,7 @@
 
 use std::convert::{TryFrom, TryInto};
 use std::ops::Deref;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc};
 
 use cpclib_common::itertools::{chain, Itertools};
 use cpclib_common::nom::branch::*;
@@ -198,6 +198,7 @@ pub fn parse_z80_strrc_with_contextrc(
                 });
             }
 
+            /* this feature is currently disabled. Will see later how to implement it properly
             if ctx.read_referenced_files {
                 let errors = parsed
                     .listing_mut()
@@ -211,6 +212,7 @@ pub fn parse_z80_strrc_with_contextrc(
                     return Err(AssemblerError::MultipleErrors { errors });
                 }
             }
+        */
 
             return Ok(parsed);
         }
@@ -1477,15 +1479,19 @@ pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
         )
     ))(input)?;
 
+    let size = include_start.len()-input.len();
     Ok((
         input,
-        LocatedToken::Include(
-            fname.to_string(),
-            RwLock::new(None),
-            namespace,
-            once.is_some(),
-            include_start
-        )
+        LocatedToken::Standard{
+            token: Token::Include(
+                fname.to_string(),
+                namespace,
+                once.is_some()
+            ),
+            span: include_start.take(size)
+        }
+        
+
     ))
 }
 
@@ -1520,7 +1526,6 @@ pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
             length,
             extended_offset: None,
             off: off.is_some(),
-            content: None.into(),
             transformation
         }
     ))
