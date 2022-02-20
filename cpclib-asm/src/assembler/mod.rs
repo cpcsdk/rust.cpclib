@@ -22,6 +22,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
+use std::fmt::Debug;
 
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
@@ -2374,7 +2375,7 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
-pub fn visit_tokens_all_passes<T: Visited + AsSimpleToken>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> {
+pub fn visit_tokens_all_passes<T: Visited + AsSimpleToken + Debug>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> {
     let options = AssemblingOptions::default();
     visit_tokens_all_passes_with_options(tokens, &options, ctx)
 }
@@ -2451,16 +2452,13 @@ impl Env {
 
 /// Visit the tokens during several passes by providing a specific symbol table.
 /// Warning Listing output is only possible for LocatedToken
-pub fn visit_tokens_all_passes_with_options<'token, T: Visited + AsSimpleToken>(
+pub fn visit_tokens_all_passes_with_options<'token, T: Visited + AsSimpleToken + Debug>(
     tokens: &'token [T],
     options: &AssemblingOptions,
     ctx: &ParserContext
 ) -> Result<Env, AssemblerError> {
     let mut env = Env::new(options, ctx);
-    let mut tokens: Vec<ProcessedToken<'token, T>> = tokens.iter()
-                    .map(|t| processed_token::ProcessedToken::from(t)) // Build the processed token of each token
-                    .map(|mut t| {t.read_referenced_file(&env); t}) // Read its files but ignore errors if any (which must happen a lot for incbin)
-                    .collect_vec();
+    let mut tokens = processed_token::build_list(tokens, &mut env);
     loop {
         env.start_new_pass();
         // println!("[pass] {:?}", env.pass);
@@ -2469,9 +2467,7 @@ pub fn visit_tokens_all_passes_with_options<'token, T: Visited + AsSimpleToken>(
             break;
         }
 
-        for token in tokens.iter_mut() {
-            token.visited(&mut env)?;
-        }
+        processed_token::visit_processed_tokens(&mut tokens, &mut env)?;
     }
 
     if options.output_builder.is_some() {

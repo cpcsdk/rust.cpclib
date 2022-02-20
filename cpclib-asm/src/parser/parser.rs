@@ -16,7 +16,6 @@ use cpclib_common::nom::sequence::*;
 #[allow(missing_docs)]
 use cpclib_common::nom::*;
 use cpclib_common::nom_locate::LocatedSpan;
-use cpclib_common::rayon::prelude::*;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{bin_number, dec_number, hex_number, lazy_static};
 use cpclib_sna::parse::{parse_flag, parse_flag_value};
