@@ -7,6 +7,7 @@
 #![feature(box_syntax)]
 #![feature(box_patterns)]
 #![feature(string_extend_from_within)]
+#![recursion_limit = "256"]
 
 /// Implementation of various behvior for the tokens of cpclib_tokens
 pub mod implementation;
@@ -131,7 +132,7 @@ pub fn assemble_with_options(
 }
 
 /// Assemble the predifined list of tokens
-pub fn assemble_tokens_with_options<'tokens, T: Visited + AsSimpleToken + Clone + ListingElement >(
+pub fn assemble_tokens_with_options<'tokens, T: 'static + Visited + AsSimpleToken + Clone + ListingElement >(
     tokens: &'tokens [T],
     options: &AssemblingOptions,
     ctx: &ParserContext

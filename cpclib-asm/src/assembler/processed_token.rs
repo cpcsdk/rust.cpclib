@@ -12,6 +12,7 @@ use cpclib_tokens::BinaryTransformation;
 use crate::implementation::instructions::Cruncher;
 use cpclib_disc::amsdos::AmsdosHeader;
 
+use std::any::Any;
 use std::borrow::BorrowMut;
 use std::fmt::write;
 use std::io::Read;
@@ -79,8 +80,8 @@ impl AsSimpleToken for LocatedToken {
 	}
 }
 
-
-impl<'token, T: Visited + AsSimpleToken + Debug> From<&'token T> for ProcessedToken<'token, T> {
+/* There is a bug in rust compiler that forbids to use that :(
+default impl<'token, T:AsSimpleToken + Visited + Debug>  From<&'token T> for ProcessedToken<'token, T> {
 	fn from(token: &'token T) -> Self {
 		let state = match token.as_simple_token().as_ref() {
 			Token::Include(..) | Token::Incbin{..} => Some(ProcessedTokenState::Expected),
@@ -92,18 +93,82 @@ impl<'token, T: Visited + AsSimpleToken + Debug> From<&'token T> for ProcessedTo
 			state
 		}
 	}
+	}
 }
+*/
+
+
+ impl From<&'token Token> for ProcessedToken<'token, Token> {
+	fn from(token: &'token Token) -> Self {
+		let state = match token {
+			Token::Include(..) | Token::Incbin{..} => Some(ProcessedTokenState::Expected),
+			_ => None
+		};
+
+		ProcessedToken{
+			token,
+			state
+		}
+	}
+}
+
+// Explicit version in LocatedToken to not convert it in Token which is a lost of time
+impl From<&'token LocatedToken> for ProcessedToken<'token, LocatedToken> {
+	fn from(token: &'token LocatedToken) -> Self {
+		let state = match token {
+			LocatedToken::Standard{
+                token: Token::Include(..) | Token::Incbin{..},
+                ..
+            } => Some(ProcessedTokenState::Expected),
+			_ => None
+		};
+
+		ProcessedToken{
+			token,
+			state
+		}
+	}
+}
+
 
 pub type AssemblerInfo = AssemblerError;
 
 
 
-/// Build the list of processed tokens (and read files when possible)
-pub fn build_list<'token, T:AsSimpleToken + Visited + Debug> (tokens: &'token[T], env: &Env) -> Vec<ProcessedToken<'token, T>> {
-	tokens.iter()
-		.map(|t| ProcessedToken::from(t)) // Build the processed token of each token
-		.map(|mut t| {t.read_referenced_file(&env); t}) // Read its files but ignore errors if any (which must happen a lot for incbin)
-		.collect_vec()
+pub fn build_list<'token, T:'static + AsSimpleToken + Visited + Debug> (tokens: &'token[T], env: &Env) -> Vec<ProcessedToken<'token, T>> {
+
+
+    tokens.iter()
+    .map(|t| {
+        // ugly workaround of a rust compiler bug that forbids to play with ProcessedToken::from(t)
+
+        match  (t as &'token dyn Any).downcast_ref::<LocatedToken>() {
+            Some(t) => {
+                let t: &'token LocatedToken = unsafe{std::mem::transmute(t)};
+                let t = ProcessedToken::from(t);
+                let t: ProcessedToken<'token, T> =  unsafe{std::mem::transmute(t)}; // totally safe as we a transmuting from one type to the strictly same one
+                return t;
+            }
+            None => {},
+        }
+
+        match  (t as &'token dyn Any).downcast_ref::<Token>() {
+            Some(t) => {
+                let t: &'token Token = unsafe{std::mem::transmute(t)};
+                let t = ProcessedToken::from(t);
+                let t: ProcessedToken<'token, T> =  unsafe{std::mem::transmute(t)}; // totally safe as we a transmuting from one type to the strictly same one
+                return t;
+            }
+            None => panic!("Unhandled type..."),
+        }
+
+    })
+    .map(|mut t| {
+        t.read_referenced_file(&env); 
+        t
+    }) // Read its files but ignore errors if any (which must happen a lot for incbin)
+    .collect_vec()
+
 }
 
 /// Visit all the tokens until an error occurs

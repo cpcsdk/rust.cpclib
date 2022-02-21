@@ -209,7 +209,9 @@ impl LocatedToken {
                 ))
             }
             LocatedToken::While(e, l, _span) => Cow::Owned(Token::While(e.clone(), l.as_listing())),
-            LocatedToken::Iterate(_name, _values, _code, _span) => todo!(),
+            LocatedToken::Iterate(name, values, code, span) => {
+                todo!()
+            },
             LocatedToken::Module(..) => todo!(),
             LocatedToken::For {
                 label,
