@@ -2375,7 +2375,7 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
-pub fn visit_tokens_all_passes<T: 'static + Visited + AsSimpleToken + Debug>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> {
+pub fn visit_tokens_all_passes<T: 'static + Visited + AsSimpleToken + Debug + Sync>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> {
     let options = AssemblingOptions::default();
     visit_tokens_all_passes_with_options(tokens, &options, ctx)
 }
@@ -2452,7 +2452,7 @@ impl Env {
 
 /// Visit the tokens during several passes by providing a specific symbol table.
 /// Warning Listing output is only possible for LocatedToken
-pub fn visit_tokens_all_passes_with_options<'token, T: 'static + Visited + AsSimpleToken + Debug>(
+pub fn visit_tokens_all_passes_with_options<'token, T: 'static + Visited + AsSimpleToken + Debug + Sync>(
     tokens: &'token [T],
     options: &AssemblingOptions,
     ctx: &ParserContext

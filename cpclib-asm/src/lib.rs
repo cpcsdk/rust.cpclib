@@ -132,7 +132,7 @@ pub fn assemble_with_options(
 }
 
 /// Assemble the predifined list of tokens
-pub fn assemble_tokens_with_options<'tokens, T: 'static + Visited + AsSimpleToken + Clone + ListingElement >(
+pub fn assemble_tokens_with_options<'tokens, T: 'static + Visited + AsSimpleToken + Clone + ListingElement + Sync>(
     tokens: &'tokens [T],
     options: &AssemblingOptions,
     ctx: &ParserContext

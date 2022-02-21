@@ -135,10 +135,12 @@ pub type AssemblerInfo = AssemblerError;
 
 
 
-pub fn build_list<'token, T:'static + AsSimpleToken + Visited + Debug> (tokens: &'token[T], env: &Env) -> Vec<ProcessedToken<'token, T>> {
+pub fn build_list<'token, T:'static + AsSimpleToken + Visited + Debug + Sync> (tokens: &'token[T], env: &Env) -> Vec<ProcessedToken<'token, T>> {
+    use rayon::prelude::*;
+     use rayon::iter::ParallelBridge;
 
-
-    tokens.iter()
+    tokens
+    .par_iter()
     .map(|t| {
         // ugly workaround of a rust compiler bug that forbids to play with ProcessedToken::from(t)
 
@@ -167,7 +169,7 @@ pub fn build_list<'token, T:'static + AsSimpleToken + Visited + Debug> (tokens: 
         t.read_referenced_file(&env); 
         t
     }) // Read its files but ignore errors if any (which must happen a lot for incbin)
-    .collect_vec()
+    .collect::<Vec::<_>>()
 
 }
 

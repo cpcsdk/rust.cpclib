@@ -75,6 +75,12 @@ pub fn parse<'arg>(
     context.set_dotted_directives(matches.is_present("DOTTED_DIRECTIVES"));
 
     context.set_current_filename(&filename);
+    match std::env::current_dir() {
+        Ok(cwd) => {
+            context.add_search_path(cwd);
+        },
+        Err(_) => todo!(),
+    }
     context.add_search_path_from_file(&filename); // we ignore the potential error
     if let Some(directories) = matches.values_of("INCLUDE_DIRECTORIES") {
         for directory in directories {
