@@ -17,6 +17,7 @@ use cpclib_tokens::{tokens, ExpressionTypeError, Oper};
 
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
+use crate::preamble::LocatedListing;
 use crate::{PhysicalAddress, Z80Span};
 
 #[derive(Debug, Clone)]
@@ -31,6 +32,8 @@ pub enum ExpressionError {
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum AssemblerError {
+    /// Parse of a located listing failed, but the error is in fact stored within the located listing object...
+    LocatedListingError(Box<LocatedListing>),
     //#[fail(display = "Several errors arised: {:?}", errors)]
     MultipleErrors {
         errors: Vec<AssemblerError>
@@ -387,14 +390,12 @@ impl AssemblerError {
                                 // Add filename to database if needed
                                 let filename =
                                     e.0.extra
-                                        .1
                                         .current_filename
                                         .as_ref()
                                         .map(|p| p.as_os_str().to_str().unwrap().to_owned());
 
                                 let filename = filename.unwrap_or_else(|| {
                                     e.0.extra
-                                        .1
                                         .context_name
                                         .as_ref()
                                         .cloned()
@@ -402,7 +403,7 @@ impl AssemblerError {
                                 });
                                 let filename = Box::new(filename);
 
-                                let source = e.0.extra.0.as_ref();
+                                let source = e.0.extra.complete_source();
                                 let file_id = match fname_to_id.get(filename.deref()) {
                                     Some(&id) => id,
                                     None => {
@@ -821,7 +822,7 @@ impl AssemblerError {
 
 fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z80Span) -> String {
     let filename = build_filename(span);
-    let source = span.extra.0.as_ref();
+    let source = span.extra.complete_source();
 
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);
@@ -853,7 +854,7 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
 
 pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
     let filename = build_filename(span);
-    let source = span.extra.0.as_ref();
+    let source = span.extra.complete_source();
 
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);
@@ -886,8 +887,8 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
 }
 
 fn build_filename(span: &Z80Span) -> Box<String> {
-    let fname = &span.extra.1.current_filename;
-    let context = &span.extra.1.context_name;
+    let fname = &span.extra.current_filename;
+    let context = &span.extra.context_name;
 
     let name = fname
         .as_ref()
@@ -908,7 +909,7 @@ fn build_simple_error_message_with_notes(
     span: &Z80Span
 ) -> String {
     let filename = build_filename(span);
-    let source = span.extra.0.as_ref();
+    let source = span.extra.complete_source();
 
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);

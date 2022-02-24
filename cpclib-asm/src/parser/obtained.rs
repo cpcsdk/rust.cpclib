@@ -1,17 +1,27 @@
 use std::borrow::Cow;
-use std::convert::TryFrom;
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use cpclib_common::nom_locate::LocatedSpan;
 use cpclib_common::itertools::Itertools;
+use cpclib_common::nom::character::complete::space0;
+use cpclib_common::nom::multi::fold_many0;
+use cpclib_common::nom::combinator::cut;
+use cpclib_common::nom::combinator::opt;
+use cpclib_common::nom::sequence::{preceded, delimited};
+use cpclib_common::nom::error::{VerboseError, context};
+use cpclib_common::nom::bytes::complete::tag;
+use cpclib_common::nom::{Err, IResult, error::ErrorKind};
+use cpclib_common::nom::InputLength;
+use cpclib_common::nom::InputTake;
 use cpclib_common::rayon::prelude::*;
-use cpclib_common::smol_str::SmolStr;
 use cpclib_tokens::{
-    BaseListing, CrunchType, Expr, ListingElement, TestKind, Token
+    BaseListing, CrunchType, Expr, ListingElement, TestKind, Token, MacroParam
 };
+use crate::ParsingState;
+use super::{ParserContext, Z80Span, parse_z80_line};
+use crate::error::AssemblerError;
+use crate::preamble::{parse_z80_str, parse_end_directive};
 
-use super::{ParserContext, Z80Span};
-use crate::preamble::{parse_z80_str};
-
+use ouroboros::self_referencing;
 /// ! This crate is related to the adaptation of tokens and listing for the case where they are parsed
 
 
@@ -20,10 +30,79 @@ use crate::preamble::{parse_z80_str};
 pub struct LocatedExpr(Expr, Z80Span);
 
 impl LocatedExpr {
+    pub fn new(expr: Expr, span: Z80Span) -> Self {
+        Self(expr, span)
+    }
     pub fn as_expr(&self) -> &Expr {
         &self.0
     }
 }
+
+#[derive(Debug, Clone)]
+pub enum LocatedMacroParam {
+    /// Standard argument
+    Single(Z80Span),
+    /// A list of argument that will be provided in a nested macro call
+    List(Vec<Box<LocatedMacroParam>>)
+}
+
+impl LocatedMacroParam {
+    pub fn to_macro_param(&self) -> MacroParam {
+        match self {
+            LocatedMacroParam::Single(text) => {
+                MacroParam::Single(text.fragment().to_string())
+            },
+            LocatedMacroParam::List(params) => {
+                MacroParam::List(
+                    params.iter()
+                        .map(|p| box p.to_macro_param())
+                        .collect_vec()
+                )
+            },
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            LocatedMacroParam::Single(text) => text.is_empty(),
+            _ => false
+        }
+    }
+
+    pub fn span(&self) -> Z80Span {
+        match self {
+            LocatedMacroParam::Single(span) => span.clone(),
+            LocatedMacroParam::List(_) => todo!(),
+        }
+    }
+}
+
+pub enum LocatedTestKind {
+    // Test succeed if it is an expression that returns True
+    True(LocatedExpr),
+    // Test succeed if it is an expression that returns False
+    False(LocatedExpr),
+    // Test succeed if it is an existing label
+    LabelExists(Z80Span),
+    // Test succeed if it is a missing label
+    LabelDoesNotExist(Z80Span),
+    LabelUsed(Z80Span),
+    LabelNused(Z80Span)
+}
+
+impl LocatedTestKind {
+    pub fn to_test_kind(&self) -> TestKind {
+        match self {
+            LocatedTestKind::True(e) => TestKind::True(e.as_expr().clone()),
+            LocatedTestKind::False(e) => TestKind::False(e.as_expr().clone()),
+            LocatedTestKind::LabelExists(l) => TestKind::LabelExists(l.into()),
+            LocatedTestKind::LabelDoesNotExist(l) => TestKind::LabelDoesNotExist(l.into()),
+            LocatedTestKind::LabelUsed(l) => TestKind::LabelUsed(l.into()),
+            LocatedTestKind::LabelNused(l) => TestKind::LabelNused(l.into()),
+        }
+    }
+}
+
 
 #[derive(Debug)]
 /// Add span information for a Token.
@@ -37,29 +116,32 @@ pub enum LocatedToken {
         span: Z80Span
     },
     For {
-        label: SmolStr,
+        label: Z80Span,
         start: Expr,
         stop: Expr,
         step: Option<Expr>,
         listing: LocatedListing,
         span: Z80Span
     },
-    Function(SmolStr, Vec<SmolStr>, LocatedListing, Z80Span),
+    Function(Z80Span, Vec<Z80Span>, LocatedListing, Z80Span),
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
     If(
-        Vec<(TestKind, LocatedListing)>,
+        Vec<(LocatedTestKind, LocatedListing)>,
         Option<LocatedListing>,
         Z80Span
     ),
-    Repeat(Expr, LocatedListing, Option<SmolStr>, Option<Expr>, Z80Span),
+    Label(Z80Span),
+    MacroCall(Z80Span, Vec<LocatedMacroParam>),
+    Repeat(Expr, LocatedListing, Option<Z80Span>, Option<Expr>, Z80Span),
     Iterate(
-        SmolStr,
+        Z80Span,
         either::Either<Vec<Expr>, Expr>,
         LocatedListing,
         Z80Span
     ),
     RepeatUntil(Expr, LocatedListing, Z80Span),
     Rorg(Expr, LocatedListing, Z80Span),
+    Struct(Z80Span, Vec<(Z80Span, LocatedToken)>),
     Switch(
         Expr,
         Vec<(Expr, LocatedListing, bool)>,
@@ -67,11 +149,14 @@ pub enum LocatedToken {
         Z80Span
     ),
     While(Expr, LocatedListing, Z80Span),
-    Module(SmolStr, LocatedListing, Z80Span)
+    Module(Z80Span, LocatedListing, Z80Span)
 }
+
 
 impl Clone for LocatedToken {
     fn clone(&self) -> Self {
+        unimplemented!();
+        /*
         match self {
             LocatedToken::Standard { token, span } => {
                 LocatedToken::Standard {
@@ -117,6 +202,7 @@ impl Clone for LocatedToken {
                 }
             }
         }
+        */
     }
 }
 
@@ -132,6 +218,7 @@ impl Deref for LocatedToken {
         }
     }
 }
+
 
 impl LocatedToken {
     /// We can obtain a token only for "standard ones". Those that rely on listing need to be handled differently
@@ -160,13 +247,15 @@ impl LocatedToken {
         }
     }
 
-    pub fn context(&self) -> &(Arc<String>, Arc<ParserContext>) {
+    pub fn context(&self) -> &ParserContext {
         &self.span().extra
     }
 }
 
 impl LocatedToken {
-    pub fn as_token(&self) -> Cow<Token> {
+    /// Transform the located token in a raw token.
+    /// Warning, this is quite costly when strings or vec are involved
+    pub fn to_token(&self) -> Cow<Token> {
         match self {
             LocatedToken::Standard { token, .. } => Cow::Borrowed(token),
             LocatedToken::CrunchedSection(c, l, _span) => {
@@ -174,15 +263,15 @@ impl LocatedToken {
             }
             LocatedToken::Function(name, params, inner, _span) => {
                 Cow::Owned(Token::Function(
-                    name.clone(),
-                    params.clone(),
+                    name.into(),
+                    params.iter().map(|p| p.into()).collect_vec(),
                     inner.as_listing()
                 ))
             }
             LocatedToken::If(v, e, _span) => {
                 Cow::Owned(Token::If(
                     v.iter()
-                        .map(|(k, l)| (k.clone(), l.as_listing()))
+                        .map(|(k, l)| (k.to_test_kind(), l.as_listing()))
                         .collect_vec(),
                     e.as_ref().map(|l| l.as_listing())
                 ))
@@ -191,7 +280,7 @@ impl LocatedToken {
                 Cow::Owned(Token::Repeat(
                     e.clone(),
                     l.as_listing(),
-                    s.clone(),
+                    s.map(|s| s.into()),
                     start.clone()
                 ))
             }
@@ -222,7 +311,7 @@ impl LocatedToken {
                 span
             } => {
                 Cow::Owned(Token::For {
-                    label: label.clone(),
+                    label: label.into(),
                     start: start.clone(),
                     stop: stop.clone(),
                     step: step.clone(),
@@ -362,44 +451,265 @@ pub type InnerLocatedListing = BaseListing<LocatedToken>;
 
 /// Represents a Listing of located tokens
 /// Lifetimes 'src and 'ctx are in fact the same and correspond to hte lifetime of the object itself
-#[derive(Clone, Debug)]
+#[derive(Debug)]
+#[self_referencing]
 pub struct LocatedListing {
-    /// The real listing
-    listing: InnerLocatedListing,
-    /// Its source code
-    src: Arc<String>,
-    /// Its Parsing Context
-    ctx: Arc<ParserContext>
+    /// Its source code. We want it to live as long as possible.
+    /// A string is copied for the very beginning of the file parsing, while a span is used for the inner blocs. As this field is immutable and build before the listing, we do not store the span here
+    src: Option<String>,
+
+    /// Its Parsing Context whose source targets LocatedListing
+    #[borrows(src)]
+    ctx: ParserContext,
+
+    /// The real listing whose tokens come from src
+    #[borrows(src, ctx)]
+    pub(crate) parse_result: ParseResult,
+}
+
+#[derive(Debug)]
+pub(crate) enum ParseResult {
+    /// Success for a complete file
+    SuccessComplete(InnerLocatedListing),
+    /// Success for an inner block
+    SuccessInner{
+        /// The real listing of LocatedTokens
+        listing: InnerLocatedListing,
+        /// The code of the inner block
+        inner_span: Z80Span, 
+        /// The code of the next span
+        next_span: Z80Span
+    },
+    FailureInner(Err<VerboseError<Z80Span>>),
+    FailureComplete(AssemblerError)
+}
+
+#[derive(Debug)]
+pub(crate) enum ParseResultFirstStage {
+    Sucess {
+        listing: Option<InnerLocatedListing>,
+        remaining_span: Option<Z80Span>
+    },
+    Failure(VerboseError<Z80Span>)
 }
 
 impl LocatedListing {
-    /// Create an empty listing. Code as to be parsed afterwhise
-    pub fn new_empty(str: String, ctx: ParserContext) -> Self {
-        Self {
-            listing: Default::default(),
-            src: Arc::new(str),
-            ctx: Arc::new(ctx)
+    /// Build the listing from the current code and context
+    /// In case of error, the listing is provided as error message refer to its owned source code... FInal version should behave differently
+    /// The listing embeds the error
+    pub fn new_complete_source(code: String, mut ctx: ParserContext) -> Result<LocatedListing,  LocatedListing> {
+
+        // generate the listing
+        let listing = LocatedListingBuilder {
+            // source code is a string owned by the listing
+            src: Some(code),
+
+            // context keeps a reference on the full listing (but is it really needed yet ?)
+            ctx_builder: |src| {
+                ctx.source = src.map(|s| s.as_str());
+                ctx
+            },
+
+            // tokens depend both on the source and context. However source can be obtained from context so we do not use it here (it is usefull for the inner case)
+            parse_result_builder: |_, ctx| {
+                let src = ctx.source.as_ref().unwrap();
+                let input_start = Z80Span::new_extra(src, ctx);
+
+                // really make the parsing
+                let res = fold_many0(
+                    parse_z80_line,
+                    || Vec::new(),
+                    |mut source_tokens, mut line_tokens| {
+                        source_tokens.append(&mut line_tokens);
+                        source_tokens
+                    }
+                )(input_start.clone());
+                
+                // analyse result and can generate error even if parsing was ok
+                let res = match res {
+                    Ok((input_stop, tokens)) => {
+                        if input_stop.trim().is_empty() {
+                            // no more things to assemble
+                            Ok(InnerLocatedListing::from(tokens))
+                        }
+                        else {
+                            // Everything should have been consumed
+                            std::result::Result::Err(Err::Error(
+                                cpclib_common::nom::error::ParseError::<Z80Span>::from_error_kind(
+                                    input_start,
+                                    ErrorKind::Many0
+                                )
+                            ))
+                        }
+                    }
+                    Err(e) => {
+                        // Propagate the error (that is located)
+                        std::result::Result::Err(e)
+                    }
+                };
+
+                // Build the result
+                let res = match res {
+                    Ok(listing) => {
+                        ParseResult::SuccessComplete(listing)
+                    },
+                    Err(e) => {
+                        match e {
+                            cpclib_common::nom::Err::Error(e) | Err::Failure(e) => {
+                                ParseResult::FailureComplete(AssemblerError::SyntaxError { error: e })
+                            }
+                            cpclib_common::nom::Err::Incomplete(_) => {
+                                ParseResult::FailureComplete(AssemblerError::BugInParser {
+                                    error: "Bug in the parser".to_owned(),
+                                    context: ctx.deref().clone()
+                                })
+                            }
+                        }
+                    }
+                };
+
+                return res;
+            }
+            
+        }.build();
+
+
+        match listing.borrow_parse_result() {
+            ParseResult::SuccessComplete(_) => Ok(listing),
+            ParseResult::FailureComplete(_) => Err(listing),
+            _  => unreachable!(),
+        }
+  
+    }
+
+    /// By definition code is store in a Z80Span because the original string is Already contained in another Listing as a String
+    /// As the code is already owned by another LocatedListing, we can return error messages that refer it
+    pub fn parse_inner(code: Z80Span, new_state: ParsingState) -> IResult<Z80Span, LocatedListing, VerboseError<Z80Span>> {
+        // The context is similar to the initial one ...
+        let mut ctx = code.extra.clone();
+        let old_state = ctx.state;
+        // ... but the state can be modified to forbid some keywords
+        ctx.state = new_state;
+
+        let previous_length = code.input_len();
+        let fragment = code.fragment();
+    
+        let listing = LocatedListingBuilder {
+            src: None,
+
+            ctx_builder: move |_src| {
+                ctx.source = Some(fragment);
+                ctx
+            },
+
+            parse_result_builder: move |_, ctx| {
+                // build a span with the appropriate novel context
+                let ctx = unsafe{&*(ctx as *const ParserContext) as &'static ParserContext };
+                let mut src = 
+                        Z80Span(unsafe{
+                            LocatedSpan::new_from_raw_offset(
+                                code.location_offset(),
+                                code.location_line(),
+                                &*(code.as_str() as *const str) as &'static str,
+                                ctx
+                            )
+                        });
+
+                let mut input_start: Z80Span = src.clone();
+
+                let mut tokens = Vec::new(); // container of the parsed tokens
+                let error = None; // container of the potential parse error
+
+
+                // we parse until we met an error or the end of the parse
+                while error.is_none() {
+
+                    // check if the line needs to be parsed (ie there is no end directive)
+                    let must_break = input_start.trim().is_empty() || {
+                        // TODO take into account potential label
+                        let maybe_keyword = opt(
+                            preceded(
+                            delimited(space0, opt(tag(":")), space0),
+                            parse_end_directive
+                            )
+                        )(src.clone());
+                        match maybe_keyword {
+                            Ok((_, Some(_))) => true,
+                            _ => false
+                        }
+                    };
+                    if must_break {
+                        break;
+                    };
+            
+                    // really parse the line
+                    match cut(context("[DBG] Inner loop", parse_z80_line))(src) {
+                        Ok((next_input, mut tok)) => {
+                            src = next_input;
+                            tokens.append(&mut tok);
+                        }
+                        Err(e) => {
+                            error = Some(e);
+                        }
+                    }
+                }
+
+                // here we may have left because of an error or the end of parsing
+                match error {
+                    Some(e) => ParseResult::FailureInner(e),
+                    None => {
+                        src.extra.state = old_state;
+                        ParseResult::SuccessInner{
+                            inner_span: input_start.take(input_start.input_len()-src.input_len()),
+                            next_span: src, 
+                            listing: InnerLocatedListing::from(tokens)
+                        }
+                    },
+                }
+            }
+        }.build();
+
+
+        match  listing.borrow_parse_result() {
+            ParseResult::SuccessInner { listing: innerListing, inner_span, next_span } => {
+                Ok((
+                    next_span.clone(),
+                    listing
+                ))
+            },
+            ParseResult::FailureInner(e) => Err(*e),
+            _ => unreachable!(),
+
         }
     }
 
-    pub fn new_empty_span(span: Z80Span) -> Self {
-        Self {
-            listing: Default::default(),
-            src: Arc::clone(&span.extra.0),
-            ctx: Arc::clone(&span.extra.1)
-        }
+}
+
+impl LocatedListing {
+
+    
+    /// Make sense only when the listing as been properly parsed. May crash otherwhise
+    pub fn src(&self) -> &str {
+        self.with_src(|src| 
+            src.map(|s| s.as_str())
+        )
+        .unwrap_or_else(|| {
+            self.with_parse_result(|parse_result| match parse_result {
+                ParseResult::SuccessInner{inner_span, ..} => inner_span.as_str(),
+                _ => unreachable!()
+            })
+        })
     }
 
-    pub fn src(&self) -> &Arc<String> {
-        &self.src
-    }
-
-    pub fn ctx(&self) -> &Arc<ParserContext> {
-        &self.ctx
+    /// Lie a bit for inner listing as the provided source is too long
+    pub fn ctx(&self) -> &ParserContext {
+        self.with_ctx(|ctx| ctx)
     }
 
     pub fn span(&self) -> Z80Span {
-        Z80Span::new_extra_from_rc(Arc::clone(&self.src), Arc::clone(&self.ctx))
+        self.with_parse_result(|parse_result| {
+            todo!()
+        })
     }
 
     // pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
@@ -412,15 +722,21 @@ impl Deref for LocatedListing {
     type Target = InnerLocatedListing;
 
     fn deref(&self) -> &Self::Target {
-        &self.listing
+        self.with_parse_result(|parse_result|
+            match parse_result {
+            _ => todo!()
+            }
+        )
     }
 }
 impl DerefMut for LocatedListing {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.listing
+        todo!()
     }
 }
 
+/*
+ No more possible as the listing MUST be created BEFORE the tokens
 impl TryFrom<Vec<LocatedToken>> for LocatedListing {
     type Error = ();
 
@@ -443,12 +759,13 @@ impl TryFrom<Vec<LocatedToken>> for LocatedListing {
         }
     }
 }
+*/
 
 impl LocatedListing {
     pub fn as_cowed_listing(&self) -> BaseListing<Cow<Token>> {
         self.deref()
             .par_iter()
-            .map(|lt| lt.as_token())
+            .map(|lt| lt.to_token())
             .collect::<Vec<_>>()
             .into()
     }
@@ -456,7 +773,7 @@ impl LocatedListing {
     pub fn as_listing(&self) -> BaseListing<Token> {
         self.deref()
             .par_iter()
-            .map(|lt| lt.as_token())
+            .map(|lt| lt.to_token())
             .map(|c| -> Token { c.into_owned() })
             .collect::<Vec<Token>>()
             .into()
@@ -473,6 +790,6 @@ impl ParseToken for Token {
 
     fn parse_token(src: &str) -> Result<Self::Output, String> {
         let token = LocatedToken::parse_token(src);
-        token.map(|lt| lt.as_token().into_owned())
+        token.map(|lt| lt.to_token().into_owned())
     }
 }

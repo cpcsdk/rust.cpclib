@@ -1,6 +1,5 @@
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
-
+use std::borrow::Borrow;
 use cpclib_common::nom::error::{ErrorKind, ParseError};
 use cpclib_common::nom::{
     Compare, CompareResult, Err, FindSubstring, IResult, InputIter, InputLength, InputTake, Needed,
@@ -12,19 +11,47 @@ use cpclib_tokens::symbols::Source;
 use super::context::ParserContext;
 use super::ParsingState;
 
+type InnerZ80Span = LocatedSpan<
+    // the type of data, owned by the base listing of interest
+    &'static str,
+    // The parsing context
+    // TODO remove it an pass it over the parse arguments
+    &'static ParserContext
+>;
+
 #[derive(Clone, PartialEq)]
 pub struct Z80Span(
-    pub(crate)  LocatedSpan<
-        // the type of data
-        &'static str,
-        (
-            // The full source (same as the &str)
-            Arc<String>,
-            // The parsing context
-            Arc<ParserContext>
-        )
-    >
+    pub(crate) InnerZ80Span
 );
+
+impl AsRef<str> for Z80Span {
+    fn as_ref(&self) -> &str {
+        self.fragment()
+    }
+}
+
+impl Z80Span {
+    pub fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl Borrow<str> for Z80Span {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl std::fmt::Display for Z80Span {
+    // This trait requires `fmt` with this exact signature.
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        // Write strictly the first element into the supplied output
+        // stream: `f`. Returns `fmt::Result` which indicates whether the
+        // operation succeeded or failed. Note that `write!` uses syntax which
+        // is very similar to `println!`.
+        write!(f, "{}", self.as_str())
+    }
+}
 
 impl Into<Source> for &Z80Span {
     fn into(self) -> Source {
@@ -40,25 +67,9 @@ impl Into<Source> for &Z80Span {
     }
 }
 
-impl From<&'src str> for Z80Span {
-    fn from(s: &'src str) -> Self {
-        let src = Arc::new(s.to_owned());
-        let ctx = Arc::default();
 
-        let len = src.len();
-
-        Self(LocatedSpan::new_extra(
-            // The string is safe on the heap
-            unsafe {
-                std::str::from_utf8_unchecked(
-                    &*std::ptr::slice_from_raw_parts(src.as_ptr(), len) as _
-                )
-            },
-            (src, ctx)
-        ))
-    }
-}
-
+/*
+Impossible as the string MUST exist more than the span
 impl From<String> for Z80Span {
     fn from(s: String) -> Self {
         let src = Arc::new(s);
@@ -71,7 +82,10 @@ impl From<String> for Z80Span {
         ))
     }
 }
+*/
 
+/*
+//check if still needed
 impl Z80Span {
     pub fn from_standard_span(
         span: LocatedSpan<&'static str, ()>,
@@ -79,7 +93,7 @@ impl Z80Span {
     ) -> Self {
         {
             let _span_addr = span.fragment().as_ptr();
-            let _extra_addr = extra.0.as_ptr();
+            let _extra_addr = extra.as_ptr();
             // TODO; no idea why it fails :()
             //   assert!(std::ptr::eq(span_addr, extra_addr));
         }
@@ -94,6 +108,7 @@ impl Z80Span {
         })
     }
 }
+*/
 
 impl<'a> Into<LocatedSpan<&'a str>> for Z80Span {
     fn into(self) -> LocatedSpan<&'a str> {
@@ -109,7 +124,7 @@ impl<'a> Into<LocatedSpan<&'a str>> for Z80Span {
 }
 
 impl Deref for Z80Span {
-    type Target = LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)>;
+    type Target = InnerZ80Span;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -120,14 +135,14 @@ impl DerefMut for Z80Span {
         &mut self.0
     }
 }
-impl AsRef<LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)>> for Z80Span {
-    fn as_ref(&self) -> &LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> {
+impl AsRef<InnerZ80Span> for Z80Span {
+    fn as_ref(&self) -> &InnerZ80Span {
         self.deref()
     }
 }
 impl std::fmt::Debug for Z80Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        self.deref().fmt(f)
+        std::fmt::Display::fmt(&self.as_str(), f)
     }
 }
 impl Compare<&'static str> for Z80Span {
@@ -141,11 +156,11 @@ impl Compare<&'static str> for Z80Span {
 }
 impl cpclib_common::nom::InputIter for Z80Span {
     type Item =
-        <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::Item;
+        <InnerZ80Span as cpclib_common::nom::InputIter>::Item;
     type Iter =
-        <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::Iter;
+        <InnerZ80Span as cpclib_common::nom::InputIter>::Iter;
     type IterElem =
-        <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::IterElem;
+        <InnerZ80Span as cpclib_common::nom::InputIter>::IterElem;
 
     fn iter_indices(&self) -> Self::Iter {
         self.deref().iter_indices()
@@ -177,6 +192,8 @@ impl Offset for Z80Span {
     }
 }
 
+
+
 impl cpclib_common::nom::InputTake for Z80Span {
     fn take(&self, count: usize) -> Self {
         Self(self.deref().take(count))
@@ -189,8 +206,7 @@ impl cpclib_common::nom::InputTake for Z80Span {
 }
 
 impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
-    type Item =
-        <LocatedSpan<&'static str, (Arc<String>, Arc<ParserContext>)> as cpclib_common::nom::InputIter>::Item;
+    type Item = <InnerZ80Span as cpclib_common::nom::InputIter>::Item;
 
     fn split_at_position<P, E: ParseError<Self>>(&self, predicate: P) -> IResult<Self, Self, E>
     where P: Fn(Self::Item) -> bool {
@@ -276,34 +292,30 @@ impl Slice<std::ops::RangeTo<usize>> for Z80Span {
 }
 
 impl Z80Span {
-    pub fn new_extra<S: Into<String>>(src: S, ctx: ParserContext) -> Self {
-        let src = Arc::new(src.into());
-        let ctx = Arc::new(ctx);
-
-        Self::new_extra_from_rc(src, ctx)
-    }
-
-    pub fn new_extra_from_rc(src: Arc<String>, ctx: Arc<ParserContext>) -> Self {
+    pub fn new_extra(src: &str, ctx: &ParserContext) -> Self {
         Self(LocatedSpan::new_extra(
             // pointer is always good as source is store in a Arc
-            unsafe { &*(src.as_str() as *const str) as &'static str },
-            (Arc::clone(&src), Arc::clone(&ctx))
+            unsafe { &*(src as *const str) as &'static str },
+            unsafe { &*(ctx as *const ParserContext) as &'static ParserContext},
         ))
     }
 
     pub fn context(&self) -> &ParserContext {
-        &self.0.extra.1
+        &self.0.extra
     }
 }
 
 impl Z80Span {
+    /*
+    /// Used when the state is changing (it controls the parsing)
     pub fn clone_with_state(&self, state: ParsingState) -> Self {
+        eprintln!("Z80Span::clone_with_state used. Need to check if it could be done differently as the state is supposed to be hold by the listing");
         let ctx = self.context().clone_with_state(state);
         let mut clone = self.clone();
-        clone.extra = (self.extra.0.clone(), Arc::new(ctx));
+        clone.extra =  w(ctx);
         clone
     }
-
+    */
     pub fn state(&self) -> &ParsingState {
         &self.context().state
     }

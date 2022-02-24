@@ -46,7 +46,6 @@ use crate::save_command::*;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, PhysicalAddress};
 use crate::assembler::processed_token::AsSimpleToken;
-use crate::processed_token::ProcessedToken;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -2000,7 +1999,7 @@ impl Env {
             // Tokenize with the same parsing  parameters and context when possible
             let listing = match caller_span {
                 Some(span) => {
-                    let mut ctx = span.extra.1.deref().clone();
+                    let mut ctx = span.extra.deref().clone();
                     ctx.remove_filename();
                     ctx.set_context_name(&format!(
                         "{}:{}:{} > {} {}:",

@@ -173,7 +173,7 @@ fn regression_akm1() {
                             ";
     let bin = dbg!(parse_conditional(input.into()));
     assert!(bin.is_ok());
-    dbg!(bin.unwrap().1.as_token());
+    dbg!(bin.unwrap().1.to_token());
 }
 
 #[test]
@@ -189,7 +189,7 @@ fn regression_akm2() {
 ";
     let bin = dbg!(parse_conditional(input.into()));
     assert!(bin.is_ok());
-    dbg!(bin.unwrap().1.as_token());
+    dbg!(bin.unwrap().1.to_token());
 }
 
 #[test]
@@ -202,7 +202,7 @@ fn regression_akm3() {
 ";
     let bin = dbg!(parse_conditional(input.into()));
     assert!(bin.is_ok());
-    dbg!(bin.unwrap().1.as_token());
+    dbg!(bin.unwrap().1.to_token());
 }
 
 #[test]
@@ -216,7 +216,7 @@ dknr3:  ld de,4
 ";
     let bin = dbg!(parse_conditional(input.into()));
     assert!(bin.is_ok());
-    dbg!(bin.unwrap().1.as_token());
+    dbg!(bin.unwrap().1.to_token());
 }
 
 #[test]
@@ -246,7 +246,7 @@ dknr3:  ld de,4
 ";
     let bin = dbg!(parse_conditional(input.into()));
     assert!(bin.is_ok());
-    dbg!(bin.unwrap().1.as_token());
+    dbg!(bin.unwrap().1.to_token());
 }
 
 #[test]

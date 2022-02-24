@@ -3,6 +3,7 @@ use std::ops::Deref;
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_tokens::symbols::{Macro, Source, Struct};
 use cpclib_tokens::{MacroParam, Token};
+use crate::ParserContext;
 
 use crate::error::AssemblerError;
 use crate::preamble::Z80Span;
@@ -23,7 +24,8 @@ impl Expandable for MacroParam {
                 const EVAL: &str = "{eval}";
                 if trimmed.starts_with(EVAL) {
                     let src = &s[EVAL.len()..];
-                    let src = Z80Span::from(src);
+                    let ctx = ParserContext::default(); // TODO really use the good context
+                    let src = Z80Span::new_extra(src, &ctx);
                     let expr_token = crate::parser::expr(src)
                         .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?
                         .1;

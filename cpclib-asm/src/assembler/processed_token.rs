@@ -1,30 +1,23 @@
 use crate::Visited;
 use crate::ParserContext;
 use crate::AssemblerError; 
-use crate::parse_z80_strrc_with_contextrc;
 use crate::LocatedToken;
 use crate::Env;
 use crate::preamble::LocatedListing;
+use crate::preamble::parse_z80_str_with_context;
 
-use cpclib_tokens::ListingElement;
 use cpclib_tokens::Token;
 use cpclib_tokens::BinaryTransformation;
 use crate::implementation::instructions::Cruncher;
 use cpclib_disc::amsdos::AmsdosHeader;
 
 use std::any::Any;
-use std::borrow::BorrowMut;
-use std::fmt::write;
 use std::io::Read;
 use std::fs::File;
 use std::borrow::Cow;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::ops::Deref;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 
-use cpclib_common::itertools::Itertools;
 
 use ouroboros::*;
 
@@ -76,7 +69,7 @@ impl AsSimpleToken for Token {
 
 impl AsSimpleToken for LocatedToken {
 	fn as_simple_token(&self) -> Cow<Token> {
-		self.as_token()
+		self.to_token()
 	}
 }
 
@@ -210,14 +203,13 @@ impl<'token, T:AsSimpleToken + Visited + Debug> ProcessedToken<'token, T> {
             Token::Include(ref fname, _namespace, _once) => {
                 let content = read_source(fname, ctx)?;
 
-                let content = Arc::new(content);
                 let new_ctx = {
-                    let mut new_ctx = ctx.deref().clone();
+                    let mut new_ctx = ctx.clone();
                     new_ctx.set_current_filename(fname);
-                    Arc::new(new_ctx)
+                    new_ctx
                 };
 
-                let listing = parse_z80_strrc_with_contextrc(content, new_ctx)?;
+                let listing = parse_z80_str_with_context(content, new_ctx)?;
                 let includeState = IncludeStateBuilder {
                     listing,
                     processed_tokens_builder: |listing: &LocatedListing| build_list(listing.as_slice(), env)

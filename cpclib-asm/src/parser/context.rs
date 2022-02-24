@@ -2,13 +2,12 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
-use super::Z80Span;
 use crate::error::AssemblerError;
 use crate::preamble::*;
 use crate::LocatedToken;
 
 /// State to limit the parsing abilities depending on the parsing context
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum ParsingState {
     Standard,
     FunctionLimited,
@@ -93,7 +92,9 @@ pub struct ParserContext {
     /// Set to true when directives must start by a dot
     pub dotted_directive: bool,
     /// indicate we are parsing a listing generating by a struct
-    pub parse_warning: RwLock<Vec<AssemblerError>>
+    pub parse_warning: RwLock<Vec<AssemblerError>>,
+    /// source code of the parsing state
+    pub source: Option<&'static str>
 }
 
 impl Clone for ParserContext {
@@ -105,7 +106,8 @@ impl Clone for ParserContext {
             read_referenced_files: self.read_referenced_files.clone(),
             parse_warning: self.parse_warning.write().unwrap().clone().into(),
             state: self.state.clone(),
-            dotted_directive: self.dotted_directive.clone()
+            dotted_directive: self.dotted_directive.clone(),
+            source: self.source.clone()
         }
     }
 }
@@ -119,7 +121,8 @@ impl Default for ParserContext {
             read_referenced_files: true,
             parse_warning: Default::default(),
             state: ParsingState::Standard,
-            dotted_directive: false
+            dotted_directive: false,
+            source: None
         }
     }
 }
@@ -133,6 +136,7 @@ impl ParserContext {
             read_referenced_files: self.read_referenced_files.clone(),
             parse_warning: self.parse_warning.write().unwrap().clone().into(),
             dotted_directive: self.dotted_directive.clone(),
+            source: self.source.clone(),
             state
         }
     }
@@ -140,9 +144,11 @@ impl ParserContext {
 
 #[allow(missing_docs)]
 impl ParserContext {
+    /*
     pub fn build_span<S: Into<String>>(&self, src: S) -> Z80Span {
         Z80Span::new_extra(src, self.clone())
     }
+    */
 
     /// Specify the path that contains the code
     pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
@@ -286,6 +292,10 @@ impl ParserContext {
 
     pub fn pop_warning(&self) -> Option<AssemblerError> {
         self.parse_warning.write().unwrap().pop() // TODO investigate why I cannot return a reference
+    }
+
+    pub fn complete_source(&self) -> &str {
+        todo!()
     }
 }
 // pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
