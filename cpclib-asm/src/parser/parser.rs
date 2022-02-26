@@ -3919,7 +3919,7 @@ pub fn expr2(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
 fn located_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
     let start = input.clone();
     let (stop, exp) = expr(input)?;
-    let len = stop.input_len()-start.input_len();
+    let len = start.input_len() - stop.input_len();
     Ok((
         stop,
         LocatedExpr::new(exp, start.take(len))
