@@ -295,7 +295,7 @@ impl ParserContext {
     }
 
     pub fn complete_source(&self) -> &str {
-        todo!()
+        self.source.unwrap()
     }
 }
 // pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
