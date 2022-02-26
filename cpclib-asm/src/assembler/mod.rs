@@ -45,7 +45,7 @@ use crate::report::Report;
 use crate::save_command::*;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, PhysicalAddress};
-use crate::assembler::processed_token::AsSimpleToken;
+use cpclib_tokens::ToSimpleToken;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -1548,43 +1548,47 @@ impl Env {
     }
 
     /// Manage a IF .. XXX ELSEIF YYY ELSE ZZZ structure
-    fn visit_if<T: ListingElement + Visited>(
+    fn visit_if<T: ListingElement + Visited, K: TestKindElement>(
         &mut self,
-        cases: &[(&TestKind, &[T])],
+        cases: &[(&K, &[T])],
         other: Option<&[T]>
     ) -> Result<(), AssemblerError> {
-        assert!(!cases.is_empty());
+
+        debug_assert!(!cases.is_empty());
 
         // Test all the if cases until reaching one != 0
-        for case in cases.iter() {
-            let token_adr = case.0 as *const _ as usize;
-            match case {
+        for &(test, listing) in cases.iter() {
+            let token_adr = test as *const _ as usize;
+
+            if test.is_true_test() {
+                let exp = test.expr_unchecked();
                 // Expression must be true
-                (TestKind::True(ref exp), ref listing) => {
-                    let value = self.resolve_expr_must_never_fail(exp)?;
-                    if value.bool()? {
-                        self.visit_listing(listing)?;
-                        return Ok(());
-                    }
+                let value = self.resolve_expr_must_never_fail(exp)?;
+                if value.bool()? {
+                    self.visit_listing(listing)?;
+                    return Ok(());
                 }
+            
+            }
 
-                // Expression must be false
-                (TestKind::False(ref exp), listing) => {
-                    let value = self.resolve_expr_must_never_fail(exp)?;
-                    if !value.bool()? {
-                        self.visit_listing(listing)?;
-                        return Ok(());
-                    }
+            // Expression must be false
+            else if test.is_false_test()  {
+                let exp = test.expr_unchecked();
+                let value = self.resolve_expr_must_never_fail(exp)?;
+                if !value.bool()? {
+                    self.visit_listing(listing)?;
+                    return Ok(());
                 }
+            }
 
-                (TestKind::LabelUsed(label), listing) => {
+            else if test.is_label_used_test() {
+                    let label = test.label_unchecked();
                     let decision = self.symbols().is_used(label);
 
                     // Add an extra pass if the test differ
                     if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr) {
                         if *res != decision {
                             *self.request_additional_pass.write().unwrap() = true;
-                            dbg!("yyyy");
                         }
                     }
 
@@ -1594,17 +1598,18 @@ impl Env {
 
                     if decision {
                         self.visit_listing(listing)?;
+                        return Ok(());
                     }
                 }
 
-                (TestKind::LabelNused(label), listing) => {
+                else if test.is_label_nused_test() {
+                    let label = test.label_unchecked();
                     let decision = !self.symbols().is_used(label);
 
                     // Add an extra pass if the test differ
                     if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr) {
                         if *res != decision {
                             *self.request_additional_pass.write().unwrap() = true;
-                            dbg!("xxxxxxxxxx");
                         }
                     }
 
@@ -1614,11 +1619,13 @@ impl Env {
 
                     if decision {
                         self.visit_listing(listing)?;
+                        return Ok(());
                     }
                 }
 
                 // Label must exist
-                (TestKind::LabelExists(ref label), listing) => {
+            else if test.is_label_exists_test() {
+                    let label = test.label_unchecked();
                     if self.symbols().symbol_exist_in_current_pass(label)? {
                         self.visit_listing(listing)?;
                         return Ok(());
@@ -1626,13 +1633,15 @@ impl Env {
                 }
 
                 // Label must not exist
-                (TestKind::LabelDoesNotExist(ref label), ref listing) => {
+            else {
+                    debug_assert!(test.is_label_nexists_test()); 
+                    let label = test.label_unchecked();
                     if !self.symbols().symbol_exist_in_current_pass(label)? {
                         self.visit_listing(listing)?;
                         return Ok(());
                     }
                 }
-            }
+            
         }
 
         // Test the else if any
@@ -1674,10 +1683,10 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_struct_definition(
+    pub fn visit_struct_definition<T: ListingElement + ToSimpleToken, S: Borrow<str>>(
         &mut self,
         name: &str,
-        content: &[(SmolStr, Token)],
+        content: &[(S, T)],
         source: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
@@ -2374,7 +2383,7 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
-pub fn visit_tokens_all_passes<T: 'static + Visited + AsSimpleToken + Debug + Sync>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> {
+pub fn visit_tokens_all_passes<T: 'static + Visited + ToSimpleToken + Debug + Sync>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> {
     let options = AssemblingOptions::default();
     visit_tokens_all_passes_with_options(tokens, &options, ctx)
 }
@@ -2451,7 +2460,7 @@ impl Env {
 
 /// Visit the tokens during several passes by providing a specific symbol table.
 /// Warning Listing output is only possible for LocatedToken
-pub fn visit_tokens_all_passes_with_options<'token, T: 'static + Visited + AsSimpleToken + Debug + Sync>(
+pub fn visit_tokens_all_passes_with_options<'token, T: 'static + Visited + ToSimpleToken + Debug + Sync>(
     tokens: &'token [T],
     options: &AssemblingOptions,
     ctx: &ParserContext
@@ -2662,6 +2671,16 @@ pub fn visit_located_token(
                 Some(span)
             )
         }
+        LocatedToken::Label(label) => {
+            env.visit_label(label.as_str())
+                .map_err(|e| e.locate(label.clone()))
+        },
+        LocatedToken::MacroCall(name, args, span) => {
+            env.visit_call_macro_or_build_struct(outer_token) // TODO rewrite that, it does not seem to be a appropriate code (no cast should be used, their is a lack of abstraction here
+        },
+        LocatedToken::Struct(name, args, span) => {
+            env.visit_struct_definition(name.as_str(), args, Some(span))
+        },
     }?;
 
     // Patch the warnings to inject them a location
@@ -2750,6 +2769,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             off: _,
             transformation: _
         } => panic!("Error - should never be called"),
+
         Token::If(ref cases, ref other) => {
             env.visit_if(
                 cases

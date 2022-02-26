@@ -6,6 +6,7 @@ use crate::Env;
 use crate::preamble::LocatedListing;
 use crate::preamble::parse_z80_str_with_context;
 
+use cpclib_tokens::ToSimpleToken;
 use cpclib_tokens::Token;
 use cpclib_tokens::BinaryTransformation;
 use crate::implementation::instructions::Cruncher;
@@ -24,7 +25,7 @@ use ouroboros::*;
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
 #[derive(Debug)]
-pub struct ProcessedToken<'token, T: Visited + AsSimpleToken + Debug> {
+pub struct ProcessedToken<'token, T: Visited + ToSimpleToken + Debug> {
 	/// The token being processed by the assembler
 	token: &'token T,
 	state: Option<ProcessedTokenState>
@@ -56,25 +57,15 @@ impl Debug for IncludeState {
      }
 }
 
-pub trait AsSimpleToken {
-	/// Convert the token in its simplest form
-	fn as_simple_token(&self) -> Cow<Token>;
-}
 
-impl AsSimpleToken for Token {
+impl<'token, T: Visited + ToSimpleToken + Debug> ToSimpleToken for ProcessedToken<'token, T> {
 	fn as_simple_token(&self) -> Cow<Token> {
-		Cow::Borrowed(self)
-	}
-}
-
-impl AsSimpleToken for LocatedToken {
-	fn as_simple_token(&self) -> Cow<Token> {
-		self.to_token()
+		self.token.as_simple_token()
 	}
 }
 
 /* There is a bug in rust compiler that forbids to use that :(
-default impl<'token, T:AsSimpleToken + Visited + Debug>  From<&'token T> for ProcessedToken<'token, T> {
+default impl<'token, T:ToSimpleToken + Visited + Debug>  From<&'token T> for ProcessedToken<'token, T> {
 	fn from(token: &'token T) -> Self {
 		let state = match token.as_simple_token().as_ref() {
 			Token::Include(..) | Token::Incbin{..} => Some(ProcessedTokenState::Expected),
@@ -128,7 +119,7 @@ pub type AssemblerInfo = AssemblerError;
 
 
 
-pub fn build_list<'token, T:'static + AsSimpleToken + Visited + Debug + Sync> (tokens: &'token[T], env: &Env) -> Vec<ProcessedToken<'token, T>> {
+pub fn build_list<'token, T:'static + ToSimpleToken + Visited + Debug + Sync> (tokens: &'token[T], env: &Env) -> Vec<ProcessedToken<'token, T>> {
     use rayon::prelude::*;
      use rayon::iter::ParallelBridge;
 
@@ -167,7 +158,7 @@ pub fn build_list<'token, T:'static + AsSimpleToken + Visited + Debug + Sync> (t
 }
 
 /// Visit all the tokens until an error occurs
-pub fn visit_processed_tokens<'token, T:AsSimpleToken + Visited + Debug>(tokens: & mut [ProcessedToken<'token, T>], env: &mut Env) -> Result<(), AssemblerError> {
+pub fn visit_processed_tokens<'token, T:ToSimpleToken + Visited + Debug>(tokens: & mut [ProcessedToken<'token, T>], env: &mut Env) -> Result<(), AssemblerError> {
     for token in tokens.iter_mut() {
         token.visited(env)?;
     }
@@ -176,7 +167,7 @@ pub fn visit_processed_tokens<'token, T:AsSimpleToken + Visited + Debug>(tokens:
 }
 
 
-impl<'token, T:AsSimpleToken + Visited + Debug> ProcessedToken<'token, T> {
+impl<'token, T:ToSimpleToken + Visited + Debug> ProcessedToken<'token, T> {
 
 
 	/// Read the data for the appropriate tokens.
@@ -385,7 +376,7 @@ pub fn read_source(fname: &str, ctx: &ParserContext) -> Result<String, Assembler
     }
 }
 
-impl<'token, T: Visited + AsSimpleToken + Debug>  ProcessedToken<'token, T> {
+impl<'token, T: Visited + ToSimpleToken + Debug>  ProcessedToken<'token, T> {
 	/// Due to the state management, the signature requires mutability
 	pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
 

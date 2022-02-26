@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 
 use cpclib_common::itertools::Itertools;
@@ -397,6 +398,19 @@ pub enum CharsetFormat {
 
 /// TODO use a more complete type that can use a subset of functions to generate a string
 pub type Filename = String;
+
+
+
+pub trait ToSimpleToken {
+	/// Convert the token in its simplest form
+	fn as_simple_token(&self) -> Cow<Token>;
+}
+
+impl ToSimpleToken for Token {
+	fn as_simple_token(&self) -> Cow<Token> {
+		Cow::Borrowed(self)
+	}
+}
 
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]

@@ -169,7 +169,7 @@ pub fn parse_z80_str_with_context<S: Into<String>>(
     ctx: ParserContext
 ) -> Result<LocatedListing, AssemblerError> {
     LocatedListing::new_complete_source(str.into(), ctx)
-        .map_err(|l| {AssemblerError::LocatedListingError(box l)})
+        .map_err(|l| {AssemblerError::LocatedListingError(std::sync::Arc::new(l))})
 }
 
 /// Parse a string and return the corresponding listing
@@ -256,7 +256,7 @@ pub fn parse_z80_line(
     Ok((input2, tokens.1))
 }
 
-fn inner_code(mut input: Z80Span) -> IResult<Z80Span, LocatedListing, VerboseError<Z80Span>> {
+fn inner_code(input: Z80Span) -> IResult<Z80Span, LocatedListing, VerboseError<Z80Span>> {
     inner_code_with_state(input.extra.state.clone())(input)
 }
 
@@ -874,7 +874,7 @@ pub fn parse_z80_line_complete(
 
     // Guess the kind of label previously acquired
     let (input, label_or_macro) = opt(preceded(space0, parse_label(false)))(input)?;
-    let (mut input, (mut i_know_it_is_a_label, label_modifier)) = if label_or_macro.is_some() {
+    let (input, (mut i_know_it_is_a_label, label_modifier)) = if label_or_macro.is_some() {
         context(
             "check label  modifier",
             alt((
@@ -2320,6 +2320,7 @@ pub fn parse_macro_or_struct_call(
     move |input| {
         // BUG: added because of parsing issues. Need to find why and remove ot
         let (input_label, _) = space0(input)?;
+        let input_start = input_label.clone();
         let (input, name) = parse_macro_name(input_label.clone())?;
 
         // Check if the macro name is allowed
@@ -2416,7 +2417,8 @@ pub fn parse_macro_or_struct_call(
                 }
             }
 
-            Ok((input, LocatedToken::MacroCall(name, args)))
+            let all_span = input_start.take(input_start.input_len()-input.input_len());
+            Ok((input, LocatedToken::MacroCall(name, args, all_span)))
         }
     }
 }
@@ -3386,6 +3388,7 @@ fn parse_snainit(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span
 }
 
 fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let input_start = input.clone();
     let (input, _) = parse_directive_word("STRUCT")(input)?;
     let (input, name) = cut(parse_label(false))(input)?;
 
@@ -3421,7 +3424,8 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z
 
     let (input, _) = cut(preceded(space0, parse_directive_word("ENDSTRUCT")))(input)?;
 
-    Ok((input, LocatedToken::Struct(name, fields)))
+    let all_span = input_start.take(input_start.input_len()-input.input_len());
+    Ok((input, LocatedToken::Struct(name, fields, all_span)))
 }
 
 fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
@@ -3610,16 +3614,17 @@ pub fn parse_end_directive(input: Z80Span) -> IResult<Z80Span, String, VerboseEr
 }
 
 pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
+    let dotted_directive = input.context().dotted_directive;
     verify(
         recognize(tuple((
             one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"),
             is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
         ))),
-        |name: &Z80Span| {
+        move |name: &Z80Span| {
             let first = name.fragment().chars().next().unwrap();
             let KEYWORD = name.as_str().to_ascii_uppercase();
 
-            if impossible_names(input.context().dotted_directive).any(|&val| val == &KEYWORD) {
+            if impossible_names(dotted_directive).any(|&val| val == &KEYWORD) {
                 return false;
             }
             else {
@@ -3670,7 +3675,7 @@ pub fn parse_value(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Spa
             cpclib_common::nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::Verify))
         })?;
 
-    let input = input
+    let input = input_start
         .take_split(alien_start.input_len() - alien_end.input_len())
         .1;
     Ok((input, Expr::Value(val as i32)))
@@ -3914,9 +3919,10 @@ pub fn expr2(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
 fn located_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
     let start = input.clone();
     let (stop, exp) = expr(input)?;
+    let len = stop.input_len()-start.input_len();
     Ok((
         stop,
-        LocatedExpr::new(exp, start.take(stop.input_len()-start.input_len()))
+        LocatedExpr::new(exp, start.take(len))
     ))
 }
 

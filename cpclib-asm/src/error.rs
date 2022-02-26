@@ -33,7 +33,7 @@ pub enum ExpressionError {
 #[allow(missing_docs)]
 pub enum AssemblerError {
     /// Parse of a located listing failed, but the error is in fact stored within the located listing object...
-    LocatedListingError(Box<LocatedListing>),
+    LocatedListingError(std::sync::Arc<LocatedListing>),
     //#[fail(display = "Several errors arised: {:?}", errors)]
     MultipleErrors {
         errors: Vec<AssemblerError>
@@ -815,7 +815,10 @@ impl AssemblerError {
                 write!(f, "Error when crunching code {}", error)
             }
             AssemblerError::NotAllowed => write!(f, "Instruction not allowed in this context."),
-            AssemblerError::Fail { msg } => write!(f, "FAIL: {}", msg)
+            AssemblerError::Fail { msg } => write!(f, "FAIL: {}", msg),
+            AssemblerError::LocatedListingError(arc) => {
+                write!(f, "{}", arc.as_ref().cpclib_error_unchecked())
+            },
         }
     }
 }

@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use cpclib_common::clap;
-use cpclib_common::clap::{App, Arg, ArgGroup, ArgMatches};
+use cpclib_common::clap::{Command, Arg, ArgGroup, ArgMatches};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 use crate::processed_token::read_source;
 use crate::preamble::*;
@@ -66,7 +66,7 @@ impl From<AssemblerError> for BasmError {
 /// TODO read options to configure the search path
 pub fn parse<'arg>(
     matches: &'arg ArgMatches
-) -> Result<(ParserContext, LocatedListing, Vec<AssemblerError>), BasmError> {
+) -> Result<LocatedListing, BasmError> {
     let inline_fname = "<inline code>";
     let filename = matches.value_of("INPUT").unwrap_or(inline_fname);
 
@@ -77,7 +77,7 @@ pub fn parse<'arg>(
     context.set_current_filename(&filename);
     match std::env::current_dir() {
         Ok(cwd) => {
-            context.add_search_path(cwd);
+            context.add_search_path(cwd)?;
         },
         Err(_) => todo!(),
     }
@@ -104,22 +104,14 @@ pub fn parse<'arg>(
         panic!("No code provided to assemble");
     };
 
-    // Continue the creation of the context
-    let code = Arc::new(code);
-    let context = Arc::new(context);
-
-    let res = parse_z80_strrc_with_contextrc(code, Arc::clone(&context))
-        .map_err(|e| BasmError::from(e))?;
-
-    let warnings = context.warnings();
-    Ok((context.as_ref().clone(), res, warnings))
+    crate::parse_z80_str_with_context(code, context)
+        .map_err(|e| BasmError::from(e))
 }
 
 /// Assemble the given code
 /// TODO use options to configure the base symbole table
 pub fn assemble<'arg>(
     matches: &'arg ArgMatches,
-    ctx: &ParserContext,
     listing: &LocatedListing
 ) -> Result<Env, BasmError> {
     let mut options = AssemblingOptions::default();
@@ -139,10 +131,15 @@ pub fn assemble<'arg>(
     // Get the variables definition
     if let Some(definitions) = matches.values_of("DEFINE_SYMBOL") {
         for definition in definitions {
-            let mut split = definition.split("=");
-            let symbol = split.next().unwrap();
-            let value = split.next().unwrap_or("1");
-            let value = /*cpclib_common::*/parse_value(value.into())
+            let (symbol, value) = {
+                match definition.split_once("=") {
+                    Some((symbol, value)) => (symbol, value),
+                    None => (definition, "1"),
+                }
+            };
+            let ctx = ParserContext::default();
+            let span = Z80Span::new_extra(value, &ctx);
+            let value = /*cpclib_common::*/parse_value(span)
                     .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))
                     ?
                     .1;
@@ -169,7 +166,7 @@ pub fn assemble<'arg>(
         }
     }
 
-    let env = visit_tokens_all_passes_with_options(&listing, &options, &ctx)
+    let env = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
         .map_err(|e| BasmError::AssemblerError { error: e })?;
 
     if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
@@ -219,7 +216,6 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             }
         }
         else {
-            use std::convert::TryFrom;
 
             let pc_filename = matches.value_of("OUTPUT").unwrap();
             if pc_filename.to_lowercase().ends_with(".sna") && !matches.is_present("SNAPSHOT") {
@@ -285,10 +281,12 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 /// Launch the assembling of everythin
 pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     // standard assembling
-    let (ctx, listing, mut warnings) = parse(matches)?;
-    let env = assemble(matches, &ctx, &listing)?;
+    let listing = parse(matches)?;
+    let env = assemble(matches,&listing)?;
 
-    warnings.extend_from_slice(env.warnings());
+     eprintln!("TODO: include parse warnings");
+    //warnings.extend_from_slice(env.warnings());
+    let warnings = env.warnings().to_vec();
 
     if matches.is_present("WERROR") && !warnings.is_empty() {
         return Err(AssemblerError::MultipleErrors { errors: warnings }.into());
@@ -299,8 +297,8 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
     }
 }
 
-pub fn build_args_parser() -> clap::App<'static> {
-    App::new("basm")
+pub fn build_args_parser() -> clap::Command<'static> {
+    Command::new("basm")
 					.author("Krusty/Benediction")
 					.about("Benediction ASM -- z80 assembler that tailor Amstrad CPC")
                     .after_help("Work In Progress")

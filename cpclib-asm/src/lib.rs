@@ -37,7 +37,6 @@ use cpclib_disc::amsdos::*;
 use preamble::*;
 
 use self::listing_output::ListingOutput;
-use crate::processed_token::AsSimpleToken;
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
 #[derive(Debug)]
@@ -132,7 +131,7 @@ pub fn assemble_with_options(
 }
 
 /// Assemble the predifined list of tokens
-pub fn assemble_tokens_with_options<'tokens, T: 'static + Visited + AsSimpleToken + Clone + ListingElement + Sync>(
+pub fn assemble_tokens_with_options<'tokens, T: 'static + Visited + ToSimpleToken + Clone + ListingElement + Sync>(
     tokens: &'tokens [T],
     options: &AssemblingOptions,
     ctx: &ParserContext
