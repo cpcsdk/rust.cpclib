@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_tokens::symbols::{Macro, Source, Struct};
-use cpclib_tokens::{MacroParam, Token};
+use cpclib_tokens::{MacroParam, Token, MacroParamElement};
 use crate::ParserContext;
 
 use crate::error::AssemblerError;
@@ -15,49 +15,46 @@ pub trait Expandable {
     fn expand(&self, env: &Env) -> Result<String, AssemblerError>;
 }
 
-impl Expandable for MacroParam {
-    /// Expansion is slightly different thant to_string has it does not print the bracket
-    fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
-        match self {
-            Self::Single(s) => {
-                let trimmed = s.trim();
-                const EVAL: &str = "{eval}";
-                if trimmed.starts_with(EVAL) {
-                    let src = &s[EVAL.len()..];
-                    let ctx = ParserContext::default(); // TODO really use the good context
-                    let src = Z80Span::new_extra(src, &ctx);
-                    let expr_token = crate::parser::expr(src)
-                        .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?
-                        .1;
-                    let value = env.resolve_expr_must_never_fail(&expr_token)?;
-                    return Ok(value.to_string());
-                }
-                else {
-                    Ok(s.clone())
-                }
-            }
-            Self::List(l) => {
-                Ok(format!(
-                    "{}",
-                    l.iter()
-                        .map(|p| p.expand(env))
-                        .collect::<Result<Vec<_>, AssemblerError>>()?
-                        .join(",")
-                ))
-            }
+fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, AssemblerError> {
+    if m.is_single() {
+        let s = m.single_argument();
+        let trimmed = s.trim();
+        const EVAL: &str = "{eval}";
+        if trimmed.starts_with(EVAL) {
+            let src = &s[EVAL.len()..];
+            let ctx = ParserContext::default(); // TODO really use the good context
+            let src = Z80Span::new_extra(src, &ctx);
+            let expr_token = crate::parser::expr(src)
+                .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?
+                .1;
+            let value = env.resolve_expr_must_never_fail(&expr_token)?;
+            return Ok(value.to_string());
         }
+        else {
+            Ok(s.to_owned())
+        }
+    } else {
+        let l = m.list_argument();
+        Ok(format!(
+            "{}",
+            l.iter()
+                .map(|p| expand_param(p.deref(), env))
+                .collect::<Result<Vec<_>, AssemblerError>>()?
+                .join(",")
+        ))
     }
 }
 
+
 /// Encodes both the arguments and the macro
-pub struct MacroWithArgs<'m, 'a> {
+pub struct MacroWithArgs<'m, 'a, P: MacroParamElement> {
     r#macro: &'m Macro,
-    args: &'a [MacroParam]
+    args: &'a [P]
 }
 
-impl<'m, 'a> MacroWithArgs<'m, 'a> {
+impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
     /// The construction fails if the number pf arguments is incorrect
-    pub fn build(r#macro: &'m Macro, args: &'a [MacroParam]) -> Result<Self, AssemblerError> {
+    pub fn build(r#macro: &'m Macro, args: &'a [P]) -> Result<Self, AssemblerError> {
         if r#macro.nb_args() != args.len() {
             Err(AssemblerError::MacroError {
                 name: r#macro.name().into(),
@@ -80,7 +77,7 @@ impl<'m, 'a> MacroWithArgs<'m, 'a> {
     }
 }
 
-impl<'m, 'a> Expandable for MacroWithArgs<'m, 'a> {
+impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
     /// Develop the macro with the given arguments
     fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
         //        assert_eq!(args.len(), self.nb_args());
@@ -88,25 +85,27 @@ impl<'m, 'a> Expandable for MacroWithArgs<'m, 'a> {
 
         // replace the arguments for the listing
         for (argname, argvalue) in self.r#macro.params().iter().zip(self.args.iter()) {
-            listing = listing.replace(&format!("{{{}}}", argname), &argvalue.expand(env)?);
+            listing = listing.replace(
+                &format!("{{{}}}", argname), 
+                &expand_param(argvalue, env)?);
         }
 
         Ok(listing)
     }
 }
 
-pub struct StructWithArgs<'s, 'a> {
+pub struct StructWithArgs<'s, 'a, P: MacroParamElement> {
     r#struct: &'s Struct,
-    args: &'a [MacroParam]
+    args: &'a [P]
 }
 
-impl<'s, 'a> StructWithArgs<'s, 'a> {
+impl<'s, 'a, P: MacroParamElement> StructWithArgs<'s, 'a, P> {
     pub fn r#struct(&self) -> &Struct {
         self.r#struct
     }
 
     /// The construction fails if the number pf arguments is incorrect
-    pub fn build(r#struct: &'s Struct, args: &'a [MacroParam]) -> Result<Self, AssemblerError> {
+    pub fn build(r#struct: &'s Struct, args: &'a [P]) -> Result<Self, AssemblerError> {
         if r#struct.nb_args() < args.len() {
             Err(AssemblerError::MacroError {
                 name: r#struct.name().into(),
@@ -129,7 +128,9 @@ impl<'s, 'a> StructWithArgs<'s, 'a> {
     }
 }
 
-impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
+
+
+impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
     /// Generate the token that correspond to the current structure
     /// Current bersion does not handle at all directive with several arguments
     /// BUG does not work when directives have a prefix
@@ -165,12 +166,13 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
                                 "DB"
                             }
                             else {
+
                                 "DW"
                             };
 
                             let elem = match provided_param {
                                 Some(provided_param) => {
-                                    let elem = provided_param.expand(env)?;
+                                    let elem = expand_param(provided_param, env) ?;
                                     if elem.is_empty() {
                                         c[0].to_string()
                                     }
@@ -187,20 +189,21 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
                             let mut call = format!(" {}{} ", prefix, r#macro);
 
                             let args = match provided_param {
-                                Some(MacroParam::Single(..)) => {
-                                    provided_param
+                                Some(provided_param2) => {
+                                    if provided_param2.is_single() {
+                                        provided_param
                                         .into_iter()
                                         .zip_longest(current_default_args)
                                         .map(|a| {
                                             match a {
                                                 EitherOrBoth::Both(provided, _)
-                                                | EitherOrBoth::Left(provided) => provided,
-                                                EitherOrBoth::Right(default) => default
+                                                | EitherOrBoth::Left(provided) => (provided.is_single(), expand_param(provided, env)),
+                                                EitherOrBoth::Right(default) => (default.is_single(),expand_param(default, env))
                                             }
                                         })
-                                        .map(|a| {
-                                            a.expand(env).map(|repr| {
-                                                if a.is_single() {
+                                        .map(|(is_single, a)| {
+                                            a.map(|repr| {
+                                                if is_single {
                                                     repr
                                                 }
                                                 else {
@@ -209,20 +212,20 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
                                             })
                                         })
                                         .collect::<Result<Vec<String>, AssemblerError>>()?
-                                }
-                                Some(MacroParam::List(l)) => {
-                                    l.into_iter()
+                                    } else {
+                                        provided_param2.list_argument()
+                                        .into_iter()
                                         .zip_longest(current_default_args)
                                         .map(|a| {
                                             match a {
                                                 EitherOrBoth::Both(provided, _)
-                                                | EitherOrBoth::Left(provided) => provided.deref(),
-                                                EitherOrBoth::Right(default) => default
+                                                | EitherOrBoth::Left(provided) => (provided.is_single(),expand_param(provided.deref(), env)),
+                                                EitherOrBoth::Right(default) => (default.is_single(), expand_param(default, env))
                                             }
                                         })
-                                        .map(|a| {
-                                            a.expand(env).map(|repr| {
-                                                if a.is_single() {
+                                        .map(|(is_single, a)| {
+                                            a.map(|repr| {
+                                                if is_single {
                                                     repr
                                                 }
                                                 else {
@@ -231,11 +234,15 @@ impl<'s, 'a> Expandable for StructWithArgs<'s, 'a> {
                                             })
                                         })
                                         .collect::<Result<Vec<String>, AssemblerError>>()?
+                                    }
                                 }
+
+
+
                                 None => {
                                     current_default_args
                                         .iter()
-                                        .map(|a| a.expand(env))
+                                        .map(|a| expand_param(a, env))
                                         .collect::<Result<Vec<String>, AssemblerError>>()?
                                 }
                             };

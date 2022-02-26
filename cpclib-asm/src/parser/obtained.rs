@@ -14,7 +14,7 @@ use cpclib_common::nom::InputLength;
 use cpclib_common::nom::InputTake;
 use cpclib_common::rayon::prelude::*;
 use cpclib_tokens::{
-    BaseListing, CrunchType, Expr, ListingElement, TestKind, Token, MacroParam, ToSimpleToken
+    BaseListing, CrunchType, Expr, ListingElement, TestKind, Token, MacroParam, ToSimpleToken, MacroParamElement
 };
 use crate::ParsingState;
 use crate::implementation::tokens::TestKindElement;
@@ -45,6 +45,34 @@ pub enum LocatedMacroParam {
     Single(Z80Span),
     /// A list of argument that will be provided in a nested macro call
     List(Vec<Box<LocatedMacroParam>>)
+}
+
+impl MacroParamElement for LocatedMacroParam {
+    fn empty() -> Self {
+        unimplemented!()
+    }
+
+    fn is_single(&self) -> bool {
+        matches!(self, LocatedMacroParam::Single(..))
+    }
+
+    fn is_list(&self) -> bool {
+        matches!(self, LocatedMacroParam::List(..))
+    }
+
+    fn single_argument(&self) -> &str {
+        match self {
+            LocatedMacroParam::Single(s) => s,
+            LocatedMacroParam::List(_) => unreachable!(),
+        }
+    }
+
+    fn list_argument(&self) -> &[Box<Self>] {
+        match self {
+            LocatedMacroParam::Single(_) => unreachable!(),
+            LocatedMacroParam::List(l) => l,
+        }
+    }
 }
 
 impl LocatedMacroParam {
@@ -206,6 +234,57 @@ impl ToSimpleToken for LocatedToken {
 	}
 }
 
+
+/// Trait to handle the span of listing elements
+pub trait MayHaveSpan : ListingElement {
+    fn possible_span(&self) -> Option<&Z80Span>;
+    fn span(&self) -> &Z80Span;
+    fn has_span(&self) -> bool;
+}
+
+impl MayHaveSpan for Token {
+    fn possible_span(&self) -> Option<&Z80Span> {
+       None
+    }
+
+    fn span(&self) -> &Z80Span {
+        panic!()
+    }
+
+    fn has_span(&self) -> bool {
+        false
+    }
+}
+
+impl MayHaveSpan for LocatedToken {
+    fn has_span(&self) -> bool {
+        true
+    }
+    fn possible_span(&self) -> Option<&Z80Span> {   
+        Some(self.span())
+    }
+    /// Get the span of the current token
+    fn span(&self) -> &Z80Span {
+        match self {
+            Self::Standard { span, .. }
+            | Self::CrunchedSection(_, _, span)
+            | Self::For { span, .. }
+            | Self::Function(_, _, _, span)
+            | Self::If(_, _, span)
+            | Self::Label(span) 
+            | Self::MacroCall(_,_, span)
+            | Self::Module(_, _, span)
+            | Self::Iterate(_, _, _, span)
+            | Self::Repeat(_, _, _, _, span)
+            | Self::RepeatUntil(_, _, span)
+            | Self::Rorg(_, _, span) 
+            | Self::Struct(_,_, span)
+            | Self::Switch(_, _, _, span)
+            | Self::While(_, _, span) => span
+        }
+    }
+}
+
 impl Clone for LocatedToken {
     fn clone(&self) -> Self {
         unimplemented!();
@@ -282,26 +361,6 @@ impl LocatedToken {
         }
     }
 
-    /// Get the span of the current token
-    pub fn span(&self) -> &Z80Span {
-        match self {
-            Self::Standard { span, .. }
-            | Self::CrunchedSection(_, _, span)
-            | Self::For { span, .. }
-            | Self::Function(_, _, _, span)
-            | Self::If(_, _, span)
-            | Self::Label(span) 
-            | Self::MacroCall(_,_, span)
-            | Self::Module(_, _, span)
-            | Self::Iterate(_, _, _, span)
-            | Self::Repeat(_, _, _, _, span)
-            | Self::RepeatUntil(_, _, span)
-            | Self::Rorg(_, _, span) 
-            | Self::Struct(_,_, span)
-            | Self::Switch(_, _, _, span)
-            | Self::While(_, _, span) => span
-        }
-    }
 
     pub fn context(&self) -> &ParserContext {
         &self.span().extra
@@ -309,6 +368,8 @@ impl LocatedToken {
 }
 
 impl LocatedToken {
+
+
     /// Transform the located token in a raw token.
     /// Warning, this is quite costly when strings or vec are involved
     pub fn to_token(&self) -> Cow<Token> {
@@ -518,7 +579,25 @@ impl Locate for Token {
     }
 }
 
-impl ListingElement for LocatedToken {}
+impl ListingElement for LocatedToken {
+    type MacroParam = LocatedMacroParam;
+
+    fn macro_call_name(&self) -> &str {
+        match self {
+            Self::MacroCall(name, _, _) => name.as_str(),
+            _ => panic!()
+        }
+    }
+
+    fn macro_call_arguments(&self) -> &[Self::MacroParam] {
+        match self {
+            Self::MacroCall(_, args, _) => args,
+            _ => panic!()
+        }
+    }
+
+
+}
 
 pub type InnerLocatedListing = BaseListing<LocatedToken>;
 

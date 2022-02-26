@@ -1941,28 +1941,15 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_call_macro_or_build_struct<T: ListingElement + core::fmt::Debug + 'static>(
+    pub fn visit_call_macro_or_build_struct<T: ListingElement + MayHaveSpan + core::fmt::Debug + 'static>(
         &mut self,
         caller: &T
     ) -> Result<(), AssemblerError> {
-        //        dbg!(caller);
+        dbg!(caller);
 
-        // Get the macro call information
-        let (name, parameters, caller_span) = {
-            let located_caller = (caller as &dyn Any).downcast_ref::<LocatedToken>();
-            let standard_caller = (caller as &dyn Any).downcast_ref::<Token>();
-
-            let (token, span) = match (located_caller, standard_caller) {
-                (Some(caller), Option::None) => (caller.token().unwrap(), Some(caller.span())),
-                (None, Some(caller)) => (caller, None),
-                _ => unreachable!()
-            };
-
-            match token {
-                Token::MacroCall(name, params) => (name, params, span),
-                _ => unreachable!()
-            }
-        };
+        let caller_span = caller.possible_span();
+        let name = caller.macro_call_name();
+        let parameters = caller.macro_call_arguments();
 
         let listing = {
             // Retreive the macro or structure definition
@@ -1979,7 +1966,7 @@ impl Env {
 
             if r#macro.is_none() && r#struct.is_none() {
                 let e = AssemblerError::UnknownMacro {
-                    symbol: name.clone(),
+                    symbol: name.into(),
                     closest: self.symbols().closest_symbol(name, SymbolFor::Macro)?
                 };
                 return match caller_span {
@@ -2001,7 +1988,7 @@ impl Env {
             else {
                 let r#struct = r#struct.as_ref().unwrap();
                 let mut parameters = parameters.to_vec();
-                parameters.resize(r#struct.r#struct().nb_args(), MacroParam::empty());
+                parameters.resize(r#struct.r#struct().nb_args(), T::MacroParam::empty());
                 (r#struct.source(), r#struct.expand(self)?)
             };
 
@@ -2043,7 +2030,7 @@ impl Env {
         // really assemble the produced tokens
         self.visit_listing(&listing).or_else(|e| {
             let e = AssemblerError::MacroError {
-                name: name.clone(),
+                name: name.into(),
                 root: Box::new(e)
             };
             match caller_span {

@@ -2,7 +2,24 @@ use crate::tokens::expression::*;
 use crate::tokens::instructions::*;
 use crate::tokens::listing::*;
 
-impl ListingElement for Token {}
+impl ListingElement for Token {
+    type MacroParam = MacroParam;
+
+    fn macro_call_name(&self) -> &str {
+        match self {
+            Token::MacroCall(name, _) => name.as_str(),
+            _ => panic!()
+        }
+    }
+
+    fn macro_call_arguments(&self) -> &[Self::MacroParam] {
+        match self {
+            Token::MacroCall(_, args) => args,
+            _ => panic!()
+        }
+    }
+
+}
 
 /// Standard listing is a specific implementation
 pub type Listing = BaseListing<Token>;

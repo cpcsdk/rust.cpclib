@@ -3,12 +3,28 @@ use std::borrow::Cow;
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 
-use crate::Token;
-/// The ListingElement trati contains the public method any memeber of a listing should contain
+use crate::{Token, MacroParamElement, MacroParam};
+/// The ListingElement trait contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
-pub trait ListingElement: Debug {}
+pub trait ListingElement: Debug {
+    type MacroParam: MacroParamElement;
 
-impl<'t> ListingElement for Cow<'t, Token> {}
+    fn macro_call_name(&self) -> &str;
+    fn macro_call_arguments(&self) -> &[Self::MacroParam];
+}
+
+impl<'t> ListingElement for Cow<'t, Token> {
+    type MacroParam = MacroParam;
+
+    fn macro_call_name(&self) -> &str {
+        self.as_ref().macro_call_name()
+    }
+
+    fn macro_call_arguments(&self) -> &[Self::MacroParam] {
+        self.as_ref().macro_call_arguments()
+    }
+    
+}
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaseListing<T: Clone + ListingElement> {

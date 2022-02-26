@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::borrow::Cow;
 use std::fmt;
 
@@ -31,10 +32,46 @@ impl ToString for MacroParam {
     }
 }
 
-impl MacroParam {
-    pub fn empty() -> Self {
+pub trait MacroParamElement : Clone{
+    fn empty() -> Self;
+
+    fn is_single(&self) -> bool;
+    fn is_list(&self) -> bool;
+
+    fn single_argument(&self) -> &str;
+    fn list_argument(&self) -> &[Box<Self>];
+}
+
+impl MacroParamElement for MacroParam {
+    fn empty() -> Self {
         Self::Single("".to_owned())
     }
+
+    fn is_single(&self) -> bool {
+        matches!(self, MacroParam::Single(_))
+    }
+
+    fn is_list(&self) -> bool {
+        matches!(self, MacroParam::List(_))
+    }
+
+    fn single_argument(&self) -> &str {
+        match self {
+            MacroParam::Single(s) => s,
+            MacroParam::List(_) => unreachable!(),
+        }
+    }
+
+    fn list_argument(&self) -> &[Box<Self>] {
+        match self {
+            MacroParam::Single(_) => unreachable!(),
+            MacroParam::List(l) => l,
+        }
+    }
+}
+
+impl MacroParam {
+
 
     pub fn is_single(&self) -> bool {
         match self {

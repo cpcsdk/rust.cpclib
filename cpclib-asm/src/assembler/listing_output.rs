@@ -6,7 +6,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::{ExprResult, Token};
 
-use crate::preamble::LocatedToken;
+use crate::preamble::{LocatedToken, MayHaveSpan};
 /// Generate an output listing.
 /// Can be useful to detect issues
 pub struct ListingOutput {

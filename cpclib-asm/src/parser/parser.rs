@@ -361,6 +361,8 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
         )
     )(input)?;
 
+
+
     let (input, content) = cut(context(
         "MACRO: issue in the content",
         preceded(
@@ -2314,7 +2316,7 @@ pub fn parse_macro_arg(
 /// Manage the call of a macro.
 /// When ambiguou may return a label
 pub fn parse_macro_or_struct_call(
-    can_return_label: bool,
+    allowed_to_return_a_label: bool,
     for_struct: bool
 ) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     move |input| {
@@ -2323,9 +2325,12 @@ pub fn parse_macro_or_struct_call(
         let input_start = input_label.clone();
         let (input, name) = parse_macro_name(input_label.clone())?;
 
+        dbg!("macro name", &name);
+
+
         // Check if the macro name is allowed
         if impossible_names(input.context().dotted_directive).any(|&a| a == name.to_uppercase()) {
-            Err(Err::Failure(cpclib_common::nom::error::VerboseError::<
+            return Err(Err::Failure(cpclib_common::nom::error::VerboseError::<
                 Z80Span
             >::add_context(
                 input_label,
@@ -2339,87 +2344,98 @@ pub fn parse_macro_or_struct_call(
                     input,
                     ErrorKind::AlphaNumeric
                 )
-            )))
+            )));
+        }
+
+        let nothing_after = pair(
+            space0, 
+            alt((
+                recognize(parse_comment),
+                tag(":"),
+                tag("\n")
+            ))
+        )(input.clone()).is_ok();
+
+        if allowed_to_return_a_label && nothing_after {
+            input.extra.add_warning(AssemblerError::RelocatedWarning{
+            warning: Box::new(AssemblerError::AssemblingError{
+                msg: format!("Ambiguous code. Use (void) for macro with no args, (default) for struct with default parameters; avoid labels that do not start at beginning of a line. {} is considered to be a label, not a macro.", name)
+            }),
+            span: input.clone()
+        });
+            dbg!("label only");
+            return Ok((input, LocatedToken::Label(name)));
+        }
+
+        let (input, _) = space0(input)?;
+
+        let (input, args) = if alt((eof, tag("\n"), tag(":")))(input.clone()).is_ok() {
+            // panic!("no arguments at all provided")
+            (input, vec![])
         }
         else {
-            if can_return_label && pair(space0, opt(parse_comment))(input.clone()).is_ok() {
-                input.extra.add_warning(AssemblerError::RelocatedWarning{
-                warning: Box::new(AssemblerError::AssemblingError{
-                    msg: format!("Ambiguous code. Use (void) for macro with no args, (default) for struct with default parameters; avoid labels that do not start at beginning of a line. {} is considered to be a label, not a macro.", name)
-                }),
-                span: input.clone()
-            });
-                return Ok((input, LocatedToken::Label(name)));
-            }
+            cut(context(
+                if for_struct {
+                    "STRUCT: error in arguments list"
+                }
+                else {
+                    "MACRO or STRUCT: forbidden name"
+                },
+                alt((
+                    map(delimited(space0, tag_no_case("(void)"), space0), |_| {
+                        Default::default()
+                    }),
+                    alt((
+                        map(tag_no_case("(void)"), |_| Vec::new()),
+                        separated_list1(
+                            parse_comma,
+                            alt((
+                                parse_macro_arg,
+                                map(space1, |space: Z80Span| {
+                                    LocatedMacroParam::Single(space.take(0))
+                                    // string of size 0;
+                                })
+                            ))
+                        )
+                    ))
+                ))
+            ))(input.clone())?
+        };
 
-            let (input, _) = space0(input)?;
+        dbg!("macro args", &args, &input);
+        if args.len() == 1 && args.first().unwrap().is_empty() {
+            panic!();
+        }
 
-            let (input, args) = if alt((eof, tag("\n"), tag(":")))(input.clone()).is_ok() {
-                // panic!("no arguments at all provided")
-                (input, vec![])
-            }
-            else {
-                cut(context(
+        // avoid ambiguate code such as label nop
+        if args.len() == 1 {
+            let arg = &args[0];
+            let arg = arg.span();
+            if alt((
+                    parse_word("NOP"), 
+                    recognize(parse_opcode_no_arg)
+            ))(arg).is_ok() {
+                return Err(Err::Failure(cpclib_common::nom::error::VerboseError::<
+                    Z80Span
+                >::add_context(
+                    input_label,
                     if for_struct {
-                        "STRUCT: error in arguments list"
+                        "First argument of STRUCT cannot be an opcode with no argument"
                     }
                     else {
-                        "MACRO or STRUCT: forbidden name"
+                        "First argument of MACRO or STRUCT cannot be an opcode with no argument"
                     },
-                    alt((
-                        map(delimited(space0, tag_no_case("(void)"), space0), |_| {
-                            Default::default()
-                        }),
-                        alt((
-                            map(tag_no_case("(void)"), |_| Vec::new()),
-                            separated_list1(
-                                parse_comma,
-                                alt((
-                                    parse_macro_arg,
-                                    map(space1, |space: Z80Span| {
-                                        LocatedMacroParam::Single(space.take(0))
-                                        // string of size 0;
-                                    })
-                                ))
-                            )
-                        ))
-                    ))
-                ))(input.clone())?
-            };
-
-            if args.len() == 1 && args.first().unwrap().is_empty() {
-                panic!();
+                    cpclib_common::nom::error::ParseError::<Z80Span>::from_error_kind(
+                        input,
+                        ErrorKind::AlphaNumeric
+                    )
+                )));
             }
-
-            // avoid ambiguate code such as label nop
-            if args.len() == 1 {
-                let arg = &args[0];
-                let arg = arg.span();
-                if alt((
-                        parse_word("NOP"), 
-                        recognize(parse_opcode_no_arg)
-                ))(arg).is_ok() {
-                    return Err(Err::Failure(cpclib_common::nom::error::VerboseError::<
-                        Z80Span
-                    >::add_context(
-                        input_label,
-                        if for_struct {
-                            "First argument of STRUCT cannot be an opcode with no argument"
-                        }
-                        else {
-                            "First argument of MACRO or STRUCT cannot be an opcode with no argument"
-                        },
-                        cpclib_common::nom::error::ParseError::<Z80Span>::from_error_kind(
-                            input,
-                            ErrorKind::AlphaNumeric
-                        )
-                    )));
-                }
-            }
-
-            let all_span = input_start.take(input_start.input_len()-input.input_len());
-            Ok((input, LocatedToken::MacroCall(name, args, all_span)))
         }
+
+        let all_span = input_start.take(input_start.input_len()-input.input_len());
+        Ok((input, LocatedToken::MacroCall(name, args, all_span)))
+    
     }
 }
 
