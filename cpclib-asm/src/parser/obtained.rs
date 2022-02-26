@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref};
 use cpclib_common::nom_locate::LocatedSpan;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::character::complete::space0;
@@ -675,7 +675,7 @@ impl LocatedListing {
         ctx.source = Some(input_fragment);
 
     
-        let innerListing = LocatedListingBuilder {
+        let inner_listing = LocatedListingBuilder {
             // No need to specify an input as it is already embedded in the parent listing
             src: None,
 
@@ -767,15 +767,14 @@ impl LocatedListing {
         }.build();
 
 
-        match  innerListing.borrow_parse_result() {
+        match  inner_listing.borrow_parse_result() {
             ParseResult::SuccessInner { 
-                listing, 
-                inner_span, 
-                next_span 
+                next_span,
+                ..
             } => {
                 Ok((
                     next_span.clone(),
-                    innerListing
+                    inner_listing
                 ))
             },
             ParseResult::FailureInner(e) => Err(e.clone()),
@@ -807,9 +806,18 @@ impl LocatedListing {
         self.with_ctx(|ctx| ctx)
     }
 
+    /// Return the span of the listing
     pub fn span(&self) -> Z80Span {
         self.with_parse_result(|parse_result| {
-            todo!()
+            match parse_result {
+                ParseResult::SuccessComplete(_) => {
+                    let src = self.src();
+                    let ctx = self.ctx();
+                    Z80Span::new_extra(src, ctx)
+                },
+                ParseResult::SuccessInner { inner_span, ..} => inner_span.clone(),
+                _ => panic!("No listing available")
+            }
         })
     }
 
@@ -831,6 +839,17 @@ impl LocatedListing {
         })
     }
 
+    pub fn parse_ok(&self) -> bool {
+        self.with_parse_result(|parse_result| {
+            match parse_result {
+                ParseResult::SuccessComplete(_) | 
+                ParseResult::SuccessInner {..} => true,
+                ParseResult::FailureInner(_) |
+                ParseResult::FailureComplete(_) => false,
+            }
+        })
+    }
+
     // pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
     // self.iter_mut()
     // .for_each(|e| e.fix_local_macro_labels_with_seed(seed));
@@ -843,16 +862,14 @@ impl Deref for LocatedListing {
     fn deref(&self) -> &Self::Target {
         self.with_parse_result(|parse_result|
             match parse_result {
-            _ => todo!()
+                ParseResult::SuccessComplete(listing) => listing,
+                ParseResult::SuccessInner { listing, ..} => listing,
+                _  => panic!("No listing available.")
             }
         )
     }
 }
-impl DerefMut for LocatedListing {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        todo!()
-    }
-}
+
 
 /*
  No more possible as the listing MUST be created BEFORE the tokens
