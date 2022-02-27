@@ -43,23 +43,23 @@ impl ReturnExpr for LocatedToken {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AnyFunction<T: ListingElement + Visited> {
+pub struct AnyFunction<'token, T: ListingElement + Visited> {
     name: String,
     args: Vec<String>,
-    inner: Vec<T>
+    inner: &'token [T]
 }
 
-impl<T: ListingElement + Visited + Clone> AnyFunction<T> {
-    fn new<S: Borrow<str>>(name: &str, args: &[S], inner: &[T]) -> Self {
+impl<'token, T: ListingElement + Visited + Clone> AnyFunction<'token, T> {
+    fn new<S: Borrow<str>>(name: &str, args: &[S], inner: &'token [T]) -> Self {
         AnyFunction {
             name: name.to_owned(),
             args: args.iter().map(|s| s.borrow().into()).collect_vec(),
-            inner: inner.to_vec()
+            inner: inner
         }
     }
 }
 
-impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
+impl<'token, T: ListingElement + Visited + ReturnExpr> AnyFunction<'token, T> {
     pub fn eval(
         &self,
         init_env: &Env,
@@ -119,8 +119,8 @@ impl<T: ListingElement + Visited + ReturnExpr> AnyFunction<T> {
 
 #[derive(Debug, Clone)]
 pub enum Function {
-    Located(AnyFunction<LocatedToken>),
-    Standard(AnyFunction<Token>),
+    Located(AnyFunction<'static, LocatedToken>),
+    Standard(AnyFunction<'static, Token>),
     HardCoded(HardCodedFunction)
 }
 
@@ -430,7 +430,8 @@ impl HardCodedFunction {
 }
 
 impl Function {
-    pub fn new_located<S: Borrow<str> + Display>(
+    /// Be sure the function lives shorter than inner
+    pub unsafe fn new_located<S: Borrow<str> + Display>(
         name: &str,
         args: &[S],
         inner: &[LocatedToken]
@@ -438,12 +439,13 @@ impl Function {
         if inner.is_empty() {
             return Err(AssemblerError::FunctionWithEmptyBody(name.to_owned()));
         }
-        return Ok(Function::Located(AnyFunction::<LocatedToken>::new(
-            name, args, inner
+        return Ok(Function::Located(AnyFunction::<'static, LocatedToken>::new(
+            name, args, &*(inner as *const _) as &'static _
         )));
     }
 
-    pub fn new_standard<S: Borrow<str> + Display>(
+    /// Be sure the function lives shorter than inner
+    pub unsafe fn new_standard<S: Borrow<str> + Display>(
         name: &str,
         args: &[S],
         inner: &[Token]
@@ -452,8 +454,8 @@ impl Function {
             return Err(AssemblerError::FunctionWithEmptyBody(name.to_owned()));
         }
         else {
-            return Ok(Function::Standard(AnyFunction::<Token>::new(
-                name, args, inner
+            return Ok(Function::Standard(AnyFunction::<'static, Token>::new(
+                name, args, &*(inner as *const _) as &'static _
             )));
         }
     }
@@ -468,18 +470,18 @@ impl Function {
 }
 
 pub trait FunctionBuilder<S: Borrow<str> + Display> {
-    fn new(name: &str, args: &[S], inner: &[Self]) -> Result<Function, AssemblerError>
+    unsafe fn new(name: &str, args: &[S], inner: &[Self]) -> Result<Function, AssemblerError>
     where Self: Sized;
 }
 
 impl<S: Borrow<str> + Display> FunctionBuilder<S> for LocatedToken {
-    fn new(name: &str, args: &[S], inner: &[LocatedToken]) -> Result<Function, AssemblerError> {
+    unsafe fn new(name: &str, args: &[S], inner: &[LocatedToken]) -> Result<Function, AssemblerError> {
         Function::new_located(name, args, inner)
     }
 }
 
 impl<S: Borrow<str> + Display> FunctionBuilder<S> for Token {
-    fn new(name: &str, args: &[S], inner: &[Token]) -> Result<Function, AssemblerError> {
+    unsafe fn new(name: &str, args: &[S], inner: &[Token]) -> Result<Function, AssemblerError> {
         Function::new_standard(name, args, inner)
     }
 }

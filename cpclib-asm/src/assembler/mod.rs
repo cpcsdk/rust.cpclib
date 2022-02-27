@@ -2436,7 +2436,7 @@ impl Env {
         _span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
         if !self.functions.contains_key(name) {
-            let f = FunctionBuilder::new(name, params, inner)?;
+            let f = unsafe{FunctionBuilder::new(name, params, inner)}?;
 
             self.functions.insert(name.to_owned(), f);
         }
