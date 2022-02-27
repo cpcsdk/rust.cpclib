@@ -14,53 +14,6 @@ use crate::implementation::listing::ListingExt;
 use crate::AssemblingOptions;
 use crate::ParserContext;
 
-pub trait TestKindElement {
-    fn is_true_test(&self) -> bool;
-    fn is_false_test(&self) -> bool;
-
-    fn is_label_used_test(&self) -> bool;
-    fn is_label_nused_test(&self) -> bool;
-
-    fn is_label_exists_test(&self) -> bool;
-    fn is_label_nexists_test(&self) -> bool;
-
-    fn expr_unchecked(&self) -> &Expr;
-    fn label_unchecked(&self) -> &str;
-}
-
-impl TestKindElement for TestKind {
-    fn is_true_test(&self) -> bool {
-        todo!()
-    }
-
-    fn is_false_test(&self) -> bool {
-        todo!()
-    }
-
-    fn is_label_used_test(&self) -> bool {
-        todo!()
-    }
-
-    fn is_label_nused_test(&self) -> bool {
-        todo!()
-    }
-
-    fn is_label_exists_test(&self) -> bool {
-        todo!()
-    }
-
-    fn is_label_nexists_test(&self) -> bool {
-        todo!()
-    }
-
-    fn expr_unchecked(&self) -> &Expr {
-        todo!()
-    }
-
-    fn label_unchecked(&self) -> &str {
-        todo!()
-    }
-}
 /// Needed methods for the Token defined in cpclib_tokens
 pub trait TokenExt: ListingElement + Clone + Debug {
     fn estimated_duration(&self) -> Result<usize, AssemblerError>;

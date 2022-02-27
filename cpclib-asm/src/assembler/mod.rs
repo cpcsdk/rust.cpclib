@@ -1425,13 +1425,15 @@ impl Env {
         self.symbols_output.generate(w, self.symbols())
     }
 
-    /// Visit all the tokens of the slice of tokens
+    /// Visit all the tokens of the slice of tokens.
+    /// Return true if an additional pass is requested
     pub fn visit_listing<T: ListingElement + Visited>(
         &mut self,
         listing: &[T]
     ) -> Result<(), AssemblerError> {
+
         for token in listing.iter() {
-            token.visited(self)?;
+            let res = token.visited(self)?;
         }
 
         Ok(())
@@ -1545,110 +1547,6 @@ impl Env {
             .collect::<Result<Vec<_>, AssemblerError>>()?;
         let result = result.into_iter().flatten().collect_vec();
         self.output_bytes(&result)
-    }
-
-    /// Manage a IF .. XXX ELSEIF YYY ELSE ZZZ structure
-    fn visit_if<T: ListingElement + Visited, K: TestKindElement>(
-        &mut self,
-        cases: &[(&K, &[T])],
-        other: Option<&[T]>
-    ) -> Result<(), AssemblerError> {
-
-        debug_assert!(!cases.is_empty());
-
-        // Test all the if cases until reaching one != 0
-        for &(test, listing) in cases.iter() {
-            let token_adr = test as *const _ as usize;
-
-            if test.is_true_test() {
-                let exp = test.expr_unchecked();
-                // Expression must be true
-                let value = self.resolve_expr_must_never_fail(exp)?;
-                if value.bool()? {
-                    self.visit_listing(listing)?;
-                    return Ok(());
-                }
-            
-            }
-
-            // Expression must be false
-            else if test.is_false_test()  {
-                let exp = test.expr_unchecked();
-                let value = self.resolve_expr_must_never_fail(exp)?;
-                if !value.bool()? {
-                    self.visit_listing(listing)?;
-                    return Ok(());
-                }
-            }
-
-            else if test.is_label_used_test() {
-                    let label = test.label_unchecked();
-                    let decision = self.symbols().is_used(label);
-
-                    // Add an extra pass if the test differ
-                    if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr) {
-                        if *res != decision {
-                            *self.request_additional_pass.write().unwrap() = true;
-                        }
-                    }
-
-                    // replace the previously stored value
-                    self.if_token_adr_to_used_decision
-                        .insert(token_adr.clone(), decision);
-
-                    if decision {
-                        self.visit_listing(listing)?;
-                        return Ok(());
-                    }
-                }
-
-                else if test.is_label_nused_test() {
-                    let label = test.label_unchecked();
-                    let decision = !self.symbols().is_used(label);
-
-                    // Add an extra pass if the test differ
-                    if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr) {
-                        if *res != decision {
-                            *self.request_additional_pass.write().unwrap() = true;
-                        }
-                    }
-
-                    // replace the previously stored value
-                    self.if_token_adr_to_unused_decision
-                        .insert(token_adr.clone(), decision);
-
-                    if decision {
-                        self.visit_listing(listing)?;
-                        return Ok(());
-                    }
-                }
-
-                // Label must exist
-            else if test.is_label_exists_test() {
-                    let label = test.label_unchecked();
-                    if self.symbols().symbol_exist_in_current_pass(label)? {
-                        self.visit_listing(listing)?;
-                        return Ok(());
-                    }
-                }
-
-                // Label must not exist
-            else {
-                    debug_assert!(test.is_label_nexists_test()); 
-                    let label = test.label_unchecked();
-                    if !self.symbols().symbol_exist_in_current_pass(label)? {
-                        self.visit_listing(listing)?;
-                        return Ok(());
-                    }
-                }
-            
-        }
-
-        // Test the else if any
-        match other {
-            Some(listing) => self.visit_listing(listing),
-            None => Ok(())
-        }
     }
 
     pub fn visit_macro_definition(
@@ -2328,7 +2226,7 @@ impl Env {
             | *crunched_env.request_additional_pass.read().unwrap())
         .into();
         *self.can_skip_next_passes.write().unwrap() = can_skip_next_passes;
-        *self.request_additional_pass.write().unwrap() = dbg!(request_additional_pass);
+        *self.request_additional_pass.write().unwrap() =request_additional_pass;
 
         self.macro_seed = crunched_env.macro_seed;
 
@@ -2370,7 +2268,7 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
-pub fn visit_tokens_all_passes<T: 'static + Visited + ToSimpleToken + Debug + Sync>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> {
+pub fn visit_tokens_all_passes<T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> {
     let options = AssemblingOptions::default();
     visit_tokens_all_passes_with_options(tokens, &options, ctx)
 }
@@ -2447,7 +2345,7 @@ impl Env {
 
 /// Visit the tokens during several passes by providing a specific symbol table.
 /// Warning Listing output is only possible for LocatedToken
-pub fn visit_tokens_all_passes_with_options<'token, T: 'static + Visited + ToSimpleToken + Debug + Sync>(
+pub fn visit_tokens_all_passes_with_options<'token, T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement>(
     tokens: &'token [T],
     options: &AssemblingOptions,
     ctx: &ParserContext
@@ -2597,15 +2495,7 @@ pub fn visit_located_token(
         
 
         LocatedToken::If(cases, other, span) => {
-            env.visit_if(
-                cases
-                    .iter()
-                    .map(|c| (&c.0, c.1.as_ref()))
-                    .collect_vec()
-                    .as_ref(),
-                other.as_ref().map(|o| o.as_ref())
-            )
-            .map_err(|err| err.locate(span.clone()))
+            panic!("Should be handled by ProcessedToken")
         }
 
         LocatedToken::Module(name, code, span) => {
@@ -2758,14 +2648,8 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         } => panic!("Error - should never be called"),
 
         Token::If(ref cases, ref other) => {
-            env.visit_if(
-                cases
-                    .iter()
-                    .map(|c| (&c.0, c.1.as_ref()))
-                    .collect_vec()
-                    .as_ref(),
-                other.as_ref().map(|o| o.as_ref())
-            )
+            panic!("Should be handled by ProcessedToken")
+
         }
         Token::Label(ref label) => env.visit_label(label),
         Token::Limit(ref exp) => env.visit_limit(exp),

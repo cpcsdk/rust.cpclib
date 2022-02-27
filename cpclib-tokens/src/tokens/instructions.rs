@@ -393,6 +393,55 @@ pub enum TestKind {
     LabelNused(SmolStr)
 }
 
+
+pub trait TestKindElement {
+    fn is_true_test(&self) -> bool;
+    fn is_false_test(&self) -> bool;
+
+    fn is_label_used_test(&self) -> bool;
+    fn is_label_nused_test(&self) -> bool;
+
+    fn is_label_exists_test(&self) -> bool;
+    fn is_label_nexists_test(&self) -> bool;
+
+    fn expr_unchecked(&self) -> &Expr;
+    fn label_unchecked(&self) -> &str;
+}
+
+impl TestKindElement for TestKind {
+    fn is_true_test(&self) -> bool {
+        todo!()
+    }
+
+    fn is_false_test(&self) -> bool {
+        todo!()
+    }
+
+    fn is_label_used_test(&self) -> bool {
+        todo!()
+    }
+
+    fn is_label_nused_test(&self) -> bool {
+        todo!()
+    }
+
+    fn is_label_exists_test(&self) -> bool {
+        todo!()
+    }
+
+    fn is_label_nexists_test(&self) -> bool {
+        todo!()
+    }
+
+    fn expr_unchecked(&self) -> &Expr {
+        todo!()
+    }
+
+    fn label_unchecked(&self) -> &str {
+        todo!()
+    }
+}
+
 /// List of transformations that can be applied to an imported binary file
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[allow(missing_docs)]

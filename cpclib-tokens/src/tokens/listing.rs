@@ -3,18 +3,28 @@ use std::borrow::Cow;
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 
-use crate::{Token, MacroParamElement, MacroParam};
+use crate::{Token, MacroParamElement, MacroParam, TestKind, TestKindElement};
 /// The ListingElement trait contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
-pub trait ListingElement: Debug {
+pub trait ListingElement: Debug + Sized {
     type MacroParam: MacroParamElement;
+    type TestKind: TestKindElement;
 
     fn macro_call_name(&self) -> &str;
     fn macro_call_arguments(&self) -> &[Self::MacroParam];
+
+    fn is_if(&self) -> bool;
+    fn if_nb_tests(&self) -> usize;
+    fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]);
+    fn if_else(&self) -> Option<&[Self]>;
+
+    fn is_include(&self) -> bool;
+    fn is_incbin(&self) -> bool;
 }
 
 impl<'t> ListingElement for Cow<'t, Token> {
     type MacroParam = MacroParam;
+    type TestKind = TestKind;
 
     fn macro_call_name(&self) -> &str {
         self.as_ref().macro_call_name()
@@ -23,7 +33,31 @@ impl<'t> ListingElement for Cow<'t, Token> {
     fn macro_call_arguments(&self) -> &[Self::MacroParam] {
         self.as_ref().macro_call_arguments()
     }
-    
+
+    fn if_nb_tests(&self) -> usize{
+        self.as_ref().if_nb_tests()
+    }
+
+    fn if_test(&self, idx: usize) ->  (&Self::TestKind, &[Self]) {
+        unimplemented!()
+    }
+
+    fn if_else(&self) -> Option<&[Self]> {
+        unimplemented!()
+
+    }
+
+    fn is_if(&self) -> bool {
+        self.as_ref().is_if()
+    }
+
+    fn is_include(&self) -> bool {
+        self.as_ref().is_include()
+    }
+
+    fn is_incbin(&self) -> bool {
+        self.as_ref().is_incbin()
+    }
 }
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]

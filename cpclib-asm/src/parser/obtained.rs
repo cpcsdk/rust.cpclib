@@ -14,10 +14,9 @@ use cpclib_common::nom::InputLength;
 use cpclib_common::nom::InputTake;
 use cpclib_common::rayon::prelude::*;
 use cpclib_tokens::{
-    BaseListing, CrunchType, Expr, ListingElement, TestKind, Token, MacroParam, ToSimpleToken, MacroParamElement
+    BaseListing, CrunchType, Expr, ListingElement, TestKind, Token, MacroParam, ToSimpleToken, MacroParamElement, TestKindElement
 };
 use crate::ParsingState;
-use crate::implementation::tokens::TestKindElement;
 use super::{ParserContext, Z80Span, parse_z80_line};
 use crate::error::AssemblerError;
 use crate::preamble::{parse_z80_str, parse_end_directive};
@@ -588,6 +587,8 @@ impl Locate for Token {
 
 impl ListingElement for LocatedToken {
     type MacroParam = LocatedMacroParam;
+    type TestKind = LocatedTestKind;
+
 
     fn macro_call_name(&self) -> &str {
         match self {
@@ -600,6 +601,52 @@ impl ListingElement for LocatedToken {
         match self {
             Self::MacroCall(_, args, _) => args,
             _ => panic!()
+        }
+    }
+
+
+    fn is_if(&self) -> bool {
+        match self {
+            Self::If(..) => true,
+            _=> false
+        }
+    }
+
+    fn if_nb_tests(&self) -> usize {
+        match self {
+            Self::If(tests, _, _) => tests.len(),
+            _ => panic!()
+        }
+    }
+
+    fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]) {
+        match self {
+            Self::If(tests, _, _) => {
+                let data = &tests[idx];
+                (&data.0, &data.1)
+            },
+            _ => panic!()
+        }       
+    }
+
+    fn if_else(&self) -> Option<&[Self]> {
+        match self {
+            Self::If(_, r#else, _) => r#else.as_ref().map(|l| l.as_slice()),
+            _ => panic!()
+        }
+    }
+
+    fn is_include(&self) -> bool {
+        match self {
+            Self::Standard{token: Token::Include(..), ..} => true,
+            _ => false
+        }
+    }
+
+    fn is_incbin(&self) -> bool {
+        match self {
+            Self::Standard{token: Token::Incbin{..}, ..} => true,
+            _ => false
         }
     }
 
@@ -757,8 +804,9 @@ impl LocatedListing {
         // ... but the state can be modified to forbid some keywords
         ctx.state = new_state;
 
-        let input_fragment = input_code.fragment();
-        ctx.source = Some(input_fragment);
+        // we do not change ctx.source that must be the very same than the parent
+ //       let input_fragment = input_code.fragment();
+ //       ctx.source = Some(input_fragment);
 
     
         let inner_listing = LocatedListingBuilder {

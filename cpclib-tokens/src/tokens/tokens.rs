@@ -4,6 +4,8 @@ use crate::tokens::listing::*;
 
 impl ListingElement for Token {
     type MacroParam = MacroParam;
+    type TestKind = TestKind;
+
 
     fn macro_call_name(&self) -> &str {
         match self {
@@ -16,6 +18,52 @@ impl ListingElement for Token {
         match self {
             Token::MacroCall(_, args) => args,
             _ => panic!()
+        }
+    }
+
+
+    fn is_if(&self) -> bool {
+       match self {
+           Token::If(..) => true,
+           _ => false
+       }
+    }
+
+    fn if_nb_tests(&self) -> usize {
+        match self {
+            Self::If(tests, ..) => tests.len(),
+            _ => panic!()
+        }
+    }
+
+    fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]) {
+        match self {
+            Self::If(tests, ..) => {
+                let data = &tests[idx];
+                (&data.0, &data.1)
+            },
+            _ => panic!()
+        }
+    }
+
+    fn if_else(&self) -> Option<&[Self]> {
+        match self {
+            Self::If(_, r#else) => r#else.as_ref().map(|l| l.as_slice()),
+            _ => panic!()
+        }
+    }
+
+    fn is_include(&self) -> bool {
+        match self {
+            Token::Include(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_incbin(&self) -> bool {
+        match self {
+            Token::Incbin{..} => true,
+            _ => false
         }
     }
 

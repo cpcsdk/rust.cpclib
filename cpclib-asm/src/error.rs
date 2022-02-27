@@ -952,6 +952,8 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
 
     impl EndKind {
         fn guess(&self, code: &str, mut offset: usize) -> usize {
+
+            dbg!(code, code.len(), offset);
             match self {
                 EndKind::End => {
                     for current in code[offset..].chars() {

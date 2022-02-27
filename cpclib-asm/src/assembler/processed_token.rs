@@ -6,36 +6,43 @@ use crate::Env;
 use crate::preamble::LocatedListing;
 use crate::preamble::parse_z80_str_with_context;
 
+use cpclib_tokens::ListingElement;
+use cpclib_tokens::TestKindElement;
 use cpclib_tokens::ToSimpleToken;
 use cpclib_tokens::Token;
 use cpclib_tokens::BinaryTransformation;
+use cpclib_tokens::symbols::SymbolsTableTrait;
 use crate::implementation::instructions::Cruncher;
 use cpclib_disc::amsdos::AmsdosHeader;
 
 use std::any::Any;
+use std::collections::HashMap;
 use std::io::Read;
 use std::fs::File;
 use std::borrow::Cow;
 use std::fmt::Debug;
 use std::fmt::Formatter;
+use std::ops::Deref;
 
 
 use ouroboros::*;
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
-#[derive(Debug)]
-pub struct ProcessedToken<'token, T: Visited + ToSimpleToken + Debug> {
+#[derive(Debug, Clone)]
+pub struct ProcessedToken<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> {
 	/// The token being processed by the assembler
 	token: &'token T,
-	state: Option<ProcessedTokenState>
+	state: Option<ProcessedTokenState<'token, T>>
 }
 
 /// Specific state to maintain for the current token
-#[derive(Debug)]
-enum ProcessedTokenState {
+#[derive(Debug, Clone)]
+enum ProcessedTokenState<'token, T:  Visited + ToSimpleToken + ListingElement + Debug + Sync> {
 	/// A state is expected but has not been yet specified
 	Expected,
+    /// If state encodes previous choice
+    If(IfState<'token, T>),
 	/// Included file must read at some moment the file to handle
 	Include(IncludeState),
 	/// Included binary needs to be read
@@ -51,103 +58,214 @@ struct IncludeState {
     processed_tokens: Vec<ProcessedToken<'this, LocatedToken>>
 }
 
+impl Clone for IncludeState {
+    fn clone(&self) -> Self {
+        todo!()
+    }
+}
+
 impl Debug for IncludeState {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> { 
         write!(fmt, "IncludeState")
      }
 }
 
+/// Store for each branch (if passed at some point) the test result and the listing
+#[derive(Debug, Clone)]
+struct IfState<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync>{
+    // The token that contains the tests and listings
+    token: &'token T,
+    if_token_adr_to_used_decision: std::collections::HashMap<usize, bool>,
+    if_token_adr_to_unused_decision: std::collections::HashMap<usize, bool>,
+    // Processed listing build on demand
+    tests_listing: HashMap<usize, Vec<ProcessedToken<'token, T>>>,
+    // else listing build on demand
+    else_listing: Option<Vec<ProcessedToken<'token, T>>>
+}
 
-impl<'token, T: Visited + ToSimpleToken + Debug> ToSimpleToken for ProcessedToken<'token, T> {
+
+impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> IfState<'token, T> {
+    fn new(token: &'token T) -> Self {
+        Self {
+            token,
+            if_token_adr_to_used_decision: Default::default(),
+            if_token_adr_to_unused_decision: Default::default(),
+            tests_listing: Default::default(),
+            else_listing: None
+        }
+    }
+
+
+    fn choose_listing_to_assemble(&mut self, env: &Env) -> Result< Option<&mut [ProcessedToken<'token, T>]>, AssemblerError> {
+
+        let mut selected_idx = None;
+        let mut request_additional_pass = false;
+
+        for idx in 0..self.token.if_nb_tests() {
+            dbg!(idx);
+            let (test, _) = self.token.if_test(idx);
+            let token_adr = test as *const _ as usize;
+
+            // Expression must be true
+            if test.is_true_test() {
+                let exp = test.expr_unchecked();
+                // Expression must be true
+                let value = env.resolve_expr_must_never_fail(exp)?;
+                if value.bool()? {
+                    selected_idx = Some(idx);
+                    break
+                }
+            
+            }
+
+            // Expression must be false
+            else if test.is_false_test()  {
+                let exp = test.expr_unchecked();
+                let value = env.resolve_expr_must_never_fail(exp)?;
+                if !value.bool()? {
+                    selected_idx = Some(idx);
+                    break
+                }
+            }
+
+            else if test.is_label_used_test() {
+                    let label = test.label_unchecked();
+                    let decision = env.symbols().is_used(label);
+
+                    // Add an extra pass if the test differ
+                    if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr) {
+                        if *res != decision {
+                            request_additional_pass = true;
+                        }
+                    }
+
+                    // replace the previously stored value
+                    self.if_token_adr_to_used_decision
+                        .insert(token_adr.clone(), decision);
+
+                    if decision {
+                        selected_idx = Some(idx);
+                        break
+                    }
+                }
+
+                else if test.is_label_nused_test() {
+                    let label = test.label_unchecked();
+                    let decision = !env.symbols().is_used(label);
+
+                    // Add an extra pass if the test differ
+                    if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr) {
+                        if *res != decision {
+                            request_additional_pass = true;
+                        }
+                    }
+
+                    // replace the previously stored value
+                    self.if_token_adr_to_unused_decision
+                        .insert(token_adr.clone(), decision);
+
+                    if decision {
+                        selected_idx = Some(idx);
+                        break
+                    }
+                }
+
+                // Label must exist
+            else if test.is_label_exists_test() {
+                    let label = test.label_unchecked();
+                    if env.symbols().symbol_exist_in_current_pass(label)? {
+                        selected_idx = Some(idx);
+                        break
+                    }
+                }
+
+                // Label must not exist
+            else {
+                    let label = test.label_unchecked();
+                    if !env.symbols().symbol_exist_in_current_pass(label)? {
+                        selected_idx = Some(idx);
+                        break;
+                    }
+                }
+        }
+
+        dbg!(&selected_idx);
+
+        let selected_listing = match selected_idx {
+            Some(selected_idx) => {
+                // build the listing if never done
+                if self.tests_listing.get(&selected_idx).is_none() {
+                    let listing = self.token.if_test(selected_idx).1;
+                    let listing = build_list(listing, env);
+                    self.tests_listing.insert(selected_idx, listing);
+                }
+                self.tests_listing.get_mut(&selected_idx)
+            },
+            None => {
+                // build else listing if needed
+                if self.else_listing.is_none() && self.token.if_else().is_some() {
+                    let listing = self.token.if_else();
+                    self.else_listing  = listing.map(|listing| build_list(listing, env));
+                }
+                self.else_listing.as_mut()
+            }
+        };
+
+        // update env to request an additional pass
+        let request_additional_pass = *env.request_additional_pass.read().unwrap().deref()
+            | request_additional_pass;
+        *env.request_additional_pass.write().unwrap() =request_additional_pass;
+
+
+
+        Ok(
+            selected_listing.map(|l| l.as_mut_slice())
+        )
+
+    }
+} 
+
+impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> ToSimpleToken for ProcessedToken<'token, T> {
 	fn as_simple_token(&self) -> Cow<Token> {
 		self.token.as_simple_token()
 	}
 }
 
-/* There is a bug in rust compiler that forbids to use that :(
-default impl<'token, T:ToSimpleToken + Visited + Debug>  From<&'token T> for ProcessedToken<'token, T> {
-	fn from(token: &'token T) -> Self {
-		let state = match token.as_simple_token().as_ref() {
-			Token::Include(..) | Token::Incbin{..} => Some(ProcessedTokenState::Expected),
-			_ => None
-		};
-
-		ProcessedToken{
-			token,
-			state
-		}
-	}
-	}
-}
-*/
-
-
- impl From<&'token Token> for ProcessedToken<'token, Token> {
-	fn from(token: &'token Token) -> Self {
-		let state = match token {
-			Token::Include(..) | Token::Incbin{..} => Some(ProcessedTokenState::Expected),
-			_ => None
-		};
-
-		ProcessedToken{
-			token,
-			state
-		}
-	}
-}
-
-// Explicit version in LocatedToken to not convert it in Token which is a lost of time
-impl From<&'token LocatedToken> for ProcessedToken<'token, LocatedToken> {
-	fn from(token: &'token LocatedToken) -> Self {
-		let state = match token {
-			LocatedToken::Standard{
-                token: Token::Include(..) | Token::Incbin{..},
-                ..
-            } => Some(ProcessedTokenState::Expected),
-			_ => None
-		};
-
-		ProcessedToken{
-			token,
-			state
-		}
-	}
-}
-
-
 pub type AssemblerInfo = AssemblerError;
 
 
+pub fn build_processed_token<'token, T: ToSimpleToken + Visited + Debug + Sync + ListingElement> (token: &'token T, env: &Env) -> ProcessedToken<'token, T> {
 
-pub fn build_list<'token, T:'static + ToSimpleToken + Visited + Debug + Sync> (tokens: &'token[T], env: &Env) -> Vec<ProcessedToken<'token, T>> {
+    if token.is_if() {
+        let state = IfState::new(token);
+        ProcessedToken {
+            state: Some(ProcessedTokenState::If(state)),
+            token
+        }
+    }
+    else if token.is_include() || token.is_incbin() {
+        ProcessedToken {
+            state: Some(ProcessedTokenState::Expected),
+            token
+        }
+    }
+    else {
+        ProcessedToken {
+            state: None,
+            token
+        }
+    }
+
+}
+
+
+pub fn build_list<'token, T: ToSimpleToken + Visited + Debug + Sync + ListingElement> (tokens: &'token[T], env: &Env) -> Vec<ProcessedToken<'token, T>> {
     use rayon::prelude::*;
-     use rayon::iter::ParallelBridge;
 
     tokens
     .par_iter()
     .map(|t| {
-        // ugly workaround of a rust compiler bug that forbids to play with ProcessedToken::from(t)
-
-        match  (t as &'token dyn Any).downcast_ref::<LocatedToken>() {
-            Some(t) => {
-                let t: &'token LocatedToken = unsafe{std::mem::transmute(t)};
-                let t = ProcessedToken::from(t);
-                let t: ProcessedToken<'token, T> =  unsafe{std::mem::transmute(t)}; // totally safe as we a transmuting from one type to the strictly same one
-                return t;
-            }
-            None => {},
-        }
-
-        match  (t as &'token dyn Any).downcast_ref::<Token>() {
-            Some(t) => {
-                let t: &'token Token = unsafe{std::mem::transmute(t)};
-                let t = ProcessedToken::from(t);
-                let t: ProcessedToken<'token, T> =  unsafe{std::mem::transmute(t)}; // totally safe as we a transmuting from one type to the strictly same one
-                return t;
-            }
-            None => panic!("Unhandled type..."),
-        }
-
+        build_processed_token(t, env)
     })
     .map(|mut t| {
         t.read_referenced_file(&env); 
@@ -158,7 +276,7 @@ pub fn build_list<'token, T:'static + ToSimpleToken + Visited + Debug + Sync> (t
 }
 
 /// Visit all the tokens until an error occurs
-pub fn visit_processed_tokens<'token, T:ToSimpleToken + Visited + Debug>(tokens: & mut [ProcessedToken<'token, T>], env: &mut Env) -> Result<(), AssemblerError> {
+pub fn visit_processed_tokens<'token, T:ToSimpleToken + Visited + Debug +ListingElement + Sync>(tokens: & mut [ProcessedToken<'token, T>], env: &mut Env) -> Result<(), AssemblerError> {
     for token in tokens.iter_mut() {
         token.visited(env)?;
     }
@@ -167,7 +285,7 @@ pub fn visit_processed_tokens<'token, T:ToSimpleToken + Visited + Debug>(tokens:
 }
 
 
-impl<'token, T:ToSimpleToken + Visited + Debug> ProcessedToken<'token, T> {
+impl<'token, T:ToSimpleToken + Visited + Debug + ListingElement + Sync> ProcessedToken<'token, T> {
 
 
 	/// Read the data for the appropriate tokens.
@@ -179,6 +297,7 @@ impl<'token, T:ToSimpleToken + Visited + Debug> ProcessedToken<'token, T> {
 			Some(ProcessedTokenState::Expected) => {/* need to read the ressource */},
 			Some(ProcessedTokenState::Include{..}) => {return Ok(None)},
 			Some(ProcessedTokenState::Incbin{..}) => { /* TODO check if paramters changed */ return Ok(None)}
+            Some(ProcessedTokenState::If(..)) => {/* we qwant to read only for the selected branch*/ return Ok(None)}
 			None => {return Ok(None)}
 		};
 
@@ -189,6 +308,8 @@ impl<'token, T:ToSimpleToken + Visited + Debug> ProcessedToken<'token, T> {
 		let token = token.as_ref();
 
 		let mut info = None;
+
+        todo!("Do not manipulate token but Listing Element api");
 
         self.state = match token {
             Token::Include(ref fname, _namespace, _once) => {
@@ -376,17 +497,20 @@ pub fn read_source(fname: &str, ctx: &ParserContext) -> Result<String, Assembler
     }
 }
 
-impl<'token, T: Visited + ToSimpleToken + Debug>  ProcessedToken<'token, T> {
+impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync>  ProcessedToken<'token, T> {
 	/// Due to the state management, the signature requires mutability
 	pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
 
-		if let Some(_) = &self.state
+        let mut request_additional_pass = false;
+
+        // Read file if needed
+		if self.token.is_include() || self.token.is_incbin()
 		{
 			self.read_referenced_file(env)?;
 		}	
 
+        // Handle the tokens depending on their specific state
 		match &mut self.state {
-			None => self.token.visited(env),
             Some(ProcessedTokenState::Include(ref mut state)) => {
                 match self.token.as_simple_token().as_ref() {
                     Token::Include(fname, namespace, once) => {
@@ -429,8 +553,22 @@ impl<'token, T: Visited + ToSimpleToken + Debug>  ProcessedToken<'token, T> {
 
             Some(ProcessedTokenState::Incbin{ref data}) => {
                 env.visit_incbin(data)
+            },
+
+            Some(ProcessedTokenState::If(if_state)) => {
+                let listing = if_state.choose_listing_to_assemble(env)?;
+
+                if let Some(listing) = listing {
+                    visit_processed_tokens(listing, env)?;
+                }
+
+                Ok(())
             }
-			other => unimplemented!("Specific behavior requiring a state not implemented. {:?}", other)
+
+			Some(other) => unimplemented!("Specific behavior requiring a state not implemented. {:?}", other),
+            // no state imply a standard visit
+			None => self.token.visited(env),
+
 		}
 	}
 }

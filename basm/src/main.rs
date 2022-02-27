@@ -48,7 +48,6 @@ fn main() {
             std::process::exit(0);
         }
         Err(e) => {
-            // dbg!(&e);
             eprintln!("Error while assembling.\n{}", e);
             std::process::exit(-1);
         }
