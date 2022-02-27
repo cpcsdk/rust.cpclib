@@ -41,6 +41,7 @@ impl LocatedExpr {
 
 #[derive(Debug, Clone)]
 pub enum LocatedMacroParam {
+    Empty,
     /// Standard argument
     Single(Z80Span),
     /// A list of argument that will be provided in a nested macro call
@@ -49,7 +50,7 @@ pub enum LocatedMacroParam {
 
 impl MacroParamElement for LocatedMacroParam {
     fn empty() -> Self {
-        unimplemented!()
+       Self::Empty
     }
 
     fn is_single(&self) -> bool {
@@ -62,6 +63,7 @@ impl MacroParamElement for LocatedMacroParam {
 
     fn single_argument(&self) -> &str {
         match self {
+            LocatedMacroParam::Empty => "",
             LocatedMacroParam::Single(s) => s,
             LocatedMacroParam::List(_) => unreachable!(),
         }
@@ -69,8 +71,8 @@ impl MacroParamElement for LocatedMacroParam {
 
     fn list_argument(&self) -> &[Box<Self>] {
         match self {
-            LocatedMacroParam::Single(_) => unreachable!(),
             LocatedMacroParam::List(l) => l,
+            _ => unreachable!(),
         }
     }
 }
@@ -78,6 +80,9 @@ impl MacroParamElement for LocatedMacroParam {
 impl LocatedMacroParam {
     pub fn to_macro_param(&self) -> MacroParam {
         match self {
+            LocatedMacroParam::Empty => {
+                MacroParam::Single("".to_string())
+            }
             LocatedMacroParam::Single(text) => {
                 MacroParam::Single(text.fragment().to_string())
             },
@@ -93,6 +98,7 @@ impl LocatedMacroParam {
 
     pub fn is_empty(&self) -> bool {
         match self {
+            LocatedMacroParam::Empty => true,
             LocatedMacroParam::Single(text) => text.is_empty(),
             _ => false
         }
@@ -102,6 +108,7 @@ impl LocatedMacroParam {
         match self {
             LocatedMacroParam::Single(span) => span.clone(),
             LocatedMacroParam::List(_) => todo!(),
+            LocatedMacroParam::Empty => panic!(),
         }
     }
 }
