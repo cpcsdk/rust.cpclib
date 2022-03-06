@@ -828,7 +828,6 @@ impl LocatedToken {
     /// Transform the located token in a raw token.
     /// Warning, this is quite costly when strings or vec are involved
     pub fn to_token(&self) -> Cow<Token> {
-        unimplemented!();
         match self {
             LocatedToken::Standard { token, .. } => Cow::Borrowed(token),
             LocatedToken::CrunchedSection(c, l, _span) => {
@@ -854,7 +853,7 @@ impl LocatedToken {
                     e.to_expr(),
                     l.as_listing(),
                     s.as_ref().map(|s| s.into()),
-                    start.map(|e| e.to_expr())
+                    start.as_ref().map(|e| e.to_expr())
                 ))
             }
             LocatedToken::RepeatUntil(e, l, _span) => {
@@ -889,7 +888,7 @@ impl LocatedToken {
                     label: label.into(),
                     start: start.to_expr(),
                     stop: stop.to_expr(),
-                    step: step.map(|e| e.to_expr()),
+                    step: step.as_ref().map(|e| e.to_expr()),
                     listing: listing.as_listing()
                 })
             }
@@ -909,9 +908,10 @@ impl LocatedToken {
                         .collect_vec()
                 ))
             }
-            LocatedToken::Defb(..) => todo!(),
-            LocatedToken::Defw(..) => todo!(),
-            LocatedToken::Str(..) => todo!(),
+            LocatedToken::Defb(exprs, _ ) => Cow::Owned(Token::Defb(exprs.iter().map(|e|e.to_expr()).collect_vec())),
+            LocatedToken::Defw(exprs, _ ) => Cow::Owned(Token::Defw(exprs.iter().map(|e|e.to_expr()).collect_vec())),
+            LocatedToken::Str(exprs, _ ) => Cow::Owned(Token::Str(exprs.iter().map(|e|e.to_expr()).collect_vec())),
+
             LocatedToken::Include(..) => todo!(),
             LocatedToken::Incbin {
                 fname,
