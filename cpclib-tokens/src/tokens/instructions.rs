@@ -32,7 +32,7 @@ impl ToString for MacroParam {
     }
 }
 
-pub trait MacroParamElement : Clone{
+pub trait MacroParamElement: Clone {
     fn empty() -> Self;
 
     fn is_single(&self) -> bool;
@@ -58,21 +58,19 @@ impl MacroParamElement for MacroParam {
     fn single_argument(&self) -> &str {
         match self {
             MacroParam::Single(s) => s,
-            MacroParam::List(_) => unreachable!(),
+            MacroParam::List(_) => unreachable!()
         }
     }
 
     fn list_argument(&self) -> &[Box<Self>] {
         match self {
             MacroParam::Single(_) => unreachable!(),
-            MacroParam::List(l) => l,
+            MacroParam::List(l) => l
         }
     }
 }
 
 impl MacroParam {
-
-
     pub fn is_single(&self) -> bool {
         match self {
             Self::Single(_) => true,
@@ -393,7 +391,6 @@ pub enum TestKind {
     LabelNused(SmolStr)
 }
 
-
 pub trait TestKindElement {
     type Expr: ExprElement;
 
@@ -411,8 +408,7 @@ pub trait TestKindElement {
 }
 
 impl TestKindElement for TestKind {
-    type Expr= Expr;
-
+    type Expr = Expr;
 
     fn is_true_test(&self) -> bool {
         todo!()
@@ -490,17 +486,15 @@ pub enum CharsetFormat {
 /// TODO use a more complete type that can use a subset of functions to generate a string
 pub type Filename = String;
 
-
-
 pub trait ToSimpleToken {
-	/// Convert the token in its simplest form
-	fn as_simple_token(&self) -> Cow<Token>;
+    /// Convert the token in its simplest form
+    fn as_simple_token(&self) -> Cow<Token>;
 }
 
 impl ToSimpleToken for Token {
-	fn as_simple_token(&self) -> Cow<Token> {
-		Cow::Borrowed(self)
-	}
+    fn as_simple_token(&self) -> Cow<Token> {
+        Cow::Borrowed(self)
+    }
 }
 
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
@@ -680,13 +674,7 @@ impl Clone for Token {
                     transformation: transformation.clone()
                 }
             }
-            Token::Include(a, b, c) => {
-                Token::Include(
-                    a.clone(),
-                    b.clone(),
-                    c.clone()
-                )
-            }
+            Token::Include(a, b, c) => Token::Include(a.clone(), b.clone(), c.clone()),
             Token::Iterate(a, b, c) => Token::Iterate(a.clone(), b.clone(), c.clone()),
             Token::Label(a) => Token::Label(a.clone()),
             Token::Let(a, b) => Token::Let(a.clone(), b.clone()),

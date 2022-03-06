@@ -80,17 +80,15 @@ impl ListingOutput {
     /// Check if the token is for the same source
     fn token_is_on_same_source(&self, token: &LocatedToken) -> bool {
         panic!("Does not currently work. Should not be used");
-        /*
-        match &self.current_source {
-            Some(current_source) => {
-                std::ptr::eq(
-                    token.context().0.deref().as_ptr(),
-                    current_source.as_str().as_ptr()
-                )
-            }
-            None => false
-        }
-        */
+        // match &self.current_source {
+        // Some(current_source) => {
+        // std::ptr::eq(
+        // token.context().0.deref().as_ptr(),
+        // current_source.as_str().as_ptr()
+        // )
+        // }
+        // None => false
+        // }
     }
 
     /// Check if the token is for the same line than the previous token
@@ -141,7 +139,7 @@ impl ListingOutput {
 
             // replace the objects of interest
             panic!("Cannot work anymore, need to detect source change in another way (Listing change should be an obvious way)");
-            //self.current_source = Some(token.context().0.clone());
+            // self.current_source = Some(token.context().0.clone());
 
             // TODO manage differently for macros and so on
             // let current_line = current_line.split("\n").next().unwrap_or(current_line);

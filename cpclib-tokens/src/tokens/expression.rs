@@ -7,9 +7,8 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use ordered_float::OrderedFloat;
 
-use crate::ListingElement;
 use crate::tokens::Token;
-
+use crate::ListingElement;
 
 /// Expression nodes.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -44,7 +43,7 @@ pub enum Expr {
     BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
     BinaryOperation(BinaryOperation, Box<Expr>, Box<Expr>),
 
-   /// Function supposely coded by the user
+    /// Function supposely coded by the user
     AnyFunction(SmolStr, Vec<Expr>),
 
     /// Random value
@@ -52,10 +51,9 @@ pub enum Expr {
 }
 
 /// All methods are unchecked
-pub trait ExprElement : Sized{
+pub trait ExprElement: Sized {
     type ResultExpr: ExprElement;
     type Token: ListingElement;
-
 
     fn is_negated(&self) -> bool;
 
@@ -120,7 +118,6 @@ pub trait ExprElement : Sized{
     fn is_context_independant(&self) -> bool;
     fn fix_relative_value(&mut self);
 }
-
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 /// Represents a prefix that provides information related to banks for a label
@@ -300,7 +297,7 @@ impl Display for UnaryOperation {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         let repr = match self {
             UnaryOperation::Neg => "-",
-            UnaryOperation::Not => "~",
+            UnaryOperation::Not => "~"
         };
         write!(format, "{}", repr)
     }
@@ -327,7 +324,7 @@ impl Display for UnaryTokenOperation {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         let repr = match self {
             UnaryTokenOperation::Duration => "DURATION",
-            UnaryTokenOperation::Opcode => "OPCODE",
+            UnaryTokenOperation::Opcode => "OPCODE"
         };
         write!(format, "{}", repr)
     }
@@ -364,28 +361,27 @@ impl Display for BinaryOperation {
         use BinaryOperation::*;
         let repr = match self {
             RightShift => ">>",
-            LeftShift=> "<<",
-        
-            Add=> "+",
-            Sub=> "-",
-            Mul=> "*",
-            Div=> "/",
-            Mod=> "%",
-        
-            BinaryAnd => "&",
-            BinaryOr =>  "|",
-            BinaryXor =>  "^",
+            LeftShift => "<<",
 
-            BooleanAnd =>  "&&",
+            Add => "+",
+            Sub => "-",
+            Mul => "*",
+            Div => "/",
+            Mod => "%",
+
+            BinaryAnd => "&",
+            BinaryOr => "|",
+            BinaryXor => "^",
+
+            BooleanAnd => "&&",
             BooleanOr => "||",
 
-            Equal =>  "==",
+            Equal => "==",
             Different => "!=",
             LowerOrEqual => "<=",
             GreaterOrEqual => ">=",
             StrictlyGreater => ">",
-            StrictlyLower => "<",
-
+            StrictlyLower => "<"
         };
         write!(format, "{}", repr)
     }
@@ -426,11 +422,9 @@ impl ExprElement for Expr {
     type ResultExpr = Expr;
     type Token = Token;
 
-
-
     fn is_negated(&self) -> bool {
         match self {
-            Expr::UnaryOperation(UnaryOperation::Neg,_) => true,
+            Expr::UnaryOperation(UnaryOperation::Neg, _) => true,
             _ => false
         }
     }
@@ -478,11 +472,9 @@ impl ExprElement for Expr {
         }
     }
 
-
     fn not(&self) -> Self::ResultExpr {
         todo!()
     }
-
 
     fn is_value(&self) -> bool {
         todo!()
@@ -600,7 +592,7 @@ impl ExprElement for Expr {
         todo!()
     }
 
-    fn is_any_function(&self) -> bool{
+    fn is_any_function(&self) -> bool {
         todo!()
     }
 
@@ -620,7 +612,6 @@ impl ExprElement for Expr {
         todo!()
     }
 }
-
 
 impl Expr {
     pub fn to_simplified_string(&self) -> String {
@@ -651,10 +642,10 @@ impl Display for Expr {
             UnaryFunction(func, arg) => write!(format, "{}({})", func, arg),
 
             BinaryFunction(func, arg1, arg2) => write!(format, "{}({}, {})", func, arg1, arg2),
-       
+
             Paren(ref expr) => write!(format, "({})", expr),
 
-                      AnyFunction(name, args) => {
+            AnyFunction(name, args) => {
                 write!(
                     format,
                     "{}({})",
@@ -665,7 +656,7 @@ impl Display for Expr {
 
             UnaryOperation(op, exp) => write!(format, "{}{}", op, exp),
             UnaryTokenOperation(op, tok) => write!(format, "{}({})", op, tok),
-            BinaryOperation(op, exp1, exp2) => write!(format, "{}({},{})", op, exp1, exp2),
+            BinaryOperation(op, exp1, exp2) => write!(format, "{}({},{})", op, exp1, exp2)
         }
     }
 }

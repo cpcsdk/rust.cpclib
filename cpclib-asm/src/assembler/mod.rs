@@ -17,12 +17,11 @@ use std::any::Any;
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
-use std::fmt::Debug;
 
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
@@ -32,6 +31,7 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::*;
+use cpclib_tokens::ToSimpleToken;
 
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
@@ -45,7 +45,6 @@ use crate::report::Report;
 use crate::save_command::*;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, PhysicalAddress};
-use cpclib_tokens::ToSimpleToken;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -552,7 +551,7 @@ impl Env {
     /// If the expression is not solvable in second pass, an error is returned
     ///
     /// However, when assembling in a crunched section, the expression MUST NOT fail. edit: why ? I do not get it now and I have removed this limitation
-    pub fn resolve_expr_may_fail_in_first_pass<E:ExprEvaluationExt>(
+    pub fn resolve_expr_may_fail_in_first_pass<E: ExprEvaluationExt>(
         &self,
         exp: &E
     ) -> Result<ExprResult, AssemblerError> {
@@ -572,8 +571,10 @@ impl Env {
 
     /// Compute the expression thanks to the symbol table of the environment.
     /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
-    fn resolve_expr_must_never_fail<E:ExprEvaluationExt>(&self, exp: &E) -> Result<ExprResult, AssemblerError> {
-        
+    fn resolve_expr_must_never_fail<E: ExprEvaluationExt>(
+        &self,
+        exp: &E
+    ) -> Result<ExprResult, AssemblerError> {
         match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
@@ -1432,7 +1433,6 @@ impl Env {
         &mut self,
         listing: &[T]
     ) -> Result<(), AssemblerError> {
-
         for token in listing.iter() {
             let res = token.visited(self)?;
         }
@@ -1840,7 +1840,9 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_call_macro_or_build_struct<T: ListingElement + MayHaveSpan + core::fmt::Debug + 'static>(
+    pub fn visit_call_macro_or_build_struct<
+        T: ListingElement + MayHaveSpan + core::fmt::Debug + 'static
+    >(
         &mut self,
         caller: &T
     ) -> Result<(), AssemblerError> {
@@ -2227,7 +2229,7 @@ impl Env {
             | *crunched_env.request_additional_pass.read().unwrap())
         .into();
         *self.can_skip_next_passes.write().unwrap() = can_skip_next_passes;
-        *self.request_additional_pass.write().unwrap() =request_additional_pass;
+        *self.request_additional_pass.write().unwrap() = request_additional_pass;
 
         self.macro_seed = crunched_env.macro_seed;
 
@@ -2269,9 +2271,16 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
-pub fn visit_tokens_all_passes<T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> 
-where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-<<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr: ExprEvaluationExt
+pub fn visit_tokens_all_passes<
+    T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement
+>(
+    tokens: &[T],
+    ctx: &ParserContext
+) -> Result<Env, AssemblerError>
+where
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
+        ExprEvaluationExt
 {
     let options = AssemblingOptions::default();
     visit_tokens_all_passes_with_options(tokens, &options, ctx)
@@ -2338,7 +2347,7 @@ impl Env {
         _span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
         if !self.functions.contains_key(name) {
-            let f = unsafe{FunctionBuilder::new(name, params, inner)}?;
+            let f = unsafe { FunctionBuilder::new(name, params, inner) }?;
 
             self.functions.insert(name.to_owned(), f);
         }
@@ -2353,13 +2362,11 @@ pub fn visit_tokens_all_passes_with_options<'token, T>(
     tokens: &'token [T],
     options: &AssemblingOptions,
     ctx: &ParserContext
-) -> Result<Env, AssemblerError> 
-
-
-where 
-T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement,
-<T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-<<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt
+) -> Result<Env, AssemblerError>
+where
+    T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt
 {
     let mut env = Env::new(options, ctx);
     let mut tokens = processed_token::build_list(tokens, &mut env);
@@ -2457,25 +2464,23 @@ pub fn visit_located_token(
                     env.visit_struct_definition(name, content.as_slice(), Some(span))
                         .map_err(|e| e.locate(span.clone()))
                 }
-                Token::Incbin {..} | Token::Include(..) => {
+                Token::Incbin { .. } | Token::Include(..) => {
                     panic!("Should never be called");
-                    /*
-                    if content.read().unwrap().is_none() {
-                        outer_token
-                            .read_referenced_file(&outer_token.context().1)
-                            .and_then(|_| visit_located_token(outer_token, env))
-                            .map_err(|e| e.locate(span.clone()))
-                    }
-                    else {
-                        env.visit_incbin(content.read().unwrap().as_ref().unwrap())
-                    }
-                    .map_err(|err| {
-                        AssemblerError::IncludedFileError {
-                            span: span.clone(),
-                            error: Box::new(err)
-                        }
-                    })
-                    */
+                    // if content.read().unwrap().is_none() {
+                    // outer_token
+                    // .read_referenced_file(&outer_token.context().1)
+                    // .and_then(|_| visit_located_token(outer_token, env))
+                    // .map_err(|e| e.locate(span.clone()))
+                    // }
+                    // else {
+                    // env.visit_incbin(content.read().unwrap().as_ref().unwrap())
+                    // }
+                    // .map_err(|err| {
+                    // AssemblerError::IncludedFileError {
+                    // span: span.clone(),
+                    // error: Box::new(err)
+                    // }
+                    // })
                 }
                 _ => {
                     token.visited(env).map_err(|err| {
@@ -2495,8 +2500,6 @@ pub fn visit_located_token(
         LocatedToken::Function(name, params, inner, span) => {
             env.visit_function_definition(name, params, inner, Some(span))
         }
-
-        
 
         LocatedToken::If(cases, other, span) => {
             panic!("Should be handled by ProcessedToken")
@@ -2555,27 +2558,27 @@ pub fn visit_located_token(
         LocatedToken::Label(label) => {
             env.visit_label(label.as_str())
                 .map_err(|e| e.locate(label.clone()))
-        },
+        }
         LocatedToken::MacroCall(name, args, span) => {
             env.visit_call_macro_or_build_struct(outer_token) // TODO rewrite that, it does not seem to be a appropriate code (no cast should be used, their is a lack of abstraction here
-        },
+        }
         LocatedToken::Struct(name, args, span) => {
             env.visit_struct_definition(name.as_str(), args, Some(span))
-        },
+        }
         LocatedToken::Defb(l, span) => {
             visit_db_or_dw_or_str(DbLikeKind::Defb, l.as_ref(), env)
-            .map_err(|e| e.locate(span.clone()))
-        },
+                .map_err(|e| e.locate(span.clone()))
+        }
         LocatedToken::Defw(l, span) => {
             visit_db_or_dw_or_str(DbLikeKind::Defw, l.as_ref(), env)
-            .map_err(|e| e.locate(span.clone()))
-        },
-        LocatedToken::Str(l, span) =>{
+                .map_err(|e| e.locate(span.clone()))
+        }
+        LocatedToken::Str(l, span) => {
             visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), env)
-            .map_err(|e| e.locate(span.clone()))
-        },
+                .map_err(|e| e.locate(span.clone()))
+        }
         LocatedToken::Include(..) => panic!("Should never been called"),
-        LocatedToken::Incbin {..} => panic!("Should never been called"),
+        LocatedToken::Incbin { .. } => panic!("Should never been called")
     }?;
 
     // Patch the warnings to inject them a location
@@ -2637,7 +2640,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             });
             Ok(())
         }
-        Token::Include(_,  namespace, once) => {
+        Token::Include(_, namespace, once) => {
             panic!("ERROR - Should never be executed");/*
             if *once {
                 unimplemented!("ONCE on hardcoded tokens");
@@ -2667,7 +2670,6 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 
         Token::If(ref cases, ref other) => {
             panic!("Should be handled by ProcessedToken")
-
         }
         Token::Label(ref label) => env.visit_label(label),
         Token::Limit(ref exp) => env.visit_limit(exp),
@@ -2766,34 +2768,25 @@ fn visit_assert(
                 };
 
                 let prefix = match exp {
-                    Expr::BinaryOperation(
-                        BinaryOperation::Equal, 
-                        box left, 
-                        box right
-                    ) => oper(left, right, "=="),
+                    Expr::BinaryOperation(BinaryOperation::Equal, box left, box right) => {
+                        oper(left, right, "==")
+                    }
+
+                    Expr::BinaryOperation(BinaryOperation::LowerOrEqual, box left, box right) => {
+                        oper(left, right, "<=")
+                    }
+
+                    Expr::BinaryOperation(BinaryOperation::GreaterOrEqual, box left, box right) => {
+                        oper(left, right, ">=")
+                    }
+
+                    Expr::BinaryOperation(BinaryOperation::StrictlyLower, box left, box right) => {
+                        oper(left, right, "<")
+                    }
 
                     Expr::BinaryOperation(
-                        BinaryOperation::LowerOrEqual, 
-                        box left, 
-                        box right
-                    ) => oper(left, right, "<="),
-
-                    Expr::BinaryOperation(
-                        BinaryOperation::GreaterOrEqual, 
-                        box left, 
-                        box right
-                    ) => oper(left, right, ">="),
-
-                    Expr::BinaryOperation(
-                        BinaryOperation::StrictlyLower, 
-                        box left, 
-                        box right
-                    ) => oper(left, right, "<"),
-
-
-                    Expr::BinaryOperation(
-                        BinaryOperation::StrictlyGreater, 
-                        box left, 
+                        BinaryOperation::StrictlyGreater,
+                        box left,
                         box right
                     ) => oper(left, right, ">"),
 
@@ -2835,7 +2828,7 @@ fn visit_assert(
 }
 
 impl Env {
-    pub fn visit_while<E: ExprEvaluationExt, T: ListingElement<Expr=E> + Visited>(
+    pub fn visit_while<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited>(
         &mut self,
         cond: &E,
         code: &[T],
@@ -2855,17 +2848,17 @@ impl Env {
     }
 
     /// Handle the switch directive
-    pub fn visit_switch<'a,T, E> (
+    pub fn visit_switch<'a, T, E>(
         &mut self,
         value: &E,
         cases: impl Iterator<Item = (&'a E, &'a [T], bool)>,
         default: Option<&'a [T]>,
         _span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> 
-    where  
+    ) -> Result<(), AssemblerError>
+    where
         E: ExprEvaluationExt,
         E: 'a,
-        T: 'a + ListingElement<Expr=E> + Visited 
+        T: 'a + ListingElement<Expr = E> + Visited
     {
         let value = self.resolve_expr_must_never_fail(value)?;
         let mut met = false;
@@ -2897,7 +2890,7 @@ impl Env {
 
     /// Handle the iterate repetition directive
     /// Values is either a list of values or a Expression that represents a list
-    pub fn visit_iterate<E: ExprEvaluationExt + Display, T: ListingElement<Expr=E> + Visited>(
+    pub fn visit_iterate<E: ExprEvaluationExt + Display, T: ListingElement<Expr = E> + Visited>(
         &mut self,
         counter_name: &str,
         values: either::Either<&Vec<E>, &E>,
@@ -2970,7 +2963,7 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_rorg<E: ExprEvaluationExt, T: ListingElement<Expr=E> + Visited>(
+    pub fn visit_rorg<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited>(
         &mut self,
         address: &E,
         code: &[T],
@@ -3018,7 +3011,7 @@ impl Env {
     }
 
     /// Handle the for directive
-    pub fn visit_for<E: ExprEvaluationExt, T: ListingElement<Expr=E> + Visited>(
+    pub fn visit_for<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited>(
         &mut self,
         label: &str,
         start: &E,
@@ -3097,10 +3090,10 @@ impl Env {
         cond: &E,
         code: &[T],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> 
+    ) -> Result<(), AssemblerError>
     where
-    E: ExprEvaluationExt, 
-    T: ListingElement<Expr=E> + Visited
+        E: ExprEvaluationExt,
+        T: ListingElement<Expr = E> + Visited
     {
         let mut i = 0;
         loop {
@@ -3116,18 +3109,17 @@ impl Env {
     }
 
     /// Handle the statndard repetition directive
-    pub fn visit_repeat<T, E>
-    (
+    pub fn visit_repeat<T, E>(
         &mut self,
         count: &E,
         code: &[T],
         counter: Option<&str>,
         counter_start: Option<&E>,
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> 
-    where 
+    ) -> Result<(), AssemblerError>
+    where
         E: ExprEvaluationExt,
-        T: ListingElement<Expr=E> + Visited,
+        T: ListingElement<Expr = E> + Visited
     {
         // get the number of loops
         let count = self.resolve_expr_must_never_fail(count)?.int()?;
@@ -3265,15 +3257,14 @@ impl Env {
                     let left = exp.arg1();
                     let right = exp.arg2();
                     format(code, left, right)
-                },
-            
+                }
+
                 None => format!("0x{:x}", self.resolve_expr_must_never_fail(exp).unwrap())
             }
-
-        } else {
+        }
+        else {
             format!("0x{:x}", self.resolve_expr_must_never_fail(exp).unwrap())
         }
-
     }
 
     fn visit_run(&mut self, address: &Expr, ga: Option<&Expr>) -> Result<(), AssemblerError> {
@@ -3353,18 +3344,20 @@ pub enum DbLikeKind {
 impl DbLikeKind {
     fn mask(&self) -> u16 {
         match self {
-            DbLikeKind::Defb => 0xff,
-            DbLikeKind::Defw => 0xffff,
-            DbLikeKind::Str => 0xff,
+            DbLikeKind::Defb => 0xFF,
+            DbLikeKind::Defw => 0xFFFF,
+            DbLikeKind::Str => 0xFF
         }
     }
 }
 
 // TODO refactor code with assemble_opcode or other functions manipulating bytes
-pub fn visit_db_or_dw_or_str<E:ExprEvaluationExt + ExprElement>(kind: DbLikeKind, exprs: &[E], env: &mut Env) -> Result<(), AssemblerError> {
+pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement>(
+    kind: DbLikeKind,
+    exprs: &[E],
+    env: &mut Env
+) -> Result<(), AssemblerError> {
     let mask = kind.mask();
-
-
 
     let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {
         if mask == 0xFF {
@@ -3422,7 +3415,8 @@ pub fn visit_db_or_dw_or_str<E:ExprEvaluationExt + ExprElement>(kind: DbLikeKind
             let b = env.charset_encoding.transform_char(c);
             output(env, b as _, mask)?;
             env.update_dollar();
-        } else {
+        }
+        else {
             let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
             output_expr_result(env, val, mask)?;
             env.update_dollar();

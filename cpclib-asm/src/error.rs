@@ -13,7 +13,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
 use cpclib_tokens::symbols::{Symbol, SymbolError};
-use cpclib_tokens::{tokens, ExpressionTypeError, BinaryOperation};
+use cpclib_tokens::{tokens, BinaryOperation, ExpressionTypeError};
 
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
@@ -818,7 +818,7 @@ impl AssemblerError {
             AssemblerError::Fail { msg } => write!(f, "FAIL: {}", msg),
             AssemblerError::LocatedListingError(arc) => {
                 write!(f, "{}", arc.as_ref().cpclib_error_unchecked())
-            },
+            }
         }
     }
 }
@@ -952,9 +952,8 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
 
     impl EndKind {
         fn guess(&self, code: &str, mut offset: usize) -> usize {
-
             dbg!(code, code.len(), offset);
-            
+
             match self {
                 EndKind::End => {
                     for current in code[offset..].chars() {

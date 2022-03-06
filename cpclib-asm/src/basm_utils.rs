@@ -5,10 +5,11 @@ use std::io::Write;
 use std::path::Path;
 
 use cpclib_common::clap;
-use cpclib_common::clap::{Command, Arg, ArgGroup, ArgMatches};
+use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
-use crate::processed_token::read_source;
+
 use crate::preamble::*;
+use crate::processed_token::read_source;
 
 #[derive(Debug)]
 pub enum BasmError {
@@ -63,9 +64,7 @@ impl From<AssemblerError> for BasmError {
 
 /// Parse the given code.
 /// TODO read options to configure the search path
-pub fn parse<'arg>(
-    matches: &'arg ArgMatches
-) -> Result<LocatedListing, BasmError> {
+pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmError> {
     let inline_fname = "<inline code>";
     let filename = matches.value_of("INPUT").unwrap_or(inline_fname);
 
@@ -77,8 +76,8 @@ pub fn parse<'arg>(
     match std::env::current_dir() {
         Ok(cwd) => {
             context.add_search_path(cwd)?;
-        },
-        Err(_) => todo!(),
+        }
+        Err(_) => todo!()
     }
     context.add_search_path_from_file(&filename); // we ignore the potential error
     if let Some(directories) = matches.values_of("INCLUDE_DIRECTORIES") {
@@ -103,8 +102,7 @@ pub fn parse<'arg>(
         panic!("No code provided to assemble");
     };
 
-    crate::parse_z80_str_with_context(code, context)
-        .map_err(|e| BasmError::from(e))
+    crate::parse_z80_str_with_context(code, context).map_err(|e| BasmError::from(e))
 }
 
 /// Assemble the given code
@@ -133,7 +131,7 @@ pub fn assemble<'arg>(
             let (symbol, value) = {
                 match definition.split_once("=") {
                     Some((symbol, value)) => (symbol, value),
-                    None => (definition, "1"),
+                    None => (definition, "1")
                 }
             };
             let ctx = ParserContext::default();
@@ -215,7 +213,6 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             }
         }
         else {
-
             let pc_filename = matches.value_of("OUTPUT").unwrap();
             if pc_filename.to_lowercase().ends_with(".sna") && !matches.is_present("SNAPSHOT") {
                 eprintln!(
@@ -281,10 +278,10 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     // standard assembling
     let listing = parse(matches)?;
-    let env = assemble(matches,&listing)?;
+    let env = assemble(matches, &listing)?;
 
-     eprintln!("TODO: include parse warnings");
-    //warnings.extend_from_slice(env.warnings());
+    eprintln!("TODO: include parse warnings");
+    // warnings.extend_from_slice(env.warnings());
     let warnings = env.warnings().to_vec();
 
     if matches.is_present("WERROR") && !warnings.is_empty() {

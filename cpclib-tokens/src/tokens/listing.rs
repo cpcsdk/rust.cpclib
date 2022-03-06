@@ -3,7 +3,10 @@ use std::borrow::Cow;
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 
-use crate::{Token, MacroParamElement, MacroParam, TestKind, TestKindElement, BinaryTransformation, ExprElement};
+use crate::{
+    BinaryTransformation, ExprElement, MacroParam, MacroParamElement, TestKind, TestKindElement,
+    Token
+};
 /// The ListingElement trait contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
 pub trait ListingElement: Debug + Sized {

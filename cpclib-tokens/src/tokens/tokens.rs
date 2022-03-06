@@ -3,11 +3,9 @@ use crate::tokens::instructions::*;
 use crate::tokens::listing::*;
 
 impl ListingElement for Token {
+    type Expr = Expr;
     type MacroParam = MacroParam;
     type TestKind = TestKind;
-    type Expr = Expr;
-
-
 
     fn macro_call_name(&self) -> &str {
         match self {
@@ -23,12 +21,11 @@ impl ListingElement for Token {
         }
     }
 
-
     fn is_if(&self) -> bool {
-       match self {
-           Token::If(..) => true,
-           _ => false
-       }
+        match self {
+            Token::If(..) => true,
+            _ => false
+        }
     }
 
     fn if_nb_tests(&self) -> usize {
@@ -43,7 +40,7 @@ impl ListingElement for Token {
             Self::If(tests, ..) => {
                 let data = &tests[idx];
                 (&data.0, &data.1)
-            },
+            }
             _ => panic!()
         }
     }
@@ -64,47 +61,45 @@ impl ListingElement for Token {
 
     fn is_incbin(&self) -> bool {
         match self {
-            Token::Incbin{..} => true,
+            Token::Incbin { .. } => true,
             _ => false
         }
     }
 
-
     fn incbin_fname(&self) -> &str {
-        match self{
-            Self::Incbin{fname, ..} => fname.as_ref(),
+        match self {
+            Self::Incbin { fname, .. } => fname.as_ref(),
             _ => unreachable!()
         }
     }
 
     fn incbin_offset(&self) -> Option<&Self::Expr> {
-        match self{
-            Self::Incbin{offset, ..} => offset.as_ref(),
+        match self {
+            Self::Incbin { offset, .. } => offset.as_ref(),
             _ => unreachable!()
         }
     }
 
     fn incbin_length(&self) -> Option<&Self::Expr> {
-        match self{
-            Self::Incbin{length, ..} => length.as_ref(),
+        match self {
+            Self::Incbin { length, .. } => length.as_ref(),
             _ => unreachable!()
         }
     }
 
     fn incbin_transformation(&self) -> &BinaryTransformation {
-        match self{
-            Self::Incbin{transformation, ..} => transformation,
+        match self {
+            Self::Incbin { transformation, .. } => transformation,
             _ => unreachable!()
         }
     }
 
     fn include_fname(&self) -> &str {
-        match self{
-            Self::Include(fname, _, _) => fname.as_ref(),
+        match self {
+            Self::Include(fname, ..) => fname.as_ref(),
             _ => unreachable!()
         }
     }
-
 }
 
 /// Standard listing is a specific implementation

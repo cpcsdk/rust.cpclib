@@ -439,9 +439,13 @@ impl Function {
         if inner.is_empty() {
             return Err(AssemblerError::FunctionWithEmptyBody(name.to_owned()));
         }
-        return Ok(Function::Located(AnyFunction::<'static, LocatedToken>::new(
-            name, args, &*(inner as *const _) as &'static _
-        )));
+        return Ok(Function::Located(
+            AnyFunction::<'static, LocatedToken>::new(
+                name,
+                args,
+                &*(inner as *const _) as &'static _
+            )
+        ));
     }
 
     /// Be sure the function lives shorter than inner
@@ -455,7 +459,9 @@ impl Function {
         }
         else {
             return Ok(Function::Standard(AnyFunction::<'static, Token>::new(
-                name, args, &*(inner as *const _) as &'static _
+                name,
+                args,
+                &*(inner as *const _) as &'static _
             )));
         }
     }
@@ -475,7 +481,11 @@ pub trait FunctionBuilder<S: Borrow<str> + Display> {
 }
 
 impl<S: Borrow<str> + Display> FunctionBuilder<S> for LocatedToken {
-    unsafe fn new(name: &str, args: &[S], inner: &[LocatedToken]) -> Result<Function, AssemblerError> {
+    unsafe fn new(
+        name: &str,
+        args: &[S],
+        inner: &[LocatedToken]
+    ) -> Result<Function, AssemblerError> {
         Function::new_located(name, args, inner)
     }
 }

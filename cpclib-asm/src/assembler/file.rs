@@ -1,4 +1,3 @@
-
 use cpclib_tokens::ExprResult;
 
 pub fn load_binary<P: AsRef<std::path::Path>>(fname: P) -> std::io::Result<ExprResult> {

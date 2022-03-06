@@ -409,7 +409,6 @@ impl ExprEvaluationExt for Expr {
 
             Expr::UnaryTokenOperation(_, box t) => {
                 unimplemented!("Need to retreive the symbols from the operation")
-
             }
         }
     }

@@ -9,8 +9,7 @@ use crate::assembler::{assemble_defs_item, Env, Visited};
 use crate::error::*;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
-use crate::AssemblingOptions;
-use crate::ParserContext;
+use crate::{AssemblingOptions, ParserContext};
 
 /// Needed methods for the Token defined in cpclib_tokens
 pub trait TokenExt: ListingElement + Clone + Debug {
@@ -78,27 +77,23 @@ pub trait TokenExt: ListingElement + Clone + Debug {
     }
 }
 
-/*
-
-impl<'t> TokenExt for Cow<'t, Token> {
-    fn disassemble_data(&self) -> Result<Listing, String> {
-        self.deref().disassemble_data()
-    }
-
-    fn estimated_duration(&self) -> Result<usize, AssemblerError> {
-        self.deref().estimated_duration()
-    }
-
-    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
-        self.deref().to_bytes_with_options(option)
-    }
-
-    fn unroll(&self, _env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
-        unimplemented!("signature issue. should be transformed/unused")
-    }
-}
-*/
-
+// impl<'t> TokenExt for Cow<'t, Token> {
+// fn disassemble_data(&self) -> Result<Listing, String> {
+// self.deref().disassemble_data()
+// }
+//
+// fn estimated_duration(&self) -> Result<usize, AssemblerError> {
+// self.deref().estimated_duration()
+// }
+//
+// fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
+// self.deref().to_bytes_with_options(option)
+// }
+//
+// fn unroll(&self, _env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
+// unimplemented!("signature issue. should be transformed/unused")
+// }
+// }
 
 impl TokenExt for Token {
     /// Unroll the tokens when in a repetition loop
@@ -162,14 +157,12 @@ impl TokenExt for Token {
 
             Token::Defb(_) | Token::Defw(_) => {
                 todo!();
-                /*
-                use crate::assembler::visit_db_or_dw_or_str;
-
-                let mut env = Env::default();
-                visit_db_or_dw_or_str(self, &mut env)
-                    .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
-                wrap(&env.produced_bytes())
-                */
+                // use crate::assembler::visit_db_or_dw_or_str;
+                //
+                // let mut env = Env::default();
+                // visit_db_or_dw_or_str(self, &mut env)
+                // .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
+                // wrap(&env.produced_bytes())
             }
 
             _ => {

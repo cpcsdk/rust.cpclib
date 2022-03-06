@@ -2,12 +2,11 @@ use std::ops::Deref;
 
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_tokens::symbols::{Macro, Source, Struct};
-use cpclib_tokens::{MacroParam, Token, MacroParamElement};
-use crate::ParserContext;
+use cpclib_tokens::{MacroParam, MacroParamElement, Token};
 
 use crate::error::AssemblerError;
 use crate::preamble::Z80Span;
-use crate::Env;
+use crate::{Env, ParserContext};
 
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
@@ -33,7 +32,8 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
         else {
             Ok(s.to_owned())
         }
-    } else {
+    }
+    else {
         let l = m.list_argument();
         Ok(format!(
             "{}",
@@ -44,7 +44,6 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
         ))
     }
 }
-
 
 /// Encodes both the arguments and the macro
 pub struct MacroWithArgs<'m, 'a, P: MacroParamElement> {
@@ -85,9 +84,7 @@ impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
 
         // replace the arguments for the listing
         for (argname, argvalue) in self.r#macro.params().iter().zip(self.args.iter()) {
-            listing = listing.replace(
-                &format!("{{{}}}", argname), 
-                &expand_param(argvalue, env)?);
+            listing = listing.replace(&format!("{{{}}}", argname), &expand_param(argvalue, env)?);
         }
 
         Ok(listing)
@@ -128,8 +125,6 @@ impl<'s, 'a, P: MacroParamElement> StructWithArgs<'s, 'a, P> {
     }
 }
 
-
-
 impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
     /// Generate the token that correspond to the current structure
     /// Current bersion does not handle at all directive with several arguments
@@ -166,13 +161,12 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                                 "DB"
                             }
                             else {
-
                                 "DW"
                             };
 
                             let elem = match provided_param {
                                 Some(provided_param) => {
-                                    let elem = expand_param(provided_param, env) ?;
+                                    let elem = expand_param(provided_param, env)?;
                                     if elem.is_empty() {
                                         c[0].to_string()
                                     }
@@ -192,52 +186,72 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                                 Some(provided_param2) => {
                                     if provided_param2.is_single() {
                                         provided_param
-                                        .into_iter()
-                                        .zip_longest(current_default_args)
-                                        .map(|a| {
-                                            match a {
-                                                EitherOrBoth::Both(provided, _)
-                                                | EitherOrBoth::Left(provided) => (provided.is_single(), expand_param(provided, env)),
-                                                EitherOrBoth::Right(default) => (default.is_single(),expand_param(default, env))
-                                            }
-                                        })
-                                        .map(|(is_single, a)| {
-                                            a.map(|repr| {
-                                                if is_single {
-                                                    repr
-                                                }
-                                                else {
-                                                    format!("[{}]", repr)
-                                                }
-                                            })
-                                        })
-                                        .collect::<Result<Vec<String>, AssemblerError>>()?
-                                    } else {
-                                        provided_param2.list_argument()
-                                        .into_iter()
-                                        .zip_longest(current_default_args)
-                                        .map(|a| {
-                                            match a {
-                                                EitherOrBoth::Both(provided, _)
-                                                | EitherOrBoth::Left(provided) => (provided.is_single(),expand_param(provided.deref(), env)),
-                                                EitherOrBoth::Right(default) => (default.is_single(), expand_param(default, env))
-                                            }
-                                        })
-                                        .map(|(is_single, a)| {
-                                            a.map(|repr| {
-                                                if is_single {
-                                                    repr
-                                                }
-                                                else {
-                                                    format!("[{}]", repr)
+                                            .into_iter()
+                                            .zip_longest(current_default_args)
+                                            .map(|a| {
+                                                match a {
+                                                    EitherOrBoth::Both(provided, _)
+                                                    | EitherOrBoth::Left(provided) => {
+                                                        (
+                                                            provided.is_single(),
+                                                            expand_param(provided, env)
+                                                        )
+                                                    }
+                                                    EitherOrBoth::Right(default) => {
+                                                        (
+                                                            default.is_single(),
+                                                            expand_param(default, env)
+                                                        )
+                                                    }
                                                 }
                                             })
-                                        })
-                                        .collect::<Result<Vec<String>, AssemblerError>>()?
+                                            .map(|(is_single, a)| {
+                                                a.map(|repr| {
+                                                    if is_single {
+                                                        repr
+                                                    }
+                                                    else {
+                                                        format!("[{}]", repr)
+                                                    }
+                                                })
+                                            })
+                                            .collect::<Result<Vec<String>, AssemblerError>>()?
+                                    }
+                                    else {
+                                        provided_param2
+                                            .list_argument()
+                                            .into_iter()
+                                            .zip_longest(current_default_args)
+                                            .map(|a| {
+                                                match a {
+                                                    EitherOrBoth::Both(provided, _)
+                                                    | EitherOrBoth::Left(provided) => {
+                                                        (
+                                                            provided.is_single(),
+                                                            expand_param(provided.deref(), env)
+                                                        )
+                                                    }
+                                                    EitherOrBoth::Right(default) => {
+                                                        (
+                                                            default.is_single(),
+                                                            expand_param(default, env)
+                                                        )
+                                                    }
+                                                }
+                                            })
+                                            .map(|(is_single, a)| {
+                                                a.map(|repr| {
+                                                    if is_single {
+                                                        repr
+                                                    }
+                                                    else {
+                                                        format!("[{}]", repr)
+                                                    }
+                                                })
+                                            })
+                                            .collect::<Result<Vec<String>, AssemblerError>>()?
                                     }
                                 }
-
-
 
                                 None => {
                                     current_default_args

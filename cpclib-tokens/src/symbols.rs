@@ -13,7 +13,7 @@ use delegate::delegate;
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{ExprResult, MacroParam, Token, ListingElement, ToSimpleToken};
+use crate::{ExprResult, ListingElement, MacroParam, ToSimpleToken, Token};
 
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone)]
@@ -158,10 +158,7 @@ impl Struct {
             name: name.as_ref().into(),
             content: content
                 .iter()
-                .map(|(s, t)| (
-                    SmolStr::from(s.borrow()), 
-                    t.as_simple_token().into_owned()
-                ))
+                .map(|(s, t)| (SmolStr::from(s.borrow()), t.as_simple_token().into_owned()))
                 .collect_vec(),
             source
         }

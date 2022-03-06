@@ -130,15 +130,18 @@ pub fn assemble_with_options(
 }
 
 /// Assemble the predifined list of tokens
-pub fn assemble_tokens_with_options<'tokens, T: 'static + Visited + ToSimpleToken + Clone + ListingElement + Sync>
-(
+pub fn assemble_tokens_with_options<
+    'tokens,
+    T: 'static + Visited + ToSimpleToken + Clone + ListingElement + Sync
+>(
     tokens: &'tokens [T],
     options: &AssemblingOptions,
     ctx: &ParserContext
-) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> 
-where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-<<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr: implementation::expression::ExprEvaluationExt
-
+) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError>
+where
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
+        implementation::expression::ExprEvaluationExt
 {
     let env = assembler::visit_tokens_all_passes_with_options(tokens, &options, ctx)?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
@@ -152,7 +155,6 @@ pub fn assemble_to_amsdos_file(
     amsdos_filename: &str,
     ctx: &ParserContext
 ) -> Result<AmsdosFile, AssemblerError> {
-
     let amsdos_filename = AmsdosFileName::try_from(amsdos_filename)?;
 
     let tokens = parser::parse_z80_str(code)?;
@@ -204,7 +206,7 @@ mod test_super {
 Truc
 		";
 
-        let ctx = ParserContext{
+        let ctx = ParserContext {
             ..Default::default()
         };
 
