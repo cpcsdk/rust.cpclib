@@ -24,7 +24,7 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
             let src = &s[EVAL.len()..];
             let ctx = ParserContext::default(); // TODO really use the good context
             let src = Z80Span::new_extra(src, &ctx);
-            let expr_token = crate::parser::expr(src)
+            let expr_token = crate::parser::located_expr(src)
                 .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?
                 .1;
             let value = env.resolve_expr_must_never_fail(&expr_token)?;

@@ -276,7 +276,7 @@ pub fn parse_rorg(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError
     let rorg_start = input.clone();
     let (input, _) = alt((tag_no_case("PHASE"), tag_no_case("RORG")))(input)?;
 
-    let (input, exp) = delimited(space1, expr, space0)(input)?;
+    let (input, exp) = delimited(space1, located_expr, space0)(input)?;
 
     let (input, _) = line_ending(input)?;
 
@@ -408,7 +408,7 @@ pub fn parse_while(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
     let while_start = input.clone();
     let (input, _) = parse_directive_word("WHILE")(input)?;
 
-    let (input, cond) = cut(context("WHILE: error in condition", expr))(input)?;
+    let (input, cond) = cut(context("WHILE: error in condition", located_expr))(input)?;
     let (input, inner) = cut(context("WHILE: issue in the content", inner_code))(input)?;
     let (input, _) = cut(context(
         "WHILE: not closed",
@@ -476,7 +476,7 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
     let (switch_start, _) = many0(alt((space1, line_ending)))(input)?;
     let (input, _) = parse_directive_word("SWITCH")(switch_start.clone())?;
 
-    let (input, value) = cut(context("SWITCH: tested value", preceded(space0, expr)))(input)?;
+    let (input, value) = cut(context("SWITCH: tested value", preceded(space0, located_expr)))(input)?;
 
     let mut cases_listing = Vec::new();
     let mut default_listing = None;
@@ -532,7 +532,7 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         loop_start = if value.is_some() {
             let (input, value) = cut(context(
                 "SWITCH: case value error.",
-                delimited(space0, expr, opt(tag(":")))
+                delimited(space0, located_expr, opt(tag(":")))
             ))(input)?;
 
             let (input, inner) = cut(context("SWITCH: error in case code", inner_code))(input)?;
@@ -565,9 +565,9 @@ pub fn parse_for(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<
 
     // Get parameters
     let (input, counter) = cut(parse_label(false))(input)?;
-    let (input, start) = cut(preceded(parse_comma, expr))(input)?;
-    let (input, stop) = cut(preceded(parse_comma, expr))(input)?;
-    let (input, step) = opt(preceded(parse_comma, expr))(input)?;
+    let (input, start) = cut(preceded(parse_comma, located_expr))(input)?;
+    let (input, stop) = cut(preceded(parse_comma, located_expr))(input)?;
+    let (input, step) = opt(preceded(parse_comma, located_expr))(input)?;
 
     // Get loop content
     let (input, inner) = cut(context("FOR: issue in the content", inner_code))(input)?;
@@ -610,14 +610,14 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         ))
     )(input)?;
 
-    let (input, count) = opt(expr)(input)?;
+    let (input, count) = opt(located_expr)(input)?;
     match count {
         Some(count) => {
             let (input, counter) = cut(context(
                 "REPEAT: issue in the counter",
                 opt(preceded(parse_comma, parse_label(false)))
             ))(input)?;
-            let (input, counter_start) = opt(preceded(parse_comma, expr))(input)?;
+            let (input, counter_start) = opt(preceded(parse_comma, located_expr))(input)?;
             let (input, inner) = cut(context("REPEAT: issue in the content", inner_code))(input)?;
 
             let (input, _) = cut(context(
@@ -647,7 +647,7 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
                 "REPEAT ... UNTIL: not closed",
                 delimited(space0, parse_directive_word("UNTIL"), space0)
             ))(input)?;
-            let (input, cond) = cut(context("REPEAT UNTIL: condition error", expr))(input)?;
+            let (input, cond) = cut(context("REPEAT UNTIL: condition error", located_expr))(input)?;
             Ok((
                 input.clone(),
                 LocatedToken::RepeatUntil(cond, inner, repeat_start)
@@ -689,7 +689,7 @@ pub fn parse_iterate(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
                 parse_binary_function_call,
                 parse_any_function_call,
                 parse_assemble,
-                map(parse_label(false), |l| Expr::Label(l.into()))
+                map(parse_label(false), |l| LocatedExpr::Label(l))
             ))
         ))(input)?;
         (input, either::Either::Right(values))
@@ -1309,15 +1309,14 @@ pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
     let size = include_start.len() - input.len();
     Ok((
         input,
-        LocatedToken::Standard {
-            token: Token::Include(fname.to_string(), namespace.map(|l| SmolStr::from(l)), once.is_some()),
-            span: include_start.take(size)
-        }
+        LocatedToken::Include(fname, namespace, once.is_some(), include_start.take(size)),
     ))
 }
 
 /// Parse for the various binary include directives
-pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
     let (input, transformation) = alt((
         map(
             alt((tag_no_case("INCBIN"), tag_no_case("BINCLUDE"))),
@@ -1331,23 +1330,25 @@ pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
 
     let (input, fname) = preceded(space1, parse_fname)(input)?;
 
-    let (input, offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
-    let (input, length) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
+    let (input, offset) = opt(preceded(tuple((space0, char(','), space0)), located_expr))(input)?;
+    let (input, length) = opt(preceded(tuple((space0, char(','), space0)), located_expr))(input)?;
     let (input, _extended_offset) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
     let (input, off) = opt(preceded(
         tuple((space0, char(','), space0)),
         tag_no_case("OFF")
     ))(input)?;
 
+    let span = input_start.take(input_start.input_len() - input.input_len());
     Ok((
         input,
-        Token::Incbin {
-            fname: fname.to_string(),
+        LocatedToken::Incbin {
+            fname: fname,
             offset,
             length,
             extended_offset: None,
             off: off.is_some(),
-            transformation
+            transformation,
+            span
         }
     ))
 }
@@ -1629,7 +1630,6 @@ fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
             context("[DBG] defs", parse_defs),
             context("[DBG] nop", parse_nop),
             context("[DBG] export", parse_export),
-            context("[DBG] incbin", parse_incbin),
             context("[DBG] limit", parse_limit),
             context("[DBG] print", parse_print),
             context("[DBG] fail", parse_fail),
@@ -1677,7 +1677,8 @@ fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
 fn parse_directive3(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     alt((
         context("[DBG] db", parse_db_or_dw_or_str),
-        context("[DBG] include", parse_include),
+            context("[DBG] incbin", parse_incbin),
+            context("[DBG] include", parse_include),
         context("[DBG] struct", parse_struct),
         context(
             "[DBG] macro or struct call",
@@ -2232,20 +2233,17 @@ pub fn parse_db_or_dw_or_str(
 
     Ok((
         input,
-        LocatedToken::Standard {
-            token: if code == 0 {
-                Token::Defb(expr)
-            }
-            else if code == 1 {
-                Token::Defw(expr)
-            }
-            else
-            // if code == 2
-            {
-                Token::Str(expr)
-            },
-            span: token_span
+        if code == 0 {
+            LocatedToken::Defb(expr, token_span)
         }
+        else if code == 1 {
+            LocatedToken::Defw(expr, token_span)
+        }
+        else
+        // if code == 2
+        {
+            LocatedToken::Str(expr, token_span)
+        },
     ))
 }
 
@@ -2454,7 +2452,7 @@ fn parse_directive_word(
 
 fn parse_word(
     name: &'static str
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> + 'static {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Span, VerboseError<Z80Span>> {
     move |input: Z80Span| {
         map(
             tuple((
@@ -2486,10 +2484,10 @@ pub fn parse_djnz(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Spa
 }
 
 /// ...
-pub fn expr_list(input: Z80Span) -> IResult<Z80Span, Vec<Expr>, VerboseError<Z80Span>> {
+pub fn expr_list(input: Z80Span) -> IResult<Z80Span, Vec<LocatedExpr>, VerboseError<Z80Span>> {
     separated_list1(
         tuple((tag(","), space0)),
-        cut(context("Error in expression", alt((expr, string_expr))))
+        cut(context("Error in expression", alt((located_expr, string_expr))))
     )(input)
 }
 
@@ -3185,7 +3183,7 @@ pub fn parse_indexregister_with_index(
 
     let (input, op) = preceded(
         space0,
-        alt((value(Oper::Add, tag("+")), value(Oper::Sub, tag("-"))))
+        alt((value(BinaryOperation::Add, tag("+")), value(BinaryOperation::Sub, tag("-"))))
     )(input)?;
 
     let (input, expr) = terminated(expr, tuple((space0, tag(")"))))(input)?;
@@ -3195,8 +3193,8 @@ pub fn parse_indexregister_with_index(
         DataAccess::IndexRegister16WithIndex(
             reg.get_indexregister16().unwrap(),
             match op {
-                Oper::Add => expr,
-                Oper::Sub => expr.neg(),
+                BinaryOperation::Add => expr,
+                BinaryOperation::Sub => expr.neg(),
                 _ => unreachable!()
             }
         )
@@ -3490,14 +3488,16 @@ pub fn string_between_quotes(input: Z80Span) -> IResult<Z80Span, Z80Span, Verbos
 }
 
 /// TODO
-pub fn string_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn string_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
     map(string_between_quotes, |string| {
-        Expr::String(SmolStr::from(string.to_string()))
+        LocatedExpr::String(string)
     })(input)
 }
 
-pub fn char_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
-    map(
+pub fn char_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
+    let (input, c) =
         alt((
             delimited(
                 tag("\""),
@@ -3509,9 +3509,14 @@ pub fn char_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>
                 cpclib_common::nom::character::complete::anychar,
                 tag("'")
             )
-        )),
-        |c| Expr::Char(c)
-    )(input)
+        ))(input)?;
+
+
+    let span = input_start.take(input_start.input_len()-input.input_len());
+    Ok((
+        input,
+        LocatedExpr::Char(c, span)
+    ))
 }
 
 /// Parse a label(label: S)
@@ -3650,7 +3655,9 @@ pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, Z80Span, VerboseErro
     )(input)
 }
 
-pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
     let (input, prefix) = alt((
         value(LabelPrefix::Bank, tag_no_case("{bank}")),
         value(LabelPrefix::Page, tag_no_case("{page}")),
@@ -3659,13 +3666,14 @@ pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseErro
     let (input, label) = preceded(
         space0,
         alt((
-            map(parse_label(false), |l| SmolStr::from(l)),
-            map(tag_no_case("$"), |_| SmolStr::from("$")),
-            map(tag_no_case("$$"), |_| SmolStr::from("$$"))
+            parse_label(false),
+            tag_no_case("$"),
+            tag_no_case("$$")
         ))
     )(input)?;
 
-    Ok((input, Expr::PrefixedLabel(prefix, label.into())))
+    let span = input_start.take(input_start.input_len()-input.input_len());
+    Ok((input, LocatedExpr::PrefixedLabel(prefix, label, span)))
 }
 
 // Parse an ASM file an returns the stream of tokens.
@@ -3682,7 +3690,7 @@ pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseErro
 // XXX Code greatly inspired from https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs
 
 /// Read a value
-pub fn parse_value(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_value(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
     let input_start = input.clone();
 
     let alien_start = input.deref().clone();
@@ -3691,53 +3699,77 @@ pub fn parse_value(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Spa
             cpclib_common::nom::Err::Error(VerboseError::from_error_kind(input, ErrorKind::Verify))
         })?;
 
-    let input = input_start
+    let (span, input) = input_start
         .take_split(alien_start.input_len() - alien_end.input_len())
-        .1;
-    Ok((input, Expr::Value(val as i32)))
+        ;
+    Ok((input, LocatedExpr::Value(val as i32, span)))
 }
 
 /// Parse a repetition counter
-pub fn parse_counter(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_counter(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+
     map(
-        delimited(
+        recognize(delimited(
             tag("{".into()),
             parse_label(false), // BUG will accept too many cases
             pair(tag("}".into()), not(alphanumeric1))
-        ),
-        |l| Expr::Label(format!("{{{}}}", l).into())
+        )),
+        |l| LocatedExpr::Label(l)
     )(input)
 }
 
 /// Read a parenthesed expression
-pub fn parens(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
-    delimited(
+pub fn parens(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
+    let (input, exp) = delimited(
         delimited(my_space0, tag("("), my_space0),
-        map(map(expr, Box::new), Expr::Paren),
+        located_expr,
         delimited(my_space0, tag(")"), space0)
-    )(input)
+    )(input)?;
+
+    let span = input_start.take(input_start.len()-input.len());
+    Ok((input, LocatedExpr::Paren(
+        Box::new(exp),
+        span
+    )))
 }
 
-pub fn parse_expr_bracketed_list(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
-    map(
+pub fn parse_expr_bracketed_list(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
+
+    let (input, list) = 
         delimited(
             pair(tag("["), my_space0),
-            separated_list0(parse_comma, expr),
+            separated_list0(parse_comma, located_expr),
             pair(my_space0, tag("]"))
-        ),
-        |l| Expr::List(l)
-    )(input)
+        )(input)?;
+
+        let span = input_start.take(input_start.len()-input.len());
+    Ok((input, LocatedExpr::List(list, span)))
 }
 
-pub fn parse_bool_expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
-    alt((
-        map(parse_word("true"), |_| Expr::Bool(true)),
-        map(parse_word("false"), |_| Expr::Bool(false))
-    ))(input)
+pub fn parse_bool_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+    let (input, bool) = alt((
+        map(parse_word("true"), |_| true),
+        map(parse_word("false"), |_| false)
+    ))(input)?;
+    let span = input_start.take(input_start.input_len()-input.input_len());
+    Ok((
+        input,
+        LocatedExpr::Bool(
+            bool, 
+            span
+        
+        )
+    ))
 }
 
 // TODO rewire with https://docs.rs/nom/7.1.0/nom/bytes/complete/fn.escaped_transform.html
 pub fn parse_decoded_string(input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
+    panic!("Decoding must be done in assembling phase not parse phase");
     map(parse_string, |s| {
         s.replace("\\\\", "\\")
             .replace("\\a", &char::from(7).to_string())
@@ -3751,7 +3783,9 @@ pub fn parse_decoded_string(input: Z80Span) -> IResult<Z80Span, String, VerboseE
 }
 
 /// Get a factor
-pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn factor(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
     let (input, neg) = opt(delimited(
         space0,
         alt((tag("!"), parse_word("NOT"))),
@@ -3769,7 +3803,10 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                 alt((
                     parse_expr_bracketed_list,
                     // Manage functions
-                    map(parse_word("RND()"), |_| Expr::Rnd),
+                    map(
+                        parse_word("RND()"), 
+                        |w| LocatedExpr::Rnd(w)
+                    ),
                     parse_unary_function_call,
                     parse_binary_function_call,
                     parse_duration,
@@ -3778,15 +3815,24 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
                     // manage values
                     alt((positive_number, negative_number)),
                     char_expr,
-                    map(parse_decoded_string, |s| Expr::String(s.into())),
+                    map(
+                        parse_string, 
+                        |s| LocatedExpr::String(s)
+                    ),
                     parse_counter,
                     // manage $
-                    map(tag("$$"), |_x| Expr::Label(SmolStr::from("$$"))),
-                    map(tag("$"), |_x| Expr::Label(SmolStr::from("$"))),
+                    map(
+                        tag("$$"), 
+                        |l| LocatedExpr::Label(l)),
+                    map(
+                        tag("$"), 
+                        |l| LocatedExpr::Label(l)),
                     parse_bool_expr,
                     prefixed_label_expr,
                     // manage labels
-                    map(parse_label(false), |l| Expr::Label(l.into())),
+                    map(
+                        parse_label(false), 
+                        |l| LocatedExpr::Label(l)),
                     parens
                 ))
             ),
@@ -3795,37 +3841,59 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
     )(input)?;
 
     let factor = match neg {
-        Some(_) => Expr::Neg(factor.into()),
+        Some(_) => LocatedExpr::UnaryOperation(
+            UnaryOperation::Neg, 
+            Box::new(factor),
+            input_start.take(input_start.input_len()-input.input_len())
+        ),
         None => factor
     };
 
     let factor = match not {
-        Some(_) => Expr::BinaryNot(factor.into()),
+        Some(_) => LocatedExpr::UnaryOperation(
+            UnaryOperation::Not, 
+            Box::new(factor),
+            input_start.take(input_start.input_len()-input.input_len())
+        ),
         None => factor
     };
 
     Ok((input, factor))
 }
 
-pub fn negative_number(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
-    map(preceded(tag("-"), positive_number), |exp| {
+pub fn negative_number(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
+    let (input, v) = map(preceded(tag("-"), positive_number), |exp| {
         match exp {
-            Expr::Value(v) => Expr::Value(-v),
+            LocatedExpr::Value(v, _) => -v,
             _ => unreachable!()
         }
-    })(input)
+    })(input)?;
+
+    let span = input_start.take(input_start.len()-input.len());
+    Ok((
+        input,
+        LocatedExpr::Value(v, span)
+    ))
 }
 
-pub fn positive_number(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
-    map(
+pub fn positive_number(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
+    let (input, number) = 
         terminated(
             alt((hex_number_inner, bin_number_inner, dec_number_inner)),
             not(one_of(
                 "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@_"
             ))
-        ),
-        |d: u32| Expr::Value(d as i32)
-    )(input)
+        )(input)?;
+
+        let span  = input_start.take(input_start.input_len()-input.input_len());
+    Ok((
+        input,
+        LocatedExpr::Value(number as _,span)
+    ))
 }
 
 pub fn parse_labelprefix(input: Z80Span) -> IResult<Z80Span, LabelPrefix> {
@@ -3836,45 +3904,27 @@ pub fn parse_labelprefix(input: Z80Span) -> IResult<Z80Span, LabelPrefix> {
     ))(input)
 }
 
-fn fold_exprs(initial: Expr, remainder: Vec<(Oper, Expr)>) -> Expr {
-    remainder.into_iter().fold(initial, |acc, pair| {
+fn fold_exprs(initial: LocatedExpr, remainder: Vec<(BinaryOperation, LocatedExpr)>, span:  Z80Span) -> LocatedExpr {
+    remainder.into_iter().fold(initial, move |acc, pair| {
         let (oper, expr) = pair;
-        match oper {
-            Oper::Add => Expr::Add(Box::new(acc), Box::new(expr)),
-            Oper::Sub => Expr::Sub(Box::new(acc), Box::new(expr)),
-            Oper::Mul => Expr::Mul(Box::new(acc), Box::new(expr)),
-            Oper::Div => Expr::Div(Box::new(acc), Box::new(expr)),
-            Oper::Mod => Expr::Mod(Box::new(acc), Box::new(expr)),
-            Oper::RightShift => Expr::RightShift(Box::new(acc), Box::new(expr)),
-            Oper::LeftShift => Expr::LeftShift(Box::new(acc), Box::new(expr)),
+        LocatedExpr::BinaryOperation(oper, Box::new(acc), Box::new(expr), span.clone())
 
-            Oper::BinaryAnd => Expr::BinaryAnd(Box::new(acc), Box::new(expr)),
-            Oper::BinaryOr => Expr::BinaryOr(Box::new(acc), Box::new(expr)),
-            Oper::BinaryXor => Expr::BinaryXor(Box::new(acc), Box::new(expr)),
-
-            Oper::BooleanAnd => Expr::BooleanAnd(Box::new(acc), Box::new(expr)),
-            Oper::BooleanOr => Expr::BooleanOr(Box::new(acc), Box::new(expr)),
-
-            Oper::Equal => Expr::Equal(Box::new(acc), Box::new(expr)),
-            Oper::Different => Expr::Different(Box::new(acc), Box::new(expr)),
-            Oper::StrictlyGreater => Expr::StrictlyGreater(Box::new(acc), Box::new(expr)),
-            Oper::StrictlyLower => Expr::StrictlyLower(Box::new(acc), Box::new(expr)),
-            Oper::LowerOrEqual => Expr::LowerOrEqual(Box::new(acc), Box::new(expr)),
-            Oper::GreaterOrEqual => Expr::GreaterOrEqual(Box::new(acc), Box::new(expr))
-        }
     })
 }
 
 /// Compute operations related to * % /
-pub fn term(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn term(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
     let (input, initial) = factor(input)?;
     let (input, remainder) = many0(alt((
-        parse_oper(factor, "*", Oper::Mul),
-        parse_oper(factor, "%", Oper::Mod),
-        parse_oper(factor, "/", Oper::Div)
+        parse_oper(factor, "*", BinaryOperation::Mul),
+        parse_oper(factor, "%", BinaryOperation::Mod),
+        parse_oper(factor, "/", BinaryOperation::Div)
     )))(input)?;
 
-    Ok((input, fold_exprs(initial, remainder)))
+    let span  =input_start.take(input_start.input_len()-input.input_len());
+    Ok((input, fold_exprs(initial, remainder, span)))
 }
 
 /// Generate a parser of comparison symbol
@@ -3884,10 +3934,10 @@ pub fn term(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
 fn parse_oper<F>(
     inner: F,
     pattern: &'static str,
-    symbol: Oper
-) -> impl Fn(Z80Span) -> IResult<Z80Span, (Oper, Expr), VerboseError<Z80Span>>
+    symbol: BinaryOperation
+) -> impl Fn(Z80Span) -> IResult<Z80Span, (BinaryOperation, LocatedExpr), VerboseError<Z80Span>>
 where
-    F: Fn(Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>>
+    F: Fn(Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>>
 {
     move |input: Z80Span| {
         let (input, _) = space0(input)?;
@@ -3902,10 +3952,10 @@ where
 fn parse_bool<F>(
     inner: F,
     pattern: &'static str,
-    symbol: Oper
-) -> impl Fn(Z80Span) -> IResult<Z80Span, (Oper, Expr), VerboseError<Z80Span>>
+    symbol: BinaryOperation
+) -> impl Fn(Z80Span) -> IResult<Z80Span, (BinaryOperation, LocatedExpr), VerboseError<Z80Span>>
 where
-    F: Fn(Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>>
+    F: Fn(Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>>
 {
     move |input: Z80Span| {
         let (input, _) = space0(input)?;
@@ -3918,43 +3968,49 @@ where
 }
 
 /// Parse an expression
-pub fn expr2(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn expr2(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
     let (input, initial) = shift(input)?;
     let (input, remainder) = many0(alt((
-        parse_oper(shift, "<=", Oper::LowerOrEqual),
-        parse_oper(shift, "<", Oper::StrictlyLower),
-        parse_oper(shift, ">=", Oper::GreaterOrEqual),
-        parse_oper(shift, ">", Oper::StrictlyGreater),
-        parse_oper(shift, "==", Oper::Equal),
-        parse_oper(shift, "!=", Oper::Different)
+        parse_oper(shift, "<=", BinaryOperation::LowerOrEqual),
+        parse_oper(shift, "<", BinaryOperation::StrictlyLower),
+        parse_oper(shift, ">=", BinaryOperation::GreaterOrEqual),
+        parse_oper(shift, ">", BinaryOperation::StrictlyGreater),
+        parse_oper(shift, "==", BinaryOperation::Equal),
+        parse_oper(shift, "!=", BinaryOperation::Different)
     )))(input)?;
 
-    Ok((input, fold_exprs(initial, remainder)))
+    let span = input_start.take(input_start.input_len()-input.input_len());
+    Ok((input, fold_exprs(initial, remainder, span )))
 }
 
-fn located_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
-    let start = input.clone();
-    let (stop, exp) = expr(input)?;
-    let len = start.input_len() - stop.input_len();
-    Ok((
-        stop,
-        LocatedExpr::new(exp, start.take(len))
-    ))
+fn expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+
+    map(    
+        located_expr,
+        |e| e.to_expr()
+    )(input)
+
 }
 
 
 /// TODO replace ALL expr parse by a located version
-pub fn expr(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn located_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
     let (input, initial) = expr2(input)?;
     let (input, remainder) = many0(alt((
-        parse_oper(expr2, "&&", Oper::BooleanAnd),
-        parse_oper(expr2, "||", Oper::BooleanOr)
+        parse_oper(expr2, "&&", BinaryOperation::BooleanAnd),
+        parse_oper(expr2, "||", BinaryOperation::BooleanOr)
     )))(input)?;
-    Ok((input, fold_exprs(initial, remainder)))
+    let span = input_start.take(input_start.input_len()-input.input_len());
+    Ok((input, fold_exprs(initial, remainder, span)))
 }
 
 /// parse functions with one argument
-pub fn parse_unary_function_call(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_unary_function_call(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
     let (input, func) = alt((
         value(
             UnaryFunction::High,
@@ -3987,16 +4043,20 @@ pub fn parse_unary_function_call(input: Z80Span) -> IResult<Z80Span, Expr, Verbo
         "UNARY function: error in parameters",
         delimited(
             tuple((space0, tag("("), space0)),
-            expr,
+            located_expr,
             tuple((space0, tag(")")))
         )
     ))(input)?;
 
-    Ok((input, Expr::UnaryFunction(func, Box::new(exp))))
+    let span = input_start.take(input_start.input_len()-input.input_len());
+
+    Ok((input, LocatedExpr::UnaryFunction(func, Box::new(exp), span)))
 }
 
 /// parse functions with two arguments
-pub fn parse_binary_function_call(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_binary_function_call(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
     let (input, func) = alt((
         value(BinaryFunction::Min, tag_no_case("MIN")),
         value(BinaryFunction::Max, tag_no_case("MAX")),
@@ -4005,80 +4065,111 @@ pub fn parse_binary_function_call(input: Z80Span) -> IResult<Z80Span, Expr, Verb
 
     let (input, _) = tuple((space0, tag("("), space0))(input)?;
 
-    let (input, arg1) = expr(input)?;
+    let (input, arg1) = located_expr(input)?;
     let (input, _) = tuple((space0, tag(","), space0))(input)?;
-    let (input, arg2) = expr(input)?;
+    let (input, arg2) = located_expr(input)?;
 
     let (input, _) = tuple((space0, tag(")")))(input)?;
 
+    let span = input_start.take(input_start.input_len()-input.input_len());
     Ok((
         input,
-        Expr::BinaryFunction(func, Box::new(arg1), Box::new(arg2))
+        LocatedExpr::BinaryFunction(
+            func, 
+            Box::new(arg1), 
+            Box::new(arg2),
+            span
+        )
     ))
 }
 
-pub fn parse_any_function_call(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_any_function_call(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
+
     let (input, function_name) = parse_label(false)(input)?;
     let (input, arguments) = delimited(
         tuple((/* space0, */ tag("("), my_space0)),
-        separated_list0(parse_comma, expr),
+        separated_list0(parse_comma, located_expr),
         tuple((my_space0, tag(")")))
     )(input)?;
 
-    Ok((input, Expr::AnyFunction(function_name.into(), arguments)))
+    let span = input_start.take(input_start.input_len()-input.input_len());
+    Ok((input, LocatedExpr::AnyFunction(function_name, arguments,span
+    )))
 }
 
 /// Parser for functions taking into argument a token
 pub fn token_function<'a>(
     function_name: &'static str
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     move |input: Z80Span| {
         let (input, _) = tuple((tag_no_case(function_name), space0, char('('), space0))(input)?;
 
         let (input, token) = parse_token(input)?;
-        let token = token.token().clone(); // remove the location
 
         let (input, _) = tuple((space0, tag(")")))(input)?;
 
-        Ok((input, token.unwrap().clone()))
+        Ok((input, token))
     }
 }
 
 /// Parse the duration function
-pub fn parse_duration(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_duration(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
     let (input, token) = token_function("duration")(input)?;
-    Ok((input, Expr::Duration(Box::new(token))))
+
+    let span  =input_start.take(input_start.input_len()-input.input_len());
+    Ok((input, LocatedExpr::UnaryTokenOperation(UnaryTokenOperation::Duration, Box::new(token), 
+    span)))
 }
 
 /// Parse the single opcode assembling function
-pub fn parse_assemble(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn parse_assemble(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
     let (input, token) = token_function("opcode")(input)?;
-    Ok((input, Expr::OpCode(Box::new(token))))
+
+    let span =  input_start.take(input_start.input_len()-input.input_len());
+    Ok((input, LocatedExpr::UnaryTokenOperation(UnaryTokenOperation::Opcode, Box::new(token), 
+   span)))
 }
 
-pub fn shift(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn shift(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
+
     let (input, initial) = comp(input)?;
     let (input, remainder) = many0(alt((
-        parse_oper(comp, "<<", Oper::LeftShift),
-        parse_oper(comp, ">>", Oper::RightShift)
+        parse_oper(comp, "<<", BinaryOperation::LeftShift),
+        parse_oper(comp, ">>", BinaryOperation::RightShift)
     )))(input)?;
-    Ok((input, fold_exprs(initial, remainder)))
+    let span =  
+    input_start.take(input_start.input_len()-input.input_len());
+    Ok((input, fold_exprs(initial, remainder,span)))
 }
 
 /// Parse operation related to + - & |
-pub fn comp(input: Z80Span) -> IResult<Z80Span, Expr, VerboseError<Z80Span>> {
+pub fn comp(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
+    let input_start = input.clone();
+
     let (input, initial) = term(input)?;
     let (input, remainder) = many0(alt((
-        parse_oper(term, "+", Oper::Add),
-        parse_oper(term, "-", Oper::Sub),
-        parse_oper(term, "&", Oper::BinaryAnd), /* TODO check if it works and not compete with && */
-        parse_oper(term, "AND", Oper::BinaryAnd),
-        parse_oper(term, "|", Oper::BinaryAnd), /* TODO check if it works and not compete with || */
-        parse_oper(term, "OR", Oper::BinaryOr),
-        parse_oper(term, "^", Oper::BinaryXor), /* TODO check if it works and not compete with ^^ */
-        parse_oper(term, "XOR", Oper::BinaryXor)
+        parse_oper(term, "+", BinaryOperation::Add),
+        parse_oper(term, "-", BinaryOperation::Sub),
+        parse_oper(term, "&", BinaryOperation::BinaryAnd), /* TODO check if it works and not compete with && */
+        parse_oper(term, "AND", BinaryOperation::BinaryAnd),
+        parse_oper(term, "|", BinaryOperation::BinaryAnd), /* TODO check if it works and not compete with || */
+        parse_oper(term, "OR", BinaryOperation::BinaryOr),
+        parse_oper(term, "^", BinaryOperation::BinaryXor), /* TODO check if it works and not compete with ^^ */
+        parse_oper(term, "XOR", BinaryOperation::BinaryXor)
     )))(input)?;
-    Ok((input, fold_exprs(initial, remainder)))
+    let span = input_start.take(input_start.input_len()-input.input_len());
+    Ok((input, fold_exprs(initial, remainder, 
+        span
+    )
+    ))
 }
 
 /// Generate a string from a parsing error. Probably deprecated

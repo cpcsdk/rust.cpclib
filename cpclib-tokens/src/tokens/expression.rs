@@ -7,7 +7,9 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use ordered_float::OrderedFloat;
 
+use crate::ListingElement;
 use crate::tokens::Token;
+
 
 /// Expression nodes.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -34,52 +36,91 @@ pub enum Expr {
     /// Label with a prefix
     PrefixedLabel(LabelPrefix, SmolStr),
 
-    /// This expression node represents the duration of an instruction. The duration is compute at assembling and not at parsing in order to benefit of the symbol table
-    Duration(Box<Token>), // TODO move in a token function stuff
-    OpCode(Box<Token>), // TODO move in a token general function stuff
-
-    // Arithmetic operations
-    RightShift(Box<Expr>, Box<Expr>),
-    LeftShift(Box<Expr>, Box<Expr>),
-
-    Add(Box<Expr>, Box<Expr>),
-    Sub(Box<Expr>, Box<Expr>),
-
-    Mul(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
-    Mod(Box<Expr>, Box<Expr>),
-
-    // Binary operations
-    BinaryAnd(Box<Expr>, Box<Expr>),
-    BinaryOr(Box<Expr>, Box<Expr>),
-    BinaryXor(Box<Expr>, Box<Expr>),
-    BinaryNot(Box<Expr>),
-
-    // Boolean operations
-    BooleanAnd(Box<Expr>, Box<Expr>),
-    BooleanOr(Box<Expr>, Box<Expr>),
-    Neg(Box<Expr>),
-
     Paren(Box<Expr>),
 
-    // Boolean operations
-    Equal(Box<Expr>, Box<Expr>),
-    Different(Box<Expr>, Box<Expr>),
-    LowerOrEqual(Box<Expr>, Box<Expr>),
-    GreaterOrEqual(Box<Expr>, Box<Expr>),
-    StrictlyGreater(Box<Expr>, Box<Expr>),
-    StrictlyLower(Box<Expr>, Box<Expr>),
-
-    /// Hardcoded function with one argument
     UnaryFunction(UnaryFunction, Box<Expr>),
-    /// Hardoded function with two arguments
+    UnaryOperation(UnaryOperation, Box<Expr>),
+    UnaryTokenOperation(UnaryTokenOperation, Box<Token>),
     BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
-    /// Function supposely coded by the user
+    BinaryOperation(BinaryOperation, Box<Expr>, Box<Expr>),
+
+   /// Function supposely coded by the user
     AnyFunction(SmolStr, Vec<Expr>),
 
     /// Random value
     Rnd
 }
+
+/// All methods are unchecked
+pub trait ExprElement : Sized{
+    type ResultExpr: ExprElement;
+    type Token: ListingElement;
+
+
+    fn is_negated(&self) -> bool;
+
+    fn is_relative(&self) -> bool;
+    fn relative_delta(&self) -> i8;
+
+    fn is_value(&self) -> bool;
+    fn value(&self) -> i32;
+
+    fn is_char(&self) -> bool;
+    fn char(&self) -> char;
+
+    fn is_bool(&self) -> bool;
+    fn bool(&self) -> bool;
+
+    fn is_string(&self) -> bool;
+    fn string(&self) -> &str;
+
+    fn is_float(&self) -> bool;
+    fn float(&self) -> OrderedFloat<f64>;
+
+    fn is_list(&self) -> bool;
+    fn list(&self) -> &[Self];
+
+    fn is_label(&self) -> bool;
+    fn label(&self) -> &str;
+
+    fn is_token_operation(&self) -> bool;
+    fn token_operation(&self) -> &UnaryTokenOperation;
+    fn token(&self) -> &Self::Token;
+
+    fn is_prefix_label(&self) -> bool;
+    fn prefix(&self) -> &LabelPrefix;
+
+    fn is_binary_operation(&self) -> bool;
+    fn binary_operation(&self) -> BinaryOperation;
+
+    fn is_unary_operation(&self) -> bool;
+    fn unary_operation(&self) -> UnaryOperation;
+
+    fn is_unary_function(&self) -> bool;
+    fn unary_function(&self) -> UnaryFunction;
+
+    fn is_binary_function(&self) -> bool;
+    fn binary_function(&self) -> BinaryFunction;
+
+    fn is_paren(&self) -> bool;
+
+    fn is_rnd(&self) -> bool;
+
+    fn is_any_function(&self) -> bool;
+    fn function_name(&self) -> &str;
+    fn function_args(&self) -> &[Self];
+
+    fn arg1(&self) -> &Self;
+    fn arg2(&self) -> &Self;
+
+    fn neg(&self) -> Self::ResultExpr;
+    fn not(&self) -> Self::ResultExpr;
+    fn add<E: Into<Self::ResultExpr>>(&self, v: E) -> Self::ResultExpr;
+
+    fn is_context_independant(&self) -> bool;
+    fn fix_relative_value(&mut self);
+}
+
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 /// Represents a prefix that provides information related to banks for a label
@@ -201,7 +242,7 @@ impl From<Expr> for FormattedExpr {
 }
 
 /// Represent a function with one argument
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum UnaryFunction {
     /// High byte of a value
     High,
@@ -249,12 +290,20 @@ impl Display for UnaryFunction {
     }
 }
 
-/// Function with two arguments
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum BinaryFunction {
-    Min,
-    Max,
-    Pow
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum UnaryOperation {
+    Neg,
+    Not
+}
+
+impl Display for UnaryOperation {
+    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
+        let repr = match self {
+            UnaryOperation::Neg => "-",
+            UnaryOperation::Not => "~",
+        };
+        write!(format, "{}", repr)
+    }
 }
 
 impl Display for BinaryFunction {
@@ -266,6 +315,88 @@ impl Display for BinaryFunction {
         };
         write!(format, "{}", repr)
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum UnaryTokenOperation {
+    Duration,
+    Opcode
+}
+
+impl Display for UnaryTokenOperation {
+    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
+        let repr = match self {
+            UnaryTokenOperation::Duration => "DURATION",
+            UnaryTokenOperation::Opcode => "OPCODE",
+        };
+        write!(format, "{}", repr)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum BinaryOperation {
+    RightShift,
+    LeftShift,
+
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+
+    BinaryAnd,
+    BinaryOr,
+    BinaryXor,
+
+    BooleanAnd,
+    BooleanOr,
+
+    Equal,
+    Different,
+    LowerOrEqual,
+    GreaterOrEqual,
+    StrictlyGreater,
+    StrictlyLower
+}
+
+impl Display for BinaryOperation {
+    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
+        use BinaryOperation::*;
+        let repr = match self {
+            RightShift => ">>",
+            LeftShift=> "<<",
+        
+            Add=> "+",
+            Sub=> "-",
+            Mul=> "*",
+            Div=> "/",
+            Mod=> "%",
+        
+            BinaryAnd => "&",
+            BinaryOr =>  "|",
+            BinaryXor =>  "^",
+
+            BooleanAnd =>  "&&",
+            BooleanOr => "||",
+
+            Equal =>  "==",
+            Different => "!=",
+            LowerOrEqual => "<=",
+            GreaterOrEqual => ">=",
+            StrictlyGreater => ">",
+            StrictlyLower => "<",
+
+        };
+        write!(format, "{}", repr)
+    }
+}
+
+/// Function with two arguments
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum BinaryFunction {
+    Min,
+    Max,
+    Pow
 }
 
 impl From<&str> for Expr {
@@ -291,38 +422,47 @@ macro_rules! convert_number_to_expr {
 convert_number_to_expr!(i32 i16 i8 u8 u16 u32 usize);
 
 #[allow(missing_docs)]
-impl Expr {
-    pub fn is_negated(&self) -> bool {
+impl ExprElement for Expr {
+    type ResultExpr = Expr;
+    type Token = Token;
+
+
+
+    fn is_negated(&self) -> bool {
         match self {
-            Expr::Neg(_) => true,
+            Expr::UnaryOperation(UnaryOperation::Neg,_) => true,
             _ => false
         }
     }
 
-    pub fn is_relative(&self) -> bool {
+    fn is_relative(&self) -> bool {
         match self {
             Expr::RelativeDelta(_) => true,
             _ => false
         }
     }
 
-    pub fn relative_delta(&self) -> Option<i8> {
+    fn relative_delta(&self) -> i8 {
         match self {
-            Expr::RelativeDelta(val) => Some(*val),
-            _ => None
+            Expr::RelativeDelta(val) => *val,
+            _ => unreachable!()
         }
     }
 
-    pub fn neg(&self) -> Self {
-        Expr::Neg(Box::new(self.clone()))
+    fn neg(&self) -> Self {
+        Expr::UnaryOperation(UnaryOperation::Neg, Box::new(self.clone()))
     }
 
-    pub fn add<E: Into<Expr>>(&self, v: E) -> Self {
-        Expr::Add(Box::new(self.clone()), v.into().into())
+    fn add<E: Into<Expr>>(&self, v: E) -> Self {
+        Expr::BinaryOperation(
+            BinaryOperation::Add,
+            Box::new(self.clone()),
+            v.into().into()
+        )
     }
 
     /// Check if it is necessary to read within a symbol table
-    pub fn is_context_independant(&self) -> bool {
+    fn is_context_independant(&self) -> bool {
         use self::Expr::*;
         match *self {
             Label(_) => false,
@@ -331,69 +471,156 @@ impl Expr {
     }
 
     /// When disassembling an instruction with relative expressions, the contained value needs to be transformed as an absolute value
-    pub fn fix_relative_value(&mut self) {
+    fn fix_relative_value(&mut self) {
         if let Expr::Value(val) = self {
             let mut new_expr = Expr::RelativeDelta(*val as i8);
             std::mem::swap(self, &mut new_expr);
         }
     }
-}
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-#[allow(missing_docs)]
-pub enum Oper {
-    RightShift,
-    LeftShift,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
 
-    BinaryAnd,
-    BinaryOr,
-    BinaryXor,
+    fn not(&self) -> Self::ResultExpr {
+        todo!()
+    }
 
-    BooleanAnd,
-    BooleanOr,
 
-    Equal,
-    LowerOrEqual,
-    GreaterOrEqual,
-    StrictlyGreater,
-    StrictlyLower,
-    Different
-}
+    fn is_value(&self) -> bool {
+        todo!()
+    }
 
-impl Display for Oper {
-    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
-        use self::Oper::*;
+    fn value(&self) -> i32 {
+        todo!()
+    }
 
-        match self {
-            &Add => write!(format, "+"),
-            &Sub => write!(format, "-"),
-            &Mul => write!(format, "*"),
-            &Div => write!(format, "/"),
-            &Mod => write!(format, "%"),
-            &RightShift => write!(format, ">>"),
-            &LeftShift => write!(format, "<<"),
+    fn is_char(&self) -> bool {
+        todo!()
+    }
 
-            BinaryAnd => write!(format, "&"),
-            BinaryOr => write!(format, "|"),
-            BinaryXor => write!(format, "^"),
+    fn char(&self) -> char {
+        todo!()
+    }
 
-            BooleanAnd => write!(format, "&&"),
-            BooleanOr => write!(format, "||"),
+    fn is_bool(&self) -> bool {
+        todo!()
+    }
 
-            &Equal => write!(format, "=="),
-            &Different => write!(format, "!="),
-            &LowerOrEqual => write!(format, "<="),
-            &GreaterOrEqual => write!(format, ">="),
-            &StrictlyGreater => write!(format, ">"),
-            &StrictlyLower => write!(format, "<")
-        }
+    fn bool(&self) -> bool {
+        todo!()
+    }
+
+    fn is_string(&self) -> bool {
+        todo!()
+    }
+
+    fn string(&self) -> &str {
+        todo!()
+    }
+
+    fn is_float(&self) -> bool {
+        todo!()
+    }
+
+    fn float(&self) -> OrderedFloat<f64> {
+        todo!()
+    }
+
+    fn is_list(&self) -> bool {
+        todo!()
+    }
+
+    fn list(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn is_label(&self) -> bool {
+        todo!()
+    }
+
+    fn label(&self) -> &str {
+        todo!()
+    }
+
+    fn is_token_operation(&self) -> bool {
+        todo!()
+    }
+
+    fn token_operation(&self) -> &UnaryTokenOperation {
+        todo!()
+    }
+
+    fn token(&self) -> &Self::Token {
+        todo!()
+    }
+
+    fn is_prefix_label(&self) -> bool {
+        todo!()
+    }
+
+    fn prefix(&self) -> &LabelPrefix {
+        todo!()
+    }
+
+    fn is_binary_operation(&self) -> bool {
+        todo!()
+    }
+
+    fn binary_operation(&self) -> BinaryOperation {
+        todo!()
+    }
+
+    fn is_unary_operation(&self) -> bool {
+        todo!()
+    }
+
+    fn unary_operation(&self) -> UnaryOperation {
+        todo!()
+    }
+
+    fn is_unary_function(&self) -> bool {
+        todo!()
+    }
+
+    fn unary_function(&self) -> UnaryFunction {
+        todo!()
+    }
+
+    fn is_binary_function(&self) -> bool {
+        todo!()
+    }
+
+    fn binary_function(&self) -> BinaryFunction {
+        todo!()
+    }
+
+    fn is_paren(&self) -> bool {
+        todo!()
+    }
+
+    fn is_rnd(&self) -> bool {
+        todo!()
+    }
+
+    fn is_any_function(&self) -> bool{
+        todo!()
+    }
+
+    fn function_name(&self) -> &str {
+        todo!()
+    }
+
+    fn function_args(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn arg1(&self) -> &Self {
+        todo!()
+    }
+
+    fn arg2(&self) -> &Self {
+        todo!()
     }
 }
+
 
 impl Expr {
     pub fn to_simplified_string(&self) -> String {
@@ -410,61 +637,24 @@ impl Display for Expr {
         match self {
             Rnd => write!(format, "RND()"),
             // Should not be displayed often
-            &RelativeDelta(delta) => write!(format, "$ + {} + 2", delta),
+            RelativeDelta(delta) => write!(format, "$ + {} + 2", delta),
 
-            &Value(val) => write!(format, "0x{:x}", val),
-            &Float(val) => write!(format, "{}", val),
+            Value(val) => write!(format, "0x{:x}", val),
+            Float(val) => write!(format, "{}", val),
             Char(c) => write!(format, "'{}'", c),
             Bool(b) => write!(format, "{}", if *b { "true" } else { "false" }),
-            &String(ref string) => write!(format, "\"{}\"", string),
+            String(ref string) => write!(format, "\"{}\"", string),
             List(l) => write!(format, "[{}]", l.iter().map(|e| e.to_string()).join(",")),
-            &Label(ref label) => write!(format, "{}", label),
+            Label(ref label) => write!(format, "{}", label),
             PrefixedLabel(prefix, label) => write!(format, "{}{}", prefix, label),
 
             UnaryFunction(func, arg) => write!(format, "{}({})", func, arg),
 
             BinaryFunction(func, arg1, arg2) => write!(format, "{}({}, {})", func, arg1, arg2),
+       
+            Paren(ref expr) => write!(format, "({})", expr),
 
-            &Duration(ref token) => write!(format, "DURATION({})", token),
-            &OpCode(ref token) => write!(format, "OPCODE({})", token),
-
-            &RightShift(ref left, ref right) => write!(format, "({} >> {})", left, right),
-            &LeftShift(ref left, ref right) => write!(format, "({} << {})", left, right),
-            &Add(ref left, ref right) => write!(format, "({} + {})", left, right),
-            &Sub(ref left, ref right) => write!(format, "({} - {})", left, right),
-            &Mul(ref left, ref right) => write!(format, "({} * {})", left, right),
-            &Mod(ref left, ref right) => write!(format, "({} % {})", left, right),
-            &Div(ref left, ref right) => write!(format, "({} / {})", left, right),
-
-            BinaryAnd(ref left, ref right) => {
-                write!(format, "{} {} {}", left, Oper::BinaryAnd, right)
-            }
-            BinaryOr(ref left, ref right) => {
-                write!(format, "{} {} {}", left, Oper::BinaryOr, right)
-            }
-            BinaryXor(ref left, ref right) => {
-                write!(format, "{} {} {}", left, Oper::BinaryXor, right)
-            }
-            BinaryNot(ref e) => write!(format, "~({})", e),
-
-            BooleanAnd(ref left, ref right) => {
-                write!(format, "{} {} {}", left, Oper::BooleanAnd, right)
-            }
-            BooleanOr(ref left, ref right) => {
-                write!(format, "{} {} {}", left, Oper::BooleanOr, right)
-            }
-            &Neg(ref e) => write!(format, "-({})", e),
-
-            &Paren(ref expr) => write!(format, "({})", expr),
-
-            &Different(ref left, ref right) => write!(format, "{} != {}", left, right),
-            &Equal(ref left, ref right) => write!(format, "{} == {}", left, right),
-            &GreaterOrEqual(ref left, ref right) => write!(format, "{} >= {}", left, right),
-            &StrictlyGreater(ref left, ref right) => write!(format, "{} > {}", left, right),
-            &StrictlyLower(ref left, ref right) => write!(format, "{} < {}", left, right),
-            &LowerOrEqual(ref left, ref right) => write!(format, "{} <= {}", left, right),
-
-            AnyFunction(name, args) => {
+                      AnyFunction(name, args) => {
                 write!(
                     format,
                     "{}({})",
@@ -472,6 +662,10 @@ impl Display for Expr {
                     args.iter().map(|e| e.to_string()).join(",")
                 )
             }
+
+            UnaryOperation(op, exp) => write!(format, "{}{}", op, exp),
+            UnaryTokenOperation(op, tok) => write!(format, "{}({})", op, tok),
+            BinaryOperation(op, exp1, exp2) => write!(format, "{}({},{})", op, exp1, exp2),
         }
     }
 }

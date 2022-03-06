@@ -552,9 +552,9 @@ impl Env {
     /// If the expression is not solvable in second pass, an error is returned
     ///
     /// However, when assembling in a crunched section, the expression MUST NOT fail. edit: why ? I do not get it now and I have removed this limitation
-    pub fn resolve_expr_may_fail_in_first_pass(
+    pub fn resolve_expr_may_fail_in_first_pass<E:ExprEvaluationExt>(
         &self,
-        exp: &Expr
+        exp: &E
     ) -> Result<ExprResult, AssemblerError> {
         match exp.resolve(self) {
             Ok(value) => Ok(value),
@@ -572,7 +572,8 @@ impl Env {
 
     /// Compute the expression thanks to the symbol table of the environment.
     /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
-    fn resolve_expr_must_never_fail(&self, exp: &Expr) -> Result<ExprResult, AssemblerError> {
+    fn resolve_expr_must_never_fail<E:ExprEvaluationExt>(&self, exp: &E) -> Result<ExprResult, AssemblerError> {
+        
         match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
@@ -1715,7 +1716,7 @@ impl Env {
         }
 
         // setup the value
-        let value = self.resolve_expr_must_never_fail(&source.into())?;
+        let value = self.resolve_expr_must_never_fail(&Expr::Label(source.into()))?;
         if can_override {
             self.symbols_mut()
                 .assign_symbol_to_value(destination, value.clone())?;
@@ -2268,7 +2269,10 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
-pub fn visit_tokens_all_passes<T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> {
+pub fn visit_tokens_all_passes<T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement>(tokens: &[T], ctx: &ParserContext) -> Result<Env, AssemblerError> 
+where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+<<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr: ExprEvaluationExt
+{
     let options = AssemblingOptions::default();
     visit_tokens_all_passes_with_options(tokens, &options, ctx)
 }
@@ -2345,11 +2349,18 @@ impl Env {
 
 /// Visit the tokens during several passes by providing a specific symbol table.
 /// Warning Listing output is only possible for LocatedToken
-pub fn visit_tokens_all_passes_with_options<'token, T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement>(
+pub fn visit_tokens_all_passes_with_options<'token, T>(
     tokens: &'token [T],
     options: &AssemblingOptions,
     ctx: &ParserContext
-) -> Result<Env, AssemblerError> {
+) -> Result<Env, AssemblerError> 
+
+
+where 
+T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement,
+<T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+<<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt
+{
     let mut env = Env::new(options, ctx);
     let mut tokens = processed_token::build_list(tokens, &mut env);
     loop {
@@ -2446,14 +2457,7 @@ pub fn visit_located_token(
                     env.visit_struct_definition(name, content.as_slice(), Some(span))
                         .map_err(|e| e.locate(span.clone()))
                 }
-                Token::Incbin {
-                    fname: _,
-                    offset: _,
-                    length: _,
-                    extended_offset: _,
-                    off: _,
-                    transformation: _
-                } => {
+                Token::Incbin {..} | Token::Include(..) => {
                     panic!("Should never be called");
                     /*
                     if content.read().unwrap().is_none() {
@@ -2558,6 +2562,20 @@ pub fn visit_located_token(
         LocatedToken::Struct(name, args, span) => {
             env.visit_struct_definition(name.as_str(), args, Some(span))
         },
+        LocatedToken::Defb(l, span) => {
+            visit_db_or_dw_or_str(DbLikeKind::Defb, l.as_ref(), env)
+            .map_err(|e| e.locate(span.clone()))
+        },
+        LocatedToken::Defw(l, span) => {
+            visit_db_or_dw_or_str(DbLikeKind::Defw, l.as_ref(), env)
+            .map_err(|e| e.locate(span.clone()))
+        },
+        LocatedToken::Str(l, span) =>{
+            visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), env)
+            .map_err(|e| e.locate(span.clone()))
+        },
+        LocatedToken::Include(..) => panic!("Should never been called"),
+        LocatedToken::Incbin {..} => panic!("Should never been called"),
     }?;
 
     // Patch the warnings to inject them a location
@@ -2595,7 +2613,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Bankset(ref v) => env.visit_bankset(v),
         Token::Breakpoint(ref exp) => env.visit_breakpoint(exp.as_ref(), None),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
-        Token::Defb(_) | Token::Defw(_) | Token::Str(_) => visit_db_or_dw_or_str(token, env),
+        Token::Defb(_) | Token::Defw(_) | Token::Str(_) => todo!("implement the 3 different calls"),
         Token::Defs(_) => visit_defs(token, env),
         Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
             visit_opcode(*mnemonic, &arg1, &arg2, &arg3, env)?;
@@ -2748,11 +2766,37 @@ fn visit_assert(
                 };
 
                 let prefix = match exp {
-                    Expr::Equal(ref left, ref right) => oper(left, right, "=="),
-                    Expr::LowerOrEqual(ref left, ref right) => oper(left, right, "<="),
-                    Expr::GreaterOrEqual(ref left, ref right) => oper(left, right, ">="),
-                    Expr::StrictlyGreater(ref left, ref right) => oper(left, right, ">"),
-                    Expr::StrictlyLower(ref left, ref right) => oper(left, right, "<"),
+                    Expr::BinaryOperation(
+                        BinaryOperation::Equal, 
+                        box left, 
+                        box right
+                    ) => oper(left, right, "=="),
+
+                    Expr::BinaryOperation(
+                        BinaryOperation::LowerOrEqual, 
+                        box left, 
+                        box right
+                    ) => oper(left, right, "<="),
+
+                    Expr::BinaryOperation(
+                        BinaryOperation::GreaterOrEqual, 
+                        box left, 
+                        box right
+                    ) => oper(left, right, ">="),
+
+                    Expr::BinaryOperation(
+                        BinaryOperation::StrictlyLower, 
+                        box left, 
+                        box right
+                    ) => oper(left, right, "<"),
+
+
+                    Expr::BinaryOperation(
+                        BinaryOperation::StrictlyGreater, 
+                        box left, 
+                        box right
+                    ) => oper(left, right, ">"),
+
                     _ => "".to_string()
                 };
 
@@ -2791,9 +2835,9 @@ fn visit_assert(
 }
 
 impl Env {
-    pub fn visit_while<T: ListingElement + Visited>(
+    pub fn visit_while<E: ExprEvaluationExt, T: ListingElement<Expr=E> + Visited>(
         &mut self,
-        cond: &Expr,
+        cond: &E,
         code: &[T],
         span: Option<Z80Span>
     ) -> Result<(), AssemblerError> {
@@ -2811,13 +2855,18 @@ impl Env {
     }
 
     /// Handle the switch directive
-    pub fn visit_switch<'a, T: 'a + ListingElement + Visited>(
+    pub fn visit_switch<'a,T, E> (
         &mut self,
-        value: &Expr,
-        cases: impl Iterator<Item = (&'a Expr, &'a [T], bool)>,
+        value: &E,
+        cases: impl Iterator<Item = (&'a E, &'a [T], bool)>,
         default: Option<&'a [T]>,
         _span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), AssemblerError> 
+    where  
+        E: ExprEvaluationExt,
+        E: 'a,
+        T: 'a + ListingElement<Expr=E> + Visited 
+    {
         let value = self.resolve_expr_must_never_fail(value)?;
         let mut met = false;
         let mut broken = false;
@@ -2848,10 +2897,10 @@ impl Env {
 
     /// Handle the iterate repetition directive
     /// Values is either a list of values or a Expression that represents a list
-    pub fn visit_iterate<T: ListingElement + Visited>(
+    pub fn visit_iterate<E: ExprEvaluationExt + Display, T: ListingElement<Expr=E> + Visited>(
         &mut self,
         counter_name: &str,
-        values: either::Either<&Vec<Expr>, &Expr>,
+        values: either::Either<&Vec<E>, &E>,
         code: &[T],
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
@@ -2921,9 +2970,9 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_rorg<T: ListingElement + Visited>(
+    pub fn visit_rorg<E: ExprEvaluationExt, T: ListingElement<Expr=E> + Visited>(
         &mut self,
-        address: &Expr,
+        address: &E,
         code: &[T],
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
@@ -2969,12 +3018,12 @@ impl Env {
     }
 
     /// Handle the for directive
-    pub fn visit_for<T: ListingElement + Visited>(
+    pub fn visit_for<E: ExprEvaluationExt, T: ListingElement<Expr=E> + Visited>(
         &mut self,
         label: &str,
-        start: &Expr,
-        stop: &Expr,
-        step: Option<&Expr>,
+        start: &E,
+        stop: &E,
+        step: Option<&E>,
         code: &[T],
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
@@ -3043,12 +3092,16 @@ impl Env {
     }
 
     /// Handle the standard repetition directive
-    pub fn visit_repeat_until<T: ListingElement + Visited>(
+    pub fn visit_repeat_until<E, T>(
         &mut self,
-        cond: &Expr,
+        cond: &E,
         code: &[T],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), AssemblerError> 
+    where
+    E: ExprEvaluationExt, 
+    T: ListingElement<Expr=E> + Visited
+    {
         let mut i = 0;
         loop {
             i = i + 1;
@@ -3063,14 +3116,19 @@ impl Env {
     }
 
     /// Handle the statndard repetition directive
-    pub fn visit_repeat<T: ListingElement + Visited>(
+    pub fn visit_repeat<T, E>
+    (
         &mut self,
-        count: &Expr,
+        count: &E,
         code: &[T],
         counter: Option<&str>,
-        counter_start: Option<&Expr>,
+        counter_start: Option<&E>,
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), AssemblerError> 
+    where 
+        E: ExprEvaluationExt,
+        T: ListingElement<Expr=E> + Visited,
+    {
         // get the number of loops
         let count = self.resolve_expr_must_never_fail(count)?.int()?;
 
@@ -3094,7 +3152,6 @@ impl Env {
 
         // get the first value
         let mut counter_value = counter_start
-            .as_ref()
             .map(|start| self.resolve_expr_must_never_fail(start))
             .unwrap_or(Ok(REPEAT_START_VALUE.into()))?;
 
@@ -3193,15 +3250,30 @@ impl Env {
             )
         };
 
-        match exp {
-            Expr::Equal(left, right) => format("==", left, right),
-            Expr::GreaterOrEqual(left, right) => format(">=", left, right),
-            Expr::StrictlyGreater(left, right) => format(">", left, right),
-            Expr::StrictlyLower(left, right) => format("<", left, right),
-            Expr::LowerOrEqual(left, right) => format("<=", left, right),
+        if exp.is_binary_operation() {
+            let code = match exp.binary_operation() {
+                BinaryOperation::Equal => Some("=="),
+                BinaryOperation::GreaterOrEqual => Some(">="),
+                BinaryOperation::StrictlyGreater => Some(">"),
+                BinaryOperation::StrictlyLower => Some("<"),
+                BinaryOperation::LowerOrEqual => Some("<="),
+                _ => None
+            };
 
-            _ => format!("0x{:x}", self.resolve_expr_must_never_fail(exp).unwrap())
+            match code {
+                Some(code) => {
+                    let left = exp.arg1();
+                    let right = exp.arg2();
+                    format(code, left, right)
+                },
+            
+                None => format!("0x{:x}", self.resolve_expr_must_never_fail(exp).unwrap())
+            }
+
+        } else {
+            format!("0x{:x}", self.resolve_expr_must_never_fail(exp).unwrap())
         }
+
     }
 
     fn visit_run(&mut self, address: &Expr, ga: Option<&Expr>) -> Result<(), AssemblerError> {
@@ -3272,15 +3344,27 @@ fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     }
 }
 
-// TODO refactor code with assemble_opcode or other functions manipulating bytes
-pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
-    let (ref exprs, mask) = {
-        match token {
-            Token::Defb(ref exprs) | Token::Str(ref exprs) => (exprs, 0xFF),
-            Token::Defw(ref exprs) => (exprs, 0xFFFF),
-            _ => unreachable!()
+pub enum DbLikeKind {
+    Defb,
+    Defw,
+    Str
+}
+
+impl DbLikeKind {
+    fn mask(&self) -> u16 {
+        match self {
+            DbLikeKind::Defb => 0xff,
+            DbLikeKind::Defw => 0xffff,
+            DbLikeKind::Str => 0xff,
         }
-    };
+    }
+}
+
+// TODO refactor code with assemble_opcode or other functions manipulating bytes
+pub fn visit_db_or_dw_or_str<E:ExprEvaluationExt + ExprElement>(kind: DbLikeKind, exprs: &[E], env: &mut Env) -> Result<(), AssemblerError> {
+    let mask = kind.mask();
+
+
 
     let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {
         if mask == 0xFF {
@@ -3325,29 +3409,28 @@ pub fn visit_db_or_dw_or_str(token: &Token, env: &mut Env) -> Result<(), Assembl
 
     let backup_address = env.logical_output_address();
     for exp in exprs.iter() {
-        match exp {
-            Expr::String(s) => {
-                let bytes = env.charset_encoding.transform_string(s);
-                for b in &bytes {
-                    output(env, *b as _, mask)?
-                }
-                env.update_dollar();
+        if exp.is_string() {
+            let s = exp.string();
+            let bytes = env.charset_encoding.transform_string(s);
+            for b in &bytes {
+                output(env, *b as _, mask)?
             }
-            Expr::Char(c) => {
-                let b = env.charset_encoding.transform_char(*c);
-                output(env, b as _, mask)?;
-                env.update_dollar();
-            }
-            _ => {
-                let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
-                output_expr_result(env, val, mask)?;
-                env.update_dollar();
-            }
+            env.update_dollar();
+        }
+        else if exp.is_char() {
+            let c = exp.char();
+            let b = env.charset_encoding.transform_char(c);
+            output(env, b as _, mask)?;
+            env.update_dollar();
+        } else {
+            let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
+            output_expr_result(env, val, mask)?;
+            env.update_dollar();
         }
     }
 
     // Patch the last char of a str
-    if matches!(token, Token::Str(_)) && backup_address < env.logical_output_address() {
+    if matches!(kind, DbLikeKind::Str) && backup_address < env.logical_output_address() {
         let last_address = env.logical_output_address() - 1;
         let last_address = env.logical_to_physical_address(last_address as _);
         let last_value = env.peek(&last_address);

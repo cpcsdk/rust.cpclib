@@ -5,6 +5,8 @@ use crate::tokens::listing::*;
 impl ListingElement for Token {
     type MacroParam = MacroParam;
     type TestKind = TestKind;
+    type Expr = Expr;
+
 
 
     fn macro_call_name(&self) -> &str {
@@ -64,6 +66,42 @@ impl ListingElement for Token {
         match self {
             Token::Incbin{..} => true,
             _ => false
+        }
+    }
+
+
+    fn incbin_fname(&self) -> &str {
+        match self{
+            Self::Incbin{fname, ..} => fname.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn incbin_offset(&self) -> Option<&Self::Expr> {
+        match self{
+            Self::Incbin{offset, ..} => offset.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn incbin_length(&self) -> Option<&Self::Expr> {
+        match self{
+            Self::Incbin{length, ..} => length.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn incbin_transformation(&self) -> &BinaryTransformation {
+        match self{
+            Self::Incbin{transformation, ..} => transformation,
+            _ => unreachable!()
+        }
+    }
+
+    fn include_fname(&self) -> &str {
+        match self{
+            Self::Include(fname, _, _) => fname.as_ref(),
+            _ => unreachable!()
         }
     }
 

@@ -13,7 +13,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
 use cpclib_tokens::symbols::{Symbol, SymbolError};
-use cpclib_tokens::{tokens, ExpressionTypeError, Oper};
+use cpclib_tokens::{tokens, ExpressionTypeError, BinaryOperation};
 
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
@@ -22,9 +22,9 @@ use crate::{PhysicalAddress, Z80Span};
 
 #[derive(Debug, Clone)]
 pub enum ExpressionError {
-    LeftError(Oper, Box<AssemblerError>),
-    RightError(Oper, Box<AssemblerError>),
-    LeftAndRightError(Oper, Box<AssemblerError>, Box<AssemblerError>),
+    LeftError(BinaryOperation, Box<AssemblerError>),
+    RightError(BinaryOperation, Box<AssemblerError>),
+    LeftAndRightError(BinaryOperation, Box<AssemblerError>, Box<AssemblerError>),
     OwnError(Box<AssemblerError>),
     InvalidSize(usize, usize) // expected index
 }
@@ -954,6 +954,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
         fn guess(&self, code: &str, mut offset: usize) -> usize {
 
             dbg!(code, code.len(), offset);
+            
             match self {
                 EndKind::End => {
                     for current in code[offset..].chars() {

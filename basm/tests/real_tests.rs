@@ -3,7 +3,7 @@ use std::{process::{Command, Output}, fs::remove_dir};
 use test_generator::test_resources;
 use pretty_assertions::{assert_eq, assert_ne};
 
-const BUILD_BASM: bool = false;
+const BUILD_BASM: bool = true;
 
 fn build_basm() {
     if BUILD_BASM {

@@ -3,12 +3,13 @@ use std::borrow::Cow;
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 
-use crate::{Token, MacroParamElement, MacroParam, TestKind, TestKindElement};
+use crate::{Token, MacroParamElement, MacroParam, TestKind, TestKindElement, BinaryTransformation, ExprElement};
 /// The ListingElement trait contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
 pub trait ListingElement: Debug + Sized {
     type MacroParam: MacroParamElement;
     type TestKind: TestKindElement;
+    type Expr: ExprElement;
 
     fn macro_call_name(&self) -> &str;
     fn macro_call_arguments(&self) -> &[Self::MacroParam];
@@ -18,46 +19,14 @@ pub trait ListingElement: Debug + Sized {
     fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]);
     fn if_else(&self) -> Option<&[Self]>;
 
-    fn is_include(&self) -> bool;
     fn is_incbin(&self) -> bool;
-}
+    fn incbin_fname(&self) -> &str;
+    fn incbin_offset(&self) -> Option<&Self::Expr>;
+    fn incbin_length(&self) -> Option<&Self::Expr>;
+    fn incbin_transformation(&self) -> &BinaryTransformation;
 
-impl<'t> ListingElement for Cow<'t, Token> {
-    type MacroParam = MacroParam;
-    type TestKind = TestKind;
-
-    fn macro_call_name(&self) -> &str {
-        self.as_ref().macro_call_name()
-    }
-
-    fn macro_call_arguments(&self) -> &[Self::MacroParam] {
-        self.as_ref().macro_call_arguments()
-    }
-
-    fn if_nb_tests(&self) -> usize{
-        self.as_ref().if_nb_tests()
-    }
-
-    fn if_test(&self, idx: usize) ->  (&Self::TestKind, &[Self]) {
-        unimplemented!()
-    }
-
-    fn if_else(&self) -> Option<&[Self]> {
-        unimplemented!()
-
-    }
-
-    fn is_if(&self) -> bool {
-        self.as_ref().is_if()
-    }
-
-    fn is_include(&self) -> bool {
-        self.as_ref().is_include()
-    }
-
-    fn is_incbin(&self) -> bool {
-        self.as_ref().is_incbin()
-    }
+    fn is_include(&self) -> bool;
+    fn include_fname(&self) -> &str;
 }
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]

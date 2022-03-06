@@ -1,6 +1,4 @@
-use std::borrow::Cow;
 use std::fmt::Debug;
-use std::ops::Deref;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
@@ -80,6 +78,8 @@ pub trait TokenExt: ListingElement + Clone + Debug {
     }
 }
 
+/*
+
 impl<'t> TokenExt for Cow<'t, Token> {
     fn disassemble_data(&self) -> Result<Listing, String> {
         self.deref().disassemble_data()
@@ -97,6 +97,8 @@ impl<'t> TokenExt for Cow<'t, Token> {
         unimplemented!("signature issue. should be transformed/unused")
     }
 }
+*/
+
 
 impl TokenExt for Token {
     /// Unroll the tokens when in a repetition loop
@@ -159,12 +161,15 @@ impl TokenExt for Token {
             }
 
             Token::Defb(_) | Token::Defw(_) => {
+                todo!();
+                /*
                 use crate::assembler::visit_db_or_dw_or_str;
 
                 let mut env = Env::default();
                 visit_db_or_dw_or_str(self, &mut env)
                     .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
                 wrap(&env.produced_bytes())
+                */
             }
 
             _ => {

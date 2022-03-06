@@ -3,9 +3,11 @@ use crate::ParserContext;
 use crate::AssemblerError; 
 use crate::LocatedToken;
 use crate::Env;
+use crate::implementation::expression::ExprEvaluationExt;
 use crate::preamble::LocatedListing;
 use crate::preamble::parse_z80_str_with_context;
 
+use cpclib_tokens::Listing;
 use cpclib_tokens::ListingElement;
 use cpclib_tokens::TestKindElement;
 use cpclib_tokens::ToSimpleToken;
@@ -72,7 +74,8 @@ impl Debug for IncludeState {
 
 /// Store for each branch (if passed at some point) the test result and the listing
 #[derive(Debug, Clone)]
-struct IfState<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync>{
+struct IfState<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync>
+{
     // The token that contains the tests and listings
     token: &'token T,
     if_token_adr_to_used_decision: std::collections::HashMap<usize, bool>,
@@ -84,7 +87,9 @@ struct IfState<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Syn
 }
 
 
-impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> IfState<'token, T> {
+impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> IfState<'token, T>
+where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+{
     fn new(token: &'token T) -> Self {
         Self {
             token,
@@ -96,13 +101,16 @@ impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> IfState
     }
 
 
-    fn choose_listing_to_assemble(&mut self, env: &Env) -> Result< Option<&mut [ProcessedToken<'token, T>]>, AssemblerError> {
+    fn choose_listing_to_assemble(&mut self, env: &Env) -> Result< Option<&mut [ProcessedToken<'token, T>]>, AssemblerError> 
+    where 
+    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+    {
 
         let mut selected_idx = None;
         let mut request_additional_pass = false;
 
         for idx in 0..self.token.if_nb_tests() {
-            dbg!(idx);
             let (test, _) = self.token.if_test(idx);
             let token_adr = test as *const _ as usize;
 
@@ -234,7 +242,9 @@ impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> ToSimpl
 pub type AssemblerInfo = AssemblerError;
 
 
-pub fn build_processed_token<'token, T: ToSimpleToken + Visited + Debug + Sync + ListingElement> (token: &'token T, env: &Env) -> ProcessedToken<'token, T> {
+pub fn build_processed_token<'token, T: ToSimpleToken + Visited + Debug + Sync + ListingElement> (token: &'token T, env: &Env) -> ProcessedToken<'token, T> 
+where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+{
 
     if token.is_if() {
         let state = IfState::new(token);
@@ -259,7 +269,9 @@ pub fn build_processed_token<'token, T: ToSimpleToken + Visited + Debug + Sync +
 }
 
 
-pub fn build_list<'token, T: ToSimpleToken + Visited + Debug + Sync + ListingElement> (tokens: &'token[T], env: &Env) -> Vec<ProcessedToken<'token, T>> {
+pub fn build_list<'token, T: ToSimpleToken + Visited + Debug + Sync + ListingElement> (tokens: &'token[T], env: &Env) -> Vec<ProcessedToken<'token, T>>
+where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+{
     use rayon::prelude::*;
 
     tokens
@@ -276,7 +288,10 @@ pub fn build_list<'token, T: ToSimpleToken + Visited + Debug + Sync + ListingEle
 }
 
 /// Visit all the tokens until an error occurs
-pub fn visit_processed_tokens<'token, T:ToSimpleToken + Visited + Debug +ListingElement + Sync>(tokens: & mut [ProcessedToken<'token, T>], env: &mut Env) -> Result<(), AssemblerError> {
+pub fn visit_processed_tokens<'token, T:ToSimpleToken + Visited + Debug +ListingElement + Sync>(tokens: & mut [ProcessedToken<'token, T>], env: &mut Env) -> Result<(), AssemblerError> 
+where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+<<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt
+{
     for token in tokens.iter_mut() {
         token.visited(env)?;
     }
@@ -290,7 +305,9 @@ impl<'token, T:ToSimpleToken + Visited + Debug + ListingElement + Sync> Processe
 
 	/// Read the data for the appropriate tokens.
 	/// Possibly returns information to be printed by the caller
-    pub fn read_referenced_file(&mut self, env: &Env) -> Result<Option<AssemblerInfo>, AssemblerError> {
+    pub fn read_referenced_file(&mut self, env: &Env) -> Result<Option<AssemblerInfo>, AssemblerError>
+    where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+     {
 
 
 		match self.state {
@@ -304,147 +321,137 @@ impl<'token, T:ToSimpleToken + Visited + Debug + ListingElement + Sync> Processe
 		let ctx = &env.ctx;
 
 		// whatever is the representation of the token, returns it simple version
-		let token: Cow<Token> = self.token.as_simple_token();
-		let token = token.as_ref();
-
 		let mut info = None;
 
-        todo!("Do not manipulate token but Listing Element api");
+        self.state = if self.token.is_include() {
+            let fname = self.token.include_fname();
+            let content = read_source(fname, ctx)?;
 
-        self.state = match token {
-            Token::Include(ref fname, _namespace, _once) => {
-                let content = read_source(fname, ctx)?;
+            let new_ctx = {
+                let mut new_ctx = ctx.clone();
+                new_ctx.set_current_filename(fname);
+                new_ctx
+            };
 
-                let new_ctx = {
-                    let mut new_ctx = ctx.clone();
-                    new_ctx.set_current_filename(fname);
-                    new_ctx
-                };
+            let listing = parse_z80_str_with_context(content, new_ctx)?;
+            let includeState = IncludeStateBuilder {
+                listing,
+                processed_tokens_builder: |listing: &LocatedListing| build_list(listing.as_slice(), env)
+            }.build();
 
-                let listing = parse_z80_str_with_context(content, new_ctx)?;
-                let includeState = IncludeStateBuilder {
-                    listing,
-                    processed_tokens_builder: |listing: &LocatedListing| build_list(listing.as_slice(), env)
-                }.build();
-				Some(ProcessedTokenState::Include(includeState))
-            }
+            Some(ProcessedTokenState::Include(includeState))
+        }
+        else if self.token.is_incbin() {
+            // TODO reorder to make crash before reading in case of expression issues
+            let fname = self.token.incbin_fname();
+            let offset = self.token.incbin_offset();
+            let length = self.token.incbin_length();
+            let transformation = self.token.incbin_transformation();
 
-            Token::Incbin {
-                        fname,
-                        offset,
-                        length,
-                        extended_offset: _,
-                        off: _,
-                        transformation
-            } => {
-                // TODO manage the optional arguments
-                match ctx.get_path_for(&fname) {
-                    Err(_e) => {
-                        return Err(AssemblerError::IOError {
-                            msg: format!("{:?} not found", fname)
+        
+            // TODO manage the optional arguments
+            match ctx.get_path_for(&fname) {
+                Err(_e) => {
+                    return Err(AssemblerError::IOError {
+                        msg: format!("{:?} not found", fname)
+                    });
+                }
+                Ok(ref fname) => {
+                    let mut f = File::open(&fname).map_err(|_e| {
+                        AssemblerError::IOError {
+                            msg: format!("Unable to open {:?}", fname)
+                        }
+                    })?;
+
+                    // load the full file
+                    let mut data = Vec::new();
+                    f.read_to_end(&mut data).map_err(|e| {
+                        AssemblerError::IOError {
+                            msg: format!("Unable to read {:?}. {}", fname, e.to_string())
+                        }
+                    })?;
+
+                    // get a slice on the data to ease its cut
+                    let mut data = &data[..];
+
+                    if data.len() >= 128 {
+                        let header = AmsdosHeader::from_buffer(&data);
+                        let info = Some(if header.is_checksum_valid() {
+                            data = &data[128..];
+
+                            AssemblerError::AssemblingError{
+                                msg: format!("{:?} is a valid Amsdos file. It is included without its header.", fname)
+                            }
+                        }
+                        else {
+                            AssemblerError::AssemblingError{
+                                        msg: format!("{:?} does not contain a valid Amsdos file. It is fully included.", fname)
+                                    }
                         });
+
                     }
-                    Ok(ref fname) => {
-                        let mut f = File::open(&fname).map_err(|_e| {
-                            AssemblerError::IOError {
-                                msg: format!("Unable to open {:?}", fname)
+
+                    match offset {
+                        Some(offset) => {
+                            let offset = env.resolve_expr_must_never_fail(offset)?.int()? as usize;
+                            if offset >= data.len() {
+                                return Err(AssemblerError::AssemblingError {
+                                    msg: format!(
+                                        "Unable to read {:?}. Only {} are available",
+                                        fname,
+                                        data.len()
+                                    )
+                                });
                             }
-                        })?;
+                            data = &data[offset..];
+                        },
+                        None => {}
+                    }
 
-                        // load the full file
-                        let mut data = Vec::new();
-                        f.read_to_end(&mut data).map_err(|e| {
-                            AssemblerError::IOError {
-                                msg: format!("Unable to read {:?}. {}", fname, e.to_string())
+                    
+                    match length {
+                        Some(length) => {
+                            let length = env.resolve_expr_must_never_fail(length)?.int()? as usize;
+                            if data.len() < length {
+                                return Err(AssemblerError::AssemblingError {
+                                    msg: format!(
+                                        "Unable to read {:?}. Only {} bytes are available ({} expected)",
+                                        fname,
+                                        data.len(),
+                                        length
+                                    )
+                                });
                             }
-                        })?;
+                            data = &data[..length];
+                        },
+                        None => {}
+                    }
 
-                        // get a slice on the data to ease its cut
-                        let mut data = &data[..];
-
-                        if data.len() >= 128 {
-                            let header = AmsdosHeader::from_buffer(&data);
-                            let info = Some(if header.is_checksum_valid() {
-                                data = &data[128..];
-
-                                AssemblerError::AssemblingError{
-									msg: format!("{:?} is a valid Amsdos file. It is included without its header.", fname)
-								}
-                            }
-                            else {
-                               AssemblerError::AssemblingError{
-                                            msg: format!("{:?} does not contain a valid Amsdos file. It is fully included.", fname)
-                                        }
-							});
-
+                    let data = match transformation {
+                        BinaryTransformation::None => {
+                            data.to_vec()
                         }
 
-						match offset {
-							Some(ref offset) => {
-								let offset = env.resolve_expr_must_never_fail(offset)?.int()? as usize;
-								if offset >= data.len() {
-									return Err(AssemblerError::AssemblingError {
-										msg: format!(
-											"Unable to read {:?}. Only {} are available",
-											fname,
-											data.len()
-										)
-									});
-								}
-								data = &data[offset..];
-							},
-							None => {}
-						}
-
-                       
-                        match length {
-							Some(length) => {
-								let length = env.resolve_expr_must_never_fail(length)?.int()? as usize;
-								if data.len() < length {
-									return Err(AssemblerError::AssemblingError {
-										msg: format!(
-											"Unable to read {:?}. Only {} bytes are available ({} expected)",
-											fname,
-											data.len(),
-											length
-										)
-									});
-								}
-								data = &data[..length];
-							},
-							None => {}
-						}
-
-                        let data = match transformation {
-                            BinaryTransformation::None => {
-                                data.to_vec()
+                        other => {
+                            if data.len() == 0 {
+                                return Err(AssemblerError::EmptyBinaryFile(
+                                    fname.to_string_lossy().to_string()
+                                ));
                             }
 
-                            other => {
-                                if data.len() == 0 {
-                                    return Err(AssemblerError::EmptyBinaryFile(
-                                        fname.to_string_lossy().to_string()
-                                    ));
-                                }
-
-                                let crunch_type = other.crunch_type().unwrap();
-                                crunch_type.crunch(&data)?
-                            }
-                        };
-						Some(ProcessedTokenState::Incbin{data})
-                    }
-                }
-            },
-/*
-            // Rorg may embed some instructions that read files
-            LocatedToken::Rorg(_, ref listing, _) => {
-                for token in listing.iter() {
-                    token.read_referenced_file(ctx)?;
+                            let crunch_type = other.crunch_type().unwrap();
+                            crunch_type.crunch(&data)?
+                        }
+                    };
+                    Some(ProcessedTokenState::Incbin{data})
                 }
             }
-*/
-            _ => {unreachable!()}
+        }
+
+        else {
+            unreachable!()
         };
+
 
         Ok(info)
     }
@@ -497,7 +504,10 @@ pub fn read_source(fname: &str, ctx: &ParserContext) -> Result<String, Assembler
     }
 }
 
-impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync>  ProcessedToken<'token, T> {
+impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync>  ProcessedToken<'token, T> 
+where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+ <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt
+{
 	/// Due to the state management, the signature requires mutability
 	pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
 

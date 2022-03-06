@@ -433,23 +433,6 @@ impl MyToTokens for Expr {
                 one_param("Label", val, tokens);
             }
 
-            Expr::Duration(val) => {
-                one_param("Duration", val, tokens);
-            }
-
-            Expr::Add(left, right) => {
-                two_params("Add", left, right, tokens);
-            }
-            Expr::Div(left, right) => {
-                two_params("Div", left, right, tokens);
-            }
-            Expr::Mul(left, right) => {
-                two_params("Mul", left, right, tokens);
-            }
-            Expr::Sub(left, right) => {
-                two_params("Sub", left, right, tokens);
-            }
-
             Expr::Paren(val) => {
                 one_param("Paren", val, tokens);
             }

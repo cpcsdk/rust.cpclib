@@ -143,6 +143,7 @@ fn palette_code(pal: &Palette) -> String {
 }
 
 fn standard_linked_code(mode: u8, pal: &Palette, screen: &[u8]) -> String {
+    let parser_context = ParserContext::default();
     let base_code = standard_display_code(mode);
     format!(
         "   org 0x1000
@@ -180,7 +181,7 @@ image_end
     ",
         palette = palette_code(pal),
         decompressor = include_str!("lz4_docent.asm"),
-        code = defb_elements(&assemble(&base_code).unwrap()),
+        code = defb_elements(&assemble(&base_code, &parser_context).unwrap()),
         screen = defb_elements(screen)
     )
 }
@@ -418,6 +419,8 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         &output_format
     )?;
 
+    let parser_context = ParserContext::default();
+
     if sub_sprite.is_some() {
         // TODO share code with the tile branch
 
@@ -559,7 +562,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 }
             };
 
-            let file = assemble_to_amsdos_file(&code, filename).unwrap();
+            let file = assemble_to_amsdos_file(&code, filename, &parser_context).unwrap();
 
             if sub_exec.is_some() {
                 let filename = Path::new(filename);
@@ -587,12 +590,12 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         if sub_sna.is_some() || sub_m4.is_some() {
             let (palette, code) = match &conversion {
                 Output::CPCMemoryStandard(_memory, pal) => {
-                    (pal, assemble(&standard_display_code(output_mode)).unwrap())
+                    (pal, assemble(&standard_display_code(output_mode), &parser_context).unwrap())
                 }
 
                 Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
                     let code =
-                        assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal)).unwrap();
+                        assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal), &parser_context).unwrap();
                     (pal, code)
                 }
 

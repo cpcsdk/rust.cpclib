@@ -3,7 +3,6 @@ use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
 
 use cpclib_common::clap;
 use cpclib_common::clap::{Command, Arg, ArgGroup, ArgMatches};

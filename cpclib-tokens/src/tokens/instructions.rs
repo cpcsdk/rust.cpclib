@@ -395,6 +395,8 @@ pub enum TestKind {
 
 
 pub trait TestKindElement {
+    type Expr: ExprElement;
+
     fn is_true_test(&self) -> bool;
     fn is_false_test(&self) -> bool;
 
@@ -404,11 +406,14 @@ pub trait TestKindElement {
     fn is_label_exists_test(&self) -> bool;
     fn is_label_nexists_test(&self) -> bool;
 
-    fn expr_unchecked(&self) -> &Expr;
+    fn expr_unchecked(&self) -> &Self::Expr;
     fn label_unchecked(&self) -> &str;
 }
 
 impl TestKindElement for TestKind {
+    type Expr= Expr;
+
+
     fn is_true_test(&self) -> bool {
         todo!()
     }
@@ -433,7 +438,7 @@ impl TestKindElement for TestKind {
         todo!()
     }
 
-    fn expr_unchecked(&self) -> &Expr {
+    fn expr_unchecked(&self) -> &Self::Expr {
         todo!()
     }
 
