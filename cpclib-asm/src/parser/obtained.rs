@@ -416,7 +416,25 @@ impl ExprEvaluationExt for LocatedExpr {
 
 impl LocatedExpr {
     pub fn span(&self) -> &Z80Span {
-        todo!()
+        match self {
+            LocatedExpr::RelativeDelta(_, span)|
+            LocatedExpr::Value(_, span)|
+            LocatedExpr::Float(_, span) |
+            LocatedExpr::Char(_, span) |
+            LocatedExpr::Bool(_,  span) |
+            LocatedExpr::String( span) |
+            LocatedExpr::Label(span)|
+            LocatedExpr::List(_, span) |
+            LocatedExpr::PrefixedLabel(_, _, span)|
+            LocatedExpr::Paren(_, span) |
+            LocatedExpr::UnaryFunction(_, _, span) |
+            LocatedExpr::UnaryOperation(_, _, span)|
+            LocatedExpr::UnaryTokenOperation(_, _, span)|
+            LocatedExpr::BinaryFunction(_, _, _, span) |
+            LocatedExpr::BinaryOperation(_, _, _, span) |
+            LocatedExpr::AnyFunction(_, _, span) |
+            LocatedExpr::Rnd(span) => span
+        }
     }
 
     /// Build a expr representation of the expression
