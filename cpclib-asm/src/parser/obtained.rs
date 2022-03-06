@@ -69,171 +69,304 @@ impl ExprElement for LocatedExpr {
     type Token = LocatedToken;
 
     fn is_negated(&self) -> bool {
-        todo!()
+        match self {
+            Self::UnaryOperation(UnaryOperation::Neg, _, _) => true,
+            _ => false
+        }
     }
 
     fn is_relative(&self) -> bool {
-        todo!()
+        match self {
+            Self::RelativeDelta(_, _) => true,
+            _ => false
+        }
     }
 
     fn relative_delta(&self) -> i8 {
-        todo!()
-    }
-
-    fn is_value(&self) -> bool {
-        todo!()
-    }
-
-    fn value(&self) -> i32 {
-        todo!()
-    }
-
-    fn is_char(&self) -> bool {
-        todo!()
-    }
-
-    fn char(&self) -> char {
-        todo!()
-    }
-
-    fn is_bool(&self) -> bool {
-        todo!()
-    }
-
-    fn bool(&self) -> bool {
-        todo!()
-    }
-
-    fn is_string(&self) -> bool {
-        todo!()
-    }
-
-    fn string(&self) -> &str {
-        todo!()
-    }
-
-    fn is_float(&self) -> bool {
-        todo!()
-    }
-
-    fn float(&self) -> OrderedFloat<f64> {
-        todo!()
-    }
-
-    fn is_list(&self) -> bool {
-        todo!()
-    }
-
-    fn list(&self) -> &[Self] {
-        todo!()
-    }
-
-    fn is_label(&self) -> bool {
-        todo!()
-    }
-
-    fn label(&self) -> &str {
-        todo!()
-    }
-
-    fn is_token_operation(&self) -> bool {
-        todo!()
-    }
-
-    fn token_operation(&self) -> &UnaryTokenOperation {
-        todo!()
-    }
-
-    fn token(&self) -> &Self::Token {
-        todo!()
-    }
-
-    fn is_prefix_label(&self) -> bool {
-        todo!()
-    }
-
-    fn prefix(&self) -> &LabelPrefix {
-        todo!()
-    }
-
-    fn is_binary_operation(&self) -> bool {
-        todo!()
-    }
-
-    fn binary_operation(&self) -> BinaryOperation {
-        todo!()
-    }
-
-    fn is_unary_operation(&self) -> bool {
-        todo!()
-    }
-
-    fn unary_operation(&self) -> UnaryOperation {
-        todo!()
-    }
-
-    fn is_unary_function(&self) -> bool {
-        todo!()
-    }
-
-    fn unary_function(&self) -> UnaryFunction {
-        todo!()
-    }
-
-    fn is_binary_function(&self) -> bool {
-        todo!()
-    }
-
-    fn binary_function(&self) -> BinaryFunction {
-        todo!()
-    }
-
-    fn is_paren(&self) -> bool {
-        todo!()
-    }
-
-    fn is_rnd(&self) -> bool {
-        todo!()
-    }
-
-    fn is_any_function(&self) -> bool {
-        todo!()
-    }
-
-    fn function_name(&self) -> &str {
-        todo!()
-    }
-
-    fn function_args(&self) -> &[Self] {
-        todo!()
-    }
-
-    fn arg1(&self) -> &Self {
-        todo!()
-    }
-
-    fn arg2(&self) -> &Self {
-        todo!()
+        match self {
+            Self::RelativeDelta(val, _) => *val,
+            _ => unreachable!()
+        }
     }
 
     fn neg(&self) -> Self::ResultExpr {
-        todo!()
+        Expr::UnaryOperation(UnaryOperation::Neg, Box::new(self.to_expr()))
+    }
+
+    fn add<E: Into<Expr>>(&self, v: E) -> Self::ResultExpr {
+        Self::ResultExpr::BinaryOperation(
+            BinaryOperation::Add,
+            Box::new(self.to_expr()),
+            v.into().into()
+        )
+    }
+
+    /// Check if it is necessary to read within a symbol table
+    fn is_context_independant(&self) -> bool {
+        match self {
+            Self::Label(..) => false,
+            _ => true
+        }
+    }
+
+    /// When disassembling an instruction with relative expressions, the contained value needs to be transformed as an absolute value
+    fn fix_relative_value(&mut self) {
+        if let Self::Value(val, span) = self {
+            let mut new_expr = Self::RelativeDelta(*val as i8, span.clone());
+            std::mem::swap(self, &mut new_expr);
+        }
     }
 
     fn not(&self) -> Self::ResultExpr {
         todo!()
     }
 
-    fn add<E: Into<Self::ResultExpr>>(&self, v: E) -> Self::ResultExpr {
-        todo!()
+    fn is_value(&self) -> bool {
+        match self {
+            Self::Value(..) => true,
+            _ => false
+        }
     }
 
-    fn is_context_independant(&self) -> bool {
-        todo!()
+    fn value(&self) -> i32 {
+        match self {
+            Self::Value(v, _) => *v,
+            _ => unreachable!()
+        }
     }
 
-    fn fix_relative_value(&mut self) {
-        todo!()
+    fn is_char(&self) -> bool {
+        match self {
+            Self::Char(..) => true,
+            _ => false
+        }
+    }
+
+    fn char(&self) -> char {
+        match self {
+            Self::Char(v, _) => *v,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_bool(&self) -> bool {
+        match self {
+            Self::Bool(..) => true,
+            _ => false
+        }
+    }
+
+    fn bool(&self) -> bool {
+        match self {
+            Self::Bool(v, _) => *v,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_string(&self) -> bool {
+        match self {
+            Self::String(..) => true,
+            _ => false
+        }
+    }
+
+    fn string(&self) -> &str {
+        match self {
+            Self::String(v) => v.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_float(&self) -> bool {
+        match self {
+            Self::Float(..) => true,
+            _ => false
+        }
+    }
+
+    fn float(&self) -> OrderedFloat<f64> {
+        match self {
+            Self::Float(v, _) => *v,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_list(&self) -> bool {
+        match self {
+            Self::List(..) => true,
+            _ => false
+        }
+    }
+
+    fn list(&self) -> &[Self] {
+        match self {
+            Self::List(v, _) => v.as_slice(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_label(&self) -> bool {
+        match self {
+            Self::Label(..) => true,
+            _ => false
+        }
+    }
+
+    fn label(&self) -> &str {
+        match self {
+            Self::Label(v) => v.as_str(),
+            Self::PrefixedLabel(_, v, _) => v.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_token_operation(&self) -> bool {
+        match self {
+            Self::UnaryTokenOperation(..) => true,
+            _=> false,
+        }
+    }
+
+    fn token_operation(&self) -> &UnaryTokenOperation {
+        match self {
+            Self::UnaryTokenOperation(op, __,_) => op,
+            _=> unreachable!(),
+        }
+    }
+
+    fn token(&self) -> &Self::Token {
+        match self {
+            Self::UnaryTokenOperation(_, box token, _) => token,
+            _=> unreachable!(),
+        }
+    }
+
+    fn is_prefix_label(&self) -> bool {
+       match self {
+           Self::PrefixedLabel(..) => true,
+           _ => false
+       }
+    }
+
+    fn prefix(&self) -> &LabelPrefix {
+        match self {
+            Self::PrefixedLabel(prefix, _, _) => prefix,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_binary_operation(&self) -> bool {
+       match self {
+           Self::BinaryOperation(..) => true,
+           _ => false
+       }
+    }
+
+    fn binary_operation(&self) -> BinaryOperation {
+        match self {
+            Self::BinaryOperation(op, _, _, _) => *op,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_unary_operation(&self) -> bool {
+        match self {
+            Self::UnaryOperation(..) => true,
+            _ => false
+        }
+    }
+
+    fn unary_operation(&self) -> UnaryOperation {
+        match self {
+            Self::UnaryOperation(op, _, _) => *op,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_unary_function(&self) -> bool {
+        match self {
+            Self::UnaryFunction(_, _, _) => true,
+            _ => false
+        }
+    }
+
+    fn unary_function(&self) -> UnaryFunction {
+        match self {
+            Self::UnaryFunction(f, _, _) => *f,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_binary_function(&self) -> bool {
+        match self {
+            Self::BinaryFunction(_, _, _, _) => true,
+            _ => false
+        }
+    }
+
+    fn binary_function(&self) -> BinaryFunction {
+        match self {
+            Self::BinaryFunction(f, _, _, _) => *f,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_paren(&self) -> bool {
+        match self {
+            Self::Paren(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_rnd(&self) -> bool {
+        match self {
+            Self::Rnd(_)=> true,
+            _ => false
+        }
+    }
+
+    fn is_any_function(&self) -> bool {
+        match self {
+            Self::AnyFunction(_, _, _) => true,
+            _ => false
+        }
+    }
+
+    fn function_name(&self) -> &str {
+        match self {
+            Self::AnyFunction(n, _, _) => n.as_str(),
+            Self::UnaryFunction(f, _, _) => todo!(),
+            Self::BinaryFunction(f, _, _, _) => todo!(),
+            _ => unreachable!()
+        }
+    }
+
+    fn function_args(&self) -> &[Self] {
+        match self {
+            Self::AnyFunction(_, args, _) => args.as_slice(),
+            _ => unreachable!()
+        }
+    }
+
+    fn arg1(&self) -> &Self {
+        match self {
+            Self::BinaryOperation(_, box arg1, _, _) => arg1,
+            Self::UnaryOperation(_, box arg, _) => arg,
+            Self::UnaryFunction(_, box  arg, _) => arg,
+            Self::BinaryFunction(_, box arg1, _, _) => arg1,
+            Self::Paren(box p, _) => p,
+
+            _ => unreachable!()
+        }
+    }
+
+    fn arg2(&self) -> &Self {
+        match self {
+            Self::BinaryOperation(_, _, box arg2, _) => arg2,
+            Self::BinaryFunction(_, _, box arg2, _) => arg2,
+
+            _ => unreachable!()
+        }
     }
 }
 

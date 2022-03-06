@@ -560,7 +560,7 @@ where
                     other
                 )
             }
-            // no state imply a standard visit
+            // no state implies a standard visit
             None => self.token.visited(env)
         }
     }
