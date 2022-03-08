@@ -100,6 +100,20 @@ impl ListingElement for Token {
             _ => unreachable!()
         }
     }
+
+    fn include_namespace(&self) -> Option<&str> {
+        match self {
+            Self::Include(_, module, _) => module.as_ref().map(|s|s.as_str()),
+            _ => unreachable!()
+        }
+    }
+
+    fn include_once(&self) -> bool {
+        match self {
+            Self::Include(_,_, once) => *once,
+            _ => unreachable!()
+        }
+    }
 }
 
 /// Standard listing is a specific implementation

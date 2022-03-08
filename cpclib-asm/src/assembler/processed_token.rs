@@ -495,6 +495,7 @@ where
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
         let mut request_additional_pass = false;
 
+
         // Read file if needed
         if self.token.is_include() || self.token.is_incbin() {
             self.read_referenced_file(env)?;
@@ -503,42 +504,40 @@ where
         // Handle the tokens depending on their specific state
         match &mut self.state {
             Some(ProcessedTokenState::Include(ref mut state)) => {
-                match self.token.as_simple_token().as_ref() {
-                    Token::Include(fname, namespace, once) => {
-                        let fname = env
-                            .ctx // TODO get span context if available
-                            .get_path_for(fname)
-                            .unwrap_or("will_fail".into());
-                        if (!*once) || (!env.has_included(&fname)) {
-                            // inclusion requested
-                            env.mark_included(fname);
+                let fname = self.token.include_fname();
+                let namespace = self.token.include_namespace();
+                let once = self.token.include_once();
+                let fname = env
+                    .ctx // TODO get span context if available
+                    .get_path_for(fname)
+                    .unwrap_or("will_fail".into());
+                if (!once) || (!env.has_included(&fname)) {
+                    // inclusion requested
+                    env.mark_included(fname);
 
-                            // handle module if necessary
-                            if let Some(namespace) = namespace {
-                                env.enter_namespace(namespace)?;
-                                // TODO handle the locating of error
-                                //.map_err(|e| e.locate(span.clone()))?;
-                            }
-
-                            // Visit the included listing
-                            state.with_processed_tokens_mut(|tokens| {
-                                visit_processed_tokens(tokens, env)
-                            })?;
-
-                            // Remove module if necessary
-                            if namespace.is_some() {
-                                env.leave_namespace()?;
-                                //.map_err(|e| e.locate(span.clone()))?;
-                            }
-
-                            Ok(())
-                        }
-                        else {
-                            // no inclusion
-                            Ok(())
-                        }
+                    // handle module if necessary
+                    if let Some(namespace) = namespace {
+                        env.enter_namespace(namespace)?;
+                        // TODO handle the locating of error
+                        //.map_err(|e| e.locate(span.clone()))?;
                     }
-                    _ => unreachable!()
+
+                    // Visit the included listing
+                    state.with_processed_tokens_mut(|tokens| {
+                        visit_processed_tokens(tokens, env)
+                    })?;
+
+                    // Remove module if necessary
+                    if namespace.is_some() {
+                        env.leave_namespace()?;
+                        //.map_err(|e| e.locate(span.clone()))?;
+                    }
+
+                    Ok(())
+                }
+                else {
+                    // no inclusion
+                    Ok(())
                 }
             }
 
@@ -602,3 +601,34 @@ where
 // else {
 // Ok(()) // we include nothing
 // }
+
+
+#[cfg(test)]
+mod test_super {
+    use crate::preamble::{Z80Span, parse_include};
+
+    use super::*;
+
+    #[test]
+    fn test_located_include() {
+        let src = " include \"toto\"";
+        let ctx = ParserContext::default();
+        ctx.source = Some(src);
+
+        let span = Z80Span::new_extra(src, &ctx);
+
+        let token = parse_include(span).unwrap().1;
+        let env = Env::default();
+
+        dbg!(&token);
+
+        let processed = build_processed_token(&token, &env);
+        dbg!(&processed);
+        assert!(
+            matches!(
+                processed.state,
+                'Some(ProcessedTokenState::Include(..))
+            )
+        );
+    }
+}

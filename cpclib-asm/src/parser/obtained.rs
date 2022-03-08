@@ -1091,10 +1091,7 @@ impl ListingElement for LocatedToken {
 
     fn is_include(&self) -> bool {
         match self {
-            Self::Standard {
-                token: Token::Include(..),
-                ..
-            } => true,
+            Self::Include(..) => true,
             _ => false
         }
     }
@@ -1137,6 +1134,21 @@ impl ListingElement for LocatedToken {
     fn include_fname(&self) -> &str {
         match self {
             Self::Include(fname, ..) => fname,
+            _ => unreachable!()
+        }
+    }
+
+
+    fn include_namespace(&self) -> Option<&str> {
+        match self {
+            Self::Include(_, module, _, _) => module.as_ref().map(|s|s.as_str()),
+            _ => unreachable!()
+        }
+    }
+
+    fn include_once(&self) -> bool {
+        match self {
+            Self::Include(_,_, once, _) => *once,
             _ => unreachable!()
         }
     }
