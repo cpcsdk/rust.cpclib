@@ -1429,7 +1429,7 @@ impl Env {
 
     /// Visit all the tokens of the slice of tokens.
     /// Return true if an additional pass is requested
-    pub fn visit_listing<T: ListingElement + Visited>(
+    pub fn visit_listing<T: ListingElement + Visited + MayHaveSpan>(
         &mut self,
         listing: &[T]
     ) -> Result<(), AssemblerError> {
@@ -1486,10 +1486,12 @@ impl Env {
         // Try to fallback on a macro call - parser is not that much great
         if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
             if kind == "macro" || kind == "struct" {
+                unimplemented!("Need to reactivate this case that is supposed to not work anymore");/*
                 self.visit_call_macro_or_build_struct(&Token::MacroCall(
                     label.into(),
                     Default::default()
                 ))
+                */
             }
             else {
                 res
@@ -1840,128 +1842,6 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_call_macro_or_build_struct<
-        T: ListingElement + MayHaveSpan + core::fmt::Debug + 'static
-    >(
-        &mut self,
-        caller: &T
-    ) -> Result<(), AssemblerError> {
-        dbg!(caller);
-
-        let caller_span = caller.possible_span();
-        let name = caller.macro_call_name();
-        let parameters = caller.macro_call_arguments();
-
-        let listing = {
-            // Retreive the macro or structure definition
-            let r#macro = self
-                .symbols()
-                .macro_value(name)?
-                .map(|m| r#macro::MacroWithArgs::build(m, parameters))
-                .transpose()?;
-            let r#struct = self
-                .symbols()
-                .struct_value(name)?
-                .map(|s| r#macro::StructWithArgs::build(s, parameters))
-                .transpose()?;
-
-            if r#macro.is_none() && r#struct.is_none() {
-                let e = AssemblerError::UnknownMacro {
-                    symbol: name.into(),
-                    closest: self.symbols().closest_symbol(name, SymbolFor::Macro)?
-                };
-                return match caller_span {
-                    Some(span) => {
-                        Err(AssemblerError::RelocatedError {
-                            error: e.into(),
-                            span: span.clone()
-                        })
-                    }
-                    None => Err(e)
-                };
-            }
-
-            // get the generated code
-            // TODO handle some errors there
-            let (source, code) = if let Some(ref r#macro) = r#macro {
-                (r#macro.source(), r#macro.expand(self)?)
-            }
-            else {
-                let r#struct = r#struct.as_ref().unwrap();
-                let mut parameters = parameters.to_vec();
-                parameters.resize(r#struct.r#struct().nb_args(), T::MacroParam::empty());
-                (r#struct.source(), r#struct.expand(self)?)
-            };
-
-            // Tokenize with the same parsing  parameters and context when possible
-            let listing = match caller_span {
-                Some(span) => {
-                    let mut ctx = span.extra.deref().clone();
-                    ctx.remove_filename();
-                    ctx.set_context_name(&format!(
-                        "{}:{}:{} > {} {}:",
-                        source.map(|s| s.fname()).unwrap_or_else(|| "???"),
-                        source.map(|s| s.line()).unwrap_or(0),
-                        source.map(|s| s.column()).unwrap_or(0),
-                        if r#macro.is_some() { "MACRO" } else { "STRUCT" },
-                        name,
-                    ));
-                    let code = Box::new(code);
-                    parse_z80_str_with_context(code.as_ref(), ctx)?
-                }
-                _ => parse_z80_str(&code)?
-            };
-            listing
-        };
-
-        //   dbg!(&listing);
-
-        self.macro_seed += 1;
-        let seed = self.macro_seed;
-        self.symbols_mut().push_seed(seed);
-
-        // save the number of prints to patch the ones added by the macro
-        // to properly locate them
-        let nb_prints = self
-            .pages_info_sna
-            .iter()
-            .map(|ti| ti.print_commands().len())
-            .collect_vec();
-
-        // really assemble the produced tokens
-        self.visit_listing(&listing).or_else(|e| {
-            let e = AssemblerError::MacroError {
-                name: name.into(),
-                root: Box::new(e)
-            };
-            match caller_span {
-                Some(span) => {
-                    Err(AssemblerError::RelocatedError {
-                        error: e.into(),
-                        span: span.clone()
-                    })
-                }
-                None => Err(e)
-            }
-        })?;
-
-        if let Some(span) = caller_span {
-            self.pages_info_sna
-                .iter_mut()
-                .zip(nb_prints.into_iter())
-                .for_each(|(ti, count)| {
-                    ti.print_commands_mut()[count..]
-                        .iter_mut()
-                        .for_each(|cmd| cmd.relocate(span.clone()))
-                });
-        }
-
-        self.symbols_mut().pop_seed();
-        //   dbg!("done");
-
-        Ok(())
-    }
-
     /// Remove the given variable from the table of symbols
     pub fn visit_undef(&mut self, label: &str) -> Result<(), AssemblerError> {
         match self.symbols_mut().remove_symbol(label)? {
@@ -2127,10 +2007,11 @@ impl Env {
         self.output_bytes(data)
     }
 
+
     /// Handle a crunched section.
     /// Current limitations (that need to be overcomed later):
     ///  - everything inside the crunched section must be assembled during pass1
-    pub fn visit_crunched_section<T: Visited + ListingElement>(
+    pub fn visit_crunched_section<T: Visited + ListingElement + MayHaveSpan>(
         &mut self,
         kind: &CrunchType,
         lst: &[T],
@@ -2272,7 +2153,7 @@ impl Env {
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
 pub fn visit_tokens_all_passes<
-    T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement
+    T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
 >(
     tokens: &[T],
     ctx: &ParserContext
@@ -2364,12 +2245,12 @@ pub fn visit_tokens_all_passes_with_options<'token, T>(
     ctx: &ParserContext
 ) -> Result<Env, AssemblerError>
 where
-    T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement,
+    T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt
 {
     let mut env = Env::new(options, ctx);
-    let mut tokens = processed_token::build_list(tokens, &mut env);
+    let mut tokens = processed_token::build_processed_tokens_list(tokens, &mut env);
     loop {
         env.start_new_pass();
         // println!("[pass] {:?}", env.pass);
@@ -2446,8 +2327,7 @@ pub fn visit_located_token(
                         .map_err(|e| e.locate(span.clone()))
                 }
                 Token::MacroCall(..) => {
-                    env.visit_call_macro_or_build_struct(outer_token)
-                        .map_err(|e| e.locate(span.clone()))
+                    panic!("Should not be called")
                 }
 
                 Token::Pause => {
@@ -2560,7 +2440,7 @@ pub fn visit_located_token(
                 .map_err(|e| e.locate(label.clone()))
         }
         LocatedToken::MacroCall(name, args, span) => {
-            env.visit_call_macro_or_build_struct(outer_token) // TODO rewrite that, it does not seem to be a appropriate code (no cast should be used, their is a lack of abstraction here
+            panic!("Should never be called")
         }
         LocatedToken::Struct(name, args, span) => {
             env.visit_struct_definition(name.as_str(), args, Some(span))
@@ -2724,7 +2604,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Macro(name, arguments, code) => {
             env.visit_macro_definition(name, arguments, code, None)
         }
-        Token::MacroCall(_name, _parameters) => env.visit_call_macro_or_build_struct(token),
+        Token::MacroCall(_name, _parameters) => panic!("Should never been called"),
         Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice(), None),
         Token::WaitNops(count) => env.visit_waitnops(count),
         Token::Next(label, source, delta) => {
@@ -2828,7 +2708,7 @@ fn visit_assert(
 }
 
 impl Env {
-    pub fn visit_while<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited>(
+    pub fn visit_while<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited + MayHaveSpan>(
         &mut self,
         cond: &E,
         code: &[T],
@@ -2858,7 +2738,7 @@ impl Env {
     where
         E: ExprEvaluationExt,
         E: 'a,
-        T: 'a + ListingElement<Expr = E> + Visited
+        T: 'a + ListingElement<Expr = E> + Visited + MayHaveSpan
     {
         let value = self.resolve_expr_must_never_fail(value)?;
         let mut met = false;
@@ -2890,7 +2770,7 @@ impl Env {
 
     /// Handle the iterate repetition directive
     /// Values is either a list of values or a Expression that represents a list
-    pub fn visit_iterate<E: ExprEvaluationExt + Display, T: ListingElement<Expr = E> + Visited>(
+    pub fn visit_iterate<E: ExprEvaluationExt + Display, T: ListingElement<Expr = E> + Visited + MayHaveSpan>(
         &mut self,
         counter_name: &str,
         values: either::Either<&Vec<E>, &E>,
@@ -2963,7 +2843,7 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_rorg<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited>(
+    pub fn visit_rorg<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited + MayHaveSpan>(
         &mut self,
         address: &E,
         code: &[T],
@@ -3011,7 +2891,7 @@ impl Env {
     }
 
     /// Handle the for directive
-    pub fn visit_for<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited>(
+    pub fn visit_for<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited + MayHaveSpan >(
         &mut self,
         label: &str,
         start: &E,
@@ -3093,7 +2973,7 @@ impl Env {
     ) -> Result<(), AssemblerError>
     where
         E: ExprEvaluationExt,
-        T: ListingElement<Expr = E> + Visited
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan
     {
         let mut i = 0;
         loop {
@@ -3119,7 +2999,7 @@ impl Env {
     ) -> Result<(), AssemblerError>
     where
         E: ExprEvaluationExt,
-        T: ListingElement<Expr = E> + Visited
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan
     {
         // get the number of loops
         let count = self.resolve_expr_must_never_fail(count)?.int()?;
@@ -3166,7 +3046,7 @@ impl Env {
     }
 
     /// Handle the code generation for all the repetition variants
-    fn inner_visit_repeat<T: ListingElement + Visited>(
+    fn inner_visit_repeat<T: ListingElement + Visited + MayHaveSpan>(
         &mut self,
         counter_name: Option<&str>,
         counter_value: Option<ExprResult>,
@@ -3291,6 +3171,18 @@ impl Env {
             }
         }
         Ok(())
+    }
+}
+
+
+/// Macro related code
+impl Env {
+    pub fn inc_macro_seed(&mut self) {
+        self.macro_seed += 1;
+    }
+
+    pub fn macro_seed(&self) -> usize {
+        self.macro_seed
     }
 }
 

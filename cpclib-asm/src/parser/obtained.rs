@@ -690,7 +690,7 @@ impl ToSimpleToken for LocatedToken {
 }
 
 /// Trait to handle the span of listing elements
-pub trait MayHaveSpan: ListingElement {
+pub trait MayHaveSpan {
     fn possible_span(&self) -> Option<&Z80Span>;
     fn span(&self) -> &Z80Span;
     fn has_span(&self) -> bool;
@@ -1150,6 +1150,13 @@ impl ListingElement for LocatedToken {
         match self {
             Self::Include(_,_, once, _) => *once,
             _ => unreachable!()
+        }
+    }
+
+    fn is_call_macro_or_build_struct(&self) -> bool {
+        match self {
+            Self::MacroCall(..) => true,
+            _ => false
         }
     }
 }

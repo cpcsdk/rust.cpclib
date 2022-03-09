@@ -114,6 +114,13 @@ impl ListingElement for Token {
             _ => unreachable!()
         }
     }
+
+    fn is_call_macro_or_build_struct(&self) -> bool {
+        match self {
+            Self::MacroCall(..) => true,
+            _ => false
+        }
+    }
 }
 
 /// Standard listing is a specific implementation

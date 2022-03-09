@@ -32,6 +32,8 @@ pub trait ListingElement: Debug + Sized {
     fn include_fname(&self) -> &str;
     fn include_namespace(&self) -> Option<&str>;
     fn include_once(&self) -> bool;
+
+    fn is_call_macro_or_build_struct(&self) -> bool;
 }
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]
