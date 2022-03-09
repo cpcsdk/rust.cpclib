@@ -275,6 +275,6 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
         if last != 'n' {
             developped.push('\n');
         }
-        dbg!(Ok(developped))
+        Ok(developped)
     }
 }

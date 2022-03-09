@@ -2336,8 +2336,6 @@ pub fn parse_macro_or_struct_call(
         let input_start = input_label.clone();
         let (input, name) = parse_macro_name(input_label.clone())?;
 
-        dbg!("macro name", &name);
-
         // Check if the macro name is allowed
         if impossible_names(input.context().dotted_directive).any(|&a| a == name.to_uppercase()) {
             return Err(Err::Failure(cpclib_common::nom::error::VerboseError::<
@@ -2407,7 +2405,6 @@ pub fn parse_macro_or_struct_call(
             ))(input.clone())?
         };
 
-        dbg!("macro args", &args, &input);
         if args.len() == 1 && args.first().unwrap().is_empty() {
             panic!();
         }

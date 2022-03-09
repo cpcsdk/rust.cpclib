@@ -651,8 +651,6 @@ where
         }
 
 
-        dbg!(self.token, self.token.is_if());
-
         // Handle the tokens depending on their specific state
         match &mut self.state {
             Some(ProcessedTokenState::Include(ref mut state)) => {
