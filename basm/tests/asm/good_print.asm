@@ -2,5 +2,3 @@
 
 world = "World"
 	print "hello ", world
-
-	fail
