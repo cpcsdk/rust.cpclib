@@ -1,3 +1,6 @@
+use cpclib_common::smallvec::SmallVec;
+use cpclib_common::smol_str::SmolStr;
+
 use crate::tokens::expression::*;
 use crate::tokens::instructions::*;
 use crate::tokens::listing::*;
@@ -119,6 +122,34 @@ impl ListingElement for Token {
         match self {
             Self::MacroCall(..) => true,
             _ => false
+        }
+    }
+
+    fn is_function_definition(&self) -> bool {
+        match self {
+            Self::Function(..) => true,
+            _ => false
+        }
+    }
+
+    fn function_definition_name(&self)-> &str {
+        match self {
+            Self::Function(name, _, _) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn function_definition_params(&self)->  SmallVec<[&str;4]> {
+        match self {
+            Self::Function(_, params, _) => params.iter().map(|v| v.as_str()).collect(),
+            _ => unreachable!()
+        }
+    }
+
+    fn function_definition_inner(&self)-> &[Self] {
+        match self {
+            Self::Function(_, _, inner) => inner.as_slice(),
+            _ => unreachable!()
         }
     }
 }

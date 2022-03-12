@@ -35,6 +35,7 @@ use cpclib_tokens::ToSimpleToken;
 
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
+use self::processed_token::{build_processed_tokens_list, ProcessedToken};
 use self::report::SavedFile;
 use self::symbols_output::SymbolOutputGenerator;
 use crate::assembler::r#macro::Expandable;
@@ -373,7 +374,7 @@ pub struct Env {
 
     /// Return value of the currently executed function. Is almost always None
     return_value: Option<ExprResult>,
-    functions: BTreeMap<String, Function>,
+    functions: BTreeMap<String, Arc<Function>>,
 
     /// Set only if the run instruction has been used
     run_options: Option<(u16, Option<u16>)>,
@@ -827,6 +828,7 @@ impl Env {
                 self.request_additional_pass = false.into();
             }
             self.symbols.new_pass();
+            self.functions.clear(); // The functions refer to listing elements that could be freed from memory
         }
     }
 
@@ -2152,17 +2154,17 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
-pub fn visit_tokens_all_passes<
-    T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
+pub fn visit_tokens_all_passes<'token,
+    T: 'token + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
 >(
-    tokens: &[T],
+    tokens: &'token [T],
     ctx: &ParserContext
 ) -> Result<Env, AssemblerError>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
     <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
-        ExprEvaluationExt
-{
+        ExprEvaluationExt,
+        ProcessedToken<'token, T>: FunctionBuilder {
     let options = AssemblingOptions::default();
     visit_tokens_all_passes_with_options(tokens, &options, ctx)
 }
@@ -2216,25 +2218,7 @@ impl Env {
         }
     }
 
-    /// Add a function if it does not exist.
-    pub fn visit_function_definition<
-        T: ListingElement + Visited + Clone + FunctionBuilder<S>,
-        S: Borrow<str> + Display
-    >(
-        &mut self,
-        name: &str,
-        params: &[S],
-        inner: &[T],
-        _span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
-        if !self.functions.contains_key(name) {
-            let f = unsafe { FunctionBuilder::new(name, params, inner) }?;
 
-            self.functions.insert(name.to_owned(), f);
-        }
-
-        Ok(())
-    }
 }
 
 /// Visit the tokens during several passes by providing a specific symbol table.
@@ -2245,10 +2229,11 @@ pub fn visit_tokens_all_passes_with_options<'token, T>(
     ctx: &ParserContext
 ) -> Result<Env, AssemblerError>
 where
-    T: 'static + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
+    T:  Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt
-{
+    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+    ProcessedToken<'token, T>: FunctionBuilder
+    {
     let mut env = Env::new(options, ctx);
     let mut tokens = processed_token::build_processed_tokens_list(tokens, &mut env);
     loop {
@@ -2378,7 +2363,7 @@ pub fn visit_located_token(
         }
 
         LocatedToken::Function(name, params, inner, span) => {
-            env.visit_function_definition(name, params, inner, Some(span))
+            panic!("Should be handled by ProcessedToken")
         }
 
         LocatedToken::If(cases, other, span) => {

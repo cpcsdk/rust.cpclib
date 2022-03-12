@@ -1,10 +1,13 @@
 use std::borrow::Borrow;
+use std::cell::Cell;
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::fmt::{Display, Debug};
+use std::ops::DerefMut;
+use std::sync::{RwLock, Arc};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
-use cpclib_tokens::{Expr, ExprResult, ListingElement, Token};
+use cpclib_tokens::{Expr, ExprResult, ListingElement, Token, ToSimpleToken, TestKindElement};
 
 use super::list::{
     list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push
@@ -12,11 +15,13 @@ use super::list::{
 use super::matrix::{
     matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width
 };
+use super::processed_token::{ProcessedToken, build_processed_tokens_list};
 use super::{file, Env};
 use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
-use crate::preamble::{LocatedToken, ParserContext, ParsingState};
+use crate::implementation::expression::ExprEvaluationExt;
+use crate::preamble::{LocatedToken, ParserContext, ParsingState, MayHaveSpan};
 use crate::Visited;
 
 /// Returns the expression of the RETURN directive
@@ -42,24 +47,71 @@ impl ReturnExpr for LocatedToken {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AnyFunction<'token, T: ListingElement + Visited> {
+#[derive(Debug)]
+pub struct AnyFunction<'token,  T: ListingElement + Visited + ToSimpleToken + Sync + MayHaveSpan> where
+<T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+<<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+    ProcessedToken<'token, T>: FunctionBuilder,
+ {
     name: String,
     args: Vec<String>,
-    inner: &'token [T]
+    inner: RwLock<Vec<ProcessedToken<'token, T>>>
 }
 
-impl<'token, T: ListingElement + Visited + Clone> AnyFunction<'token, T> {
-    fn new<S: Borrow<str>>(name: &str, args: &[S], inner: &'token [T]) -> Self {
-        AnyFunction {
-            name: name.to_owned(),
-            args: args.iter().map(|s| s.borrow().into()).collect_vec(),
-            inner: inner
+
+impl<'token,  T: ListingElement + Visited + ToSimpleToken + Sync + MayHaveSpan> Clone for AnyFunction<'token, T> where
+<T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+<<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+ProcessedToken<'token, T>: FunctionBuilder
+{
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            args: self.args.clone(),
+            inner: todo!()
         }
     }
 }
 
-impl<'token, T: ListingElement + Visited + ReturnExpr> AnyFunction<'token, T> {
+
+impl<'token,  T: ListingElement + Visited + ToSimpleToken + Sync + MayHaveSpan> PartialEq for AnyFunction< 'token,  T> where
+<T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+<<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+ProcessedToken<'token, T>: FunctionBuilder,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && 
+        self.args == other.args 
+    }
+}
+
+impl<'token, T: ListingElement + Visited + ToSimpleToken + Sync + MayHaveSpan> Eq for AnyFunction<'token,  T> where
+<T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+<<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+ProcessedToken<'token, T>: FunctionBuilder,
+{
+
+}
+
+impl<'token, T: ListingElement + Visited + ToSimpleToken + Sync + MayHaveSpan> AnyFunction<'token, T> where
+<T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+<<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+ProcessedToken<'token, T>: FunctionBuilder
+{
+    fn new<S1:AsRef<str>, S2:Borrow<str>>(name: S1, args: &[S2], inner: Vec<ProcessedToken<'token, T>>) -> Self {
+        AnyFunction {
+            name: name.as_ref().to_owned(),
+            args: args.iter().map(|s| s.borrow().into()).collect_vec(),
+            inner: inner.into()
+        }
+    }
+}
+
+impl<'token,  T: ListingElement + Visited + ToSimpleToken + Sync + ReturnExpr + MayHaveSpan> AnyFunction<'token, T> 
+where
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+    ProcessedToken<'token, T>: FunctionBuilder{
     pub fn eval(
         &self,
         init_env: &Env,
@@ -87,7 +139,9 @@ impl<'token, T: ListingElement + Visited + ReturnExpr> AnyFunction<'token, T> {
             .unwrap();
         }
 
-        for token in self.inner.iter() {
+        let mut inner = self.inner.write().unwrap();
+        let inner = inner.deref_mut();
+        for token in inner.iter_mut() {
             token
                 .visited(&mut env)
                 .map_err(|e| AssemblerError::FunctionError(self.name.clone(), box e))?;
@@ -117,9 +171,9 @@ impl<'token, T: ListingElement + Visited + ReturnExpr> AnyFunction<'token, T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Function {
-    Located(AnyFunction<'static, LocatedToken>),
+    Located(AnyFunction<'static, LocatedToken>), // Here we cheat, it should not be 'static ...
     Standard(AnyFunction<'static, Token>),
     HardCoded(HardCodedFunction)
 }
@@ -431,40 +485,50 @@ impl HardCodedFunction {
 
 impl Function {
     /// Be sure the function lives shorter than inner
-    pub unsafe fn new_located<S: Borrow<str> + Display>(
-        name: &str,
-        args: &[S],
-        inner: &[LocatedToken]
-    ) -> Result<Self, AssemblerError> {
+    pub unsafe fn new_located< 'token, S1: AsRef<str>, S2:Borrow<str>>(
+        name: &S1,
+        args: &[S2],
+        inner: Vec<ProcessedToken<'token, LocatedToken>>
+    ) -> Result<Self, AssemblerError> 
+    {
         if inner.is_empty() {
-            return Err(AssemblerError::FunctionWithEmptyBody(name.to_owned()));
+            return Err(AssemblerError::FunctionWithEmptyBody(name.as_ref().to_owned()));
         }
+
+        let inner = std::mem::transmute(inner);
+
         return Ok(Function::Located(
-            AnyFunction::<'static, LocatedToken>::new(
+            AnyFunction::new(
                 name,
                 args,
-                &*(inner as *const _) as &'static _
+                inner
+            )
+        ));
+    }
+
+    pub unsafe fn new_standard<'token, S1:  AsRef<str>, S2: Borrow<str>>(
+        name: &S1,
+        args: &[S2],
+        inner: Vec<ProcessedToken<'token, Token>>
+    ) -> Result<Self, AssemblerError> 
+    {
+        if inner.is_empty() {
+            return Err(AssemblerError::FunctionWithEmptyBody(name.as_ref().to_owned()));
+        }
+
+        let inner = std::mem::transmute(inner);
+
+
+        return Ok(Function::Standard(
+            AnyFunction::new(
+                name,
+                args,
+                inner
             )
         ));
     }
 
     /// Be sure the function lives shorter than inner
-    pub unsafe fn new_standard<S: Borrow<str> + Display>(
-        name: &str,
-        args: &[S],
-        inner: &[Token]
-    ) -> Result<Self, AssemblerError> {
-        if inner.is_empty() {
-            return Err(AssemblerError::FunctionWithEmptyBody(name.to_owned()));
-        }
-        else {
-            return Ok(Function::Standard(AnyFunction::<'static, Token>::new(
-                name,
-                args,
-                &*(inner as *const _) as &'static _
-            )));
-        }
-    }
 
     pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
         match self {
@@ -475,26 +539,26 @@ impl Function {
     }
 }
 
-pub trait FunctionBuilder<S: Borrow<str> + Display> {
-    unsafe fn new(name: &str, args: &[S], inner: &[Self]) -> Result<Function, AssemblerError>
+pub trait FunctionBuilder {
+    unsafe fn new<S1:AsRef<str>, S2:Borrow<str>>(name: &S1, args: &[S2], inner: Vec<Self>) -> Result<Function, AssemblerError>
     where Self: Sized;
 }
 
-impl<S: Borrow<str> + Display> FunctionBuilder<S> for LocatedToken {
-    unsafe fn new(
-        name: &str,
-        args: &[S],
-        inner: &[LocatedToken]
-    ) -> Result<Function, AssemblerError> {
-        Function::new_located(name, args, inner)
+impl<'token> FunctionBuilder for ProcessedToken<'token, LocatedToken> {
+    unsafe fn new<S1:AsRef<str>, S2:Borrow<str>>(name: &S1, args: &[S2], inner: Vec<Self>) -> Result<Function, AssemblerError>
+    where Self: Sized {
+       Function::new_located(name, args, inner)
     }
 }
 
-impl<S: Borrow<str> + Display> FunctionBuilder<S> for Token {
-    unsafe fn new(name: &str, args: &[S], inner: &[Token]) -> Result<Function, AssemblerError> {
-        Function::new_standard(name, args, inner)
+
+impl<'token> FunctionBuilder for ProcessedToken<'token, Token> {
+    unsafe fn new<S1:AsRef<str>, S2:Borrow<str>>(name: &S1, args: &[S2], inner: Vec<Self>) -> Result<Function, AssemblerError>
+    where Self: Sized {
+       Function::new_standard(name, args, inner)
     }
 }
+
 
 /// Assemble a simple listing with no directives.
 /// Warning !!! As the env is read only, we cannot assemble directly inside

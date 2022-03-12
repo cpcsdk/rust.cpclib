@@ -3,6 +3,8 @@ use std::borrow::Cow;
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 
+use cpclib_common::smallvec::SmallVec;
+
 use crate::{
     BinaryTransformation, ExprElement, MacroParam, MacroParamElement, TestKind, TestKindElement,
     Token
@@ -34,6 +36,11 @@ pub trait ListingElement: Debug + Sized {
     fn include_once(&self) -> bool;
 
     fn is_call_macro_or_build_struct(&self) -> bool;
+
+    fn is_function_definition(&self) -> bool;
+    fn function_definition_name(&self)-> &str;
+    fn function_definition_params(&self)-> SmallVec<[&str;4]>;
+    fn function_definition_inner(&self)-> &[Self];
 }
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]

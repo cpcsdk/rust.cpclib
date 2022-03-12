@@ -11,6 +11,7 @@ use cpclib_common::nom::sequence::{delimited, preceded};
 use cpclib_common::nom::{Err, IResult, InputLength, InputTake};
 use cpclib_common::nom_locate::LocatedSpan;
 use cpclib_common::rayon::prelude::*;
+use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
     BaseListing, BinaryFunction, BinaryOperation, CrunchType, Expr, ExprResult, LabelPrefix,
@@ -1159,6 +1160,35 @@ impl ListingElement for LocatedToken {
             _ => false
         }
     }
+
+
+    fn is_function_definition(&self) -> bool {
+        match self {
+            Self::Function(..) => true,
+            _ => false
+        }
+    }
+
+    fn function_definition_name(&self)-> &str {
+        match self {
+            Self::Function(name, _, _, _) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn function_definition_params(&self)->  SmallVec<[&str;4]> {
+        match self {
+            Self::Function(_, params, _, _) => params.iter().map(|v| v.as_str()).collect(),
+            _ => unreachable!()
+        }
+    }
+
+    fn function_definition_inner(&self)-> &[Self] {
+        match self {
+            Self::Function(_, _, inner, _) => inner.as_slice(),
+            _ => unreachable!()
+        }
+    }
 }
 
 pub type InnerLocatedListing = BaseListing<LocatedToken>;
@@ -1178,6 +1208,12 @@ pub struct LocatedListing {
     /// The real listing whose tokens come from src
     #[borrows(src, ctx)]
     pub(crate) parse_result: ParseResult
+}
+
+impl PartialEq for LocatedListing {
+    fn eq(&self, other: &Self) -> bool {
+        self.borrow_src() == other.borrow_src()
+    }
 }
 
 impl std::fmt::Debug for LocatedListing {
