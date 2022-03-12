@@ -54,7 +54,7 @@ impl std::fmt::Display for Z80Span {
 
 impl std::fmt::Debug for Z80Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result{
-        write!(f, "{}:{}:{} {}", 
+        write!(f, "{}:{}:{} <{}>", 
             self.context().current_filename
                 .as_ref()
                 .map(|f| f.to_str().unwrap_or("<invalid filename>"))
