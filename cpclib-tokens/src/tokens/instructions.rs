@@ -527,7 +527,7 @@ pub enum Token {
     Equ(SmolStr, Expr),
     Export(Vec<SmolStr>),
 
-    Fail(Vec<FormattedExpr>),
+    Fail(Option<Vec<FormattedExpr>>),
     For {
         label: SmolStr,
         start: Expr,

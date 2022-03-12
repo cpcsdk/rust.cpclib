@@ -71,8 +71,8 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
     // prepare the context for the included directories
     let mut context = ParserContext::default();
     context.set_dotted_directives(matches.is_present("DOTTED_DIRECTIVES"));
-
     context.set_current_filename(&filename);
+
     match std::env::current_dir() {
         Ok(cwd) => {
             context.add_search_path(cwd)?;
@@ -102,7 +102,7 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
         panic!("No code provided to assemble");
     };
 
-    crate::parse_z80_str_with_context(code, context).map_err(|e| BasmError::from(e))
+    dbg!(crate::parse_z80_str_with_context(code, context).map_err(|e| BasmError::from(e)))
 }
 
 /// Assemble the given code

@@ -895,7 +895,7 @@ fn build_filename(span: &Z80Span) -> Box<String> {
 
     let name = fname
         .as_ref()
-        .map(|p| p.as_os_str().to_str().unwrap_or("Unknown file name"))
+        .map(|p| dbg!(p).as_os_str().to_str().unwrap_or("[Unknown file name]"))
         .unwrap_or_else(|| {
             context
                 .as_ref()
@@ -952,8 +952,6 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
 
     impl EndKind {
         fn guess(&self, code: &str, mut offset: usize) -> usize {
-            dbg!(code, code.len(), offset);
-
             match self {
                 EndKind::End => {
                     for current in code[offset..].chars() {

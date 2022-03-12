@@ -1918,8 +1918,9 @@ impl Env {
         self.active_page_info_mut().add_pause_command(span.into());
     }
 
-    pub fn visit_fail(&self, info: &[FormattedExpr]) -> Result<(), AssemblerError> {
-        let repr = self.build_string_from_formatted_expression(info)?;
+    pub fn visit_fail(&self, info: Option<&[FormattedExpr]>) -> Result<(), AssemblerError> {
+        let repr = info.map(|info| self.build_string_from_formatted_expression(info))
+            .unwrap_or_else(|| Ok("".to_owned()))?;
         Err(AssemblerError::Fail { msg: repr })
     }
 
@@ -2553,7 +2554,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             env.visit_print(exp.as_ref(), None);
             Ok(())
         }
-        Token::Fail(ref exp) => env.visit_fail(exp.as_ref()),
+        Token::Fail(ref exp) => env.visit_fail(exp.as_ref().map(|v|v.as_slice())),
         Token::Repeat(count, code, counter, counter_start) => {
             env.visit_repeat(
                 count,

@@ -2542,7 +2542,9 @@ pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
 
 pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
-        preceded(parse_directive_word("FAIL"), cut(parse_print_inner)),
+        preceded(
+            parse_directive_word("FAIL"), 
+            opt(parse_print_inner)),
         |exps| Token::Fail(exps)
     )(input)
 }
