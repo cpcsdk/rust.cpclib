@@ -807,7 +807,7 @@ pub fn parse_empty_line(
 
     let mut res = Vec::new();
     if comment.is_some() {
-        let size = input.input_len()-before_comment.input_len();
+        let size = before_comment.input_len() - input.input_len();
         res.push(comment.unwrap().locate(before_comment, size));
     }
 
@@ -1239,7 +1239,7 @@ pub fn parse_z80_line_label_only(
         tokens.push(token.locate(before_label, size));
 
         if comment.is_some() {
-            let size = input.input_len() - before_comment.input_len();
+            let size = before_comment.input_len() - input.input_len();
             tokens.push(comment.unwrap().locate(before_comment, size));
         }
 
