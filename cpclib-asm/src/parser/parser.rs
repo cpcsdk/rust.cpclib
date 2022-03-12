@@ -217,7 +217,7 @@ pub fn parse_z80_line(
                     space0,
                     alt((
                         map(context("basic", parse_basic), |t| {
-                            vec![t.locate(before_elem.clone())]
+                            vec![t]
                         }),
                         map(
                             context(
@@ -359,10 +359,10 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
         )
     )(input)?;
 
+    let (input, _) = alt((space0, line_ending, tag(":")))(input)?;
+    let before_content = input.clone();
     let (input, content) = cut(context(
         "MACRO: issue in the content",
-        preceded(
-            alt((space0, line_ending, tag(":"))),
             many_till(
                 take(1usize),
                 alt((
@@ -370,32 +370,20 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
                     parse_directive_word("ENDMACRO"),
                     parse_directive_word("MEND")
                 ))
-            )
         )
     ))(input)?;
 
+    let content = before_content.take(content.0.len());
+
+    let span = dir_start.take(dir_start.input_len() - input.input_len());
     Ok((
         input.clone(),
-        Token::Macro(
-            name.into(),
-            arguments
-                .iter()
-                .map(|s| SmolStr::from_iter(s.fragment().chars()))
-                .collect::<Vec<SmolStr>>(),
-            content
-                .0
-                .iter()
-                .map(|s| -> String { s.to_string() })
-                .collect::<String>()
-        )
-        .locate(Z80Span(unsafe {
-            LocatedSpan::new_from_raw_offset(
-                dir_start.location_offset(),
-                dir_start.location_line(),
-                &dir_start[..dir_start.len() - input.len()],
-                dir_start.extra
-            )
-        }))
+        LocatedToken::Macro{
+            name,
+            params: arguments,
+            content,
+            span
+        }
     ))
 }
 
@@ -723,7 +711,8 @@ pub fn parse_iterate(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseEr
 }
 
 /// TODO
-pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
+pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let basic_start = input.clone();
     let (input, _) = tuple((space0, tag_no_case("LOCOMOTIVE"), space0))(input)?;
 
     let (input, args) = opt(separated_list1(
@@ -741,7 +730,13 @@ pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
     let (input, _) = tuple((tag_no_case("ENDLOCOMOTIVE"), space0))(input)?;
 
     let args = args.map(|v| v.iter().map(|l| SmolStr::from(l)).collect_vec());
-    Ok((input, Token::Basic(args, hidden_lines, basic.to_string())))
+
+    let size = input.input_len() - basic_start.input_len();
+    Ok((
+        input, 
+        Token::Basic(args, hidden_lines, basic.to_string())
+            .locate(basic_start, size)
+    ))
 }
 
 /// Parse the instruction to hide basic lines
@@ -812,7 +807,8 @@ pub fn parse_empty_line(
 
     let mut res = Vec::new();
     if comment.is_some() {
-        res.push(comment.unwrap().locate(before_comment));
+        let size = input.input_len()-before_comment.input_len();
+        res.push(comment.unwrap().locate(before_comment, size));
     }
 
     Ok((input, res))
@@ -975,7 +971,8 @@ pub fn parse_z80_line_complete(
             }
             None => Token::Label(label.into())
         };
-        tokens.push(token.locate(before_label));
+        let size = before_label.input_len()-input.input_len();
+        tokens.push(token.locate(before_label, size));
         input
     }
     else {
@@ -1025,9 +1022,7 @@ pub fn parse_z80_line_complete(
 
         // We add first token as a label or macro
         if label_or_macro.is_some() && i_know_it_is_a_label {
-            tokens.push(
-                Token::Label(label_or_macro.clone().unwrap().into()).locate(before_label.clone())
-            );
+            tokens.push(LocatedToken::Label(label_or_macro.unwrap()));
         }
         else if r#macro.is_some() {
             tokens.push(r#macro.unwrap());
@@ -1113,7 +1108,8 @@ pub fn parse_z80_line_complete(
             "We expect nothing else at the end of the line",
             alt((line_ending, eof))
         ))(input)?;
-        (input, comment.map(|c| c.locate(before_comment)))
+        let size = before_comment.input_len() - input.input_len();
+        (input, comment.map(|c| c.locate(before_comment, size)))
     }
     else {
         (input.take_split(1).0, None) // Remove the #
@@ -1239,10 +1235,12 @@ pub fn parse_z80_line_label_only(
         };
 
         // add it to the list
-        tokens.push(token.locate(before_label));
+        let size = before_label.input_len() - input.input_len();
+        tokens.push(token.locate(before_label, size));
 
         if comment.is_some() {
-            tokens.push(comment.unwrap().locate(before_comment));
+            let size = input.input_len() - before_comment.input_len();
+            tokens.push(comment.unwrap().locate(before_comment, size));
         }
 
         Ok((input, tokens))
@@ -1524,6 +1522,7 @@ pub fn parse_assign(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80S
 
 /// Parse the opcodes. TODO rename as parse_opcode ...
 pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    let input_start = input.clone();
     let parsing_state = input.context().state.clone();
 
     verify(
@@ -1552,7 +1551,10 @@ pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
         )),
         move |t| t.is_accepted(&parsing_state)
     )(input.clone())
-    .map(|(i, r)| (i, r.locate(input)))
+    .map(|(i, r)| {
+        let size = input_start.input_len() - i.input_len();
+        (i, r.locate(input, size))
+    })
 }
 
 /// Parse ex af, af' instruction
@@ -1626,8 +1628,7 @@ pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z
 
 fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let dir_start = input.clone();
-    map(
-        alt((
+    let (input, token) = alt((
             context("[DBG] assert", parse_assert),
             context("[DBG] bankset", parse_bankset),
             context("[DBG] bank", parse_bank),
@@ -1648,9 +1649,10 @@ fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
             map(preceded(space0, parse_directive_word("PAUSE")), |_| {
                 Token::Pause
             })
-        )),
-        move |t| t.locate(dir_start.clone())
-    )(input.clone())
+        ))(input)?;
+
+    let size = dir_start.input_len() - input.input_len();
+    Ok((input, token.locate(dir_start, size)))
 }
 
 fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
@@ -1670,16 +1672,9 @@ fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         context("[DBG] snainit", parse_snainit)
     ))(input.clone())?;
 
-    // XXX Do we keep that
-    let directive = directive.locate(Z80Span(unsafe {
-        LocatedSpan::new_from_raw_offset(
-            dir_start.location_offset(),
-            dir_start.location_line(),
-            &dir_start[..dir_start.len() - input2.len()],
-            dir_start.extra
-        )
-    }));
-    Ok((input2, directive))
+
+    let size = dir_start.input_len() - input.input_len();
+    Ok((input2, directive.locate(dir_start, size)))
 }
 
 // Concerns directive that already produce a LocatedToken

@@ -2309,8 +2309,7 @@ pub fn visit_located_token(
                 Token::Breakpoint(expr) => env.visit_breakpoint(expr.as_ref(), Some(span.clone())),
 
                 Token::Macro(name, arguments, code) => {
-                    env.visit_macro_definition(name, arguments, code, Some(span))
-                        .map_err(|e| e.locate(span.clone()))
+                    panic!("Should delegate it to ProcessedToken")
                 }
                 Token::MacroCall(..) => {
                     panic!("Should not be called")
@@ -2444,7 +2443,8 @@ pub fn visit_located_token(
                 .map_err(|e| e.locate(span.clone()))
         }
         LocatedToken::Include(..) => panic!("Should never been called"),
-        LocatedToken::Incbin { .. } => panic!("Should never been called")
+        LocatedToken::Incbin { .. } => panic!("Should never been called"),
+        LocatedToken::Macro { name, params, content, span } => panic!("Should never been called"),
     }?;
 
     // Patch the warnings to inject them a location

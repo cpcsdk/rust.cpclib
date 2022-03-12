@@ -649,6 +649,12 @@ pub enum LocatedToken {
         Z80Span
     ),
     Label(Z80Span),
+    Macro{
+        name: Z80Span, 
+        params: Vec<Z80Span>, 
+        content: Z80Span,
+        span: Z80Span
+    },
     /// Name, Parameters, FullSpan
     MacroCall(Z80Span, Vec<LocatedMacroParam>, Z80Span),
     Repeat(
@@ -729,6 +735,7 @@ impl MayHaveSpan for LocatedToken {
             | LocatedToken::Function(_, _, _, span)
             | LocatedToken::If(_, _, span)
             | LocatedToken::Label(span)
+            | LocatedToken::Macro{span, ..}
             | LocatedToken::MacroCall(_, _, span)
             | LocatedToken::Module(_, _, span)
             | LocatedToken::Iterate(_, _, _, span)
@@ -922,7 +929,8 @@ impl LocatedToken {
                 off,
                 transformation,
                 span
-            } => todo!()
+            } => todo!(),
+            LocatedToken::Macro { name, params, content, span } => Cow::Owned(Token::Macro(name.into(), params.iter().map(|p| p.into()).collect_vec(), content.as_str().to_owned())),
         }
     }
 
@@ -995,13 +1003,13 @@ impl LocatedToken {
 pub trait Locate {
     type Output;
 
-    fn locate(self, span: Z80Span) -> Self::Output;
+    fn locate(self, span: Z80Span, size: usize) -> Self::Output;
 }
 
 impl Locate for Token {
     type Output = LocatedToken;
 
-    fn locate(self, span: Z80Span) -> LocatedToken {
+    fn locate(self, span: Z80Span, size: usize) -> LocatedToken {
         if self.has_at_least_one_listing() {
             // /
             // match self {
@@ -1035,7 +1043,7 @@ impl Locate for Token {
             unreachable!()
         }
         else {
-            LocatedToken::Standard { token: self, span }
+            LocatedToken::Standard { token: self, span: span.take(size) }
         }
     }
 }
