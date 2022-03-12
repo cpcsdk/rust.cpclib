@@ -34,6 +34,7 @@ pub enum ExpressionError {
 pub enum AssemblerError {
     /// Parse of a located listing failed, but the error is in fact stored within the located listing object...
     LocatedListingError(std::sync::Arc<LocatedListing>),
+
     //#[fail(display = "Several errors arised: {:?}", errors)]
     MultipleErrors {
         errors: Vec<AssemblerError>
@@ -890,12 +891,13 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
 }
 
 fn build_filename(span: &Z80Span) -> Box<String> {
+    dbg!(span);
     let fname = &span.extra.current_filename;
     let context = &span.extra.context_name;
 
     let name = fname
         .as_ref()
-        .map(|p| dbg!(p).as_os_str().to_str().unwrap_or("[Unknown file name]"))
+        .map(|p| dbg!(p).as_os_str().to_str().unwrap_or("[Invalid file name]"))
         .unwrap_or_else(|| {
             context
                 .as_ref()

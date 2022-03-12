@@ -1921,7 +1921,7 @@ impl Env {
     pub fn visit_fail(&self, info: Option<&[FormattedExpr]>) -> Result<(), AssemblerError> {
         let repr = info.map(|info| self.build_string_from_formatted_expression(info))
             .unwrap_or_else(|| Ok("".to_owned()))?;
-        Err(AssemblerError::Fail { msg: repr })
+       dbg!(Err(AssemblerError::Fail { msg: repr }))
     }
 
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
@@ -2349,10 +2349,10 @@ pub fn visit_located_token(
                 }
                 _ => {
                     token.visited(env).map_err(|err| {
-                        AssemblerError::RelocatedError {
+                        dbg!(AssemblerError::RelocatedError {
                             error: Box::new(err),
                             span: span.clone()
-                        }
+                        })
                     })
                 }
             }

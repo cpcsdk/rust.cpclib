@@ -18,6 +18,7 @@ pub enum BasmError {
 
     // #[fail(display = "Assembling error: {}", error)]
     AssemblerError { error: AssemblerError },
+    ErrorWithListing { error: Box<BasmError>, listing: LocatedListing},
 
     // #[fail(display = "Invalid Amsdos filename: {}", filename)]
     InvalidAmsdosFilename { filename: String },
@@ -52,6 +53,9 @@ impl Display for BasmError {
             BasmError::InvalidArgument(msg) => {
                 write!(f, "Invalid argument: {}", msg)
             }
+            BasmError::ErrorWithListing { box error, listing } => {
+                error.fmt(f)
+            },
         }
     }
 }
@@ -164,7 +168,7 @@ pub fn assemble<'arg>(
     }
 
     let env = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
-        .map_err(|e| BasmError::AssemblerError { error: e })?;
+        .map_err(|e| dbg!(BasmError::AssemblerError { error: e }))?;
 
     if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
         if dest == "-" {
@@ -278,7 +282,8 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     // standard assembling
     let listing = parse(matches)?;
-    let env = assemble(matches, &listing)?;
+    let env = assemble(matches, &listing)
+        .map_err(move |error| BasmError::ErrorWithListing{error : box error, listing})?;
 
     eprintln!("TODO: include parse warnings");
     // warnings.extend_from_slice(env.warnings());
