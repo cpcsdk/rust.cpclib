@@ -10,6 +10,37 @@ impl ListingElement for Token {
     type MacroParam = MacroParam;
     type TestKind = TestKind;
 
+
+
+
+    fn is_macro_definition(&self) -> bool {
+        match self {
+            Self::Macro(..) => true,
+            _ => false
+        }
+    }
+    fn macro_definition_name(&self) -> &str {
+        match self {
+            Self::Macro(name, _, _) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+    fn macro_definition_arguments(&self)-> SmallVec<[&str;4]> {
+        match self {
+            Self::Macro(_,args,  _) => args.iter().map(|a| a.as_str()).collect(),
+            _ => unreachable!()
+        }
+    }
+    fn macro_definition_code(&self) -> &str {
+        match self {
+            Self::Macro(_, _, code) => code.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+
+
+
     fn macro_call_name(&self) -> &str {
         match self {
             Token::MacroCall(name, _) => name.as_str(),

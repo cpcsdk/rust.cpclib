@@ -1557,7 +1557,7 @@ impl Env {
     pub fn visit_macro_definition(
         &mut self,
         name: &str,
-        arguments: &[SmolStr],
+        arguments: &[&str],
         code: &str,
         source: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
@@ -2588,7 +2588,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
         Token::Macro(name, arguments, code) => {
-            env.visit_macro_definition(name, arguments, code, None)
+            panic!("Is delegated to ProcessedToken")
         }
         Token::MacroCall(_name, _parameters) => panic!("Should never been called"),
         Token::Struct(name, content) => env.visit_struct_definition(name, content.as_slice(), None),

@@ -16,6 +16,13 @@ pub trait ListingElement: Debug + Sized {
     type TestKind: TestKindElement;
     type Expr: ExprElement;
 
+    fn is_macro_definition(&self) -> bool;
+    fn macro_definition_name(&self) -> &str;
+    fn macro_definition_arguments(&self)-> SmallVec<[&str;4]>;
+    fn macro_definition_code(&self) -> &str;
+
+
+    fn is_call_macro_or_build_struct(&self) -> bool;
     fn macro_call_name(&self) -> &str;
     fn macro_call_arguments(&self) -> &[Self::MacroParam];
 
@@ -35,7 +42,6 @@ pub trait ListingElement: Debug + Sized {
     fn include_namespace(&self) -> Option<&str>;
     fn include_once(&self) -> bool;
 
-    fn is_call_macro_or_build_struct(&self) -> bool;
 
     fn is_function_definition(&self) -> bool;
     fn function_definition_name(&self)-> &str;

@@ -1053,6 +1053,32 @@ impl ListingElement for LocatedToken {
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
 
+    fn is_macro_definition(&self) -> bool {
+        match self {
+            Self::Macro{..} => true,
+            _ => false
+        }
+    }
+    fn macro_definition_name(&self) -> &str {
+        match self {
+            Self::Macro{name,..} => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+    fn macro_definition_arguments(&self)-> SmallVec<[&str;4]> {
+        match self {
+            Self::Macro{params,..} => params.iter().map(|a| a.as_str()).collect(),
+            _ => unreachable!()
+        }
+    }
+    fn macro_definition_code(&self) -> &str {
+        match self {
+            Self::Macro{content, ..}=> content.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+
     fn macro_call_name(&self) -> &str {
         match self {
             Self::MacroCall(name, ..) => name.as_str(),

@@ -685,8 +685,12 @@ where
         }
 
         // Behavior based on the token
-        if false {
-            todo!()
+        if self.token.is_macro_definition() {
+            //TODO really implement logic here
+            let name = self.token.macro_definition_name();
+            let arguments = self.token.macro_definition_arguments();
+            let code = self.token.macro_definition_code();
+            env.visit_macro_definition(name, &arguments, code, self.possible_span())
         }        
         // Behavior based on the state (for ease of writting)
         else {

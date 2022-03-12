@@ -249,10 +249,10 @@ pub struct Macro {
 }
 
 impl Macro {
-    pub fn new(name: SmolStr, params: &[SmolStr], code: String, source: Option<Source>) -> Self {
+    pub fn new(name: SmolStr, params: &[&str], code: String, source: Option<Source>) -> Self {
         Macro {
             name,
-            params: params.to_vec(),
+            params: params.iter().map(|s| s.into()).collect(),
             code,
             source
         }
