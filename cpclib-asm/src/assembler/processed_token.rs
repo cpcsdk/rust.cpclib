@@ -20,6 +20,7 @@ use crate::implementation::instructions::Cruncher;
 use crate::preamble::{parse_z80_str_with_context, LocatedListing, parse_z80_str, Z80Span, MayHaveSpan};
 use crate::{AssemblerError, Env, LocatedToken, ParserContext, Visited};
 
+use super::file::load_binary;
 use super::function::{FunctionBuilder, Function};
 use super::r#macro::Expandable;
 
@@ -522,19 +523,7 @@ impl<'token, T: ToSimpleToken + Visited + Debug + ListingElement + Sync + MayHav
                     });
                 }
                 Ok(ref fname) => {
-                    let mut f = File::open(&fname).map_err(|_e| {
-                        AssemblerError::IOError {
-                            msg: format!("Unable to open {:?}", fname)
-                        }
-                    })?;
-
-                    // load the full file
-                    let mut data = Vec::new();
-                    f.read_to_end(&mut data).map_err(|e| {
-                        AssemblerError::IOError {
-                            msg: format!("Unable to read {:?}. {}", fname, e.to_string())
-                        }
-                    })?;
+                    let mut data = load_binary(fname, ctx)?;
 
                     // get a slice on the data to ease its cut
                     let mut data = &data[..];

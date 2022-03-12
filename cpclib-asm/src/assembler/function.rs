@@ -473,11 +473,9 @@ impl HardCodedFunction {
             HardCodedFunction::MatrixHeight => matrix_height(&params[0]),
             HardCodedFunction::Load => {
                 let fname = params[0].string()?;
-                file::load_binary(fname).map_err(|e| {
-                    AssemblerError::AssemblingError {
-                        msg: format!("{} not found", fname)
-                    }
-                })
+                let ctx = &env.ctx;
+                let data = file::load_binary(fname, ctx)?;
+                Ok(ExprResult::from(data.as_slice()))
             }
         }
     }
