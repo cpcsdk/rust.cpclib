@@ -52,6 +52,21 @@ impl std::fmt::Display for Z80Span {
     }
 }
 
+impl std::fmt::Debug for Z80Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result{
+        write!(f, "{}:{}:{} {}", 
+            self.context().current_filename
+                .as_ref()
+                .map(|f| f.to_str().unwrap_or("<invalid filename>"))
+                .unwrap_or("unknown"),
+            self.location_line(),
+            self.get_utf8_column(),
+            self.as_str()
+        )
+
+    }
+}
+
 impl Into<Source> for &Z80Span {
     fn into(self) -> Source {
         Source::new(
@@ -134,11 +149,7 @@ impl AsRef<InnerZ80Span> for Z80Span {
         self.deref()
     }
 }
-impl std::fmt::Debug for Z80Span {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        std::fmt::Display::fmt(&self.as_str(), f)
-    }
-}
+
 impl Compare<&'static str> for Z80Span {
     fn compare(&self, t: &'static str) -> CompareResult {
         self.deref().compare(t)
