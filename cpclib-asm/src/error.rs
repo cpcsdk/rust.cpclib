@@ -502,8 +502,8 @@ impl AssemblerError {
                     ExpressionError::OwnError(error) => {
                         format!("{}", error)
                     }
-                    ExpressionError::InvalidSize(_expected, index) => {
-                        format!("{} index incompatible with size {}", index, index)
+                    ExpressionError::InvalidSize(expected, index) => {
+                        format!("{} index incompatible with size {}", index, expected)
                     }
                 };
                 write!(f, "Expression error {}", msg)

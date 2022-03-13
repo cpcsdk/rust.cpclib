@@ -11,8 +11,10 @@
 
 	; Take the {amount} first element of list {l}
 	FUNCTION TAKE, l, amount
-		pos = list_len({l})
-		return list_sublist({l}, 0, min({amount}-1, pos))
+		len = list_len({l})
+		start = 0
+		finish = start + min({amount}, len)
+		return list_sublist({l}, start, finish)
 	ENDFUNCTION
 
 	; Reverse list {l}
@@ -34,6 +36,9 @@
 
 	assert REVERT([1, 2, 3, 4]) == [4, 3, 2, 1]
 	assert list_len(load("hello.sna")) == 4674
+
+	assert list_len(TAKE(load("hello.sna"), 8)) == 8
+
 
 
 	assert string_from_list(TAKE(load("hello.sna"), 8)) == "MV - SNA"

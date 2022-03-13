@@ -98,6 +98,9 @@ pub fn list_sublist(
     start: usize,
     end: usize
 ) -> Result<ExprResult, crate::AssemblerError> {
+
+    dbg!(list, start, end);
+    
     match list {
         ExprResult::String(s) => {
             if start >= s.len() {
