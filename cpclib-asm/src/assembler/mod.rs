@@ -828,7 +828,6 @@ impl Env {
                 self.request_additional_pass = false.into();
             }
             self.symbols.new_pass();
-            self.functions.clear(); // The functions refer to listing elements that could be freed from memory
         }
     }
 
