@@ -10,7 +10,7 @@ use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, Token, ToSimpleToken, TestKindElement};
 
 use super::list::{
-    list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push
+    list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_new, string_push, string_from_list
 };
 use super::matrix::{
     matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width
@@ -201,6 +201,7 @@ lazy_static::lazy_static! {
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
         "string_concat": Function::HardCoded(HardCodedFunction::StringConcat),
+        "string_from_list": Function::HardCoded(HardCodedFunction::StringFromList),
         "assemble": Function::HardCoded(HardCodedFunction::Assemble),
         "matrix_new": Function::HardCoded(HardCodedFunction::MatrixNew),
         "matrix_set": Function::HardCoded(HardCodedFunction::MatrixSet),
@@ -251,6 +252,7 @@ pub enum HardCodedFunction {
     StringNew,
     StringPush,
     StringConcat,
+    StringFromList,
 
     Load,
     Assemble
@@ -282,6 +284,7 @@ impl HardCodedFunction {
 
             HardCodedFunction::StringNew => Some(2),
             HardCodedFunction::StringPush => Some(2),
+            HardCodedFunction::StringFromList => Some(1),
             HardCodedFunction::StringConcat => None,
 
             HardCodedFunction::Assemble => Some(1),
@@ -430,6 +433,9 @@ impl HardCodedFunction {
             }
 
             HardCodedFunction::StringPush => string_push(params[0].clone(), params[1].clone()),
+
+            HardCodedFunction::StringFromList => string_from_list(params[0].clone()),
+
 
             HardCodedFunction::Assemble => assemble(params[0].clone(), env),
             HardCodedFunction::StringConcat => {

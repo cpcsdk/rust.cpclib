@@ -12,7 +12,7 @@
 	; Take the {amount} first element of list {l}
 	FUNCTION TAKE, l, amount
 		pos = list_len({l})
-		return list_sublist({l}, 0, min({amount}, pos))
+		return list_sublist({l}, 0, min({amount}-1, pos))
 	ENDFUNCTION
 
 	; Reverse list {l}
@@ -36,7 +36,7 @@
 	assert list_len(load("hello.sna")) == 4674
 
 
-	assert TAKE(load("hello.sna"), 8) == "MV - SNA"
+	assert string_from_list(TAKE(load("hello.sna"), 8)) == "MV - SNA"
 
 	; Write in memory 8 bytes from the given file
 	snapshot = load("hello.sna")

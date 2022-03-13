@@ -205,6 +205,36 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
     }
 }
 
+pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+    match s1 {
+        ExprResult::List(l1) => {
+            l1.iter()
+                .enumerate()
+                .map(|(idx, v)| {
+                    let v = v.int()?;
+                    if v<0 || v>255 {
+                       Err(AssemblerError::AssemblingError {
+                            msg: format!("{} at {} is not a valid byte value", v, idx)
+                        })
+                    } else {
+                        Ok(v as u8 as char)
+                    }
+                })
+                .collect::<Result<String, AssemblerError>>()
+                .map(|s| s.into())
+
+        },
+
+        _ => {
+            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                box AssemblerError::AssemblingError {
+                    msg: format!("string_from_list must take a list as an argument")
+                }
+            )))
+        }
+    }
+}
+
 pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
     match (s1, s2) {
         (ExprResult::String(s1), ExprResult::String(s2)) => {
