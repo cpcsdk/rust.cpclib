@@ -1,33 +1,30 @@
 use std::fs::remove_dir;
 use std::process::{Command, Output};
 
+use cpclib_asm::assembler::Env;
+use cpclib_asm::basm_utils::{build_args_parser, process, BasmError};
+use cpclib_asm::error::AssemblerError;
 use pretty_assertions::{assert_eq, assert_ne};
 use test_generator::test_resources;
 
 const BUILD_BASM: bool = true;
 
-fn build_basm() {
-    if BUILD_BASM {
-        eprintln!("> Build basm");
-        Command::new("cargo")
-            .args(["+nightly", "build"])
-            .output()
-            .expect("Unable to build basm");
-    }
-}
 
-fn command_for_generated_test(fname: &str, output: &str) -> Output {
-    build_basm();
 
-    eprintln!("> Run  basm");
-    Command::new("../target/debug/basm")
-        .args(["-I", "tests/asm/", "-i", fname, "-o", output])
-        .output()
-        .expect("Unable to launch basm")
+fn command_for_generated_test(fname: &str, output: &str) -> Result<(Env, Vec<AssemblerError>), BasmError> {
+    let args_parser = build_args_parser();
+    let args = args_parser.get_matches_from(&[
+        "basm",
+        "-I", "tests/asm/", 
+        "-i", 
+        "-o", output,
+        fname, 
+    ]);
+    process(&args)
 }
 
 fn specific_test(folder: &str, fname: &str) {
-    build_basm();
+  
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
@@ -62,7 +59,7 @@ fn expect_success(fname: &str) {
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
     let res = command_for_generated_test(fname, output_fname);
-    if res.status.success() {
+    if res.is_ok() {
         // TODO - add additional checks
         let equiv_fname = fname.replace(".asm", ".equiv");
         if std::path::Path::new("tests/asm/")
@@ -75,11 +72,12 @@ fn expect_success(fname: &str) {
             let equiv_output_fname = equiv_output_file.path().as_os_str().to_str().unwrap();
 
             let res_equiv = command_for_generated_test(&equiv_fname, equiv_output_fname);
-            if !res_equiv.status.success() {
-                panic!(
+            if !res_equiv.is_ok() {
+                eprintln!(
                     "Error while assembling the equivalent file.\n{}",
-                    String::from_utf8_lossy(&res.stderr)
-                )
+                    res.err().unwrap().to_string()
+                );
+                panic!()
             }
 
             let output_content = std::fs::read(output_fname).unwrap();
@@ -95,7 +93,7 @@ fn expect_success(fname: &str) {
         eprintln!(
             "Error when assembling {}:\n{}",
             fname,
-            String::from_utf8_lossy(&res.stderr)
+            res.err().unwrap().to_string()
         );
         panic!()
     }
@@ -109,23 +107,15 @@ fn expect_failure(fname: &str) {
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
     let res = command_for_generated_test(fname, output_fname);
-    if !res.status.success() {
-        let msg = dbg!(String::from_utf8_lossy(&res.stderr));
-        if msg.contains("panicked at") {
-            eprintln!(
-                "Error when assembling {}. Failure due to a basm bug:\n{}",
-                fname, msg
-            );
-            panic!()
-        } else {
-            panic!()
-        }
+    if res.is_err() {
+       // nothing to do
     }
     else {
-        panic!(
-            "Error when assembling {}. Wrong success:\n{}",
-            fname,
-            String::from_utf8_lossy(&res.stdout)
+        eprintln!(
+            "Error when assembling {}. Wrong success:\n",
+            fname
+            
         );
+        panic!();
     }
 }
