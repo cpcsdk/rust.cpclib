@@ -8,8 +8,9 @@
 	db "Before crunched section"
 
 	LZAPU
+		; Here, the limit does not hold because it is checked AFTER compression
 		defs 0x100
-		assert $> 0x1e0
+		assert $> 0x1e0, "Must be allowed before compression"
 	LZCLOSE
 
 	db "After crunched section"

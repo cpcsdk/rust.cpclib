@@ -2059,7 +2059,7 @@ impl Env {
         self.output_trigger
             .as_mut()
             .map(|t| t.enter_crunched_section());
-        visit_processed_tokens(lst, self).map_err(|e| {
+        visit_processed_tokens(lst, &mut crunched_env).map_err(|e| {
             dbg!(&self.pass, &crunched_env.pass);
             let e = AssemblerError::CrunchedSectionError { error: e.into() };
             match span {
