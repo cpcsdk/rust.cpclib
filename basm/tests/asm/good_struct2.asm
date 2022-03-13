@@ -21,7 +21,7 @@ zz    db 6
 my_point1: point 1, 2, 3
 
 ; use all default values
-my_point2: point
+my_point2: point (void)
 
 ; use default at the end
 my_point3: point 1
