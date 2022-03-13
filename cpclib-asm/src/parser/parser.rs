@@ -1275,7 +1275,7 @@ pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80
 
 pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     // manage the string format - TODO manage the others too
-    let (input, chars) = context("Invalid string", parse_decoded_string)(input)?;
+    let (input, chars) = context("Missing string", parse_string)(input)?;
     let (input, start) = context("Missing start value", preceded(parse_comma, expr))(input)?;
     let format = CharsetFormat::CharsList(chars.chars().collect_vec(), start);
 
@@ -3746,20 +3746,7 @@ pub fn parse_bool_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseE
     Ok((input, LocatedExpr::Bool(bool, span)))
 }
 
-// TODO rewire with https://docs.rs/nom/7.1.0/nom/bytes/complete/fn.escaped_transform.html
-pub fn parse_decoded_string(input: Z80Span) -> IResult<Z80Span, String, VerboseError<Z80Span>> {
-    panic!("Decoding must be done in assembling phase not parse phase");
-    map(parse_string, |s| {
-        s.replace("\\\\", "\\")
-            .replace("\\a", &char::from(7).to_string())
-            .replace("\\b", &char::from(8).to_string())
-            .replace("\\t", "\t")
-            .replace("\\r", "\r")
-            .replace("\\n", "\n")
-            .replace("\\v", &char::from(11).to_string())
-            .replace("\\f", &char::from(12).to_string())
-    })(input)
-}
+
 
 /// Get a factor
 pub fn factor(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {
