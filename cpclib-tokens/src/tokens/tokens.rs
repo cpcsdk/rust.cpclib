@@ -183,6 +183,29 @@ impl ListingElement for Token {
             _ => unreachable!()
         }
     }
+
+    fn is_crunched_section(&self) -> bool {
+        match self {
+            Self::CrunchedSection(..) => true,
+            _  => false,
+        }
+    }
+
+    fn crunched_section_listing(&self) -> &[Self] {
+        match self {
+            Self::CrunchedSection(_, lst) => lst.as_slice(),
+            _  => unreachable!(),
+        }
+    }
+
+    fn crunched_section_kind(&self) -> &CrunchType {
+        match self {
+            Self::CrunchedSection(kind, _) => kind,
+            _  => unreachable!(),
+        }
+    }
+
+
 }
 
 /// Standard listing is a specific implementation

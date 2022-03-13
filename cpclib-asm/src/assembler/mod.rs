@@ -38,6 +38,7 @@ use self::listing_output::*;
 use self::processed_token::{build_processed_tokens_list, ProcessedToken};
 use self::report::SavedFile;
 use self::symbols_output::SymbolOutputGenerator;
+use crate::assembler::processed_token::visit_processed_tokens;
 use crate::assembler::r#macro::Expandable;
 use crate::delayed_command::*;
 use crate::page_info::PageInformation;
@@ -2013,12 +2014,18 @@ impl Env {
     /// Handle a crunched section.
     /// Current limitations (that need to be overcomed later):
     ///  - everything inside the crunched section must be assembled during pass1
-    pub fn visit_crunched_section<T: Visited + ListingElement + MayHaveSpan>(
+    pub fn visit_crunched_section<'tokens, T: Visited + ListingElement + MayHaveSpan + Sync>(
         &mut self,
         kind: &CrunchType,
-        lst: &[T],
+        lst: &mut [ProcessedToken<'tokens, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), AssemblerError> 
+    where  <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    ProcessedToken<'tokens, T>: FunctionBuilder
+    , <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr: ExprEvaluationExt
+
+
+    {
         // deactivated because there is no reason to do such thing
         // crunched section is disabled inside crunched section
         // if let Some(state) = & self.crunched_section_state {
@@ -2052,7 +2059,7 @@ impl Env {
         self.output_trigger
             .as_mut()
             .map(|t| t.enter_crunched_section());
-        crunched_env.visit_listing(lst).map_err(|e| {
+        visit_processed_tokens(lst, self).map_err(|e| {
             dbg!(&self.pass, &crunched_env.pass);
             let e = AssemblerError::CrunchedSectionError { error: e.into() };
             match span {
@@ -2357,15 +2364,15 @@ pub fn visit_located_token(
             }
         }
 
-        LocatedToken::CrunchedSection(kind, lst, span) => {
-            env.visit_crunched_section(kind, lst, Some(span))
-        }
-
-        LocatedToken::Function(name, params, inner, span) => {
+        LocatedToken::CrunchedSection(..) => {
             panic!("Should be handled by ProcessedToken")
         }
 
-        LocatedToken::If(cases, other, span) => {
+        LocatedToken::Function(..) => {
+            panic!("Should be handled by ProcessedToken")
+        }
+
+        LocatedToken::If(..) => {
             panic!("Should be handled by ProcessedToken")
         }
 

@@ -20,7 +20,7 @@ type InnerZ80Span = LocatedSpan<
     &'static ParserContext
 >;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Z80Span(pub(crate) InnerZ80Span);
 
 impl AsRef<str> for Z80Span {

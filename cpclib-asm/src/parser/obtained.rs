@@ -621,6 +621,7 @@ pub enum LocatedToken {
     },
     Defb(Vec<LocatedExpr>, Z80Span),
     Defw(Vec<LocatedExpr>, Z80Span),
+    CrunchedSection(CrunchType, LocatedListing, Z80Span),
     Str(Vec<LocatedExpr>, Z80Span),
 
     For {
@@ -632,7 +633,6 @@ pub enum LocatedToken {
         span: Z80Span
     },
     Function(Z80Span, Vec<Z80Span>, LocatedListing, Z80Span),
-    CrunchedSection(CrunchType, LocatedListing, Z80Span),
     Include(Z80Span, Option<Z80Span>, bool, Z80Span),
     Incbin {
         fname: Z80Span,
@@ -1223,6 +1223,28 @@ impl ListingElement for LocatedToken {
             _ => unreachable!()
         }
     }
+
+    fn is_crunched_section(&self) -> bool {
+        match self {
+            Self::CrunchedSection(..) => true,
+            _  => false,
+        }
+    }
+
+    fn crunched_section_listing(&self) -> &[Self] {
+        match self {
+            Self::CrunchedSection(_, lst, _) => lst.as_slice(),
+            _  => unreachable!(),
+        }
+    }
+
+    fn crunched_section_kind(&self) -> &CrunchType {
+        match self {
+            Self::CrunchedSection(kind, _, _) => kind,
+            _  => unreachable!(),
+        }
+    }
+
 }
 
 pub type InnerLocatedListing = BaseListing<LocatedToken>;

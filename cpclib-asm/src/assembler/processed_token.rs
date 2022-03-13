@@ -27,7 +27,7 @@ use super::r#macro::Expandable;
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProcessedToken<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> {
+pub struct ProcessedToken<'token, T: Visited +  Debug + ListingElement + Sync> {
     /// The token being processed by the assembler
     token: &'token T,
     state: Option<ProcessedTokenState<'token, T>>
@@ -36,7 +36,8 @@ pub struct ProcessedToken<'token, T: Visited + ToSimpleToken + Debug + ListingEl
 
 /// Specific state to maintain for the current token
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum ProcessedTokenState<'token, T: Visited + ToSimpleToken + ListingElement + Debug + Sync> {
+enum ProcessedTokenState<'token, T: Visited +  ListingElement + Debug + Sync> {
+    CrunchedSection(CrunchedSectionState<'token, T>),
     /// A state is expected but has not been yet specified (before include or incbin or a macro call or a struct build or a function definition)
     Expected,
     FunctionDefinition(FunctionDefinitionState),
@@ -52,6 +53,25 @@ enum ProcessedTokenState<'token, T: Visited + ToSimpleToken + ListingElement + D
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FunctionDefinitionState(Option<Arc<Function>>);
+
+
+#[derive(PartialEq, Eq)]
+struct CrunchedSectionState<'token, T: Visited +  ListingElement + Debug + Sync> {
+    processed_tokens: Vec<ProcessedToken<'token, T>>,
+    span: Option<Z80Span>
+}
+
+impl<'token, T: Visited +  ListingElement + Debug + Sync> Clone for CrunchedSectionState<'token, T> {
+    fn clone(&self) -> Self {
+        todo!()
+    }
+}
+
+impl<'token, T: Visited +  ListingElement + Debug + Sync> Debug for CrunchedSectionState<'token, T> {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "CrunchedSectionState")
+    }
+}
 
 
 #[self_referencing]
@@ -123,7 +143,7 @@ impl Debug for ExpandState {
 
 /// Store for each branch (if passed at some point) the test result and the listing
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct IfState<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> {
+struct IfState<'token, T: Visited +  Debug + ListingElement + Sync> {
     // The token that contains the tests and listings
     token: &'token T,
     if_token_adr_to_used_decision: std::collections::HashMap<usize, bool>,
@@ -134,7 +154,7 @@ struct IfState<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Syn
     else_listing: Option<Vec<ProcessedToken<'token, T>>>
 }
 
-impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync +MayHaveSpan> IfState<'token, T>
+impl<'token, T: Visited +  Debug + ListingElement + Sync +MayHaveSpan> IfState<'token, T>
 where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
     fn new(token: &'token T) -> Self {
@@ -269,7 +289,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
     }
 }
 
-impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> ToSimpleToken
+impl<'token, T: Visited +  Debug + ListingElement + Sync + ToSimpleToken > ToSimpleToken
     for ProcessedToken<'token, T>
 {
     fn as_simple_token(&self) -> Cow<Token> {
@@ -279,7 +299,8 @@ impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync> ToSimpl
 
 pub type AssemblerInfo = AssemblerError;
 
-pub fn build_processed_token<'token, T: ToSimpleToken + Visited + Debug + Sync + ListingElement + MayHaveSpan>(
+/// Build a processed token based on the base token
+pub fn build_processed_token<'token, T:  Visited + Debug + Sync + ListingElement + MayHaveSpan>(
     token: &'token T,
     env: &Env
 ) -> ProcessedToken<'token, T>
@@ -292,6 +313,14 @@ where
     }
     else if token.is_include() || token.is_incbin() {
         Some(ProcessedTokenState::Expected)
+    }
+    else if token.is_crunched_section() {
+        Some(ProcessedTokenState::CrunchedSection(
+            CrunchedSectionState{
+                processed_tokens: build_processed_tokens_list(token.crunched_section_listing(), env),
+                span: token.possible_span().cloned()
+            } 
+        ))
     }
     else if token.is_function_definition() {
         Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(None)))
@@ -310,7 +339,7 @@ where
     }
 }
 
-pub fn build_processed_tokens_list<'token, T: ToSimpleToken + Visited + Debug + Sync + ListingElement + MayHaveSpan>(
+pub fn build_processed_tokens_list<'token, T:  Visited + Debug + Sync + ListingElement + MayHaveSpan>(
     tokens: &'token [T],
     env: &Env
 ) -> Vec<ProcessedToken<'token, T>>
@@ -330,7 +359,7 @@ where
 }
 
 /// Visit all the tokens until an error occurs
-pub fn visit_processed_tokens<'token,  T: ToSimpleToken + Visited + Debug + ListingElement + Sync + MayHaveSpan>(
+pub fn visit_processed_tokens<'token,  T:  Visited + Debug + ListingElement + Sync + MayHaveSpan>(
     tokens: &mut [ProcessedToken<'token, T>],
     env: &mut Env
 ) -> Result<(), AssemblerError>
@@ -346,7 +375,7 @@ where
     Ok(())
 }
 
-impl<'token, T: ToSimpleToken + Visited + Debug + ListingElement + Sync + MayHaveSpan>  MayHaveSpan for ProcessedToken<'token, T> {
+impl<'token, T:  Visited + Debug + ListingElement + Sync + MayHaveSpan>  MayHaveSpan for ProcessedToken<'token, T> {
     fn possible_span(&self) -> Option<&Z80Span> {
         self.token.possible_span()
     }
@@ -360,7 +389,7 @@ impl<'token, T: ToSimpleToken + Visited + Debug + ListingElement + Sync + MayHav
     }
 }
 
-impl<'token, T: ToSimpleToken + Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T> {
+impl<'token, T:  Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T> {
    
 
     /// Generate the tokens needed for the macro or the struct
@@ -475,9 +504,12 @@ impl<'token, T: ToSimpleToken + Visited + Debug + ListingElement + Sync + MayHav
                 // TODO check if paramters changed
                 return Ok(None);
             }
-            Some(ProcessedTokenState::If(..)) |
-            Some(ProcessedTokenState::MacroCallOrBuildStruct(_)) |
-            Some(ProcessedTokenState::FunctionDefinition(..)) |
+            Some(
+                ProcessedTokenState::If(..) |
+                ProcessedTokenState::MacroCallOrBuildStruct(_) |
+                ProcessedTokenState::FunctionDefinition(..) |
+                ProcessedTokenState::CrunchedSection{..}
+            ) |
             None  => return Ok(None)
         };
 
@@ -650,7 +682,7 @@ pub fn read_source(fname: &str, ctx: &ParserContext) -> Result<String, Assembler
     }
 }
 
-impl<'token, T: Visited + ToSimpleToken + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
+impl<'token, T: Visited +  Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
@@ -684,6 +716,15 @@ where
         else {
             // Handle the tokens depending on their specific state
             match &mut self.state {
+                Some(ProcessedTokenState::CrunchedSection(CrunchedSectionState{processed_tokens, span})) => {
+                    env.visit_crunched_section(
+                        self.token.crunched_section_kind(),
+                        processed_tokens,
+                        span.as_ref()
+                    )
+                }
+
+
                 Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(Some(fun)))) => {
                     // TODO check if the funtion has already been defined during this pass
                     Ok(())

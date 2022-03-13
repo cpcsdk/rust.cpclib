@@ -8,9 +8,8 @@
 	db "Before crunched section"
 
 	LZAPU
-
-	defs 0x100
-	assert $> 0x1e0
+		defs 0x100
+		assert $> 0x1e0
 	LZCLOSE
 
 	db "After crunched section"
