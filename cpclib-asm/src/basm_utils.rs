@@ -106,7 +106,7 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
         panic!("No code provided to assemble");
     };
 
-    dbg!(crate::parse_z80_str_with_context(code, context).map_err(|e| BasmError::from(e)))
+    crate::parse_z80_str_with_context(code, context).map_err(|e| BasmError::from(e))
 }
 
 /// Assemble the given code
@@ -168,7 +168,7 @@ pub fn assemble<'arg>(
     }
 
     let env = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
-        .map_err(|e| dbg!(BasmError::AssemblerError { error: e }))?;
+        .map_err(|e| BasmError::AssemblerError { error: e })?;
 
     if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
         if dest == "-" {
