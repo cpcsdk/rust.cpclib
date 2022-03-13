@@ -96,34 +96,34 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, crate::As
 pub fn list_sublist(
     list: &ExprResult,
     start: usize,
-    end: usize
+    end: usize // not included
 ) -> Result<ExprResult, crate::AssemblerError> {
 
     dbg!(list, start, end);
-    
+
     match list {
         ExprResult::String(s) => {
-            if start >= s.len() {
+            if start >= s.len() + 1{
                 return Err(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(s.len(), start)
                 ));
             }
-            if end >= s.len() + 1 {
+            if end >= s.len() {
                 return Err(AssemblerError::ExpressionError(
-                    ExpressionError::InvalidSize(s.len(), end + 1)
+                    ExpressionError::InvalidSize(s.len(), end)
                 ));
             }
             Ok(ExprResult::String(s.substring(start, end).into()))
         }
         ExprResult::List(l) => {
-            if start >= l.len() {
+            if start >= l.len() + 1{
                 return Err(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(l.len(), start)
                 ));
             }
-            if end >= l.len() + 1 {
+            if end >= l.len() {
                 return Err(AssemblerError::ExpressionError(
-                    ExpressionError::InvalidSize(l.len(), end + 1)
+                    ExpressionError::InvalidSize(l.len(), end )
                 ));
             }
             Ok(ExprResult::List(l[start..end].to_vec()))

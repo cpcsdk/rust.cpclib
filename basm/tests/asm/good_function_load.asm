@@ -11,9 +11,10 @@
 
 	; Take the {amount} first element of list {l}
 	FUNCTION TAKE, l, amount
+		assert {amount} > 0
 		len = list_len({l})
 		start = 0
-		finish = start + min({amount}, len)
+		finish = start + min({amount}, len) -1
 		return list_sublist({l}, start, finish)
 	ENDFUNCTION
 
