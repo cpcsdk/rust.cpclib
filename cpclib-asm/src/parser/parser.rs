@@ -731,7 +731,7 @@ pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
 
     let args = args.map(|v| v.iter().map(|l| SmolStr::from(l)).collect_vec());
 
-    let size = input.input_len() - basic_start.input_len();
+    let size =  basic_start.input_len() - input.input_len();
     Ok((
         input, 
         Token::Basic(args, hidden_lines, basic.to_string())
