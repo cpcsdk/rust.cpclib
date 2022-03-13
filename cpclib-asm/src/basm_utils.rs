@@ -14,22 +14,38 @@ use crate::processed_token::read_source;
 #[derive(Debug)]
 pub enum BasmError {
     //#[fail(display = "IO error: {}", io)]
-    Io { io: io::Error, ctx: String },
+    Io {
+        io: io::Error,
+        ctx: String
+    },
 
     // #[fail(display = "Assembling error: {}", error)]
-    AssemblerError { error: AssemblerError },
-    ErrorWithListing { error: Box<BasmError>, listing: LocatedListing},
+    AssemblerError {
+        error: AssemblerError
+    },
+    ErrorWithListing {
+        error: Box<BasmError>,
+        listing: LocatedListing
+    },
 
     // #[fail(display = "Invalid Amsdos filename: {}", filename)]
-    InvalidAmsdosFilename { filename: String },
+    InvalidAmsdosFilename {
+        filename: String
+    },
 
     // #[fail(display = "{} is not a valid directory.", path)]
-    NotAValidDirectory { path: String },
+    NotAValidDirectory {
+        path: String
+    },
 
     //  #[fail(display = "{} is not a valid file.", file)]
-    NotAValidFile { file: String },
+    NotAValidFile {
+        file: String
+    },
 
-    ListingGeneration { msg: String },
+    ListingGeneration {
+        msg: String
+    },
 
     InvalidArgument(String)
 }
@@ -53,9 +69,7 @@ impl Display for BasmError {
             BasmError::InvalidArgument(msg) => {
                 write!(f, "Invalid argument: {}", msg)
             }
-            BasmError::ErrorWithListing { box error, listing } => {
-                error.fmt(f)
-            },
+            BasmError::ErrorWithListing { box error, listing } => error.fmt(f)
         }
     }
 }
@@ -282,8 +296,12 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     // standard assembling
     let listing = parse(matches)?;
-    let env = assemble(matches, &listing)
-        .map_err(move |error| BasmError::ErrorWithListing{error : box error, listing})?;
+    let env = assemble(matches, &listing).map_err(move |error| {
+        BasmError::ErrorWithListing {
+            error: box error,
+            listing
+        }
+    })?;
 
     eprintln!("TODO: include parse warnings");
     // warnings.extend_from_slice(env.warnings());

@@ -10,36 +10,33 @@ impl ListingElement for Token {
     type MacroParam = MacroParam;
     type TestKind = TestKind;
 
-
-
-
     fn is_macro_definition(&self) -> bool {
         match self {
             Self::Macro(..) => true,
             _ => false
         }
     }
+
     fn macro_definition_name(&self) -> &str {
         match self {
-            Self::Macro(name, _, _) => name.as_str(),
+            Self::Macro(name, ..) => name.as_str(),
             _ => unreachable!()
         }
     }
-    fn macro_definition_arguments(&self)-> SmallVec<[&str;4]> {
+
+    fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]> {
         match self {
-            Self::Macro(_,args,  _) => args.iter().map(|a| a.as_str()).collect(),
+            Self::Macro(_, args, _) => args.iter().map(|a| a.as_str()).collect(),
             _ => unreachable!()
         }
     }
+
     fn macro_definition_code(&self) -> &str {
         match self {
             Self::Macro(_, _, code) => code.as_str(),
             _ => unreachable!()
         }
     }
-
-
-
 
     fn macro_call_name(&self) -> &str {
         match self {
@@ -137,14 +134,14 @@ impl ListingElement for Token {
 
     fn include_namespace(&self) -> Option<&str> {
         match self {
-            Self::Include(_, module, _) => module.as_ref().map(|s|s.as_str()),
+            Self::Include(_, module, _) => module.as_ref().map(|s| s.as_str()),
             _ => unreachable!()
         }
     }
 
     fn include_once(&self) -> bool {
         match self {
-            Self::Include(_,_, once) => *once,
+            Self::Include(_, _, once) => *once,
             _ => unreachable!()
         }
     }
@@ -163,21 +160,21 @@ impl ListingElement for Token {
         }
     }
 
-    fn function_definition_name(&self)-> &str {
+    fn function_definition_name(&self) -> &str {
         match self {
-            Self::Function(name, _, _) => name.as_str(),
+            Self::Function(name, ..) => name.as_str(),
             _ => unreachable!()
         }
     }
 
-    fn function_definition_params(&self)->  SmallVec<[&str;4]> {
+    fn function_definition_params(&self) -> SmallVec<[&str; 4]> {
         match self {
             Self::Function(_, params, _) => params.iter().map(|v| v.as_str()).collect(),
             _ => unreachable!()
         }
     }
 
-    fn function_definition_inner(&self)-> &[Self] {
+    fn function_definition_inner(&self) -> &[Self] {
         match self {
             Self::Function(_, _, inner) => inner.as_slice(),
             _ => unreachable!()
@@ -187,25 +184,23 @@ impl ListingElement for Token {
     fn is_crunched_section(&self) -> bool {
         match self {
             Self::CrunchedSection(..) => true,
-            _  => false,
+            _ => false
         }
     }
 
     fn crunched_section_listing(&self) -> &[Self] {
         match self {
             Self::CrunchedSection(_, lst) => lst.as_slice(),
-            _  => unreachable!(),
+            _ => unreachable!()
         }
     }
 
     fn crunched_section_kind(&self) -> &CrunchType {
         match self {
             Self::CrunchedSection(kind, _) => kind,
-            _  => unreachable!(),
+            _ => unreachable!()
         }
     }
-
-
 }
 
 /// Standard listing is a specific implementation

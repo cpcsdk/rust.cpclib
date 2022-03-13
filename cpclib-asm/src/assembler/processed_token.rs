@@ -6,37 +6,38 @@ use std::fs::File;
 use std::io::Read;
 use std::ops::Deref;
 use std::sync::Arc;
-use crate::r#macro;
+
 use cpclib_common::itertools::Itertools;
 use cpclib_disc::amsdos::AmsdosHeader;
-use cpclib_tokens::symbols::{SymbolsTableTrait, Macro, SymbolFor};
+use cpclib_tokens::symbols::{Macro, SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
-    BinaryTransformation, Listing, ListingElement, TestKindElement, ToSimpleToken, Token
+    BinaryTransformation, Listing, ListingElement, MacroParamElement, TestKindElement,
+    ToSimpleToken, Token
 };
 use ouroboros::*;
-use cpclib_tokens::MacroParamElement;
-use crate::implementation::expression::ExprEvaluationExt;
-use crate::implementation::instructions::Cruncher;
-use crate::preamble::{parse_z80_str_with_context, LocatedListing, parse_z80_str, Z80Span, MayHaveSpan};
-use crate::{AssemblerError, Env, LocatedToken, ParserContext, Visited};
 
 use super::file::load_binary;
-use super::function::{FunctionBuilder, Function};
+use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
+use crate::implementation::expression::ExprEvaluationExt;
+use crate::implementation::instructions::Cruncher;
+use crate::preamble::{
+    parse_z80_str, parse_z80_str_with_context, LocatedListing, MayHaveSpan, Z80Span
+};
+use crate::{r#macro, AssemblerError, Env, LocatedToken, ParserContext, Visited};
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProcessedToken<'token, T: Visited +  Debug + ListingElement + Sync> {
+pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync> {
     /// The token being processed by the assembler
     token: &'token T,
     state: Option<ProcessedTokenState<'token, T>>
 }
 
-
 /// Specific state to maintain for the current token
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum ProcessedTokenState<'token, T: Visited +  ListingElement + Debug + Sync> {
+enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     CrunchedSection(CrunchedSectionState<'token, T>),
     /// A state is expected but has not been yet specified (before include or incbin or a macro call or a struct build or a function definition)
     Expected,
@@ -47,32 +48,32 @@ enum ProcessedTokenState<'token, T: Visited +  ListingElement + Debug + Sync> {
     Include(IncludeState),
     /// Included binary needs to be read
     /// TODO add parameters
-    Incbin { data: Vec<u8> },
+    Incbin {
+        data: Vec<u8>
+    },
     MacroCallOrBuildStruct(ExpandState)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FunctionDefinitionState(Option<Arc<Function>>);
 
-
 #[derive(PartialEq, Eq)]
-struct CrunchedSectionState<'token, T: Visited +  ListingElement + Debug + Sync> {
+struct CrunchedSectionState<'token, T: Visited + ListingElement + Debug + Sync> {
     processed_tokens: Vec<ProcessedToken<'token, T>>,
     span: Option<Z80Span>
 }
 
-impl<'token, T: Visited +  ListingElement + Debug + Sync> Clone for CrunchedSectionState<'token, T> {
+impl<'token, T: Visited + ListingElement + Debug + Sync> Clone for CrunchedSectionState<'token, T> {
     fn clone(&self) -> Self {
         todo!()
     }
 }
 
-impl<'token, T: Visited +  ListingElement + Debug + Sync> Debug for CrunchedSectionState<'token, T> {
+impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for CrunchedSectionState<'token, T> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "CrunchedSectionState")
     }
 }
-
 
 #[self_referencing]
 struct IncludeState {
@@ -90,24 +91,17 @@ impl Clone for IncludeState {
 
 impl PartialEq for IncludeState {
     fn eq(&self, other: &Self) -> bool {
-        self.with_listing(|l1| {
-            other.with_listing(|l2| {
-                l1.eq(l2)
-            })
-        })
+        self.with_listing(|l1| other.with_listing(|l2| l1.eq(l2)))
     }
 }
 
-impl Eq for IncludeState {
-
-}
+impl Eq for IncludeState {}
 
 impl Debug for IncludeState {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "IncludeState")
     }
 }
-
 
 #[self_referencing]
 struct ExpandState {
@@ -119,11 +113,7 @@ struct ExpandState {
 
 impl PartialEq for ExpandState {
     fn eq(&self, other: &Self) -> bool {
-        self.with_listing(|l1| {
-            other.with_listing(|l2| {
-                l1.eq(l2)
-            })
-        })
+        self.with_listing(|l1| other.with_listing(|l2| l1.eq(l2)))
     }
 }
 
@@ -143,7 +133,7 @@ impl Debug for ExpandState {
 
 /// Store for each branch (if passed at some point) the test result and the listing
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct IfState<'token, T: Visited +  Debug + ListingElement + Sync> {
+struct IfState<'token, T: Visited + Debug + ListingElement + Sync> {
     // The token that contains the tests and listings
     token: &'token T,
     if_token_adr_to_used_decision: std::collections::HashMap<usize, bool>,
@@ -154,7 +144,7 @@ struct IfState<'token, T: Visited +  Debug + ListingElement + Sync> {
     else_listing: Option<Vec<ProcessedToken<'token, T>>>
 }
 
-impl<'token, T: Visited +  Debug + ListingElement + Sync +MayHaveSpan> IfState<'token, T>
+impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> IfState<'token, T>
 where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
     fn new(token: &'token T) -> Self {
@@ -274,7 +264,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 // build else listing if needed
                 if self.else_listing.is_none() && self.token.if_else().is_some() {
                     let listing = self.token.if_else();
-                    self.else_listing = listing.map(|listing| build_processed_tokens_list(listing, env));
+                    self.else_listing =
+                        listing.map(|listing| build_processed_tokens_list(listing, env));
                 }
                 self.else_listing.as_mut()
             }
@@ -289,7 +280,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
     }
 }
 
-impl<'token, T: Visited +  Debug + ListingElement + Sync + ToSimpleToken > ToSimpleToken
+impl<'token, T: Visited + Debug + ListingElement + Sync + ToSimpleToken> ToSimpleToken
     for ProcessedToken<'token, T>
 {
     fn as_simple_token(&self) -> Cow<Token> {
@@ -300,7 +291,7 @@ impl<'token, T: Visited +  Debug + ListingElement + Sync + ToSimpleToken > ToSim
 pub type AssemblerInfo = AssemblerError;
 
 /// Build a processed token based on the base token
-pub fn build_processed_token<'token, T:  Visited + Debug + Sync + ListingElement + MayHaveSpan>(
+pub fn build_processed_token<'token, T: Visited + Debug + Sync + ListingElement + MayHaveSpan>(
     token: &'token T,
     env: &Env
 ) -> ProcessedToken<'token, T>
@@ -315,17 +306,17 @@ where
         Some(ProcessedTokenState::Expected)
     }
     else if token.is_crunched_section() {
-        Some(ProcessedTokenState::CrunchedSection(
-            CrunchedSectionState{
-                processed_tokens: build_processed_tokens_list(token.crunched_section_listing(), env),
-                span: token.possible_span().cloned()
-            } 
-        ))
+        Some(ProcessedTokenState::CrunchedSection(CrunchedSectionState {
+            processed_tokens: build_processed_tokens_list(token.crunched_section_listing(), env),
+            span: token.possible_span().cloned()
+        }))
     }
     else if token.is_function_definition() {
-        Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(None)))
+        Some(ProcessedTokenState::FunctionDefinition(
+            FunctionDefinitionState(None)
+        ))
     }
-    else if token.is_call_macro_or_build_struct(){
+    else if token.is_call_macro_or_build_struct() {
         // one day, we may whish to maintain a state
         None
     }
@@ -333,13 +324,13 @@ where
         None
     };
 
-    ProcessedToken {
-        token,
-        state
-    }
+    ProcessedToken { token, state }
 }
 
-pub fn build_processed_tokens_list<'token, T:  Visited + Debug + Sync + ListingElement + MayHaveSpan>(
+pub fn build_processed_tokens_list<
+    'token,
+    T: Visited + Debug + Sync + ListingElement + MayHaveSpan
+>(
     tokens: &'token [T],
     env: &Env
 ) -> Vec<ProcessedToken<'token, T>>
@@ -359,7 +350,7 @@ where
 }
 
 /// Visit all the tokens until an error occurs
-pub fn visit_processed_tokens<'token,  T:  Visited + Debug + ListingElement + Sync + MayHaveSpan>(
+pub fn visit_processed_tokens<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan>(
     tokens: &mut [ProcessedToken<'token, T>],
     env: &mut Env
 ) -> Result<(), AssemblerError>
@@ -375,7 +366,9 @@ where
     Ok(())
 }
 
-impl<'token, T:  Visited + Debug + ListingElement + Sync + MayHaveSpan>  MayHaveSpan for ProcessedToken<'token, T> {
+impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSpan
+    for ProcessedToken<'token, T>
+{
     fn possible_span(&self) -> Option<&Z80Span> {
         self.token.possible_span()
     }
@@ -389,23 +382,14 @@ impl<'token, T:  Visited + Debug + ListingElement + Sync + MayHaveSpan>  MayHave
     }
 }
 
-impl<'token, T:  Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T> {
-   
-
+impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T> {
     /// Generate the tokens needed for the macro or the struct
-    /// 
-    /// 
-    pub fn update_macro_or_struct_state(
-        &mut self,
-        env: &Env
-    ) -> Result<(), AssemblerError>
-    where
-        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
-    {
+    ///
+    pub fn update_macro_or_struct_state(&mut self, env: &Env) -> Result<(), AssemblerError>
+    where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt {
         let caller = self.token;
         let name = caller.macro_call_name();
         let parameters = caller.macro_call_arguments();
-
 
         let listing = {
             // Retreive the macro or structure definition
@@ -473,17 +457,14 @@ impl<'token, T:  Visited + Debug + ListingElement + Sync + MayHaveSpan> Processe
             listing,
             processed_tokens_builder: |listing: &LocatedListing| {
                 build_processed_tokens_list(listing.as_slice(), env)
-            },
+            }
         }
         .build();
 
         self.state = Some(ProcessedTokenState::MacroCallOrBuildStruct(expandState));
 
         return Ok(());
-
-
     }
-
 
     /// Read the data for the appropriate tokens.
     /// Possibly returns information to be printed by the caller
@@ -499,18 +480,18 @@ impl<'token, T:  Visited + Debug + ListingElement + Sync + MayHaveSpan> Processe
             Some(ProcessedTokenState::Include { .. }) => {
                 // alrady read, no need to do ti a second time
                 return Ok(None);
-            },
+            }
             Some(ProcessedTokenState::Incbin { .. }) => {
                 // TODO check if paramters changed
                 return Ok(None);
             }
             Some(
-                ProcessedTokenState::If(..) |
-                ProcessedTokenState::MacroCallOrBuildStruct(_) |
-                ProcessedTokenState::FunctionDefinition(..) |
-                ProcessedTokenState::CrunchedSection{..}
-            ) |
-            None  => return Ok(None)
+                ProcessedTokenState::If(..)
+                | ProcessedTokenState::MacroCallOrBuildStruct(_)
+                | ProcessedTokenState::FunctionDefinition(..)
+                | ProcessedTokenState::CrunchedSection { .. }
+            )
+            | None => return Ok(None)
         };
 
         let ctx = &env.ctx;
@@ -682,18 +663,18 @@ pub fn read_source(fname: &str, ctx: &ParserContext) -> Result<String, Assembler
     }
 }
 
-impl<'token, T: Visited +  Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
+impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
-   ProcessedToken<'token, T>: FunctionBuilder
+    ProcessedToken<'token, T>: FunctionBuilder
 {
     /// Due to the state management, the signature requires mutability
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
         let mut request_additional_pass = false;
 
-
-        { // Update the state}
+        {
+            // Update the state}
             // Read file if needed
             if self.token.is_include() || self.token.is_incbin() {
                 self.update_file_read_state(env)?;
@@ -706,17 +687,20 @@ where
 
         // Behavior based on the token
         if self.token.is_macro_definition() {
-            //TODO really implement logic here
+            // TODO really implement logic here
             let name = self.token.macro_definition_name();
             let arguments = self.token.macro_definition_arguments();
             let code = self.token.macro_definition_code();
             env.visit_macro_definition(name, &arguments, code, self.possible_span())
-        }        
+        }
         // Behavior based on the state (for ease of writting)
         else {
             // Handle the tokens depending on their specific state
             match &mut self.state {
-                Some(ProcessedTokenState::CrunchedSection(CrunchedSectionState{processed_tokens, span})) => {
+                Some(ProcessedTokenState::CrunchedSection(CrunchedSectionState {
+                    processed_tokens,
+                    span
+                })) => {
                     env.visit_crunched_section(
                         self.token.crunched_section_kind(),
                         processed_tokens,
@@ -724,35 +708,29 @@ where
                     )
                 }
 
-
-                Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(Some(fun)))) => {
+                Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(Some(
+                    fun
+                )))) => {
                     // TODO check if the funtion has already been defined during this pass
                     Ok(())
-                },
+                }
                 Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(option))) => {
                     let name = self.token.function_definition_name();
                     if !env.functions.contains_key(name) {
-
                         let inner = self.token.function_definition_inner();
                         let params = self.token.function_definition_params();
 
                         let inner = build_processed_tokens_list(inner, env);
-                        let f = Arc::new(unsafe { 
-                            FunctionBuilder::new(
-                                &name, 
-                                &params, 
-                                inner) 
-                        }?);
+                        let f = Arc::new(unsafe { FunctionBuilder::new(&name, &params, inner) }?);
                         option.replace(f.clone());
 
                         env.functions.insert(name.to_owned(), f);
                     }
                     else {
-                        //TODO raise an error ?
+                        // TODO raise an error ?
                     }
                     Ok(())
-            
-                },
+                }
                 Some(ProcessedTokenState::Include(ref mut state)) => {
                     let fname = self.token.include_fname();
                     let namespace = self.token.include_namespace();
@@ -792,9 +770,7 @@ where
                     }
                 }
 
-                Some(ProcessedTokenState::Incbin { ref data }) => {
-                    env.visit_incbin(data)
-                },
+                Some(ProcessedTokenState::Incbin { ref data }) => env.visit_incbin(data),
 
                 Some(ProcessedTokenState::If(if_state)) => {
                     let listing = if_state.choose_listing_to_assemble(env)?;
@@ -807,14 +783,12 @@ where
                 }
 
                 Some(ProcessedTokenState::MacroCallOrBuildStruct(state)) => {
-
                     let name = self.token.macro_call_name();
-
 
                     env.inc_macro_seed();
                     let seed = env.macro_seed();
                     env.symbols_mut().push_seed(seed);
-            
+
                     // save the number of prints to patch the ones added by the macro
                     // to properly locate them
                     let nb_prints = env
@@ -822,29 +796,29 @@ where
                         .iter()
                         .map(|ti| ti.print_commands().len())
                         .collect_vec();
-            
 
-            
-                    state.with_processed_tokens_mut(|listing| {
-                        let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut listing[..];
-                        visit_processed_tokens::<'_, LocatedToken>(tokens,  env)
-                    }).or_else(|e| {
-                        let e = AssemblerError::MacroError {
-                            name: name.into(),
-                            root: Box::new(e)
-                        };
-                        let caller_span = self.possible_span();
-                        match caller_span {
-                            Some(span) => {
-                                Err(AssemblerError::RelocatedError {
-                                    error: e.into(),
-                                    span: span.clone()
-                                })
+                    state
+                        .with_processed_tokens_mut(|listing| {
+                            let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut listing[..];
+                            visit_processed_tokens::<'_, LocatedToken>(tokens, env)
+                        })
+                        .or_else(|e| {
+                            let e = AssemblerError::MacroError {
+                                name: name.into(),
+                                root: Box::new(e)
+                            };
+                            let caller_span = self.possible_span();
+                            match caller_span {
+                                Some(span) => {
+                                    Err(AssemblerError::RelocatedError {
+                                        error: e.into(),
+                                        span: span.clone()
+                                    })
+                                }
+                                None => Err(e)
                             }
-                            None => Err(e)
-                        }
-                    })?;
-            
+                        })?;
+
                     let caller_span = self.possible_span();
                     if let Some(span) = caller_span {
                         env.pages_info_sna
@@ -856,13 +830,12 @@ where
                                     .for_each(|cmd| cmd.relocate(span.clone()))
                             });
                     }
-            
+
                     env.symbols_mut().pop_seed();
                     //   dbg!("done");
-            
+
                     Ok(())
                 }
-
 
                 Some(other) => {
                     unimplemented!(
@@ -914,12 +887,10 @@ where
 // Ok(()) // we include nothing
 // }
 
-
 #[cfg(test)]
 mod test_super {
-    use crate::preamble::{Z80Span, parse_include};
-
     use super::*;
+    use crate::preamble::{parse_include, Z80Span};
 
     #[test]
     fn test_located_include() {
@@ -936,11 +907,9 @@ mod test_super {
 
         let processed = build_processed_token(&token, &env);
         dbg!(&processed);
-        assert!(
-            matches!(
-                processed.state,
-                'Some(ProcessedTokenState::Include(..))
-            )
-        );
+        assert!(matches!(
+            processed.state,
+            'Some(ProcessedTokenState::Include(..))
+        ));
     }
 }

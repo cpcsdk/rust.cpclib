@@ -897,7 +897,12 @@ fn build_filename(span: &Z80Span) -> Box<String> {
 
     let name = fname
         .as_ref()
-        .map(|p| dbg!(p).as_os_str().to_str().unwrap_or("[Invalid file name]"))
+        .map(|p| {
+            dbg!(p)
+                .as_os_str()
+                .to_str()
+                .unwrap_or("[Invalid file name]")
+        })
         .unwrap_or_else(|| {
             context
                 .as_ref()

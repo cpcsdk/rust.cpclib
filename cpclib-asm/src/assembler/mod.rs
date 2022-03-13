@@ -1488,12 +1488,11 @@ impl Env {
         // Try to fallback on a macro call - parser is not that much great
         if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
             if kind == "macro" || kind == "struct" {
-                unimplemented!("Need to reactivate this case that is supposed to not work anymore");/*
-                self.visit_call_macro_or_build_struct(&Token::MacroCall(
-                    label.into(),
-                    Default::default()
-                ))
-                */
+                unimplemented!("Need to reactivate this case that is supposed to not work anymore");
+            // self.visit_call_macro_or_build_struct(&Token::MacroCall(
+            // label.into(),
+            // Default::default()
+            // ))
             }
             else {
                 res
@@ -1919,9 +1918,10 @@ impl Env {
     }
 
     pub fn visit_fail(&self, info: Option<&[FormattedExpr]>) -> Result<(), AssemblerError> {
-        let repr = info.map(|info| self.build_string_from_formatted_expression(info))
+        let repr = info
+            .map(|info| self.build_string_from_formatted_expression(info))
             .unwrap_or_else(|| Ok("".to_owned()))?;
-       dbg!(Err(AssemblerError::Fail { msg: repr }))
+        dbg!(Err(AssemblerError::Fail { msg: repr }))
     }
 
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
@@ -2010,7 +2010,6 @@ impl Env {
         self.output_bytes(data)
     }
 
-
     /// Handle a crunched section.
     /// Current limitations (that need to be overcomed later):
     ///  - everything inside the crunched section must be assembled during pass1
@@ -2019,12 +2018,12 @@ impl Env {
         kind: &CrunchType,
         lst: &mut [ProcessedToken<'tokens, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> 
-    where  <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-    ProcessedToken<'tokens, T>: FunctionBuilder
-    , <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr: ExprEvaluationExt
-
-
+    ) -> Result<(), AssemblerError>
+    where
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+        ProcessedToken<'tokens, T>: FunctionBuilder,
+        <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
+            ExprEvaluationExt
     {
         // deactivated because there is no reason to do such thing
         // crunched section is disabled inside crunched section
@@ -2161,7 +2160,8 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
-pub fn visit_tokens_all_passes<'token,
+pub fn visit_tokens_all_passes<
+    'token,
     T: 'token + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
 >(
     tokens: &'token [T],
@@ -2171,7 +2171,8 @@ where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
     <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
         ExprEvaluationExt,
-        ProcessedToken<'token, T>: FunctionBuilder {
+    ProcessedToken<'token, T>: FunctionBuilder
+{
     let options = AssemblingOptions::default();
     visit_tokens_all_passes_with_options(tokens, &options, ctx)
 }
@@ -2224,8 +2225,6 @@ impl Env {
             None => self.user_defined_function(name)
         }
     }
-
-
 }
 
 /// Visit the tokens during several passes by providing a specific symbol table.
@@ -2236,11 +2235,11 @@ pub fn visit_tokens_all_passes_with_options<'token, T>(
     ctx: &ParserContext
 ) -> Result<Env, AssemblerError>
 where
-    T:  Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
+    T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
-    {
+{
     let mut env = Env::new(options, ctx);
     let mut tokens = processed_token::build_processed_tokens_list(tokens, &mut env);
     loop {
@@ -2450,7 +2449,12 @@ pub fn visit_located_token(
         }
         LocatedToken::Include(..) => panic!("Should never been called"),
         LocatedToken::Incbin { .. } => panic!("Should never been called"),
-        LocatedToken::Macro { name, params, content, span } => panic!("Should never been called"),
+        LocatedToken::Macro {
+            name,
+            params,
+            content,
+            span
+        } => panic!("Should never been called")
     }?;
 
     // Patch the warnings to inject them a location
@@ -2560,7 +2564,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             env.visit_print(exp.as_ref(), None);
             Ok(())
         }
-        Token::Fail(ref exp) => env.visit_fail(exp.as_ref().map(|v|v.as_slice())),
+        Token::Fail(ref exp) => env.visit_fail(exp.as_ref().map(|v| v.as_slice())),
         Token::Repeat(count, code, counter, counter_start) => {
             env.visit_repeat(
                 count,
@@ -2700,7 +2704,10 @@ fn visit_assert(
 }
 
 impl Env {
-    pub fn visit_while<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited + MayHaveSpan>(
+    pub fn visit_while<
+        E: ExprEvaluationExt,
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan
+    >(
         &mut self,
         cond: &E,
         code: &[T],
@@ -2762,7 +2769,10 @@ impl Env {
 
     /// Handle the iterate repetition directive
     /// Values is either a list of values or a Expression that represents a list
-    pub fn visit_iterate<E: ExprEvaluationExt + Display, T: ListingElement<Expr = E> + Visited + MayHaveSpan>(
+    pub fn visit_iterate<
+        E: ExprEvaluationExt + Display,
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan
+    >(
         &mut self,
         counter_name: &str,
         values: either::Either<&Vec<E>, &E>,
@@ -2883,7 +2893,7 @@ impl Env {
     }
 
     /// Handle the for directive
-    pub fn visit_for<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited + MayHaveSpan >(
+    pub fn visit_for<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited + MayHaveSpan>(
         &mut self,
         label: &str,
         start: &E,
@@ -3165,7 +3175,6 @@ impl Env {
         Ok(())
     }
 }
-
 
 /// Macro related code
 impl Env {

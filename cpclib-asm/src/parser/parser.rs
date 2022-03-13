@@ -216,9 +216,7 @@ pub fn parse_z80_line(
                 delimited(
                     space0,
                     alt((
-                        map(context("basic", parse_basic), |t| {
-                            vec![t]
-                        }),
+                        map(context("basic", parse_basic), |t| vec![t]),
                         map(
                             context(
                                 "block instruction",
@@ -363,13 +361,13 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
     let before_content = input.clone();
     let (input, content) = cut(context(
         "MACRO: issue in the content",
-            many_till(
-                take(1usize),
-                alt((
-                    parse_directive_word("ENDM"),
-                    parse_directive_word("ENDMACRO"),
-                    parse_directive_word("MEND")
-                ))
+        many_till(
+            take(1usize),
+            alt((
+                parse_directive_word("ENDM"),
+                parse_directive_word("ENDMACRO"),
+                parse_directive_word("MEND")
+            ))
         )
     ))(input)?;
 
@@ -378,7 +376,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
     let span = dir_start.take(dir_start.input_len() - input.input_len());
     Ok((
         input.clone(),
-        LocatedToken::Macro{
+        LocatedToken::Macro {
             name,
             params: arguments,
             content,
@@ -731,11 +729,10 @@ pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
 
     let args = args.map(|v| v.iter().map(|l| SmolStr::from(l)).collect_vec());
 
-    let size =  basic_start.input_len() - input.input_len();
+    let size = basic_start.input_len() - input.input_len();
     Ok((
-        input, 
-        Token::Basic(args, hidden_lines, basic.to_string())
-            .locate(basic_start, size)
+        input,
+        Token::Basic(args, hidden_lines, basic.to_string()).locate(basic_start, size)
     ))
 }
 
@@ -971,7 +968,7 @@ pub fn parse_z80_line_complete(
             }
             None => Token::Label(label.into())
         };
-        let size = before_label.input_len()-input.input_len();
+        let size = before_label.input_len() - input.input_len();
         tokens.push(token.locate(before_label, size));
         input
     }
@@ -1629,27 +1626,27 @@ pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z
 fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
     let dir_start = input.clone();
     let (input, token) = alt((
-            context("[DBG] assert", parse_assert),
-            context("[DBG] bankset", parse_bankset),
-            context("[DBG] bank", parse_bank),
-            context("[DBG] charset", parse_charset),
-            context("[DBG] align", parse_align),
-            context("[DBG] breakpoint", parse_breakpoint),
-            context("[DBG] buildsna", parse_buildsna),
-            context("[DBG] org", parse_org),
-            context("[DBG] defs", parse_defs),
-            context("[DBG] nop", parse_nop),
-            context("[DBG] export", parse_export),
-            context("[DBG] limit", parse_limit),
-            context("[DBG] print", parse_print),
-            context("[DBG] fail", parse_fail),
-            context("[DBG] protext", parse_protect),
-            context("[DBG] run", parse_run),
-            context("[DBG] snaset", parse_snaset),
-            map(preceded(space0, parse_directive_word("PAUSE")), |_| {
-                Token::Pause
-            })
-        ))(input)?;
+        context("[DBG] assert", parse_assert),
+        context("[DBG] bankset", parse_bankset),
+        context("[DBG] bank", parse_bank),
+        context("[DBG] charset", parse_charset),
+        context("[DBG] align", parse_align),
+        context("[DBG] breakpoint", parse_breakpoint),
+        context("[DBG] buildsna", parse_buildsna),
+        context("[DBG] org", parse_org),
+        context("[DBG] defs", parse_defs),
+        context("[DBG] nop", parse_nop),
+        context("[DBG] export", parse_export),
+        context("[DBG] limit", parse_limit),
+        context("[DBG] print", parse_print),
+        context("[DBG] fail", parse_fail),
+        context("[DBG] protext", parse_protect),
+        context("[DBG] run", parse_run),
+        context("[DBG] snaset", parse_snaset),
+        map(preceded(space0, parse_directive_word("PAUSE")), |_| {
+            Token::Pause
+        })
+    ))(input)?;
 
     let size = dir_start.input_len() - input.input_len();
     Ok((input, token.locate(dir_start, size)))
@@ -1671,7 +1668,6 @@ fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErr
         context("[DBG] section", parse_section),
         context("[DBG] snainit", parse_snainit)
     ))(input.clone())?;
-
 
     let size = dir_start.input_len() - input.input_len();
     Ok((input2, directive.locate(dir_start, size)))
@@ -2537,9 +2533,7 @@ pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Sp
 
 pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, Token, VerboseError<Z80Span>> {
     map(
-        preceded(
-            parse_directive_word("FAIL"), 
-            opt(parse_print_inner)),
+        preceded(parse_directive_word("FAIL"), opt(parse_print_inner)),
         |exps| Token::Fail(exps)
     )(input)
 }
@@ -3745,8 +3739,6 @@ pub fn parse_bool_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseE
     let span = input_start.take(input_start.input_len() - input.input_len());
     Ok((input, LocatedExpr::Bool(bool, span)))
 }
-
-
 
 /// Get a factor
 pub fn factor(input: Z80Span) -> IResult<Z80Span, LocatedExpr, VerboseError<Z80Span>> {

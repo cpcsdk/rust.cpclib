@@ -33,9 +33,9 @@ use std::io::Write;
 use std::sync::{Arc, RwLock};
 
 use cpclib_disc::amsdos::*;
-use preamble::*;
 use preamble::function::FunctionBuilder;
 use preamble::processed_token::ProcessedToken;
+use preamble::*;
 
 use self::listing_output::ListingOutput;
 
@@ -144,7 +144,7 @@ where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
     <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
         implementation::expression::ExprEvaluationExt,
-       ProcessedToken<'tokens, T>: FunctionBuilder
+    ProcessedToken<'tokens, T>: FunctionBuilder
 {
     let env = assembler::visit_tokens_all_passes_with_options(tokens, &options, ctx)?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))

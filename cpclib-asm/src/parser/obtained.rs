@@ -71,14 +71,14 @@ impl ExprElement for LocatedExpr {
 
     fn is_negated(&self) -> bool {
         match self {
-            Self::UnaryOperation(UnaryOperation::Neg, _, _) => true,
+            Self::UnaryOperation(UnaryOperation::Neg, ..) => true,
             _ => false
         }
     }
 
     fn is_relative(&self) -> bool {
         match self {
-            Self::RelativeDelta(_, _) => true,
+            Self::RelativeDelta(..) => true,
             _ => false
         }
     }
@@ -224,48 +224,48 @@ impl ExprElement for LocatedExpr {
     fn is_token_operation(&self) -> bool {
         match self {
             Self::UnaryTokenOperation(..) => true,
-            _=> false,
+            _ => false
         }
     }
 
     fn token_operation(&self) -> &UnaryTokenOperation {
         match self {
-            Self::UnaryTokenOperation(op, __,_) => op,
-            _=> unreachable!(),
+            Self::UnaryTokenOperation(op, __, _) => op,
+            _ => unreachable!()
         }
     }
 
     fn token(&self) -> &Self::Token {
         match self {
             Self::UnaryTokenOperation(_, box token, _) => token,
-            _=> unreachable!(),
+            _ => unreachable!()
         }
     }
 
     fn is_prefix_label(&self) -> bool {
-       match self {
-           Self::PrefixedLabel(..) => true,
-           _ => false
-       }
+        match self {
+            Self::PrefixedLabel(..) => true,
+            _ => false
+        }
     }
 
     fn prefix(&self) -> &LabelPrefix {
         match self {
-            Self::PrefixedLabel(prefix, _, _) => prefix,
+            Self::PrefixedLabel(prefix, ..) => prefix,
             _ => unreachable!()
         }
     }
 
     fn is_binary_operation(&self) -> bool {
-       match self {
-           Self::BinaryOperation(..) => true,
-           _ => false
-       }
+        match self {
+            Self::BinaryOperation(..) => true,
+            _ => false
+        }
     }
 
     fn binary_operation(&self) -> BinaryOperation {
         match self {
-            Self::BinaryOperation(op, _, _, _) => *op,
+            Self::BinaryOperation(op, ..) => *op,
             _ => unreachable!()
         }
     }
@@ -279,35 +279,35 @@ impl ExprElement for LocatedExpr {
 
     fn unary_operation(&self) -> UnaryOperation {
         match self {
-            Self::UnaryOperation(op, _, _) => *op,
+            Self::UnaryOperation(op, ..) => *op,
             _ => unreachable!()
         }
     }
 
     fn is_unary_function(&self) -> bool {
         match self {
-            Self::UnaryFunction(_, _, _) => true,
+            Self::UnaryFunction(..) => true,
             _ => false
         }
     }
 
     fn unary_function(&self) -> UnaryFunction {
         match self {
-            Self::UnaryFunction(f, _, _) => *f,
+            Self::UnaryFunction(f, ..) => *f,
             _ => unreachable!()
         }
     }
 
     fn is_binary_function(&self) -> bool {
         match self {
-            Self::BinaryFunction(_, _, _, _) => true,
+            Self::BinaryFunction(..) => true,
             _ => false
         }
     }
 
     fn binary_function(&self) -> BinaryFunction {
         match self {
-            Self::BinaryFunction(f, _, _, _) => *f,
+            Self::BinaryFunction(f, ..) => *f,
             _ => unreachable!()
         }
     }
@@ -321,23 +321,23 @@ impl ExprElement for LocatedExpr {
 
     fn is_rnd(&self) -> bool {
         match self {
-            Self::Rnd(_)=> true,
+            Self::Rnd(_) => true,
             _ => false
         }
     }
 
     fn is_any_function(&self) -> bool {
         match self {
-            Self::AnyFunction(_, _, _) => true,
+            Self::AnyFunction(..) => true,
             _ => false
         }
     }
 
     fn function_name(&self) -> &str {
         match self {
-            Self::AnyFunction(n, _, _) => n.as_str(),
-            Self::UnaryFunction(f, _, _) => todo!(),
-            Self::BinaryFunction(f, _, _, _) => todo!(),
+            Self::AnyFunction(n, ..) => n.as_str(),
+            Self::UnaryFunction(f, ..) => todo!(),
+            Self::BinaryFunction(f, ..) => todo!(),
             _ => unreachable!()
         }
     }
@@ -351,10 +351,10 @@ impl ExprElement for LocatedExpr {
 
     fn arg1(&self) -> &Self {
         match self {
-            Self::BinaryOperation(_, box arg1, _, _) => arg1,
+            Self::BinaryOperation(_, box arg1, ..) => arg1,
             Self::UnaryOperation(_, box arg, _) => arg,
-            Self::UnaryFunction(_, box  arg, _) => arg,
-            Self::BinaryFunction(_, box arg1, _, _) => arg1,
+            Self::UnaryFunction(_, box arg, _) => arg,
+            Self::BinaryFunction(_, box arg1, ..) => arg1,
             Self::Paren(box p, _) => p,
 
             _ => unreachable!()
@@ -418,23 +418,23 @@ impl ExprEvaluationExt for LocatedExpr {
 impl LocatedExpr {
     pub fn span(&self) -> &Z80Span {
         match self {
-            LocatedExpr::RelativeDelta(_, span)|
-            LocatedExpr::Value(_, span)|
-            LocatedExpr::Float(_, span) |
-            LocatedExpr::Char(_, span) |
-            LocatedExpr::Bool(_,  span) |
-            LocatedExpr::String( span) |
-            LocatedExpr::Label(span)|
-            LocatedExpr::List(_, span) |
-            LocatedExpr::PrefixedLabel(_, _, span)|
-            LocatedExpr::Paren(_, span) |
-            LocatedExpr::UnaryFunction(_, _, span) |
-            LocatedExpr::UnaryOperation(_, _, span)|
-            LocatedExpr::UnaryTokenOperation(_, _, span)|
-            LocatedExpr::BinaryFunction(_, _, _, span) |
-            LocatedExpr::BinaryOperation(_, _, _, span) |
-            LocatedExpr::AnyFunction(_, _, span) |
-            LocatedExpr::Rnd(span) => span
+            LocatedExpr::RelativeDelta(_, span)
+            | LocatedExpr::Value(_, span)
+            | LocatedExpr::Float(_, span)
+            | LocatedExpr::Char(_, span)
+            | LocatedExpr::Bool(_, span)
+            | LocatedExpr::String(span)
+            | LocatedExpr::Label(span)
+            | LocatedExpr::List(_, span)
+            | LocatedExpr::PrefixedLabel(_, _, span)
+            | LocatedExpr::Paren(_, span)
+            | LocatedExpr::UnaryFunction(_, _, span)
+            | LocatedExpr::UnaryOperation(_, _, span)
+            | LocatedExpr::UnaryTokenOperation(_, _, span)
+            | LocatedExpr::BinaryFunction(_, _, _, span)
+            | LocatedExpr::BinaryOperation(_, _, _, span)
+            | LocatedExpr::AnyFunction(_, _, span)
+            | LocatedExpr::Rnd(span) => span
         }
     }
 
@@ -649,9 +649,9 @@ pub enum LocatedToken {
         Z80Span
     ),
     Label(Z80Span),
-    Macro{
-        name: Z80Span, 
-        params: Vec<Z80Span>, 
+    Macro {
+        name: Z80Span,
+        params: Vec<Z80Span>,
         content: Z80Span,
         span: Z80Span
     },
@@ -735,7 +735,7 @@ impl MayHaveSpan for LocatedToken {
             | LocatedToken::Function(_, _, _, span)
             | LocatedToken::If(_, _, span)
             | LocatedToken::Label(span)
-            | LocatedToken::Macro{span, ..}
+            | LocatedToken::Macro { span, .. }
             | LocatedToken::MacroCall(_, _, span)
             | LocatedToken::Module(_, _, span)
             | LocatedToken::Iterate(_, _, _, span)
@@ -916,9 +916,15 @@ impl LocatedToken {
                         .collect_vec()
                 ))
             }
-            LocatedToken::Defb(exprs, _ ) => Cow::Owned(Token::Defb(exprs.iter().map(|e|e.to_expr()).collect_vec())),
-            LocatedToken::Defw(exprs, _ ) => Cow::Owned(Token::Defw(exprs.iter().map(|e|e.to_expr()).collect_vec())),
-            LocatedToken::Str(exprs, _ ) => Cow::Owned(Token::Str(exprs.iter().map(|e|e.to_expr()).collect_vec())),
+            LocatedToken::Defb(exprs, _) => {
+                Cow::Owned(Token::Defb(exprs.iter().map(|e| e.to_expr()).collect_vec()))
+            }
+            LocatedToken::Defw(exprs, _) => {
+                Cow::Owned(Token::Defw(exprs.iter().map(|e| e.to_expr()).collect_vec()))
+            }
+            LocatedToken::Str(exprs, _) => {
+                Cow::Owned(Token::Str(exprs.iter().map(|e| e.to_expr()).collect_vec()))
+            }
 
             LocatedToken::Include(..) => todo!(),
             LocatedToken::Incbin {
@@ -930,7 +936,18 @@ impl LocatedToken {
                 transformation,
                 span
             } => todo!(),
-            LocatedToken::Macro { name, params, content, span } => Cow::Owned(Token::Macro(name.into(), params.iter().map(|p| p.into()).collect_vec(), content.as_str().to_owned())),
+            LocatedToken::Macro {
+                name,
+                params,
+                content,
+                span
+            } => {
+                Cow::Owned(Token::Macro(
+                    name.into(),
+                    params.iter().map(|p| p.into()).collect_vec(),
+                    content.as_str().to_owned()
+                ))
+            }
         }
     }
 
@@ -1043,7 +1060,10 @@ impl Locate for Token {
             unreachable!()
         }
         else {
-            LocatedToken::Standard { token: self, span: span.take(size) }
+            LocatedToken::Standard {
+                token: self,
+                span: span.take(size)
+            }
         }
     }
 }
@@ -1055,29 +1075,31 @@ impl ListingElement for LocatedToken {
 
     fn is_macro_definition(&self) -> bool {
         match self {
-            Self::Macro{..} => true,
+            Self::Macro { .. } => true,
             _ => false
         }
     }
+
     fn macro_definition_name(&self) -> &str {
         match self {
-            Self::Macro{name,..} => name.as_str(),
-            _ => unreachable!()
-        }
-    }
-    fn macro_definition_arguments(&self)-> SmallVec<[&str;4]> {
-        match self {
-            Self::Macro{params,..} => params.iter().map(|a| a.as_str()).collect(),
-            _ => unreachable!()
-        }
-    }
-    fn macro_definition_code(&self) -> &str {
-        match self {
-            Self::Macro{content, ..}=> content.as_str(),
+            Self::Macro { name, .. } => name.as_str(),
             _ => unreachable!()
         }
     }
 
+    fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]> {
+        match self {
+            Self::Macro { params, .. } => params.iter().map(|a| a.as_str()).collect(),
+            _ => unreachable!()
+        }
+    }
+
+    fn macro_definition_code(&self) -> &str {
+        match self {
+            Self::Macro { content, .. } => content.as_str(),
+            _ => unreachable!()
+        }
+    }
 
     fn macro_call_name(&self) -> &str {
         match self {
@@ -1173,17 +1195,16 @@ impl ListingElement for LocatedToken {
         }
     }
 
-
     fn include_namespace(&self) -> Option<&str> {
         match self {
-            Self::Include(_, module, _, _) => module.as_ref().map(|s|s.as_str()),
+            Self::Include(_, module, ..) => module.as_ref().map(|s| s.as_str()),
             _ => unreachable!()
         }
     }
 
     fn include_once(&self) -> bool {
         match self {
-            Self::Include(_,_, once, _) => *once,
+            Self::Include(_, _, once, _) => *once,
             _ => unreachable!()
         }
     }
@@ -1195,7 +1216,6 @@ impl ListingElement for LocatedToken {
         }
     }
 
-
     fn is_function_definition(&self) -> bool {
         match self {
             Self::Function(..) => true,
@@ -1203,21 +1223,21 @@ impl ListingElement for LocatedToken {
         }
     }
 
-    fn function_definition_name(&self)-> &str {
+    fn function_definition_name(&self) -> &str {
         match self {
-            Self::Function(name, _, _, _) => name.as_str(),
+            Self::Function(name, ..) => name.as_str(),
             _ => unreachable!()
         }
     }
 
-    fn function_definition_params(&self)->  SmallVec<[&str;4]> {
+    fn function_definition_params(&self) -> SmallVec<[&str; 4]> {
         match self {
-            Self::Function(_, params, _, _) => params.iter().map(|v| v.as_str()).collect(),
+            Self::Function(_, params, ..) => params.iter().map(|v| v.as_str()).collect(),
             _ => unreachable!()
         }
     }
 
-    fn function_definition_inner(&self)-> &[Self] {
+    fn function_definition_inner(&self) -> &[Self] {
         match self {
             Self::Function(_, _, inner, _) => inner.as_slice(),
             _ => unreachable!()
@@ -1227,24 +1247,23 @@ impl ListingElement for LocatedToken {
     fn is_crunched_section(&self) -> bool {
         match self {
             Self::CrunchedSection(..) => true,
-            _  => false,
+            _ => false
         }
     }
 
     fn crunched_section_listing(&self) -> &[Self] {
         match self {
             Self::CrunchedSection(_, lst, _) => lst.as_slice(),
-            _  => unreachable!(),
+            _ => unreachable!()
         }
     }
 
     fn crunched_section_kind(&self) -> &CrunchType {
         match self {
-            Self::CrunchedSection(kind, _, _) => kind,
-            _  => unreachable!(),
+            Self::CrunchedSection(kind, ..) => kind,
+            _ => unreachable!()
         }
     }
-
 }
 
 pub type InnerLocatedListing = BaseListing<LocatedToken>;

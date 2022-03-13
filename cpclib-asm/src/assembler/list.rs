@@ -98,12 +98,11 @@ pub fn list_sublist(
     start: usize,
     end: usize // not included
 ) -> Result<ExprResult, crate::AssemblerError> {
-
     dbg!(list, start, end);
 
     match list {
         ExprResult::String(s) => {
-            if start >= s.len(){
+            if start >= s.len() {
                 return Err(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(s.len(), start)
                 ));
@@ -123,7 +122,7 @@ pub fn list_sublist(
             }
             if end > l.len() {
                 return Err(AssemblerError::ExpressionError(
-                    ExpressionError::InvalidSize(l.len(), end )
+                    ExpressionError::InvalidSize(l.len(), end)
                 ));
             }
             Ok(ExprResult::List(l[start..end].to_vec()))
@@ -215,18 +214,18 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
                 .enumerate()
                 .map(|(idx, v)| {
                     let v = v.int()?;
-                    if v<0 || v>255 {
-                       Err(AssemblerError::AssemblingError {
+                    if v < 0 || v > 255 {
+                        Err(AssemblerError::AssemblingError {
                             msg: format!("{} at {} is not a valid byte value", v, idx)
                         })
-                    } else {
+                    }
+                    else {
                         Ok(v as u8 as char)
                     }
                 })
                 .collect::<Result<String, AssemblerError>>()
                 .map(|s| s.into())
-
-        },
+        }
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(

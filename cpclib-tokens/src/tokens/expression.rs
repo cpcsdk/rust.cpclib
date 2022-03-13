@@ -578,29 +578,29 @@ impl ExprElement for Expr {
     fn is_token_operation(&self) -> bool {
         match self {
             Self::UnaryTokenOperation(..) => true,
-            _=> false,
+            _ => false
         }
     }
 
     fn token_operation(&self) -> &UnaryTokenOperation {
         match self {
             Self::UnaryTokenOperation(op, _) => op,
-            _=> unreachable!(),
+            _ => unreachable!()
         }
     }
 
     fn token(&self) -> &Self::Token {
         match self {
             Self::UnaryTokenOperation(_, box token) => token,
-            _=> unreachable!(),
+            _ => unreachable!()
         }
     }
 
     fn is_prefix_label(&self) -> bool {
-       match self {
-           Self::PrefixedLabel(..) => true,
-           _ => false
-       }
+        match self {
+            Self::PrefixedLabel(..) => true,
+            _ => false
+        }
     }
 
     fn prefix(&self) -> &LabelPrefix {
@@ -611,22 +611,22 @@ impl ExprElement for Expr {
     }
 
     fn is_binary_operation(&self) -> bool {
-       match self {
-           Self::BinaryOperation(_, _, _) => true,
-           _ => false
-       }
+        match self {
+            Self::BinaryOperation(..) => true,
+            _ => false
+        }
     }
 
     fn binary_operation(&self) -> BinaryOperation {
         match self {
-            Self::BinaryOperation(op, _, _) => *op,
+            Self::BinaryOperation(op, ..) => *op,
             _ => unreachable!()
         }
     }
 
     fn is_unary_operation(&self) -> bool {
         match self {
-            Self::UnaryOperation(_, _) => true,
+            Self::UnaryOperation(..) => true,
             _ => false
         }
     }
@@ -640,7 +640,7 @@ impl ExprElement for Expr {
 
     fn is_unary_function(&self) -> bool {
         match self {
-            Self::UnaryFunction(_, _) => true,
+            Self::UnaryFunction(..) => true,
             _ => false
         }
     }
@@ -654,14 +654,14 @@ impl ExprElement for Expr {
 
     fn is_binary_function(&self) -> bool {
         match self {
-            Self::BinaryFunction(_, _, _) => true,
+            Self::BinaryFunction(..) => true,
             _ => false
         }
     }
 
     fn binary_function(&self) -> BinaryFunction {
         match self {
-            Self::BinaryFunction(f, _, _) => *f,
+            Self::BinaryFunction(f, ..) => *f,
             _ => unreachable!()
         }
     }
@@ -682,7 +682,7 @@ impl ExprElement for Expr {
 
     fn is_any_function(&self) -> bool {
         match self {
-            Self::AnyFunction(_, _) => true,
+            Self::AnyFunction(..) => true,
             _ => false
         }
     }
@@ -691,7 +691,7 @@ impl ExprElement for Expr {
         match self {
             Self::AnyFunction(n, _) => n.as_str(),
             Self::UnaryFunction(f, _) => todo!(),
-            Self::BinaryFunction(f, _, _) => todo!(),
+            Self::BinaryFunction(f, ..) => todo!(),
             _ => unreachable!()
         }
     }
@@ -707,7 +707,7 @@ impl ExprElement for Expr {
         match self {
             Self::BinaryOperation(_, box arg1, _) => arg1,
             Self::UnaryOperation(_, box arg) => arg,
-            Self::UnaryFunction(_, box  arg) => arg,
+            Self::UnaryFunction(_, box arg) => arg,
             Self::BinaryFunction(_, box arg1, _) => arg1,
             Self::Paren(box p) => p,
 
