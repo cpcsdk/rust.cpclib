@@ -8,6 +8,7 @@ const BUILD_BASM: bool = true;
 
 fn build_basm() {
     if BUILD_BASM {
+        eprintln!("> Build basm");
         Command::new("cargo")
             .args(["+nightly", "build"])
             .output()
@@ -18,6 +19,7 @@ fn build_basm() {
 fn command_for_generated_test(fname: &str, output: &str) -> Output {
     build_basm();
 
+    eprintln!("> Run  basm");
     Command::new("../target/debug/basm")
         .args(["-I", "tests/asm/", "-i", fname, "-o", output])
         .output()
@@ -109,11 +111,13 @@ fn expect_failure(fname: &str) {
     let res = command_for_generated_test(fname, output_fname);
     if !res.status.success() {
         let msg = dbg!(String::from_utf8_lossy(&res.stderr));
-        if msg.contains("RUST_BACKTRACE") {
+        if msg.contains("panicked at") {
             eprintln!(
                 "Error when assembling {}. Failure due to a basm bug:\n{}",
                 fname, msg
             );
+            panic!()
+        } else {
             panic!()
         }
     }

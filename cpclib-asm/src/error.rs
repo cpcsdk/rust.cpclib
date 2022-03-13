@@ -891,14 +891,13 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
 }
 
 fn build_filename(span: &Z80Span) -> Box<String> {
-    dbg!(span);
     let fname = &span.extra.current_filename;
     let context = &span.extra.context_name;
 
     let name = fname
         .as_ref()
         .map(|p| {
-            dbg!(p)
+            p
                 .as_os_str()
                 .to_str()
                 .unwrap_or("[Invalid file name]")

@@ -2354,10 +2354,10 @@ pub fn visit_located_token(
                 }
                 _ => {
                     token.visited(env).map_err(|err| {
-                        dbg!(AssemblerError::RelocatedError {
+                        AssemblerError::RelocatedError {
                             error: Box::new(err),
                             span: span.clone()
-                        })
+                        }
                     })
                 }
             }
