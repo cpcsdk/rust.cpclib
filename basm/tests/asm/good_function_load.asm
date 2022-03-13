@@ -1,9 +1,9 @@
 
 	; Skip the {start} first element of list {l}
 	FUNCTION SKIP, l, start
-		pos = list_len({l})
-		if {start} < pos
-			return list_sublist({l}, {start}, pos)
+		len = list_len({l})
+		if {start} < len
+			return list_sublist({l}, {start}, len)
 		else
 			return []
 		endif
@@ -14,7 +14,12 @@
 		assert {amount} > 0
 		len = list_len({l})
 		start = 0
-		finish = start + min({amount}, len) -1
+		finish = start + min({amount}, len) ; seems to not work for un unknown reason
+		if {amount} > len
+			finish = len
+		else
+			finish = {amount}
+		endif
 		return list_sublist({l}, start, finish)
 	ENDFUNCTION
 
@@ -28,12 +33,19 @@
 		return new
 	ENDFUNCTION
 
+	assert list_len([1, 2, 3, 4]) == 4
+	assert list_sublist([1, 2, 3, 4], 0, 2) == [1,2]
+	assert list_sublist([1, 2, 3, 4], 0, 4) == [1, 2, 3, 4]
+
+
 	; Various test to check appropriate behavior
 	assert SKIP([1, 2, 3, 4], 2) == [3, 4]
 	assert SKIP([1, 2, 3, 4], 5) == []
 
 	assert TAKE([1, 2, 3, 4], 2) == [1, 2]
-	assert TAKE([1, 2, 3, 4], 5) == [1, 2, 3, 4]
+	assert min(4,5) == 4
+	assert TAKE([1, 2, 3, 4], 4) == [1, 2, 3, 4]
+	assert TAKE([1, 2, 3, 4], 10) == [1, 2, 3, 4]
 
 	assert REVERT([1, 2, 3, 4]) == [4, 3, 2, 1]
 	assert list_len(load("hello.sna")) == 4674

@@ -103,12 +103,12 @@ pub fn list_sublist(
 
     match list {
         ExprResult::String(s) => {
-            if start >= s.len() + 1{
+            if start >= s.len(){
                 return Err(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(s.len(), start)
                 ));
             }
-            if end >= s.len() {
+            if end > s.len() {
                 return Err(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(s.len(), end)
                 ));
@@ -116,12 +116,12 @@ pub fn list_sublist(
             Ok(ExprResult::String(s.substring(start, end).into()))
         }
         ExprResult::List(l) => {
-            if start >= l.len() + 1{
+            if start >= l.len() {
                 return Err(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(l.len(), start)
                 ));
             }
-            if end >= l.len() {
+            if end > l.len() {
                 return Err(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(l.len(), end )
                 ));
