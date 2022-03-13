@@ -690,8 +690,8 @@ impl ExprElement for Expr {
     fn function_name(&self) -> &str {
         match self {
             Self::AnyFunction(n, _) => n.as_str(),
-            Self::UnaryFunction(f, _) => todo!(),
-            Self::BinaryFunction(f, ..) => todo!(),
+            Self::UnaryFunction(_f, _) => todo!(),
+            Self::BinaryFunction(_f, ..) => todo!(),
             _ => unreachable!()
         }
     }

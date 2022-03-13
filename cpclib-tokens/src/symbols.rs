@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
-use std::path::PathBuf;
+
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::prelude::*;
@@ -13,7 +13,7 @@ use delegate::delegate;
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{ExprResult, ListingElement, MacroParam, ToSimpleToken, Token};
+use crate::{ExprResult, ListingElement, ToSimpleToken, Token};
 
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone)]

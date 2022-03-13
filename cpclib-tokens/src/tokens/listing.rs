@@ -1,13 +1,13 @@
 use core::fmt::Debug;
-use std::borrow::Cow;
+
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 
 use cpclib_common::smallvec::SmallVec;
 
 use crate::{
-    BinaryTransformation, CrunchType, ExprElement, MacroParam, MacroParamElement, TestKind,
-    TestKindElement, Token
+    BinaryTransformation, CrunchType, ExprElement, MacroParamElement,
+    TestKindElement
 };
 /// The ListingElement trait contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
