@@ -111,7 +111,7 @@ impl<'token,  T: ListingElement + Visited + ToSimpleToken + Sync + ReturnExpr + 
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
-    ProcessedToken<'token, T>: FunctionBuilder{
+    ProcessedToken<'token, T>: FunctionBuilder + Clone {
     pub fn eval(
         &self,
         init_env: &Env,
@@ -139,8 +139,10 @@ where
             .unwrap();
         }
 
-        let mut inner = self.inner.write().unwrap();
-        let inner = inner.deref_mut();
+        let inner = self.inner.read().unwrap();
+        let mut inner = inner.iter()
+            .cloned()
+            .collect_vec(); // BUG: memory issue in case of error generated
         for token in inner.iter_mut() {
             token
                 .visited(&mut env)

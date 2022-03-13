@@ -33,6 +33,7 @@ pub struct ProcessedToken<'token, T: Visited + ToSimpleToken + Debug + ListingEl
     state: Option<ProcessedTokenState<'token, T>>
 }
 
+
 /// Specific state to maintain for the current token
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ProcessedTokenState<'token, T: Visited + ToSimpleToken + ListingElement + Debug + Sync> {
@@ -238,8 +239,6 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 }
             }
         }
-
-        dbg!(&selected_idx);
 
         let selected_listing = match selected_idx {
             Some(selected_idx) => {
