@@ -1,4 +1,5 @@
 use cpclib_common::smallvec::SmallVec;
+use either::Either;
 
 
 use crate::tokens::expression::*;
@@ -9,6 +10,33 @@ impl ListingElement for Token {
     type Expr = Expr;
     type MacroParam = MacroParam;
     type TestKind = TestKind;
+
+
+
+    fn is_iterate(&self)-> bool {
+        match self {
+            Self::Iterate(..) => true,
+            _ => false
+        }
+    }
+    fn iterate_listing(&self) -> &[Self] {
+        match self {
+            Self::Iterate(_, _, listing, ..) => listing.as_slice(),
+            _ => unreachable!()
+        }
+    }
+    fn iterate_counter_name(&self) -> &str  {
+        match self {
+            Self::Iterate(name, ..) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr>  {
+        match self {
+            Self::Iterate(_, values, ..) => Either::Left(values),
+            _ => unreachable!()
+        }
+    }
 
 
 

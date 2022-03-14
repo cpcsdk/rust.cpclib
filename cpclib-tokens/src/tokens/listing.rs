@@ -16,6 +16,12 @@ pub trait ListingElement: Debug + Sized {
     type TestKind: TestKindElement;
     type Expr: ExprElement;
 
+    fn is_iterate(&self)-> bool;
+    fn iterate_listing(&self) -> &[Self];
+    fn iterate_counter_name(&self) -> &str;
+    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr> ;
+
+
     fn is_for(&self) -> bool;
     fn for_listing(&self) -> &[Self];
     fn for_label(&self) -> &str;

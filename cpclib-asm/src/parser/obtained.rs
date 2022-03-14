@@ -1074,6 +1074,34 @@ impl ListingElement for LocatedToken {
     type TestKind = LocatedTestKind;
 
 
+
+    fn is_iterate(&self)-> bool {
+        match self {
+            Self::Iterate(..) => true,
+            _ => false
+        }
+    }
+    fn iterate_listing(&self) -> &[Self] {
+        match self {
+            Self::Iterate(_, _, listing, ..) => listing.as_slice(),
+            _ => unreachable!()
+        }
+    }
+    fn iterate_counter_name(&self) -> &str  {
+        match self {
+            Self::Iterate(name, ..) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr>  {
+        match self {
+            Self::Iterate(_, values, ..) => values.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+
+
     fn is_for(&self) -> bool {
         match self {
             Self::For{..} => true,
@@ -1110,7 +1138,7 @@ impl ListingElement for LocatedToken {
             _ => unreachable!()
         }
     }
-    
+
 
     fn is_repeat_until(&self) -> bool {
         match self {

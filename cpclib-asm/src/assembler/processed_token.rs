@@ -52,6 +52,8 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     Incbin {
         data: Vec<u8>
     },
+    
+    Iterate(SimpleListingState<'token, T>),
     MacroCallOrBuildStruct(ExpandState),
     Repeat(SimpleListingState<'token, T>),
     RepeatUntil(SimpleListingState<'token, T>)
@@ -332,6 +334,14 @@ where
             FunctionDefinitionState(None)
         ))
     }
+    else if token.is_iterate() {
+        Some(ProcessedTokenState::Iterate(
+            SimpleListingState{
+                processed_tokens: build_processed_tokens_list(token.iterate_listing(), env),
+                span: token.possible_span().cloned()
+            }
+        ))     
+    }
     else if token.is_repeat() {
         Some(ProcessedTokenState::Repeat(
             SimpleListingState{
@@ -522,6 +532,7 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
                 | ProcessedTokenState::For(..)
                 | ProcessedTokenState::FunctionDefinition(..)
                 | ProcessedTokenState::If(..)
+                | ProcessedTokenState::Iterate(..)
                 | ProcessedTokenState::MacroCallOrBuildStruct(_)
                 | ProcessedTokenState::Repeat(..)
                 | ProcessedTokenState::RepeatUntil(..)
@@ -829,6 +840,18 @@ where
 
                     Ok(())
                 }
+
+
+
+                Some(ProcessedTokenState::Iterate(SimpleListingState{processed_tokens, span})) => {
+                    env.visit_iterate(
+                        self.token.iterate_counter_name(),
+                        self.token.iterate_values(),
+                        processed_tokens,
+                        span.as_ref()
+                    )
+                }
+
 
                 Some(ProcessedTokenState::MacroCallOrBuildStruct(state)) => {
                     let name = self.token.macro_call_name();

@@ -2740,7 +2740,7 @@ impl Env {
     /// Handle the iterate repetition directive
     /// Values is either a list of values or a Expression that represents a list
     pub fn visit_iterate<'token,
-        E: ExprEvaluationExt + Display,
+        E: ExprEvaluationExt ,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync
     >(
         &mut self,

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
@@ -12,7 +14,7 @@ use crate::SymbolFor;
 /// The result of expression (without taking into account the strings) is either a int (no complex mathematical expression) or a float (division/sinus and so on)
 
 /// Evaluate an aexpression
-pub trait ExprEvaluationExt {
+pub trait ExprEvaluationExt : Display {
     /// Simple evaluation without context => can only evaluate number based operations.
     fn eval(&self) -> Result<ExprResult, AssemblerError> {
         let env = Env::default();
@@ -38,6 +40,14 @@ struct UnaryFunctionWrapper<'a, E:ExprEvaluationExt> {
     func:  UnaryFunction,
     arg: &'a E
 }
+
+
+impl<'a, E:ExprEvaluationExt>  std::fmt::Display for  UnaryFunctionWrapper<'a,E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{}({})", self.func, self.arg)
+    }
+}
+
 
 impl<'a, E:ExprEvaluationExt> UnaryFunctionWrapper<'a, E> {
     fn new(func:  UnaryFunction, arg: &'a E) -> UnaryFunctionWrapper<'a,E> {
@@ -111,6 +121,15 @@ struct BinaryFunctionWrapper<'a,  E:ExprEvaluationExt> {
     arg1: &'a E,
     arg2: &'a E
 }
+
+
+impl<'a, E:ExprEvaluationExt>  std::fmt::Display for  BinaryFunctionWrapper<'a,E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{}({},{})", self.func, self.arg1, self.arg2)
+    }
+}
+
+
 
 impl<'a,  E:ExprEvaluationExt> BinaryFunctionWrapper<'a, E> {
     fn new(func:  BinaryFunction, arg1: &'a E, arg2: &'a E) -> Self {
@@ -409,6 +428,7 @@ impl ExprEvaluationExt for Expr {
 
             Expr::UnaryTokenOperation(_, box t) => {
                 unimplemented!("Need to retreive the symbols from the operation")
+
             }
         }
     }
