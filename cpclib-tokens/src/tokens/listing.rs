@@ -16,6 +16,18 @@ pub trait ListingElement: Debug + Sized {
     type TestKind: TestKindElement;
     type Expr: ExprElement;
 
+
+    fn is_repeat_until(&self) -> bool;
+    fn repeat_until_listing(&self) -> &[Self];
+    fn repeat_until_condition(&self) -> &Self::Expr;
+
+
+    fn is_repeat(&self) -> bool;
+    fn repeat_listing(&self) -> &[Self];
+    fn repeat_count(&self) -> &Self::Expr;
+    fn repeat_counter_name(&self) -> Option<&str>;
+    fn repeat_counter_start(&self) -> Option<&Self::Expr>;
+
     fn is_crunched_section(&self) -> bool;
     fn crunched_section_listing(&self) -> &[Self];
     fn crunched_section_kind(&self) -> &CrunchType;

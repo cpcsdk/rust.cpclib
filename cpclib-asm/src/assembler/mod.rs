@@ -2383,17 +2383,11 @@ pub fn visit_located_token(
             Ok(())
         }
 
-        LocatedToken::Repeat(count, code, counter, counter_start, span) => {
-            env.visit_repeat(
-                count,
-                code,
-                counter.as_ref().map(|s| s.as_str()),
-                counter_start.as_ref(),
-                Some(span)
-            )
+        LocatedToken::Repeat(..) => {
+            panic!("Should never be called")
         }
-        LocatedToken::RepeatUntil(cond, code, span) => {
-            env.visit_repeat_until(cond, code, Some(span))
+        LocatedToken::RepeatUntil(..) => {
+            panic!("Should be handled by ProcessedToken")
         }
         LocatedToken::Rorg(address, code, span) => env.visit_rorg(address, code, Some(span)),
         LocatedToken::Switch(value, cases, default, span) => {
@@ -2405,25 +2399,9 @@ pub fn visit_located_token(
             )
         }
         LocatedToken::While(cond, inner, span) => env.visit_while(cond, inner, Some(span.clone())),
-        LocatedToken::Iterate(name, values, code, span) => {
-            env.visit_iterate(name.as_str(), values.as_ref(), code, Some(span))
-        }
-        LocatedToken::For {
-            label,
-            start,
-            stop,
-            step,
-            listing,
-            span
-        } => {
-            env.visit_for(
-                label.as_str(),
-                start,
-                stop,
-                step.as_ref(),
-                listing,
-                Some(span)
-            )
+        LocatedToken::Iterate(..) => { panic!("Should never be called")}
+        LocatedToken::For {..} => {
+            panic!("Should never be called")
         }
         LocatedToken::Label(label) => {
             env.visit_label(label.as_str())
@@ -2565,15 +2543,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             Ok(())
         }
         Token::Fail(ref exp) => env.visit_fail(exp.as_ref().map(|v| v.as_slice())),
-        Token::Repeat(count, code, counter, counter_start) => {
-            env.visit_repeat(
-                count,
-                code,
-                counter.as_ref().map(|s| s.as_str()),
-                counter_start.as_ref(),
-                None
-            )
-        }
+        Token::Repeat(..) => { panic!("Should never be called")}
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
         Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code, None),
         Token::Save {
@@ -2769,16 +2739,22 @@ impl Env {
 
     /// Handle the iterate repetition directive
     /// Values is either a list of values or a Expression that represents a list
-    pub fn visit_iterate<
+    pub fn visit_iterate<'token,
         E: ExprEvaluationExt + Display,
-        T: ListingElement<Expr = E> + Visited + MayHaveSpan
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync
     >(
         &mut self,
         counter_name: &str,
         values: either::Either<&Vec<E>, &E>,
-        code: &[T],
+        code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), AssemblerError> 
+    where
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+    ProcessedToken<'token, T>: FunctionBuilder
+    
+    {
         let counter_name = format!("{{{}}}", counter_name);
         let counter_name = counter_name.as_str();
         if self.symbols().contains_symbol(counter_name)? {
@@ -2893,15 +2869,20 @@ impl Env {
     }
 
     /// Handle the for directive
-    pub fn visit_for<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited + MayHaveSpan>(
+    pub fn visit_for<'token, E: ExprEvaluationExt, T>(
         &mut self,
         label: &str,
         start: &E,
         stop: &E,
         step: Option<&E>,
-        code: &[T],
+        code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), AssemblerError> 
+  where  
+    T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+<<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+ProcessedToken<'token, T>: FunctionBuilder {
         let counter_name = format!("{{{}}}", label);
         if self.symbols().contains_symbol(&counter_name)? {
             return Err(AssemblerError::ForIssue {
@@ -2967,15 +2948,18 @@ impl Env {
     }
 
     /// Handle the standard repetition directive
-    pub fn visit_repeat_until<E, T>(
+    pub fn visit_repeat_until<'token, E, T>(
         &mut self,
         cond: &E,
-        code: &[T],
+        code: &mut [ProcessedToken<'token,T>],
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
         E: ExprEvaluationExt,
-        T: ListingElement<Expr = E> + Visited + MayHaveSpan
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+        ProcessedToken<'token, T>: FunctionBuilder
     {
         let mut i = 0;
         loop {
@@ -2991,17 +2975,20 @@ impl Env {
     }
 
     /// Handle the statndard repetition directive
-    pub fn visit_repeat<T, E>(
+    pub fn visit_repeat<'token, T, E>(
         &mut self,
         count: &E,
-        code: &[T],
+        code: &mut [ProcessedToken<'token,T>],
         counter: Option<&str>,
         counter_start: Option<&E>,
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
         E: ExprEvaluationExt,
-        T: ListingElement<Expr = E> + Visited + MayHaveSpan
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+    ProcessedToken<'token, T>: FunctionBuilder
     {
         // get the number of loops
         let count = self.resolve_expr_must_never_fail(count)?.int()?;
@@ -3048,14 +3035,20 @@ impl Env {
     }
 
     /// Handle the code generation for all the repetition variants
-    fn inner_visit_repeat<T: ListingElement + Visited + MayHaveSpan>(
+    fn inner_visit_repeat<'token, T: ListingElement + Visited + MayHaveSpan + Sync>(
         &mut self,
         counter_name: Option<&str>,
         counter_value: Option<ExprResult>,
         iteration: i32,
-        code: &[T],
+        code: &mut [ProcessedToken<'token,T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), AssemblerError> 
+    where
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+    ProcessedToken<'token, T>: FunctionBuilder
+    
+    {
         // handle symbols unicity
         {
             self.macro_seed += 1;
@@ -3070,7 +3063,7 @@ impl Env {
         }
 
         // generate the bytes
-        self.visit_listing(code).map_err(|e| {
+        visit_processed_tokens(code, self).map_err(|e| {
             let e = if let AssemblerError::RelocatedError {
                 error: box AssemblerError::UnknownSymbol { closest: _, symbol },
                 span

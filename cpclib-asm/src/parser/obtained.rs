@@ -1073,6 +1073,71 @@ impl ListingElement for LocatedToken {
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
 
+
+
+    fn is_repeat_until(&self) -> bool {
+        match self {
+            Self::RepeatUntil(..) => true,
+            _ => false
+        }
+    }
+    fn repeat_until_listing(&self) -> &[Self]{
+        match self {
+            Self::RepeatUntil(_, code, ..) => code.as_slice(),
+            _ => unreachable!()
+        }
+    }
+    fn repeat_until_condition(&self) -> &Self::Expr {
+        match self {
+            Self::RepeatUntil(cond, ..) => cond,
+            _ => unreachable!()
+        }
+    }
+
+
+
+    fn is_repeat(&self) -> bool  {
+        match self {
+            Self::Repeat(..) => true,
+            _ => false
+        }
+    }
+
+    fn repeat_listing(&self) -> &[Self] {
+        match self {
+            Self::Repeat(_, listing, ..) => listing.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn repeat_count(&self) -> &Self::Expr {
+        match self {
+            Self::Repeat(e, ..) => e,
+            _ => unreachable!()
+        }
+    }
+    fn repeat_counter_name(&self) -> Option<&str> {
+        match self {
+            Self::Repeat(_, _, counter_name, ..) => counter_name.as_ref().map(|c| c.as_str()),
+            _ => unreachable!()
+        }
+    }
+    fn repeat_counter_start(&self) -> Option<&Self::Expr> {
+        match self {
+            Self::Repeat(_, _, _, start, _) => start.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+
+
+
+
+
+
+
+
+
     fn is_macro_definition(&self) -> bool {
         match self {
             Self::Macro { .. } => true,

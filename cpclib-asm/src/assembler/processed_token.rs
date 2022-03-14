@@ -51,8 +51,31 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     Incbin {
         data: Vec<u8>
     },
-    MacroCallOrBuildStruct(ExpandState)
+    MacroCallOrBuildStruct(ExpandState),
+    Repeat(SimpleListingState<'token, T>),
+    RepeatUntil(SimpleListingState<'token, T>)
 }
+
+
+
+#[derive(PartialEq, Eq)]
+struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> {
+    processed_tokens: Vec<ProcessedToken<'token, T>>
+}
+
+
+impl<'token, T: Visited + ListingElement + Debug + Sync> Clone for SimpleListingState<'token, T> {
+    fn clone(&self) -> Self {
+        todo!()
+    }
+}
+
+impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListingState<'token, T> {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "SimpleListingState")
+    }
+}
+
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FunctionDefinitionState(Option<Arc<Function>>);
@@ -316,6 +339,20 @@ where
             FunctionDefinitionState(None)
         ))
     }
+    else if token.is_repeat() {
+        Some(ProcessedTokenState::Repeat(
+            SimpleListingState{
+                processed_tokens: build_processed_tokens_list(token.repeat_listing(), env)
+            }
+        ))
+    }
+    else if token.is_repeat_until() {
+        Some(ProcessedTokenState::RepeatUntil(
+            SimpleListingState{
+                processed_tokens: build_processed_tokens_list(token.repeat_until_listing(), env)
+            }
+        ))
+    }
     else if token.is_call_macro_or_build_struct() {
         // one day, we may whish to maintain a state
         None
@@ -486,10 +523,12 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
                 return Ok(None);
             }
             Some(
-                ProcessedTokenState::If(..)
-                | ProcessedTokenState::MacroCallOrBuildStruct(_)
+                ProcessedTokenState::CrunchedSection { .. }
                 | ProcessedTokenState::FunctionDefinition(..)
-                | ProcessedTokenState::CrunchedSection { .. }
+                | ProcessedTokenState::If(..)
+                | ProcessedTokenState::MacroCallOrBuildStruct(_)
+                | ProcessedTokenState::Repeat(..)
+                | ProcessedTokenState::RepeatUntil(..)
             )
             | None => return Ok(None)
         };
@@ -837,12 +876,28 @@ where
                     Ok(())
                 }
 
-                Some(other) => {
-                    unimplemented!(
-                        "Specific behavior requiring a state not implemented. {:?}",
-                        other
+                Some(ProcessedTokenState::Repeat(SimpleListingState{processed_tokens})) => {
+                    env.visit_repeat(
+                        self.token.repeat_count(),
+                        processed_tokens,
+                        self.token.repeat_counter_name(),
+                        self.token.repeat_counter_start(),
+                        self.token.possible_span()
                     )
                 }
+
+
+                Some(ProcessedTokenState::RepeatUntil(SimpleListingState{processed_tokens})) => {
+                    env.visit_repeat_until(
+                        self.token.repeat_until_condition(),
+                        processed_tokens,
+                        self.token.possible_span()
+                    )
+                }
+
+  
+                Some(ProcessedTokenState::Expected) => unreachable!(),
+
                 // no state implies a standard visit
                 None => self.token.visited(env)
             }
