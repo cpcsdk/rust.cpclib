@@ -16,6 +16,13 @@ pub trait ListingElement: Debug + Sized {
     type TestKind: TestKindElement;
     type Expr: ExprElement;
 
+    fn is_for(&self) -> bool;
+    fn for_listing(&self) -> &[Self];
+    fn for_label(&self) -> &str;
+    fn for_start(&self) -> &Self::Expr;
+    fn for_stop(&self) -> &Self::Expr;
+    fn for_step(&self) -> Option<&Self::Expr>;
+
 
     fn is_repeat_until(&self) -> bool;
     fn repeat_until_listing(&self) -> &[Self];

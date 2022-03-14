@@ -38,9 +38,10 @@ pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync> {
 /// Specific state to maintain for the current token
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
-    CrunchedSection(CrunchedSectionState<'token, T>),
+    CrunchedSection(SimpleListingState<'token, T>),
     /// A state is expected but has not been yet specified (before include or incbin or a macro call or a struct build or a function definition)
     Expected,
+    For(SimpleListingState<'token, T>),
     FunctionDefinition(FunctionDefinitionState),
     /// If state encodes previous choice
     If(IfState<'token, T>),
@@ -60,7 +61,8 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
 
 #[derive(PartialEq, Eq)]
 struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> {
-    processed_tokens: Vec<ProcessedToken<'token, T>>
+    processed_tokens: Vec<ProcessedToken<'token, T>>,
+    span: Option<Z80Span>
 }
 
 
@@ -80,23 +82,6 @@ impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListing
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FunctionDefinitionState(Option<Arc<Function>>);
 
-#[derive(PartialEq, Eq)]
-struct CrunchedSectionState<'token, T: Visited + ListingElement + Debug + Sync> {
-    processed_tokens: Vec<ProcessedToken<'token, T>>,
-    span: Option<Z80Span>
-}
-
-impl<'token, T: Visited + ListingElement + Debug + Sync> Clone for CrunchedSectionState<'token, T> {
-    fn clone(&self) -> Self {
-        todo!()
-    }
-}
-
-impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for CrunchedSectionState<'token, T> {
-    fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(fmt, "CrunchedSectionState")
-    }
-}
 
 #[self_referencing]
 struct IncludeState {
@@ -329,10 +314,18 @@ where
         Some(ProcessedTokenState::Expected)
     }
     else if token.is_crunched_section() {
-        Some(ProcessedTokenState::CrunchedSection(CrunchedSectionState {
+        Some(ProcessedTokenState::CrunchedSection(SimpleListingState {
             processed_tokens: build_processed_tokens_list(token.crunched_section_listing(), env),
             span: token.possible_span().cloned()
         }))
+    }
+    else if token.is_for() {
+        Some(ProcessedTokenState::For(
+            SimpleListingState{
+                processed_tokens: build_processed_tokens_list(token.for_listing(), env),
+                span: token.possible_span().cloned()
+            }
+        ))
     }
     else if token.is_function_definition() {
         Some(ProcessedTokenState::FunctionDefinition(
@@ -342,14 +335,16 @@ where
     else if token.is_repeat() {
         Some(ProcessedTokenState::Repeat(
             SimpleListingState{
-                processed_tokens: build_processed_tokens_list(token.repeat_listing(), env)
+                processed_tokens: build_processed_tokens_list(token.repeat_listing(), env),
+                span: token.possible_span().cloned()
             }
         ))
     }
     else if token.is_repeat_until() {
         Some(ProcessedTokenState::RepeatUntil(
             SimpleListingState{
-                processed_tokens: build_processed_tokens_list(token.repeat_until_listing(), env)
+                processed_tokens: build_processed_tokens_list(token.repeat_until_listing(), env),
+                span: token.possible_span().cloned()
             }
         ))
     }
@@ -524,6 +519,7 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
             }
             Some(
                 ProcessedTokenState::CrunchedSection { .. }
+                | ProcessedTokenState::For(..)
                 | ProcessedTokenState::FunctionDefinition(..)
                 | ProcessedTokenState::If(..)
                 | ProcessedTokenState::MacroCallOrBuildStruct(_)
@@ -736,12 +732,25 @@ where
         else {
             // Handle the tokens depending on their specific state
             match &mut self.state {
-                Some(ProcessedTokenState::CrunchedSection(CrunchedSectionState {
+                Some(ProcessedTokenState::CrunchedSection(SimpleListingState {
                     processed_tokens,
                     span
                 })) => {
                     env.visit_crunched_section(
                         self.token.crunched_section_kind(),
+                        processed_tokens,
+                        span.as_ref()
+                    )
+                }
+
+
+                Some(ProcessedTokenState::For(SimpleListingState{processed_tokens, span})) => {
+                        
+                    env.visit_for(
+                        self.token.for_label(),
+                        self.token.for_start(),
+                        self.token.for_stop(),
+                        self.token.for_step(),
                         processed_tokens,
                         span.as_ref()
                     )
@@ -876,7 +885,7 @@ where
                     Ok(())
                 }
 
-                Some(ProcessedTokenState::Repeat(SimpleListingState{processed_tokens})) => {
+                Some(ProcessedTokenState::Repeat(SimpleListingState{processed_tokens, ..})) => {
                     env.visit_repeat(
                         self.token.repeat_count(),
                         processed_tokens,
@@ -887,7 +896,7 @@ where
                 }
 
 
-                Some(ProcessedTokenState::RepeatUntil(SimpleListingState{processed_tokens})) => {
+                Some(ProcessedTokenState::RepeatUntil(SimpleListingState{processed_tokens, ..})) => {
                     env.visit_repeat_until(
                         self.token.repeat_until_condition(),
                         processed_tokens,

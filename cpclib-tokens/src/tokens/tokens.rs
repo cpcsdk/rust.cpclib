@@ -12,6 +12,42 @@ impl ListingElement for Token {
 
 
 
+    fn is_for(&self) -> bool {
+        match self {
+            Self::For{..} => true,
+            _ => false
+        }
+    }
+    fn for_listing(&self) -> &[Self]{
+        match self {
+            Self::For{listing, ..} => listing.as_slice(),
+            _ => unreachable!()
+        }
+    }
+    fn for_label(&self) -> &str {
+        match self {
+            Self::For{label, ..} => label.as_ref(),
+            _ => unreachable!()
+        }
+    }
+    fn for_start(&self) -> &Self::Expr {
+        match self {
+            Self::For{start, ..} => start,
+            _ => unreachable!()
+        }
+    }
+    fn for_stop(&self) -> &Self::Expr {
+        match self {
+            Self::For{stop, ..} => stop,
+            _ => unreachable!()
+        }
+    }
+    fn for_step(&self) -> Option<&Self::Expr>  {
+        match self {
+            Self::For{step, ..} => step.as_ref(),
+            _ => unreachable!()
+        }
+    }
 
     fn is_repeat_until(&self) -> bool {
         match self {
@@ -31,6 +67,7 @@ impl ListingElement for Token {
             _ => unreachable!()
         }
     }
+
 
     fn is_repeat(&self) -> bool  {
         match self {
