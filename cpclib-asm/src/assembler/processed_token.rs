@@ -712,223 +712,228 @@ where
 {
     /// Due to the state management, the signature requires mutability
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
-        let mut request_additional_pass = false;
 
-        {
-            // Update the state}
-            // Read file if needed
-            if self.token.is_include() || self.token.is_incbin() {
-                self.update_file_read_state(env)?;
+
+            let mut really_does_the_job = move || {
+            {
+                // Update the state}
+                // Read file if needed
+                if self.token.is_include() || self.token.is_incbin() {
+                    self.update_file_read_state(env)?;
+                }
+                // Generate the code of a macro/struct
+                if self.token.is_call_macro_or_build_struct() {
+                    self.update_macro_or_struct_state(env)?;
+                }
             }
-            // Generate the code of a macro/struct
-            if self.token.is_call_macro_or_build_struct() {
-                self.update_macro_or_struct_state(env)?;
+
+            // Behavior based on the token
+            if self.token.is_macro_definition() {
+                // TODO really implement logic here
+                let name = self.token.macro_definition_name();
+                let arguments = self.token.macro_definition_arguments();
+                let code = self.token.macro_definition_code();
+                env.visit_macro_definition(name, &arguments, code, self.possible_span())
             }
-        }
-
-        // Behavior based on the token
-        if self.token.is_macro_definition() {
-            // TODO really implement logic here
-            let name = self.token.macro_definition_name();
-            let arguments = self.token.macro_definition_arguments();
-            let code = self.token.macro_definition_code();
-            env.visit_macro_definition(name, &arguments, code, self.possible_span())
-        }
-        // Behavior based on the state (for ease of writting)
-        else {
-            // Handle the tokens depending on their specific state
-            match &mut self.state {
-                Some(ProcessedTokenState::CrunchedSection(SimpleListingState {
-                    processed_tokens,
-                    span
-                })) => {
-                    env.visit_crunched_section(
-                        self.token.crunched_section_kind(),
+            // Behavior based on the state (for ease of writting)
+            else {
+                // Handle the tokens depending on their specific state
+                match &mut self.state {
+                    Some(ProcessedTokenState::CrunchedSection(SimpleListingState {
                         processed_tokens,
-                        span.as_ref()
-                    )
-                }
-
-
-                Some(ProcessedTokenState::For(SimpleListingState{processed_tokens, span})) => {
-                        
-                    env.visit_for(
-                        self.token.for_label(),
-                        self.token.for_start(),
-                        self.token.for_stop(),
-                        self.token.for_step(),
-                        processed_tokens,
-                        span.as_ref()
-                    )
-                }
-
-                Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(Some(
-                    fun
-                )))) => {
-                    // TODO check if the funtion has already been defined during this pass
-                    Ok(())
-                }
-                Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(option))) => {
-                    let name = self.token.function_definition_name();
-                    if !env.functions.contains_key(name) {
-                        let inner = self.token.function_definition_inner();
-                        let params = self.token.function_definition_params();
-
-                        let inner = build_processed_tokens_list(inner, env);
-                        let f = Arc::new(unsafe { FunctionBuilder::new(&name, &params, inner) }?);
-                        option.replace(f.clone());
-
-                        env.functions.insert(name.to_owned(), f);
+                        span
+                    })) => {
+                        env.visit_crunched_section(
+                            self.token.crunched_section_kind(),
+                            processed_tokens,
+                            span.as_ref()
+                        )
                     }
-                    else {
-                        // TODO raise an error ?
+
+
+                    Some(ProcessedTokenState::For(SimpleListingState{processed_tokens, span})) => {
+                            
+                        env.visit_for(
+                            self.token.for_label(),
+                            self.token.for_start(),
+                            self.token.for_stop(),
+                            self.token.for_step(),
+                            processed_tokens,
+                            span.as_ref()
+                        )
                     }
-                    Ok(())
-                }
-                Some(ProcessedTokenState::Include(ref mut state)) => {
-                    let fname = self.token.include_fname();
-                    let namespace = self.token.include_namespace();
-                    let once = self.token.include_once();
-                    let fname = env
-                        .ctx // TODO get span context if available
-                        .get_path_for(fname)
-                        .unwrap_or("will_fail".into());
-                    if (!once) || (!env.has_included(&fname)) {
-                        // inclusion requested
-                        env.mark_included(fname);
 
-                        // handle module if necessary
-                        if let Some(namespace) = namespace {
-                            env.enter_namespace(namespace)?;
-                            // TODO handle the locating of error
-                            //.map_err(|e| e.locate(span.clone()))?;
-                        }
-
-                        // Visit the included listing
-                        state.with_processed_tokens_mut(|tokens| {
-                            let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut tokens[..];
-                            visit_processed_tokens::<'_, LocatedToken>(tokens, env)
-                        })?;
-
-                        // Remove module if necessary
-                        if namespace.is_some() {
-                            env.leave_namespace()?;
-                            //.map_err(|e| e.locate(span.clone()))?;
-                        }
-
+                    Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(Some(
+                        fun
+                    )))) => {
+                        // TODO check if the funtion has already been defined during this pass
                         Ok(())
                     }
-                    else {
-                        // no inclusion
+                    Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(option))) => {
+                        let name = self.token.function_definition_name();
+                        if !env.functions.contains_key(name) {
+                            let inner = self.token.function_definition_inner();
+                            let params = self.token.function_definition_params();
+
+                            let inner = build_processed_tokens_list(inner, env);
+                            let f = Arc::new(unsafe { FunctionBuilder::new(&name, &params, inner) }?);
+                            option.replace(f.clone());
+
+                            env.functions.insert(name.to_owned(), f);
+                        }
+                        else {
+                            // TODO raise an error ?
+                        }
                         Ok(())
                     }
-                }
+                    Some(ProcessedTokenState::Include(ref mut state)) => {
+                        let fname = self.token.include_fname();
+                        let namespace = self.token.include_namespace();
+                        let once = self.token.include_once();
+                        let fname = env
+                            .ctx // TODO get span context if available
+                            .get_path_for(fname)
+                            .unwrap_or("will_fail".into());
+                        if (!once) || (!env.has_included(&fname)) {
+                            // inclusion requested
+                            env.mark_included(fname);
 
-                Some(ProcessedTokenState::Incbin { ref data }) => env.visit_incbin(data),
-
-                Some(ProcessedTokenState::If(if_state)) => {
-                    let listing = if_state.choose_listing_to_assemble(env)?;
-
-                    if let Some(listing) = listing {
-                        visit_processed_tokens(listing, env)?;
-                    }
-
-                    Ok(())
-                }
-
-
-
-                Some(ProcessedTokenState::Iterate(SimpleListingState{processed_tokens, span})) => {
-                    env.visit_iterate(
-                        self.token.iterate_counter_name(),
-                        self.token.iterate_values(),
-                        processed_tokens,
-                        span.as_ref()
-                    )
-                }
-
-
-                Some(ProcessedTokenState::MacroCallOrBuildStruct(state)) => {
-                    let name = self.token.macro_call_name();
-
-                    env.inc_macro_seed();
-                    let seed = env.macro_seed();
-                    env.symbols_mut().push_seed(seed);
-
-                    // save the number of prints to patch the ones added by the macro
-                    // to properly locate them
-                    let nb_prints = env
-                        .pages_info_sna
-                        .iter()
-                        .map(|ti| ti.print_commands().len())
-                        .collect_vec();
-
-                    state
-                        .with_processed_tokens_mut(|listing| {
-                            let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut listing[..];
-                            visit_processed_tokens::<'_, LocatedToken>(tokens, env)
-                        })
-                        .or_else(|e| {
-                            let e = AssemblerError::MacroError {
-                                name: name.into(),
-                                root: Box::new(e)
-                            };
-                            let caller_span = self.possible_span();
-                            match caller_span {
-                                Some(span) => {
-                                    Err(AssemblerError::RelocatedError {
-                                        error: e.into(),
-                                        span: span.clone()
-                                    })
-                                }
-                                None => Err(e)
+                            // handle module if necessary
+                            if let Some(namespace) = namespace {
+                                env.enter_namespace(namespace)?;
+                                // TODO handle the locating of error
+                                //.map_err(|e| e.locate(span.clone()))?;
                             }
-                        })?;
 
-                    let caller_span = self.possible_span();
-                    if let Some(span) = caller_span {
-                        env.pages_info_sna
-                            .iter_mut()
-                            .zip(nb_prints.into_iter())
-                            .for_each(|(ti, count)| {
-                                ti.print_commands_mut()[count..]
-                                    .iter_mut()
-                                    .for_each(|cmd| cmd.relocate(span.clone()))
-                            });
+                            // Visit the included listing
+                            state.with_processed_tokens_mut(|tokens| {
+                                let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut tokens[..];
+                                visit_processed_tokens::<'_, LocatedToken>(tokens, env)
+                            })?;
+
+                            // Remove module if necessary
+                            if namespace.is_some() {
+                                env.leave_namespace()?;
+                                //.map_err(|e| e.locate(span.clone()))?;
+                            }
+
+                            Ok(())
+                        }
+                        else {
+                            // no inclusion
+                            Ok(())
+                        }
                     }
 
-                    env.symbols_mut().pop_seed();
-                    //   dbg!("done");
+                    Some(ProcessedTokenState::Incbin { ref data }) => env.visit_incbin(data),
 
-                    Ok(())
+                    Some(ProcessedTokenState::If(if_state)) => {
+                        let listing = if_state.choose_listing_to_assemble(env)?;
+
+                        if let Some(listing) = listing {
+                            visit_processed_tokens(listing, env)?;
+                        }
+
+                        Ok(())
+                    }
+
+
+
+                    Some(ProcessedTokenState::Iterate(SimpleListingState{processed_tokens, span})) => {
+                        env.visit_iterate(
+                            self.token.iterate_counter_name(),
+                            self.token.iterate_values(),
+                            processed_tokens,
+                            span.as_ref()
+                        )
+                    }
+
+
+                    Some(ProcessedTokenState::MacroCallOrBuildStruct(state)) => {
+                        let name = self.token.macro_call_name();
+
+                        env.inc_macro_seed();
+                        let seed = env.macro_seed();
+                        env.symbols_mut().push_seed(seed);
+
+                        // save the number of prints to patch the ones added by the macro
+                        // to properly locate them
+                        let nb_prints = env
+                            .pages_info_sna
+                            .iter()
+                            .map(|ti| ti.print_commands().len())
+                            .collect_vec();
+
+                        state
+                            .with_processed_tokens_mut(|listing| {
+                                let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut listing[..];
+                                visit_processed_tokens::<'_, LocatedToken>(tokens, env)
+                            })
+                            .or_else(|e| {
+                                let e = AssemblerError::MacroError {
+                                    name: name.into(),
+                                    root: Box::new(e)
+                                };
+                                let caller_span = self.possible_span();
+                                match caller_span {
+                                    Some(span) => {
+                                        Err(AssemblerError::RelocatedError {
+                                            error: e.into(),
+                                            span: span.clone()
+                                        })
+                                    }
+                                    None => Err(e)
+                                }
+                            })?;
+
+                        let caller_span = self.possible_span();
+                        if let Some(span) = caller_span {
+                            env.pages_info_sna
+                                .iter_mut()
+                                .zip(nb_prints.into_iter())
+                                .for_each(|(ti, count)| {
+                                    ti.print_commands_mut()[count..]
+                                        .iter_mut()
+                                        .for_each(|cmd| cmd.relocate(span.clone()))
+                                });
+                        }
+
+                        env.symbols_mut().pop_seed();
+                        //   dbg!("done");
+
+                        Ok(())
+                    }
+
+                    Some(ProcessedTokenState::Repeat(SimpleListingState{processed_tokens, ..})) => {
+                        env.visit_repeat(
+                            self.token.repeat_count(),
+                            processed_tokens,
+                            self.token.repeat_counter_name(),
+                            self.token.repeat_counter_start(),
+                            self.token.possible_span()
+                        )
+                    }
+
+
+                    Some(ProcessedTokenState::RepeatUntil(SimpleListingState{processed_tokens, ..})) => {
+                        env.visit_repeat_until(
+                            self.token.repeat_until_condition(),
+                            processed_tokens,
+                            self.token.possible_span()
+                        )
+                    }
+
+    
+                    Some(ProcessedTokenState::Expected) => unreachable!(),
+
+                    // no state implies a standard visit
+                    None => self.token.visited(env)
                 }
-
-                Some(ProcessedTokenState::Repeat(SimpleListingState{processed_tokens, ..})) => {
-                    env.visit_repeat(
-                        self.token.repeat_count(),
-                        processed_tokens,
-                        self.token.repeat_counter_name(),
-                        self.token.repeat_counter_start(),
-                        self.token.possible_span()
-                    )
-                }
-
-
-                Some(ProcessedTokenState::RepeatUntil(SimpleListingState{processed_tokens, ..})) => {
-                    env.visit_repeat_until(
-                        self.token.repeat_until_condition(),
-                        processed_tokens,
-                        self.token.possible_span()
-                    )
-                }
-
-  
-                Some(ProcessedTokenState::Expected) => unreachable!(),
-
-                // no state implies a standard visit
-                None => self.token.visited(env)
             }
-        }
+        };
+
+        really_does_the_job()
+            .map_err(|e| AssemblerError::AlreadyRenderedError(e.to_string()))
     }
 }
 

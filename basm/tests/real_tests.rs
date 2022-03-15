@@ -108,7 +108,11 @@ fn expect_failure(fname: &str) {
 
     let res = command_for_generated_test(fname, output_fname);
     if res.is_err() {
-       // nothing to do
+       let msg = res.err().unwrap().to_string();
+
+        if msg.contains("[Invalid file name]") {
+                panic!("There is a memory issue there...{}",msg)
+            }
     }
     else {
         eprintln!(

@@ -32,6 +32,8 @@ pub enum ExpressionError {
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum AssemblerError {
+    /// Dirty trick to not play with memory
+    AlreadyRenderedError(String),
     /// Parse of a located listing failed, but the error is in fact stored within the located listing object...
     LocatedListingError(std::sync::Arc<LocatedListing>),
 
@@ -820,6 +822,7 @@ impl AssemblerError {
             AssemblerError::LocatedListingError(arc) => {
                 write!(f, "{}", arc.as_ref().cpclib_error_unchecked())
             }
+            AssemblerError::AlreadyRenderedError(e) => write!(f, "{}", e),
         }
     }
 }
