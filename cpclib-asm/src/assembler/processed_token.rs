@@ -61,18 +61,13 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
 
 
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> {
     processed_tokens: Vec<ProcessedToken<'token, T>>,
     span: Option<Z80Span>
 }
 
 
-impl<'token, T: Visited + ListingElement + Debug + Sync> Clone for SimpleListingState<'token, T> {
-    fn clone(&self) -> Self {
-        todo!()
-    }
-}
 
 impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListingState<'token, T> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
