@@ -20,7 +20,7 @@ pub struct ListingOutput {
     /// Bytes collected at the current line
     current_line_bytes: SmallVec<[u8; 4]>,
     /// Complete source
-    current_source: Option<Arc<String>>,
+    current_source: Option<&'static str>,
     /// Line number and line content.
     current_line_group: Option<(u32, String)>, // clone view of the line XXX avoid this clone
 
@@ -79,16 +79,15 @@ impl ListingOutput {
 
     /// Check if the token is for the same source
     fn token_is_on_same_source(&self, token: &LocatedToken) -> bool {
-        panic!("Does not currently work. Should not be used");
-        // match &self.current_source {
-        // Some(current_source) => {
-        // std::ptr::eq(
-        // token.context().0.deref().as_ptr(),
-        // current_source.as_str().as_ptr()
-        // )
-        // }
-        // None => false
-        // }
+         match &self.current_source {
+         Some(current_source) => {
+         std::ptr::eq(
+         token.context().source.unwrap().as_ptr(),
+         current_source.as_ptr()
+         )
+         }
+         None => false
+         }
     }
 
     /// Check if the token is for the same line than the previous token
@@ -138,8 +137,7 @@ impl ListingOutput {
             self.process_current_line(); // request a display
 
             // replace the objects of interest
-            panic!("Cannot work anymore, need to detect source change in another way (Listing change should be an obvious way)");
-            // self.current_source = Some(token.context().0.clone());
+            self.current_source = Some(token.context().source.unwrap());
 
             // TODO manage differently for macros and so on
             // let current_line = current_line.split("\n").next().unwrap_or(current_line);
@@ -291,25 +289,28 @@ impl ListingOutput {
 #[derive(Clone)]
 pub struct ListingOutputTrigger {
     /// the token read before collecting the bytes
-    /// Because of macros we need to make a copy (TODO find why...)
-    pub(crate) token: Option<LocatedToken>,
+    /// Because each token can have a different lifespan, we store them using a pointer
+    pub(crate) token: Option<*const LocatedToken>,
     /// the bytes progressively collected
     pub(crate) bytes: Vec<u8>,
     pub(crate) start: u32,
     pub(crate) builder: Arc<RwLock<ListingOutput>>
 }
 
+unsafe impl Sync for ListingOutputTrigger {}
+
+
 impl ListingOutputTrigger {
     pub fn write_byte(&mut self, b: u8) {
         self.bytes.push(b);
     }
 
-    pub fn new_token(&mut self, new: &LocatedToken, address: u32, kind: AddressKind) {
+    pub fn new_token(&mut self, new: *const LocatedToken, address: u32, kind: AddressKind) {
         if let Some(token) = &self.token {
             self.builder
                 .write()
                 .unwrap()
-                .add_token(token, &self.bytes, self.start, kind);
+                .add_token(unsafe{&**token}, &self.bytes, self.start, kind);
         }
 
         self.token.replace(new.clone()); // TODO remove that clone that is memory/time eager
@@ -337,7 +338,7 @@ impl ListingOutputTrigger {
     pub fn finish(&mut self) {
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(
-                token,
+                unsafe{&**token},
                 &self.bytes,
                 self.start,
                 AddressKind::Address
