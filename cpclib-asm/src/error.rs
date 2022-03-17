@@ -34,6 +34,9 @@ pub enum ExpressionError {
 pub enum AssemblerError {
     /// Dirty trick to not play with memory
     AlreadyRenderedError(String),
+
+    
+
     /// Parse of a located listing failed, but the error is in fact stored within the located listing object...
     LocatedListingError(std::sync::Arc<LocatedListing>),
 

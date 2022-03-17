@@ -51,12 +51,52 @@ fn test_roudoudou_generated_code() {
     std::fs::remove_dir("generated_sprites");
 }
 
+
+
+#[test_resources("basm/tests/asm/good_*.asm")]
+/// TODO write tests specifics for this purpose
+fn expect_listing_success(fname: &str) {
+    let fname = &fname["basm/tests/asm/".len()..];
+
+    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_fname = output_file.path().as_os_str().to_str().unwrap();
+
+
+    let listing_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
+
+
+    println!("Lisitng will be generated in {}", &listing_fname);
+    let res = Command::new("../target/debug/basm")
+        .args(["-I", "tests/asm/", 
+        "-i", 
+        fname, 
+        "-o", output_fname,
+        "--lst", listing_fname
+        ])
+        .output()
+        .expect("Unable to launch basm");
+
+    if !res.status.success() {
+        panic!(
+            "Failure to assemble {}.\n{}",
+            fname,
+            String::from_utf8_lossy(&res.stderr)
+        );
+    }
+
+
+}
+
+
 #[test_resources("basm/tests/asm/good_*.asm")]
 fn expect_success(fname: &str) {
     let fname = &fname["basm/tests/asm/".len()..];
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
+
+
 
     let res = command_for_generated_test(fname, output_fname);
     if res.is_ok() {
