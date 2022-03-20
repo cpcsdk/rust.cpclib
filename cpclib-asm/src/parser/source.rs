@@ -24,18 +24,21 @@ type InnerZ80Span = LocatedSpan<
 pub struct Z80Span(pub(crate) InnerZ80Span);
 
 impl AsRef<str> for Z80Span {
+    #[inline]
     fn as_ref(&self) -> &str {
         self.fragment()
     }
 }
 
 impl Z80Span {
+    #[inline]
     pub fn as_str(&self) -> &str {
         self.as_ref()
     }
 }
 
 impl Borrow<str> for Z80Span {
+    #[inline]
     fn borrow(&self) -> &str {
         self.as_str()
     }
@@ -53,6 +56,7 @@ impl std::fmt::Display for Z80Span {
 }
 
 impl std::fmt::Debug for Z80Span {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -70,6 +74,7 @@ impl std::fmt::Debug for Z80Span {
 }
 
 impl Into<Source> for &Z80Span {
+    #[inline]
     fn into(self) -> Source {
         Source::new(
             self.context()
@@ -122,6 +127,7 @@ impl Into<Source> for &Z80Span {
 // }
 
 impl<'a> Into<LocatedSpan<&'a str>> for Z80Span {
+    #[inline]
     fn into(self) -> LocatedSpan<&'a str> {
         unsafe {
             LocatedSpan::new_from_raw_offset(
@@ -137,26 +143,31 @@ impl<'a> Into<LocatedSpan<&'a str>> for Z80Span {
 impl Deref for Z80Span {
     type Target = InnerZ80Span;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 impl DerefMut for Z80Span {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 impl AsRef<InnerZ80Span> for Z80Span {
+    #[inline]
     fn as_ref(&self) -> &InnerZ80Span {
         self.deref()
     }
 }
 
 impl Compare<&'static str> for Z80Span {
+    #[inline]
     fn compare(&self, t: &'static str) -> CompareResult {
         self.deref().compare(t)
     }
 
+    #[inline]
     fn compare_no_case(&self, t: &'static str) -> CompareResult {
         self.deref().compare_no_case(t)
     }
@@ -166,42 +177,51 @@ impl cpclib_common::nom::InputIter for Z80Span {
     type Iter = <InnerZ80Span as cpclib_common::nom::InputIter>::Iter;
     type IterElem = <InnerZ80Span as cpclib_common::nom::InputIter>::IterElem;
 
+    #[inline]
     fn iter_indices(&self) -> Self::Iter {
         self.deref().iter_indices()
     }
 
+    #[inline]
     fn iter_elements(&self) -> Self::IterElem {
         self.deref().iter_elements()
     }
 
+    #[inline]
     fn position<P>(&self, predicate: P) -> Option<usize>
     where P: Fn(Self::Item) -> bool {
         self.deref().position(predicate)
     }
 
+    #[inline]
     fn slice_index(&self, count: usize) -> Result<usize, Needed> {
         self.deref().slice_index(count)
     }
 }
 
 impl cpclib_common::nom::InputLength for Z80Span {
+    #[inline]
     fn input_len(&self) -> usize {
         self.deref().input_len()
     }
 }
 
 impl Offset for Z80Span {
+    #[inline]
     fn offset(&self, second: &Self) -> usize {
         self.deref().offset(second.deref())
     }
 }
 
 impl cpclib_common::nom::InputTake for Z80Span {
+    #[inline]
     fn take(&self, count: usize) -> Self {
         Self(self.deref().take(count))
     }
 
-    fn take_split(&self, count: usize) -> (Self, Self) {
+    #[inline]
+    fn take_split(&self,
+        count: usize) -> (Self, Self) {
         let res = self.deref().take_split(count);
         (Self(res.0), Self(res.1))
     }
@@ -210,6 +230,7 @@ impl cpclib_common::nom::InputTake for Z80Span {
 impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
     type Item = <InnerZ80Span as cpclib_common::nom::InputIter>::Item;
 
+    #[inline]
     fn split_at_position<P, E: ParseError<Self>>(&self, predicate: P) -> IResult<Self, Self, E>
     where P: Fn(Self::Item) -> bool {
         match self.deref().position(predicate) {
@@ -218,6 +239,7 @@ impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
         }
     }
 
+    #[inline]
     fn split_at_position1<P, E: ParseError<Self>>(
         &self,
         predicate: P,
@@ -233,6 +255,7 @@ impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
         }
     }
 
+    #[inline]
     fn split_at_position_complete<P, E: ParseError<Self>>(
         &self,
         predicate: P
@@ -246,6 +269,7 @@ impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
         }
     }
 
+    #[inline]
     fn split_at_position1_complete<P, E: ParseError<Self>>(
         &self,
         predicate: P,
@@ -278,16 +302,19 @@ where &'src str: FindSubstring<U>
 }
 
 impl Slice<std::ops::Range<usize>> for Z80Span {
+    #[inline]
     fn slice(&self, range: std::ops::Range<usize>) -> Self {
         Self(self.deref().slice(range))
     }
 }
 impl Slice<std::ops::RangeFrom<usize>> for Z80Span {
+    #[inline]
     fn slice(&self, range: std::ops::RangeFrom<usize>) -> Self {
         Self(self.deref().slice(range))
     }
 }
 impl Slice<std::ops::RangeTo<usize>> for Z80Span {
+    #[inline]
     fn slice(&self, range: std::ops::RangeTo<usize>) -> Self {
         Self(self.deref().slice(range))
     }

@@ -2357,7 +2357,6 @@ pub fn parse_macro_or_struct_call(
             }),
             span: input.clone()
         });
-            dbg!("label only");
             return Ok((input, LocatedToken::Label(name)));
         }
 
