@@ -315,7 +315,40 @@ where
         Some(ProcessedTokenState::If(state))
     }
     else if token.is_include(){
-        Some(ProcessedTokenState::Include(None))
+        let fname = token.include_fname();
+        let ctx = &env.ctx;
+        match get_filename(fname, ctx, Some(env)) {
+            Ok(fname) => {
+                 match read_source(fname.clone(), ctx, Some(env)) {
+                    Ok(content) => {
+                        let new_ctx = {
+                            let mut new_ctx = ctx.clone();
+                            new_ctx.set_current_filename(fname.clone());
+                            new_ctx
+                        };
+            
+                        match parse_z80_str_with_context(content, new_ctx) {
+                            Ok(listing) => {
+                                let include_state = IncludeStateBuilder {
+                                    listing,
+                                    processed_tokens_builder: |listing: &LocatedListing| {
+                                        build_processed_tokens_list(listing.as_slice(), env)
+                                    }
+                                }
+                                .build();
+                
+                                Some(ProcessedTokenState::Include(Some(include_state))) 
+                            },
+                            Err(_) => Some(ProcessedTokenState::Include(None)),
+                        }
+
+                    },
+                    Err(_) => Some(ProcessedTokenState::Include(None)),
+                }
+            },
+            Err(_) =>  Some(ProcessedTokenState::Include(None)) // we were unable to get the filename with the provided information
+        }
+       
     }
     else if token.is_incbin() {
         Some(ProcessedTokenState::Incbin(Default::default()))
