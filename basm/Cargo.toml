@@ -17,7 +17,13 @@ time = "0.2.27"
 test-generator = "0.3.0"
 tempfile = "3.3.0"
 pretty_assertions = "1.1.0"
-
+criterion = "0.3"
+globset = "0.4.8"
 
 [build-dependencies]
 built = { version = "0.5.1", features = ["chrono"] }
+
+
+[[bench]]
+name = "basm_benchs"
+harness = false
