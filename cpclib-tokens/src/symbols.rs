@@ -609,7 +609,7 @@ impl SymbolsTable {
     }
 
     /// Some symbols are local and need to be converted to their global value.
-    fn extend_local_and_patterns_for_symbol<S: Into<Symbol>>(
+    pub fn extend_local_and_patterns_for_symbol<S: Into<Symbol>>(
         &self,
         symbol: S
     ) -> Result<Symbol, SymbolError> {

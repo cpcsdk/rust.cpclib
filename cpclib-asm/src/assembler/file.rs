@@ -1,29 +1,48 @@
-use std::fmt::Debug;
-
-use cpclib_tokens::ExprResult;
+use std::path::{PathBuf, Path};
 
 use crate::error::AssemblerError;
 use crate::preamble::ParserContext;
 
-pub fn load_binary<P: AsRef<std::path::Path>>(
-    fname: P,
-    ctx: &ParserContext
+use super::Env;
+
+
+pub fn get_filename(fname: &str,  ctx: &ParserContext, env: Option<&Env>) -> Result<PathBuf, AssemblerError> {
+
+    ctx.get_path_for(fname, env)
+        .map_err(|e| {
+            match e {
+                either::Either::Left(asm) => asm,
+                either::Either::Right(tested) => 
+                    AssemblerError::AssemblingError{
+                        msg: format!("{} not found. TEsted {:?}", fname, tested)
+                    }
+            }
+        })
+}
+
+/// Load a file
+/// - if path is provided, this is the file name used
+/// - if a string is provided, there is a search of appropriate filename
+pub fn load_binary(
+    fname: either::Either<&Path, &str>,
+    ctx: &ParserContext,
+    env: &Env
 ) -> Result<Vec<u8>, AssemblerError> {
-    let fname = fname.as_ref();
-    let fname_repr = fname.to_string_lossy();
-    match ctx.get_path_for(fname) {
-        Err(_e) => {
-            return Err(AssemblerError::IOError {
-                msg: format!("{} not found", fname_repr)
-            });
+
+    // Retreive fname
+    let fname = match &fname {
+        either::Either::Right(p) => get_filename(p, ctx, Some(env))?,
+        either::Either::Left(p) => p.into(),
+    };
+    
+
+    // Load data
+   std::fs::read(fname.clone())
+   .map_err(|e| {
+        AssemblerError::IOError {
+            msg: format!("Unable to read {}.", fname.to_string_lossy().to_string())
         }
-        Ok(ref fname) => {
-            let read = std::fs::read(fname).map_err(|e| {
-                AssemblerError::IOError {
-                    msg: format!("Unable to read {}.", fname_repr)
-                }
-            })?;
-            Ok(read)
-        }
-    }
+    })
+
+
 }

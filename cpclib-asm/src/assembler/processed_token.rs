@@ -1,10 +1,12 @@
 use std::any::Any;
 use std::borrow::{Cow, Borrow};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::collections::btree_map::Entry;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::Read;
 use std::ops::Deref;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
@@ -14,9 +16,10 @@ use cpclib_tokens::{
     BinaryTransformation, Listing, ListingElement, MacroParamElement, TestKindElement,
     ToSimpleToken, Token
 };
+use either::Either;
 use ouroboros::*;
 
-use super::file::load_binary;
+use super::file::{load_binary, get_filename};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
@@ -46,14 +49,12 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
         // The previous compressed flux - to reuse if needed
         previous_compressed_bytes: Option<Vec<u8>>
     },
-    /// A state is expected but has not been yet specified (before include or incbin or a macro call or a struct build or a function definition)
-    Expected,
     For(SimpleListingState<'token, T>),
     FunctionDefinition(FunctionDefinitionState),
     /// If state encodes previous choice
     If(IfState<'token, T>),
     /// Included file must read at some moment the file to handle
-    Include(IncludeState),
+    Include(Option<IncludeState>),
     /// Included binary needs to be read
     /// TODO add parameters
     Incbin(IncbinState),
@@ -65,9 +66,9 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
 }
 
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Default)]
 struct IncbinState{
-    full_file: Vec<u8>
+    contents: BTreeMap<PathBuf, Vec<u8>>,
 }
 
 
@@ -313,8 +314,11 @@ where
         let state = IfState::new(token);
         Some(ProcessedTokenState::If(state))
     }
-    else if token.is_include() || token.is_incbin() {
-        Some(ProcessedTokenState::Expected)
+    else if token.is_include(){
+        Some(ProcessedTokenState::Include(None))
+    }
+    else if token.is_incbin() {
+        Some(ProcessedTokenState::Incbin(Default::default()))
     }
     else if token.is_crunched_section() {
         Some(ProcessedTokenState::CrunchedSection {
@@ -384,10 +388,6 @@ where
     tokens
         .par_iter()
         .map(|t| build_processed_token(t, env))
-        .map(|mut t| {
-            t.update_file_read_state(&env);
-            t
-        }) // Read its files but ignore errors if any (which must happen a lot for incbin)
         .collect::<Vec<_>>()
 }
 
@@ -507,168 +507,47 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
         return Ok(());
     }
 
-    /// Read the data for the appropriate tokens.
-    /// Possibly returns information to be printed by the caller
-    pub fn update_file_read_state(
-        &mut self,
-        env: &Env
-    ) -> Result<Option<AssemblerInfo>, AssemblerError>
-    where
-        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
-    {
-        match self.state {
-            Some(ProcessedTokenState::Expected) => { /* need to read the ressource */ }
-            Some(ProcessedTokenState::Include { .. }) => {
-                // alrady read, no need to do ti a second time
-                return Ok(None);
-            }
-            Some(ProcessedTokenState::Incbin { .. }) => {
-                // TODO check if paramters changed
-                return Ok(None);
-            }
-            Some(
-                ProcessedTokenState::CrunchedSection { .. }
-                | ProcessedTokenState::For(..)
-                | ProcessedTokenState::FunctionDefinition(..)
-                | ProcessedTokenState::If(..)
-                | ProcessedTokenState::Iterate(..)
-                | ProcessedTokenState::MacroCallOrBuildStruct(_)
-                | ProcessedTokenState::Repeat(..)
-                | ProcessedTokenState::RepeatUntil(..)
-            )
-            | None => return Ok(None)
-        };
-
-        let ctx = &env.ctx;
-
-        // whatever is the representation of the token, returns it simple version
-        let mut info = None;
-
-        self.state = if self.token.is_include() {
-            let fname = self.token.include_fname();
-            let content = read_source(fname, ctx)?;
-
-            let new_ctx = {
-                let mut new_ctx = ctx.clone();
-                new_ctx.set_current_filename(fname);
-                new_ctx
-            };
-
-            let listing = parse_z80_str_with_context(content, new_ctx)?;
-            let includeState = IncludeStateBuilder {
-                listing,
-                processed_tokens_builder: |listing: &LocatedListing| {
-                    build_processed_tokens_list(listing.as_slice(), env)
-                }
-            }
-            .build();
-
-            Some(ProcessedTokenState::Include(includeState))
-        }
-        else if self.token.is_incbin() {
-            // TODO reorder to make crash before reading in case of expression issues
-            let fname = self.token.incbin_fname();
-
-
-
-
-
-
-
-            // TODO manage the optional arguments
-            match ctx.get_path_for(&fname) {
-                Err(_e) => {
-                    return Err(AssemblerError::IOError {
-                        msg: format!("{:?} not found", fname)
-                    });
-                }
-                Ok(ref fname) => {
-                    let mut data = load_binary(fname, ctx)?;
-
-                    // get a slice on the data to ease its cut
-                    let mut data = &data[..];
-
-                    if data.len() >= 128 {
-                        let header = AmsdosHeader::from_buffer(&data);
-                        let info = Some(if header.is_checksum_valid() {
-                            data = &data[128..];
-
-                            AssemblerError::AssemblingError{
-                                msg: format!("{:?} is a valid Amsdos file. It is included without its header.", fname)
-                            }
-                        }
-                        else {
-                            AssemblerError::AssemblingError{
-                                        msg: format!("{:?} does not contain a valid Amsdos file. It is fully included.", fname)
-                                    }
-                        });
-                    }
-
-                    Some(ProcessedTokenState::Incbin(
-                        IncbinState{full_file: data.to_vec()}
-                    ))
-        
-
-
-
-
-
-
-                }
-            }
-        }
-        else {
-            unreachable!()
-        };
-
-        Ok(info)
-    }
+ 
 }
 
 /// Read the content of the source file.
 /// Uses the context to obtain the appropriate file other the included directories
-pub fn read_source(fname: &str, ctx: &ParserContext) -> Result<String, AssemblerError> {
-    match ctx.get_path_for(fname) {
-        Err(e) => {
-            Err(AssemblerError::IOError {
-                msg: format!("{:?} not found. {:?}", fname, e)
-            })
+pub fn read_source<P: AsRef<Path>>(fname: P, ctx: &ParserContext, env: Option<&Env>) -> Result<String, AssemblerError> {
+
+    let fname = fname.as_ref();
+    let mut f = File::open(&fname).map_err(|e| {
+        AssemblerError::IOError {
+            msg: format!("Unable to open {:?}. {}", fname, e)
         }
-        Ok(ref fname) => {
-            let mut f = File::open(&fname).map_err(|e| {
-                AssemblerError::IOError {
-                    msg: format!("Unable to open {:?}. {}", fname, e)
-                }
-            })?;
+    })?;
 
-            let mut content = Vec::new();
-            f.read_to_end(&mut content).map_err(|e| {
-                AssemblerError::IOError {
-                    msg: format!("Unable to read {:?}. {}", fname, e.to_string())
-                }
-            })?;
-
-            let result = chardet::detect(&content);
-            let coder =
-                encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
-
-            let content = match coder {
-                Some(coder) => {
-                    let utf8reader = coder
-                        .decode(&content, encoding::DecoderTrap::Ignore)
-                        .expect("Error");
-                    utf8reader.to_string()
-                }
-                None => {
-                    return Err(AssemblerError::IOError {
-                        msg: format!("Encoding error for {:?}.", fname)
-                    });
-                }
-            };
-
-            Ok(content)
+    let mut content = Vec::new();
+    f.read_to_end(&mut content).map_err(|e| {
+        AssemblerError::IOError {
+            msg: format!("Unable to read {:?}. {}", fname, e.to_string())
         }
-    }
+    })?;
+
+    let result = chardet::detect(&content);
+    let coder =
+        encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
+
+    let content = match coder {
+        Some(coder) => {
+            let utf8reader = coder
+                .decode(&content, encoding::DecoderTrap::Ignore)
+                .expect("Error");
+            utf8reader.to_string()
+        }
+        None => {
+            return Err(AssemblerError::IOError {
+                msg: format!("Encoding error for {:?}.", fname)
+            });
+        }
+    };
+
+    Ok(content)
+    
 }
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
@@ -679,13 +558,12 @@ where
 {
     /// Due to the state management, the signature requires mutability
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
+
         let mut really_does_the_job = move || {
+        let ctx = &env.ctx;
+
             {
-                // Update the state}
-                // Read file if needed
-                if self.token.is_include() || self.token.is_incbin() {
-                    self.update_file_read_state(env)?;
-                }
+
                 // Generate the code of a macro/struct
                 if self.token.is_call_macro_or_build_struct() {
                     self.update_macro_or_struct_state(env)?;
@@ -760,13 +638,49 @@ where
                         Ok(())
                     }
 
-                    Some(ProcessedTokenState::Incbin(IncbinState{full_file})) => {
+                    Some(ProcessedTokenState::Incbin(IncbinState{contents})) => {
+                        // Handle file loading
+                        let fname = self.token.incbin_fname();
+                        let fname = get_filename(fname, ctx, Some(env))?;
+
+                        // get the data for the given file
+                        let data = if !contents.contains_key(&fname){
+                            // need to load the file
+                           
+                            let data = load_binary(Either::Left(fname.as_ref()), ctx, env)?;
+                            // get a slice on the data to ease its cut
+                            let mut data = &data[..];
+
+                            if data.len() >= 128 {
+                                let header = AmsdosHeader::from_buffer(&data);
+                                let info = Some(if header.is_checksum_valid() {
+                                    data = &data[128..];
+
+                                AssemblerError::AssemblingError{
+                                    msg: format!("{:?} is a valid Amsdos file. It is included without its header.", fname)
+                                }
+                            }
+                            else {
+                                AssemblerError::AssemblingError{
+                                            msg: format!("{:?} does not contain a valid Amsdos file. It is fully included.", fname)
+                                        }
+                                });
+                            }
+
+                            contents.try_insert(fname.clone(), data.to_vec()).unwrap()
+                        }
+                        else {
+                            contents.get(&fname).unwrap()
+                        };
+
+                        let mut data = data.as_slice();
+
+
+                        // Extract the appropriate content to the file
                         let offset = self.token.incbin_offset();
                         let length = self.token.incbin_length();
                         let transformation = self.token.incbin_transformation();
 
-
-                        let mut data = full_file.as_slice();
                         match offset {
                             Some(offset) => {
                                 let offset = env.resolve_expr_must_never_fail(offset)?.int()? as usize;
@@ -824,14 +738,39 @@ where
 
                     Some(ProcessedTokenState::Include(ref mut state)) => {
                         let fname = self.token.include_fname();
+                        let fname = get_filename(fname, ctx, Some(env))?;
+
                         let namespace = self.token.include_namespace();
                         let once = self.token.include_once();
-                        let fname = env
-                            .ctx // TODO get span context if available
-                            .get_path_for(fname)
-                            .unwrap_or("will_fail".into());
+
+                        // Process the inclusion only if necessary
                         if (!once) || (!env.has_included(&fname)) {
-                            // inclusion requested
+                            // Build the state if needed / retreive it otherwhise
+                            let state: &mut IncludeState = if state.is_none() {
+                                let content = read_source(fname.clone(), ctx, Some(env))?;
+                    
+                                let new_ctx = {
+                                    let mut new_ctx = ctx.clone();
+                                    new_ctx.set_current_filename(fname.clone());
+                                    new_ctx
+                                };
+                    
+                                let listing = parse_z80_str_with_context(content, new_ctx)?;
+                                let include_state = IncludeStateBuilder {
+                                    listing,
+                                    processed_tokens_builder: |listing: &LocatedListing| {
+                                        build_processed_tokens_list(listing.as_slice(), env)
+                                    }
+                                }
+                                .build();
+
+                                state.insert(include_state)
+                            } else {
+                                state.as_mut().unwrap()
+                            };
+
+
+                            // handle the listing
                             env.mark_included(fname);
 
                             // handle module if necessary
@@ -855,11 +794,10 @@ where
                             }
 
                             Ok(())
-                        }
-                        else {
-                            // no inclusion
+                        } else {
                             Ok(())
                         }
+                    
                     }
 
 
@@ -965,8 +903,6 @@ where
                             self.token.possible_span()
                         )
                     }
-
-                    Some(ProcessedTokenState::Expected) => unreachable!(),
 
                     // no state implies a standard visit
                     None => self.token.visited(env)

@@ -8,6 +8,7 @@ use cpclib_common::clap;
 use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
+use crate::assembler::file::get_filename;
 use crate::preamble::*;
 use crate::processed_token::read_source;
 
@@ -111,7 +112,8 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
 
     // get the source code if any
     let code = if matches.is_present("INPUT") {
-        read_source(filename, &context)?
+        let filename = get_filename(filename, &context, None)?;
+        read_source(filename, &context, None)?
     }
     else if let Some(code) = matches.value_of("INLINE") {
         format!(" {}", code)

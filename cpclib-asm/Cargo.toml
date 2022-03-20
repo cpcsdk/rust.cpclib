@@ -39,6 +39,7 @@ matches = "0.1.8"
 ouroboros = "0.14.2"
 paste = "1.0.5"
 rayon = "1.5.1"
+regex = "1.5.5"
 serde = { version = "1.0.126", features = ["derive"] }
 substring = "1.4.5"
 velcro = "0.5.3"

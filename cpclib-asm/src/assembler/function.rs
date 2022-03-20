@@ -8,6 +8,7 @@ use std::sync::{Arc, RwLock};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token};
+use either::Either;
 
 use super::list::{
     list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_from_list,
@@ -491,7 +492,7 @@ impl HardCodedFunction {
             HardCodedFunction::Load => {
                 let fname = params[0].string()?;
                 let ctx = &env.ctx;
-                let data = file::load_binary(fname, ctx)?;
+                let data = file::load_binary(Either::Right(fname), ctx, env)?;
                 Ok(ExprResult::from(data.as_slice()))
             }
         }
