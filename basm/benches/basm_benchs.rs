@@ -1,3 +1,6 @@
+#![feature(path_file_prefix)]
+
+
 use cpclib_asm::basm_utils::{build_args_parser, process};
 use cpclib_common::itertools::Itertools;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
@@ -34,7 +37,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
 		for (fname, output) in &fnames {
 			c.bench_function(
-				fname, 
+				std::path::Path::new(fname).file_prefix().unwrap().to_str().unwrap(), 
 				|b| b.iter(|| command_for_generated_test(fname, output)));
 
 		}
