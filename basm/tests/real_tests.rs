@@ -89,10 +89,11 @@ fn expect_listing_success(fname: &str) {
 
 
 
-#[test_resources("basm/tests/asm/good_*.asm")]
+//#[test_resources("basm/tests/asm/good_*.sym")]
 /// TODO write tests specifics for this purpose
 fn expect_symbols_success(fname: &str) {
-    let fname = &fname["basm/tests/asm/".len()..];
+    let sym_gt = &fname["basm/tests/asm/".len()..];
+    let fname = sym_gt.replace(".sym", ".asm");
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
@@ -105,7 +106,7 @@ fn expect_symbols_success(fname: &str) {
     let res = Command::new("../target/debug/basm")
         .args(["-I", "tests/asm/", 
         "-i", 
-        fname, 
+        fname.as_str(), 
         "-o", output_fname,
         "--sym", symbol_fname
         ])
@@ -120,6 +121,10 @@ fn expect_symbols_success(fname: &str) {
         );
     }
 
+    let sym_gt = std::fs::read_to_string(fname).unwrap();
+    let sym = std::fs::read_to_string(symbol_fname).expect("Symbols not generated");
+
+    assert_eq!(sym_gt, sym, "Symbols differ.");
 
 }
 
