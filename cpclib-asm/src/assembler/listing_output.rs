@@ -324,6 +324,7 @@ impl ListingOutputTrigger {
         match address {
             ExprResult::Float(f) => {}
             ExprResult::Value(v) => self.start = v as _,
+            ExprResult::Char(v) => self.start = v as _,
             ExprResult::Bool(b) => self.start = if b { 1 } else { 0 },
             ExprResult::String(s) => self.start = s.len() as _,
             ExprResult::List(l) => self.start = l.len() as _,

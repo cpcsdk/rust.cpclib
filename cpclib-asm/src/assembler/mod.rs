@@ -2630,8 +2630,21 @@ fn visit_assert(
                     let res_left = left.resolve(env).unwrap();
                     let res_right = right.resolve(env).unwrap();
 
-                    format!("[{} {} {}] ", res_left, oper, res_right)
-                        + &format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right)
+
+                    match (&res_left, &res_right) {
+                        (ExprResult::Char(c1), ExprResult::Char(c2)) => {
+                            format!("['{}' {} '{}']",
+                                *c1 as char,
+                                oper,
+                                *c2 as char
+                            )
+                        },
+                        _  => {
+                    
+                            format!("[{} {} {}] ", res_left, oper, res_right)
+                                + &format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right)
+                        }
+                    }
                 };
 
                 let prefix = match exp {
@@ -3281,7 +3294,7 @@ pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement>(
 
     let output_expr_result = |env: &mut Env, expr: ExprResult, mask: u16| {
         match &expr {
-            ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => {
+            ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_)  | ExprResult::Char(_) => {
                 output(env, expr.int()?, mask)
             }
             ExprResult::String(s) => {

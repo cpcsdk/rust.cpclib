@@ -113,6 +113,8 @@ do_stuff
 
 ### INCBIN, BINCLUDE
 
+INCBIN|BINCLUDE "fname" [[, SKIP], AMOUNT]
+
 ### INCLUDE, READ
 
 `INCLUDE|READ [ONCE] "fname" [AS|MODULE|NAMESPACE "module"]`

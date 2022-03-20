@@ -100,6 +100,11 @@ impl<'a, E:ExprEvaluationExt> ExprEvaluationExt for UnaryFunctionWrapper<'a,E> {
                     .map(|i| i.into())
                     .map_err(|e| AssemblerError::ExpressionTypeError(e))
             }
+            UnaryFunction::Char => {
+                (arg.char())
+                    .map(|i| i.into())
+                    .map_err(|e| AssemblerError::ExpressionTypeError(e))
+            }
             UnaryFunction::Sin => (arg.sin()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::Cos => (arg.cos()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::ASin => (arg.asin()).map_err(|e| AssemblerError::ExpressionTypeError(e)),

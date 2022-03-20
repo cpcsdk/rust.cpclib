@@ -3968,6 +3968,7 @@ pub fn parse_unary_function_call(
         value(UnaryFunction::Floor, parse_word("FLOOR")),
         value(UnaryFunction::Ceil, parse_word("CEIL")),
         value(UnaryFunction::Frac, parse_word("FRAC")),
+        value(UnaryFunction::Char, parse_word("CHAR")),
         value(UnaryFunction::Int, parse_word("INT")),
         value(UnaryFunction::Sin, parse_word("SIN")),
         value(UnaryFunction::Cos, parse_word("COS")),

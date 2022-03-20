@@ -247,7 +247,7 @@ pub enum UnaryFunction {
     Low,
     /// Memory already assembled
     Memory,
-
+    Char,
     Floor,
     Ceil,
     Frac,
@@ -273,6 +273,7 @@ impl Display for UnaryFunction {
             UnaryFunction::Ceil => "ceil",
             UnaryFunction::Frac => "frac",
             UnaryFunction::Int => "int",
+            UnaryFunction::Char => "char",
             UnaryFunction::Sin => "sin",
             UnaryFunction::Cos => "cos",
             UnaryFunction::ASin => "asin",
@@ -875,6 +876,7 @@ impl Display for ExpressionTypeError {
 pub enum ExprResult {
     Float(OrderedFloat<f64>),
     Value(i32),
+    Char(u8),
     Bool(bool),
     String(SmolStr),
     List(Vec<ExprResult>),
@@ -952,7 +954,7 @@ impl From<i8> for ExprResult {
 }
 impl From<char> for ExprResult {
     fn from(i: char) -> Self {
-        ExprResult::Value(i as _)
+        ExprResult::Char(i as _)
     }
 }
 
@@ -973,6 +975,13 @@ impl ExprResult {
     pub fn is_int(&self) -> bool {
         match self {
             Self::Value(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_char(&self) -> bool {
+        match self {
+            Self::Char(_) => true,
             _ => false
         }
     }
@@ -1000,6 +1009,7 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.into_inner() as _),
             ExprResult::Value(i) => Ok(*i),
+            ExprResult::Char(i) => Ok(*i as i32),
             ExprResult::Bool(b) => Ok(if *b { 1 } else { 0 }),
             _ => {
                 Err(ExpressionTypeError(format!(
@@ -1014,6 +1024,7 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.into_inner()),
             ExprResult::Value(i) => Ok(*i as f64),
+            ExprResult::Char(i) => Ok(*i as f64),
             ExprResult::Bool(b) => Ok(if *b { 1 as f64 } else { 0 as f64 }),
             _ => {
                 Err(ExpressionTypeError(format!(
@@ -1026,6 +1037,7 @@ impl ExprResult {
 
     pub fn char(&self) -> Result<char, ExpressionTypeError> {
         match self {
+            ExprResult::Char(u) => Ok(*u as char),
             ExprResult::Float(f) => Ok(f.into_inner() as u8 as char),
             ExprResult::Value(v) => Ok(*v as u8 as char),
             ExprResult::Bool(b) => Ok(if *b { 'T'.into() } else { 'F'.into() }),
@@ -1042,6 +1054,7 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(*f != 0.),
             ExprResult::Value(i) => Ok(*i != 0),
+            ExprResult::Char(i) => Ok(*i != 0),
             ExprResult::Bool(b) => Ok(*b),
             _ => {
                 Err(ExpressionTypeError(format!(
@@ -1493,6 +1506,7 @@ impl std::fmt::Display for ExprResult {
         match self {
             ExprResult::Float(f2) => write!(f, "{}", f2.into_inner()),
             ExprResult::Value(v) => write!(f, "{}", v),
+            ExprResult::Char(v) => write!(f, "'{}'", *v as char),
             ExprResult::Bool(b) => write!(f, "{}", b),
             ExprResult::String(v) => write!(f, "\"{}\"", v),
             ExprResult::List(v) => {
@@ -1521,6 +1535,7 @@ impl std::fmt::LowerHex for ExprResult {
         match self {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:x}", v),
+            ExprResult::Char(v) => write!(f, "{:x}", v),
             ExprResult::Bool(v) => write!(f, "{:x}", *v as u8),
             ExprResult::String(_v) => write!(f, "STRING REPRESENTATION ISSUE"),
             ExprResult::List(v) => {
@@ -1549,6 +1564,7 @@ impl std::fmt::UpperHex for ExprResult {
         match self {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{:X}", v),
+            ExprResult::Char(v) => write!(f, "{:X}", *v),
             ExprResult::Bool(v) => write!(f, "{:X}", *v as u8),
             ExprResult::String(_v) => write!(f, "STRING REPRESENTATION ISSUE"),
             ExprResult::List(v) => {
