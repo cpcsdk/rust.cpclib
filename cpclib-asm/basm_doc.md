@@ -115,6 +115,9 @@ do_stuff
 
 INCBIN|BINCLUDE "fname" [[, SKIP], AMOUNT]
 
+
+Fname can be build with variables.
+
 Limitations:
 
 - File is loaded fully in memory before being sliced depending on arguments.
@@ -122,6 +125,8 @@ Limitations:
 ### INCLUDE, READ
 
 `INCLUDE|READ [ONCE] "fname" [AS|MODULE|NAMESPACE "module"]`
+
+Fname can be build with variables.
 
 ## Data saving and export
 
