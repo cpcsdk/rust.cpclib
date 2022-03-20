@@ -1303,10 +1303,14 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
         match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 + f2).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1 + rhs.float()?).into()),
-            (ExprResult::Value(_), ExprResult::Float(f2)) => {
+            (ExprResult::Value(_) | ExprResult::Char(_), ExprResult::Float(f2)) => {
                 Ok((self.float()? + f2.into_inner()).into())
             }
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 + v2).into()),
+            (ExprResult::Char(v1), ExprResult::Char(v2)) => Ok((v1 + v2).into()),
+            (ExprResult::Value(v1), ExprResult::Char(v2)) => Ok((v1 + *v2 as i32).into()),
+            (ExprResult::Char(v1), ExprResult::Value(v2)) => Ok((*v1 as i32 + *v2).into()),
+
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible addition between {} and {}",
