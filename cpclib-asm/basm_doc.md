@@ -115,6 +115,10 @@ do_stuff
 
 INCBIN|BINCLUDE "fname" [[, SKIP], AMOUNT]
 
+Limitations:
+
+- File is loaded fully in memory before being sliced depending on arguments.
+
 ### INCLUDE, READ
 
 `INCLUDE|READ [ONCE] "fname" [AS|MODULE|NAMESPACE "module"]`

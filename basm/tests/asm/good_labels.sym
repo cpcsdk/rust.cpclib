@@ -1,0 +1,3 @@
+outer1 equ #0000
+outer2 equ #0006
+outer2.inner1 equ #0009

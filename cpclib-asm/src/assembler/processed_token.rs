@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::borrow::Cow;
+use std::borrow::{Cow, Borrow};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
@@ -56,15 +56,20 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     Include(IncludeState),
     /// Included binary needs to be read
     /// TODO add parameters
-    Incbin {
-        data: Vec<u8>
-    },
+    Incbin(IncbinState),
 
     Iterate(SimpleListingState<'token, T>),
     MacroCallOrBuildStruct(ExpandState),
     Repeat(SimpleListingState<'token, T>),
     RepeatUntil(SimpleListingState<'token, T>)
 }
+
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+struct IncbinState{
+    full_file: Vec<u8>
+}
+
 
 #[derive(PartialEq, Eq, Clone)]
 struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> {
@@ -563,9 +568,12 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
         else if self.token.is_incbin() {
             // TODO reorder to make crash before reading in case of expression issues
             let fname = self.token.incbin_fname();
-            let offset = self.token.incbin_offset();
-            let length = self.token.incbin_length();
-            let transformation = self.token.incbin_transformation();
+
+
+
+
+
+
 
             // TODO manage the optional arguments
             match ctx.get_path_for(&fname) {
@@ -596,56 +604,16 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
                         });
                     }
 
-                    match offset {
-                        Some(offset) => {
-                            let offset = env.resolve_expr_must_never_fail(offset)?.int()? as usize;
-                            if offset >= data.len() {
-                                return Err(AssemblerError::AssemblingError {
-                                    msg: format!(
-                                        "Unable to read {:?}. Only {} are available",
-                                        fname,
-                                        data.len()
-                                    )
-                                });
-                            }
-                            data = &data[offset..];
-                        }
-                        None => {}
-                    }
+                    Some(ProcessedTokenState::Incbin(
+                        IncbinState{full_file: data.to_vec()}
+                    ))
+        
 
-                    match length {
-                        Some(length) => {
-                            let length = env.resolve_expr_must_never_fail(length)?.int()? as usize;
-                            if data.len() < length {
-                                return Err(AssemblerError::AssemblingError {
-                                    msg: format!(
-                                        "Unable to read {:?}. Only {} bytes are available ({} expected)",
-                                        fname,
-                                        data.len(),
-                                        length
-                                    )
-                                });
-                            }
-                            data = &data[..length];
-                        }
-                        None => {}
-                    }
 
-                    let data = match transformation {
-                        BinaryTransformation::None => data.to_vec(),
 
-                        other => {
-                            if data.len() == 0 {
-                                return Err(AssemblerError::EmptyBinaryFile(
-                                    fname.to_string_lossy().to_string()
-                                ));
-                            }
 
-                            let crunch_type = other.crunch_type().unwrap();
-                            crunch_type.crunch(&data)?
-                        }
-                    };
-                    Some(ProcessedTokenState::Incbin { data })
+
+
                 }
             }
         }
@@ -791,6 +759,69 @@ where
                         }
                         Ok(())
                     }
+
+                    Some(ProcessedTokenState::Incbin(IncbinState{full_file})) => {
+                        let offset = self.token.incbin_offset();
+                        let length = self.token.incbin_length();
+                        let transformation = self.token.incbin_transformation();
+
+
+                        let mut data = full_file.as_slice();
+                        match offset {
+                            Some(offset) => {
+                                let offset = env.resolve_expr_must_never_fail(offset)?.int()? as usize;
+                                if offset >= data.len() {
+                                    return Err(AssemblerError::AssemblingError {
+                                        msg: format!(
+                                            "Unable to read {:?}. Only {} are available",
+                                            self.token.incbin_fname(),
+                                            data.len()
+                                        )
+                                    });
+                                }
+                                data = &data[offset..];
+                            }
+                            None => {}
+                        }
+
+                        match length {
+                            Some(length) => {
+                                let length = env.resolve_expr_must_never_fail(length)?.int()? as usize;
+                                if data.len() < length {
+                                    return Err(AssemblerError::AssemblingError {
+                                        msg: format!(
+                                            "Unable to read {:?}. Only {} bytes are available ({} expected)",
+                                            self.token.incbin_fname(),
+                                            data.len(),
+                                            length
+                                        )
+                                    });
+                                }
+                                data = &data[..length];
+                            }
+                            None => {}
+                        }
+
+                        let data = match transformation {
+                            BinaryTransformation::None => Cow::Borrowed(data),
+    
+                            other => {
+                                if data.len() == 0 {
+                                    return Err(AssemblerError::EmptyBinaryFile(
+                                        self.token.incbin_fname().to_string()
+                                    ));
+                                }
+    
+                                let crunch_type = other.crunch_type().unwrap();
+                                Cow::Owned(crunch_type.crunch(&data)?)
+                            }
+                        };
+
+
+                        env.visit_incbin(data.borrow())
+                    },
+
+
                     Some(ProcessedTokenState::Include(ref mut state)) => {
                         let fname = self.token.include_fname();
                         let namespace = self.token.include_namespace();
@@ -831,7 +862,7 @@ where
                         }
                     }
 
-                    Some(ProcessedTokenState::Incbin { ref data }) => env.visit_incbin(data),
+
 
                     Some(ProcessedTokenState::If(if_state)) => {
                         let listing = if_state.choose_listing_to_assemble(env)?;
