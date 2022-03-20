@@ -54,7 +54,7 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     /// If state encodes previous choice
     If(IfState<'token, T>),
     /// Included file must read at some moment the file to handle
-    Include(Option<IncludeState>),
+    Include(IncludeState),
     /// Included binary needs to be read
     /// TODO add parameters
     Incbin(IncbinState),
@@ -87,29 +87,40 @@ impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListing
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FunctionDefinitionState(Option<Arc<Function>>);
 
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+struct IncludeState(
+    BTreeMap<PathBuf, IncludeStateInner>
+);
+
+impl Default for IncludeState {
+    fn default() -> Self {
+        IncludeState(BTreeMap::default())
+    }
+}
 #[self_referencing]
-struct IncludeState {
+struct IncludeStateInner {
     listing: LocatedListing,
     #[borrows(listing)]
     #[covariant]
     processed_tokens: Vec<ProcessedToken<'this, LocatedToken>>
 }
 
-impl Clone for IncludeState {
+impl Clone for IncludeStateInner {
     fn clone(&self) -> Self {
         todo!()
     }
 }
 
-impl PartialEq for IncludeState {
+impl PartialEq for IncludeStateInner {
     fn eq(&self, other: &Self) -> bool {
         self.with_listing(|l1| other.with_listing(|l2| l1.eq(l2)))
     }
 }
 
-impl Eq for IncludeState {}
+impl Eq for IncludeStateInner {}
 
-impl Debug for IncludeState {
+impl Debug for IncludeStateInner {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "IncludeState")
     }
@@ -329,24 +340,27 @@ where
             
                         match parse_z80_str_with_context(content, new_ctx) {
                             Ok(listing) => {
-                                let include_state = IncludeStateBuilder {
+                                let include_state = IncludeStateInnerBuilder {
                                     listing,
                                     processed_tokens_builder: |listing: &LocatedListing| {
                                         build_processed_tokens_list(listing.as_slice(), env)
                                     }
                                 }
                                 .build();
+
+                                let mut map = BTreeMap::new();
+                                map.insert(fname, include_state);
                 
-                                Some(ProcessedTokenState::Include(Some(include_state))) 
+                                Some(ProcessedTokenState::Include(IncludeState(map))) 
                             },
-                            Err(_) => Some(ProcessedTokenState::Include(None)),
+                            Err(_) => Some(ProcessedTokenState::Include(Default::default())),
                         }
 
                     },
-                    Err(_) => Some(ProcessedTokenState::Include(None)),
+                    Err(_) => Some(ProcessedTokenState::Include(Default::default())),
                 }
             },
-            Err(_) =>  Some(ProcessedTokenState::Include(None)) // we were unable to get the filename with the provided information
+            Err(_) =>  Some(ProcessedTokenState::Include(Default::default())) // we were unable to get the filename with the provided information
         }
        
     }
@@ -769,7 +783,7 @@ where
                     },
 
 
-                    Some(ProcessedTokenState::Include(ref mut state)) => {
+                    Some(ProcessedTokenState::Include(IncludeState(ref mut contents))) => {
                         let fname = self.token.include_fname();
                         let fname = get_filename(fname, ctx, Some(env))?;
 
@@ -779,7 +793,7 @@ where
                         // Process the inclusion only if necessary
                         if (!once) || (!env.has_included(&fname)) {
                             // Build the state if needed / retreive it otherwhise
-                            let state: &mut IncludeState = if state.is_none() {
+                            let state: &mut IncludeStateInner = if !contents.contains_key(&fname) {
                                 let content = read_source(fname.clone(), ctx, Some(env))?;
                     
                                 let new_ctx = {
@@ -789,7 +803,7 @@ where
                                 };
                     
                                 let listing = parse_z80_str_with_context(content, new_ctx)?;
-                                let include_state = IncludeStateBuilder {
+                                let include_state = IncludeStateInnerBuilder {
                                     listing,
                                     processed_tokens_builder: |listing: &LocatedListing| {
                                         build_processed_tokens_list(listing.as_slice(), env)
@@ -797,9 +811,9 @@ where
                                 }
                                 .build();
 
-                                state.insert(include_state)
+                                contents.try_insert(fname.clone(), include_state).unwrap()
                             } else {
-                                state.as_mut().unwrap()
+                                contents.get_mut(&fname).unwrap()
                             };
 
 
