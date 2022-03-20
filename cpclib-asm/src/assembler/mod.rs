@@ -2020,12 +2020,13 @@ impl Env {
     }
 
     /// Handle a crunched section.
-    /// Current limitations (that need to be overcomed later):
-    ///  - everything inside the crunched section must be assembled during pass1
+    /// bytes generated during previous pass or previous loop are provided TO NOT crunched them an additional time if they are similar
     pub fn visit_crunched_section<'tokens, T: Visited + ListingElement + MayHaveSpan + Sync>(
         &mut self,
         kind: &CrunchType,
         lst: &mut [ProcessedToken<'tokens, T>],
+        previous_bytes: &mut Option<Vec<u8>>,
+        previous_crunched_bytes: &mut Option<Vec<u8>>,
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
@@ -2067,6 +2068,7 @@ impl Env {
         self.output_trigger
             .as_mut()
             .map(|t| t.enter_crunched_section());
+
         visit_processed_tokens(lst, &mut crunched_env).map_err(|e| {
             dbg!(&self.pass, &crunched_env.pass);
             let e = AssemblerError::CrunchedSectionError { error: e.into() };
@@ -2084,26 +2086,36 @@ impl Env {
             .as_mut()
             .map(|t| t.leave_crunched_section());
 
-        // get the new data and crunch it
+        // get the new data and crunch it if needed
         let bytes = crunched_env.produced_bytes();
-        let crunched: Vec<u8> = if bytes.is_empty() {
-            Vec::new()
-        }
-        else {
-            kind.crunch(&bytes).map_err(|e| {
-                match span {
-                    Some(span) => {
-                        AssemblerError::RelocatedError {
-                            error: e.into(),
-                            span: span.clone()
-                        }
-                    }
-                    None => e
-                }
-            })?
-        };
 
-        eprintln!("Crunched from {} to {} bytes", bytes.len(), crunched.len());
+        let must_crunch = previous_bytes.as_ref().map(
+            |b| b.as_slice() != bytes.as_slice()
+            ).unwrap_or(true);
+        if  must_crunch{
+            let crunched: Vec<u8> = if bytes.is_empty() {
+                Vec::new()
+            }
+            else {
+                kind.crunch(&bytes).map_err(|e| {
+                    match span {
+                        Some(span) => {
+                            AssemblerError::RelocatedError {
+                                error: e.into(),
+                                span: span.clone()
+                            }
+                        }
+                        None => e
+                    }
+                })?
+            };
+            previous_crunched_bytes.replace(crunched);
+            previous_bytes.replace(bytes);
+        } else {
+        }
+
+        let bytes = previous_bytes.as_ref().unwrap();
+        let crunched = previous_crunched_bytes.as_ref().unwrap();
 
         // inject the crunched data
         self.visit_incbin(&crunched).map_err(|e| {

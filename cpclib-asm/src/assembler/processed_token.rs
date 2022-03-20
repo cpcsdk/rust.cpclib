@@ -38,7 +38,14 @@ pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync> {
 /// Specific state to maintain for the current token
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
-    CrunchedSection(SimpleListingState<'token, T>),
+    CrunchedSection {
+        /// The token to assemble
+        listing: SimpleListingState<'token, T>,
+        // The bytes previously generated - to be compared to avoid a second slow assembling
+        previous_bytes: Option<Vec<u8>>,
+        // The previous compressed flux - to reuse if needed
+        previous_compressed_bytes: Option<Vec<u8>>
+    },
     /// A state is expected but has not been yet specified (before include or incbin or a macro call or a struct build or a function definition)
     Expected,
     For(SimpleListingState<'token, T>),
@@ -52,14 +59,12 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     Incbin {
         data: Vec<u8>
     },
-    
+
     Iterate(SimpleListingState<'token, T>),
     MacroCallOrBuildStruct(ExpandState),
     Repeat(SimpleListingState<'token, T>),
     RepeatUntil(SimpleListingState<'token, T>)
 }
-
-
 
 #[derive(PartialEq, Eq, Clone)]
 struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> {
@@ -67,18 +72,14 @@ struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> {
     span: Option<Z80Span>
 }
 
-
-
 impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListingState<'token, T> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "SimpleListingState")
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FunctionDefinitionState(Option<Arc<Function>>);
-
 
 #[self_referencing]
 struct IncludeState {
@@ -311,18 +312,23 @@ where
         Some(ProcessedTokenState::Expected)
     }
     else if token.is_crunched_section() {
-        Some(ProcessedTokenState::CrunchedSection(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.crunched_section_listing(), env),
-            span: token.possible_span().cloned()
-        }))
+        Some(ProcessedTokenState::CrunchedSection {
+            listing: SimpleListingState {
+                processed_tokens: build_processed_tokens_list(
+                    token.crunched_section_listing(),
+                    env
+                ),
+                span: token.possible_span().cloned()
+            },
+            previous_bytes: None,
+            previous_compressed_bytes: None
+        })
     }
     else if token.is_for() {
-        Some(ProcessedTokenState::For(
-            SimpleListingState{
-                processed_tokens: build_processed_tokens_list(token.for_listing(), env),
-                span: token.possible_span().cloned()
-            }
-        ))
+        Some(ProcessedTokenState::For(SimpleListingState {
+            processed_tokens: build_processed_tokens_list(token.for_listing(), env),
+            span: token.possible_span().cloned()
+        }))
     }
     else if token.is_function_definition() {
         Some(ProcessedTokenState::FunctionDefinition(
@@ -330,28 +336,22 @@ where
         ))
     }
     else if token.is_iterate() {
-        Some(ProcessedTokenState::Iterate(
-            SimpleListingState{
-                processed_tokens: build_processed_tokens_list(token.iterate_listing(), env),
-                span: token.possible_span().cloned()
-            }
-        ))     
+        Some(ProcessedTokenState::Iterate(SimpleListingState {
+            processed_tokens: build_processed_tokens_list(token.iterate_listing(), env),
+            span: token.possible_span().cloned()
+        }))
     }
     else if token.is_repeat() {
-        Some(ProcessedTokenState::Repeat(
-            SimpleListingState{
-                processed_tokens: build_processed_tokens_list(token.repeat_listing(), env),
-                span: token.possible_span().cloned()
-            }
-        ))
+        Some(ProcessedTokenState::Repeat(SimpleListingState {
+            processed_tokens: build_processed_tokens_list(token.repeat_listing(), env),
+            span: token.possible_span().cloned()
+        }))
     }
     else if token.is_repeat_until() {
-        Some(ProcessedTokenState::RepeatUntil(
-            SimpleListingState{
-                processed_tokens: build_processed_tokens_list(token.repeat_until_listing(), env),
-                span: token.possible_span().cloned()
-            }
-        ))
+        Some(ProcessedTokenState::RepeatUntil(SimpleListingState {
+            processed_tokens: build_processed_tokens_list(token.repeat_until_listing(), env),
+            span: token.possible_span().cloned()
+        }))
     }
     else if token.is_call_macro_or_build_struct() {
         // one day, we may whish to maintain a state
@@ -421,7 +421,6 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSp
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T> {
     /// Generate the tokens needed for the macro or the struct
-    ///
     pub fn update_macro_or_struct_state(&mut self, env: &Env) -> Result<(), AssemblerError>
     where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt {
         let caller = self.token;
@@ -712,9 +711,7 @@ where
 {
     /// Due to the state management, the signature requires mutability
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
-
-
-            let mut really_does_the_job = move || {
+        let mut really_does_the_job = move || {
             {
                 // Update the state}
                 // Read file if needed
@@ -739,20 +736,25 @@ where
             else {
                 // Handle the tokens depending on their specific state
                 match &mut self.state {
-                    Some(ProcessedTokenState::CrunchedSection(SimpleListingState {
-                        processed_tokens,
+                    Some(ProcessedTokenState::CrunchedSection{listing:  SimpleListingState {
+                        ref mut processed_tokens,
                         span
-                    })) => {
+                    }, 
+                    ref mut previous_bytes, 
+                    ref mut previous_compressed_bytes}) => {
                         env.visit_crunched_section(
                             self.token.crunched_section_kind(),
                             processed_tokens,
+                            previous_bytes,
+                            previous_compressed_bytes,
                             span.as_ref()
                         )
                     }
 
-
-                    Some(ProcessedTokenState::For(SimpleListingState{processed_tokens, span})) => {
-                            
+                    Some(ProcessedTokenState::For(SimpleListingState {
+                        processed_tokens,
+                        span
+                    })) => {
                         env.visit_for(
                             self.token.for_label(),
                             self.token.for_start(),
@@ -763,20 +765,23 @@ where
                         )
                     }
 
-                    Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(Some(
-                        fun
-                    )))) => {
+                    Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(
+                        Some(fun)
+                    ))) => {
                         // TODO check if the funtion has already been defined during this pass
                         Ok(())
                     }
-                    Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(option))) => {
+                    Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(
+                        option
+                    ))) => {
                         let name = self.token.function_definition_name();
                         if !env.functions.contains_key(name) {
                             let inner = self.token.function_definition_inner();
                             let params = self.token.function_definition_params();
 
                             let inner = build_processed_tokens_list(inner, env);
-                            let f = Arc::new(unsafe { FunctionBuilder::new(&name, &params, inner) }?);
+                            let f =
+                                Arc::new(unsafe { FunctionBuilder::new(&name, &params, inner) }?);
                             option.replace(f.clone());
 
                             env.functions.insert(name.to_owned(), f);
@@ -807,7 +812,8 @@ where
 
                             // Visit the included listing
                             state.with_processed_tokens_mut(|tokens| {
-                                let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut tokens[..];
+                                let tokens: &mut [ProcessedToken<'_, LocatedToken>] =
+                                    &mut tokens[..];
                                 visit_processed_tokens::<'_, LocatedToken>(tokens, env)
                             })?;
 
@@ -837,9 +843,10 @@ where
                         Ok(())
                     }
 
-
-
-                    Some(ProcessedTokenState::Iterate(SimpleListingState{processed_tokens, span})) => {
+                    Some(ProcessedTokenState::Iterate(SimpleListingState {
+                        processed_tokens,
+                        span
+                    })) => {
                         env.visit_iterate(
                             self.token.iterate_counter_name(),
                             self.token.iterate_values(),
@@ -847,7 +854,6 @@ where
                             span.as_ref()
                         )
                     }
-
 
                     Some(ProcessedTokenState::MacroCallOrBuildStruct(state)) => {
                         let name = self.token.macro_call_name();
@@ -866,7 +872,8 @@ where
 
                         state
                             .with_processed_tokens_mut(|listing| {
-                                let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut listing[..];
+                                let tokens: &mut [ProcessedToken<'_, LocatedToken>] =
+                                    &mut listing[..];
                                 visit_processed_tokens::<'_, LocatedToken>(tokens, env)
                             })
                             .or_else(|e| {
@@ -904,7 +911,10 @@ where
                         Ok(())
                     }
 
-                    Some(ProcessedTokenState::Repeat(SimpleListingState{processed_tokens, ..})) => {
+                    Some(ProcessedTokenState::Repeat(SimpleListingState {
+                        processed_tokens,
+                        ..
+                    })) => {
                         env.visit_repeat(
                             self.token.repeat_count(),
                             processed_tokens,
@@ -914,8 +924,10 @@ where
                         )
                     }
 
-
-                    Some(ProcessedTokenState::RepeatUntil(SimpleListingState{processed_tokens, ..})) => {
+                    Some(ProcessedTokenState::RepeatUntil(SimpleListingState {
+                        processed_tokens,
+                        ..
+                    })) => {
                         env.visit_repeat_until(
                             self.token.repeat_until_condition(),
                             processed_tokens,
@@ -923,7 +935,6 @@ where
                         )
                     }
 
-    
                     Some(ProcessedTokenState::Expected) => unreachable!(),
 
                     // no state implies a standard visit
@@ -932,8 +943,7 @@ where
             }
         };
 
-        really_does_the_job()
-            .map_err(|e| AssemblerError::AlreadyRenderedError(e.to_string()))
+        really_does_the_job().map_err(|e| AssemblerError::AlreadyRenderedError(e.to_string()))
     }
 }
 
