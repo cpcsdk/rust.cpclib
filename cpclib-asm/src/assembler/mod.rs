@@ -783,9 +783,10 @@ impl Env {
                     AssemblingPass::SecondPass
                 }
             };
-        }
+        } 
 
-        if !self.pass.is_finished() {
+
+        if !self.pass.is_finished() || self.pass.is_listing_pass() {
             if !self.pass.is_listing_pass() {
                 self.real_nb_passes += 1;
             }
@@ -796,16 +797,7 @@ impl Env {
             );
             self.current_pass_discarded_errors.clear();
 
-            // environnement is not reset when assembling is finished
-            self.symbols
-                .set_current_address(PhysicalAddress::new(0, 0xC0));
-            self.update_dollar();
 
-            self.ga_mmr = 0xC0;
-            self.macro_seed = 0;
-            self.charset_encoding.reset();
-            // self.sna = Default::default(); // We finally keep the snapshot for the memory function
-            self.sna_version = cpclib_sna::SnapshotVersion::V3;
 
             self.stable_counters = StableTickerCounters::default();
             self.run_options = None;
@@ -823,13 +815,30 @@ impl Env {
                 bank.2.fill(false);
             });
             self.selected_bank = None;
+
+            // environnement is not reset when assembling is finished
             self.output_address = 0;
+            let page_info = self.active_page_info_mut();
+            page_info.logical_outputadr = 0;
+            page_info.logical_codeadr =0;
+            self.update_dollar();
+
+            self.ga_mmr = 0xC0;
+            self.macro_seed = 0;
+            self.charset_encoding.reset();
+            // self.sna = Default::default(); // We finally keep the snapshot for the memory function
+            self.sna_version = cpclib_sna::SnapshotVersion::V3;
+
+
+
             self.can_skip_next_passes = true.into();
             if can_change_request {
                 self.request_additional_pass = false.into();
             }
             self.symbols.new_pass();
         }
+
+
     }
 
     /// Handle the actions to do after assembling.
