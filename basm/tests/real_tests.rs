@@ -76,7 +76,7 @@ fn expect_one_line_success(real_fname: &str) {
     let mut content = content.split("\n")
                                     .map(|l| RE1.replace(&l, ""))
                                     .join(":");
-    while content.contains("::") {
+    while RE2.is_match(&content) {
         content = RE2.replace_all(&content, ":").to_string();;
     }
     let content = if content.chars().next().unwrap() == ':' {

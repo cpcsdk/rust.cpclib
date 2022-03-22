@@ -859,13 +859,67 @@ enum LabelModifier {
     Next
 }
 
-/// Parse a line
+/// Parse a line (ie a set of components separated by :) until the end of the line or a stop directive
 /// TODO add an argument o manage cases like '... : ENDIF'
 pub fn parse_z80_line_complete(
     input: Z80Span
 ) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
+
+    // get the line components
+    let (input, mut tokens) =  dbg!(map(
+        separated_list0(
+        tuple((space0, tag(":"), space0)),
+        alt((
+           parse_z80_line_component, // a real component
+            map(space0, |_| Vec::new()), // a duplicated :
+        ))
+        ),
+        |obtained| {
+            obtained.into_iter()
+                .fold(
+                    Vec::new(),
+                    |mut acc, mut line| {
+                        acc.append(&mut line);
+                        acc
+                    }
+
+                )
+        }
+    )(input))?;
+
+    let (input, _) = space0(input)?;
+
+    // early stop in case of stop directive
+    let (input, stop) = opt(parse_end_directive)(input)?;
+    if stop.is_some() {
+        return Ok((input, tokens));
+    }
+
+    // get the possible comment
+    let (input, _) = space0(input)?;
+    let before_comment = input.clone();
+    let (input, comment) = opt(parse_comment)(input)?;
+    let (input, _) = space0(input)?;
+
+    if let Some(comment) = comment {
+        let size =  before_comment.input_len()-input.input_len();
+        tokens.push(comment.locate(before_comment,size));
+    }
+
+    dbg!(&tokens);
+    let (input, _) = dbg!(cut(context(
+        "Line ending expected",
+        alt((eof, line_ending))
+    ))(input))?;
+
+    Ok((input, tokens))
+}
+
+/// Parse a component of line WITHOUT consumming the : or \n
+pub fn parse_z80_line_component(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
+
     // Eat previous line ending
-    let (input, _) = opt(line_ending)(input)?;
+    //let (input, _) = opt(line_ending)(input)?;
 
     // Eat optional label (or macro call)
     let before_label = input.clone();
@@ -1032,10 +1086,10 @@ pub fn parse_z80_line_complete(
         // and we want to add the corresponding opcode
         if !i_know_it_is_a_macro {
             // input is after the label if any
-            let (input2, _) = cut(context(
+            let (input2, _) = context(
                 "Parse issue, no end directive expected here",
                 not(parse_forbidden_keyword)
-            ))(input)?;
+            )(input)?;
 
             // label/macro instruction?
             let nb_warnings = input2.extra.warnings().len();
@@ -1075,49 +1129,6 @@ pub fn parse_z80_line_complete(
         }
     };
 
-    // Eat the additional opcodes after the label (with modifier or not, the macro or the opcode)
-    let (input, additional_opcodes) = context(
-        "[DBG] other tokens",
-        cut(fold_many0(
-            parse_single_token(false),
-            || Vec::new(),
-            |mut acc: Vec<_>, item| {
-                acc.push(item);
-                acc
-            }
-        ))
-    )(input)?;
-
-    let (input, comment) = if preceded(tag(":"), parse_forbidden_keyword)(input.clone()).is_err() {
-        // we have not an ending keyword here
-
-        // eat extra : as in Targhans code
-        let (input, _) = opt(delimited(space0, tag(":"), space0))(input)?;
-
-        // Eat final comment
-        let (input, _) = space0(input)?;
-        let before_comment = input.clone();
-        let (input, comment) = opt(parse_comment)(input)?;
-        let (input, _) = space0(input)?;
-
-        // Ensure it is the end of line of file or a forbidden keyword
-        let (input, _) = cut(context(
-            "We expect nothing else at the end of the line",
-            alt((line_ending, eof))
-        ))(input)?;
-        let size = before_comment.input_len() - input.input_len();
-        (input, comment.map(|c| c.locate(before_comment, size)))
-    }
-    else {
-        (input.take_split(1).0, None) // Remove the #
-    };
-
-    for opcode in additional_opcodes {
-        tokens.push(opcode);
-    }
-    if comment.is_some() {
-        tokens.push(unsafe { comment.unwrap_unchecked() });
-    }
 
     Ok((input, tokens))
 }

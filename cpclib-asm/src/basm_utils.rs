@@ -122,7 +122,8 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
         panic!("No code provided to assemble");
     };
 
-    crate::parse_z80_str_with_context(code, context).map_err(|e| BasmError::from(e))
+    crate::parse_z80_str_with_context(code, context)
+        .map_err(|e| BasmError::from(AssemblerError::AlreadyRenderedError(e.to_string())))
 }
 
 /// Assemble the given code

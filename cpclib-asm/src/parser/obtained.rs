@@ -1485,14 +1485,14 @@ impl LocatedListing {
                 let input_start = Z80Span::new_extra(src, ctx);
 
                 // really make the parsing
-                let res = fold_many0(
+                let res = dbg!(fold_many0(
                     parse_z80_line,
                     || Vec::new(),
                     |mut source_tokens, mut line_tokens| {
                         source_tokens.append(&mut line_tokens);
                         source_tokens
                     }
-                )(input_start.clone());
+                )(input_start.clone()));
 
                 // analyse result and can generate error even if parsing was ok
                 let res = match res {
