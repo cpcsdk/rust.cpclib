@@ -892,7 +892,7 @@ pub fn parse_z80_line_complete(
         separated_list0(
             tuple((space0, tag(":"), space0)),
             alt((
-                map(parse_z80_directive_with_block, |b| vec![b]),
+                map(preceded(space0, parse_z80_directive_with_block), |b| vec![b]),
                 parse_z80_line_component,    // a real component
                 map( pair(space0, peek(tag(":"))), |_| Vec::new()), // a duplicated :
                 map(preceded(space0, parse_label(false)), |l| vec![LocatedToken::Label(l)])
