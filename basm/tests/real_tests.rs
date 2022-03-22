@@ -7,6 +7,7 @@ use cpclib_asm::error::AssemblerError;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use pretty_assertions::{assert_eq, assert_ne};
+use serial_test::serial;
 use test_generator::test_resources;
 use regex::Regex;
 
@@ -125,6 +126,7 @@ fn expect_one_line_success(real_fname: &str) {
 #[test_resources("basm/tests/asm/good_*.asm")]
 /// TODO write tests specifics for this purpose
 fn expect_listing_success(fname: &str) {
+
     let fname = &fname["basm/tests/asm/".len()..];
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
@@ -200,6 +202,8 @@ fn expect_symbols_success(fname: &str) {
 
 #[test_resources("basm/tests/asm/good_*.asm")]
 fn expect_success(fname: &str) {
+    eprintln!("{}", fname);
+
     let fname = &fname["basm/tests/asm/".len()..];
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");

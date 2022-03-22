@@ -215,28 +215,7 @@ pub fn parse_z80_line(
                 "[DBG] code embeders",
                 delimited(
                     space0,
-                    alt((
-                        map(context("basic", parse_basic), |t| vec![t]),
-                        map(
-                            context(
-                                "block instruction",
-                                alt((
-                                    context("macro definition", parse_macro),
-                                    context("[DBG] crunched section", parse_crunched_section),
-                                    context("[DBG] module", parse_module),
-                                    context("[DBG] repeat", parse_repeat),
-                                    context("[DBG] for", parse_for),
-                                    context("Function definition", parse_function),
-                                    context("SWITCH parse error", parse_switch),
-                                    context("[DBG] iterate", parse_iterate),
-                                    context("[DBG] while", parse_while),
-                                    context("[DBG] rorg", parse_rorg),
-                                    context("[DBG] condition", parse_conditional)
-                                ))
-                            ),
-                            |lt| vec![lt]
-                        )
-                    )),
+                    map(parse_z80_directive_with_block, |b| vec![b]),
                     cut(context(
                         "Line ending issue",
                         preceded(
@@ -387,10 +366,20 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseErro
 
 /// TODO
 pub fn parse_while(input: Z80Span) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+
+    let (input, _) = space0(input)?;
     let while_start = input.clone();
     let (input, _) = parse_directive_word("WHILE")(input)?;
 
     let (input, cond) = cut(context("WHILE: error in condition", located_expr))(input)?;
+
+
+    // we must have either a new line or :
+    let (input, _) = alt((
+        delimited(space0, tag(":"), space0),
+        preceded(space0, line_ending)
+    ))(input)?;
+
     let (input, inner) = cut(context("WHILE: issue in the content", inner_code))(input)?;
     let (input, _) = cut(context(
         "WHILE: not closed",
@@ -859,38 +848,68 @@ enum LabelModifier {
     Next
 }
 
+pub fn parse_z80_directive_with_block(
+    input: Z80Span
+) -> IResult<Z80Span, LocatedToken, VerboseError<Z80Span>> {
+    alt((
+        context("basic", parse_basic), 
+
+            context(
+                "block instruction",
+                alt((
+                    context("macro definition", parse_macro),
+                    context("[DBG] crunched section", parse_crunched_section),
+                    context("[DBG] module", parse_module),
+                    context("[DBG] repeat", parse_repeat),
+                    context("[DBG] for", parse_for),
+                    context("Function definition", parse_function),
+                    context("SWITCH parse error", parse_switch),
+                    context("[DBG] iterate", parse_iterate),
+                    context("[DBG] while", parse_while),
+                    context("[DBG] rorg", parse_rorg),
+                    context("[DBG] condition", parse_conditional)
+                ))
+            )
+    ))(input)
+}
+
 /// Parse a line (ie a set of components separated by :) until the end of the line or a stop directive
 /// TODO add an argument o manage cases like '... : ENDIF'
 pub fn parse_z80_line_complete(
     input: Z80Span
 ) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
 
+    dbg!(input.split("\n").next());
+
+    // Early exit if line is empty
+    let (input, empty) = opt(parse_empty_line)(input)?;
+    if let Some(empty) = empty {
+        return Ok((input, empty));
+    }
+
     // get the line components
-    let (input, mut tokens) =  dbg!(map(
+    let (input, mut tokens) = dbg!(map(
         separated_list0(
-        tuple((space0, tag(":"), space0)),
-        alt((
-           parse_z80_line_component, // a real component
-            map(space0, |_| Vec::new()), // a duplicated :
-        ))
+            tuple((space0, tag(":"), space0)),
+            alt((
+                map(parse_z80_directive_with_block, |b| vec![b]),
+                parse_z80_line_component,    // a real component
+                map( pair(space0, peek(tag(":"))), |_| Vec::new()), // a duplicated :
+                map(preceded(space0, parse_label(false)), |l| vec![LocatedToken::Label(l)])
+            ))
         ),
         |obtained| {
-            obtained.into_iter()
-                .fold(
-                    Vec::new(),
-                    |mut acc, mut line| {
-                        acc.append(&mut line);
-                        acc
-                    }
-
-                )
+            obtained.into_iter().fold(Vec::new(), |mut acc, mut line| {
+                acc.append(&mut line);
+                acc
+            })
         }
     )(input))?;
 
     let (input, _) = space0(input)?;
 
     // early stop in case of stop directive
-    let (input, stop) = opt(parse_end_directive)(input)?;
+    let (_, stop) = opt(parse_end_directive)(input.clone())?;
     if stop.is_some() {
         return Ok((input, tokens));
     }
@@ -902,11 +921,12 @@ pub fn parse_z80_line_complete(
     let (input, _) = space0(input)?;
 
     if let Some(comment) = comment {
-        let size =  before_comment.input_len()-input.input_len();
-        tokens.push(comment.locate(before_comment,size));
+        let size = before_comment.input_len() - input.input_len();
+        tokens.push(comment.locate(before_comment, size));
     }
 
     dbg!(&tokens);
+    dbg!(&input);
     let (input, _) = dbg!(cut(context(
         "Line ending expected",
         alt((eof, line_ending))
@@ -916,10 +936,11 @@ pub fn parse_z80_line_complete(
 }
 
 /// Parse a component of line WITHOUT consumming the : or \n
-pub fn parse_z80_line_component(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
-
+pub fn parse_z80_line_component(
+    input: Z80Span
+) -> IResult<Z80Span, Vec<LocatedToken>, VerboseError<Z80Span>> {
     // Eat previous line ending
-    //let (input, _) = opt(line_ending)(input)?;
+    // let (input, _) = opt(line_ending)(input)?;
 
     // Eat optional label (or macro call)
     let before_label = input.clone();
@@ -1128,7 +1149,6 @@ pub fn parse_z80_line_component(input: Z80Span) -> IResult<Z80Span, Vec<LocatedT
             input
         }
     };
-
 
     Ok((input, tokens))
 }
@@ -2371,7 +2391,10 @@ pub fn parse_macro_or_struct_call(
             return Ok((input, LocatedToken::Label(name)));
         }
 
-        let (input, _) = space0(input)?;
+        let (input, _) = pair(
+            space0,
+            not(parse_comment)
+        )(input)?;
 
         let (input, args) = if alt((eof, tag("\n"), tag(":")))(input.clone()).is_ok() {
             // panic!("no arguments at all provided")

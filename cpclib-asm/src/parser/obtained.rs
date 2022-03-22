@@ -4,9 +4,9 @@ use std::ops::Deref;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::bytes::complete::tag;
 use cpclib_common::nom::character::complete::space0;
-use cpclib_common::nom::combinator::{cut, opt};
+use cpclib_common::nom::combinator::{cut, opt, map, eof};
 use cpclib_common::nom::error::{context, ErrorKind, VerboseError};
-use cpclib_common::nom::multi::fold_many0;
+use cpclib_common::nom::multi::{fold_many0, many_till};
 use cpclib_common::nom::sequence::{delimited, preceded};
 use cpclib_common::nom::{Err, IResult, InputLength, InputTake};
 use cpclib_common::nom_locate::LocatedSpan;
@@ -18,9 +18,10 @@ use cpclib_tokens::{
     ListingElement, MacroParam, MacroParamElement, TestKind, TestKindElement, ToSimpleToken, Token,
     UnaryFunction, UnaryOperation, UnaryTokenOperation
 };
+use libc::Elf32_Off;
 use ouroboros::self_referencing;
 
-use super::{parse_z80_line, ParserContext, Z80Span};
+use super::{parse_z80_line, ParserContext, Z80Span, parse_z80_line_complete};
 use crate::assembler::Env;
 use crate::error::AssemblerError;
 /// ! This crate is related to the adaptation of tokens and listing for the case where they are parsed
@@ -1485,12 +1486,14 @@ impl LocatedListing {
                 let input_start = Z80Span::new_extra(src, ctx);
 
                 // really make the parsing
-                let res = dbg!(fold_many0(
-                    parse_z80_line,
-                    || Vec::new(),
-                    |mut source_tokens, mut line_tokens| {
-                        source_tokens.append(&mut line_tokens);
-                        source_tokens
+                let res = dbg!(
+                    map(
+                        many_till(
+                            parse_z80_line_complete,
+                            eof
+                        ),
+                    |(v,_)| {
+                        v.into_iter().flatten().collect_vec()
                     }
                 )(input_start.clone()));
 
@@ -1593,13 +1596,14 @@ impl LocatedListing {
 
                 // we parse until we met an error or the end of the parse
                 loop {
+                    dbg!(&tokens);
+                    dbg!(&inner_code);
                     // check if the line needs to be parsed (ie there is no end directive)
                     let must_break = inner_code.trim().is_empty() || {
                         // TODO take into account potential label
-                        let maybe_keyword = opt(preceded(
-                            delimited(space0, opt(tag(":")), space0),
+                        let maybe_keyword = opt(
                             parse_end_directive
-                        ))(inner_code.clone());
+                        )(inner_code.clone());
                         match maybe_keyword {
                             Ok((_, Some(_))) => true,
                             _ => false
@@ -1610,7 +1614,7 @@ impl LocatedListing {
                     };
 
                     // really parse the line
-                    match cut(context("[DBG] Inner loop", parse_z80_line))(inner_code.clone()) {
+                    match cut(context("[DBG] Inner loop", parse_z80_line_complete))(inner_code.clone()) {
                         Ok((next_input, mut tok)) => {
                             inner_code = next_input; // ensure next line parsing starts at the right place{}
                             tokens.append(&mut tok); // add the collected tokens to the complete tokens list
