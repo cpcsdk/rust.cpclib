@@ -4,8 +4,11 @@ use std::process::{Command, Output};
 use cpclib_asm::assembler::Env;
 use cpclib_asm::basm_utils::{build_args_parser, process, BasmError};
 use cpclib_asm::error::AssemblerError;
+use cpclib_common::itertools::Itertools;
+use cpclib_common::lazy_static;
 use pretty_assertions::{assert_eq, assert_ne};
 use test_generator::test_resources;
+use regex::Regex;
 
 const BUILD_BASM: bool = true;
 
@@ -50,6 +53,72 @@ fn test_roudoudou_generated_code() {
     specific_test("tests/asm/roudoudou", "rasm_sprites.asm");
     std::fs::remove_dir("generated_sprites");
 }
+
+
+#[test_resources("basm/tests/asm/good_*.asm")]
+fn expect_one_line_success(real_fname: &str) {
+    let fname = &real_fname["basm/tests/asm/".len()..];
+
+    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_fname = output_file.path().as_os_str().to_str().unwrap();
+
+
+    let listing_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
+
+    let content = std::fs::read_to_string(dbg!(&real_fname["basm/".len()..])).expect("Unable to read_source");
+
+    lazy_static::lazy_static! {
+        static ref RE1: Regex = Regex::new(r";.*$").unwrap();
+        static ref RE2: Regex = Regex::new(r":\w*:").unwrap();
+    }
+    
+    let mut content = content.split("\n")
+                                    .map(|l| RE1.replace(&l, ""))
+                                    .join(":");
+    while content.contains("::") {
+        content = RE2.replace_all(&content, ":").to_string();;
+    }
+    let content = if content.chars().next().unwrap() == ':' {
+        &content[1..]
+    } else {
+        &content[..]
+    };
+
+    let content = if content.chars().last().unwrap() == ':' {
+        &content[..content.len()-1]
+    } else {
+        content
+    };
+
+
+    let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let input_fname = input_file.path().as_os_str().to_str().unwrap();
+    std::fs::write(input_fname, content).unwrap();
+
+
+
+    let res = Command::new("../target/debug/basm")
+        .args(["-I", "tests/asm/", 
+        "-i", 
+        input_fname, 
+        "-o", output_fname,
+        "--lst", listing_fname
+        ])
+        .output()
+        .expect("Unable to launch basm");
+
+    if !res.status.success() {
+        panic!(
+            "Failure to assemble {}.\n{}",
+            fname,
+            String::from_utf8_lossy(&res.stderr)
+        );
+    }
+
+
+}
+
 
 
 
