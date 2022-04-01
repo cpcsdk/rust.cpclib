@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::ops::Deref;
+use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::bytes::complete::tag;
@@ -8,7 +9,7 @@ use cpclib_common::nom::combinator::{cut, opt, map, eof};
 use cpclib_common::nom::error::{context, ErrorKind, VerboseError};
 use cpclib_common::nom::multi::{fold_many0, many_till};
 use cpclib_common::nom::sequence::{delimited, preceded};
-use cpclib_common::nom::{Err, IResult, InputLength, InputTake};
+use cpclib_common::nom::{Err, IResult, InputLength, InputTake, self};
 use cpclib_common::nom_locate::LocatedSpan;
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
@@ -21,7 +22,7 @@ use cpclib_tokens::{
 use libc::Elf32_Off;
 use ouroboros::self_referencing;
 
-use super::{parse_z80_line, ParserContext, Z80Span, parse_z80_line_complete};
+use super::{parse_z80_line, ParserContext, Z80Span, parse_z80_line_complete, Z80ParserError};
 use crate::assembler::Env;
 use crate::error::AssemblerError;
 /// ! This crate is related to the adaptation of tokens and listing for the case where they are parsed
@@ -1405,7 +1406,7 @@ pub type InnerLocatedListing = BaseListing<LocatedToken>;
 pub struct LocatedListing {
     /// Its source code. We want it to live as long as possible.
     /// A string is copied for the very beginning of the file parsing, while a span is used for the inner blocs. As this field is immutable and build before the listing, we do not store the span here
-    src: Option<String>,
+    src: Option<std::sync::Arc<String> >,
 
     /// Its Parsing Context whose source targets LocatedListing
     #[borrows(src)]
@@ -1445,8 +1446,8 @@ pub(crate) enum ParseResult {
         /// The code of the next span
         next_span: Z80Span
     },
-    FailureInner(Err<VerboseError<Z80Span>>),
-    FailureComplete(AssemblerError)
+    FailureInner(Err<Z80ParserError>),
+    FailureComplete(AssemblerError) // TODO use Z80ParserError there
 }
 
 #[derive(Debug)]
@@ -1469,12 +1470,13 @@ impl LocatedListing {
         // generate the listing
         let listing = LocatedListingBuilder {
             // source code is a string owned by the listing
-            src: Some(code),
+            src: Some(code.into()),
 
             // context keeps a reference on the full listing (but is it really needed yet ?)
-            ctx_builder: |src| {
+            ctx_builder: |src: &Option<Arc<String>>| {
                 ctx.source = src
                     .as_ref()
+                    .map(|arc| arc.deref())
                     .map(|s| s.as_str())
                     .map(|s| unsafe { &*(s as *const str) as &'static str });
                 ctx
@@ -1557,7 +1559,8 @@ impl LocatedListing {
     pub fn parse_inner(
         input_code: Z80Span,
         new_state: ParsingState
-    ) -> IResult<Z80Span, LocatedListing, VerboseError<Z80Span>> {
+    ) -> IResult<Z80Span, Arc<LocatedListing>, Z80ParserError> {
+
         // The context is similar to the initial one ...
         let mut ctx = input_code.extra.clone();
         // ... but the state can be modified to forbid some keywords
@@ -1572,11 +1575,14 @@ impl LocatedListing {
             src: None,
 
             // Context source has already been provided before. Its state as also been properly set
-            ctx_builder: move |_src| ctx,
+            ctx_builder: move |_src| {
+                // we have already build the context
+                ctx
+            },
 
-            parse_result_builder: |_, ctx| {
+            parse_result_builder: |_src, lst_ctx| {
                 // build a span with the appropriate novel context
-                let ctx = unsafe { &*(ctx as *const ParserContext) as &'static ParserContext }; // the context is store within the object; so it is safe to set its lifetime to static
+                let lst_ctx = unsafe { &*(lst_ctx as *const ParserContext) as &'static ParserContext }; // the context is stored within the object; so it is safe to set its lifetime to static
 
                 // Build the span that will be parsed to collect inner tokens.
                 // It has a length of input_length.
@@ -1585,7 +1591,7 @@ impl LocatedListing {
                         input_code.location_offset(),
                         input_code.location_line(),
                         &*(input_code.as_str() as *const str) as &'static str,
-                        ctx
+                        lst_ctx
                     )
                 });
                 // keep a track of the very beginning of the span
@@ -1630,7 +1636,9 @@ impl LocatedListing {
                 // Generate the appropriate parse result
                 match error {
                     // Parse error
-                    Some(e) => ParseResult::FailureInner(e),
+                    Some(e) => {
+                        ParseResult::FailureInner(e)
+                    },
                     // Correct parsing
                     None => {
                         // restore the appropriate context to the next_span (the original context in fact)
@@ -1651,10 +1659,26 @@ impl LocatedListing {
             }
         }
         .build();
+        let inner_listing = Arc::new(inner_listing);
 
-        match inner_listing.borrow_parse_result() {
+        match inner_listing.borrow_parse_result().clone() {
             ParseResult::SuccessInner { next_span, .. } => Ok((next_span.clone(), inner_listing)),
-            ParseResult::FailureInner(e) => Err(e.clone()),
+            ParseResult::FailureInner(e) => 
+                match e {
+                    Err::Error(e) => Err(Err::Error(Z80ParserError::from_inner_error(
+                        input_code,
+                        inner_listing.clone(),
+                        box e.clone()
+                    ))),
+                    Err::Failure(e) =>  Err(Err::Failure(Z80ParserError::from_inner_error(
+                        input_code,
+                        inner_listing.clone(),
+                        box e.clone()
+                    ))) ,
+                    Err::Incomplete(e) => Err(Err::Incomplete(*e))  ,
+
+                }
+            
             _ => unreachable!()
         }
     }
@@ -1694,7 +1718,7 @@ impl LocatedListing {
         })
     }
 
-    pub fn nom_error_unchecked(&self) -> &Err<VerboseError<Z80Span>> {
+    pub fn nom_error_unchecked(&self) -> &Err<Z80ParserError> {
         self.with_parse_result(|parse_result| {
             match parse_result {
                 ParseResult::FailureInner(e) => e,

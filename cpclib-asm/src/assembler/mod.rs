@@ -2493,6 +2493,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(_) | Token::Defw(_) | Token::Str(_) => todo!("implement the 3 different calls"),
         Token::Defs(_) => visit_defs(token, env),
+        Token::End => visit_end(env),
         Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
             visit_opcode(*mnemonic, &arg1, &arg2, &arg3, env)?;
             // Compute duration only if it is necessary
@@ -3253,6 +3254,11 @@ fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         }
         _ => unreachable!()
     }
+}
+
+fn visit_end( env : &mut Env) -> Result<(), AssemblerError> {
+    eprintln!("END directive is not implemented");
+    Ok(())
 }
 
 pub enum DbLikeKind {

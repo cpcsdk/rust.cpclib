@@ -323,7 +323,7 @@ impl Slice<std::ops::RangeTo<usize>> for Z80Span {
 impl Z80Span {
     pub fn new_extra(src: &str, ctx: &ParserContext) -> Self {
         Self(LocatedSpan::new_extra(
-            // pointer is always good as source is store in a Arc
+            // pointer is always good as source is stored in a Arc
             unsafe { &*(src as *const str) as &'static str },
             unsafe { &*(ctx as *const ParserContext) as &'static ParserContext }
         ))

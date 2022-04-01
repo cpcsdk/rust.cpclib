@@ -6,7 +6,7 @@
 	ENDLOCOMOTIVE
 
 start
-		ld hl, text
+		ld hl, txt
 .loop
 		ld a, (hl)
 		or a : jr z, .end
@@ -16,7 +16,7 @@ start
 .end
 		jp $
 
-text
+txt
 	db "Hello world", 0
 
 	print "LOADER START IN ", {hex}start

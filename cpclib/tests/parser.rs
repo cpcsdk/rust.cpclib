@@ -184,7 +184,7 @@ mod tests {
         );
 
         let code = "label";
-        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(code.to_owned())));
+        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
 
         let code = "label";
@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn test_equ() {
         let code = "LABEL EQU VALUE";
-        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(code.to_owned())));
+        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(code.to_owned())));
         assert_eq!(tokens.len(), 1);
     }
 
@@ -380,26 +380,26 @@ mod tests {
     #[should_panic]
     pub fn test_unique_lines_panic() {
         let line1 = "label1:fd";
-        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(line1)));
+        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(line1)));
         assert_eq!(tokens.len(), 1);
     }
 
     #[test]
     pub fn test_unique_lines() {
         let line1 = "label1";
-        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(line1)));
+        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(line1)));
         assert_eq!(tokens.len(), 1);
 
         let line1 = "label1  ";
-        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(line1)));
+        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(line1)));
         assert_eq!(tokens.len(), 1);
 
         let line1 = "label1 ; blabla ";
-        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(line1)));
+        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(line1)));
         assert_eq!(tokens.len(), 2);
 
         let line1 = "label1 ; blabla \n";
-        let tokens = get_val(parse_z80_line_label_only(CTX.build_span(line1)));
+        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(line1)));
         assert_eq!(tokens.len(), 2);
 
         let line1 = "label1";

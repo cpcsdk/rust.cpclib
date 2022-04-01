@@ -6,3 +6,4 @@
 	defb 1, 2, 3, 4
 	defb "hello", ' ', "world"
 	defb $, $ ; should generate 2 different values
+	db "Hello world", 0

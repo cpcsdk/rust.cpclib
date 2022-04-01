@@ -524,6 +524,7 @@ pub enum Token {
     Defs(Vec<(Expr, Option<Expr>)>),
     Defw(Vec<Expr>),
 
+    End,
     Equ(SmolStr, Expr),
     Export(Vec<SmolStr>),
 
@@ -653,6 +654,7 @@ impl Clone for Token {
             Token::Defs(l) => Token::Defs(l.clone()),
             Token::Defw(l) => Token::Defw(l.clone()),
             Token::Equ(a, b) => Token::Equ(a.clone(), b.clone()),
+            Token::End => Token::End,
             Token::Export(a) => Token::Export(a.clone()),
             Token::Fail(a) => Token::Fail(a.clone()),
             Token::Function(a, b, c) => Token::Function(a.clone(), b.clone(), c.clone()),

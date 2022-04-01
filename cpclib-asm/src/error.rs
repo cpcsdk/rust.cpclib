@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::Deref;
@@ -8,7 +9,7 @@ use codespan_reporting::term::termcolor::Buffer;
 use codespan_reporting::term::{self, Chars, DisplayStyle};
 use cpclib_basic::BasicError;
 use cpclib_common::itertools::Itertools;
-use cpclib_common::nom::error::{VerboseError, VerboseErrorKind};
+use cpclib_common::nom;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
@@ -17,7 +18,7 @@ use cpclib_tokens::{tokens, BinaryOperation, ExpressionTypeError};
 
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
-use crate::preamble::LocatedListing;
+use crate::preamble::{LocatedListing, Z80ParserError, Z80ParserErrorKind};
 use crate::{PhysicalAddress, Z80Span};
 
 #[derive(Debug, Clone)]
@@ -29,6 +30,8 @@ pub enum ExpressionError {
     InvalidSize(usize, usize) // expected index
 }
 
+
+
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum AssemblerError {
@@ -39,6 +42,8 @@ pub enum AssemblerError {
 
     /// Parse of a located listing failed, but the error is in fact stored within the located listing object...
     LocatedListingError(std::sync::Arc<LocatedListing>),
+
+
 
     //#[fail(display = "Several errors arised: {:?}", errors)]
     MultipleErrors {
@@ -67,7 +72,7 @@ pub enum AssemblerError {
     // TODO add more information
     //#[fail(display = "Syntax error:\n{}", error)]
     SyntaxError {
-        error: VerboseError<Z80Span>
+        error: Z80ParserError
     },
 
     IncludedFileError {
@@ -262,8 +267,8 @@ impl From<&ExpressionTypeError> for AssemblerError {
     }
 }
 
-impl From<VerboseError<Z80Span>> for AssemblerError {
-    fn from(err: VerboseError<Z80Span>) -> Self {
+impl From<Z80ParserError> for AssemblerError {
+    fn from(err: Z80ParserError) -> Self {
         AssemblerError::SyntaxError { error: err }
     }
 }
@@ -366,25 +371,25 @@ impl AssemblerError {
                 let mut fname_to_id = std::collections::BTreeMap::new();
 
                 let str = error
-                    .errors
+                    .errors()
                     .iter()
                     .filter(|e| {
                         match e.1 {
-                            VerboseErrorKind::Context(ctx) => !ctx.starts_with("[DBG]"),
-                            //  VerboseErrorKind::Nom(ErrorKind::Eof) => true,
+                            Z80ParserErrorKind::Context(ctx) => !ctx.starts_with("[DBG]"),
+                            //  Z80ParserErrorKind::Nom(ErrorKind::Eof) => true,
                             _ => true
                         }
                     })
                     .map(|e| {
                         match e.1 {
-                            VerboseErrorKind::Context(_)
-                            | VerboseErrorKind::Nom(_)
-                            | VerboseErrorKind::Char(_) => {
+                            Z80ParserErrorKind::Context(_)
+                            | Z80ParserErrorKind::Nom(_)
+                            | Z80ParserErrorKind::Char(_) => {
                                 // Get the real are build the context
                                 let ctx: std::borrow::Cow<str> = match e.1 {
-                                    VerboseErrorKind::Context(ctx) => ctx.into(),
-                                    VerboseErrorKind::Nom(_) => "Unknown error".into(),
-                                    VerboseErrorKind::Char(c) => {
+                                    Z80ParserErrorKind::Context(ctx) => Cow::Borrowed(*ctx),
+                                    Z80ParserErrorKind::Nom(_) => "Unknown error".into(),
+                                    Z80ParserErrorKind::Char(c) => {
                                         format!("Error with char '{}'", c).into()
                                     }
                                     _ => unreachable!()
