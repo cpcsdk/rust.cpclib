@@ -97,6 +97,8 @@ fn expect_one_line_success(real_fname: &str) {
         content
     };
 
+    let content = content.replace("\\:", "");
+
     dbg!(&content);
 
     let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
