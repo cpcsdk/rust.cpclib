@@ -58,6 +58,11 @@ fn test_roudoudou_generated_code() {
 
 #[test_resources("basm/tests/asm/good_*.asm")]
 fn expect_one_line_success(real_fname: &str) {
+
+    if real_fname.contains("basic") {
+        return;
+    }
+
     let fname = &real_fname["basm/tests/asm/".len()..];
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
@@ -75,7 +80,7 @@ fn expect_one_line_success(real_fname: &str) {
     }
     
     let mut content = content.split("\n")
-                                    .map(|l| RE1.replace(&l, ""))
+                                    .map(|l| RE1.replace(&l, "").replace('\r',""))
                                     .join(":");
     while RE2.is_match(&content) {
         content = RE2.replace_all(&content, ":").to_string();;
@@ -92,6 +97,7 @@ fn expect_one_line_success(real_fname: &str) {
         content
     };
 
+    dbg!(&content);
 
     let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
     let input_fname = input_file.path().as_os_str().to_str().unwrap();
