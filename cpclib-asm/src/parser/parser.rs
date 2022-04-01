@@ -2522,7 +2522,10 @@ pub fn parse_macro_or_struct_call(
         let (input, name) = terminated(
             parse_macro_name,
             not(
-                pair(space0, alt((tag(":"), line_ending, eof)))
+                alt((
+                    recognize(pair(space0, alt((tag(":"), line_ending, eof)))),
+                    recognize(char('.'))
+                ))
             )
         )(input_label.clone())?;
 
@@ -3738,6 +3741,7 @@ pub fn parse_label(
 
         if (middle.is_none() && (first == '@' || first == '.' || has_prefix))
             || (has_prefix && (first == '@' || first == '.'))
+            || middle.as_ref().map(|s| s.as_str().chars().last().unwrap() == '.').unwrap_or(false) // no . in the very last char
         {
             return Err(cpclib_common::nom::Err::Error(error_position!(
                 input,
