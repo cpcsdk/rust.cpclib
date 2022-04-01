@@ -55,7 +55,7 @@ my_triangle2: triangle [1, 2, 3], [4, 5, 6], [7, 8 , 9]
  if 0
 
 
-my_triangle1. triangle
+my_triangle1: triangle
 
 my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
  endif
