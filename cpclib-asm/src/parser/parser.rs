@@ -2776,7 +2776,7 @@ fn my_space0(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
 /// Handle \ in end of line
 #[inline]
 fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
-    alt((
+    recognize(many1(alt((
         recognize(eof),
         recognize(tuple((
             space0,
@@ -2786,7 +2786,7 @@ fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
             space0
         ))),
         recognize(space1)
-    ))(input)
+    ))))(input)
 }
 
 #[inline]

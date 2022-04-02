@@ -143,6 +143,68 @@ fn expect_one_line_success(real_fname: &str) {
 
 
 #[test_resources("basm/tests/asm/good_*.asm")]
+fn expect_several_empty_lines_success(real_fname: &str) {
+    if real_fname.contains("basic") {
+        return;
+    }
+
+    let fname = &real_fname["basm/tests/asm/".len()..];
+
+    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_fname = output_file.path().as_os_str().to_str().unwrap();
+
+
+    let listing_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
+
+    let content = std::fs::read_to_string(dbg!(&real_fname["basm/".len()..])).expect("Unable to read_source");
+
+    lazy_static::lazy_static! {
+        static ref RE1: Regex = Regex::new(r"(?m)([^\\])\n").unwrap();
+        static ref RE2: Regex = Regex::new(r"(?m)\\\n").unwrap();
+    }
+
+    let content = content.replace("\r", "");
+    let content = RE1.replace_all(&content, "$1\n\n\n");
+    let content = RE2.replace_all(&content, "\\\n\\\n\\\n");
+    let content = content.as_ref();
+
+
+
+    eprintln!("{}", &content);
+
+
+        let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+        let input_fname = input_file.path().as_os_str().to_str().unwrap();
+        std::fs::write(input_fname, content).unwrap();
+
+
+
+        let res = Command::new("../target/debug/basm")
+            .args(["-I", "tests/asm/", 
+            "-i", 
+            input_fname, 
+            "-o", output_fname,
+            "--lst", listing_fname
+            ])
+            .output()
+            .expect("Unable to launch basm");
+
+        if !res.status.success() {
+            panic!(
+                "Failure to assemble {}.\n{}",
+                fname,
+                String::from_utf8_lossy(&res.stderr)
+            );
+        }
+
+}
+
+
+
+
+
+#[test_resources("basm/tests/asm/good_*.asm")]
 /// TODO write tests specifics for this purpose
 fn expect_listing_success(fname: &str) {
 
