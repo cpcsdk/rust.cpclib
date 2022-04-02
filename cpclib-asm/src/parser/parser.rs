@@ -2498,7 +2498,7 @@ pub fn parse_macro_arg(
                 alt((
                     recognize(expr), // TODO handle evaluation or transposition
                     string_between_quotes,
-                    recognize(many0(none_of(" ,\r\n\t][;")))
+                    recognize(many0(none_of(" ,\r\n\t][;:")))
                 )), // TODO find a way to give arguments with space
                 alt((space0, eof))
             ),
@@ -2818,8 +2818,8 @@ pub fn parse_logical_operator(input: Z80Span) -> IResult<Z80Span, Token, Z80Pars
         map(parse_word("Xor"), |_| Mnemonic::Xor)
     ))(input)?;
 
-    let (input, operand) = cut(context(
-        "logical operand",
+    let (input, operand) = context(
+        "Wrong logical operand",
         alt((
             parse_register8,
             parse_indexregister8,
@@ -2827,7 +2827,7 @@ pub fn parse_logical_operator(input: Z80Span) -> IResult<Z80Span, Token, Z80Pars
             parse_indexregister_with_index,
             parse_expr
         ))
-    ))(input)?;
+    )(input)?;
 
     Ok((input, Token::new_opcode(operator, Some(operand), None)))
 }
