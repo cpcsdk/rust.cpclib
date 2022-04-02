@@ -6,6 +6,7 @@ use std::process::{Command};
 
 macro_rules! import_rasm_success {
 ($ (#define $name:ident $($code:expr)+);+ ;)  => {$(
+			#[ignore]
 			#[test]
 			fn $name() {
 				test_assemble(concat!($($code),+))

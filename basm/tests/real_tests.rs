@@ -140,8 +140,6 @@ fn expect_one_line_success(real_fname: &str) {
 }
 
 
-
-
 #[test_resources("basm/tests/asm/good_*.asm")]
 fn expect_several_empty_lines_success(real_fname: &str) {
     if real_fname.contains("basic") {

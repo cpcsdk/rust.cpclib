@@ -982,9 +982,6 @@ where
 
         really_does_the_job().map_err(|e| AssemblerError::AlreadyRenderedError(e.to_string()))
     }
-
-
-
 }
 
 // let fname = span
