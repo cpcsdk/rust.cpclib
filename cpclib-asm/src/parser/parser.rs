@@ -374,7 +374,7 @@ pub fn parse_rorg(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserErr
 
     let (input, exp) = delimited(space1, located_expr, space0)(input)?;
 
-    let (input, _) = line_ending(input)?;
+    let (input, _) = my_line_ending(input)?;
 
     let (input, inner) = inner_code(input)?;
 
@@ -411,11 +411,11 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Parse
         )
     ))(input)?;
 
-    let (input, _) = preceded(space0, alt((line_ending, tag(":"))))(input)?;
+    let (input, _) = preceded(space0, my_line_ending)(input)?;
     let (before_expr, listing) =
         cut(context("FUNCTION: invalid content", parse_function_listing))(input)?;
 
-    let (input, _) = many0(alt((space1, line_ending, tag(":"))))(before_expr)?;
+    let (input, _) = many0(my_line_ending)(before_expr)?;
     let (input, _) = alt((
         parse_directive_word("ENDF"),
         parse_directive_word("ENDFUNCTION")
@@ -457,7 +457,7 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserEr
         )
     )(input)?;
 
-    let (input, _) = alt((space0, line_ending, tag(":")))(input)?;
+    let (input, _) = alt((space0, my_line_ending))(input)?;
     let before_content = input.clone();
     let (input, content) = cut(context(
         "MACRO: issue in the content",
@@ -565,7 +565,7 @@ pub fn parse_crunched_section(
 
 /// Parse the switch directive
 pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let (switch_start, _) = many0(alt((space1, line_ending)))(input)?;
+    let (switch_start, _) = many0(alt((space1, my_line_ending)))(input)?;
     let (input, _) = parse_directive_word("SWITCH")(switch_start.clone())?;
 
     let (input, value) = cut(context(
@@ -2767,11 +2767,13 @@ fn formatted_expr(input: Z80Span) -> IResult<Z80Span, FormattedExpr, Z80ParserEr
 }
 
 /// Handle \ in end of line
+#[inline]
 fn my_space0(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
     recognize(opt(my_space1))(input)
 }
 
 /// Handle \ in end of line
+#[inline]
 fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
     alt((
         recognize(eof),
@@ -2786,6 +2788,15 @@ fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
     ))(input)
 }
 
+#[inline]
+fn my_line_ending(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
+    alt((
+        line_ending,
+        tag(":")
+    ))(input)
+}
+
+#[inline]
 fn parse_comma(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
     delimited(my_space0, tag(","), my_space0)(input)
 }

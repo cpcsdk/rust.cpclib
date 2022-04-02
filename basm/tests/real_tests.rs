@@ -96,7 +96,7 @@ fn expect_one_line_success(real_fname: &str) {
     dbg!(&content);
 
 
-    let content = if content.chars().last().unwrap() == ':' {
+    let content = if let Some(':') = content.chars().last() {
         &content[..content.len()-1]
     } else {
         content
@@ -108,30 +108,32 @@ fn expect_one_line_success(real_fname: &str) {
 
     dbg!(&content);
 
-    let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
-    let input_fname = input_file.path().as_os_str().to_str().unwrap();
-    std::fs::write(input_fname, content).unwrap();
+    if !content.is_empty() {
+
+        let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+        let input_fname = input_file.path().as_os_str().to_str().unwrap();
+        std::fs::write(input_fname, content).unwrap();
 
 
 
-    let res = Command::new("../target/debug/basm")
-        .args(["-I", "tests/asm/", 
-        "-i", 
-        input_fname, 
-        "-o", output_fname,
-        "--lst", listing_fname
-        ])
-        .output()
-        .expect("Unable to launch basm");
+        let res = Command::new("../target/debug/basm")
+            .args(["-I", "tests/asm/", 
+            "-i", 
+            input_fname, 
+            "-o", output_fname,
+            "--lst", listing_fname
+            ])
+            .output()
+            .expect("Unable to launch basm");
 
-    if !res.status.success() {
-        panic!(
-            "Failure to assemble {}.\n{}",
-            fname,
-            String::from_utf8_lossy(&res.stderr)
-        );
+        if !res.status.success() {
+            panic!(
+                "Failure to assemble {}.\n{}",
+                fname,
+                String::from_utf8_lossy(&res.stderr)
+            );
+        }
     }
-
 
 }
 
