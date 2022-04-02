@@ -518,6 +518,7 @@ pub fn parse_module(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
     let (input, _) = parse_directive_word("MODULE")(input)?;
 
     let (input, name) = cut(context("MODULE: error in naming", parse_label(false)))(input)?;
+    
     let (input, inner) = cut(context("MODULE: issue in the content", inner_code))(input)?;
     let (input, _) = cut(context(
         "MODULE: not closed",

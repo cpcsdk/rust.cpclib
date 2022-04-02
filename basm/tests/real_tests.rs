@@ -59,7 +59,9 @@ fn test_roudoudou_generated_code() {
 #[test_resources("basm/tests/asm/good_*.asm")]
 fn expect_one_line_success(real_fname: &str) {
 
-    if real_fname.contains("basic") {
+    if real_fname.contains("basic") // basic cannot be inlined 
+    || real_fname.contains("good_module.asm") // there are labels with ::
+    {
         return;
     }
 
@@ -84,7 +86,7 @@ fn expect_one_line_success(real_fname: &str) {
                                     .join(":");
     dbg!(&content);
     while RE2.is_match(&content) {
-        content = RE2.replace_all(&content, ":").to_string();;
+        content = RE2.replace_all(&content, ":").to_string();
     }
     dbg!(&content);
 
