@@ -76,26 +76,33 @@ fn expect_one_line_success(real_fname: &str) {
 
     lazy_static::lazy_static! {
         static ref RE1: Regex = Regex::new(r";.*$").unwrap();
-        static ref RE2: Regex = Regex::new(r":\w*:").unwrap();
+        static ref RE2: Regex = Regex::new(r":\s*:").unwrap();
     }
     
     let mut content = content.split("\n")
                                     .map(|l| RE1.replace(&l, "").replace('\r',""))
                                     .join(":");
+    dbg!(&content);
     while RE2.is_match(&content) {
         content = RE2.replace_all(&content, ":").to_string();;
     }
+    dbg!(&content);
+
     let content = if content.chars().next().unwrap() == ':' {
         &content[1..]
     } else {
         &content[..]
     };
+    dbg!(&content);
+
 
     let content = if content.chars().last().unwrap() == ':' {
         &content[..content.len()-1]
     } else {
         content
     };
+
+    dbg!(&content);
 
     let content = content.replace("\\:", "");
 
