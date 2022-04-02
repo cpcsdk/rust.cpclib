@@ -323,6 +323,27 @@ impl ListingElement for Token {
             _ => unreachable!()
         }
     }
+
+    fn is_rorg(&self) -> bool {
+        match self {
+            Self::Rorg(..) => true,
+            _ => false
+        }
+    }
+
+    fn rorg_listing(&self) -> &[Self] {
+        match self {
+            Self::Rorg(_, lst) => lst.as_slice(),
+            _ => unreachable!()
+        }
+    }
+
+    fn rorg_expr(&self) -> &Self::Expr {
+        match self {
+            Self::Rorg(exp, _) => exp,
+            _ => unreachable!()
+        }
+    }
 }
 
 /// Standard listing is a specific implementation

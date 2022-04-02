@@ -2404,13 +2404,12 @@ pub fn visit_located_token(
             Ok(())
         }
 
-        LocatedToken::Repeat(..) => {
-            panic!("Should never be called")
-        }
-        LocatedToken::RepeatUntil(..) => {
+        LocatedToken::Repeat(..) |
+        LocatedToken::RepeatUntil(..) |
+        LocatedToken::Rorg(..) => {
             panic!("Should be handled by ProcessedToken")
         }
-        LocatedToken::Rorg(address, code, span) => env.visit_rorg(address, code, Some(span)),
+
         LocatedToken::Switch(value, cases, default, span) => {
             env.visit_switch(
                 value,
@@ -2567,7 +2566,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Fail(ref exp) => env.visit_fail(exp.as_ref().map(|v| v.as_slice())),
         Token::Repeat(..) => { panic!("Should never be called")}
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
-        Token::Rorg(ref exp, ref code) => env.visit_rorg(exp, code, None),
+        Token::Rorg(ref exp, ref code) => panic!("Is delegated to ProcessedToken"),
         Token::Save {
             filename,
             address,
@@ -2856,12 +2855,18 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_rorg<E: ExprEvaluationExt, T: ListingElement<Expr = E> + Visited + MayHaveSpan>(
+    pub fn visit_rorg<'token, T, E>(
         &mut self,
         address: &E,
-        code: &[T],
+        code:  &mut [ProcessedToken<'token,T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), AssemblerError> 
+    where
+        E: ExprEvaluationExt,
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+    ProcessedToken<'token, T>: FunctionBuilder {
         // Get the next code address
         let address = self
             .resolve_expr_must_never_fail(address)
@@ -2893,7 +2898,7 @@ impl Env {
 
         // execute the listing
         self.nested_rorg += 1; // used to disable page functionalities
-        self.visit_listing(code)?;
+        visit_processed_tokens(code, self)?;
         self.nested_rorg -= 1;
 
         // restore the appropriate  address

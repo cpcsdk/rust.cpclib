@@ -34,6 +34,9 @@ pub trait ListingElement: Debug + Sized {
     fn repeat_until_listing(&self) -> &[Self];
     fn repeat_until_condition(&self) -> &Self::Expr;
 
+    fn is_rorg(&self) -> bool;
+    fn rorg_listing(&self) -> &[Self];
+    fn rorg_expr(&self) -> &Self::Expr;
 
     fn is_repeat(&self) -> bool;
     fn repeat_listing(&self) -> &[Self];

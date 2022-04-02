@@ -62,7 +62,8 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     Iterate(SimpleListingState<'token, T>),
     MacroCallOrBuildStruct(ExpandState),
     Repeat(SimpleListingState<'token, T>),
-    RepeatUntil(SimpleListingState<'token, T>)
+    RepeatUntil(SimpleListingState<'token, T>),
+    Rorg(SimpleListingState<'token, T>)
 }
 
 
@@ -409,6 +410,12 @@ where
             span: token.possible_span().cloned()
         }))
     }
+    else if token.is_rorg() {
+        Some(ProcessedTokenState::Rorg(SimpleListingState{
+            processed_tokens: build_processed_tokens_list(token.rorg_listing(), env),
+            span: token.possible_span().cloned()
+        }))
+    }
     else if token.is_call_macro_or_build_struct() {
         // one day, we may whish to maintain a state
         None
@@ -618,7 +625,7 @@ where
             }
 
             // Behavior based on the token
-            if self.token.is_macro_definition() {
+            let res = if self.token.is_macro_definition() {
                 // TODO really implement logic here
                 let name = self.token.macro_definition_name();
                 let arguments = self.token.macro_definition_arguments();
@@ -951,14 +958,33 @@ where
                         )
                     }
 
+
+                    Some(ProcessedTokenState::Rorg(SimpleListingState {
+                        processed_tokens,
+                        span
+                    })) => {
+                        env.visit_rorg(
+                            self.token.rorg_expr(),
+                            processed_tokens,
+                            span.as_ref()
+                        )
+                    }
+
                     // no state implies a standard visit
                     None => self.token.visited(env)
                 }
-            }
+            }?;
+
+            env.update_dollar();
+            Ok(res)
+
         };
 
         really_does_the_job().map_err(|e| AssemblerError::AlreadyRenderedError(e.to_string()))
     }
+
+
+
 }
 
 // let fname = span

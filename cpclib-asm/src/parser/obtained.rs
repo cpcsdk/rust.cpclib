@@ -1076,6 +1076,26 @@ impl ListingElement for LocatedToken {
     type TestKind = LocatedTestKind;
 
 
+    fn is_rorg(&self) -> bool {
+        match self {
+            Self::Rorg(..) => true,
+            _ => false
+        }
+    }
+
+    fn rorg_listing(&self) -> &[Self] {
+        match self {
+            Self::Rorg(_, lst, _) => lst.as_slice(),
+            _ => unreachable!()
+        }
+    }
+
+    fn rorg_expr(&self) -> &Self::Expr {
+        match self {
+            Self::Rorg(exp, _, _) => exp,
+            _ => unreachable!()
+        }
+    }
 
     fn is_iterate(&self)-> bool {
         match self {
