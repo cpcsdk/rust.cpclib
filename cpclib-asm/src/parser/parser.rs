@@ -3799,6 +3799,15 @@ pub fn parse_label(
 
         let label = start.take(start.input_len() - stop.input_len());
 
+        // Be sure that ::ld is not considered to be a label
+        if has_prefix && impossible_names(input.context().dotted_directive)
+        .any(|val| val == &label[2..].to_uppercase()) {
+            return Err(cpclib_common::nom::Err::Error(error_position!(
+                input,
+                ErrorKind::OneOf
+            )))           
+        }
+
         if impossible_names(input.context().dotted_directive)
             .any(|val| val == &label.to_uppercase())
         {
