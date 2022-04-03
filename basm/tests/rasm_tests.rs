@@ -254,7 +254,6 @@ import_rasm_success!{
 #define AUTOTEST_MACROPROX	" macro unemacro: nop: endm: global_label: ld hl, .table: .table";
 #define AUTOTEST_LOCAPROX	"repeat 1: @label  nop: .prox   nop: @label2 nop: djnz @label.prox: rend";
 #define AUTOTEST_FORMULA1	"a=5:b=2:assert int(a/b)==3:assert !a+!b==0:a=a*100:b=b*100:assert a*b==100000:ld hl,a*b-65536:a=123+-5*(-6/2)-50*2<<1";
-#define AUTOTEST_LIMITOK "org #100:limit #102:nop:limit #103:ld a,0:protect #105,#107:limit #108:xor a:org $+3:inc a" ;
 #define AUTOTEST_LIMIT06	"org #FFFF : nop";
 #define AUTOTEST_EMBEDDED_LABELS " disarkCounter = 0:MACRO dkps:PLY_AKG_DisarkPointerRegionStart_{disarkCounter}:ENDM" 
 		":MACRO dkpe\nPLY_AKG_DisarkPointerRegionEnd_{disarkCounter}:\ndisarkCounter = disarkCounter + 1:ENDM:\ndkps\ndkpe\ndkps";
@@ -297,6 +296,8 @@ import_rasm_failure!{
 #define AUTOTEST_DELAYED_RUN "run _start:nop:_start nop";
 #define AUTOTEST_INHIBITION	"if 0:ifused truc:ifnused glop:ifdef bidule:ifndef machin:ifnot 1:nop:endif:nop:else:nop:endif:endif:endif:endif:endif";
 #define AUTOTEST_LZ4	"lz4:repeat 10:nop:rend:defb 'roudoudoudouoneatxkjhgfdskljhsdfglkhnopnopnopnop':lzclose";
+#define AUTOTEST_LIMITOK "org #100:limit #102:nop:limit #103:ld a,0:protect #105,#107:limit #108:xor a:org $+3:inc a" ;
+
 }
 
 

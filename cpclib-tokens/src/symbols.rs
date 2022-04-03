@@ -10,6 +10,7 @@ use cpclib_common::smallvec::{smallvec, SmallVec};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{lazy_static, strsim};
 use delegate::delegate;
+use evalexpr::{build_operator_tree, HashMapContext, ContextWithMutableVariables};
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
@@ -293,6 +294,30 @@ pub enum Value {
     Struct(Struct),
     /// Counter for a repetition
     Counter(i32)
+}
+
+
+impl Into<evalexpr::Value> for Value {
+    fn into(self) -> evalexpr::Value {
+        match self {
+            Value::Expr(e) => {
+                match e {
+                    ExprResult::Float(f) => evalexpr::Value::Float(f.into()),
+                    ExprResult::Value(v) => evalexpr::Value::Int(v as _),
+                    ExprResult::Char(c) => evalexpr::Value::Int(c as _),
+                    ExprResult::Bool(b) => evalexpr::Value::Boolean(b),
+                    ExprResult::String(s) => evalexpr::Value::String(s.into()),
+                    ExprResult::List(l) => unimplemented!(),
+                    ExprResult::Matrix { width, height, content } => unimplemented!(),
+                }
+            },
+            Value::String(s) => evalexpr::Value::String(s.into()),
+            Value::Address(v) => evalexpr::Value::Int(v.address() as _),
+            Value::Macro(m) => evalexpr::Value::String(m.name.into()),
+            Value::Struct(s) => evalexpr::Value::String(s.name.into()),
+            Value::Counter(c) => evalexpr::Value::Int(c as _),
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -609,6 +634,7 @@ impl SymbolsTable {
     }
 
     /// Some symbols are local and need to be converted to their global value.
+    /// Some have expressions that need to be expended
     pub fn extend_local_and_patterns_for_symbol<S: Into<Symbol>>(
         &self,
         symbol: S
@@ -630,14 +656,38 @@ impl SymbolsTable {
 
         // make the replacement
         for model in replace.iter() {
-            let local_symbol = &model[1..model.len() - 1]; // remove {}
-            let local_value = match self.value(local_symbol)? {
+            let local_expr = &model[1..model.len() - 1]; // remove {}
+
+
+            
+            
+            let local_value = match self.value(local_expr)? {
                 Some(Value::String(s)) => s.to_string(),
                 Some(Value::Expr(e)) => e.to_string(),
                 Some(Value::Counter(e)) => e.to_string(),
                 _ => {
-                    dbg!(&model, &local_symbol, self.value(local_symbol));
-                    return Err(SymbolError::CannotModify(symbol.into()));
+                    dbg!(local_expr);
+
+
+                    let tree = build_operator_tree(local_expr).expect("Expression should be valid here. There is a bug in the assembler");
+
+                    // Fill the variable values to allow an evaluation
+                    let mut context = HashMapContext::new();
+                    for variable in tree.iter_variable_identifiers() {
+                        let variable_value = self.value(variable)?
+                        .ok_or_else(||{
+                            SymbolError::WrongSymbol(variable.into())
+                        })?;
+                        context.set_value(
+                            variable.to_owned(),
+                            variable_value.clone().into()
+                        ).unwrap();
+                    }
+
+                    // evaluate the expression
+                    let res = tree.eval_with_context(&context).map_err(|e| SymbolError::CannotModify(local_expr.into()))?;
+
+                    res.to_string()
                 }
             };
             symbol = symbol.replace(model, &local_value);

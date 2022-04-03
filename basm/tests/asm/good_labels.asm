@@ -19,3 +19,4 @@ outer2
 	ifndef outer2.inner1
 		fail "outer2.inner1 is wrongly undefined"
 	endif
+
