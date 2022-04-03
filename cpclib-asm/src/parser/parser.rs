@@ -1093,7 +1093,10 @@ pub fn parse_z80_line_complete(
     dbg!(&tokens);
     let (input, _) = cut(context(
         "Line ending expected",
-        alt((eof, line_ending))
+        preceded(
+            opt(char(':')), //we allow : as the very last char of a line
+            alt((eof, line_ending))
+        )
     ))(input)?;
 
     Ok((input, tokens))

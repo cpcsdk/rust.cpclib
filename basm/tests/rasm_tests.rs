@@ -1,5 +1,7 @@
 /// Contains some tests stolen to rasm source code
-/// 
+/// Note that the autotest only check the parsing and not the execution in opposite to rasm.
+/// I have not imported thos that rely on executation or those using a differnt syntax
+/// Test that fail should be seen as modifications to improve to the parser
 
 use std::process::{Command};
 
@@ -9,16 +11,29 @@ macro_rules! import_rasm_success {
 			#[ignore]
 			#[test]
 			fn $name() {
-				test_assemble(concat!($($code),+))
+				assemble_success(concat!($($code),+))
 			}
 	)+
 }
 
 }
 
+macro_rules! import_rasm_failure {
+	($ (#define $name:ident $($code:expr)+);+ ;)  => {$(
+				#[ignore]
+				#[test]
+				fn $name() {
+					assemble_failure(concat!($($code),+))
+				}
+		)+
+	}
+	
+	}
 
 
 
+
+// AUTOTEST_OPCODES is currently wrong. rasm  assembles impossible opcodes
 import_rasm_success!{
 #define AUTOTEST_NOINCLUDE "truc equ 0:if truc:include'bite':endif:nop";
 
@@ -208,10 +223,93 @@ import_rasm_success!{
 	":snaset CRTC_TYPE,0x1 :snaset CRTC_HCC,0x11 :snaset CRTC_CLC,0x11 :snaset CRTC_RLC,0x11 :snaset CRTC_VAC,0x11 :snaset CRTC_VSWC,0x11 :snaset CRTC_HSWC,0x11"
 	":snaset CRTC_STATE,0x11 :snaset GA_VSC,0x11 :snaset GA_ISC,0x11 :snaset GA_PEN,0x11 :snaset GA_ROMCFG,0x11 :snaset GA_RAMCFG,0x11 :snaset ROM_UP,0x11"
 	":snaset CRTC_REG,0,0x11 :snaset CRTC_REG,1,0x11 :snaset CRTC_REG,16,0x11 :snaset PSG_REG,0,0x11 :snaset PSG_REG,5,0x11 :snaset PSG_REG,15,0x11: bank : nop";
+	#define AUTOTEST_VIRGULE2 "print '5,,5':nop";
+	#define AUTOTEST_IFDEFMACRO	"macro test:nop:endm:ifndef test:error:else:test:endif:ifdef test:test:else:error:endif:nop";
+	#define AUTOTEST_NOT 	"myvar=10:myvar=10+myvar:if 5!=3:else:print glop:endif:ifnot 5:print glop:else:endif:" 
+						"ifnot 0:else:print glop:endif:if !(5):print glop:endif:if !(0):else:print glop:endif:" 
+						"ya=!0:if ya==1:else:print glop:endif:if !5:print glop:endif:ya = 0:ya =! 0:if ya == 1:" 
+						"else:print glop:endif:if ! 5:print glop:endif:if 1-!( !0 && !0):else:print glop:endif:nop" ;
+	#define AUTOTEST_LABNUM 	"mavar=67:label{mavar}truc:ld hl,7+2*label{mavar}truc:mnt=1234567:lab2{mavar}{mnt}:" 
+	"ld de,lab2{mavar}{mnt}:lab3{mavar}{mnt}h:ld de,lab3{mavar}{mnt}h";
+	#define AUTOTEST_EQUNUM		"mavar = 9:monlabel{mavar+5}truc:unalias{mavar+5}heu equ 50:autrelabel{unalias14heu}:ld hl,autrelabel50";
+	#define AUTOTEST_TICKER		"repeat 2: ticker start, mc:out (0),a:out (c),a:out (c),h:out (c),0:ticker stop, mc:if mc!=15:ld hl,bite:else:nop:endif:rend";
+	#define AUTOTEST_BANKORG	"bank 0:nop:org #5:nop:bank 1:unevar=10:bank 0:assert $==6:ret:bank 1:assert $==0:bank 0:assert $==7";
+	#define AUTOTEST_CHARSET	"charset 'abcde',0:defb 'abcde':defb 'a','b','c','d','e':defb 'a',1*'b','c'*1,1*'d','e'*1:charset:" 
+							"defb 'abcde':defb 'a','b','c','d','e':defb 'a',1*'b','c'*1,1*'d','e'*1";
+	#define AUTOTEST_CHARSET2	"charset 97,97+26,0:defb 'roua':charset:charset 97,10:defb 'roua':charset 'o',5:defb 'roua':charset 'ou',6:defb 'roua'";
+
+	#define AUTOTEST_LZSEGMENT	"org #100:debut:jr nz,zend:lz48:repeat 128:nop:rend:lzclose:jp zend:lz48:repeat 2:dec a:jr nz,@next:ld a,5:@next:jp debut:rend:" 
+							"lzclose:zend";
+
+#define AUTOTEST_MULTILZ	"bank: jr suivant: lz48: defs 100,#FF: lzclose: suivant jr lafin: lz49: defs 100,#FF: lzclose: lafin: bank: jr preums: " 
+				" preums jr suivant2: lzapu: defs 100,#FF: lzclose: suivant2 jr lafin2: lzexo: defs 100,#FF: lzclose: lafin2 ";
+
+#define AUTOTEST_MULTILZORG " tabeul: defw script0: defw script1: defw script2: " 
+				"script0: org #4000,$: lz48: start1: jr end1: defs 100: djnz start1: end1: lzclose: " 
+				"org $: script1: org #4000,$: lz49: start2: jr end2: defs 100: djnz start2: end2: lzclose: " 
+				"org $: script2: org #4000,$: lz49: start3: jr end3: defs 100: djnz start3: end3: lzclose: " 
+				"org $: ei: ret ";
+
+#define AUTOTEST_LZDEFERED	"lz48:defs 20:lzclose:defb $";
+#define AUTOTEST_MACROPROX	" macro unemacro: nop: endm: global_label: ld hl, .table: .table";
+#define AUTOTEST_LOCAPROX	"repeat 1: @label  nop: .prox   nop: @label2 nop: djnz @label.prox: rend";
+#define AUTOTEST_FORMULA1	"a=5:b=2:assert int(a/b)==3:assert !a+!b==0:a=a*100:b=b*100:assert a*b==100000:ld hl,a*b-65536:a=123+-5*(-6/2)-50*2<<1";
+#define AUTOTEST_LIMITOK "org #100:limit #102:nop:limit #103:ld a,0:protect #105,#107:limit #108:xor a:org $+3:inc a" ;
+#define AUTOTEST_LIMIT06	"org #FFFF : nop";
+#define AUTOTEST_EMBEDDED_LABELS " disarkCounter = 0:MACRO dkps:PLY_AKG_DisarkPointerRegionStart_{disarkCounter}:ENDM" 
+		":MACRO dkpe\nPLY_AKG_DisarkPointerRegionEnd_{disarkCounter}:\ndisarkCounter = disarkCounter + 1:ENDM:\ndkps\ndkpe\ndkps";
+
+#define AUTOTEST_INTORAM1 " buildsna : bankset 0 :  org #3FF8 : defb 'roudoudou in da house' ";
+
+#define AUTOTEST_DEFMOD "nbt=0: module preums: label1 nop: label3: label4: ifdef label1:nbt+=1:endif: ifdef label3:nbt+=1:endif:"
+"ifdef label4:nbt+=1:endif: ifndef label5:nbt+=1:endif: module deuze: label1 nop: label3: label5: ifdef label1:nbt+=1:endif:"
+"ifdef label3:nbt+=1:endif: ifndef label4:nbt+=1:endif: ifdef label5:nbt+=1:endif: assert nbt==8:"
+"module grouik: plop: ifused plop : glop=1 : endif:assert glop==1";
+}
+
+// AUTOTEST_INSTRMUSTFAILED is not tested as expected by asm as we stop right after the first failure
+import_rasm_failure!{
+	#define AUTOTEST_BADINCLUDE "include 'truc\n .bin' \n nop nop";
+	#define AUTOTEST_BADINCBIN "incl49 'truc\n .bin' \n nop nop";
+	#define AUTOTEST_BADINCLUDE02 "read: ldir : cp ';'";
+	#define AUTOTEST_SETINSIDE "ld hl,0=0xC9FB";
+	#define AUTOTEST_INSTRMUSTFAILED "ld a,b,c:ldi a: ldir bc:exx hl,de:exx de:ex bc,hl:ex hl,bc:ex af,af:ex hl,hl:ex hl:exx hl: "
+	"neg b:push b:push:pop:pop c:sub ix:add ix:add:sub:di 2:ei 3:ld i,c:ld r,e:rl:rr:rlca a:sla:sll:"
+	"ldd e:lddr hl:adc ix:adc b,a:xor 12,13:xor b,1:xor:or 12,13:or b,1:or:and 12,13:and b,1:and:inc:dec";
+	#define AUTOTEST_VIRGULE "defb 5,5,,5";
+	#define AUTOTEST_REPEATKO	"repeat 5:nop";
+	#define AUTOTEST_WHILEKO	"while 5:nop";
+	#define AUTOTEST_SAVEINVALID1	"nop : save'gruik',20,-100";
+
+#define AUTOTEST_SAVEINVALID2	"nop : save'gruik',-20,100";
+
+#define AUTOTEST_SAVEINVALID3	"nop : save'gruik',40000,30000";
+
+#define AUTOTEST_MACRO_CONF01   " nop: macro label1: nop: mend: macro label1: nop: mend:";
+#define AUTOTEST_MACRO_CONF02   " label1=0: macro label1: nop: mend: nop:";
+#define AUTOTEST_MACRO_CONF03   " label1 equ #100: macro label1: nop: mend: nop:";
+#define AUTOTEST_MACRO_CONF04   " label1 nop: macro label1: nop: mend: nop";
+#define AUTOTEST_LIMITKO	"limit #100:org #100:add ix,ix";
+#define AUTOTEST_LIMIT03	"limit -1 : nop";
+#define AUTOTEST_LIMIT04	"limit #10001 : nop";
+#define AUTOTEST_LIMIT05	"org #FFFF : ldir";
+#define AUTOTEST_LIMIT07	"org #ffff : Start:  equ $ :    di :     ld hl,#c9fb :  ld (#38),hl";
+#define AUTOTEST_DELAYED_RUN "run _start:nop:_start nop";
+#define AUTOTEST_INHIBITION	"if 0:ifused truc:ifnused glop:ifdef bidule:ifndef machin:ifnot 1:nop:endif:nop:else:nop:endif:endif:endif:endif:endif";
+#define AUTOTEST_LZ4	"lz4:repeat 10:nop:rend:defb 'roudoudoudouoneatxkjhgfdskljhsdfglkhnopnopnopnop':lzclose";
 }
 
 
-fn test_assemble(code: &str) {
+fn assemble_success(code: &str) {
+	test_assemble(code, true)
+}
+
+fn assemble_failure(code: &str) {
+	test_assemble(code, false)
+}
+
+
+fn test_assemble(code: &str, success: bool) {
 
 	let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
 	let input_fname = input_file.path().as_os_str().to_str().unwrap();
@@ -230,9 +328,16 @@ fn test_assemble(code: &str) {
 	.output()
 	.expect("Unable to launch basm");
 
-	if !res.status.success() {
+	if success && !res.status.success() {
 		panic!(
-			"Failure to assemble.n{}",
+			"Failure to assemble right code.{}",
+			String::from_utf8_lossy(&res.stderr)
+		);
+	}
+
+	if !success && res.status.success() {
+		panic!(
+			"Succeed to assemble wrong code{}",
 			String::from_utf8_lossy(&res.stderr)
 		);
 	}
