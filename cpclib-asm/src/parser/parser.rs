@@ -965,7 +965,7 @@ fn eof(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
 enum LabelModifier {
     Equ,
     Set,
-    Equal,
+    Equal(Option<BinaryOperation>),
     SetN,
     Next
 }
@@ -1156,7 +1156,7 @@ pub fn parse_z80_line_component_label_like(
 
     // ensure let uses =
     if r#let.is_some() {
-        if let Some(LabelModifier::Equal) = &label_modifier {
+        if let Some(LabelModifier::Equal(..)) = &label_modifier {
             // ok
         }
         else {
@@ -1168,7 +1168,7 @@ pub fn parse_z80_line_component_label_like(
 
     // Get the missing information for the standard label
     let (input, expr_arg) = match &label_modifier {
-        Some(LabelModifier::Equ | LabelModifier::Equal | LabelModifier::Set) => {
+        Some(LabelModifier::Equ | LabelModifier::Equal(..) | LabelModifier::Set) => {
             cut(context("Value error", map(expr, |e| Some(e))))(input)?
         }
         _ => (input, None)
@@ -1196,8 +1196,11 @@ pub fn parse_z80_line_component_label_like(
         // Here we know it was a modified label; so we handle it before treating next opcode
         let token = match label_modifier {
             Some(LabelModifier::Equ) => Token::Equ(label.into(), expr_arg.unwrap()),
-            Some(LabelModifier::Equal | LabelModifier::Set) => {
-                Token::Assign(label.into(), expr_arg.unwrap())
+            Some(LabelModifier::Equal(op)) => {
+                Token::Assign(label.into(), expr_arg.unwrap(), op)
+            } 
+            Some(LabelModifier::Set) => {
+                Token::Assign(label.into(), expr_arg.unwrap(), None)
             }
             Some(LabelModifier::SetN) => {
                 Token::SetN(label.into(), source_label.unwrap().into(), additional_arg)
@@ -1318,6 +1321,33 @@ pub fn parse_z80_line_component_label_like(
 }
 
 
+#[inline]
+pub fn  parse_assign_operator(input: Z80Span) -> IResult<Z80Span, Option<BinaryOperation>, Z80ParserError> {
+
+    alt((
+        value(None, tag("=")),
+
+        value(Some(BinaryOperation::RightShift), tag(">>=")),
+        value(Some(BinaryOperation::LeftShift), tag("<<=")),
+
+        value(Some(BinaryOperation::Add), tag("+=")),
+        value(Some(BinaryOperation::Sub), tag("-=")),
+        value(Some(BinaryOperation::Mul), tag("*=")),
+        value(Some(BinaryOperation::Div), tag("/=")),
+        value(Some(BinaryOperation::Mod), tag("%=")),
+
+        value(Some(BinaryOperation::BinaryAnd), tag("&=")),
+        value(Some(BinaryOperation::BinaryOr), tag("|=")),
+        value(Some(BinaryOperation::BinaryXor), tag("^=")),
+
+        value(Some(BinaryOperation::BooleanAnd), tag("&&=")),
+        value(Some(BinaryOperation::BooleanOr), tag("||=")),
+
+
+    ))(input)
+}
+
+
 
 /// No opcodes are expected there.
 /// Initially it was supposed to manage lines with only labels, however it has been extended
@@ -1333,14 +1363,6 @@ pub fn parse_z80_line_label_aware_directive(
     let _after_let = input.clone();
     let (input, label) = context("Label issue", preceded(space0, parse_label(true)))(input)?;
 
-    #[derive(Clone, Copy)]
-    enum LabelModifier {
-        Equ,
-        Set,
-        Equal,
-        SetN,
-        Next
-    }
 
     // TODO make these stuff alternatives ...
     // Manage Equ
@@ -1366,14 +1388,14 @@ pub fn parse_z80_line_label_aware_directive(
             ),
             |_| LabelModifier::Set
         ),
-        map(delimited(space0, tag("="), space0), |_| {
-            LabelModifier::Equal
+        map(delimited(space0, parse_assign_operator, space0), |op| {
+            LabelModifier::Equal(op)
         })
     ))(input)?;
 
     // ensure let uses =
     if r#let.is_some() {
-        if let LabelModifier::Equal = &label_modifier {
+        if let LabelModifier::Equal(..) = &label_modifier {
             // ok
         }
         else {
@@ -1384,7 +1406,7 @@ pub fn parse_z80_line_label_aware_directive(
     }
 
     let (input, expr_arg) = match &label_modifier {
-        LabelModifier::Equ | LabelModifier::Equal | LabelModifier::Set => {
+        LabelModifier::Equ | LabelModifier::Equal(..) | LabelModifier::Set => {
             cut(context("Value error", map(expr, |e| Some(e))))(input)?
         }
         _ => (input, None)
@@ -1413,8 +1435,11 @@ pub fn parse_z80_line_label_aware_directive(
         // Build the needed token for the label of interest
         let token = match label_modifier {
             LabelModifier::Equ => Token::Equ(label.into(), expr_arg.unwrap()),
-            LabelModifier::Equal | LabelModifier::Set => {
-                Token::Assign(label.into(), expr_arg.unwrap())
+            LabelModifier::Equal(op)=> {
+                Token::Assign(label.into(), expr_arg.unwrap(), op)
+            },
+             LabelModifier::Set => {
+                Token::Assign(label.into(), expr_arg.unwrap(), None)
             }
             LabelModifier::SetN => {
                 Token::SetN(label.into(), source_label.unwrap().into(), additional_arg)
@@ -1696,12 +1721,13 @@ pub fn parse_range(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 }
 
 pub fn parse_assign(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, (label, value)) = pair(
-        terminated(parse_label(false), delimited(space0, tag("="), space0)),
+    let (input, (label, op, value)) = tuple((
+        parse_label(false), 
+        delimited(space0, parse_assign_operator, space0),
         expr
-    )(input)?;
+    ))(input)?;
 
-    Ok((input, Token::Assign(label.into(), value)))
+    Ok((input, Token::Assign(label.into(), value, op)))
 }
 
 /// Parse the opcodes. TODO rename as parse_opcode ...

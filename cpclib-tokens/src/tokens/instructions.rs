@@ -504,7 +504,7 @@ impl ToSimpleToken for Token {
 pub enum Token {
     Align(Expr, Option<Expr>),
     Assert(Expr, Option<Vec<FormattedExpr>>),
-    Assign(SmolStr, Expr),
+    Assign(SmolStr, Expr, Option<BinaryOperation>),
 
     /// Configure the bank - completely incompatible with rasm behavior
     /// The expression corresponds to the GATE ARRAY value to select the bank of interest
@@ -638,7 +638,7 @@ impl Clone for Token {
         match self {
             Token::Align(a, b) => Token::Align(a.clone(), b.clone()),
             Token::Assert(a, b) => Token::Assert(a.clone(), b.clone()),
-            Token::Assign(a, b) => Token::Assign(a.clone(), b.clone()),
+            Token::Assign(a, b, c) => Token::Assign(a.clone(), b.clone(), c.clone()),
             Token::Bank(b) => Token::Bank(b.clone()),
             Token::Bankset(b) => Token::Bankset(b.clone()),
             Token::Basic(a, b, c) => Token::Basic(a.clone(), b.clone(), c.clone()),

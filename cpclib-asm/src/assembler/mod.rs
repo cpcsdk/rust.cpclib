@@ -2553,7 +2553,7 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::NoExport(ref labels) => env.visit_noexport(labels.as_slice()),
         Token::Export(ref labels) => env.visit_export(labels.as_slice()),
         Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
-        Token::Assign(ref label, ref exp) => visit_assign(label, exp, env),
+        Token::Assign(ref label, ref exp, op) => visit_assign(label, exp, op.as_ref(), env),
         Token::Pause => {
             env.visit_pause(None);
             Ok(())
@@ -3236,8 +3236,17 @@ fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerErro
     }
 }
 
-fn visit_assign(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
-    let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
+fn visit_assign(label: &str, exp: &Expr, op: Option<&BinaryOperation>, env: &mut Env) -> Result<(), AssemblerError> {
+    let value = if let Some(op) = op {
+        let new_exp = Expr::BinaryOperation(
+            *op, 
+            box Expr::Label(label.into()), 
+            box exp.clone()
+        );
+        env.resolve_expr_must_never_fail(&new_exp)?
+    } else {
+        env.resolve_expr_may_fail_in_first_pass(exp)?
+    };
 
     env.output_trigger
         .as_mut()
