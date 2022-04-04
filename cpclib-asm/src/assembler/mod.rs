@@ -260,12 +260,15 @@ impl CharsetEncoding {
                 }
             }
             CharsetFormat::Char(c, i) => {
+                let c = env.resolve_expr_must_never_fail(c)?.char()?;
                 let i = env.resolve_expr_must_never_fail(i)?.int()?;
-                self.lut.insert(*c, i);
+                self.lut.insert(c, i);
             }
             CharsetFormat::Interval(a, b, s) => {
+                let a = env.resolve_expr_must_never_fail(a)?.char()?;
+                let b = env.resolve_expr_must_never_fail(b)?.char()?;
                 let mut s = env.resolve_expr_must_never_fail(s)?.int()?;
-                for c in *a..=*b {
+                for c in a..=b {
                     self.lut.insert(c, s);
                     s += 1;
                 }

@@ -1358,7 +1358,13 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
                 Ok((self.float()? * f2.into_inner()).into())
             }
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 * v2).into()),
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((*v1 * *v2).into()),
+
+
+            (ExprResult::Value(v1), ExprResult::Char(v2)) |
+            (ExprResult::Char(v2), ExprResult::Value(v1))
+            => Ok((*v1 * (*v2 as i32)).into()),
+
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible multiplication between {} and {}",

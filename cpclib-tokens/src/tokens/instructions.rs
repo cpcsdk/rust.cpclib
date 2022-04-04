@@ -470,7 +470,7 @@ impl BinaryTransformation {
     }
 }
 
-/// Define characeters encoding
+/// Define characters encoding
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CharsetFormat {
     /// Reset the encoding knowledge
@@ -478,9 +478,9 @@ pub enum CharsetFormat {
     /// Specify all chars in a row
     CharsList(Vec<char>, Expr),
     /// Attribute the code to a single char
-    Char(char, Expr),
+    Char(Expr, Expr),
     /// Specify for a given interval
-    Interval(char, char, Expr)
+    Interval(Expr, Expr, Expr)
 }
 
 /// TODO use a more complete type that can use a subset of functions to generate a string

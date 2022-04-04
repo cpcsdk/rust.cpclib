@@ -1279,22 +1279,41 @@ pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError>
 pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     let (input, _) = parse_directive_word("CHARSET")(input)?;
 
-    let (input, charset) = opt(parse_charset_string)(input)?;
+    let (input, charset) = opt(alt((
+        parse_charset_string,
+        parse_charset_start_stop_end
+    )))(input)?;
 
     Ok((
         input,
-        charset.unwrap_or_else(|| Token::Charset(CharsetFormat::Reset))
+        charset
+            .map(|c| Token::Charset(c))
+            .unwrap_or_else(|| Token::Charset(CharsetFormat::Reset))
     ))
 }
 
-pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_charset_start_stop_end(input: Z80Span) -> IResult<Z80Span, CharsetFormat, Z80ParserError> {
+    let (input, (start, stop, end)) = tuple((
+        expr,
+        preceded(parse_comma, expr),
+        opt(preceded(parse_comma, expr)),
+    ))(input)?;
+
+    let format = if let Some(end) = end {
+        CharsetFormat::Interval(start, stop, end)
+    } else {
+        CharsetFormat::Char(start, stop)
+    };
+    Ok((input, format))
+}
+
+pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, CharsetFormat, Z80ParserError> {
     // manage the string format - TODO manage the others too
     let (input, chars) = context("Missing string", parse_string)(input)?;
     let (input, start) = context("Missing start value", preceded(parse_comma, expr))(input)?;
     let format = CharsetFormat::CharsList(chars.chars().collect_vec(), start);
 
-    let charset = Token::Charset(format);
-    Ok((input, charset))
+    Ok((input, format))
 }
 
 /// Parser for the include directive
