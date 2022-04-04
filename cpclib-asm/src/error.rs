@@ -800,7 +800,7 @@ impl AssemblerError {
                 )
             }
             AssemblerError::InvalidSymbol(msg) => {
-                write!(f, "Invalid symbol {}", msg)
+                write!(f, "Invalid symbol \"{}\"", msg)
             }
             AssemblerError::NoDataToCrunch => {
                 write!(f, "There is no bytes to crunch")

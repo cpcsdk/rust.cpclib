@@ -1143,7 +1143,7 @@ pub fn parse_z80_line_label_aware_directive(
     let (input, r#let) = opt(delimited(space0, parse_directive_word("LET"), space0))(input)?;
 
     let _after_let = input.clone();
-    let (input, label) = context("Label issue", preceded(space0, parse_label(true)))(input)?;
+    let (input, label) = context("Label issue", preceded(space0, parse_label(false)))(input)?;
 
 
 
@@ -1187,7 +1187,11 @@ pub fn parse_z80_line_label_aware_directive(
         }
         else {
             // ensure there is nothing after
-            let _  = tuple((my_space0, my_line_ending))(input.clone())?;
+            dbg!(&input);
+            let _  = dbg!(alt((
+                tuple((my_space0, tag(":"))),
+                tuple((my_space0, my_line_ending)),
+            ))(input.clone()))?;
             return dbg!(Ok((input, LocatedToken::Label(label))));
         }
     }

@@ -667,6 +667,7 @@ impl SymbolsTable {
                 Some(Value::Counter(e)) => e.to_string(),
                 _ => {
                     dbg!(local_expr);
+                    dbg!(&self);
 
 
                     let tree = build_operator_tree(local_expr).expect("Expression should be valid here. There is a bug in the assembler");
@@ -674,10 +675,11 @@ impl SymbolsTable {
                     // Fill the variable values to allow an evaluation
                     let mut context = HashMapContext::new();
                     for variable in tree.iter_variable_identifiers() {
-                        let variable_value = self.value(variable)?
+                        let variable_value = dbg!(self.value(variable)?
                         .ok_or_else(||{
+                            panic!();
                             SymbolError::WrongSymbol(variable.into())
-                        })?;
+                        }))?;
                         context.set_value(
                             variable.to_owned(),
                             variable_value.clone().into()
@@ -1195,7 +1197,7 @@ impl SymbolsTableCaseDependent {
     }
 
     /// Modify the Value value depending on the case confurigration (do nothing, or set uppercase)
-    fn normalize_symbol<S: Into<Symbol>>(&self, symbol: S) -> Symbol {
+    pub fn normalize_symbol<S: Into<Symbol>>(&self, symbol: S) -> Symbol {
         if self.case_sensitive {
             symbol.into()
         }

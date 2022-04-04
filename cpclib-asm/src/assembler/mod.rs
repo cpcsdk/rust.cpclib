@@ -631,7 +631,7 @@ impl Env {
                     )})
                 } else {
                     self.symbols_mut()
-                        .set_symbol_to_value(label, value);
+                        .set_symbol_to_value(label, value)?;
                     Ok(())
                 }
              },
@@ -641,12 +641,12 @@ impl Env {
             )}),
             (false, AssemblingPass::FirstPass) | (false, AssemblingPass::Uninitialized) => {
                 self.symbols_mut()
-                    .set_symbol_to_value(label, value);
+                    .set_symbol_to_value(label, value)?;
                 Ok(())
             }
             (true, AssemblingPass::SecondPass | AssemblingPass::ListingPass) => {
                 self.symbols_mut()
-                    .update_symbol_to_value(&label.to_owned(), value);
+                    .update_symbol_to_value(&label.to_owned(), value)?;
                 Ok(())
             }
             (_, _) => panic!(
@@ -1468,6 +1468,9 @@ impl Env {
     }
 
     fn visit_label(&mut self, label: &str) -> Result<(), AssemblerError> {
+        let label = self.symbols().normalize_symbol(label);
+        let label = label.value();
+
         // A label cannot be defined multiple times
         let res = if self.symbols().contains_symbol(label)?
             && (self.pass.is_first_pass()
@@ -1497,7 +1500,7 @@ impl Env {
         // Try to fallback on a macro call - parser is not that much great
         if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
             if kind == "macro" || kind == "struct" {
-                unimplemented!("Need to reactivate this case that is supposed to not work anymore");
+                return Err(AssemblerError::AssemblingError { msg: "Use (void) for macros with no parameters to disambiguate them with labels".to_owned()});
             // self.visit_call_macro_or_build_struct(&Token::MacroCall(
             // label.into(),
             // Default::default()
@@ -2274,14 +2277,14 @@ where
         processed_token::visit_processed_tokens(&mut tokens, &mut env)?;
     }
 
+    // Add an additional pass to build the listing (this way it is built only one time)
     if options.output_builder.is_some() {
         env.pass = AssemblingPass::ListingPass;
         env.start_new_pass();
-        for token in tokens.iter_mut() {
-            token
-                .visited(&mut env)
-                .expect("No error can arise in listing output mode; there is a bug somewhere")
-        }
+        processed_token::visit_processed_tokens(&mut tokens, &mut env)
+            .map_err(|e| eprintln!("{}",e))
+                .expect("No error can arise in listing output mode; there is a bug somewhere");
+        
     }
 
     if let Some(trigger) = env.output_trigger.as_mut() {
