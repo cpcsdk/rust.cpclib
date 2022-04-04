@@ -5,16 +5,69 @@
 
 use std::process::{Command};
 
+#[derive(Default)]
+struct VerifyOutput {
+	size: Option<usize>,
+	chk: Option<usize>,
+	opcodes: Vec<(usize, u8)>
+}
+
+macro_rules! import_rasm_check {
+	($verif:ident, chk($chk:expr)) => {
+		$verif.chk = Some($chk);
+	} ;
+
+	($verif:ident, len($chk:expr)) => {
+		$verif.size = Some($chk);
+	} ;
+
+	($verif:ident, opcode0($chk:expr)) => {
+		$verif.opcodes.push((0, $chk));
+	} ;
+
+	($verif:ident, opcode1($chk:expr)) => {
+		$verif.opcodes.push((1, $chk));
+	} ;
+
+	($verif:ident, opcode2($chk:expr)) => {
+		$verif.opcodes.push((2, $chk));
+	} ;
+
+	($verif:ident, opcode3($chk:expr)) => {
+		$verif.opcodes.push((3, $chk));
+	} ;
+
+	($verif:ident, opcode4($chk:expr)) => {
+		$verif.opcodes.push((4, $chk));
+	} ;
+}
+
+
 
 macro_rules! import_rasm_success {
-($ (#define $name:ident $($code:expr)+);+ ;)  => {$(
-			#[ignore]
-			#[test]
-			fn $name() {
-				assemble_success(concat!($($code),+))
-			}
-	)+
-}
+
+	($ (#define 
+		$name:ident 
+		$(:$test:ident($value:expr):)*
+		$($code:expr)+
+	   );+  
+		;
+	)  => {$(
+				#[ignore]
+				#[test]
+				fn $name() {
+					let mut verif = VerifyOutput::default();
+					$(
+						//verif.chk = Some($chk);
+						import_rasm_check!(verif, $test($value));
+					)?
+					assemble_success(concat!($($code),+), verif)
+				}
+		)+
+	};
+
+
+
 
 }
 
@@ -23,7 +76,7 @@ macro_rules! import_rasm_failure {
 				#[ignore]
 				#[test]
 				fn $name() {
-					assemble_failure(concat!($($code),+))
+					assemble_failure(concat!($($code),+), VerifyOutput::default())
 				}
 		)+
 	}
@@ -40,6 +93,14 @@ macro_rules! import_rasm_failure {
 
 // AUTOTEST_OPCODES is currently wrong. rasm  assembles impossible opcodes
 import_rasm_success!{
+
+	#define AUTOTEST_ORG		
+	:len(4):
+	:opcode1(0x80):
+	:opcode2(2):
+	:opcode3(0x10):
+	"ORG #8000,#1000:defw $:ORG $:defw $"
+	;
 #define AUTOTEST_NOINCLUDE "truc equ 0:if truc:include'bite':endif:nop";
 
 #define AUTOTEST_SWITCH		"mavar=4:switch mavar:case 1:nop:case 4:defb 4:case 3:defb 3:break:case 2:nop:case 4:defb 4:endswitch";
@@ -238,9 +299,13 @@ import_rasm_success!{
 	"ld de,lab2{mavar}{mnt}:lab3{mavar}{mnt}h:ld de,lab3{mavar}{mnt}h";
 	#define AUTOTEST_EQUNUM		"mavar = 9:monlabel{mavar+5}truc:unalias{mavar+5}heu equ 50:autrelabel{unalias14heu}:ld hl,autrelabel50";
 	#define AUTOTEST_TICKER		"repeat 2: ticker start, mc:out (0),a:out (c),a:out (c),h:out (c),0:ticker stop, mc:if mc!=15:ld hl,bite:else:nop:endif:rend";
-	#define AUTOTEST_CHARSET	"charset 'abcde',0:defb 'abcde':defb 'a','b','c','d','e':defb 'a',1*'b','c'*1,1*'d','e'*1:charset:" 
-							"defb 'abcde':defb 'a','b','c','d','e':defb 'a',1*'b','c'*1,1*'d','e'*1";
-	#define AUTOTEST_CHARSET2	"charset 97,97+26,0:defb 'roua':charset:charset 97,10:defb 'roua':charset 'o',5:defb 'roua':charset 'ou',6:defb 'roua'";
+	#define AUTOTEST_CHARSET	
+	"charset 'abcde',0:defb 'abcde':defb 'a','b','c','d','e':defb 'a',1*'b','c'*1,1*'d','e'*1:charset:" 
+							"defb 'abcde':defb 'a','b','c','d','e':defb 'a',1*'b','c'*1,1*'d','e'*1" ;
+	#define AUTOTEST_CHARSET2	
+	:chk(0x312):
+	:len(16):
+	"charset 97,97+26,0:defb 'roua':charset:charset 97,10:defb 'roua':charset 'o',5:defb 'roua':charset 'ou',6:defb 'roua'";
 
 	#define AUTOTEST_LZSEGMENT	"org #100:debut:jr nz,zend:lz48:repeat 128:nop:rend:lzclose:jp zend:lz48:repeat 2:dec a:jr nz,@next:ld a,5:@next:jp debut:rend:" 
 							"lzclose:zend";
@@ -305,16 +370,16 @@ import_rasm_failure!{
 }
 
 
-fn assemble_success(code: &str) {
-	test_assemble(code, true)
+fn assemble_success(code: &str, verify: VerifyOutput) {
+	test_assemble(code, true, verify)
 }
 
-fn assemble_failure(code: &str) {
-	test_assemble(code, false)
+fn assemble_failure(code: &str, verify: VerifyOutput) {
+	test_assemble(code, false, verify)
 }
 
 
-fn test_assemble(code: &str, success: bool) {
+fn test_assemble(code: &str, success: bool, verify: VerifyOutput) {
 
 	let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
 	let input_fname = input_file.path().as_os_str().to_str().unwrap();
@@ -332,6 +397,28 @@ fn test_assemble(code: &str, success: bool) {
 	])
 	.output()
 	.expect("Unable to launch basm");
+
+
+	if success && res.status.success() {
+		let res = std::fs::read(output_fname).unwrap();
+
+		if let Some(chk) = verify.chk {
+			let sum: usize = res.iter()
+				.map(|b| *b as usize)
+				.sum();
+			assert_eq!(chk, sum);
+		}
+
+		if let Some(size) = verify.size {
+			assert_eq!(size, res.len());
+		}
+
+
+		for (idx,byte) in verify.opcodes {
+			assert_eq!(byte, res[idx]);
+		}
+	}
+
 
 	if success && !res.status.success() {
 		panic!(
