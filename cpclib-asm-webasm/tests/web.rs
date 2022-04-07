@@ -41,3 +41,19 @@ fn test_assemble_success() {
     let result = assemble_snapshot(&source, &config);
     assert!(result.is_ok());
 }
+
+#[wasm_bindgen_test]
+fn test_fail_save() {
+    let source =  " SAVE \"test\"";
+    let config = create_parser_config("test.asm");
+    let result = assemble_snapshot(&source, &config);
+    assert!(result.is_err());
+}
+
+#[wasm_bindgen_test]
+fn test_fail_include() {
+    let source =  " include \"test.asm\"";
+    let config = create_parser_config("test.asm");
+    let result = assemble_snapshot(&source, &config);
+    assert!(result.is_err());
+}

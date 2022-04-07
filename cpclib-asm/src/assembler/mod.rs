@@ -1957,6 +1957,12 @@ impl Env {
         dsk_filename: Option<&String>,
         _side: Option<&Expr>
     ) -> Result<(), AssemblerError> {
+        if cfg!(target_arch = "wasm32") {
+            return Err(AssemblerError::AssemblingError { msg: 
+                "SAVE command is not allowed in a web-based assembling.".to_owned()
+            })
+        }
+
         let from = match address {
             Some(address) => Some(self.resolve_expr_must_never_fail(address)?.int()?),
             None => None

@@ -698,6 +698,12 @@ where
                     }
 
                     Some(ProcessedTokenState::Incbin(IncbinState{contents})) => {
+                        if cfg!(target_arch = "wasm32") {
+                            return Err(AssemblerError::AssemblingError { msg: 
+                                "INCBIN-like directives are not allowed in a web-based assembling.".to_owned()
+                            });
+                        }
+
                         // Handle file loading
                         let fname = self.token.incbin_fname();
                         let fname = get_filename(fname, ctx, Some(env))?;
@@ -796,6 +802,12 @@ where
 
 
                     Some(ProcessedTokenState::Include(IncludeState(ref mut contents))) => {
+                        if cfg!(target_arch = "wasm32") {
+                            return Err(AssemblerError::AssemblingError { msg: 
+                                "INCLUDE-like directives are not allowed in a web-based assembling.".to_owned()
+                            });
+                        }
+
                         let fname = self.token.include_fname();
                         let fname = get_filename(fname, ctx, Some(env))?;
 
