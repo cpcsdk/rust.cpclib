@@ -544,6 +544,7 @@ pub fn parse_crunched_section(
             map(parse_directive_word("LZ48"), |_| CrunchType::LZ48),
             map(parse_directive_word("LZ49"), |_| CrunchType::LZ49),
             map(parse_directive_word("LZX7"), |_| CrunchType::LZX7),
+            #[cfg(not(target_arch = "wasm32"))]
             map(parse_directive_word("LZAPU"), |_| CrunchType::LZAPU)
         ))
     )(input)?;
@@ -1365,6 +1366,7 @@ pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
         map(tag_no_case("INCEXO"), |_| BinaryTransformation::Exomizer),
         map(tag_no_case("INCL48"), |_| BinaryTransformation::Lz48),
         map(tag_no_case("INCL49"), |_| BinaryTransformation::Lz49),
+        #[cfg(not(target_arch = "wasm32"))]
         map(tag_no_case("INCAPU"), |_| BinaryTransformation::Aplib)
     ))(input)?;
 

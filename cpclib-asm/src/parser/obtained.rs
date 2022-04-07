@@ -11,7 +11,10 @@ use cpclib_common::nom::multi::{fold_many0, many_till};
 use cpclib_common::nom::sequence::{delimited, preceded};
 use cpclib_common::nom::{Err, IResult, InputLength, InputTake, self};
 use cpclib_common::nom_locate::LocatedSpan;
+
+#[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
+
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
@@ -19,7 +22,6 @@ use cpclib_tokens::{
     ListingElement, MacroParam, MacroParamElement, TestKind, TestKindElement, ToSimpleToken, Token,
     UnaryFunction, UnaryOperation, UnaryTokenOperation
 };
-use libc::Elf32_Off;
 use ouroboros::self_referencing;
 
 use super::{parse_z80_line, ParserContext, Z80Span, parse_z80_line_complete, Z80ParserError};
@@ -1819,9 +1821,14 @@ impl LocatedListing {
     // }
 
     pub fn as_listing(&self) -> BaseListing<Token> {
-        self.deref()
-            .par_iter()
-            .map(|lt| lt.to_token())
+        #[cfg(not(target_arch = "wasm32"))]
+        let iter = self.deref()
+            .par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iter = self.deref()
+            .iter();
+
+        iter.map(|lt| lt.to_token())
             .map(|c| -> Token { c.into_owned() })
             .collect::<Vec<Token>>()
             .into()

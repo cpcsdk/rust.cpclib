@@ -6,6 +6,7 @@ use web_sys::console;
 
 use cpclib_asm::{preamble::*, error::AssemblerError};
 
+
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 

@@ -2,6 +2,8 @@ use std::io::Write;
 
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
+
+#[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
 
 use super::report::SavedFile;
@@ -216,9 +218,16 @@ impl DelayedCommands {
 /// Commands execution
 impl DelayedCommands {
     pub fn execute_save(&self, env: &Env) -> Result<Vec<SavedFile>, AssemblerError> {
-        let res = self
+        #[cfg(not(target_arch = "wasm32"))]
+        let iter = self
             .save_commands
-            .par_iter()
+            .par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iter = self
+            .save_commands
+            .iter();
+
+        let res = iter
             .map(|cmd| cmd.execute_on(env))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
 

@@ -1,3 +1,6 @@
+#ifndef __wasm
+
+
 #define MemFree free
 #define MemRealloc realloc
 #define MemMalloc malloc
@@ -48,7 +51,7 @@
  *
  */
 
-#include <stdio.h>
+//#include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5770,3 +5773,5 @@ trsort(saidx_t *ISA, saidx_t *SA, saidx_t n, saidx_t depth) {
     if(unsorted == 0) { break; }
   }
 }
+
+#endif

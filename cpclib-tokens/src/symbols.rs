@@ -3,9 +3,14 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 
+#[cfg(not(target_arch = "wasm32"))]
+use cpclib_common::rayon::prelude::*;
+
+#[cfg(not(target_arch = "wasm32"))]
+use cpclib_common::rayon::iter::IntoParallelRefIterator;
+
 
 use cpclib_common::itertools::Itertools;
-use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::{smallvec, SmallVec};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{lazy_static, strsim};
@@ -1082,19 +1087,29 @@ impl SymbolsTable {
             .any(|symbol| self.current_pass_map.contains_key(&symbol)))
     }
 
+
+
     /// Returns the closest Value
     pub fn closest_symbol<S: Into<Symbol>>(
         &self,
         symbol: S,
         r#for: SymbolFor
     ) -> Result<Option<SmolStr>, SymbolError> {
-        use cpclib_common::rayon::iter::IntoParallelRefIterator;
+
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
-        Ok(self
-            .map
-            .par_iter()
-            .filter(|(_k, v)| {
+            #[cfg(not(target_arch = "wasm32"))]
+            let iter = self
+                    .map
+                    .par_iter(); 
+            #[cfg(target_arch = "wasm32")]
+            let iter = self
+                .map
+                .iter();
+
+            Ok(
+                iter
+                .filter(|(_k, v)| {
                 match (v, r#for) {
                     (Value::Expr(_), SymbolFor::Number)
                     | (Value::Expr(_), SymbolFor::Address)

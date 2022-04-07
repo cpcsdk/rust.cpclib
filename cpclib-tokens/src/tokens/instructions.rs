@@ -363,6 +363,7 @@ pub enum CrunchType {
     LZ4,
     LZX7,
     LZEXO,
+    #[cfg(not(target_arch = "wasm32"))]
     LZAPU
 }
 
@@ -455,6 +456,7 @@ pub enum BinaryTransformation {
     Lz49,
     Lz48,
     // compression with aplib
+    #[cfg(not(target_arch = "wasm32"))]
     Aplib
 }
 
@@ -464,6 +466,7 @@ impl BinaryTransformation {
             BinaryTransformation::None => None,
             BinaryTransformation::Exomizer => Some(CrunchType::LZEXO),
             BinaryTransformation::Lz49 => Some(CrunchType::LZ49),
+            #[cfg(not(target_arch = "wasm32"))]
             BinaryTransformation::Aplib => Some(CrunchType::LZAPU),
             BinaryTransformation::Lz48 => Some(CrunchType::LZ48)
         }
@@ -841,6 +844,7 @@ impl fmt::Display for Token {
                         BinaryTransformation::None => "INCBIN",
                         BinaryTransformation::Exomizer => "INCEXO",
                         BinaryTransformation::Lz49 => "INCL49",
+                        #[cfg(not(target_arch = "wasm32"))]
                         BinaryTransformation::Aplib => "INCAPU",
                         BinaryTransformation::Lz48 =>"INCL48",
                     };

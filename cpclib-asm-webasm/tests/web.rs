@@ -6,10 +6,12 @@ extern crate wasm_bindgen_test;
 use wasm_bindgen_test::*;
 use cpclib_asm_webasm::*;
 
+// TODO find a way to init the thread pool...
 wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 fn test_parse_failure() {
+
     let source =  "ld hl, 1234  push hl";
     let config = create_parser_config("test.asm");
     let result = parse_source(&source, &config);

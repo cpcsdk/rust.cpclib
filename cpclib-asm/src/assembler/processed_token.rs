@@ -29,6 +29,9 @@ use crate::preamble::{
 };
 use crate::{r#macro, AssemblerError, Env, LocatedToken, ParserContext, Visited};
 
+#[cfg(not(target_arch = "wasm32"))]
+use cpclib_common::rayon::prelude::*;
+
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -437,11 +440,13 @@ pub fn build_processed_tokens_list<
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
-    use rayon::prelude::*;
 
-    tokens
-        .par_iter()
-        .map(|t| build_processed_token(t, env))
+    #[cfg(not(target_arch = "wasm32"))]
+    let iter = tokens.par_iter();
+    #[cfg(target_arch = "wasm32")]
+    let iter = tokens.iter();
+
+    iter.map(|t| build_processed_token(t, env))
         .collect::<Vec<_>>()
 }
 

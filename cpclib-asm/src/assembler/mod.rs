@@ -27,7 +27,11 @@ use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static::__Deref;
+
+
+#[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
+
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::*;
@@ -1023,10 +1027,13 @@ impl Env {
 
         // save from extra memory / can be done in parallal
         self.ga_mmr = 0xC0;
-        let mut saved = self
-            .banks
-            .par_iter()
-            .map(|bank| bank.1.execute_save(self))
+
+        
+        #[cfg(not(target_arch = "wasm32"))]
+        let iter = self.banks.par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iter = self.banks.iter();
+        let mut saved = iter.map(|bank| bank.1.execute_save(self))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
         for s in &mut saved {
             saved_files.append(s);

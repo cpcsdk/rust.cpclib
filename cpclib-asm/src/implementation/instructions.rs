@@ -32,6 +32,7 @@ impl Cruncher for CrunchType {
                     msg: "LZEXO compression not implemented".to_owned()
                 })
             }
+            #[cfg(not(target_arch = "wasm32"))]
             CrunchType::LZAPU => Ok(crunchers::apultra::compress(raw))
         }
     }

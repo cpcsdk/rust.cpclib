@@ -1050,23 +1050,22 @@ fn get_additional_notes(ctx: &str) -> Option<Vec<String>> {
 }
 
 fn buffer() -> Buffer {
-    if cfg!(feature = "nocolor") {
-        println!("no color");
-        Buffer::no_color()
+    if cfg!(feature = "colored_error") {
+        Buffer::ansi()
     }
     else {
-        Buffer::ansi()
+        Buffer::no_color()
     }
 }
 
 fn config() -> codespan_reporting::term::Config {
-    if cfg!(feature = "nocolor") {
+    if cfg!(feature = "colored_error") {
+        codespan_reporting::term::Config::default()
+    }
+    else {
         let mut conf = codespan_reporting::term::Config::default();
         conf.chars = Chars::ascii();
         conf
-    }
-    else {
-        codespan_reporting::term::Config::default()
     }
 }
 

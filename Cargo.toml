@@ -15,7 +15,8 @@ members = [
     "cpclib",
     "basm", "bdasm",
     "imgconverter",
-    "visual-basm"
+    "visual-basm",
+    "cpclib-asm-webasm"
 ]
 
 [patch.crates-io]
@@ -31,6 +32,7 @@ cpclib-tokens = {path = "./cpclib-tokens/"}
 cpclib-xfer = {path = "./cpclib-xfer/"}
 cpclib-xfertool = {path = "./cpclib-xfertool/"}
 cpclib-z80emu = {path = "./cpclib-z80emu/"}
+cpclib-asm-webasm = {path="./cpclib-asm-webasm"}
 basm = {path = "./basm/"}
 bdasm = {path = "./bdasm/"}
 imgconverter = {path = "./imgconverter/"}

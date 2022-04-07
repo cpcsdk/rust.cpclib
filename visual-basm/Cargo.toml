@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 eframe = "0.14.0"
-cpclib-asm = { version = "0.5", features = ["basm", "nocolor"] }
+cpclib-asm = { version = "0.5", features = ["basm"] }
 temp-file = "0.1.6"
 rfd= "0.5.1"

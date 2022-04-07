@@ -256,7 +256,7 @@ impl Snapshot {
         self.write(&mut buffer, version)
     }
 
-    pub fn write(&self, buffer: &mut File, version: SnapshotVersion) -> Result<(), std::io::Error> {
+    pub fn write<B: Write>(&self, buffer: &mut B , version: SnapshotVersion) -> Result<(), std::io::Error> {
         // Convert the snapshot to ensure header is correct
         let sna = self.fix_version(version);
 
