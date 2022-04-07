@@ -1959,7 +1959,7 @@ impl Env {
     ) -> Result<(), AssemblerError> {
         if cfg!(target_arch = "wasm32") {
             return Err(AssemblerError::AssemblingError { msg: 
-                "SAVE command is not allowed in a web-based assembling.".to_owned()
+                "SAVE directive is not allowed in a web-based assembling.".to_owned()
             })
         }
 

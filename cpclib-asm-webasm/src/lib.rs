@@ -3,7 +3,7 @@ mod utils;
 use cpclib_sna::SnapshotVersion;
 use wasm_bindgen::{prelude::*};
 use web_sys::console;
-
+use js_sys::Uint8Array;
 use cpclib_asm::{preamble::*, error::AssemblerError};
 
 
@@ -92,7 +92,7 @@ impl JsAssemblerError {
 
 #[wasm_bindgen]
 pub struct JsSnapshot {
-   // content: Vec<u8>
+   content: Vec<u8>
 }
 
 impl Into<JsSnapshot> for &cpclib_sna::Snapshot {
@@ -100,7 +100,17 @@ impl Into<JsSnapshot> for &cpclib_sna::Snapshot {
         let mut content = Vec::new();
         self.write(&mut content, SnapshotVersion::V3);
 
-        JsSnapshot { /*content*/ }
+        JsSnapshot { content }
+    }
+}
+
+#[wasm_bindgen]
+impl JsSnapshot {
+
+    #[wasm_bindgen(getter)]
+    pub fn bytes(&self) -> Uint8Array {
+        Uint8Array::from(self.content.as_slice())
+            .to_owned()
     }
 }
 
