@@ -689,6 +689,7 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "cpclib-asm",
+ "cpclib-basic",
  "cpclib-sna",
  "js-sys",
  "wasm-bindgen",
@@ -707,6 +708,7 @@ dependencies = [
  "clap 2.34.0",
  "cpclib-common",
  "cpclib-disc",
+ "cpclib-sna",
  "custom_error",
  "either",
  "failure",

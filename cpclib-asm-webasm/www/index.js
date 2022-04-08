@@ -6,20 +6,20 @@ import('../pkg')
 //	init_panic_hook();
 
 	// test parse error
-	var config = cpcasm.create_parser_config("test");
+	var config = cpcasm.asm.create_parser_config("test");
 	var source = "ld hl, 1234  push hl";
 	try {
-		var result = cpcasm.parse_source(source, config);
+		var result = cpcasm.asm.parse_source(source, config);
 		console.error("ERR. Parsing successfull", result);
 	} catch(error) {
 		console.info("OK. Expected error\n",error.msg);
 	}
 
 	// test parse ok
-	config = cpcasm.create_parser_config("test");
+	config = cpcasm.asm.create_parser_config("test");
 	source = "ld hl, 1234 : push hl";
 	try {
-		result = cpcasm.parse_source(source, config);
+		result = cpcasm.asm.parse_source(source, config);
 		console.info("Ok. Parse successful", result);
 	} catch(error) {
 		console.error("ERR. Unexpected error\n",error.msg);

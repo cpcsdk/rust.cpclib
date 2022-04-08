@@ -3,12 +3,7 @@ use std::path::Path;
 
 use cc;
 
-// no idea why it is not disabled in wasm32 :(
-#[cfg(target_arch = "wasm32")]
-fn build() {
 
-}
-#[cfg(not(target_arch = "wasm32"))]
 fn build() 
 {
     let src = env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -32,5 +27,7 @@ fn build()
 
 
 fn main() {
-    build();
+    if !env::var("CARGO_CFG_TARGET_ARCH").unwrap().contains("wasm32") {
+        build();
+    }
 }

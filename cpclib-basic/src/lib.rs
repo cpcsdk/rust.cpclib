@@ -3,8 +3,9 @@ pub mod parser;
 /// Basic token encoding.
 pub mod tokens;
 
-use std::fmt;
+use std::fmt::{self, Display};
 
+use cpclib_sna::Snapshot;
 use failure::Fail;
 use parser::parse_basic_program;
 use tokens::BasicToken;
@@ -26,6 +27,7 @@ pub enum BasicError {
     #[fail(display = "{}", msg)]
     ParseError { msg: String }
 }
+
 
 /// Basic line of code representation
 #[derive(Debug, Clone)]
@@ -296,10 +298,8 @@ impl BasicProgram {
 		}
     }
 
-    /// Generate the byte stream for the gien program
+    /// Generate the byte stream for the given program
     pub fn as_bytes(&self) -> Vec<u8> {
-        eprintln!("{:?}", self);
-        dbg!(self);
         let mut bytes = self
             .lines
             .iter()
@@ -307,6 +307,13 @@ impl BasicProgram {
             .collect::<Vec<u8>>();
         bytes.resize(bytes.len() + 3, 0);
         bytes
+    }
+
+    pub fn as_sna(&self) -> Snapshot {
+        let bytes = self.as_bytes();
+        let mut sna = Snapshot::default();
+        sna.add_data(&bytes, 0x170);
+        sna
     }
 }
 

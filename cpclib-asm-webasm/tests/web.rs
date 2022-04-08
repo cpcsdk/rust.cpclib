@@ -10,50 +10,58 @@ use cpclib_asm_webasm::*;
 wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
-fn test_parse_failure() {
+fn asm_parse_failure() {
 
     let source =  "ld hl, 1234  push hl";
-    let config = create_parser_config("test.asm");
-    let result = parse_source(&source, &config);
+    let config = asm::create_parser_config("test.asm");
+    let result = asm::parse_source(&source, &config);
     assert!(result.is_err());
 }
 
 #[wasm_bindgen_test]
-fn test_parse_success() {
+fn asm_parse_success() {
     let source =  "ld hl, 1234 :  push hl";
-    let config = create_parser_config("test.asm");
-    let result = parse_source(&source, &config);
+    let config = asm::create_parser_config("test.asm");
+    let result = asm::parse_source(&source, &config);
     assert!(result.is_ok());
 }
 
 #[wasm_bindgen_test]
-fn test_assemble_failure() {
+fn asm_assemble_failure() {
     let source =  "ld hl, 1234  push hl";
-    let config = create_parser_config("test.asm");
-    let result = assemble_snapshot(&source, &config);
+    let config = asm::create_parser_config("test.asm");
+    let result = asm::assemble_snapshot(&source, &config);
     assert!(result.is_err());
 }
 
 #[wasm_bindgen_test]
-fn test_assemble_success() {
+fn asm_assemble_success() {
     let source =  "ld hl, 1234 :  push hl";
-    let config = create_parser_config("test.asm");
-    let result = assemble_snapshot(&source, &config);
+    let config = asm::create_parser_config("test.asm");
+    let result = asm::assemble_snapshot(&source, &config);
     assert!(result.is_ok());
 }
 
 #[wasm_bindgen_test]
-fn test_fail_save() {
+fn asm_fail_save() {
     let source =  " SAVE \"test\"";
-    let config = create_parser_config("test.asm");
-    let result = assemble_snapshot(&source, &config);
+    let config = asm::create_parser_config("test.asm");
+    let result = asm::assemble_snapshot(&source, &config);
     assert!(result.is_err());
 }
 
 #[wasm_bindgen_test]
-fn test_fail_include() {
+fn asm_fail_include() {
     let source =  " include \"test.asm\"";
-    let config = create_parser_config("test.asm");
-    let result = assemble_snapshot(&source, &config);
+    let config = asm::create_parser_config("test.asm");
+    let result = asm::assemble_snapshot(&source, &config);
     assert!(result.is_err());
+}
+
+
+#[wasm_bindgen_test]
+fn basic_parse_success() {
+    let source =  "10 PRINT \"HELLO WORLD\"";
+    let result = basic::parse_basic_program(source);
+    assert!(result.is_ok());
 }

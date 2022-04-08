@@ -1,5 +1,5 @@
 build:
-	wasm-pack build --target web
+	wasm-pack  build --target web
 	cd www; npm install
 
 run:
