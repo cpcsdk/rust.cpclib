@@ -1,3 +1,4 @@
+use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::branch::*;
 use cpclib_common::nom::bytes::complete::*;
 use cpclib_common::nom::character::complete::*;
@@ -8,11 +9,16 @@ use cpclib_common::nom::sequence::*;
 /// ! Locomotive basic parser routines.
 use cpclib_common::nom::*;
 
+use crate::BasicError;
 use crate::tokens::*;
 use crate::{BasicLine, BasicProgram};
 
+type BasicSeveralTokensResult<'src> = IResult<&'src str, Vec<BasicToken>, VerboseError<&'src str>>;
+type BasicOneTokenResult<'src> = IResult<&'src str, BasicToken, VerboseError<&'src str>>;
+type BasicLineResult<'src> = IResult<&'src str, BasicLine, VerboseError<&'src str>> ;
+
 /// Parse complete basic program"],
-pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram> {
+pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram, VerboseError<&str>> {
     let (input, lines) = fold_many0(
         parse_basic_inner_line,
         || Vec::new(),
@@ -33,7 +39,7 @@ pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram> {
 }
 
 /// Parse a line
-pub fn parse_basic_line(input: &str) -> IResult<&str, BasicLine> {
+pub fn parse_basic_line(input: &str) -> BasicLineResult{
     let (input, line_number) = dec_u16_inner(input)?;
 
     let (input, _) = char(' ')(input)?;
@@ -51,12 +57,12 @@ pub fn parse_basic_line(input: &str) -> IResult<&str, BasicLine> {
 }
 
 /// Parse a line BUT expect an end of line char
-pub fn parse_basic_inner_line(input: &str) -> IResult<&str, BasicLine> {
+pub fn parse_basic_inner_line(input: &str) -> BasicLineResult{
     terminated(parse_basic_line, line_ending)(input)
 }
 
 /// Parse any token
-pub fn parse_token(input: &str) -> IResult<&str, BasicToken> {
+pub fn parse_token(input: &str) -> BasicOneTokenResult{
     alt((
         parse_rem,
         parse_simple_instruction,
@@ -67,7 +73,7 @@ pub fn parse_token(input: &str) -> IResult<&str, BasicToken> {
 }
 
 /// Parse a comment"],
-pub fn parse_rem(input: &str) -> IResult<&str, BasicToken> {
+pub fn parse_rem(input: &str) -> BasicOneTokenResult{
     let (input, sym) = alt((
         map(tag_no_case("REM"), |_| BasicTokenNoPrefix::Rem),
         map(char('\''), |_| BasicTokenNoPrefix::SymbolQuote)
@@ -78,9 +84,260 @@ pub fn parse_rem(input: &str) -> IResult<&str, BasicToken> {
     Ok((input, BasicToken::Comment(sym, list.as_bytes().to_vec())))
 }
 
+pub fn parse_space(input: &str) -> BasicOneTokenResult{
+    map(one_of(" \t"), |c| BasicToken::SimpleToken(c.into()))(input)
+}
+
+pub fn parse_space0(input: &str) -> BasicSeveralTokensResult {
+    many0(parse_space)(input)
+}
+
+pub fn parse_char(input: &str) -> BasicOneTokenResult{
+    map(
+        one_of("#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"),
+        |c| BasicToken::SimpleToken(c.into())
+    )(input)
+}
+
+pub fn parse_quote(input: &str) -> BasicOneTokenResult {
+    map(char('"'), |_| {
+        BasicToken::SimpleToken(BasicTokenNoPrefix::ValueQuotedString)
+    })(input)
+}
+
+pub fn parse_canal(input: &str) -> BasicSeveralTokensResult {
+    let (input, (a, b)) = pair(
+        map(char('#'), |c| BasicToken::SimpleToken(c.into())),
+        map(one_of("01234567"), |c| {
+            BasicToken::SimpleToken(match c {
+                '0' => BasicTokenNoPrefix::ConstantNumber0,
+                '1' => BasicTokenNoPrefix::ConstantNumber1,
+                '2' => BasicTokenNoPrefix::ConstantNumber2,
+                '3' => BasicTokenNoPrefix::ConstantNumber3,
+                '4' => BasicTokenNoPrefix::ConstantNumber4,
+                '5' => BasicTokenNoPrefix::ConstantNumber5,
+                '6' => BasicTokenNoPrefix::ConstantNumber6,
+                '7' => BasicTokenNoPrefix::ConstantNumber7,
+                _ => unreachable!()
+            })
+        })
+    )(input)?;
+
+    Ok((input, vec![a, b]))
+}
+
+pub fn parse_quoted_string(input: &str) -> BasicSeveralTokensResult{
+    let (input, start) = parse_quote(input)?;
+    let (input, mut content) = fold_many0(
+        alt((parse_char, parse_space)),
+        || Vec::new(),
+        |mut acc, new| {
+            acc.push(new);
+            acc
+        }
+    )(input)?;
+    let (input, stop) = parse_quote(input)?;
+
+    let mut res = vec![start];
+    res.append(&mut content);
+    res.push(stop);
+
+    Ok((input, res))
+}
+
+/// Parse a comma optionally surrounded by space
+pub fn parse_comma(input: &str) -> BasicSeveralTokensResult{
+    let (input, mut data) = tuple((
+        parse_space0,
+        map(char(','), |c| BasicToken::SimpleToken(c.into())),
+        parse_space0
+    ))(input)?;
+
+    data.0.push(data.1);
+    data.0.append(&mut data.2);
+
+    Ok((input, data.0))
+}
+
+/// Parse the Args SPC or TAB of a print expression
+pub fn parse_print_arg_spc_or_tab(input: &str) -> BasicSeveralTokensResult{
+    let (input, (kind, open, param, close, mut space)) = tuple((
+        alt((tag_no_case("SPC"), tag_no_case("TAB"))),
+        char('('),
+        parse_decimal_value_16bits,
+        char(')'),
+        parse_space0
+    ))(input)?;
+
+    let mut tokens = kind
+        .chars()
+        .map(|c| BasicToken::SimpleToken(c.to_ascii_uppercase().into()))
+        .collect_vec();
+    tokens.push(BasicToken::SimpleToken(open.into()));
+    tokens.push(param);
+    tokens.push(BasicToken::SimpleToken(close.into()));
+    tokens.append(&mut space);
+
+    Ok((input, tokens))
+}
+
+/// Parse using argument of a print expression
+pub fn parse_print_arg_using(input: &str) -> BasicSeveralTokensResult{
+    let (input, (using, mut space_a, mut format, mut space_b, sep, mut space_c)) = tuple((
+        tag_no_case("USING"),
+        parse_space0,
+        cut(context("FORMAT expected", alt((
+            parse_quoted_string,// TODO add filtering because this string is special
+            parse_string_variable
+         )))), 
+        parse_space0,
+        cut(context("; or , expected", one_of(",;"))),
+        parse_space0
+    ))(input)?;
+
+    let mut tokens = using
+        .chars()
+        .map(|c| BasicToken::SimpleToken(c.to_ascii_uppercase().into()))
+        .collect_vec();
+    tokens.append(&mut space_a);
+    tokens.append(&mut format);
+    tokens.append(&mut space_b);
+    tokens.push(BasicToken::SimpleToken(sep.into()));
+    tokens.append(&mut space_c);
+
+    Ok((input, tokens))
+}
+
+pub fn parse_variable(input: &str) -> BasicSeveralTokensResult{
+    parse_string_variable(input)
+}
+
+pub fn parse_string_variable(input: &str) -> BasicSeveralTokensResult{
+    let (input, name) = terminated(parse_base_variable_name, char('$'))(input)?;
+
+    let mut tokens = input
+        .chars()
+        .map(|c| BasicToken::SimpleToken(BasicTokenNoPrefix::from(c)))
+        .collect_vec();
+    tokens.push(BasicToken::SimpleToken('$'.into()));
+
+    Ok((input, tokens))
+}
+
+pub fn parse_base_variable_name(input: &str) -> BasicSeveralTokensResult{
+    
+
+    let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")(input)?;
+
+    let (input, next) = opt(verify(
+        is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"),
+        |s: &str| s.len()<39
+    ))(input)?;
+
+
+    
+    let mut tokens = vec![BasicToken::SimpleToken(first.into())];
+    if let Some(next) = next {
+        tokens.extend(
+            next.chars()
+                .map(|c| BasicToken::SimpleToken(c.into()))
+        );
+    }
+
+    Ok((input, tokens))
+
+
+
+}
+
+/// Parse a single expression of a print
+pub fn parse_print_expression(input: &str) -> BasicSeveralTokensResult{
+    let (input, (prefix, mut expr)) = tuple((
+        opt(alt((parse_print_arg_spc_or_tab, parse_print_arg_using))),
+        cut(context("Missing expression to print", alt((
+            parse_quoted_string, 
+            parse_variable,
+            map(parse_basic_value, |v| vec![v])
+        ))))
+    ))(input)?;
+
+    let mut tokens = if let Some(prefix) = prefix {
+        prefix
+    }
+    else {
+        Vec::new()
+    };
+    tokens.append(&mut expr);
+
+    Ok((input, tokens))
+}
+
+/// Parse a list of expressions for print
+pub fn parse_print_stream_expression(input: &str) -> BasicSeveralTokensResult{
+    let (input, mut first) = dbg!(parse_print_expression(input))?;
+
+    let (input, mut next) = many0(map(
+        tuple((one_of(";,"), parse_space0, parse_print_expression)),
+        |(sep, mut space_a, mut expr)| {
+            let mut inner = Vec::new();
+            inner.push(BasicToken::SimpleToken(sep.into()));
+            inner.append(&mut space_a);
+            inner.append(&mut expr);
+
+            inner
+        }
+    ))(input)?;
+
+    for mut other in &mut next {
+        first.append(&mut other);
+    }
+
+
+
+    Ok((input, first))
+}
+
+/// Parse a complete and valid print expression
+pub fn parse_print(input: &str) -> BasicSeveralTokensResult{
+    // print keyword
+    let (input, _) = tag_no_case("PRINT")(input)?;
+
+    // space after keyword
+    let mut tokens = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Print)];
+    let (input, mut space) = parse_space0(input)?;
+    tokens.append(&mut space);
+
+    // canal and space
+    let (input, canal) = opt(parse_canal)(input)?;
+    let input = if let Some(mut canal) = canal {
+        tokens.append(&mut canal);
+
+        let (input, mut comma) = parse_comma(input)?;
+        tokens.append(&mut comma);
+        input
+    }
+    else {
+        input
+    };
+
+    // list of expressions
+    let (input, exprs) = opt(parse_print_stream_expression)(input)?;
+    if let Some(mut exprs) = exprs {
+        tokens.append(&mut exprs);
+    }
+
+    // nothing more should be present
+    let (input, _) = context(
+        "Line ending or ':' expected", 
+        alt((line_ending, tag(":"), eof))
+    )(input)?;
+
+    Ok((input, tokens))
+}
+
 /// Parse the instructions that do not need a prefix byte
 /// TODO Add all the other variants"
-pub fn parse_simple_instruction(input: &str) -> IResult<&str, BasicToken> {
+pub fn parse_simple_instruction(input: &str) -> BasicOneTokenResult{
     map(
         alt((
             map(tag_no_case("CALL"), |_| BasicTokenNoPrefix::Call),
@@ -92,79 +349,78 @@ pub fn parse_simple_instruction(input: &str) -> IResult<&str, BasicToken> {
 }
 
 /// TODO add the missing chars
-pub fn parse_char(input: &str) -> IResult<&str, BasicToken> {
-    map(
-        alt((
-            alt((
-                map(char(':'), |_| BasicTokenNoPrefix::StatementSeparator),
-                map(char(' '), |_| BasicTokenNoPrefix::CharSpace),
-                map(char('A'), |_| BasicTokenNoPrefix::CharUpperA),
-                map(char('B'), |_| BasicTokenNoPrefix::CharUpperB),
-                map(char('C'), |_| BasicTokenNoPrefix::CharUpperC),
-                map(char('D'), |_| BasicTokenNoPrefix::CharUpperD),
-                map(char('E'), |_| BasicTokenNoPrefix::CharUpperE),
-                map(char('F'), |_| BasicTokenNoPrefix::CharUpperF),
-                map(char('G'), |_| BasicTokenNoPrefix::CharUpperG),
-                map(char('H'), |_| BasicTokenNoPrefix::CharUpperH),
-                map(char('I'), |_| BasicTokenNoPrefix::CharUpperI),
-                map(char('J'), |_| BasicTokenNoPrefix::CharUpperJ),
-                map(char('K'), |_| BasicTokenNoPrefix::CharUpperK),
-                map(char('L'), |_| BasicTokenNoPrefix::CharUpperL),
-                map(char('M'), |_| BasicTokenNoPrefix::CharUpperM),
-                map(char('N'), |_| BasicTokenNoPrefix::CharUpperN),
-                map(char('O'), |_| BasicTokenNoPrefix::CharUpperO),
-                map(char('P'), |_| BasicTokenNoPrefix::CharUpperP),
-                map(char('Q'), |_| BasicTokenNoPrefix::CharUpperQ),
-                map(char('R'), |_| BasicTokenNoPrefix::CharUpperR)
-            )),
-            alt((
-                map(char('S'), |_| BasicTokenNoPrefix::CharUpperS),
-                map(char('T'), |_| BasicTokenNoPrefix::CharUpperT),
-                map(char('U'), |_| BasicTokenNoPrefix::CharUpperU),
-                map(char('V'), |_| BasicTokenNoPrefix::CharUpperV),
-                map(char('W'), |_| BasicTokenNoPrefix::CharUpperW),
-                map(char('X'), |_| BasicTokenNoPrefix::CharUpperX),
-                map(char('Y'), |_| BasicTokenNoPrefix::CharUpperY),
-                map(char('Z'), |_| BasicTokenNoPrefix::CharUpperZ)
-            )),
-            alt((
-                map(char('a'), |_| BasicTokenNoPrefix::CharLowerA),
-                map(char('b'), |_| BasicTokenNoPrefix::CharLowerB),
-                map(char('c'), |_| BasicTokenNoPrefix::CharLowerC),
-                map(char('d'), |_| BasicTokenNoPrefix::CharLowerD),
-                map(char('e'), |_| BasicTokenNoPrefix::CharLowerE),
-                map(char('f'), |_| BasicTokenNoPrefix::CharLowerF),
-                map(char('g'), |_| BasicTokenNoPrefix::CharLowerG),
-                map(char('h'), |_| BasicTokenNoPrefix::CharLowerH),
-                map(char('i'), |_| BasicTokenNoPrefix::CharLowerI),
-                map(char('j'), |_| BasicTokenNoPrefix::CharLowerJ),
-                map(char('k'), |_| BasicTokenNoPrefix::CharLowerK),
-                map(char('l'), |_| BasicTokenNoPrefix::CharLowerL),
-                map(char('m'), |_| BasicTokenNoPrefix::CharLowerM),
-                map(char('n'), |_| BasicTokenNoPrefix::CharLowerN),
-                map(char('o'), |_| BasicTokenNoPrefix::CharLowerO)
-            )),
-            alt((
-                map(char('p'), |_| BasicTokenNoPrefix::CharLowerP),
-                map(char('q'), |_| BasicTokenNoPrefix::CharLowerQ),
-                map(char('r'), |_| BasicTokenNoPrefix::CharLowerR),
-                map(char('s'), |_| BasicTokenNoPrefix::CharLowerS),
-                map(char('t'), |_| BasicTokenNoPrefix::CharLowerT),
-                map(char('u'), |_| BasicTokenNoPrefix::CharLowerU),
-                map(char('v'), |_| BasicTokenNoPrefix::CharLowerV),
-                map(char('w'), |_| BasicTokenNoPrefix::CharLowerW),
-                map(char('x'), |_| BasicTokenNoPrefix::CharLowerX),
-                map(char('y'), |_| BasicTokenNoPrefix::CharLowerY),
-                map(char('z'), |_| BasicTokenNoPrefix::CharLowerZ)
-            ))
-        )),
-        |token| BasicToken::SimpleToken(token)
-    )(input)
-}
-
+// pub fn parse_char(input: &str) -> BasicOneTokenResult{
+// map(
+// alt((
+// alt((
+// map(char(':'), |_| BasicTokenNoPrefix::StatementSeparator),
+// map(char(' '), |_| BasicTokenNoPrefix::CharSpace),
+// map(char('A'), |_| BasicTokenNoPrefix::CharUpperA),
+// map(char('B'), |_| BasicTokenNoPrefix::CharUpperB),
+// map(char('C'), |_| BasicTokenNoPrefix::CharUpperC),
+// map(char('D'), |_| BasicTokenNoPrefix::CharUpperD),
+// map(char('E'), |_| BasicTokenNoPrefix::CharUpperE),
+// map(char('F'), |_| BasicTokenNoPrefix::CharUpperF),
+// map(char('G'), |_| BasicTokenNoPrefix::CharUpperG),
+// map(char('H'), |_| BasicTokenNoPrefix::CharUpperH),
+// map(char('I'), |_| BasicTokenNoPrefix::CharUpperI),
+// map(char('J'), |_| BasicTokenNoPrefix::CharUpperJ),
+// map(char('K'), |_| BasicTokenNoPrefix::CharUpperK),
+// map(char('L'), |_| BasicTokenNoPrefix::CharUpperL),
+// map(char('M'), |_| BasicTokenNoPrefix::CharUpperM),
+// map(char('N'), |_| BasicTokenNoPrefix::CharUpperN),
+// map(char('O'), |_| BasicTokenNoPrefix::CharUpperO),
+// map(char('P'), |_| BasicTokenNoPrefix::CharUpperP),
+// map(char('Q'), |_| BasicTokenNoPrefix::CharUpperQ),
+// map(char('R'), |_| BasicTokenNoPrefix::CharUpperR)
+// )),
+// alt((
+// map(char('S'), |_| BasicTokenNoPrefix::CharUpperS),
+// map(char('T'), |_| BasicTokenNoPrefix::CharUpperT),
+// map(char('U'), |_| BasicTokenNoPrefix::CharUpperU),
+// map(char('V'), |_| BasicTokenNoPrefix::CharUpperV),
+// map(char('W'), |_| BasicTokenNoPrefix::CharUpperW),
+// map(char('X'), |_| BasicTokenNoPrefix::CharUpperX),
+// map(char('Y'), |_| BasicTokenNoPrefix::CharUpperY),
+// map(char('Z'), |_| BasicTokenNoPrefix::CharUpperZ)
+// )),
+// alt((
+// map(char('a'), |_| BasicTokenNoPrefix::CharLowerA),
+// map(char('b'), |_| BasicTokenNoPrefix::CharLowerB),
+// map(char('c'), |_| BasicTokenNoPrefix::CharLowerC),
+// map(char('d'), |_| BasicTokenNoPrefix::CharLowerD),
+// map(char('e'), |_| BasicTokenNoPrefix::CharLowerE),
+// map(char('f'), |_| BasicTokenNoPrefix::CharLowerF),
+// map(char('g'), |_| BasicTokenNoPrefix::CharLowerG),
+// map(char('h'), |_| BasicTokenNoPrefix::CharLowerH),
+// map(char('i'), |_| BasicTokenNoPrefix::CharLowerI),
+// map(char('j'), |_| BasicTokenNoPrefix::CharLowerJ),
+// map(char('k'), |_| BasicTokenNoPrefix::CharLowerK),
+// map(char('l'), |_| BasicTokenNoPrefix::CharLowerL),
+// map(char('m'), |_| BasicTokenNoPrefix::CharLowerM),
+// map(char('n'), |_| BasicTokenNoPrefix::CharLowerN),
+// map(char('o'), |_| BasicTokenNoPrefix::CharLowerO)
+// )),
+// alt((
+// map(char('p'), |_| BasicTokenNoPrefix::CharLowerP),
+// map(char('q'), |_| BasicTokenNoPrefix::CharLowerQ),
+// map(char('r'), |_| BasicTokenNoPrefix::CharLowerR),
+// map(char('s'), |_| BasicTokenNoPrefix::CharLowerS),
+// map(char('t'), |_| BasicTokenNoPrefix::CharLowerT),
+// map(char('u'), |_| BasicTokenNoPrefix::CharLowerU),
+// map(char('v'), |_| BasicTokenNoPrefix::CharLowerV),
+// map(char('w'), |_| BasicTokenNoPrefix::CharLowerW),
+// map(char('x'), |_| BasicTokenNoPrefix::CharLowerX),
+// map(char('y'), |_| BasicTokenNoPrefix::CharLowerY),
+// map(char('z'), |_| BasicTokenNoPrefix::CharLowerZ)
+// ))
+// )),
+// |token| BasicToken::SimpleToken(token)
+// )(input)
+// }
 /// Parse the instructions that do not need a prefix byte
 /// TODO Add all the other instructions"],
-pub fn parse_prefixed_instruction(input: &str) -> IResult<&str, BasicToken> {
+pub fn parse_prefixed_instruction(input: &str) -> BasicOneTokenResult{
     map(
         alt((
             value(BasicTokenPrefixed::Abs, tag_no_case("ABS")),
@@ -175,12 +431,159 @@ pub fn parse_prefixed_instruction(input: &str) -> IResult<&str, BasicToken> {
 }
 
 /// Parse a basic value
-pub fn parse_basic_value(input: &str) -> IResult<&str, BasicToken> {
-    alt((parse_hexadecimal_value_16bits, parse_decimal_value_16bits))(input)
+pub fn parse_basic_value(input: &str) -> BasicOneTokenResult{
+    alt((
+        parse_hexadecimal_value_16bits, 
+        parse_floating_point,
+        parse_decimal_value_16bits,
+    ))(input)
+}
+
+
+// implementation stolen to https://github.com/EdouardBERGE/rasm/blob/master/rasm.c#L2295
+pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8;5], BasicError> {
+
+    let mut bits = [false;32];
+    let mut res = [0;5];
+
+    let (is_pos, nb) = if nb >= 0f64 {
+        (true, nb)
+    } else {
+        (false, -nb)
+    };
+
+    let deci = nb.trunc() as u64;
+    let fract = nb.fract(); 
+
+    let mut bitpos = 0;
+    let mut exp: i32 = 0;
+    let mut mantissa: u64 = 0;
+    let mut mask:u64 =0x80000000;
+
+
+    if deci >= 1 { // nb is >=1
+        mask = 0x80000000;
+
+        // search for the first (from the left) bit to 1
+        while (deci & mask) == 0 {
+            mask /= 2;
+        }
+        // count the number of remaining bits
+        while mask > 0 {
+            exp += 1;
+            mask /= 2;
+        }
+        // build the mantissa part of the decimal value
+        mantissa = (nb * 2f64.powi(32- exp) + 0.5) as _;
+        if (mantissa & 0xFF00000000) != 0 {mantissa=0xFFFFFFFF};
+
+        mask = 0x80000000;
+        while mask != 0 {
+            bits[bitpos] = (mantissa & mask) != 0 ;
+            bitpos += 1;
+            mask /= 2;
+        }
+    } else {
+        // <1
+        if nb == 0.0 {
+            exp = -128;
+        } else {
+            mantissa=(nb*4294967296.0+0.5) as _ ; // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+            if (mantissa & 0xFF00000000) != 0 {
+                mantissa=0xFFFFFFFF;
+            }
+
+            mask=0x80000000;
+            // find first significant bit of fraction part
+			while (mantissa & mask) == 0 {
+				mask /= 2;
+				exp -= 1;
+			}
+
+            mantissa=(nb*2.0f64.powi(32-exp)+0.5) as _; // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+			if (mantissa & 0xFF00000000) != 0 {
+                mantissa=0xFFFFFFFF;
+            }
+
+
+			mask=0x80000000;
+            while mask != 0 {
+				bits[bitpos]= (mantissa & mask) != 0 ;
+				bitpos += 1;
+				mask /= 2;
+			}
+        }
+    }
+
+    {
+        /* generate the mantissa bytes  */
+        let mut ib: usize = 3;
+        let mut ibb: u8 = 0x80;
+        for j in 0..bitpos {
+            if bits[j] {
+                res[ib] |= ibb;
+            }
+            ibb/=2;
+            if ibb==0 {
+                ibb = 0x80;
+                if ib != 0 {
+                    ib-=1
+                } else {
+                    debug_assert!(j == bitpos-1);
+                };
+            }
+        }
+    }
+
+    {
+        /* generate the exponent */
+        exp += 128;
+        if exp < 0 || exp > 255 {
+            return Err(BasicError::ExponentOverflow)
+        } else {
+            res[4] = exp as _;
+        }
+    }
+
+    {
+        /* Generate the sign bit */
+        if is_pos {
+            res[3] &= 0x7F;
+        } else {
+            res[3] |= 0x80;
+        }
+    }
+
+    Ok(res)
+}
+
+pub fn parse_floating_point(input: &str) -> BasicOneTokenResult {
+    let (input, nb ) = 
+    context("Unable to parse float", verify(
+            map(recognize(tuple((
+            dec_u16_inner,
+            char('.'), 
+            dec_u16_inner))),
+            |nb| {
+                f32_to_amstrad_float(nb.parse::<f64>().unwrap())
+            }
+        ),
+        |res| res.is_ok()
+    ))(input)?;
+
+    let bytes = nb.unwrap();
+    let res = BasicToken::Constant(
+        BasicTokenNoPrefix::ValueFloatingPoint, 
+        BasicValue::Float(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4])
+    );
+
+    Ok((input, res))
+
+
 }
 
 /// Parse an hexadecimal value
-pub fn parse_hexadecimal_value_16bits(input: &str) -> IResult<&str, BasicToken> {
+pub fn parse_hexadecimal_value_16bits(input: &str) -> BasicOneTokenResult{
     map(preceded(char('&'), hex_u16_inner), |val| {
         BasicToken::Constant(
             BasicTokenNoPrefix::ValueIntegerHexadecimal16bits,
@@ -190,8 +593,9 @@ pub fn parse_hexadecimal_value_16bits(input: &str) -> IResult<&str, BasicToken> 
 }
 
 /// ...
-pub fn parse_decimal_value_16bits(input: &str) -> IResult<&str, BasicToken> {
-    map(dec_u16_inner, |val| {
+pub fn parse_decimal_value_16bits(input: &str) -> BasicOneTokenResult{
+    map(terminated(dec_u16_inner, not(char('.'))), 
+    |val| {
         BasicToken::Constant(
             BasicTokenNoPrefix::ValueIntegerDecimal16bits,
             BasicValue::new_integer(val)
@@ -201,7 +605,7 @@ pub fn parse_decimal_value_16bits(input: &str) -> IResult<&str, BasicToken> {
 
 /// XXX stolen to the asm parser
 #[inline]
-pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
+pub fn hex_u16_inner(input: &str) -> IResult<&str, u16, VerboseError<&str>> {
     match is_a("0123456789abcdefABCDEF")(input) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
@@ -235,7 +639,7 @@ pub fn hex_u16_inner(input: &str) -> IResult<&str, u16> {
 
 /// XXX stolen to the asm parser
 #[inline]
-pub fn dec_u16_inner(input: &str) -> IResult<&str, u16> {
+pub fn dec_u16_inner(input: &str) -> IResult<&str, u16, VerboseError<&str>> {
     match is_a("0123456789")(input) {
         Err(e) => Err(e),
         Ok((remaining, parsed)) => {
@@ -354,4 +758,43 @@ mod test {
         let line = check_line_tokenisation("10 REM fldsfksjfksjkg:CALL\n");
         assert_eq!(3, line.tokens().len())
     }
+}
+
+pub fn test_parse<P: Fn(&str) -> BasicSeveralTokensResult> (
+    parser: P,
+    code: &str
+) -> BasicLine {
+    let (rest, tokens) = dbg!(parser(code)).expect("Parse issue");
+
+    assert!(rest.is_empty());
+
+    BasicLine {
+        line_number: 10,
+        tokens,
+        forced_length: None
+    }
+}
+
+pub fn test_parse1<P: Fn(&str) -> BasicOneTokenResult> (
+    parser: P,
+    code: &str
+) -> BasicLine {
+    let (rest, tokens) = dbg!(parser(code)).expect("Parse issue");
+
+    assert!(rest.is_empty());
+
+    BasicLine {
+        line_number: 10,
+        tokens: vec![tokens],
+        forced_length: None
+    }
+}
+
+pub fn test_parse_and_compare<P: Fn(&str) -> BasicSeveralTokensResult> (
+    parser: P,
+    code: &str,
+    bytes: &[u8]
+) {
+    let prog = test_parse(parser, code);
+    assert_eq!(bytes, prog.tokens_as_bytes().as_slice())
 }

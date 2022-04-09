@@ -25,7 +25,9 @@ pub enum BasicError {
     #[fail(display = "Line does not exist: {:?}", idx)]
     UnknownLine { idx: BasicProgramLineIdx },
     #[fail(display = "{}", msg)]
-    ParseError { msg: String }
+    ParseError { msg: String },
+    #[fail(display = "Exponent Overflow")]
+    ExponentOverflow
 }
 
 
@@ -97,7 +99,7 @@ impl BasicLine {
         self.tokens().is_empty()
     }
 
-    fn tokens_as_bytes(&self) -> Vec<u8> {
+    pub fn tokens_as_bytes(&self) -> Vec<u8> {
         self.tokens
             .iter()
             .flat_map(BasicToken::as_bytes)
@@ -320,7 +322,9 @@ impl BasicProgram {
 #[allow(clippy::let_unit_value)]
 #[allow(clippy::shadow_unrelated)]
 #[cfg(test)]
-mod test {
+pub mod test {
+    use cpclib_common::nom::IResult;
+
     use super::*;
 
     #[test]
@@ -423,4 +427,10 @@ mod test {
 
         assert_eq!(bytes, expected);
     }
+
+
+
 }
+
+
+
