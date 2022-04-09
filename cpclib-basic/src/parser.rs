@@ -13,6 +13,8 @@ use crate::BasicError;
 use crate::tokens::*;
 use crate::{BasicLine, BasicProgram};
 
+use paste::paste;
+
 type BasicSeveralTokensResult<'src> = IResult<&'src str, Vec<BasicToken>, VerboseError<&'src str>>;
 type BasicOneTokenResult<'src> = IResult<&'src str, BasicToken, VerboseError<&'src str>>;
 type BasicLineResult<'src> = IResult<&'src str, BasicLine, VerboseError<&'src str>> ;
@@ -45,10 +47,10 @@ pub fn parse_basic_line(input: &str) -> BasicLineResult{
     let (input, _) = char(' ')(input)?;
 
     let (input, tokens) = fold_many0(
-        parse_token,
+        parse_instruction,
         || Vec::new(),
-        |mut acc: Vec<_>, item| {
-            acc.push(item);
+        |mut acc: Vec<_>, mut item| {
+            acc.append(&mut item);
             acc
         }
     )(input)?;
@@ -61,15 +63,28 @@ pub fn parse_basic_inner_line(input: &str) -> BasicLineResult{
     terminated(parse_basic_line, line_ending)(input)
 }
 
-/// Parse any token
-pub fn parse_token(input: &str) -> BasicOneTokenResult{
-    alt((
-        parse_rem,
-        parse_simple_instruction,
-        parse_prefixed_instruction,
-        parse_basic_value,
-        parse_char
-    ))(input)
+/// Parse any instruction.
+/// In opposite to BASIC editor, parameters are verified (i.e. generated BASIC is valid)
+pub fn parse_instruction(input: &str) -> BasicSeveralTokensResult {
+    let (input, instruction) = cut(context("Unable to parse an instruction", alt((
+        map(alt((
+            parse_rem,
+
+        )), |i| vec![i]),
+
+        parse_call,
+        parse_input,
+        parse_print,
+
+    ))))(input)?;
+
+    // nothing more should be present
+    let (_, _) = context(
+        "Line ending or ':' expected", 
+        alt((line_ending, tag(":"), eof, tag("'")))
+    )(input.clone())?;
+
+    Ok((input, instruction))
 }
 
 /// Parse a comment"],
@@ -257,7 +272,8 @@ pub fn parse_print_expression(input: &str) -> BasicSeveralTokensResult{
         cut(context("Missing expression to print", alt((
             parse_quoted_string, 
             parse_variable,
-            map(parse_basic_value, |v| vec![v])
+            map(parse_basic_value, |v| vec![v]),
+            parse_numeric_expression,
         ))))
     ))(input)?;
 
@@ -326,26 +342,17 @@ pub fn parse_print(input: &str) -> BasicSeveralTokensResult{
         tokens.append(&mut exprs);
     }
 
-    // nothing more should be present
-    let (input, _) = context(
-        "Line ending or ':' expected", 
-        alt((line_ending, tag(":"), eof))
-    )(input)?;
+
 
     Ok((input, tokens))
 }
 
-/// Parse the instructions that do not need a prefix byte
-/// TODO Add all the other variants"
-pub fn parse_simple_instruction(input: &str) -> BasicOneTokenResult{
-    map(
-        alt((
-            map(tag_no_case("CALL"), |_| BasicTokenNoPrefix::Call),
-            map(tag_no_case("INPUT"), |_| BasicTokenNoPrefix::Input),
-            map(tag_no_case("PRINT"), |_| BasicTokenNoPrefix::Print)
-        )),
-        |token| BasicToken::SimpleToken(token)
-    )(input)
+pub fn parse_call(input: &str) -> BasicSeveralTokensResult {
+    todo!()
+}
+
+pub fn parse_input(input: &str) -> BasicSeveralTokensResult {
+    todo!()
 }
 
 /// TODO add the missing chars
@@ -420,15 +427,7 @@ pub fn parse_simple_instruction(input: &str) -> BasicOneTokenResult{
 // }
 /// Parse the instructions that do not need a prefix byte
 /// TODO Add all the other instructions"],
-pub fn parse_prefixed_instruction(input: &str) -> BasicOneTokenResult{
-    map(
-        alt((
-            value(BasicTokenPrefixed::Abs, tag_no_case("ABS")),
-            value(BasicTokenPrefixed::Abs, tag_no_case("ABS")) // TODO put the others
-        )),
-        |token| BasicToken::PrefixedToken(token)
-    )(input)
-}
+
 
 /// Parse a basic value
 pub fn parse_basic_value(input: &str) -> BasicOneTokenResult{
@@ -439,6 +438,106 @@ pub fn parse_basic_value(input: &str) -> BasicOneTokenResult{
     ))(input)
 }
 
+
+pub fn parse_numeric_expression(input: &str) -> BasicSeveralTokensResult {
+    alt((
+        map(
+            parse_basic_value,
+            |v| vec![v]
+        ),
+
+        parse_variable,
+
+        // numeric functions
+        parse_abs,
+        parse_atn,
+        parse_cint,
+        parse_cos,
+        parse_creal,
+        parse_exp,
+        parse_fix,
+        parse_inp,
+        parse_int,
+        parse_log,
+        parse_sgn,
+        parse_sin,
+        parse_sqr,
+        parse_tan
+    ))(input)
+}
+
+pub fn parse_any_numeric_function<'code> (name: &'static  str, code: BasicToken) -> impl Fn(&'code str) -> BasicSeveralTokensResult  {
+
+    move |input: &'code str| ->BasicSeveralTokensResult  {
+        let (input, (
+            code, 
+            mut space_a,
+            open,
+            mut expr,
+            close
+        )) = tuple((
+            map(
+                tag_no_case(name),
+                |_| code.clone()
+            ),
+            parse_space0,
+            char('('),
+            parse_numeric_expression,
+            char(')')
+        ))(input)?;
+    
+    
+        let mut res = Vec::new();
+        res.push(code);
+        res.append(&mut space_a);
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open).into()));
+        res.append(&mut expr);
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close).into()));
+    
+        Ok((input, res))
+    }
+
+}
+
+/*
+pub fn parse_abs(input: &str) -> BasicSeveralTokensResult {
+    parse_any_numeric_function(
+        "ABS", 
+        BasicToken::PrefixedToken(BasicTokenPrefixed::Abs)
+    )(input)
+}
+*/
+
+macro_rules! generate_numeric_functions {
+    ( $($name:ident: $code:expr),+ )=> {
+        $(paste! {
+            pub fn [<parse_ $name:lower>](input: &str) -> BasicSeveralTokensResult {
+                    parse_any_numeric_function(
+                        stringify!($name), 
+                        $code
+                    )(input)
+            }
+        })+
+};
+}
+
+// Generate all the functions that consume a numerical expression
+generate_numeric_functions!{
+        ABS: BasicToken::PrefixedToken(BasicTokenPrefixed::Abs),
+        ATN: BasicToken::PrefixedToken(BasicTokenPrefixed::Atn),
+        CINT: BasicToken::PrefixedToken(BasicTokenPrefixed::Cint),
+        COS: BasicToken::PrefixedToken(BasicTokenPrefixed::Cos),
+        CREAL: BasicToken::PrefixedToken(BasicTokenPrefixed::Creal),
+        EXP: BasicToken::PrefixedToken(BasicTokenPrefixed::Exp),
+        FIX: BasicToken::PrefixedToken(BasicTokenPrefixed::Fix),
+        INP: BasicToken::PrefixedToken(BasicTokenPrefixed::Inp),
+        INT: BasicToken::PrefixedToken(BasicTokenPrefixed::Int),
+        LOG: BasicToken::PrefixedToken(BasicTokenPrefixed::Log),
+        SGN: BasicToken::PrefixedToken(BasicTokenPrefixed::Sign),
+        SIN: BasicToken::PrefixedToken(BasicTokenPrefixed::Sin),
+        SQR: BasicToken::PrefixedToken(BasicTokenPrefixed::Sqr),
+        TAN: BasicToken::PrefixedToken(BasicTokenPrefixed::Tan)
+}
 
 // implementation stolen to https://github.com/EdouardBERGE/rasm/blob/master/rasm.c#L2295
 pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8;5], BasicError> {
@@ -724,7 +823,7 @@ mod test {
     }
 
     fn check_token_tokenisation(code: &str) {
-        let res = parse_token(code.into());
+        let res = parse_instruction(code.into());
         match res {
             Ok((res, line)) => {
                 println!("{} => {:?}", code, &line);
