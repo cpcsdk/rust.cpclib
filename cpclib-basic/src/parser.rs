@@ -17,6 +17,7 @@ type BasicSeveralTokensResult<'src> = IResult<&'src str, Vec<BasicToken>, Verbos
 type BasicOneTokenResult<'src> = IResult<&'src str, BasicToken, VerboseError<&'src str>>;
 type BasicLineResult<'src> = IResult<&'src str, BasicLine, VerboseError<&'src str>>;
 
+
 /// Parse complete basic program"],
 pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram, VerboseError<&str>> {
     let (input, lines) = fold_many0(
@@ -557,7 +558,14 @@ pub fn parse_basic_value(input: &str) -> BasicOneTokenResult {
 
 
 pub fn parse_string_expression(input: &str) -> BasicSeveralTokensResult {
-    parse_quoted_string(input)
+    alt((
+        parse_quoted_string,
+        parse_chr_dollar,
+        parse_lower_dollar,
+        parse_upper_dollar,
+        parse_space_dollar,
+        parse_str_dollar
+    ))(input)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -566,6 +574,7 @@ pub enum NumericExpressionConstraint {
     Integer
 }
 
+/// TODO check that some generated functions do not generate strings even if they consume numbers
 pub fn parse_numeric_expression<'code>(
     constraint: NumericExpressionConstraint
 ) -> impl Fn(&'code str) -> BasicSeveralTokensResult {
@@ -574,6 +583,8 @@ pub fn parse_numeric_expression<'code>(
         match constraint {
             NumericExpressionConstraint::None => {
                 alt((
+                    parse_asc, parse_val,
+                    parse_len,
                     parse_all_generated_numeric_functions_any,
                     parse_all_generated_numeric_functions_int,
                     map(parse_basic_value, |v| vec![v]),
@@ -583,6 +594,8 @@ pub fn parse_numeric_expression<'code>(
             }
             NumericExpressionConstraint::Integer => {
                 alt((
+                    parse_asc, parse_val,
+                    parse_len,
                     parse_all_generated_numeric_functions_int,
                     map(parse_integer_value_16bits, |v| vec![v]),
                     parse_integer_variable
@@ -591,6 +604,110 @@ pub fn parse_numeric_expression<'code>(
         }
     }
 }
+
+fn parse_any_string_function<'code>(
+    name: &'static str,
+    code: BasicToken,
+) -> impl Fn(&'code str) -> BasicSeveralTokensResult {
+    move |input: &'code str| -> BasicSeveralTokensResult {
+        let (input, (code, mut space_a, open, mut expr, close)) = tuple((
+            map(tag_no_case(name), |_| code.clone()),
+            parse_space0,
+            char('('),
+            cut(context(
+                "Wrong parameter",
+                parse_string_expression
+            )),
+            cut(context("Missing ')'", char(')')))
+        ))(input)?;
+
+        let mut res = Vec::new();
+        res.push(code);
+        res.append(&mut space_a);
+        res.push(BasicToken::SimpleToken(
+            BasicTokenNoPrefix::from(open).into()
+        ));
+        res.append(&mut expr);
+        res.push(BasicToken::SimpleToken(
+            BasicTokenNoPrefix::from(close).into()
+        ));
+
+        Ok((input, res))
+    }
+}
+
+macro_rules! generate_string_functions {
+    ( 
+            $($name:ident: $code:expr),+
+
+    )=> {
+            $(paste! {
+                pub fn [<parse_ $name:lower>](input: &str) -> BasicSeveralTokensResult {
+                        parse_any_string_function(
+                            stringify!($name),
+                            $code,
+                        )(input)
+                }
+            })+
+
+            pub fn parse_all_generated_string_functions(input: &str) -> BasicSeveralTokensResult {
+                alt((
+                    $(
+                        paste!{[<parse_ $name:lower>]},
+                    )+
+                ))(input)
+            }
+       
+};
+}
+
+
+generate_string_functions! {
+    ASC: BasicToken::PrefixedToken(BasicTokenPrefixed::Asc),
+    LEN: BasicToken::PrefixedToken(BasicTokenPrefixed::Len),
+    VAL: BasicToken::PrefixedToken(BasicTokenPrefixed::Val)
+}
+
+/// works with float on the amstrad cpc
+fn parse_chr_dollar(input : &str) -> BasicSeveralTokensResult {
+    parse_any_numeric_function(
+        "CHR$",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::ChrDollar),
+        NumericExpressionConstraint::None
+    )(input)
+}
+
+fn parse_space_dollar(input : &str) -> BasicSeveralTokensResult {
+    parse_any_numeric_function(
+        "SPACE$",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::SpaceDollar),
+        NumericExpressionConstraint::None
+    )(input)
+}
+
+fn parse_str_dollar(input : &str) -> BasicSeveralTokensResult {
+    parse_any_numeric_function(
+        "STR$",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::StrDollar),
+        NumericExpressionConstraint::None
+    )(input)
+}
+
+fn parse_lower_dollar(input : &str) -> BasicSeveralTokensResult {
+    parse_any_string_function(
+        "LOWER$",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::LowerDollar),
+    )(input)
+}
+
+fn parse_upper_dollar(input : &str) -> BasicSeveralTokensResult {
+    parse_any_string_function(
+        "UPPER$",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::UpperDollar),
+    )(input)
+}
+
+
 
 fn parse_any_numeric_function<'code>(
     name: &'static str,
@@ -677,10 +794,13 @@ generate_numeric_functions! {
         INP: BasicToken::PrefixedToken(BasicTokenPrefixed::Inp),
         INT: BasicToken::PrefixedToken(BasicTokenPrefixed::Int),
         LOG: BasicToken::PrefixedToken(BasicTokenPrefixed::Log),
+        PEEK: BasicToken::PrefixedToken(BasicTokenPrefixed::Peek),
         SGN: BasicToken::PrefixedToken(BasicTokenPrefixed::Sign),
         SIN: BasicToken::PrefixedToken(BasicTokenPrefixed::Sin),
+        SQ: BasicToken::PrefixedToken(BasicTokenPrefixed::Sq),
         SQR: BasicToken::PrefixedToken(BasicTokenPrefixed::Sqr),
-        TAN: BasicToken::PrefixedToken(BasicTokenPrefixed::Tan)
+        TAN: BasicToken::PrefixedToken(BasicTokenPrefixed::Tan),
+        UNT: BasicToken::PrefixedToken(BasicTokenPrefixed::Unt)
     }
 
     NumericExpressionConstraint::Integer | int => {
