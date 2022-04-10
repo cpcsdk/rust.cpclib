@@ -35,3 +35,9 @@ fn print_using_string() {
 fn print_using_alpha() {
 	test_parse("PRINT using a$;12345.6789");
 }
+
+
+#[test]
+fn print_string_fail() {
+	test_parse("PRINT \"HELLO");
+}

@@ -199,7 +199,7 @@ pub fn parse_quoted_string(input: &str) -> BasicSeveralTokensResult {
             acc
         }
     )(input)?;
-    let (input, stop) = parse_quote(input)?;
+    let (input, stop) = cut(context("Unclosed string", parse_quote))(input)?;
 
     let mut res = vec![start];
     res.append(&mut content);

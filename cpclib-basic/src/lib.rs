@@ -5,6 +5,7 @@ pub mod tokens;
 
 use std::fmt::{self, Display};
 
+use cpclib_common::nom::{error::convert_error, self};
 use cpclib_sna::Snapshot;
 use failure::Fail;
 use parser::parse_basic_program;
@@ -156,7 +157,8 @@ impl BasicProgram {
 
     /// Create the program from a code to parse
     pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, BasicError> {
-        match parse_basic_program(code.as_ref().into()) {
+        let input = code.as_ref().into();
+        match parse_basic_program(input) {
             Ok((res, prog)) => {
                 if res.trim().is_empty() {
                     Ok(prog)
@@ -167,11 +169,13 @@ impl BasicProgram {
                     })
                 }
             }
-            Err(e) => {
+            Err(nom::Err::Error(e) | nom::Err::Failure(e)) => {
                 Err(BasicError::ParseError {
-                    msg: format!("Error while parsing the Basic content: {:?}", e)
+                    msg: format!("Error while parsing the Basic content: {}", convert_error(input, e))
                 })
-            }
+            },
+
+            _ => unreachable!()
         }
     }
 

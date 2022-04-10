@@ -60,8 +60,15 @@ fn asm_fail_include() {
 
 
 #[wasm_bindgen_test]
-fn basic_parse_success() {
+fn basic_parse_success_one_line() {
     let source =  "10 PRINT \"HELLO WORLD\"";
+    let result = basic::parse_basic_program(source);
+    assert!(result.is_ok());
+}
+
+#[wasm_bindgen_test]
+fn basic_parse_success_two_lines() {
+    let source =  "10 PRINT \"HELLO\":20 PRINT \"WORLD\"";
     let result = basic::parse_basic_program(source);
     assert!(result.is_ok());
 }
