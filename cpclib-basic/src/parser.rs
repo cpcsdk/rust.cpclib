@@ -73,7 +73,10 @@ pub fn parse_instruction(input: &str) -> BasicSeveralTokensResult {
             map(alt((parse_rem,)), |i| vec![i]),
             parse_call,
             parse_input,
-            parse_print
+            parse_print,
+
+            parse_assign,
+
         ))
     )(input)?;
 
@@ -83,6 +86,49 @@ pub fn parse_instruction(input: &str) -> BasicSeveralTokensResult {
     res.append(&mut extra_space);
 
     dbg!(Ok((input, res)))
+}
+
+pub fn parse_assign(input: &str) -> BasicSeveralTokensResult {
+    enum Kind {
+        Float,
+        Int,
+        String
+    };
+    let (input, mut var) = alt((
+        map(parse_string_variable, |v| (Kind::String, v)),
+        map(parse_integer_variable, |v| (Kind::Int, v)),
+        map(parse_float_variable, |v| (Kind::Float, v)),
+        ))(input)?;
+
+    let (input, mut space) = tuple((
+        parse_space0,
+        char('='),
+        parse_space0
+    ))(input)?;
+
+
+
+    let (input, mut val) = match var.0 {
+        Kind::Float | Kind::Int => {
+            cut(context(
+                "Numeric expression expected",
+                parse_numeric_expression(NumericExpressionConstraint::None)
+            ))(input)?
+        }
+        Kind::String =>  {
+            cut(context("String expression expected",
+            parse_string_expression
+        ))(input)?
+        }
+    };
+
+    let mut res = var.1;
+    res.append(&mut space.0);
+    res.push(BasicToken::SimpleToken(space.1.into()));
+    res.append(&mut space.2);
+    res.append(&mut val);
+
+    Ok((input, res))
 }
 
 /// Parse a comment"],
@@ -268,6 +314,8 @@ pub fn parse_base_variable_name(input: &str) -> BasicSeveralTokensResult {
         |s: &str| s.len() < 39
     ))(input)?;
 
+    // TODO check that it is valid
+
     let mut tokens = vec![BasicToken::SimpleToken(first.into())];
     if let Some(next) = next {
         tokens.extend(next.chars().map(|c| BasicToken::SimpleToken(c.into())));
@@ -280,7 +328,7 @@ pub fn parse_base_variable_name(input: &str) -> BasicSeveralTokensResult {
 pub fn parse_print_expression(input: &str) -> BasicSeveralTokensResult {
     let (input, (prefix, mut expr)) = tuple((
         opt(alt((parse_print_arg_spc_or_tab, parse_print_arg_using))),
-        cut(context(
+        context(
             "Missing expression to print",
             alt((
                 parse_quoted_string,
@@ -288,7 +336,7 @@ pub fn parse_print_expression(input: &str) -> BasicSeveralTokensResult {
                 map(parse_basic_value, |v| vec![v]),
                 parse_numeric_expression(NumericExpressionConstraint::None)
             ))
-        ))
+        )
     ))(input)?;
 
     let mut tokens = if let Some(prefix) = prefix {
@@ -304,7 +352,7 @@ pub fn parse_print_expression(input: &str) -> BasicSeveralTokensResult {
 
 /// Parse a list of expressions for print
 pub fn parse_print_stream_expression(input: &str) -> BasicSeveralTokensResult {
-    let (input, mut first) = parse_print_expression(input)?;
+    let (input, mut first) = dbg!(parse_print_expression(input))?;
 
     let (input, mut next) = many0(map(
         tuple((one_of(";,"), parse_space0, parse_print_expression)),
@@ -327,6 +375,8 @@ pub fn parse_print_stream_expression(input: &str) -> BasicSeveralTokensResult {
 
 /// Parse a complete and valid print expression
 pub fn parse_print(input: &str) -> BasicSeveralTokensResult {
+    dbg!(input);
+
     // print keyword
     let (input, _) = tag_no_case("PRINT")(input)?;
 
@@ -335,8 +385,13 @@ pub fn parse_print(input: &str) -> BasicSeveralTokensResult {
     let (input, mut space) = parse_space0(input)?;
     tokens.append(&mut space);
 
+    dbg!(input);
+
     // canal and space
     let (input, canal) = opt(parse_canal)(input)?;
+    
+    dbg!(input);
+    ;
     let input = if let Some(mut canal) = canal {
         tokens.append(&mut canal);
 
@@ -347,6 +402,8 @@ pub fn parse_print(input: &str) -> BasicSeveralTokensResult {
     else {
         input
     };
+
+    dbg!(input);
 
     // list of expressions
     let (input, exprs) = opt(parse_print_stream_expression)(input)?;
@@ -496,6 +553,11 @@ pub fn parse_input(input: &str) -> BasicSeveralTokensResult {
 /// Parse a basic value
 pub fn parse_basic_value(input: &str) -> BasicOneTokenResult {
     alt((parse_floating_point, parse_integer_value_16bits))(input)
+}
+
+
+pub fn parse_string_expression(input: &str) -> BasicSeveralTokensResult {
+    parse_quoted_string(input)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
