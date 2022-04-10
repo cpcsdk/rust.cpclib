@@ -8,49 +8,54 @@ use cpclib_common::nom::multi::*;
 use cpclib_common::nom::sequence::*;
 /// ! Locomotive basic parser routines.
 use cpclib_common::nom::*;
-
-use crate::BasicError;
-use crate::tokens::*;
-use crate::{BasicLine, BasicProgram};
-
 use paste::paste;
+
+use crate::tokens::*;
+use crate::{BasicError, BasicLine, BasicProgram};
 
 type BasicSeveralTokensResult<'src> = IResult<&'src str, Vec<BasicToken>, VerboseError<&'src str>>;
 type BasicOneTokenResult<'src> = IResult<&'src str, BasicToken, VerboseError<&'src str>>;
-type BasicLineResult<'src> = IResult<&'src str, BasicLine, VerboseError<&'src str>> ;
+type BasicLineResult<'src> = IResult<&'src str, BasicLine, VerboseError<&'src str>>;
 
 /// Parse complete basic program"],
 pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram, VerboseError<&str>> {
     let (input, lines) = fold_many0(
-        parse_basic_inner_line,
+        parse_basic_line,
         || Vec::new(),
         |mut acc: Vec<_>, item| {
+            dbg!(&item);
             acc.push(item);
             acc
         }
     )(input)?;
 
-    let (input, last) = terminated(opt(parse_basic_line), opt(line_ending))(input)?;
-
-    let mut lines = lines.clone();
-    if let Some(line) = last {
-        lines.push(line);
-    }
+    let lines = lines.clone();
 
     Ok((input, BasicProgram::new(lines)))
 }
 
 /// Parse a line
-pub fn parse_basic_line(input: &str) -> BasicLineResult{
+pub fn parse_basic_line(input: &str) -> BasicLineResult {
+    // get the number
     let (input, line_number) = dec_u16_inner(input)?;
 
+    // forget the first space
     let (input, _) = char(' ')(input)?;
 
+    // get the tokens
     let (input, tokens) = fold_many0(
-        parse_instruction,
+        pair(parse_instruction, alt((eof, line_ending, tag(":")))),
         || Vec::new(),
-        |mut acc: Vec<_>, mut item| {
+        |mut acc: Vec<_>, (mut item, next)| {
             acc.append(&mut item);
+            if !next.is_empty() {
+                let char = next.chars().next().unwrap();
+                match char {
+                    ':' => acc.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon)),
+                    '\n' => {},
+                    _ => panic!("{} unhandled", char),
+                }
+            }
             acc
         }
     )(input)?;
@@ -58,56 +63,54 @@ pub fn parse_basic_line(input: &str) -> BasicLineResult{
     Ok((input, BasicLine::new(line_number, &tokens)))
 }
 
-/// Parse a line BUT expect an end of line char
-pub fn parse_basic_inner_line(input: &str) -> BasicLineResult{
-    terminated(parse_basic_line, line_ending)(input)
-}
-
 /// Parse any instruction.
 /// In opposite to BASIC editor, parameters are verified (i.e. generated BASIC is valid)
 pub fn parse_instruction(input: &str) -> BasicSeveralTokensResult {
-    let (input, instruction) = cut(context("Unable to parse an instruction", alt((
-        map(alt((
-            parse_rem,
 
-        )), |i| vec![i]),
+    let (input, mut res) = parse_space0(input)?;
 
-        parse_call,
-        parse_input,
-        parse_print,
+    let (input, mut instruction) = context(
+        "Unable to parse an instruction",
+        alt((
+            map(alt((parse_rem,)), |i| vec![i]),
+            parse_call,
+            parse_input,
+            parse_print
+        ))
+    )(input)?;
 
-    ))))(input)?;
+    res.append(&mut instruction);
 
-    // nothing more should be present
-    let (_, _) = context(
-        "Line ending or ':' expected", 
-        alt((line_ending, tag(":"), eof, tag("'")))
-    )(input.clone())?;
+    let (input, mut extra_space) = parse_space0(input)?;
+    res.append(&mut extra_space);
 
-    Ok((input, instruction))
+    dbg!(Ok((input, instruction)))
 }
 
 /// Parse a comment"],
-pub fn parse_rem(input: &str) -> BasicOneTokenResult{
+pub fn parse_rem(input: &str) -> BasicOneTokenResult {
     let (input, sym) = alt((
         map(tag_no_case("REM"), |_| BasicTokenNoPrefix::Rem),
         map(char('\''), |_| BasicTokenNoPrefix::SymbolQuote)
     ))(input)?;
 
-    let (input, list) = take_till(|ch| ch == ':' || ch == '\n')(input)?;
+    let (input, list) = take_till(|ch| ch == '\n')(input)?;
 
     Ok((input, BasicToken::Comment(sym, list.as_bytes().to_vec())))
 }
 
-pub fn parse_space(input: &str) -> BasicOneTokenResult{
+pub fn parse_space(input: &str) -> BasicOneTokenResult {
     map(one_of(" \t"), |c| BasicToken::SimpleToken(c.into()))(input)
 }
 
 pub fn parse_space0(input: &str) -> BasicSeveralTokensResult {
     many0(parse_space)(input)
 }
+pub fn parse_space1(input: &str) -> BasicSeveralTokensResult {
+    many1(parse_space)(input)
+}
 
-pub fn parse_char(input: &str) -> BasicOneTokenResult{
+pub fn parse_char(input: &str) -> BasicOneTokenResult {
     map(
         one_of("#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"),
         |c| BasicToken::SimpleToken(c.into())
@@ -141,7 +144,7 @@ pub fn parse_canal(input: &str) -> BasicSeveralTokensResult {
     Ok((input, vec![a, b]))
 }
 
-pub fn parse_quoted_string(input: &str) -> BasicSeveralTokensResult{
+pub fn parse_quoted_string(input: &str) -> BasicSeveralTokensResult {
     let (input, start) = parse_quote(input)?;
     let (input, mut content) = fold_many0(
         alt((parse_char, parse_space)),
@@ -161,7 +164,7 @@ pub fn parse_quoted_string(input: &str) -> BasicSeveralTokensResult{
 }
 
 /// Parse a comma optionally surrounded by space
-pub fn parse_comma(input: &str) -> BasicSeveralTokensResult{
+pub fn parse_comma(input: &str) -> BasicSeveralTokensResult {
     let (input, mut data) = tuple((
         parse_space0,
         map(char(','), |c| BasicToken::SimpleToken(c.into())),
@@ -175,7 +178,7 @@ pub fn parse_comma(input: &str) -> BasicSeveralTokensResult{
 }
 
 /// Parse the Args SPC or TAB of a print expression
-pub fn parse_print_arg_spc_or_tab(input: &str) -> BasicSeveralTokensResult{
+pub fn parse_print_arg_spc_or_tab(input: &str) -> BasicSeveralTokensResult {
     let (input, (kind, open, param, close, mut space)) = tuple((
         alt((tag_no_case("SPC"), tag_no_case("TAB"))),
         char('('),
@@ -197,14 +200,17 @@ pub fn parse_print_arg_spc_or_tab(input: &str) -> BasicSeveralTokensResult{
 }
 
 /// Parse using argument of a print expression
-pub fn parse_print_arg_using(input: &str) -> BasicSeveralTokensResult{
+pub fn parse_print_arg_using(input: &str) -> BasicSeveralTokensResult {
     let (input, (using, mut space_a, mut format, mut space_b, sep, mut space_c)) = tuple((
         tag_no_case("USING"),
         parse_space0,
-        cut(context("FORMAT expected", alt((
-            parse_quoted_string,// TODO add filtering because this string is special
-            parse_string_variable
-         )))), 
+        cut(context(
+            "FORMAT expected",
+            alt((
+                parse_quoted_string, // TODO add filtering because this string is special
+                parse_string_variable
+            ))
+        )),
         parse_space0,
         cut(context("; or , expected", one_of(",;"))),
         parse_space0
@@ -223,58 +229,68 @@ pub fn parse_print_arg_using(input: &str) -> BasicSeveralTokensResult{
     Ok((input, tokens))
 }
 
-pub fn parse_variable(input: &str) -> BasicSeveralTokensResult{
-    parse_string_variable(input)
+pub fn parse_variable(input: &str) -> BasicSeveralTokensResult {
+    alt((parse_string_variable, parse_integer_variable))(input)
 }
 
-pub fn parse_string_variable(input: &str) -> BasicSeveralTokensResult{
+pub fn parse_string_variable(input: &str) -> BasicSeveralTokensResult {
     let (input, name) = terminated(parse_base_variable_name, char('$'))(input)?;
 
-    let mut tokens = input
-        .chars()
-        .map(|c| BasicToken::SimpleToken(BasicTokenNoPrefix::from(c)))
-        .collect_vec();
+    let mut tokens = name;
     tokens.push(BasicToken::SimpleToken('$'.into()));
 
     Ok((input, tokens))
 }
 
-pub fn parse_base_variable_name(input: &str) -> BasicSeveralTokensResult{
-    
+pub fn parse_integer_variable(input: &str) -> BasicSeveralTokensResult {
+    let (input, name) = terminated(parse_base_variable_name, char('%'))(input)?;
 
+    let mut tokens = name;
+    tokens.push(BasicToken::SimpleToken('%'.into()));
+
+    Ok((input, tokens))
+}
+
+pub fn parse_float_variable(input: &str) -> BasicSeveralTokensResult {
+    let (input, name) = pair(parse_base_variable_name, opt(char('!')))(input)?;
+
+    let mut tokens = name.0;
+    if let Some(_) = name.1 {
+        tokens.push(BasicToken::SimpleToken('!'.into()));
+    }
+
+    Ok((input, tokens))
+}
+
+pub fn parse_base_variable_name(input: &str) -> BasicSeveralTokensResult {
     let (input, first) = one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")(input)?;
 
     let (input, next) = opt(verify(
         is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"),
-        |s: &str| s.len()<39
+        |s: &str| s.len() < 39
     ))(input)?;
 
-
-    
     let mut tokens = vec![BasicToken::SimpleToken(first.into())];
     if let Some(next) = next {
-        tokens.extend(
-            next.chars()
-                .map(|c| BasicToken::SimpleToken(c.into()))
-        );
+        tokens.extend(next.chars().map(|c| BasicToken::SimpleToken(c.into())));
     }
 
     Ok((input, tokens))
-
-
-
 }
 
 /// Parse a single expression of a print
-pub fn parse_print_expression(input: &str) -> BasicSeveralTokensResult{
+pub fn parse_print_expression(input: &str) -> BasicSeveralTokensResult {
     let (input, (prefix, mut expr)) = tuple((
         opt(alt((parse_print_arg_spc_or_tab, parse_print_arg_using))),
-        cut(context("Missing expression to print", alt((
-            parse_quoted_string, 
-            parse_variable,
-            map(parse_basic_value, |v| vec![v]),
-            parse_numeric_expression,
-        ))))
+        cut(context(
+            "Missing expression to print",
+            alt((
+                parse_quoted_string,
+                parse_variable,
+                map(parse_basic_value, |v| vec![v]),
+                parse_numeric_expression(NumericExpressionConstraint::None)
+            ))
+        ))
     ))(input)?;
 
     let mut tokens = if let Some(prefix) = prefix {
@@ -289,8 +305,8 @@ pub fn parse_print_expression(input: &str) -> BasicSeveralTokensResult{
 }
 
 /// Parse a list of expressions for print
-pub fn parse_print_stream_expression(input: &str) -> BasicSeveralTokensResult{
-    let (input, mut first) = dbg!(parse_print_expression(input))?;
+pub fn parse_print_stream_expression(input: &str) -> BasicSeveralTokensResult {
+    let (input, mut first) = parse_print_expression(input)?;
 
     let (input, mut next) = many0(map(
         tuple((one_of(";,"), parse_space0, parse_print_expression)),
@@ -308,13 +324,11 @@ pub fn parse_print_stream_expression(input: &str) -> BasicSeveralTokensResult{
         first.append(&mut other);
     }
 
-
-
     Ok((input, first))
 }
 
 /// Parse a complete and valid print expression
-pub fn parse_print(input: &str) -> BasicSeveralTokensResult{
+pub fn parse_print(input: &str) -> BasicSeveralTokensResult {
     // print keyword
     let (input, _) = tag_no_case("PRINT")(input)?;
 
@@ -342,17 +356,70 @@ pub fn parse_print(input: &str) -> BasicSeveralTokensResult{
         tokens.append(&mut exprs);
     }
 
-
-
     Ok((input, tokens))
 }
 
 pub fn parse_call(input: &str) -> BasicSeveralTokensResult {
-    todo!()
+    let (input, (_, mut space_a, mut address)) = tuple((
+        tag_no_case("CALL"),
+        parse_space1,
+        cut(context(
+            "Address expected",
+            parse_numeric_expression(NumericExpressionConstraint::Integer)
+        ))
+    ))(input)?;
+
+    // TODO implement the optional arguments list
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Call)];
+    res.append(&mut space_a);
+    res.append(&mut address);
+
+    Ok((input, res))
 }
 
 pub fn parse_input(input: &str) -> BasicSeveralTokensResult {
-    todo!()
+    let (input, (_, mut space_a, mut canal, mut space_b, sep, mut space_c, string, args)) =
+        tuple((
+            tag_no_case("INPUT"),
+            parse_space1,
+            opt(parse_canal),
+            parse_space0,
+            opt(char(';')),
+            parse_space0,
+            opt(parse_quoted_string),
+            many1(tuple((
+                parse_space0,
+                char(';'),
+                parse_space0,
+                parse_variable
+            )))
+        ))(input)?;
+
+    // TODO implement the optional arguments list
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Input)];
+    res.append(&mut space_a);
+    if let Some(mut canal) = canal {
+        res.append(&mut canal)
+    };
+    res.append(&mut space_b);
+    if let Some(mut sep) = sep {
+        res.push(BasicToken::SimpleToken(sep.into()))
+    };
+    res.append(&mut space_c);
+    if let Some(mut string) = string {
+        res.append(&mut string)
+    };
+
+    for mut arg in args.into_iter() {
+        res.append(&mut arg.0);
+        res.push(BasicToken::SimpleToken(arg.1.into()));
+        res.append(&mut arg.2);
+        res.append(&mut arg.3);
+    }
+
+    Ok((input, res))
 }
 
 /// TODO add the missing chars
@@ -428,101 +495,118 @@ pub fn parse_input(input: &str) -> BasicSeveralTokensResult {
 /// Parse the instructions that do not need a prefix byte
 /// TODO Add all the other instructions"],
 
-
 /// Parse a basic value
-pub fn parse_basic_value(input: &str) -> BasicOneTokenResult{
-    alt((
-        parse_hexadecimal_value_16bits, 
-        parse_floating_point,
-        parse_decimal_value_16bits,
-    ))(input)
+pub fn parse_basic_value(input: &str) -> BasicOneTokenResult {
+    alt((parse_floating_point, parse_integer_value_16bits))(input)
 }
 
-
-pub fn parse_numeric_expression(input: &str) -> BasicSeveralTokensResult {
-    alt((
-        map(
-            parse_basic_value,
-            |v| vec![v]
-        ),
-
-        parse_variable,
-
-        // numeric functions
-        parse_abs,
-        parse_atn,
-        parse_cint,
-        parse_cos,
-        parse_creal,
-        parse_exp,
-        parse_fix,
-        parse_inp,
-        parse_int,
-        parse_log,
-        parse_sgn,
-        parse_sin,
-        parse_sqr,
-        parse_tan
-    ))(input)
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum NumericExpressionConstraint {
+    None,
+    Integer
 }
 
-pub fn parse_any_numeric_function<'code> (name: &'static  str, code: BasicToken) -> impl Fn(&'code str) -> BasicSeveralTokensResult  {
+pub fn parse_numeric_expression<'code>(
+    constraint: NumericExpressionConstraint
+) -> impl Fn(&'code str) -> BasicSeveralTokensResult {
+    // XXX Functions must be parsed first
+    move |input: &'code str| {
+        match constraint {
+            NumericExpressionConstraint::None => {
+                alt((
+                    parse_all_generated_numeric_functions_any,
+                    parse_all_generated_numeric_functions_int,
+                    map(parse_basic_value, |v| vec![v]),
+                    parse_integer_variable,
+                    parse_float_variable
+                ))(input)
+            }
+            NumericExpressionConstraint::Integer => {
+                alt((
+                    parse_all_generated_numeric_functions_int,
+                    map(parse_integer_value_16bits, |v| vec![v]),
+                    parse_integer_variable
+                ))(input)
+            }
+        }
+    }
+}
 
-    move |input: &'code str| ->BasicSeveralTokensResult  {
-        let (input, (
-            code, 
-            mut space_a,
-            open,
-            mut expr,
-            close
-        )) = tuple((
-            map(
-                tag_no_case(name),
-                |_| code.clone()
-            ),
+fn parse_any_numeric_function<'code>(
+    name: &'static str,
+    code: BasicToken,
+    constraint: NumericExpressionConstraint
+) -> impl Fn(&'code str) -> BasicSeveralTokensResult {
+    move |input: &'code str| -> BasicSeveralTokensResult {
+        let (input, (code, mut space_a, open, mut expr, close)) = tuple((
+            map(tag_no_case(name), |_| code.clone()),
             parse_space0,
             char('('),
-            parse_numeric_expression,
-            char(')')
+            cut(context(
+                "Wrong parameter",
+                parse_numeric_expression(constraint.clone())
+            )),
+            cut(context("Missing ')'", char(')')))
         ))(input)?;
-    
-    
+
         let mut res = Vec::new();
         res.push(code);
         res.append(&mut space_a);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open).into()));
+        res.push(BasicToken::SimpleToken(
+            BasicTokenNoPrefix::from(open).into()
+        ));
         res.append(&mut expr);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close).into()));
-    
+        res.push(BasicToken::SimpleToken(
+            BasicTokenNoPrefix::from(close).into()
+        ));
+
         Ok((input, res))
     }
-
 }
 
-/*
-pub fn parse_abs(input: &str) -> BasicSeveralTokensResult {
-    parse_any_numeric_function(
-        "ABS", 
-        BasicToken::PrefixedToken(BasicTokenPrefixed::Abs)
-    )(input)
-}
-*/
+// pub fn parse_abs(input: &str) -> BasicSeveralTokensResult {
+// parse_any_numeric_function(
+// "ABS",
+// BasicToken::PrefixedToken(BasicTokenPrefixed::Abs)
+// )(input)
+// }
 
 macro_rules! generate_numeric_functions {
-    ( $($name:ident: $code:expr),+ )=> {
-        $(paste! {
-            pub fn [<parse_ $name:lower>](input: &str) -> BasicSeveralTokensResult {
-                    parse_any_numeric_function(
-                        stringify!($name), 
-                        $code
-                    )(input)
+    ( $(
+        $const:ty | $kind:ident => {
+            $($name:ident: $code:expr),+
+        }
+      )+
+
+    )=> {$(
+            $(paste! {
+                pub fn [<parse_ $name:lower>](input: &str) -> BasicSeveralTokensResult {
+                        parse_any_numeric_function(
+                            stringify!($name),
+                            $code,
+                            $const
+                        )(input)
+                }
+            })+
+
+
+            paste! {
+                    pub fn [<parse_all_generated_numeric_functions_ $kind >](input: &str) -> BasicSeveralTokensResult {
+                    alt((
+                        $(
+                            paste!{[<parse_ $name:lower>]},
+                        )+
+                    ))(input)
+                }
             }
-        })+
+        )+
 };
 }
 
 // Generate all the functions that consume a numerical expression
-generate_numeric_functions!{
+generate_numeric_functions! {
+
+    NumericExpressionConstraint::None | any  => {
         ABS: BasicToken::PrefixedToken(BasicTokenPrefixed::Abs),
         ATN: BasicToken::PrefixedToken(BasicTokenPrefixed::Atn),
         CINT: BasicToken::PrefixedToken(BasicTokenPrefixed::Cint),
@@ -537,30 +621,31 @@ generate_numeric_functions!{
         SIN: BasicToken::PrefixedToken(BasicTokenPrefixed::Sin),
         SQR: BasicToken::PrefixedToken(BasicTokenPrefixed::Sqr),
         TAN: BasicToken::PrefixedToken(BasicTokenPrefixed::Tan)
+    }
+
+    NumericExpressionConstraint::Integer | int => {
+        INKEY:  BasicToken::PrefixedToken(BasicTokenPrefixed::Inkey),
+        JOY:  BasicToken::PrefixedToken(BasicTokenPrefixed::Joy)
+    }
 }
 
 // implementation stolen to https://github.com/EdouardBERGE/rasm/blob/master/rasm.c#L2295
-pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8;5], BasicError> {
+pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8; 5], BasicError> {
+    let mut bits = [false; 32];
+    let mut res = [0; 5];
 
-    let mut bits = [false;32];
-    let mut res = [0;5];
-
-    let (is_pos, nb) = if nb >= 0f64 {
-        (true, nb)
-    } else {
-        (false, -nb)
-    };
+    let (is_pos, nb) = if nb >= 0f64 { (true, nb) } else { (false, -nb) };
 
     let deci = nb.trunc() as u64;
-    let fract = nb.fract(); 
+    let fract = nb.fract();
 
     let mut bitpos = 0;
     let mut exp: i32 = 0;
     let mut mantissa: u64 = 0;
-    let mut mask:u64 =0x80000000;
+    let mut mask: u64 = 0x80000000;
 
-
-    if deci >= 1 { // nb is >=1
+    if deci >= 1 {
+        // nb is >=1
         mask = 0x80000000;
 
         // search for the first (from the left) bit to 1
@@ -573,82 +658,88 @@ pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8;5], BasicError> {
             mask /= 2;
         }
         // build the mantissa part of the decimal value
-        mantissa = (nb * 2f64.powi(32- exp) + 0.5) as _;
-        if (mantissa & 0xFF00000000) != 0 {mantissa=0xFFFFFFFF};
+        mantissa = (nb * 2f64.powi(32 - exp) + 0.5) as _;
+        if (mantissa & 0xFF00000000) != 0 {
+            mantissa = 0xFFFFFFFF
+        };
 
         mask = 0x80000000;
         while mask != 0 {
-            bits[bitpos] = (mantissa & mask) != 0 ;
+            bits[bitpos] = (mantissa & mask) != 0;
             bitpos += 1;
             mask /= 2;
         }
-    } else {
+    }
+    else {
         // <1
         if nb == 0.0 {
             exp = -128;
-        } else {
-            mantissa=(nb*4294967296.0+0.5) as _ ; // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+        }
+        else {
+            mantissa = (nb * 4294967296.0 + 0.5) as _; // as v is ALWAYS <1.0 we never reach the 32 bits maximum
             if (mantissa & 0xFF00000000) != 0 {
-                mantissa=0xFFFFFFFF;
+                mantissa = 0xFFFFFFFF;
             }
 
-            mask=0x80000000;
+            mask = 0x80000000;
             // find first significant bit of fraction part
-			while (mantissa & mask) == 0 {
-				mask /= 2;
-				exp -= 1;
-			}
-
-            mantissa=(nb*2.0f64.powi(32-exp)+0.5) as _; // as v is ALWAYS <1.0 we never reach the 32 bits maximum
-			if (mantissa & 0xFF00000000) != 0 {
-                mantissa=0xFFFFFFFF;
+            while (mantissa & mask) == 0 {
+                mask /= 2;
+                exp -= 1;
             }
 
+            mantissa = (nb * 2.0f64.powi(32 - exp) + 0.5) as _; // as v is ALWAYS <1.0 we never reach the 32 bits maximum
+            if (mantissa & 0xFF00000000) != 0 {
+                mantissa = 0xFFFFFFFF;
+            }
 
-			mask=0x80000000;
+            mask = 0x80000000;
             while mask != 0 {
-				bits[bitpos]= (mantissa & mask) != 0 ;
-				bitpos += 1;
-				mask /= 2;
-			}
+                bits[bitpos] = (mantissa & mask) != 0;
+                bitpos += 1;
+                mask /= 2;
+            }
         }
     }
 
     {
-        /* generate the mantissa bytes  */
+        // generate the mantissa bytes
         let mut ib: usize = 3;
         let mut ibb: u8 = 0x80;
         for j in 0..bitpos {
             if bits[j] {
                 res[ib] |= ibb;
             }
-            ibb/=2;
-            if ibb==0 {
+            ibb /= 2;
+            if ibb == 0 {
                 ibb = 0x80;
                 if ib != 0 {
-                    ib-=1
-                } else {
-                    debug_assert!(j == bitpos-1);
+                    ib -= 1
+                }
+                else {
+                    debug_assert!(j == bitpos - 1);
                 };
             }
         }
     }
 
     {
-        /* generate the exponent */
+        // generate the exponent
         exp += 128;
         if exp < 0 || exp > 255 {
-            return Err(BasicError::ExponentOverflow)
-        } else {
+            return Err(BasicError::ExponentOverflow);
+        }
+        else {
             res[4] = exp as _;
         }
     }
 
     {
-        /* Generate the sign bit */
+        // Generate the sign bit
         if is_pos {
             res[3] &= 0x7F;
-        } else {
+        }
+        else {
             res[3] |= 0x80;
         }
     }
@@ -657,49 +748,65 @@ pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8;5], BasicError> {
 }
 
 pub fn parse_floating_point(input: &str) -> BasicOneTokenResult {
-    let (input, nb ) = 
-    context("Unable to parse float", verify(
-            map(recognize(tuple((
-            dec_u16_inner,
-            char('.'), 
-            dec_u16_inner))),
-            |nb| {
-                f32_to_amstrad_float(nb.parse::<f64>().unwrap())
-            }
-        ),
-        |res| res.is_ok()
-    ))(input)?;
+    let (input, nb) = context(
+        "Unable to parse float",
+        verify(
+            map(
+                recognize(tuple((
+                    opt(char('-')),
+                    dec_u16_inner, 
+                    char('.'), 
+                    dec_u16_inner
+                ))),
+                |nb| f32_to_amstrad_float(nb.parse::<f64>().unwrap())
+            ),
+            |res| res.is_ok()
+        )
+    )(input)?;
 
     let bytes = nb.unwrap();
     let res = BasicToken::Constant(
-        BasicTokenNoPrefix::ValueFloatingPoint, 
+        BasicTokenNoPrefix::ValueFloatingPoint,
         BasicValue::Float(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4])
     );
 
     Ok((input, res))
+}
 
-
+pub fn parse_integer_value_16bits(input: &str) -> BasicOneTokenResult {
+    alt((parse_decimal_value_16bits, parse_hexadecimal_value_16bits))(input)
 }
 
 /// Parse an hexadecimal value
-pub fn parse_hexadecimal_value_16bits(input: &str) -> BasicOneTokenResult{
-    map(preceded(char('&'), hex_u16_inner), |val| {
-        BasicToken::Constant(
-            BasicTokenNoPrefix::ValueIntegerHexadecimal16bits,
-            BasicValue::new_integer(val)
-        )
-    })(input)
+pub fn parse_hexadecimal_value_16bits(input: &str) -> BasicOneTokenResult {
+    map(
+        pair(
+            opt(char('-')),
+            preceded(alt((tag("&"), tag_no_case("&h"))), hex_u16_inner)
+        ),
+        |(neg, val)| {
+            let val = val as i16;
+
+            BasicToken::Constant(
+                BasicTokenNoPrefix::ValueIntegerHexadecimal16bits,
+                BasicValue::new_integer(if neg.is_some() { -val } else { val })
+            )
+        }
+    )(input)
 }
 
-/// ...
-pub fn parse_decimal_value_16bits(input: &str) -> BasicOneTokenResult{
-    map(terminated(dec_u16_inner, not(char('.'))), 
-    |val| {
-        BasicToken::Constant(
-            BasicTokenNoPrefix::ValueIntegerDecimal16bits,
-            BasicValue::new_integer(val)
-        )
-    })(input)
+/// TODO: add binary number
+pub fn parse_decimal_value_16bits(input: &str) -> BasicOneTokenResult {
+    map(
+        pair(opt(char('-')), terminated(dec_u16_inner, not(char('.')))),
+        |(neg, val)| {
+            let val = val as i16;
+            BasicToken::Constant(
+                BasicTokenNoPrefix::ValueIntegerDecimal16bits,
+                BasicValue::new_integer(if neg.is_some() { -val } else { val })
+            )
+        }
+    )(input)
 }
 
 /// XXX stolen to the asm parser
@@ -778,6 +885,9 @@ mod test {
     fn check_number() {
         assert!(dec_u16_inner("10").is_ok());
 
+        assert!(dbg!(parse_floating_point("67.98")).is_ok());
+        assert!(dbg!(parse_floating_point("-67.98")).is_ok());
+
         match hex_u16_inner("1234".into()) {
             Ok((res, value)) => {
                 println!("{:?}", &res);
@@ -808,7 +918,7 @@ mod test {
     }
 
     fn check_line_tokenisation(code: &str) -> BasicLine {
-        let res = parse_basic_inner_line(code.into());
+        let res = parse_basic_line(code.into());
         match res {
             Ok((res, line)) => {
                 println!("{:?}", &line);
@@ -843,26 +953,51 @@ mod test {
     }
 
     #[test]
-    fn test_tokens() {
-        check_token_tokenisation("call");
-        check_token_tokenisation("abs");
-        check_token_tokenisation(":");
+    fn test_comment() {
+        check_line_tokenisation("10 REM fldsfksjfksjkg");
+        check_line_tokenisation("10 ' fldsfksjfksjkg");
+
+        let line = check_line_tokenisation("10 REM fldsfksjfksjkg:CALL\n");
+    }
+
+    fn check_expression(code: &str) {
+        let res = parse_numeric_expression(NumericExpressionConstraint::None)(code.into());
+        match res {
+            Ok((res, line)) => {
+                println!("{} => {:?}", code, &line);
+                assert_eq!(res.len(), 0, "Line as not been completly consummed");
+            }
+            Err(e) => {
+                panic!("{:?}", e);
+            }
+        }
+    }
+
+    fn check_print_expression(code: &str) {
+        let res = parse_print_expression(code);
+        match res {
+            Ok((res, line)) => {
+                println!("{} => {:?}", code, &line);
+                assert_eq!(res.len(), 0, "Line as not been completly consummed");
+            }
+            Err(e) => {
+                panic!("{:?}", e);
+            }
+        }
     }
 
     #[test]
-    fn test_comment() {
-        check_token_tokenisation("REM fldsfksjfksjkg");
-        check_token_tokenisation("' fldsfksjfksjkg");
+    fn test_expression() {
+        let exprs = ["ATN(1)", "ABS(-67.98)"];
 
-        let line = check_line_tokenisation("10 REM fldsfksjfksjkg:CALL\n");
-        assert_eq!(3, line.tokens().len())
+        for exp in exprs.into_iter() {
+            check_expression(exp);
+            check_print_expression(exp);
+        }
     }
 }
 
-pub fn test_parse<P: Fn(&str) -> BasicSeveralTokensResult> (
-    parser: P,
-    code: &str
-) -> BasicLine {
+pub fn test_parse<P: Fn(&str) -> BasicSeveralTokensResult>(parser: P, code: &str) -> BasicLine {
     let (rest, tokens) = dbg!(parser(code)).expect("Parse issue");
 
     assert!(rest.is_empty());
@@ -874,10 +1009,7 @@ pub fn test_parse<P: Fn(&str) -> BasicSeveralTokensResult> (
     }
 }
 
-pub fn test_parse1<P: Fn(&str) -> BasicOneTokenResult> (
-    parser: P,
-    code: &str
-) -> BasicLine {
+pub fn test_parse1<P: Fn(&str) -> BasicOneTokenResult>(parser: P, code: &str) -> BasicLine {
     let (rest, tokens) = dbg!(parser(code)).expect("Parse issue");
 
     assert!(rest.is_empty());
@@ -889,7 +1021,7 @@ pub fn test_parse1<P: Fn(&str) -> BasicOneTokenResult> (
     }
 }
 
-pub fn test_parse_and_compare<P: Fn(&str) -> BasicSeveralTokensResult> (
+pub fn test_parse_and_compare<P: Fn(&str) -> BasicSeveralTokensResult>(
     parser: P,
     code: &str,
     bytes: &[u8]

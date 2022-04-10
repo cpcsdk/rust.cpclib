@@ -400,7 +400,7 @@ pub enum BasicTokenPrefixed {
     Abs = 0,
     Asc,
     Atn,
-    CharDollar,
+    ChrDollar,
     Cint,
     Cos,
     Creal,
@@ -492,7 +492,8 @@ pub enum BasicValue {
 
 #[allow(missing_docs)]
 impl BasicValue {
-    pub fn new_integer(word: u16) -> Self {
+    pub fn new_integer(word: i16) -> Self {
+        let word:u16= unsafe{std::mem::transmute(word)};
         BasicValue::Integer((word % 256) as u8, (word / 256) as u8)
     }
 

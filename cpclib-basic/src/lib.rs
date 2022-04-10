@@ -339,14 +339,6 @@ pub mod test {
         BasicProgram::parse(code2).expect("Unable to produce basic tokens");
     }
 
-    #[test]
-    fn print_basic() {
-        let code1 = "10 call &0: abs &0\n20 call 12\n30 print\n";
-        let tokens = BasicProgram::parse(code1).unwrap();
-        println!("{:?}", tokens.lines);
-        let code2 = tokens.to_string();
-        assert_eq!(code1.to_uppercase(), code2)
-    }
 
     #[test]
     fn parse_correct() {
