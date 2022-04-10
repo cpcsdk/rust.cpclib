@@ -2,13 +2,12 @@ use wasm_bindgen::prelude::*;
 
 use cpclib_asm::{preamble::*, error::AssemblerError};
 use web_sys::console;
-use js_sys::Uint8Array;
 
 use crate::sna::JsSnapshot;
 
 
 #[wasm_bindgen]
-pub struct ParserConfig {
+pub struct AsmParserConfig {
     dotted_directive: bool,
     case_sensitive: bool,
     file_name: String
@@ -17,15 +16,15 @@ pub struct ParserConfig {
 
 
 #[wasm_bindgen]
-pub fn create_parser_config(title: &str) -> ParserConfig {
-    ParserConfig {
+pub fn asm_create_parser_config(title: &str) -> AsmParserConfig {
+    AsmParserConfig {
         dotted_directive: false,
         case_sensitive: true,
         file_name: title.to_owned()
     }
 }
 
-impl Into<ParserContext> for &ParserConfig {
+impl Into<ParserContext> for &AsmParserConfig {
     fn into(self) -> ParserContext {
         let mut ctx = ParserContext::default();
         ctx.set_dotted_directives(self.dotted_directive);
@@ -34,7 +33,7 @@ impl Into<ParserContext> for &ParserConfig {
     }
 }
 
-impl Into<AssemblingOptions> for &ParserConfig {
+impl Into<AssemblingOptions> for &AsmParserConfig {
     fn into(self) -> AssemblingOptions {
         let mut options = AssemblingOptions::default();
         options.set_case_sensitive(self.case_sensitive);
@@ -44,11 +43,11 @@ impl Into<AssemblingOptions> for &ParserConfig {
 }
 
 #[wasm_bindgen]
-pub struct JsLocatedListing {
+pub struct JsAsmListing {
     listing: LocatedListing
 }
 
-impl From<LocatedListing> for JsLocatedListing {
+impl From<LocatedListing> for JsAsmListing {
     fn from(listing: LocatedListing) -> Self {
         Self {
             listing
@@ -83,24 +82,19 @@ impl JsAssemblerError {
 
 
 
-#[wasm_bindgen]
-pub fn assemble_file(s: String) {
-
-}
-
 
 #[wasm_bindgen(catch)]
-pub fn assemble_snapshot(code: &str, conf: &ParserConfig) 
+pub fn asm_assemble_snapshot(code: &str, conf: &AsmParserConfig) 
     -> Result<JsSnapshot, JsAssemblerError> {
         console::log_1(&"assemble_snapshot".into());
 
 
-    parse_source(code, conf)
+    asm_parse_source(code, conf)
         .map_err(|e| {
             console::log_1(&"Parse NOK".into());
             e
         })
-        .and_then(|JsLocatedListing { listing }| {
+        .and_then(|JsAsmListing { listing }| {
 
             console::log_1(&"Parse OK".into());
 
@@ -131,7 +125,7 @@ pub fn assemble_snapshot(code: &str, conf: &ParserConfig)
 /// Parse the source and return the tokens.
 /// Mainly usefull for acquiring syntax error when editing the file.
 #[wasm_bindgen(catch)]
-pub fn parse_source(code: &str, conf: &ParserConfig) -> Result<JsLocatedListing, JsAssemblerError> {
+pub fn asm_parse_source(code: &str, conf: &AsmParserConfig) -> Result<JsAsmListing, JsAssemblerError> {
     let ctx:ParserContext = conf.into();
 
     let res = parse_z80_str_with_context(code, ctx);

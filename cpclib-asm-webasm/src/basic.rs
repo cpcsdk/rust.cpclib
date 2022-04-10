@@ -13,6 +13,14 @@ impl From<BasicError> for JsBasicError {
         JsBasicError(error)
     }
 }
+#[wasm_bindgen]
+impl JsBasicError {
+
+    #[wasm_bindgen(getter)]
+    pub fn msg(&self) -> String {
+        self.0.to_string()
+    }
+}
 
 #[wasm_bindgen]
 pub struct JsBasicProgram(BasicProgram);
@@ -34,7 +42,7 @@ impl JsBasicProgram {
 }
 
 #[wasm_bindgen(catch)]
-pub fn parse_basic_program(src: &str) -> Result<JsBasicProgram, JsBasicError> {
+pub fn basic_parse_program(src: &str) -> Result<JsBasicProgram, JsBasicError> {
     BasicProgram::parse(src)
         .map_err(|e| {
             console::error_1(&e.to_string().into());

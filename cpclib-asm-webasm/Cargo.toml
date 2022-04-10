@@ -35,6 +35,10 @@ js-sys = "0.3.4"
 version = "0.3.4"
 features = [
   'console',
+  'Blob', 'BlobPropertyBag',
+  'Window', 'Document', 
+  'HtmlAnchorElement', 'Url',
+
 ]
 
 
