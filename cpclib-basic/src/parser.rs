@@ -23,15 +23,12 @@ pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram, VerboseEr
         parse_basic_line,
         || Vec::new(),
         |mut acc: Vec<_>, item| {
-            dbg!(&item);
             acc.push(item);
             acc
         }
     )(input)?;
 
-    let lines = lines.clone();
-
-    Ok((input, BasicProgram::new(lines)))
+    dbg!(Ok((input, BasicProgram::new(lines))))
 }
 
 /// Parse a line
@@ -47,6 +44,7 @@ pub fn parse_basic_line(input: &str) -> BasicLineResult {
         pair(parse_instruction, alt((eof, line_ending, tag(":")))),
         || Vec::new(),
         |mut acc: Vec<_>, (mut item, next)| {
+            dbg!(&item);
             acc.append(&mut item);
             if !next.is_empty() {
                 let char = next.chars().next().unwrap();
@@ -84,7 +82,7 @@ pub fn parse_instruction(input: &str) -> BasicSeveralTokensResult {
     let (input, mut extra_space) = parse_space0(input)?;
     res.append(&mut extra_space);
 
-    dbg!(Ok((input, instruction)))
+    dbg!(Ok((input, res)))
 }
 
 /// Parse a comment"],

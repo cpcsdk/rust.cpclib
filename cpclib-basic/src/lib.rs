@@ -345,19 +345,19 @@ pub mod test {
         let code = "10 CALL &1234";
         let prog = BasicProgram::parse(code).unwrap();
         let bytes = prog.as_bytes();
-        let expected = vec![10, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 0, 0, 0];
+        let expected = [10, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 0, 0, 0];
 
-        assert_eq!(bytes, expected);
+        assert_eq!(&bytes, &expected);
 
         let code = "10 CALL &1234\n20 CALL &1234";
         let prog = BasicProgram::parse(code).unwrap();
         let bytes = prog.as_bytes();
-        let expected = vec![
+        let expected = [
             10, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 10, 0, 20, 0, 131, 32, 28, 0x34, 0x12, 0, 0,
             0, 0,
         ];
 
-        assert_eq!(bytes, expected);
+        assert_eq!(&bytes, &expected);
     }
 
     #[test]
