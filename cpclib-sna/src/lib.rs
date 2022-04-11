@@ -122,6 +122,13 @@ impl Default for Snapshot {
     }
 }
 
+impl Snapshot {
+    pub fn new_6128() -> Result<Self, String> {
+        let content = include_bytes!("cpc6128.sna").to_vec();
+        Self::from_buffer(content)
+    }
+}
+
 #[allow(missing_docs)]
 #[allow(unused)]
 impl Snapshot {
@@ -132,7 +139,6 @@ impl Snapshot {
     }
 
     pub fn load<P: AsRef<Path>>(filename: P) -> Result<Self, String> {
-        let mut sna = Self::default();
         let filename = filename.as_ref();
 
         // Read the full content of the file
@@ -142,6 +148,12 @@ impl Snapshot {
             f.read_to_end(&mut content);
             content
         };
+
+        Self::from_buffer(file_content)
+    }
+
+    pub fn from_buffer(mut file_content: Vec<u8>) -> Result<Self, String> {
+        let mut sna = Self::default();
 
         // Copy the header
         sna.header

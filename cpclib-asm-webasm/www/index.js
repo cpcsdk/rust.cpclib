@@ -87,6 +87,6 @@ import('../pkg')
 		link.click();
 		URL.revokeObjectURL(link.href);
 	} catch(error) {
-		console.error("ERR. Unexpected error\n",error.msg);
+		console.error("ERR. Unexpected error\n",error);
 	}
   }) 

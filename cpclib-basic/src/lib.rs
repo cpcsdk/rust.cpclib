@@ -315,11 +315,13 @@ impl BasicProgram {
         bytes
     }
 
-    pub fn as_sna(&self) -> Snapshot {
+    pub fn as_sna(&self) -> Result<Snapshot, String> {
         let bytes = self.as_bytes();
-        let mut sna = Snapshot::default();
-        sna.add_data(&bytes, 0x170);
-        sna
+        let mut sna = Snapshot::new_6128()?;
+        sna.unwrap_memory_chunks();
+        sna.add_data(&bytes, 0x170)
+            .map_err(|e| format!("{:?}", e))?;
+        Ok(sna)
     }
 }
 

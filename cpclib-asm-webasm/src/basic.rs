@@ -6,6 +6,7 @@ use crate::sna::JsSnapshot;
 
 
 #[wasm_bindgen]
+#[derive(Debug)]
 pub struct JsBasicError(BasicError);
 
 impl From<BasicError> for JsBasicError {
@@ -13,6 +14,7 @@ impl From<BasicError> for JsBasicError {
         JsBasicError(error)
     }
 }
+
 #[wasm_bindgen]
 impl JsBasicError {
 
@@ -34,10 +36,10 @@ impl From<BasicProgram> for JsBasicProgram {
 
 #[wasm_bindgen]
 impl JsBasicProgram {
-    #[wasm_bindgen]
-    pub fn sna(&self) -> JsSnapshot {
+    #[wasm_bindgen(catch)]
+    pub fn sna(&self) -> Result<JsSnapshot, String> {
         self.0.as_sna()
-            .into()
+            .map(|sna| sna.into())
     }
 }
 
