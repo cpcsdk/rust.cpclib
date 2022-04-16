@@ -16,8 +16,9 @@ module.exports = {
     }),
 
     new CopyWebpackPlugin({
-      patterns: [
-        'index.html'
+      patterns: [ 
+        'index.html',
+        {from:'emu', to:'emu'}
       ]
     })
   ],

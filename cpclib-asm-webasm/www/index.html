@@ -3,9 +3,105 @@
   <head>
     <meta charset="utf-8">
     <title>cpclib-asm test</title>
+
+    <style type="text/css">
+
+      .game {
+       /*   position: absolute;
+          top: 0px;
+          left: 0px;
+          margin: 0px;
+          border: 0;
+          */
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          display: block;
+          image-rendering: optimizeSpeed;
+          image-rendering: -moz-crisp-edges;
+          image-rendering: -o-crisp-edges;
+          image-rendering: -webkit-optimize-contrast;
+          image-rendering: optimize-contrast;
+          image-rendering: crisp-edges;
+          image-rendering: pixelated;
+          -ms-interpolation-mode: nearest-neighbor; 
+      }
+      </style>
+
   </head>
   <body>
     <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
     <script src="./bundle.js"></script>
+
+
+    <textarea 
+      id="source_code"
+      type="text"
+      width="80"
+      height="200"
+      multiple
+      >
+    di
+    jp $
+    </textarea>
+
+    <textarea 
+      id="error"
+      type="text"
+      readonly
+      width="80"
+      height="20"
+      multiple
+      ></textarea>
+
+    <input 
+      id="action_run"
+      type="button"
+      value="Run"
+    />
+
+    <!-- Should be programmatically generated to cope with several emulators-->
+    <div id="emu" style="width: 50%">
+      <canvas class="game" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+  <script type="text/javascript">
+    var Module = {
+        preRun: [],
+        postRun: [ ],
+        print: (function() {
+            return function(text) {
+                text = Array.prototype.slice.call(arguments).join(' ');
+                console.log(text);
+            };
+        })(),
+        printErr: function(text) {
+            text = Array.prototype.slice.call(arguments).join(' ');
+            console.error(text);
+        },
+        canvas: (function() {
+            var canvas = document.getElementById('canvas');
+            canvas.addEventListener("webglcontextlost", function(e) { alert('FIXME: WebGL context lost, please reload the page'); e.preventDefault(); }, false);
+            return canvas;
+        })(),
+        setStatus: function(text) { },
+        monitorRunDependencies: function(left) { },
+    };
+    window.onerror = function(event) {
+        console.log("onerror: " + event);
+    };
+
+
+    function cpc_inject_snapshot(name, sna) {
+      var buffer = sna.bytes;
+      console.log("Inject", buffer);
+      Module.ccall(
+        'cpc_inject_memory', 
+        null,
+        ['string','array','number'],
+        [name, buffer, buffer.length]
+      );
+    }
+  </script>
+  <script async type="text/javascript" src="emu/tiny8bit/cpc-ui.js"></script>
+    </div>
   </body>
 </html>

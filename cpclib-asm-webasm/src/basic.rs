@@ -53,3 +53,10 @@ pub fn basic_parse_program(src: &str) -> Result<JsBasicProgram, JsBasicError> {
         .map(|b| b.into())
 }
 
+#[wasm_bindgen(catch)]
+
+pub fn basic_snapshot(src: &str) -> Result<JsSnapshot, String> {
+   basic_parse_program(src)
+    .map_err(|e| e.0.to_string())?
+    .sna()
+}
