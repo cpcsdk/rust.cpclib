@@ -1046,7 +1046,7 @@ mod test_super {
     #[test]
     fn test_located_include() {
         let src = " include \"toto\"";
-        let ctx = ParserContext::default();
+        let mut ctx = ParserContext::default();
         ctx.source = Some(src);
 
         let span = Z80Span::new_extra(src, &ctx);
@@ -1060,7 +1060,7 @@ mod test_super {
         dbg!(&processed);
         assert!(matches!(
             processed.state,
-            'Some(ProcessedTokenState::Include(..))
+            Some(ProcessedTokenState::Include(..))
         ));
     }
 }

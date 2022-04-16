@@ -1,4 +1,13 @@
 use cpclib_asm::assemble;
+use cpclib_asm::preamble::ParserContext;
+
+lazy_static::lazy_static! {
+	static ref CTX: ParserContext = Default::default();
+}
+
+fn ctx() -> &'static ParserContext {
+	&CTX
+}
 
 #[test]
 pub fn assemble_vsync_test() {
@@ -14,7 +23,7 @@ end
 	jr $
 	";
 
-    let binary = assemble(code).unwrap();
+    let binary = assemble(code, ctx()).unwrap();
 
     assert_eq!(
         &binary,
@@ -48,7 +57,7 @@ pub fn macro_local_labels() {
 	";
 
     // just check that it assemble
-    let binary = assemble(code).unwrap();
+    let binary = assemble(code, ctx()).unwrap();
     assert!(binary.len() != 0);
 }
 
@@ -74,7 +83,7 @@ my_triangle1: triangle
 	";
 
     // just check that it assemble
-    let binary = assemble(code).unwrap();
+    let binary = assemble(code, ctx()).unwrap();
     assert_eq!(binary.len(), 3 * 3);
     assert_eq!(&binary, &[4, 5, 6, 4, 5, 6, 4, 5, 6,])
 }
@@ -99,7 +108,7 @@ my_triangle1 triangle [2, 3, 4], [10, 20, 30], [100, 200, 255]
 	";
 
     // just check that it assemble
-    let binary = assemble(code).unwrap();
+    let binary = assemble(code, ctx()).unwrap();
     assert_eq!(binary.len(), 3 * 3);
     assert_eq!(&binary, &[2, 3, 4, 10, 20, 30, 100, 200, 255])
 }
@@ -124,7 +133,7 @@ my_triangle1 triangle [11, 12, 13],, [1, 2, 3]
 	";
 
     // just check that it assemble
-    let binary = assemble(code).unwrap();
+    let binary = assemble(code, ctx()).unwrap();
     assert_eq!(binary.len(), 3 * 3);
     assert_eq!(&binary, &[11, 12, 13, 4, 5, 8, 1, 2, 3,])
 }
@@ -157,7 +166,7 @@ my_shape: shape
 ";
 
     // just check that it assemble
-    let binary = assemble(code).unwrap();
+    let binary = assemble(code, ctx()).unwrap();
     assert_eq!(
         &binary,
         &[1, 2, 3, 4, 5, 8, 9, 5, 6, 1, 2, 3, 4, 5, 8, 9, 5, 6,]
@@ -191,7 +200,7 @@ my_shape: shape	, [ [1,2,3], [1,2,3], [1,2,3] ]
 ";
 
     // just check that it assemble
-    let binary = assemble(code).unwrap();
+    let binary = assemble(code, ctx()).unwrap();
     assert_eq!(binary.len(), 3 * 3 * 2);
     assert_eq!(
         &binary,
@@ -311,6 +320,6 @@ BD = B_ + D_
         LZCLOSE
 ";
 
-    let bin = dbg!(assemble(code));
+    let bin = dbg!(assemble(code, ctx()));
     assert!(bin.is_ok());
 }

@@ -1,8 +1,12 @@
 use cpclib_asm::parser::ParserContext;
 use cpclib_asm::preamble::*;
 
-fn ctx() -> ParserContext {
-    ParserContext::default()
+lazy_static::lazy_static!{
+    static ref CTX: ParserContext = Default::default();
+}
+
+fn ctx() -> &'static ParserContext {
+    &CTX
 }
 #[test]
 fn test_regression1() {
@@ -43,12 +47,12 @@ fn test_regression1() {
 #[test]
 fn expr_negative_regression() {
     assert_eq!(
-        expr(ctx().build_span("18".to_owned())).unwrap().1,
+        expr2(ctx().build_span("18".to_owned())).unwrap().1.to_expr(),
         Expr::Value(18)
     );
 
     assert_eq!(
-        expr(ctx().build_span("-18".to_owned())).unwrap().1,
+        expr2(ctx().build_span("-18".to_owned())).unwrap().1.to_expr(),
         Expr::Value(-18)
     );
 }
@@ -117,7 +121,7 @@ fn macro_args_single() {
     let code = "1".to_owned();
     let arg = dbg!(parse_macro_arg(ctx().build_span(code))).unwrap().1;
 
-    assert_eq!(arg, MacroParam::Single("1".to_string()))
+    assert_eq!(arg.to_macro_param(), MacroParam::Single("1".to_string()))
 }
 
 #[test]
@@ -126,7 +130,7 @@ fn macro_args_list_1() {
     let arg = dbg!(parse_macro_arg(ctx().build_span(code))).unwrap().1;
 
     assert_eq!(
-        arg,
+        arg.to_macro_param(),
         MacroParam::List(vec![Box::new(MacroParam::Single("1".to_string()))])
     )
 }
@@ -137,7 +141,7 @@ fn macro_args_list_2() {
     let arg = dbg!(parse_macro_arg(ctx().build_span(code))).unwrap().1;
 
     assert_eq!(
-        arg,
+        arg.to_macro_param(),
         MacroParam::List(vec![
             Box::new(MacroParam::Single("1".to_string())),
             Box::new(MacroParam::Single("3".to_string())),
@@ -151,7 +155,7 @@ fn macro_args_list_3() {
     let arg = dbg!(parse_macro_arg(ctx().build_span(code))).unwrap().1;
 
     assert_eq!(
-        arg,
+        arg.to_macro_param(),
         MacroParam::List(vec![
             Box::new(MacroParam::Single("1".to_string())),
             Box::new(MacroParam::Single("".to_string())),
@@ -171,7 +175,10 @@ fn regression_akm1() {
                             inc hl
                             ENDIF ;PLY_CFG_UseEffect_ArpeggioTable
                             ";
-    let bin = dbg!(parse_conditional(input.into()));
+    let input = Z80Span::new_extra(input, ctx());
+
+
+    let bin = dbg!(parse_conditional(input));
     assert!(bin.is_ok());
     dbg!(bin.unwrap().1.to_token());
 }
@@ -187,7 +194,9 @@ fn regression_akm2() {
         inc hl
         ENDIF ;PLY_CFG_UseEffect_PitchTable
 ";
-    let bin = dbg!(parse_conditional(input.into()));
+let input = Z80Span::new_extra(input, ctx());
+
+    let bin = dbg!(parse_conditional(input));
     assert!(bin.is_ok());
     dbg!(bin.unwrap().1.to_token());
 }
@@ -200,7 +209,9 @@ fn regression_akm3() {
         nop
     ENDIF ;PLY_CFG_UseEffects
 ";
-    let bin = dbg!(parse_conditional(input.into()));
+    let input = Z80Span::new_extra(input, ctx());
+
+    let bin = dbg!(parse_conditional(input));
     assert!(bin.is_ok());
     dbg!(bin.unwrap().1.to_token());
 }
@@ -214,7 +225,9 @@ dknr3:  ld de,4
     add hl,de
     ENDIF ;PLY_CFG_UseEffects
 ";
-    let bin = dbg!(parse_conditional(input.into()));
+    let input = Z80Span::new_extra(input, ctx());
+
+    let bin = dbg!(parse_conditional(input));
     assert!(bin.is_ok());
     dbg!(bin.unwrap().1.to_token());
 }
@@ -244,7 +257,8 @@ dknr3:  ld de,4
     ENDIF ;PLY_CFG_UseEffects
 
 ";
-    let bin = dbg!(parse_conditional(input.into()));
+    let input = Z80Span::new_extra(input, ctx());
+    let bin = dbg!(parse_conditional(input));
     assert!(bin.is_ok());
     dbg!(bin.unwrap().1.to_token());
 }

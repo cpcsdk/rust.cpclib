@@ -1417,7 +1417,7 @@ pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Z80P
     // TODO add an additional note that
     let warning = AssemblerError::RelocatedWarning {
         warning: Box::new(AssemblerError::AssemblingError {
-            msg: "Prefer BANK or PAGE directives to write direct -1, -1, XX".to_owned()
+            msg: "Prefer BANK or PAGE directives to write direct -1, -1, XX".into()
         }),
         span: input_start.clone()
     };
@@ -2037,7 +2037,7 @@ pub fn parse_ld_fake(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> 
 
     let warning = AssemblerError::RelocatedWarning {
         warning: Box::new(AssemblerError::AssemblingError {
-            msg: "Fake instruction assembled using several opcodes".to_owned()
+            msg: "Fake instruction assembled using several opcodes".into()
         }),
         span: input_start.clone()
     };
@@ -4245,20 +4245,23 @@ pub fn decode_parsing_error(_orig: &str, _e: cpclib_common::nom::Err<&str>) -> S
 mod test {
     use super::*;
 
-    fn ctx() -> ParserContext {
-        Default::default()
+    lazy_static::lazy_static!{  
+        static ref  CTX: ParserContext = Default::default();
+    }
+    
+    fn ctx() -> &'static ParserContext {
+        &CTX
     }
     #[test]
     fn test_parse_end_directive() {
-        let res = dbg!(parse_end_directive("endif".into()));
+        let res = dbg!(parse_end_directive(Z80Span::new_extra("endif", ctx())));
         assert!(res.is_ok());
     }
     #[test]
     fn parse_test_cond() {
         let res = dbg!(inner_code(Z80Span::new_extra(
             " nop
-                endif"
-                .to_owned(),
+                endif",
             ctx(),
         )));
         assert!(res.is_ok());
@@ -4353,37 +4356,37 @@ mod test {
     #[test]
     fn parse_indexregister8() {
         assert_eq!(
-            parse_register_ixl(Z80Span::new_extra("ixl".to_owned(), ctx()))
+            parse_register_ixl(Z80Span::new_extra("ixl", ctx()))
                 .unwrap()
                 .1,
             DataAccess::IndexRegister8(IndexRegister8::Ixl)
         );
 
         assert_eq!(
-            parse_register_ixl(Z80Span::new_extra("lx".to_owned(), ctx()))
+            parse_register_ixl(Z80Span::new_extra("lx", ctx()))
                 .unwrap()
                 .1,
             DataAccess::IndexRegister8(IndexRegister8::Ixl)
         );
 
-        assert!(parse_register_iyl(Z80Span::new_extra("ixl".to_owned(), ctx())).is_err());
+        assert!(parse_register_iyl(Z80Span::new_extra("ixl", ctx())).is_err());
     }
 
     #[test]
     fn test_parse_prefix_label() {
         let (span, res) =
-            parse_labelprefix(Z80Span::new_extra("{bank}".to_owned(), ctx())).unwrap();
+            parse_labelprefix(Z80Span::new_extra("{bank}", ctx())).unwrap();
         assert!(span.is_empty());
         assert_eq!(res, LabelPrefix::Bank);
 
-        let (span, res) = dbg!(expr(Z80Span::new_extra("{bank}label".to_owned(), ctx())).unwrap());
+        let (span, res) = dbg!(expr(Z80Span::new_extra("{bank}label", ctx())).unwrap());
         assert!(span.is_empty());
         assert_eq!(res, Expr::PrefixedLabel(LabelPrefix::Bank, "label".into()));
     }
 
     #[test]
     fn test_parse_expr_format() {
-        let res = formatted_expr(Z80Span::new_extra("{hex} VAL".to_owned(), ctx()));
+        let res = formatted_expr(Z80Span::new_extra("{hex} VAL", ctx()));
         assert!(res.is_ok());
         let (span, res) = res.unwrap();
         assert!(span.is_empty());
@@ -4431,7 +4434,7 @@ mod test {
 
     #[test]
     fn test_parse_print() {
-        let (span, res) = parse_print(Z80Span::new_extra("PRINT VAR".to_owned(), ctx())).unwrap();
+        let (span, res) = parse_print(Z80Span::new_extra("PRINT VAR", ctx())).unwrap();
         assert!(span.is_empty());
         assert_eq!(
             res,
@@ -4439,7 +4442,7 @@ mod test {
         );
 
         let (span, res) =
-            parse_print(Z80Span::new_extra("PRINT VAR, VAR".to_owned(), ctx())).unwrap();
+            parse_print(Z80Span::new_extra("PRINT VAR, VAR", ctx())).unwrap();
         assert!(span.is_empty());
         assert_eq!(
             res,
@@ -4450,7 +4453,7 @@ mod test {
         );
 
         let (span, res) =
-            parse_print(Z80Span::new_extra("PRINT {hex}VAR".to_owned(), ctx())).unwrap();
+            parse_print(Z80Span::new_extra("PRINT {hex}VAR", ctx())).unwrap();
         assert!(span.is_empty());
         assert_eq!(
             res,
@@ -4461,7 +4464,7 @@ mod test {
         );
 
         let (span, res) =
-            parse_print(Z80Span::new_extra("PRINT \"hello\"".to_owned(), ctx())).unwrap();
+            parse_print(Z80Span::new_extra("PRINT \"hello\"", ctx())).unwrap();
         assert!(span.is_empty());
 
         assert_eq!(
@@ -4478,7 +4481,7 @@ mod test {
                         endrepeat
                         "
         );
-        let res = parse_repeat(Z80Span::new_extra(z80.to_owned(), ctx()));
+        let res = parse_repeat(Z80Span::new_extra(z80, ctx()));
         assert!(res.is_ok(), "{:?}", res);
         let res = res.unwrap();
         assert_eq!(res.0.trim().len(), 0, "{:?}", res);
@@ -4487,7 +4490,7 @@ mod test {
     #[test]
     fn parser_regression_1() {
         let res = std::dbg!(parse_ld_normal(Z80Span::new_extra(
-            "ld a, chessboard_file".to_owned(),
+            "ld a, chessboard_file",
             ctx()
         )));
         assert!(res.is_ok(), "{:?}", res);
@@ -4534,7 +4537,7 @@ mod test {
         .replace("\u{C2}\u{A0}", " ");
         let res = inner_code(Z80Span::new_extra(&code.to_owned(), ctx()));
         assert!(res.is_ok(), "{}", &res.err().unwrap().to_string());
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", &res);
+        assert_eq!(res.unwrap().0.trim().len(), 0);
     }
     #[test]
     fn parser_regression_1e() {
@@ -4561,12 +4564,11 @@ mod test {
                         ld a, main_memory_chessboard_extra_file
                         ld a, chessboard_file
                         jp .common_part_loading_in_main_memory
-                        "
-            .to_owned(),
+                        ",
             ctx()
         )));
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+        assert_eq!(res.unwrap().0.trim().len(), 0);
     }
     #[test]
     fn parser_regression_1g() {
@@ -4581,8 +4583,7 @@ mod test {
                         ld a, chessboard_file
                         jp .common_part_loading_in_main_memory
                         
-                        endif"
-                .to_owned(),
+                        endif",
             ctx()
         )));
         assert!(res.is_ok(), "{:?}", res);
@@ -4590,7 +4591,7 @@ mod test {
 
     #[test]
     fn parser_regression2() {
-        let res = std::dbg!(parse_assert(Z80Span::new_extra("assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)".to_owned(), ctx())));
+        let res = std::dbg!(parse_assert(Z80Span::new_extra("assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)", ctx())));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
     }
@@ -4598,28 +4599,28 @@ mod test {
     #[test]
     fn parser_sna() {
         let res = std::dbg!(parse_buildsna(Z80Span::new_extra(
-            "BUILDSNA".to_owned(),
+            "BUILDSNA",
             ctx()
         )));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
         let res = std::dbg!(parse_buildsna(Z80Span::new_extra(
-            "BUILDSNA V2".to_owned(),
+            "BUILDSNA V2",
             ctx()
         )));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
         let res = std::dbg!(parse_buildsna(Z80Span::new_extra(
-            "BUILDSNA V3".to_owned(),
+            "BUILDSNA V3",
             ctx()
         )));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
         let res = std::dbg!(parse_buildsna(Z80Span::new_extra(
-            "BUILDSNA V4".to_owned(),
+            "BUILDSNA V4",
             ctx()
         )));
         assert!(res.is_err(), "{:?}", &res);
@@ -4628,21 +4629,21 @@ mod test {
     #[test]
     fn test_parse_snaset() {
         let res = std::dbg!(parse_snaset(Z80Span::new_extra(
-            "SNASET Z80_SP, 0x500".to_owned(),
+            "SNASET Z80_SP, 0x500",
             ctx()
         )));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
         let res = std::dbg!(parse_snaset(Z80Span::new_extra(
-            "SNASET GA_PAL, 0, 30".to_owned(),
+            "SNASET GA_PAL, 0, 30",
             ctx()
         )));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
         let res = std::dbg!(parse_snaset(Z80Span::new_extra(
-            "SNASET CRTC_REG, 1, 48".to_owned(),
+            "SNASET CRTC_REG, 1, 48",
             ctx()
         )));
         assert!(res.is_ok(), "{:?}", &res);
@@ -4651,11 +4652,11 @@ mod test {
 
     #[test]
     fn test_parse_r16_to_r8() {
-        let res = parse_z80_line(Z80Span::new_extra(" ld a, hl.low".to_owned(), ctx()));
+        let res = parse_z80_line(Z80Span::new_extra(" ld a, hl.low", ctx()));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
-        let res = parse_ld_normal(Z80Span::new_extra("ld bc.low, a".to_owned(), ctx()));
+        let res = parse_ld_normal(Z80Span::new_extra("ld bc.low, a", ctx()));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
@@ -4670,7 +4671,7 @@ mod test {
             )
         );
 
-        let res = parse_z80_line(Z80Span::new_extra(" ld bc.low, a".to_owned(), ctx()));
+        let res = parse_z80_line(Z80Span::new_extra(" ld bc.low, a", ctx()));
         assert!(res.is_ok(), "{:?}", &res);
         assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
@@ -4689,7 +4690,7 @@ mod test {
         );
 
         let res = parse_z80_line(Z80Span::new_extra(
-            "\t\tld  bc.low, a\n\t".to_owned(),
+            "\t\tld  bc.low, a\n\t",
             ctx()
         ));
         assert!(res.is_ok(), "{:?}", &res);

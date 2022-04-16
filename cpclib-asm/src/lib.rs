@@ -40,6 +40,8 @@ use preamble::*;
 
 use self::listing_output::ListingOutput;
 
+use lazy_static;
+
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
 #[derive(Debug)]
 pub struct AssemblingOptions {
@@ -178,6 +180,15 @@ pub fn assemble_to_amsdos_file(
 mod test_super {
     use super::*;
 
+    lazy_static::lazy_static! {
+        static ref CTX: ParserContext = Default::default();
+    }
+
+
+    fn ctx() -> &'static ParserContext {
+        &CTX
+    }
+
     #[test]
     fn simple_test_assemble() {
         let code = "
@@ -186,7 +197,7 @@ mod test_super {
 		db 3, 4
 		";
 
-        let bytes = assemble(code).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
+        let bytes = assemble(code, ctx()).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
         assert_eq!(bytes.len(), 4);
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
@@ -199,7 +210,7 @@ mod test_super {
 		db 3, 4
 		";
 
-        let bytes = assemble(code).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
+        let bytes = assemble(code, ctx()).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
 
@@ -299,7 +310,7 @@ Truc
 
     fn code_test(code: &'static str) {
         let options = AssemblingOptions::new_case_insensitive();
-        let res = assemble_with_options(code, &options);
+        let res = assemble_with_options(code, &options, ctx());
         res.unwrap();
     }
 

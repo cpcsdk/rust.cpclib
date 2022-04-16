@@ -152,9 +152,9 @@ impl ParserContext {
 
 #[allow(missing_docs)]
 impl ParserContext {
-    // pub fn build_span<S: Into<String>>(&self, src: S) -> Z80Span {
-    // Z80Span::new_extra(src, self.clone())
-    // }
+    pub fn build_span<S: AsRef<str>>(&self, src: S) -> Z80Span {
+     Z80Span::new_extra(src.as_ref(), self)
+    }
 
     /// Specify the path that contains the code
     pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {

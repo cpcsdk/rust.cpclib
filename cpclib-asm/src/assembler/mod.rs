@@ -5377,14 +5377,14 @@ mod test {
         env.start_new_pass();
 
         assert!(visit_assert(
-            &Expr::Equal(Box::new(0i32.into()), Box::new(0i32.into())),
+            &Expr::BinaryOperation(BinaryOperation::Equal, Box::new(0i32.into()), Box::new(0i32.into())),
             None,
             &mut env,
             None
         )
         .unwrap());
         assert!(!visit_assert(
-            &Expr::Equal(Box::new(1i32.into()), Box::new(0i32.into())),
+            &Expr::BinaryOperation(BinaryOperation::Equal, Box::new(1i32.into()), Box::new(0i32.into())),
             None,
             &mut env,
             None
@@ -5653,7 +5653,9 @@ mod test {
         let tokens = vec![Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(Register8::A)),
-            Some(DataAccess::Expression(Expr::Duration(Box::new(
+            Some(DataAccess::Expression(Expr::UnaryTokenOperation(
+                UnaryTokenOperation::Duration,
+                Box::new(
                 Token::OpCode(
                     Mnemonic::Inc,
                     Some(DataAccess::Register16(Register16::Hl)),
@@ -5676,7 +5678,9 @@ mod test {
         let tokens = vec![Token::OpCode(
             Mnemonic::Ld,
             Some(DataAccess::Register8(Register8::A)),
-            Some(DataAccess::Expression(Expr::OpCode(Box::new(
+            Some(DataAccess::Expression(Expr::UnaryTokenOperation(
+                UnaryTokenOperation::Opcode,
+                Box::new(
                 Token::OpCode(
                     Mnemonic::Inc,
                     Some(DataAccess::Register16(Register16::Hl)),
@@ -5734,7 +5738,7 @@ mod test {
                 Some(DataAccess::Expression(Expr::Label("$".into()))),
                 None,
             ),
-        ]));
+        ], ctx()));
 
         assert!(res.is_ok());
         let env = res.unwrap();
@@ -5752,7 +5756,7 @@ mod test {
             Token::Org(0x4000.into(), None),
             Token::Label("hello".into()),
             Token::Label("hello".into())
-        ]);
+        ], ctx());
         assert!(res.is_err());
     }
 
@@ -5764,7 +5768,7 @@ mod test {
                 0x8000i32.into(),
                 vec![Token::Defb(vec![Expr::Label("$".into())])].into()
             )
-        ]);
+        ], ctx());
         assert!(res.is_ok());
     }
 
@@ -5783,7 +5787,7 @@ mod test {
         let env = visit_tokens(&tokens);
         assert!(env.is_err());
 
-        let env = visit_tokens_all_passes(&tokens);
+        let env = visit_tokens_all_passes(&tokens, ctx());
         assert!(env.is_ok());
         let env = env.ok().unwrap();
 
@@ -5828,7 +5832,7 @@ mod test {
                 Some(DataAccess::Register8(Register8::C)),
                 None
             )
-        ]);
+        ], ctx());
         assert!(res.is_ok());
         let env = res.unwrap();
         let bytes = env.memory(0x100, 4);
@@ -5846,7 +5850,7 @@ mod test {
                 Some(DataAccess::MemoryRegister16(Register16::Hl)),
                 None
             )
-        ]);
+        ], ctx());
         assert!(res.is_ok());
         let env = res.unwrap();
         let bytes = env.memory(0x100, 2);
@@ -5863,10 +5867,17 @@ mod test {
                 )),
                 Some(Register8::A)
             )
-        ]);
+        ], ctx());
         assert!(res.is_ok());
         let env = res.unwrap();
         let bytes = env.memory(0x100, 4);
         assert_eq!(bytes, vec![0xFD, 0xCB, 0x2, 0xA7]);
+    }
+
+    lazy_static::lazy_static!{
+        static ref  CTX: ParserContext = Default::default();
+    }
+    fn ctx() -> &'static ParserContext {
+        &CTX
     }
 }

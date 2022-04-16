@@ -673,6 +673,7 @@ dependencies = [
  "failure",
  "getset",
  "globset",
+ "lazy_static",
  "libc",
  "matches",
  "ouroboros",
