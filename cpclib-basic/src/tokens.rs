@@ -17,7 +17,7 @@ pub enum BasicTokenNoPrefix {
     VarUnknown1 = 6,
     VarUnknown2 = 7,
     VarUnknown3 = 8,
-    VarUnknown4 = 9,
+    CharTab = 9, // XXX Not sure of that
     VarUnknown5 = 0xA,
 
     VariableDefinition1 = 0xB,
@@ -363,7 +363,9 @@ impl From<char> for BasicTokenNoPrefix {
         '?' => BasicTokenNoPrefix::CharQuestionMark,
         '@' => BasicTokenNoPrefix::CharAt,
 
-        _ => unimplemented!("{}", c)
+        '\t' => BasicTokenNoPrefix::CharTab,
+
+        _ => unimplemented!("'{}'", c)
         }
     }
 }
