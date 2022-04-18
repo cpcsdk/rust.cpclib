@@ -41,6 +41,8 @@
       height="200"
       multiple
       >
+    buildsna v2
+    org 0x4000
     di
     jp $
     </textarea>
@@ -59,6 +61,12 @@
       type="button"
       value="Run"
     />
+
+    <input 
+    id="action_download"
+    type="button"
+    value="Download"
+  />
 
     <!-- Should be programmatically generated to cope with several emulators-->
     <div id="emu" style="width: 50%">
@@ -92,6 +100,15 @@
 
     function cpc_inject_snapshot(name, sna) {
       var buffer = sna.bytes;
+      console.log("Module", Module);
+      console.log("Module", Module);
+      Module._cpc_inject_memory(
+        name,
+        buffer,
+        buffer.length
+      );
+
+      /*
       console.log("Inject", buffer);
       Module.ccall(
         'cpc_inject_memory', 
@@ -99,7 +116,11 @@
         ['string','array','number'],
         [name, buffer, buffer.length]
       );
+*/
     }
+
+    console.log("Module", Module);
+
   </script>
   <script async type="text/javascript" src="emu/tiny8bit/cpc-ui.js"></script>
     </div>

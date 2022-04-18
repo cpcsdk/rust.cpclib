@@ -16,6 +16,9 @@ import('../pkg')
 		window.document.getElementById("action_run")
 			.onclick = requestRun;
 
+		window.document.getElementById("action_download")
+			.onclick = requestDownload;
+
 	}
 
 
@@ -26,10 +29,14 @@ import('../pkg')
 		// Build the project
 		var sna = build();
 		if (null != sna) { launch_sna(getProjectName()+".sna", sna)}
-
-
-
 	}
+
+	function requestDownload(event) {
+		// Build the project
+		var sna = build();
+		if (null != sna) { sna.download(getProjectName()+".sna")}
+	}
+
 
 	function launch_sna(fname, sna) {
 		cpc_inject_snapshot(fname, sna)

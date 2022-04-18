@@ -286,6 +286,12 @@ pub fn parse_z80_str_with_context<S: Into<String>>(
         .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)))
 }
 
+/// TODO better to build parse_z80_str_with_context from parse_z80_span than the opposite
+pub fn parse_z80_span(span: Z80Span) -> Result<LocatedListing, AssemblerError> {
+    let ctx = span.extra.clone();
+    parse_z80_str_with_context(span.as_str(), ctx)
+}
+
 /// Parse a string and return the corresponding listing
 pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, AssemblerError> {
     parse_z80_str_with_context(code, Default::default())

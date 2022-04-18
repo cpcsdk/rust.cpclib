@@ -7,20 +7,17 @@ mod tests {
     use std::sync::RwLock;
     use std::u32;
 
+
     use cpclib_asm::preamble::*;
     use cpclib_common::lazy_static;
     use cpclib_common::nom::IResult;
 
     lazy_static::lazy_static! {
-        static ref CTX: ParserContext = ParserContext {
-            context_name: None,
-            current_filename: None,
-            read_referenced_files: false,
-            search_path: Vec::new(),
-            parse_warning: RwLock::new(Vec::new()),
-            state: ParsingState::Standard,
-            dotted_directive: false
-        };
+        static ref CTX: ParserContext = Default::default();
+    }
+
+    fn ctx() -> &'static ParserContext {
+        &CTX
     }
 
     fn check_mnemonic(code: &str, mnemonic: Mnemonic) -> bool {
@@ -44,7 +41,7 @@ mod tests {
     }
 
     fn get_val<'src, 'ctx, T: core::fmt::Debug>(
-        res: IResult<Z80Span, T, cpclib_common::nom::error::VerboseError<Z80Span>>
+        res: IResult<Z80Span, T, Z80ParserError>
     ) -> T {
         match res {
             Err(e) => panic!("{:?}", e),
@@ -112,7 +109,7 @@ mod tests {
     #[test]
     fn test_expr() {
         let formula = "0xbd00 + 0x20 + 0b00001100";
-        let res = expr(CTX.build_span(formula));
+        let res = located_expr(CTX.build_span(formula));
         assert!(res.is_ok());
         println!("{:?}", res);
         assert_eq!(
@@ -157,35 +154,35 @@ mod tests {
     #[test]
     fn fn_test_label() {
         assert_eq!(
-            parse_label(false)(CTX.build_span("label")).ok().unwrap().1,
+            parse_label(false)(CTX.build_span("label")).ok().unwrap().1.as_str(),
             "label"
         );
         assert_eq!(
-            parse_label(false)(CTX.build_span("label")).ok().unwrap().1,
+            parse_label(false)(CTX.build_span("label")).ok().unwrap().1.as_str(),
             "label"
         );
         assert_eq!(
             parse_label(false)(CTX.build_span("module.label"))
                 .ok()
                 .unwrap()
-                .1,
+                .1.as_str(),
             "module.label"
         );
         assert_eq!(
             parse_label(false)(CTX.build_span("label15"))
                 .ok()
                 .unwrap()
-                .1,
+                .1.as_str(),
             "label15"
         );
         assert_eq!(
-            parse_label(false)(CTX.build_span(".label")).ok().unwrap().1,
+            parse_label(false)(CTX.build_span(".label")).ok().unwrap().1.as_str(),
             ".label"
         );
 
         let code = "label";
-        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(code.to_owned())));
-        assert_eq!(tokens.len(), 1);
+        let tokens = parse_z80_line_complete(CTX.build_span(code.to_owned())).unwrap();
+        assert_eq!(tokens.1.len(), 1);
 
         let code = "label";
         let tokens = get_val(parse_z80_line(CTX.build_span(code.to_owned())));
@@ -200,19 +197,19 @@ mod tests {
         assert_eq!(tokens.len(), 1);
 
         let code = "label      \n";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let code = "demo_system_binary_start \n";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 1);
     }
 
     #[test]
     fn test_equ() {
         let code = "LABEL EQU VALUE";
-        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(code.to_owned())));
-        assert_eq!(tokens.len(), 1);
+        let tokens = parse_z80_line_complete(CTX.build_span(code.to_owned())).unwrap();
+        assert_eq!(tokens.1.len(), 1);
     }
 
     #[test]
@@ -380,27 +377,27 @@ mod tests {
     #[should_panic]
     pub fn test_unique_lines_panic() {
         let line1 = "label1:fd";
-        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(line1)));
-        assert_eq!(tokens.len(), 1);
+        let tokens = parse_z80_line_complete(CTX.build_span(line1)).unwrap();
+        assert_eq!(tokens.1.len(), 1);
     }
 
     #[test]
     pub fn test_unique_lines() {
         let line1 = "label1";
-        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(line1)));
-        assert_eq!(tokens.len(), 1);
+        let tokens = parse_z80_line_complete(CTX.build_span(line1)).unwrap();
+        assert_eq!(tokens.1.len(), 1);
 
         let line1 = "label1  ";
-        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(line1)));
-        assert_eq!(tokens.len(), 1);
+        let tokens = parse_z80_line_complete(CTX.build_span(line1)).unwrap();
+        assert_eq!(tokens.1.len(), 1);
 
         let line1 = "label1 ; blabla ";
-        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(line1)));
-        assert_eq!(tokens.len(), 2);
+        let tokens = parse_z80_line_complete(CTX.build_span(line1)).unwrap();
+        assert_eq!(tokens.1.len(), 2);
 
         let line1 = "label1 ; blabla \n";
-        let tokens = get_val(parse_z80_line_label_aware_directive(CTX.build_span(line1)));
-        assert_eq!(tokens.len(), 2);
+        let tokens = parse_z80_line_complete(CTX.build_span(line1)).unwrap();
+        assert_eq!(tokens.1.len(), 2);
 
         let line1 = "label1";
         let tokens = get_val(parse_z80_line(CTX.build_span(line1)));
@@ -471,11 +468,11 @@ mod tests {
         assert_eq!(code.as_bytes(), b"");
 
         let code = "\n\n";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 0);
 
         let code = "";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 0);
 
         let code = "";
@@ -490,11 +487,11 @@ mod tests {
         assert_eq!(tokens.len(), 0);
 
         let code = "  ";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 0);
 
         let code = "  \n";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 0);
 
         let code = "  ; comment \n";
@@ -758,10 +755,10 @@ mod tests {
 		inc a : out (c), a : out (c), l
 		inc a : out (c), a : out (c), h
     endr";
-        let res = parse_z80_code(CTX.build_span(z80));
+        let res = parse_z80_span(CTX.build_span(z80));
         println!("{:?}", res);
         assert!(res.is_ok());
-        assert_eq!(res.unwrap().0.len(), 0);
+        assert_eq!(res.unwrap().len(), 0);
     }
 
     #[test]
@@ -776,10 +773,10 @@ mod tests {
 		inc a : out (c), a : out (c), h
 
     endr";
-        let res = parse_z80_code(CTX.build_span(z80));
+        let res = parse_z80_span(CTX.build_span(z80));
         println!("{:?}", res);
         assert!(res.is_ok());
-        assert_eq!(res.unwrap().0.len(), 0);
+        assert_eq!(res.unwrap().len(), 0);
     }
 
     #[test]
@@ -797,10 +794,10 @@ mod tests {
         let code = "		ex af, af'
 			dec a
 			jr nz, player_line_loop";
-        let res = parse_z80_code(CTX.build_span(code.to_owned()));
+        let res = parse_z80_span(CTX.build_span(code.to_owned()));
         println!("{:?}", &res);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().0.len());
+        assert_eq!(0, res.unwrap().len());
     }
 
     #[test]
@@ -809,10 +806,10 @@ mod tests {
         stableticker start stuff
             inc a
         stableticker stop";
-        let res = parse_z80_code(CTX.build_span(code.to_owned()));
+        let res = parse_z80_span(CTX.build_span(code.to_owned()));
         println!("{:?}", &res);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().0.len());
+        assert_eq!(0, res.unwrap().len());
     }
 
     #[test]
@@ -822,10 +819,10 @@ mod tests {
             ld a, duration(ld a, label)
             defs  duration(inc hl) + thing
         ";
-        let res = parse_z80_code(CTX.build_span(code.to_owned()));
+        let res = parse_z80_span(CTX.build_span(code.to_owned()));
         println!("{:?}", &res);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().0.len());
+        assert_eq!(0, res.unwrap().len());
     }
 
     #[test]
@@ -833,39 +830,39 @@ mod tests {
         let code = "
             ld a, opcode(inc a)
         ";
-        let res = parse_z80_code(CTX.build_span(code.to_owned()));
+        let res = parse_z80_span(CTX.build_span(code.to_owned()));
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().0.len());
+        assert_eq!(0, res.unwrap().len());
 
         let code = "
             ld hl, opcode(inc a)
         ";
-        let res = parse_z80_code(CTX.build_span(code.to_owned()));
+        let res = parse_z80_span(CTX.build_span(code.to_owned()));
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().0.len());
+        assert_eq!(0, res.unwrap().len());
 
         let code = "
             ld a, opcode(ldd)
         ";
-        let res = parse_z80_code(CTX.build_span(code.to_owned()));
+        let res = parse_z80_span(CTX.build_span(code.to_owned()));
         assert!(res.is_ok()); // Failure is detected in the assembler pass not the parser pass
-        assert_eq!(0, res.unwrap().0.len());
+        assert_eq!(0, res.unwrap().len());
 
         let code = "
             ld hl, opcode(ldd)
         ";
-        let res = parse_z80_code(CTX.build_span(code.to_owned()));
+        let res = parse_z80_span(CTX.build_span(code.to_owned()));
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().0.len());
+        assert_eq!(0, res.unwrap().len());
 
         let code = "
 INC_L equ opcode(inc l)
 INC_H equ opcode(inc h)
         ";
-        let res = parse_z80_code(CTX.build_span(code.to_owned()));
+        let res = parse_z80_span(CTX.build_span(code.to_owned()));
         println!("{:?}", res);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().0.len());
+        assert_eq!(0, res.unwrap().len());
 
         let code = "
 INC_L equ opcode(inc l)
@@ -873,37 +870,37 @@ INC_H equ opcode(inc h)
         ld a, INC_L
         ld (hl), a
         ";
-        let res = parse_z80_code(CTX.build_span(code.to_owned()));
+        let res = parse_z80_span(CTX.build_span(code.to_owned()));
         println!("{:?}", res);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().0.len());
+        assert_eq!(0, res.unwrap().len());
     }
 
     #[test]
     fn fn_test_asm_prog1() {
         let code = "  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n  jp $";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code = "\n\n  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let tokens = get_val(dbg!(parse_z80_code(CTX.build_span(code.to_owned()))));
+        let tokens = dbg!(parse_z80_span(CTX.build_span(code.to_owned()))).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code =
             "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \nlabel ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 7);
     }
 
@@ -915,7 +912,7 @@ INC_H equ opcode(inc h)
 30 call {titi}
         ENDLOCOMOTIVE";
 
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 1);
     }
 
@@ -927,7 +924,7 @@ INC_H equ opcode(inc h)
 30 call {titi_2}
         ENDLOCOMOTIVE";
 
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         assert_eq!(tokens.len(), 1);
     }
 
@@ -972,25 +969,25 @@ INC_H equ opcode(inc h)
         call label
         ld a, b
     ENDIF";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let _tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
 
         let code = "\t	if ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let _tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
 
-        get_val(parse_z80_code(CTX.build_span(
+        parse_z80_span(CTX.build_span(
             "
         \n\tif FDC_Is_Musical_Loader\r\n\t\tei\r\n\telse\r\n\t\tdi\r\n\tendif\n
         "
-        )));
+        )).unwrap();
 
         let code = "\t	ifdef ENABLE_CATART_DISPLAY
 		call blabla
 	endif
     ";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let _tokens = parse_z80_span(CTX.build_span(code.to_owned()));
 
         println!(
             "{:?}",
@@ -998,36 +995,36 @@ INC_H equ opcode(inc h)
         );
         println!(
             "{:?}",
-            parse_z80_code(CTX.build_span(" call crtc_display_catart_if_needed"))
+            parse_z80_span(CTX.build_span(" call crtc_display_catart_if_needed"))
         );
 
         let code = "\t	ifdef ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let _tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
 
         let code = "\t	ifndef ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let _tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
 
         let code = "\t	ifnot ENABLE_CATART_DISPLAY
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let _tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
 
         let code =
             "\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\n"
         ;
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let _tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
 
         let code =
             "STACK_SIZE equ 20 ; XXX Very small stack; hope 10 calls is enough\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\nSTACK_END"
         ;
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let _tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
     }
 
     #[test]
@@ -1045,7 +1042,7 @@ INC_H equ opcode(inc h)
     jr nz, .other_lines ; 3
     ";
 
-        let tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
         println!("{:?}", tokens);
         assert_eq!(tokens.len(), 18);
 
@@ -1080,13 +1077,13 @@ INC_H equ opcode(inc h)
     fn factor_test() {
         let (input, res) = factor(CTX.build_span("  3  ")).unwrap();
         assert!(input.is_empty());
-        assert_eq!(res, Expr::Value(3));
+        assert_eq!(res.to_expr(), Expr::Value(3));
     }
 
     fn comp_test() {
         let (input, res) = comp(CTX.build_span("1 ")).unwrap();
         assert!(input.is_empty());
-        assert_eq!(res, Expr::Value(1));
+        assert_eq!(res.to_expr(), Expr::Value(1));
     }
 
     #[test]
@@ -1094,33 +1091,33 @@ INC_H equ opcode(inc h)
         let (input, res) = term(CTX.build_span(" 3 *  5   ")).unwrap();
         assert!(input.is_empty());
         assert_eq!(
-            res,
-            Expr::Mul(Box::new(Expr::Value(3)), Box::new(Expr::Value(5)))
+            res.to_expr(),
+            Expr::BinaryOperation(BinaryOperation::Mul, Box::new(Expr::Value(3)), Box::new(Expr::Value(5)))
         );
     }
 
     #[test]
     fn expr_test() {
-        let (input, res) = expr(CTX.build_span(" 1 + 2 *  3 ")).unwrap();
+        let (input, res) = located_expr(CTX.build_span(" 1 + 2 *  3 ")).unwrap();
         assert!(input.is_empty());
         assert_eq!(
-            res,
-            Expr::Add(
+            res.to_expr(),
+            Expr::BinaryOperation(BinaryOperation::Add,
                 Box::new(Expr::Value(1)),
-                Box::new(Expr::Mul(
+                Box::new(Expr::BinaryOperation(BinaryOperation::Mul,
                     Box::new(Expr::Value(2)),
                     Box::new(Expr::Value(3))
                 ))
             )
         );
 
-        let (input, res) = expr(CTX.build_span(" 1 + 2 *  3 / 4 - 5 "))
+        let (input, res) = located_expr(CTX.build_span(" 1 + 2 *  3 / 4 - 5 "))
             .map(|(i, x)| (i, format!("{}", x)))
             .unwrap();
         assert!(input.is_empty());
         assert_eq!(res, String::from("((0x1 + ((0x2 * 0x3) / 0x4)) - 0x5)"));
 
-        let (input, res) = expr(CTX.build_span(" 72 / 2 / 3 "))
+        let (input, res) = located_expr(CTX.build_span(" 72 / 2 / 3 "))
             .map(|(i, x)| (i, format!("{}", x)))
             .unwrap();
         assert!(input.is_empty());
@@ -1129,7 +1126,7 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn parens_test() {
-        let (input, res) = expr(CTX.build_span(" ( 1 + 2 ) *  3 "))
+        let (input, res) = located_expr(CTX.build_span(" ( 1 + 2 ) *  3 "))
             .map(|(i, x)| (i, format!("{}", x)))
             .unwrap();
         assert!(input.is_empty());
@@ -1138,7 +1135,7 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn functions_test() {
-        let (input, res) = expr(CTX.build_span("lo(5)"))
+        let (input, res) = located_expr(CTX.build_span("lo(5)"))
             .map(|(i, x)| (i, format!("{}", x)))
             .unwrap();
         assert!(input.is_empty());
@@ -1147,7 +1144,7 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn boolean_test() {
-        let (input, res) = expr(CTX.build_span(" 0 == 1 "))
+        let (input, res) = located_expr(CTX.build_span(" 0 == 1 "))
             .map(|(i, x)| (i, format!("{}", x)))
             .unwrap();
         assert!(input.is_empty());
@@ -1259,13 +1256,13 @@ INC_H equ opcode(inc h)
         let _tokens = get_val(parse_ld(CTX.build_span(code.to_owned())));
 
         let code = "\tld hl, label_with_underscore";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let _tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
 
         let code = "\n\tld hl, label_with_underscore";
-        let _tokens = get_val(parse_z80_code(CTX.build_span(code.to_owned())));
+        let _tokens = parse_z80_span(CTX.build_span(code.to_owned())).unwrap();
 
         let code = "ld i,a";
-        let _tokens = get_val(parse_ld(CTX.build_span(code.to_owned())));
+        let _tokens = parse_ld(CTX.build_span(code.to_owned()));
     }
 
     #[test]
@@ -1309,12 +1306,11 @@ INC_H equ opcode(inc h)
 
     #[test]
     fn real_world_source_failures() {
-        get_val(parse_label(false)("demosystem_binary_start".into()));
-        get_val(parse_ld("ld hl, demosystem_binary_start".into()));
-        get_val(parse_z80_code("\tprint \"TODO -- Set the real address (in c7 space)\"\n\tld hl, demosystem_binary_start\n\tld de, 0xDEAD\n\tld bc, demosystem_binary_stop - demosystem_binary_start\n".into()));
+        get_val(parse_label(false)(ctx().build_span("demosystem_binary_start")));
+        get_val(parse_ld(ctx().build_span("ld hl, demosystem_binary_start")));
+        parse_z80_span(ctx().build_span("\tprint \"TODO -- Set the real address (in c7 space)\"\n\tld hl, demosystem_binary_start\n\tld de, 0xDEAD\n\tld bc, demosystem_binary_stop - demosystem_binary_start\n")).unwrap();
 
-        get_val(parse_z80_code(
-            "
+        parse_z80_span(ctx().build_span("
         ;This code is not used here, but can be useful to test the ST3 register of the FDC.
 ;Ret=A=ST3.
 FDC_GetST3
@@ -1328,12 +1324,10 @@ FDC_GetST3
 	or b
 	call FDC_PutFDC
 	jr FDC_GetFDC
-        "
-            .into()
-        ));
+        ")
+        ).unwrap();
 
-        get_val(parse_z80_code(
-            "
+        parse_z80_span(ctx().build_span("
         	if FDC_Is_Musical_Loader
 		call FDC_GotoTrack_NoWait
 		ld a,5
@@ -1345,41 +1339,32 @@ FDC_GetST3
 	else
 		call FDC_GotoTrack
 	endif
-    "
-            .into()
-        ));
+    ")
+        ).unwrap();
     }
 
     #[test]
     fn r#macro() {
-        get_val(parse_macro(
-            "macro MYMACRO
-            endm"
-                .into()
+        get_val(parse_macro(ctx().build_span("macro MYMACRO
+            endm")
         ));
 
-        get_val(parse_macro(
-            "    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
+        get_val(parse_macro(ctx().build_span("    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
         ld bc, 0x7fc1
         out (c), c
         ld (go_back_main_memory_from_extra_memory+1), bc
-    endm"
-                .into()
+    endm")
         ));
 
-        get_val(parse_z80_code(
-            "macro MYMACRO
-            endm"
-                .into()
-        ));
+        parse_z80_span(ctx().build_span("macro MYMACRO
+            endm")
+        ).unwrap();
 
-        get_val(parse_z80_code(
-            "    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
+        parse_z80_span(ctx().build_span("    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
         ld bc, 0x7fc1
         out (c), c
         ld (go_back_main_memory_from_extra_memory+1), bc
-    endm"
-                .into()
-        ));
+    endm")
+        ).unwrap();
     }
 }
