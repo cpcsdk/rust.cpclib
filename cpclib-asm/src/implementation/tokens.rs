@@ -155,14 +155,13 @@ impl TokenExt for Token {
                     .and_then(|b| wrap(&b))
             }
 
-            Token::Defb(_) | Token::Defw(_) => {
-                todo!();
-                // use crate::assembler::visit_db_or_dw_or_str;
-                //
-                // let mut env = Env::default();
-                // visit_db_or_dw_or_str(self, &mut env)
-                // .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
-                // wrap(&env.produced_bytes())
+            Token::Defb(e) | Token::Defw(e) | Token::Str(e) => {
+                 use crate::assembler::visit_db_or_dw_or_str;
+                
+                 let mut env = Env::default();
+                 visit_db_or_dw_or_str(self.into(), e, &mut env)
+                 .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
+                 wrap(&env.produced_bytes())
             }
 
             _ => {

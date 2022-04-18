@@ -3306,6 +3306,17 @@ pub enum DbLikeKind {
     Str
 }
 
+impl From<&Token> for DbLikeKind {
+    fn from(token: &Token) -> Self {
+        match token {
+            Token::Defb(..) => Self::Defb,
+            Token::Defw(..) => Self::Defw,
+            Token::Str(..) => Self::Str,
+            _ => unreachable!()
+        }
+    }
+}
+
 impl DbLikeKind {
     fn mask(&self) -> u16 {
         match self {
