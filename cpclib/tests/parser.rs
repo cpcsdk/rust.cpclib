@@ -726,14 +726,16 @@ mod tests {
         assert!(dbg!(parse_macro_or_struct_call(false, false)(
             span
         ))
-        .is_ok());
+        .is_err(),
+    "Must fail because (void) is missing");
 
         let z80 = "BREAKPOINT_WINAPE";
         let (_ctx, span) = ctx_and_span(z80);
         assert!(dbg!(parse_macro_or_struct_call(false, false)(
             span
         ))
-        .is_ok());
+        .is_err(),
+        "Must fail because (void) is missing");
 
         let z80 = "MACRONAME 1, 2, 3, TRUC";
         let (_ctx, span) = ctx_and_span(z80);
@@ -747,7 +749,7 @@ mod tests {
         assert!(dbg!(parse_z80_line(span)).is_ok());
         let z80 = "LABEL MACRONAME 1, 2, \"trois\"";
         let (_ctx, span) = ctx_and_span(z80);
-        assert!(dbg!(parse_z80_line(span)).is_ok());
+        assert!(dbg!(parse_z80_line(span)).is_err());
         let z80 = "MACRONAME 1 2 3 ";
         let (_ctx, span) = ctx_and_span(z80);
         assert!(dbg!(parse_z80_line(span)).is_err());
@@ -847,7 +849,6 @@ mod tests {
         let res = parse_z80_span(span);
         println!("{:?}", res);
         assert!(res.is_ok());
-        assert_eq!(res.unwrap().len(), 0);
     }
 
     #[test]
@@ -866,7 +867,6 @@ mod tests {
         let res = parse_z80_span(span);
         println!("{:?}", res);
         assert!(res.is_ok());
-        assert_eq!(res.unwrap().len(), 0);
     }
 
     #[test]
@@ -890,7 +890,6 @@ mod tests {
         let res = parse_z80_span(span);
         println!("{:?}", &res);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().len());
     }
 
     #[test]
@@ -903,7 +902,7 @@ mod tests {
         let res = parse_z80_span(span);
         println!("{:?}", &res);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().len());
+        assert_eq!(3, res.unwrap().len());
     }
 
     #[test]
@@ -917,7 +916,7 @@ mod tests {
         let res = parse_z80_span(span);
         println!("{:?}", &res);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().len());
+        assert_eq!(3, res.unwrap().len());
     }
 
     #[test]
@@ -928,7 +927,6 @@ mod tests {
         let (_ctx, span) = ctx_and_span(code);
         let res = parse_z80_span(span);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().len());
 
         let code = "
             ld hl, opcode(inc a)
@@ -936,7 +934,6 @@ mod tests {
         let (_ctx, span) = ctx_and_span(code);
         let res = parse_z80_span(span);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().len());
 
         let code = "
             ld a, opcode(ldd)
@@ -944,7 +941,6 @@ mod tests {
         let (_ctx, span) = ctx_and_span(code);
         let res = parse_z80_span(span);
         assert!(res.is_ok()); // Failure is detected in the assembler pass not the parser pass
-        assert_eq!(0, res.unwrap().len());
 
         let code = "
             ld hl, opcode(ldd)
@@ -952,7 +948,6 @@ mod tests {
         let (_ctx, span) = ctx_and_span(code);
         let res = parse_z80_span(span);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().len());
 
         let code = "
 INC_L equ opcode(inc l)
@@ -962,7 +957,6 @@ INC_H equ opcode(inc h)
         let res = parse_z80_span(span);
         println!("{:?}", res);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().len());
 
         let code = "
 INC_L equ opcode(inc l)
@@ -974,7 +968,6 @@ INC_H equ opcode(inc h)
         let res = parse_z80_span(span);
         println!("{:?}", res);
         assert!(res.is_ok());
-        assert_eq!(0, res.unwrap().len());
     }
 
     #[test]
@@ -1262,7 +1255,7 @@ INC_H equ opcode(inc h)
         let (_ctx, span) = ctx_and_span(" ( 1 + 2 ) *  3 ");
 
         let (input, res) = located_expr(span)
-            .map(|(i, x)| (i, format!("{}", x)))
+            .map(|(i, x)| (i, format!("{}", x.to_expr())))
             .unwrap();
         assert!(input.is_empty());
         assert_eq!(res, String::from("(((0x1 + 0x2)) * 0x3)"));
@@ -1272,7 +1265,7 @@ INC_H equ opcode(inc h)
     fn functions_test() {
         let (_ctx, span) = ctx_and_span("lo(5)");
         let (input, res) = located_expr(span)
-            .map(|(i, x)| (i, format!("{}", x)))
+            .map(|(i, x)| (i, format!("{}", x.to_expr())))
             .unwrap();
         assert!(input.is_empty());
         assert_eq!(res, String::from("LO(0x5)"));
@@ -1283,7 +1276,7 @@ INC_H equ opcode(inc h)
         let (_ctx, span) = ctx_and_span(" 0 == 1 ");
 
         let (input, res) = located_expr(span)
-            .map(|(i, x)| (i, format!("{}", x)))
+            .map(|(i, x)| (i, format!("{}", x.to_expr())))
             .unwrap();
         assert!(input.is_empty());
         assert_eq!(res, String::from(" 0 == 1 "))
