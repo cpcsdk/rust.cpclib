@@ -152,6 +152,8 @@ impl ParserContext {
 
 #[allow(missing_docs)]
 impl ParserContext {
+
+    //#[deprecated(note="Totally unsafe. Every test should be modified to not use it")]
     pub fn build_span<S: AsRef<str>>(&self, src: S) -> Z80Span {
      Z80Span::new_extra(src.as_ref(), self)
     }

@@ -2511,9 +2511,9 @@ pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
         Token::Defb(l) => {
             visit_db_or_dw_or_str(DbLikeKind::Defb, l.as_ref(), env)
-        } Token::Defw(_) => {
+        } Token::Defw(l) => {
             visit_db_or_dw_or_str(DbLikeKind::Defw, l.as_ref(), env)
-        } Token::Str(_) => {
+        } Token::Str(l) => {
             visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), env)
         },
         Token::Defs(_) => visit_defs(token, env),

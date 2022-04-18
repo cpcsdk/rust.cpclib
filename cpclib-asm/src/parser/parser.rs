@@ -294,7 +294,9 @@ pub fn parse_z80_span(span: Z80Span) -> Result<LocatedListing, AssemblerError> {
 
 /// Parse a string and return the corresponding listing
 pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, AssemblerError> {
-    parse_z80_str_with_context(code, Default::default())
+    let mut ctx: ParserContext = Default::default();
+    ctx.context_name = Some("Unamed".into());
+    parse_z80_str_with_context(code, ctx)
 }
 
 /// nom many0 does not seem to fit our parser requirements
