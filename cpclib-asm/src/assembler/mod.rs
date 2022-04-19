@@ -2492,7 +2492,7 @@ pub fn visit_located_token(
 }
 
 /// Apply the effect of the token
-pub fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
+fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     env.update_dollar();
     // dbg!(token, env.active_page_info());
     match token {
@@ -5351,7 +5351,22 @@ fn flag_test_to_code(flag: FlagTest) -> u8 {
 #[allow(deprecated)]
 mod test {
 
-    use super::*;
+    use super::{*, processed_token::build_processed_token};
+
+
+    fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
+        let mut processed = build_processed_token(token, env);
+        processed.visited(env)
+    }
+    
+    fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
+        let mut env = Env::default();
+        for t in tokens {
+            visit_token(t, &mut env)?;
+        }
+     Ok(env)
+    }
+
 
     #[test]
     pub fn test_inc_b() {

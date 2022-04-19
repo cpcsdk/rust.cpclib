@@ -1010,8 +1010,6 @@ pub fn parse_z80_line_complete(
     input: Z80Span
 ) -> IResult<Z80Span, Vec<LocatedToken>, Z80ParserError> {
 
-    dbg!(input.split("\n").next());
-
     // Early exit if line is empty
     let (input, empty) = opt(parse_empty_line)(input)?;
     if let Some(empty) = empty {
@@ -1075,8 +1073,6 @@ pub fn parse_z80_line_complete(
             })
         }
     )(input)?;
-
-    dbg!(&tokens);
 
     // we may have some space after the last component
     // also a : that is not cpatured when there is nothing after

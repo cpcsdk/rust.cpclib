@@ -1045,7 +1045,7 @@ mod test_super {
 
     #[test]
     fn test_located_include() {
-        let src = " include \"toto\"";
+        let src = "include \"toto\"";
         let mut ctx = ParserContext::default();
         ctx.source = Some(src);
 

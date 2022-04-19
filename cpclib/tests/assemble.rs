@@ -3,7 +3,21 @@ extern crate matches;
 
 #[cfg(test)]
 mod tests {
-    use cpclib_asm::preamble::*;
+    use cpclib_asm::{preamble::*, assembler::processed_token::{ProcessedToken, build_processed_token}};
+
+    fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
+        let mut processed = build_processed_token(token, env);
+        processed.visited(env)
+    }
+
+    fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
+        let mut env = Env::default();
+        for t in tokens {
+            visit_token(t, &mut env)?;
+        }
+     Ok(env)
+    }
+
 
     #[test]
     pub fn test_visit() {
