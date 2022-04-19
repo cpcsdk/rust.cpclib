@@ -762,7 +762,7 @@ impl MayHaveSpan for LocatedToken {
 
 impl Clone for LocatedToken {
     fn clone(&self) -> Self {
-        unimplemented!();
+        unimplemented!()
         // match self {
         // LocatedToken::Standard { token, span } => {
         // LocatedToken::Standard {
@@ -957,29 +957,8 @@ impl LocatedToken {
         }
     }
 
-    pub fn parse_token(value: &str) -> Result<LocatedToken, String> {
-        let tokens = {
-            let res = parse_z80_str(value);
-            match res {
-                Ok(tokens) => tokens,
-                Err(_e) => {
-                    return Err("ERROR -- need to code why ...".to_owned());
-                }
-            }
-        };
-        match tokens.len() {
-            0 => Err("No ASM found.".to_owned()),
-            1 => {
-                let token = tokens[0].clone();
-                Ok(token)
-            }
-            _ => {
-                Err(format!(
-                    "{} tokens are present instead of one",
-                    tokens.len()
-                ))
-            }
-        }
+    pub fn parse_token(value: &str) -> Result<(), String> {
+        unimplemented!("Should return a LocatedToken reference + its  LocatedListing")
     }
 
     // fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
@@ -1775,6 +1754,7 @@ impl LocatedListing {
     // }
 }
 
+
 impl Deref for LocatedListing {
     type Target = InnerLocatedListing;
 
@@ -1846,7 +1826,26 @@ impl ParseToken for Token {
     type Output = Token;
 
     fn parse_token(src: &str) -> Result<Self::Output, String> {
-        let token = LocatedToken::parse_token(src);
-        token.map(|lt| lt.to_token().into_owned())
+        let mut tokens = {
+            let res = parse_z80_str(src);
+            match res {
+                Ok(tokens) => tokens,
+                Err(_e) => {
+                    return Err("ERROR -- need to code why ...".to_owned());
+                }
+            }
+        };
+        match tokens.len() {
+            0 => Err("No ASM found.".to_owned()),
+            1 => {
+                Ok(tokens[0].to_token().into_owned())
+            }
+            _ => {
+                Err(format!(
+                    "{} tokens are present instead of one",
+                    tokens.len()
+                ))
+            }
+        }
     }
 }
