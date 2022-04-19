@@ -1095,7 +1095,6 @@ pub fn parse_z80_line_complete(
         tokens.push(comment.locate(before_comment, size));
     }
 
-    dbg!(&tokens);
     let (input, _) = cut(context(
         "Line ending expected",
         preceded(
@@ -4658,13 +4657,15 @@ mod test {
     fn test_parse_r16_to_r8() {
         let res = parse_z80_line(Z80Span::new_extra(" ld a, hl.low", ctx()));
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+        let res = res.unwrap();
+        assert_eq!(res.0.trim().len(), 0, "{:?}", res.0);
 
         let res = parse_ld_normal(Z80Span::new_extra("ld bc.low, a", ctx()));
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+        let res = res.unwrap();
+        assert_eq!(res.0.trim().len(), 0, "{:?}", &res);
 
-        let (span, res) = res.unwrap();
+        let (span, res) = res;
         assert!(span.is_empty());
         assert_eq!(
             res,
@@ -4677,9 +4678,10 @@ mod test {
 
         let res = parse_z80_line(Z80Span::new_extra(" ld bc.low, a", ctx()));
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+        let res = res.unwrap();
+        assert_eq!(res.0.trim().len(), 0, "{:?}", &res);
 
-        let (span, res) = res.unwrap();
+        let (span, res) = res;
         assert!(span.is_empty());
         assert_eq!(
             res.iter()
@@ -4698,6 +4700,7 @@ mod test {
             ctx()
         ));
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
+        let res = res.unwrap();
+        assert_eq!(res.0.trim().len(), 0, "{:?}", res);
     }
 }
