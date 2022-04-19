@@ -1074,9 +1074,12 @@ pub fn parse_z80_line_complete(
         }
     )(input)?;
 
+
+    dbg!(&input);
+
     // we may have some space after the last component
     // also a : that is not cpatured when there is nothing after
-    let (input, _) = tuple((space0, opt(tag(":")), space0))(input)?;
+    let (input, _) = tuple((space0, opt(tag(":")), space0))(input)?;	
 
     // early stop in case of stop directive
     let (_, stop) = opt(parse_end_directive)(input.clone())?;
@@ -4252,9 +4255,21 @@ mod test {
         static ref  CTX: ParserContext = Default::default();
     }
     
+    // TODO: remove all its use
     fn ctx() -> &'static ParserContext {
         &CTX
     }
+    
+    fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
+        let mut ctx = Box::new(ParserContext::default());
+        ctx.source = Some(code);
+        ctx.context_name = Some("TEST".into());
+        let span = Z80Span::new_extra(code, ctx.deref());
+        (ctx, span)
+    }
+
+
+
     #[test]
     fn test_parse_end_directive() {
         let res = dbg!(parse_end_directive(Z80Span::new_extra("endif", ctx())));
@@ -4502,20 +4517,21 @@ mod test {
     fn parser_regression_1a() {
         let code = " nop
                     "
-        .replace("\u{C2}\u{A0}", " ");
-        let res = std::dbg!(parse_z80_line_complete(Z80Span::new_extra(
-            &code.to_owned(),
-            ctx()
-        )));
+        .replace("\u{C2}\u{A0}", " ");      
+        let code = unsafe{ &*(code.as_str() as *const str) as &'static str};
+        let (_ctx, span) = ctx_and_span(code);
+        let res = std::dbg!(parse_z80_line_complete(span));
         assert!(res.is_ok(), "{:?}", &res);
-        assert!(res.unwrap().0.trim().is_empty());
+        assert_eq!(res.unwrap().0.as_str(), "                    ");
     }
     #[test]
     fn parser_regression_1b() {
         let code = " nop
                     "
-        .replace("\u{C2}\u{A0}", " ");
-        let res = std::dbg!(parse_z80_line(Z80Span::new_extra(&code.to_owned(), ctx())));
+        .replace("\u{C2}\u{A0}", " ");      
+        let code = unsafe{ &*(code.as_str() as *const str) as &'static str};
+        let (_ctx, span) = ctx_and_span(code);
+        let res = std::dbg!(parse_z80_line(span));
         assert!(res.is_ok(), "{:?}", &res);
         assert!(res.unwrap().0.trim().is_empty());
     }
@@ -4524,13 +4540,13 @@ mod test {
         let code = " nop
                     nop
                     "
-        .replace("\u{C2}\u{A0}", " ");
-        let res = std::dbg!(many0(parse_z80_line)(Z80Span::new_extra(
-            &code.to_owned(),
-            ctx()
-        )));
+        .replace("\u{C2}\u{A0}", " ");      
+        let code = unsafe{ &*(code.as_str() as *const str) as &'static str};
+        let (_ctx, span) = ctx_and_span(code);
+        let res = std::dbg!(tuple((parse_z80_line, parse_z80_line, parse_z80_line))(span));
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.len(), 0, "{:?}", &res);
+        let res = res.unwrap();
+        assert_eq!(res.0.len(), 0, "{:?}", &res);
     }
     #[test]
     fn parser_regression_1d() {
