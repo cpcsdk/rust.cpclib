@@ -2,6 +2,7 @@ use cpclib_common::smallvec::SmallVec;
 use either::Either;
 
 
+use crate::DataAccess;
 use crate::tokens::expression::*;
 use crate::tokens::instructions::*;
 use crate::tokens::listing::*;
@@ -11,6 +12,50 @@ impl ListingElement for Token {
     type MacroParam = MacroParam;
     type TestKind = TestKind;
 
+
+    fn mnemonic(&self) -> Option<&Mnemonic> {
+        match self {
+            Token::OpCode(ref mnemonic, ..) => Some(mnemonic),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg1(&self) -> Option<&DataAccess> {
+        match self {
+            Token::OpCode(_, ref arg1, ..) => arg1.as_ref(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg2(&self) -> Option<&DataAccess> {
+        match self {
+            Token::OpCode(_, _, ref arg2, _) => arg2.as_ref(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess> {
+        match self {
+            Token::OpCode(_, ref mut arg1, ..) => arg1.as_mut(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess> {
+        match self {
+            Token::OpCode(_, _, ref mut arg2, _) => arg2.as_mut(),
+            _ => None
+        }
+    }
+
+
+    fn is_directive(&self) -> bool {
+        match self {
+            Self::OpCode(..) => false,
+            _ => true
+        }
+    }
+    
 
 
     fn is_iterate(&self)-> bool {

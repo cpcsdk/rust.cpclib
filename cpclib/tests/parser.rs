@@ -222,7 +222,7 @@ mod tests {
 
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0].deref(), Token::Label(_));
+        assert_matches!(tokens[0], LocatedToken::Label(_));
     }
 
     #[test]
@@ -234,59 +234,59 @@ mod tests {
         let (_ctx, span) = ctx_and_span(" ORG 0x1000");
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0].deref(), Token::Org(_, None));
+        assert_matches!(tokens[0].to_token().into_owned(), Token::Org(_, None));
 
         let (_ctx, span) = ctx_and_span(" ORG 0x1000 ");
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0].deref(), Token::Org(_, None));
+        assert_matches!(tokens[0].to_token().into_owned(), Token::Org(_, None));
 
         let (_ctx, span) = ctx_and_span("\tORG 0x1000");
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0].deref(), Token::Org(_, None));
+        assert_matches!(tokens[0].to_token().into_owned(), Token::Org(_, None));
 
         let (_ctx, span) = ctx_and_span("    ORG 0x1000");
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
-        assert_matches!(tokens[0].deref(), Token::Org(_, None));
+        assert_matches!(tokens[0].to_token().into_owned(), Token::Org(_, None));
 
         let (_ctx, span) = ctx_and_span(" ORG 0x1000; test");
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0].deref(), Token::Org(_, None));
+        assert_matches!(tokens[0].to_token().into_owned(), Token::Org(_, None));
 
         let (_ctx, span) = ctx_and_span(" ORG 0x1000 ; test");
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0].deref(), Token::Org(_, None));
+        assert_matches!(tokens[0].to_token().into_owned(), Token::Org(_, None));
 
         let (_ctx, span) = ctx_and_span("label ORG 0x1000");
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 2);
         assert_matches!(tokens[0], LocatedToken::Label(..));
-        assert_matches!(tokens[1].deref(), Token::Org(_, _));
+        assert_matches!(tokens[1].to_token().into_owned(), Token::Org(..));
 
         let (_ctx, span) = ctx_and_span("label ORG 0x1000 : ORG 0x000 : ORG 10");
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 4);
         assert_matches!(tokens[0], LocatedToken::Label(..));
-        assert_matches!(tokens[1].deref(), Token::Org(_, _));
-        assert_matches!(tokens[2].deref(), Token::Org(_, _));
+        assert_matches!(tokens[1].to_token().into_owned(), Token::Org(..));
+        assert_matches!(tokens[2].to_token().into_owned(), Token::Org(..));
 
         let (_ctx, span) = ctx_and_span("label ORG 0x1000 : ORG 0x000 : ORG 10 ; fdfs");
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 5);
         assert_matches!(tokens[0], LocatedToken::Label(..));
-        assert_matches!(tokens[1].deref(), Token::Org(_, _));
-        assert_matches!(tokens[2].deref(), Token::Org(_, _));
+        assert_matches!(tokens[1].to_token().into_owned(), Token::Org(..));
+        assert_matches!(tokens[2].to_token().into_owned(), Token::Org(..));
 
         let (_ctx, span) = ctx_and_span("label ORG 0x1000 ; : ORG 0x000 : ORG 10 ; fdfs");
         let tokens = get_val(parse_z80_line(span)
         );
         assert_eq!(tokens.len(), 3);
         assert_matches!(tokens[0], LocatedToken::Label(..));
-        assert_matches!(tokens[1].deref(), Token::Org(_, _));
+        assert_matches!(tokens[1].to_token().into_owned(), Token::Org(..));
     }
 
     #[test]
@@ -371,7 +371,7 @@ mod tests {
         let (_ctx, span) = ctx_and_span(code);
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 2);
-        assert_matches!(tokens[0].deref(), Token::OpCode(Mnemonic::Jp, _, _, _));
+        assert_matches!(tokens[0].to_token().into_owned(), Token::OpCode(Mnemonic::Jp, _, _, _));
     }
     // #[test]
     // #[should_panic]

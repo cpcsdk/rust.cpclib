@@ -5,7 +5,7 @@ use std::fmt;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::SnapshotVersion;
-
+use crate::tokens::listing::ListingElement;
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::{Listing, Register8};
@@ -967,12 +967,7 @@ impl From<u8> for Token {
 
 #[allow(missing_docs)]
 impl Token {
-    pub fn is_directive(&self) -> bool {
-        match self {
-            Self::OpCode(..) => false,
-            _ => true
-        }
-    }
+
 
     pub fn new_opcode(mne: Mnemonic, arg1: Option<DataAccess>, arg2: Option<DataAccess>) -> Self {
         Token::OpCode(mne, arg1, arg2, None)
@@ -1069,40 +1064,7 @@ impl Token {
         }
     }
 
-    pub fn mnemonic(&self) -> Option<&Mnemonic> {
-        match self {
-            Token::OpCode(ref mnemonic, ..) => Some(mnemonic),
-            _ => None
-        }
-    }
 
-    pub fn mnemonic_arg1(&self) -> Option<&DataAccess> {
-        match self {
-            Token::OpCode(_, ref arg1, ..) => arg1.as_ref(),
-            _ => None
-        }
-    }
-
-    pub fn mnemonic_arg2(&self) -> Option<&DataAccess> {
-        match self {
-            Token::OpCode(_, _, ref arg2, _) => arg2.as_ref(),
-            _ => None
-        }
-    }
-
-    pub fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess> {
-        match self {
-            Token::OpCode(_, ref mut arg1, ..) => arg1.as_mut(),
-            _ => None
-        }
-    }
-
-    pub fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess> {
-        match self {
-            Token::OpCode(_, _, ref mut arg2, _) => arg2.as_mut(),
-            _ => None
-        }
-    }
 
     pub fn macro_name(&self) -> Option<&str> {
         match self {

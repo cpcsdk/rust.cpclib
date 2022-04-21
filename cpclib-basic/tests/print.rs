@@ -2,6 +2,7 @@ use cpclib_basic::{BasicLine, parser::parse_print};
 
 
 pub fn test_parse(code: &str) -> BasicLine {
+	
 	cpclib_basic::parser::test_parse(parse_print, code)
 }
 
@@ -38,6 +39,7 @@ fn print_using_alpha() {
 
 
 #[test]
+#[should_panic]
 fn print_string_fail() {
 	test_parse("PRINT \"HELLO");
 }

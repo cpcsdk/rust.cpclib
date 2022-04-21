@@ -20,7 +20,7 @@ use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
     BaseListing, BinaryFunction, BinaryOperation, CrunchType, Expr, ExprResult, LabelPrefix,
     ListingElement, MacroParam, MacroParamElement, TestKind, TestKindElement, ToSimpleToken, Token,
-    UnaryFunction, UnaryOperation, UnaryTokenOperation
+    UnaryFunction, UnaryOperation, UnaryTokenOperation, DataAccess, Mnemonic
 };
 use ouroboros::self_referencing;
 
@@ -811,6 +811,7 @@ impl Clone for LocatedToken {
     }
 }
 
+/*
 impl Deref for LocatedToken {
     type Target = Token;
 
@@ -823,6 +824,7 @@ impl Deref for LocatedToken {
         }
     }
 }
+*/
 
 impl LocatedToken {
     /// We can obtain a token only for "standard ones". Those that rely on listing need to be handled differently
@@ -1053,10 +1055,76 @@ impl Locate for Token {
     }
 }
 
+impl TokenExt for LocatedToken {
+    fn estimated_duration(&self) -> Result<usize, AssemblerError> {
+        todo!()
+    }
+
+    fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
+        todo!()
+    }
+
+    fn disassemble_data(&self) -> Result<cpclib_tokens::Listing, String> {
+        todo!()
+    }
+
+    fn to_bytes_with_options(&self, option: &crate::AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
+        todo!()
+    }
+}
+
+
 impl ListingElement for LocatedToken {
     type Expr = LocatedExpr;
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
+
+    fn mnemonic(&self) -> Option<&Mnemonic> {
+        match self {
+            Self::Standard{token, ..} => token.mnemonic(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg1(&self) -> Option<&DataAccess>{
+        match self {
+            Self::Standard{token, ..} => token.mnemonic_arg1(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg2(&self) -> Option<&DataAccess>{
+        match self {
+            Self::Standard{token, ..} => token.mnemonic_arg2(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess>{
+        match self {
+            Self::Standard{token, ..} => token.mnemonic_arg1_mut(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess>{
+        match self {
+            Self::Standard{token, ..} => token.mnemonic_arg2_mut(),
+            _ => None
+        }
+    }
+
+
+    
+   fn is_directive(&self) -> bool {
+        match self {
+            Self::Standard {
+            	token: Token::OpCode(..),
+            	..
+            } => false,
+            _ => true
+        }
+    }
 
 
     fn is_rorg(&self) -> bool {

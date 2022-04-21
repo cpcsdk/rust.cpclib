@@ -7,7 +7,7 @@ use cpclib_common::smallvec::SmallVec;
 
 use crate::{
     BinaryTransformation, CrunchType, ExprElement, MacroParamElement,
-    TestKindElement
+    TestKindElement, Mnemonic, DataAccess
 };
 /// The ListingElement trait contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
@@ -15,6 +15,15 @@ pub trait ListingElement: Debug + Sized {
     type MacroParam: MacroParamElement;
     type TestKind: TestKindElement;
     type Expr: ExprElement;
+    
+    fn mnemonic(&self) -> Option<&Mnemonic>;
+    fn mnemonic_arg1(&self) -> Option<&DataAccess>;
+    fn mnemonic_arg2(&self) -> Option<&DataAccess>;
+    fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess>;
+    fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess>;
+
+
+    fn is_directive(&self) -> bool;
 
     fn is_iterate(&self)-> bool;
     fn iterate_listing(&self) -> &[Self];
