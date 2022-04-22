@@ -37,6 +37,7 @@ jobs:
           draft: false
           tag: latest
           name: "Development Build"
+          generateReleaseNotes: true
           artifacts: |
             target/x86_64-pc-windows-gnu/release/basm.exe,
             target/x86_64-pc-windows-gnu/release/visual-basm.exe,

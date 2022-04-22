@@ -41,6 +41,7 @@ jobs:
           draft: false
           tag: latest
           name: "Development Build"
+          generateReleaseNotes: true
           artifacts: |
             target/release/basm,
             target/release/visual-basm,
