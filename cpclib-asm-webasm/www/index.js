@@ -63,13 +63,21 @@ import('../pkg')
 		launch_js(fname, sna) // does not seem to work
 		//launch_blob(sna); // use a blob url (does not work :()
 		//launch_base64(sna); // use a base64 url (does not work :()
+
+
+		if (getCodeKind() == CODE_BASIC) {
+			emu().cpc_inject_keys("RUN\n")
+		}
+	}
+
+	function emu(){
+		return window.document.getElementById("emu")
+			.contentWindow
 	}
 
 	/// Call the js loading function of the iframe
 	function launch_js(fname, sna) {
-		window.document.getElementById("emu")
-			.contentWindow
-			.cpc_inject_snapshot(fname, sna);
+		emu().cpc_inject_snapshot(fname, sna);
 	}
 	// try to load from drop
 	// Does not work
@@ -159,7 +167,7 @@ import('../pkg')
 					break;
 
 				case CODE_BASIC:
-					sna = cpcasm.basic_snapshot(basic);
+					sna = cpcasm.basic_snapshot(source);
 					break;
 			}
 
@@ -187,7 +195,11 @@ import('../pkg')
 	 * Should be retreived from the interface
 	 */
 	function getCodeKind() {
-		return CODE_BASM;
+		if (window.document.getElementById("language_basm").checked) {
+			return CODE_BASM;
+		} else {
+			return CODE_BASIC;
+		}
 	}
 
 	/**

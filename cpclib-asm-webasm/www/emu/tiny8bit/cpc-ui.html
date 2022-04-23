@@ -43,14 +43,24 @@
 			function cpc_inject_snapshot(name, sna) {
 				var buffer = sna.bytes;
 
-				console.log("Inject", buffer);
+				console.info("Inject sna", buffer);
 				Module.ccall(
 					'cpc_inject_memory', 
 					null,
 					['string','array','number'],
 					[name, buffer, buffer.length]
 				);
-				}
+			}
+
+			function cpc_inject_keys(keys) {
+				console.info("Inject keys", keys);
+				Module.ccall(
+					'cpc_inject_keys', 
+					null,
+					['string'],
+					[keys]
+				);
+			}
 
 		</script>
 
