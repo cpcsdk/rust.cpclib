@@ -500,7 +500,7 @@ impl Default for Env {
 
             macro_seed: 0,
             charset_encoding: CharsetEncoding::new(),
-            sna: Snapshot::default(),
+            sna: Snapshot::new_6128().unwrap(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
 
             symbols: SymbolsTableCaseDependent::default(),
