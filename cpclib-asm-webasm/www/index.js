@@ -19,8 +19,20 @@ import('../pkg')
 		window.document.getElementById("action_download")
 			.onclick = requestDownload;
 
+		window.document.getElementById("action_m4")
+			.onclick = requestM4Send;
 	}
 
+	/***
+	 * Launch the snapshot on a real cpc
+	 */
+	function requestM4Send(event) {
+		var sna = build();
+		var address = getM4Address();
+		if (null != sna) { 
+			send_sna(sna, address);
+		}
+	}
 
 	/**
 	 * Assemble the source and launch the program in case of success
@@ -58,6 +70,37 @@ import('../pkg')
 		}
 	}
 
+	async function send_sna(sna, address) {
+		console.info("Send snapshot to", address);
+
+		// upload
+		let uploadURL = "http://" + address + "/upload.html";
+		let runURL = "http://" + address + "/config.cgi?run2=playground.sna";
+		let content = new Blob([sna.bytes], {type: "application/octet-stream"});
+		const formData  = new FormData();
+		formData.append("upfile", content, "playground.sna");
+
+		try {
+			await fetch(
+				uploadURL,{
+				method: 'POST',
+				headers: {
+					'Accept': 'application/json, application/xml, text/plain, text/html, *.*',
+					'Content-Type': 'multipart/form-data'
+				},
+				body: formData
+				});
+		} catch(e) {
+			// due to cors it is normal that it fails
+		}
+
+		// run
+		try {
+			await fetch(runURL);
+		} catch(e) {
+			// due to cors it is normal that it fails
+		}
+	}
 
 	function launch_sna(fname, sna) {
 		launch_js(fname, sna) // does not seem to work
@@ -185,11 +228,18 @@ import('../pkg')
 			.innerText = e.msg;
 	}
 
+	/**
+	 * Returns the code typed by the user
+	 */
 	function getSourceCode() {
 		return window.document.getElementById("source_code")
 						.value;
 	}
 
+	function getM4Address() {
+		return window.document.getElementById("m4_address")
+		.value;
+	}
 	/**
 	 * Return the kind of source code manipulated.
 	 * Should be retreived from the interface
