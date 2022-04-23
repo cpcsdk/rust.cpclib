@@ -36,22 +36,6 @@ import('../pkg')
 		var sna = build();
 
 		if (null != sna) { 
-
-			console.log("SNA bytes", sna.bytes);
-			console.log("SNA bytes at version  value", 
-				sna.bytes[0x10],
-			);
-			console.log("SNA bytes at PC value", 
-				sna.bytes[0x23],
-				sna.bytes[0x24]
-			);
-			console.log("SNA bytes at 0x4100", 
-				sna.bytes[0x4000 + 0x100],
-				sna.bytes[0x4001 + 0x100],
-				sna.bytes[0x4002 + 0x100]
-			);
-
-
 			if (true /*use rust code*/) {
 				sna.download(getProjectName()+".sna"); // generated data is buggy
 			} else {
@@ -76,7 +60,9 @@ import('../pkg')
 
 
 	function launch_sna(fname, sna) {
-		cpc_inject_snapshot(fname, sna)
+		cpc_inject_snapshot(fname, sna); // does not seem to work
+		//launch_blob(sna); // use a blob url (does not work :()
+		//launch_base64(sna); // use a base64 url (does not work :()
 	}
 
 	// try to load from drop
@@ -97,11 +83,19 @@ import('../pkg')
 	}
 
 	// try to load from base 64
-	// Does not work
+	// Does not work \ url is too long
 
 	function launch_base64(sna) {
-		let url = sna.toString('base64')
-		console.log(url);
+
+		var binary = '';
+		var bytes = new Uint8Array( sna.bytes );
+		var len = bytes.byteLength;
+		for (var i = 0; i < len; i++) {
+			binary += String.fromCharCode( bytes[ i ] );
+		}
+		var url =  "data:application/octet-stream;base64," + window.btoa( binary );
+
+		console.log("urlbase64", url);
 
 		window.document.getElementById("emu")
 			.src = EMU_URL + "?file=" + url;
@@ -111,17 +105,37 @@ import('../pkg')
 	// launch by ending a blob
 	// Does not work
 	function launch_blob(sna) {
+		// remove previous blob if any to avoid memory leak
 		if (null!=urlToRevoke) {
 			URL.revokeObjectURL(urlToRevoke);
 			urlToRevoke = null;
 		}
 
+		console.log("SNA bytes", sna.bytes);
+		console.log("SNA bytes at version  value", 
+			sna.bytes[0x10],
+		);
+		console.log("SNA bytes at PC value", 
+			sna.bytes[0x23],
+			sna.bytes[0x24]
+		);
+		console.log("SNA bytes at 0x4100", 
+			sna.bytes[0x4000 + 0x100],
+			sna.bytes[0x4001 + 0x100],
+			sna.bytes[0x4002 + 0x100]
+		);
+
+		// build current blob and the associated url
 		var blob = new Blob([sna.bytes], {type: "application/octet-stream"});
 		var url = URL.createObjectURL(blob);
 
+		console.log("Blob url", url);
+
+		// update the emulator
 		window.document.getElementById("emu")
 			.src = EMU_URL + "?file=" + encodeURIComponent(url);
 
+		// store the url to remove it later
 		urlToRevoke = url;
 	}
 
@@ -152,8 +166,9 @@ import('../pkg')
 	}
 
 	function show_error(e) {
+		console.error(e);
 		window.document.getElementById("error")
-			.innerText = e;
+			.innerText = e.msg;
 	}
 
 	function getSourceCode() {

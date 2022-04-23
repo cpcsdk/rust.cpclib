@@ -42,8 +42,19 @@
       multiple
       >
       org 0x4000
-      run $
-      jp $
+      ld hl, data
+.loop
+      ld a, (hl)
+      or a : jp z,  $
+
+      push hl
+        call 0xbb5a
+      pop hl
+      jp .loop
+
+data
+    db "Hello World!"
+
     </textarea>
 
     <textarea 
@@ -68,6 +79,7 @@
   />
 
     <!-- Should be programmatically generated to cope with several emulators-->
+    <!-- handle snpahsot with a function -->
     <div id="emu" style="width: 50%">
       <canvas class="game" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
   <script type="text/javascript">
@@ -99,15 +111,36 @@
 
     function cpc_inject_snapshot(name, sna) {
       var buffer = sna.bytes;
+
+      /*      
       console.log("Module", Module);
-      console.log("Module", Module);
+      console.log("sna buffer", buffer);
+      console.log("name", name);
+
+      // Transform the name in a C string
+      var nameLength = name.length*4;
+      var nameBuffer = Module._malloc(nameLength + 1);
+      var nameHeap = new Uint8Array(Module.HEAPU8.buffer, nameBuffer, nameLength);
+      nameHeap.set(new Uint8Array(name.buffer));
+
+      // Transform the snapshot
+      var snaLength = buffer.length * buffer.BYTES_PER_ELEMENT
+      var snaPtr = Module._malloc(snaLength);
+      var snaHeap = new Uint8Array(Module.HEAPU8.buffer, snaPtr, snaLength);
+      snaHeap.set( new Uint8Array(buffer.buffer) );
+
+
+
+      console.log(nameBuffer)
       Module._cpc_inject_memory(
-        name,
-        buffer,
-        buffer.length
+        nameBuffer,
+        snaPtr,
+        snaLength
       );
 
-      /*
+      */
+
+
       console.log("Inject", buffer);
       Module.ccall(
         'cpc_inject_memory', 
@@ -115,7 +148,6 @@
         ['string','array','number'],
         [name, buffer, buffer.length]
       );
-*/
     }
 
     console.log("Module", Module);
@@ -123,5 +155,13 @@
   </script>
   <script async type="text/javascript" src="emu/tiny8bit/cpc-ui.js"></script>
     </div>
+
+
+    <!-- Handle snapshot with urls -->
+    <!--
+    <div>
+      <embed id="emu" style="width: 50%; height: 400px"  src="http://localhost:8081/emu/tiny8bit/cpc-ui.html?file=http://localhost:8081/loop.sna"/>
+    </div>
+  -->
   </body>
 </html>
