@@ -34,7 +34,44 @@ import('../pkg')
 	function requestDownload(event) {
 		// Build the project
 		var sna = build();
-		if (null != sna) { sna.download(getProjectName()+".sna")}
+
+		if (null != sna) { 
+
+			console.log("SNA bytes", sna.bytes);
+			console.log("SNA bytes at version  value", 
+				sna.bytes[0x10],
+			);
+			console.log("SNA bytes at PC value", 
+				sna.bytes[0x23],
+				sna.bytes[0x24]
+			);
+			console.log("SNA bytes at 0x4100", 
+				sna.bytes[0x4000 + 0x100],
+				sna.bytes[0x4001 + 0x100],
+				sna.bytes[0x4002 + 0x100]
+			);
+
+
+			if (true /*use rust code*/) {
+				sna.download(getProjectName()+".sna"); // generated data is buggy
+			} else {
+				/* same thing but in js code */
+
+				// force a download of the sna to test on a real emulator
+				var blob = new Blob(
+					[sna.bytes], 
+					{type: "application/octet-stream"}
+					);
+				let link = document.createElement('a');
+				link.download = getProjectName()+'.sna';
+				link.href = URL.createObjectURL(blob);
+				link.click();
+				URL.revokeObjectURL(link.href);
+
+			}
+
+
+		}
 	}
 
 
@@ -90,6 +127,7 @@ import('../pkg')
 
 	function build() {
 		var source = getSourceCode();
+		console.info("Try to build:", source);
 		var sna = null;
 		
 		try {
@@ -120,7 +158,7 @@ import('../pkg')
 
 	function getSourceCode() {
 		return window.document.getElementById("source_code")
-						.innerText;
+						.value;
 	}
 
 	/**

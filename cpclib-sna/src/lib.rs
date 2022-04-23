@@ -52,6 +52,8 @@ pub enum SnapshotVersion {
     V3
 }
 
+
+
 impl SnapshotVersion {
     /// Check if snapshot ius V3 version
     pub fn is_v3(self) -> bool {
@@ -127,6 +129,11 @@ impl Snapshot {
         let content = include_bytes!("cpc6128.sna").to_vec();
         Self::from_buffer(content)
     }
+
+    pub fn new_6128_v2() -> Result<Self, String> {
+        let content = include_bytes!("cpc6128_v2.sna").to_vec();
+        Self::from_buffer(content)
+    }
 }
 
 #[allow(missing_docs)]
@@ -192,6 +199,10 @@ impl Snapshot {
         self.header[0x10]
     }
 
+    pub fn version(&self) -> SnapshotVersion {
+        self.version_header().try_into().unwrap()
+    }
+
     /// Create a new snapshot that contains only information understandable
     /// by the required version
     /// TODO return an error in case of failure instead of panicing
@@ -207,9 +218,10 @@ impl Snapshot {
                 }
             }
             SnapshotVersion::V2 => {
-                for idx in 0x75..=0xFF {
-                    cloned.header[idx] = 0;
-                }
+               // for idx in 0x75..=0xFF {
+               //     cloned.header[idx] = 0;
+               // }
+               // unused but not set to 0
             }
             SnapshotVersion::V3 => {}
         };
@@ -253,7 +265,7 @@ impl Snapshot {
         cloned
     }
 
-    /// Save the snapshot V3 on disc
+    /// Save the snapshot V2 on disc
     #[deprecated]
     pub fn save_sna<P: AsRef<Path>>(&self, fname: P) -> Result<(), std::io::Error> {
         self.save(fname, SnapshotVersion::V2)

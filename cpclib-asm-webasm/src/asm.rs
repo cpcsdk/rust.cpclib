@@ -59,6 +59,7 @@ impl From<LocatedListing> for JsAsmListing {
 
 
 #[wasm_bindgen]
+#[derive(Debug)]
 pub struct JsAssemblerError {
     errors: String
 }
@@ -117,7 +118,9 @@ pub fn asm_assemble_snapshot(code: &str, conf: &AsmParserConfig)
                 .map(|env| {
                     console::log_1(&"SNA OK".into());
                     let sna = env.sna();
-                    sna.clone().into()
+                    let mut sna = sna.clone();
+                    sna.unwrap_memory_chunks();
+                    sna.into()
                 })
             })
 }

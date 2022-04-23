@@ -3,8 +3,12 @@
 #![cfg(target_arch = "wasm32")]
 
 extern crate wasm_bindgen_test;
+use std::println;
+
 use wasm_bindgen_test::*;
 use cpclib_asm_webasm::*;
+use cpclib_sna::SnapshotFlag;
+
 
 // TODO find a way to init the thread pool...
 wasm_bindgen_test_configure!(run_in_browser);
@@ -73,4 +77,60 @@ fn basic_parse_success_two_lines() {
     assert!(result.is_ok());
 
     let sna = result.unwrap().sna().unwrap();
+}
+
+#[wasm_bindgen_test]
+// this test is a copy past of generate_loop4000.rs
+fn manually_generated_snapshot() {
+    use cpclib_asm::{preamble::{ParserContext, parse_z80_str_with_context}, AssemblingOptions, assembler::visit_tokens_all_passes_with_options};
+    use cpclib_sna::{SnapshotFlag, Snapshot};
+
+	let asm = "
+		org 0x4000
+		run $
+		jp $
+	";
+
+    let mut ctx = ParserContext::default();
+	let mut options = AssemblingOptions::default();
+	let listing = parse_z80_str_with_context(asm, ctx).expect("Unable to parse z80 code");
+	let env = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx()).expect("Unable to assemble z80 code");
+	let sna = env.sna().clone();
+    assert_eq!(sna.get_value(&SnapshotFlag::Z80_PC).as_u16().unwrap(), 0x4000);
+    assert_eq!(sna.get_byte(0x4000), 0xc3);
+	assert_eq!(sna.get_byte(0x4001), 0x00);
+	assert_eq!(sna.get_byte(0x4002), 0x40);
+
+    println!("Manual generation of snapshot succeeds");
+}
+
+
+#[wasm_bindgen_test]
+// this test is a copy past of generate_loop4000.rs
+fn playground_generated_snapshot() {
+    let source = "
+        org 0x4000
+        run $
+        jp $
+    ";
+    let config = asm::asm_create_parser_config("loop4000.asm");
+    let sna = asm::asm_assemble_snapshot(&source, &config).expect("Unable to build the snapshot");
+    assert_eq!(sna.get_value(&SnapshotFlag::Z80_PC).as_u16().unwrap(), 0x4000);
+
+
+	assert_eq!(sna.get_byte(0x4000), 0xc3);
+	assert_eq!(sna.get_byte(0x4001), 0x00);
+	assert_eq!(sna.get_byte(0x4002), 0x40);
+
+    let bytes = sna.bytes();
+    assert_eq!(bytes.get_index(0x10), 2); // we currently want only snapshot v2
+    assert_eq!(bytes.get_index(0x23), 0x00); // pc
+    assert_eq!(bytes.get_index(0x24), 0x40); 
+
+
+    let header_size = 0x100;
+    assert_eq!(bytes.get_index(header_size + 0x4000), 0xc3);
+	assert_eq!(bytes.get_index(header_size +0x4001), 0x00);
+	assert_eq!(bytes.get_index(header_size +0x4002), 0x40);
+
 }
