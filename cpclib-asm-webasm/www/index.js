@@ -60,11 +60,17 @@ import('../pkg')
 
 
 	function launch_sna(fname, sna) {
-		cpc_inject_snapshot(fname, sna); // does not seem to work
+		launch_js(fname, sna) // does not seem to work
 		//launch_blob(sna); // use a blob url (does not work :()
 		//launch_base64(sna); // use a base64 url (does not work :()
 	}
 
+	/// Call the js loading function of the iframe
+	function launch_js(fname, sna) {
+		window.document.getElementById("emu")
+			.contentWindow
+			.cpc_inject_snapshot(fname, sna);
+	}
 	// try to load from drop
 	// Does not work
 	function launch_drop(sna) {
