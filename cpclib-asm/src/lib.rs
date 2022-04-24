@@ -34,7 +34,6 @@ use std::io::Write;
 use std::sync::{Arc, RwLock};
 
 use cpclib_disc::amsdos::*;
-
 use preamble::function::FunctionBuilder;
 use preamble::processed_token::ProcessedToken;
 use preamble::*;

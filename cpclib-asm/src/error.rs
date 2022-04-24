@@ -9,7 +9,6 @@ use codespan_reporting::term::termcolor::Buffer;
 use codespan_reporting::term::{self, Chars, DisplayStyle};
 use cpclib_basic::BasicError;
 use cpclib_common::itertools::Itertools;
-
 use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;

@@ -13,7 +13,6 @@ pub mod symbols_output;
 
 pub mod processed_token;
 
-
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
@@ -30,17 +29,15 @@ use cpclib_common::lazy_static::__Deref;
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
-
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
 
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
-use self::processed_token::{ProcessedToken};
+use self::processed_token::ProcessedToken;
 use self::report::SavedFile;
 use self::symbols_output::SymbolOutputGenerator;
 use crate::assembler::processed_token::visit_processed_tokens;
-
 use crate::delayed_command::*;
 use crate::page_info::PageInformation;
 use crate::preamble::*;

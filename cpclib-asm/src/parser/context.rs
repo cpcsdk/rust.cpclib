@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 
 use cpclib_common::lazy_static;
-
 use either::Either;
 use regex::Regex;
 

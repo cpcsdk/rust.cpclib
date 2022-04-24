@@ -1,9 +1,7 @@
 use std::borrow::Borrow;
-
 use std::collections::HashMap;
-use std::fmt::{Debug};
-
-use std::sync::{RwLock};
+use std::fmt::Debug;
+use std::sync::RwLock;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
@@ -17,7 +15,7 @@ use super::list::{
 use super::matrix::{
     matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width
 };
-use super::processed_token::{ProcessedToken};
+use super::processed_token::ProcessedToken;
 use super::{file, Env};
 use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};

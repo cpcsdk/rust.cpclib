@@ -3,12 +3,9 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
-
-
 use cpclib_common::nom::combinator::{cut, eof, map, opt};
 use cpclib_common::nom::error::{context, ErrorKind, VerboseError};
-use cpclib_common::nom::multi::{many_till};
-
+use cpclib_common::nom::multi::many_till;
 use cpclib_common::nom::{Err, IResult, InputLength, InputTake};
 use cpclib_common::nom_locate::LocatedSpan;
 #[cfg(not(target_arch = "wasm32"))]

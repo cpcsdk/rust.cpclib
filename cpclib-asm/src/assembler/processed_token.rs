@@ -1,6 +1,4 @@
-
 use std::borrow::{Borrow, Cow};
-
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
@@ -15,8 +13,7 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
-    BinaryTransformation, ListingElement, MacroParamElement, TestKindElement,
-    ToSimpleToken, Token
+    BinaryTransformation, ListingElement, MacroParamElement, TestKindElement, ToSimpleToken, Token
 };
 use either::Either;
 use ouroboros::*;

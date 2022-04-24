@@ -332,7 +332,6 @@ impl BasicProgram {
 #[allow(clippy::shadow_unrelated)]
 #[cfg(test)]
 pub mod test {
-    
 
     use super::*;
 

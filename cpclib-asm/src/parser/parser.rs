@@ -1664,11 +1664,10 @@ fn parse_directive3(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
         context("[DBG] db", parse_db_or_dw_or_str),
         context("[DBG] incbin", parse_incbin),
         context("[DBG] include", parse_include),
-        context("[DBG] struct", parse_struct)
-        // context(
-        // "[DBG] macro or struct call",
-        // parse_macro_or_struct_call(true, false)
-        // )
+        context("[DBG] struct", parse_struct) /* context(
+                                               * "[DBG] macro or struct call",
+                                               * parse_macro_or_struct_call(true, false)
+                                               * ) */
     ))(input)
 }
 

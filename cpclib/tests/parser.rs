@@ -7,7 +7,6 @@ mod tests {
     use std::u32;
 
     use cpclib_asm::preamble::*;
-    
     use cpclib_common::nom::IResult;
 
     fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {

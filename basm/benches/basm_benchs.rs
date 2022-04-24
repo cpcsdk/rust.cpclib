@@ -1,6 +1,6 @@
 #![feature(path_file_prefix)]
 
-use std::{fs};
+use std::fs;
 
 use cpclib_asm::basm_utils::{build_args_parser, process};
 use cpclib_common::itertools::Itertools;
