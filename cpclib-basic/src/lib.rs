@@ -5,7 +5,8 @@ pub mod tokens;
 
 use std::fmt::{self, Display};
 
-use cpclib_common::nom::{error::convert_error, self};
+use cpclib_common::nom::error::convert_error;
+use cpclib_common::nom::{self};
 use cpclib_sna::Snapshot;
 use failure::Fail;
 use parser::parse_basic_program;
@@ -30,7 +31,6 @@ pub enum BasicError {
     #[fail(display = "Exponent Overflow")]
     ExponentOverflow
 }
-
 
 /// Basic line of code representation
 #[derive(Debug, Clone)]
@@ -171,9 +171,12 @@ impl BasicProgram {
             }
             Err(nom::Err::Error(e) | nom::Err::Failure(e)) => {
                 Err(BasicError::ParseError {
-                    msg: format!("Error while parsing the Basic content: {}", convert_error(input, e))
+                    msg: format!(
+                        "Error while parsing the Basic content: {}",
+                        convert_error(input, e)
+                    )
                 })
-            },
+            }
 
             _ => unreachable!()
         }
@@ -345,7 +348,6 @@ pub mod test {
         BasicProgram::parse(code2).expect("Unable to produce basic tokens");
     }
 
-
     #[test]
     fn parse_correct() {
         let code = "10 CALL &1234";
@@ -360,7 +362,7 @@ pub mod test {
         let bytes = prog.as_bytes();
         let expected = [
             10, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 10, 0, 20, 0, 131, 32, 28, 0x34, 0x12, 0, 0,
-            0, 0,
+            0, 0
         ];
 
         assert_eq!(&bytes, &expected);
@@ -425,10 +427,4 @@ pub mod test {
 
         assert_eq!(bytes, expected);
     }
-
-
-
 }
-
-
-

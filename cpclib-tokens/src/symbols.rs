@@ -3,19 +3,16 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 
-#[cfg(not(target_arch = "wasm32"))]
-use cpclib_common::rayon::prelude::*;
-
+use cpclib_common::itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::iter::IntoParallelRefIterator;
-
-
-use cpclib_common::itertools::Itertools;
+#[cfg(not(target_arch = "wasm32"))]
+use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::{smallvec, SmallVec};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{lazy_static, strsim};
 use delegate::delegate;
-use evalexpr::{build_operator_tree, HashMapContext, ContextWithMutableVariables};
+use evalexpr::{build_operator_tree, ContextWithMutableVariables, HashMapContext};
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
@@ -301,7 +298,6 @@ pub enum Value {
     Counter(i32)
 }
 
-
 impl Into<evalexpr::Value> for Value {
     fn into(self) -> evalexpr::Value {
         match self {
@@ -313,14 +309,18 @@ impl Into<evalexpr::Value> for Value {
                     ExprResult::Bool(b) => evalexpr::Value::Boolean(b),
                     ExprResult::String(s) => evalexpr::Value::String(s.into()),
                     ExprResult::List(l) => unimplemented!(),
-                    ExprResult::Matrix { width, height, content } => unimplemented!(),
+                    ExprResult::Matrix {
+                        width,
+                        height,
+                        content
+                    } => unimplemented!()
                 }
-            },
+            }
             Value::String(s) => evalexpr::Value::String(s.into()),
             Value::Address(v) => evalexpr::Value::Int(v.address() as _),
             Value::Macro(m) => evalexpr::Value::String(m.name.into()),
             Value::Struct(s) => evalexpr::Value::String(s.name.into()),
-            Value::Counter(c) => evalexpr::Value::Int(c as _),
+            Value::Counter(c) => evalexpr::Value::Int(c as _)
         }
     }
 }
@@ -663,9 +663,6 @@ impl SymbolsTable {
         for model in replace.iter() {
             let local_expr = &model[1..model.len() - 1]; // remove {}
 
-
-            
-            
             let local_value = match self.value(local_expr)? {
                 Some(Value::String(s)) => s.to_string(),
                 Some(Value::Expr(e)) => e.to_string(),
@@ -674,25 +671,25 @@ impl SymbolsTable {
                     dbg!(local_expr);
                     dbg!(&self);
 
-
-                    let tree = build_operator_tree(local_expr).expect("Expression should be valid here. There is a bug in the assembler");
+                    let tree = build_operator_tree(local_expr)
+                        .expect("Expression should be valid here. There is a bug in the assembler");
 
                     // Fill the variable values to allow an evaluation
                     let mut context = HashMapContext::new();
                     for variable in tree.iter_variable_identifiers() {
-                        let variable_value = dbg!(self.value(variable)?
-                        .ok_or_else(||{
+                        let variable_value = dbg!(self.value(variable)?.ok_or_else(|| {
                             panic!();
                             SymbolError::WrongSymbol(variable.into())
                         }))?;
-                        context.set_value(
-                            variable.to_owned(),
-                            variable_value.clone().into()
-                        ).unwrap();
+                        context
+                            .set_value(variable.to_owned(), variable_value.clone().into())
+                            .unwrap();
                     }
 
                     // evaluate the expression
-                    let res = tree.eval_with_context(&context).map_err(|e| SymbolError::CannotModify(local_expr.into()))?;
+                    let res = tree
+                        .eval_with_context(&context)
+                        .map_err(|e| SymbolError::CannotModify(local_expr.into()))?;
 
                     res.to_string()
                 }
@@ -1087,29 +1084,21 @@ impl SymbolsTable {
             .any(|symbol| self.current_pass_map.contains_key(&symbol)))
     }
 
-
-
     /// Returns the closest Value
     pub fn closest_symbol<S: Into<Symbol>>(
         &self,
         symbol: S,
         r#for: SymbolFor
     ) -> Result<Option<SmolStr>, SymbolError> {
-
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
-            #[cfg(not(target_arch = "wasm32"))]
-            let iter = self
-                    .map
-                    .par_iter(); 
-            #[cfg(target_arch = "wasm32")]
-            let iter = self
-                .map
-                .iter();
+        #[cfg(not(target_arch = "wasm32"))]
+        let iter = self.map.par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iter = self.map.iter();
 
-            Ok(
-                iter
-                .filter(|(_k, v)| {
+        Ok(iter
+            .filter(|(_k, v)| {
                 match (v, r#for) {
                     (Value::Expr(_), SymbolFor::Number)
                     | (Value::Expr(_), SymbolFor::Address)

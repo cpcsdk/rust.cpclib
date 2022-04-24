@@ -1,17 +1,15 @@
 use cpclib_common::smallvec::SmallVec;
 use either::Either;
 
-
-use crate::DataAccess;
 use crate::tokens::expression::*;
 use crate::tokens::instructions::*;
 use crate::tokens::listing::*;
+use crate::DataAccess;
 
 impl ListingElement for Token {
     type Expr = Expr;
     type MacroParam = MacroParam;
     type TestKind = TestKind;
-
 
     fn mnemonic(&self) -> Option<&Mnemonic> {
         match self {
@@ -48,76 +46,79 @@ impl ListingElement for Token {
         }
     }
 
-
     fn is_directive(&self) -> bool {
         match self {
             Self::OpCode(..) => false,
             _ => true
         }
     }
-    
 
-
-    fn is_iterate(&self)-> bool {
+    fn is_iterate(&self) -> bool {
         match self {
             Self::Iterate(..) => true,
             _ => false
         }
     }
+
     fn iterate_listing(&self) -> &[Self] {
         match self {
             Self::Iterate(_, _, listing, ..) => listing.as_slice(),
             _ => unreachable!()
         }
     }
-    fn iterate_counter_name(&self) -> &str  {
+
+    fn iterate_counter_name(&self) -> &str {
         match self {
             Self::Iterate(name, ..) => name.as_str(),
             _ => unreachable!()
         }
     }
-    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr>  {
+
+    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr> {
         match self {
             Self::Iterate(_, values, ..) => Either::Left(values),
             _ => unreachable!()
         }
     }
 
-
-
     fn is_for(&self) -> bool {
         match self {
-            Self::For{..} => true,
+            Self::For { .. } => true,
             _ => false
         }
     }
-    fn for_listing(&self) -> &[Self]{
+
+    fn for_listing(&self) -> &[Self] {
         match self {
-            Self::For{listing, ..} => listing.as_slice(),
+            Self::For { listing, .. } => listing.as_slice(),
             _ => unreachable!()
         }
     }
+
     fn for_label(&self) -> &str {
         match self {
-            Self::For{label, ..} => label.as_ref(),
+            Self::For { label, .. } => label.as_ref(),
             _ => unreachable!()
         }
     }
+
     fn for_start(&self) -> &Self::Expr {
         match self {
-            Self::For{start, ..} => start,
+            Self::For { start, .. } => start,
             _ => unreachable!()
         }
     }
+
     fn for_stop(&self) -> &Self::Expr {
         match self {
-            Self::For{stop, ..} => stop,
+            Self::For { stop, .. } => stop,
             _ => unreachable!()
         }
     }
-    fn for_step(&self) -> Option<&Self::Expr>  {
+
+    fn for_step(&self) -> Option<&Self::Expr> {
         match self {
-            Self::For{step, ..} => step.as_ref(),
+            Self::For { step, .. } => step.as_ref(),
             _ => unreachable!()
         }
     }
@@ -128,12 +129,14 @@ impl ListingElement for Token {
             _ => false
         }
     }
-    fn repeat_until_listing(&self) -> &[Self]{
+
+    fn repeat_until_listing(&self) -> &[Self] {
         match self {
             Self::RepeatUntil(_, code, ..) => code.as_slice(),
             _ => unreachable!()
         }
     }
+
     fn repeat_until_condition(&self) -> &Self::Expr {
         match self {
             Self::RepeatUntil(cond, ..) => cond,
@@ -141,8 +144,7 @@ impl ListingElement for Token {
         }
     }
 
-
-    fn is_repeat(&self) -> bool  {
+    fn is_repeat(&self) -> bool {
         match self {
             Self::Repeat(..) => true,
             _ => false
@@ -162,20 +164,20 @@ impl ListingElement for Token {
             _ => unreachable!()
         }
     }
+
     fn repeat_counter_name(&self) -> Option<&str> {
         match self {
             Self::Repeat(_, _, counter_name, ..) => counter_name.as_ref().map(|c| c.as_str()),
             _ => unreachable!()
         }
     }
+
     fn repeat_counter_start(&self) -> Option<&Self::Expr> {
         match self {
             Self::Repeat(_, _, _, start) => start.as_ref(),
             _ => unreachable!()
         }
     }
-
-
 
     fn is_macro_definition(&self) -> bool {
         match self {

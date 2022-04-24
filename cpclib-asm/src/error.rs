@@ -30,20 +30,14 @@ pub enum ExpressionError {
     InvalidSize(usize, usize) // expected index
 }
 
-
-
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum AssemblerError {
     /// Dirty trick to not play with memory
     AlreadyRenderedError(String),
 
-    
-
     /// Parse of a located listing failed, but the error is in fact stored within the located listing object...
     LocatedListingError(std::sync::Arc<LocatedListing>),
-
-
 
     //#[fail(display = "Several errors arised: {:?}", errors)]
     MultipleErrors {
@@ -830,7 +824,7 @@ impl AssemblerError {
             AssemblerError::LocatedListingError(arc) => {
                 write!(f, "{}", arc.as_ref().cpclib_error_unchecked())
             }
-            AssemblerError::AlreadyRenderedError(e) => write!(f, "{}", e),
+            AssemblerError::AlreadyRenderedError(e) => write!(f, "{}", e)
         }
     }
 }
@@ -907,12 +901,7 @@ fn build_filename(span: &Z80Span) -> Box<String> {
 
     let name = fname
         .as_ref()
-        .map(|p| {
-            p
-                .as_os_str()
-                .to_str()
-                .unwrap_or("[Invalid file name]")
-        })
+        .map(|p| p.as_os_str().to_str().unwrap_or("[Invalid file name]"))
         .unwrap_or_else(|| {
             context
                 .as_ref()

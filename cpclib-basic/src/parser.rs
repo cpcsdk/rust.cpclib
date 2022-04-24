@@ -17,7 +17,6 @@ type BasicSeveralTokensResult<'src> = IResult<&'src str, Vec<BasicToken>, Verbos
 type BasicOneTokenResult<'src> = IResult<&'src str, BasicToken, VerboseError<&'src str>>;
 type BasicLineResult<'src> = IResult<&'src str, BasicLine, VerboseError<&'src str>>;
 
-
 /// Parse complete basic program"],
 pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram, VerboseError<&str>> {
     let (input, lines) = fold_many0(
@@ -51,8 +50,8 @@ pub fn parse_basic_line(input: &str) -> BasicLineResult {
                 let char = next.chars().next().unwrap();
                 match char {
                     ':' => acc.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon)),
-                    '\n' => {},
-                    _ => panic!("{} unhandled", char),
+                    '\n' => {}
+                    _ => panic!("{} unhandled", char)
                 }
             }
             acc
@@ -65,7 +64,6 @@ pub fn parse_basic_line(input: &str) -> BasicLineResult {
 /// Parse any instruction.
 /// In opposite to BASIC editor, parameters are verified (i.e. generated BASIC is valid)
 pub fn parse_instruction(input: &str) -> BasicSeveralTokensResult {
-
     let (input, mut res) = parse_space0(input)?;
 
     let (input, mut instruction) = context(
@@ -75,9 +73,7 @@ pub fn parse_instruction(input: &str) -> BasicSeveralTokensResult {
             parse_call,
             parse_input,
             parse_print,
-
-            parse_assign,
-
+            parse_assign
         ))
     )(input)?;
 
@@ -98,16 +94,10 @@ pub fn parse_assign(input: &str) -> BasicSeveralTokensResult {
     let (input, mut var) = alt((
         map(parse_string_variable, |v| (Kind::String, v)),
         map(parse_integer_variable, |v| (Kind::Int, v)),
-        map(parse_float_variable, |v| (Kind::Float, v)),
-        ))(input)?;
-
-    let (input, mut space) = tuple((
-        parse_space0,
-        char('='),
-        parse_space0
+        map(parse_float_variable, |v| (Kind::Float, v))
     ))(input)?;
 
-
+    let (input, mut space) = tuple((parse_space0, char('='), parse_space0))(input)?;
 
     let (input, mut val) = match var.0 {
         Kind::Float | Kind::Int => {
@@ -116,10 +106,11 @@ pub fn parse_assign(input: &str) -> BasicSeveralTokensResult {
                 parse_numeric_expression(NumericExpressionConstraint::None)
             ))(input)?
         }
-        Kind::String =>  {
-            cut(context("String expression expected",
-            parse_string_expression
-        ))(input)?
+        Kind::String => {
+            cut(context(
+                "String expression expected",
+                parse_string_expression
+            ))(input)?
         }
     };
 
@@ -390,9 +381,8 @@ pub fn parse_print(input: &str) -> BasicSeveralTokensResult {
 
     // canal and space
     let (input, canal) = opt(parse_canal)(input)?;
-    
+
     dbg!(input);
-    ;
     let input = if let Some(mut canal) = canal {
         tokens.append(&mut canal);
 
@@ -556,7 +546,6 @@ pub fn parse_basic_value(input: &str) -> BasicOneTokenResult {
     alt((parse_floating_point, parse_integer_value_16bits))(input)
 }
 
-
 pub fn parse_string_expression(input: &str) -> BasicSeveralTokensResult {
     alt((
         parse_quoted_string,
@@ -583,7 +572,8 @@ pub fn parse_numeric_expression<'code>(
         match constraint {
             NumericExpressionConstraint::None => {
                 alt((
-                    parse_asc, parse_val,
+                    parse_asc,
+                    parse_val,
                     parse_len,
                     parse_all_generated_numeric_functions_any,
                     parse_all_generated_numeric_functions_int,
@@ -594,7 +584,8 @@ pub fn parse_numeric_expression<'code>(
             }
             NumericExpressionConstraint::Integer => {
                 alt((
-                    parse_asc, parse_val,
+                    parse_asc,
+                    parse_val,
                     parse_len,
                     parse_all_generated_numeric_functions_int,
                     map(parse_integer_value_16bits, |v| vec![v]),
@@ -607,17 +598,14 @@ pub fn parse_numeric_expression<'code>(
 
 fn parse_any_string_function<'code>(
     name: &'static str,
-    code: BasicToken,
+    code: BasicToken
 ) -> impl Fn(&'code str) -> BasicSeveralTokensResult {
     move |input: &'code str| -> BasicSeveralTokensResult {
         let (input, (code, mut space_a, open, mut expr, close)) = tuple((
             map(tag_no_case(name), |_| code.clone()),
             parse_space0,
             char('('),
-            cut(context(
-                "Wrong parameter",
-                parse_string_expression
-            )),
+            cut(context("Wrong parameter", parse_string_expression)),
             cut(context("Missing ')'", char(')')))
         ))(input)?;
 
@@ -637,7 +625,7 @@ fn parse_any_string_function<'code>(
 }
 
 macro_rules! generate_string_functions {
-    ( 
+    (
             $($name:ident: $code:expr),+
 
     )=> {
@@ -657,10 +645,9 @@ macro_rules! generate_string_functions {
                     )+
                 ))(input)
             }
-       
+
 };
 }
-
 
 generate_string_functions! {
     ASC: BasicToken::PrefixedToken(BasicTokenPrefixed::Asc),
@@ -669,7 +656,7 @@ generate_string_functions! {
 }
 
 /// works with float on the amstrad cpc
-fn parse_chr_dollar(input : &str) -> BasicSeveralTokensResult {
+fn parse_chr_dollar(input: &str) -> BasicSeveralTokensResult {
     parse_any_numeric_function(
         "CHR$",
         BasicToken::PrefixedToken(BasicTokenPrefixed::ChrDollar),
@@ -677,7 +664,7 @@ fn parse_chr_dollar(input : &str) -> BasicSeveralTokensResult {
     )(input)
 }
 
-fn parse_space_dollar(input : &str) -> BasicSeveralTokensResult {
+fn parse_space_dollar(input: &str) -> BasicSeveralTokensResult {
     parse_any_numeric_function(
         "SPACE$",
         BasicToken::PrefixedToken(BasicTokenPrefixed::SpaceDollar),
@@ -685,7 +672,7 @@ fn parse_space_dollar(input : &str) -> BasicSeveralTokensResult {
     )(input)
 }
 
-fn parse_str_dollar(input : &str) -> BasicSeveralTokensResult {
+fn parse_str_dollar(input: &str) -> BasicSeveralTokensResult {
     parse_any_numeric_function(
         "STR$",
         BasicToken::PrefixedToken(BasicTokenPrefixed::StrDollar),
@@ -693,21 +680,19 @@ fn parse_str_dollar(input : &str) -> BasicSeveralTokensResult {
     )(input)
 }
 
-fn parse_lower_dollar(input : &str) -> BasicSeveralTokensResult {
+fn parse_lower_dollar(input: &str) -> BasicSeveralTokensResult {
     parse_any_string_function(
         "LOWER$",
-        BasicToken::PrefixedToken(BasicTokenPrefixed::LowerDollar),
+        BasicToken::PrefixedToken(BasicTokenPrefixed::LowerDollar)
     )(input)
 }
 
-fn parse_upper_dollar(input : &str) -> BasicSeveralTokensResult {
+fn parse_upper_dollar(input: &str) -> BasicSeveralTokensResult {
     parse_any_string_function(
         "UPPER$",
-        BasicToken::PrefixedToken(BasicTokenPrefixed::UpperDollar),
+        BasicToken::PrefixedToken(BasicTokenPrefixed::UpperDollar)
     )(input)
 }
-
-
 
 fn parse_any_numeric_function<'code>(
     name: &'static str,
@@ -934,8 +919,8 @@ pub fn parse_floating_point(input: &str) -> BasicOneTokenResult {
             map(
                 recognize(tuple((
                     opt(char('-')),
-                    dec_u16_inner, 
-                    char('.'), 
+                    dec_u16_inner,
+                    char('.'),
                     dec_u16_inner
                 ))),
                 |nb| f32_to_amstrad_float(nb.parse::<f64>().unwrap())

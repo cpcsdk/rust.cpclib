@@ -5,26 +5,24 @@ use std::sync::Arc;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::bytes::complete::tag;
 use cpclib_common::nom::character::complete::space0;
-use cpclib_common::nom::combinator::{cut, opt, map, eof};
+use cpclib_common::nom::combinator::{cut, eof, map, opt};
 use cpclib_common::nom::error::{context, ErrorKind, VerboseError};
 use cpclib_common::nom::multi::{fold_many0, many_till};
 use cpclib_common::nom::sequence::{delimited, preceded};
-use cpclib_common::nom::{Err, IResult, InputLength, InputTake, self};
+use cpclib_common::nom::{self, Err, IResult, InputLength, InputTake};
 use cpclib_common::nom_locate::LocatedSpan;
-
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
-
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
-    BaseListing, BinaryFunction, BinaryOperation, CrunchType, Expr, ExprResult, LabelPrefix,
-    ListingElement, MacroParam, MacroParamElement, TestKind, TestKindElement, ToSimpleToken, Token,
-    UnaryFunction, UnaryOperation, UnaryTokenOperation, DataAccess, Mnemonic
+    BaseListing, BinaryFunction, BinaryOperation, CrunchType, DataAccess, Expr, ExprResult,
+    LabelPrefix, ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind,
+    TestKindElement, ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation
 };
 use ouroboros::self_referencing;
 
-use super::{parse_z80_line, ParserContext, Z80Span, parse_z80_line_complete, Z80ParserError};
+use super::{parse_z80_line, parse_z80_line_complete, ParserContext, Z80ParserError, Z80Span};
 use crate::assembler::Env;
 use crate::error::AssemblerError;
 /// ! This crate is related to the adaptation of tokens and listing for the case where they are parsed
@@ -33,7 +31,6 @@ use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::tokens::TokenExt;
 use crate::preamble::{parse_end_directive, parse_z80_str};
 use crate::{resolve_impl, BinaryTransformation, ExprElement, ParsingState, SymbolFor};
-
 
 #[derive(Debug, Clone)]
 pub enum LocatedExpr {
@@ -811,20 +808,18 @@ impl Clone for LocatedToken {
     }
 }
 
-/*
-impl Deref for LocatedToken {
-    type Target = Token;
-
-    fn deref(&self) -> &Self::Target {
-        match self.token() {
-            Ok(t) => t,
-            Err(_) => {
-                panic!("{:?} cannot be dereferenced as it contains a listing", self)
-            }
-        }
-    }
-}
-*/
+// impl Deref for LocatedToken {
+// type Target = Token;
+//
+// fn deref(&self) -> &Self::Target {
+// match self.token() {
+// Ok(t) => t,
+// Err(_) => {
+// panic!("{:?} cannot be dereferenced as it contains a listing", self)
+// }
+// }
+// }
+// }
 
 impl LocatedToken {
     /// We can obtain a token only for "standard ones". Those that rely on listing need to be handled differently
@@ -1068,11 +1063,13 @@ impl TokenExt for LocatedToken {
         todo!()
     }
 
-    fn to_bytes_with_options(&self, option: &crate::AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
+    fn to_bytes_with_options(
+        &self,
+        option: &crate::AssemblingOptions
+    ) -> Result<Vec<u8>, AssemblerError> {
         todo!()
     }
 }
-
 
 impl ListingElement for LocatedToken {
     type Expr = LocatedExpr;
@@ -1081,51 +1078,48 @@ impl ListingElement for LocatedToken {
 
     fn mnemonic(&self) -> Option<&Mnemonic> {
         match self {
-            Self::Standard{token, ..} => token.mnemonic(),
+            Self::Standard { token, .. } => token.mnemonic(),
             _ => None
         }
     }
 
-    fn mnemonic_arg1(&self) -> Option<&DataAccess>{
+    fn mnemonic_arg1(&self) -> Option<&DataAccess> {
         match self {
-            Self::Standard{token, ..} => token.mnemonic_arg1(),
+            Self::Standard { token, .. } => token.mnemonic_arg1(),
             _ => None
         }
     }
 
-    fn mnemonic_arg2(&self) -> Option<&DataAccess>{
+    fn mnemonic_arg2(&self) -> Option<&DataAccess> {
         match self {
-            Self::Standard{token, ..} => token.mnemonic_arg2(),
+            Self::Standard { token, .. } => token.mnemonic_arg2(),
             _ => None
         }
     }
 
-    fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess>{
+    fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess> {
         match self {
-            Self::Standard{token, ..} => token.mnemonic_arg1_mut(),
+            Self::Standard { token, .. } => token.mnemonic_arg1_mut(),
             _ => None
         }
     }
 
-    fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess>{
+    fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess> {
         match self {
-            Self::Standard{token, ..} => token.mnemonic_arg2_mut(),
+            Self::Standard { token, .. } => token.mnemonic_arg2_mut(),
             _ => None
         }
     }
 
-
-    
-   fn is_directive(&self) -> bool {
+    fn is_directive(&self) -> bool {
         match self {
             Self::Standard {
-            	token: Token::OpCode(..),
-            	..
+                token: Token::OpCode(..),
+                ..
             } => false,
             _ => true
         }
     }
-
 
     fn is_rorg(&self) -> bool {
         match self {
@@ -1143,75 +1137,80 @@ impl ListingElement for LocatedToken {
 
     fn rorg_expr(&self) -> &Self::Expr {
         match self {
-            Self::Rorg(exp, _, _) => exp,
+            Self::Rorg(exp, ..) => exp,
             _ => unreachable!()
         }
     }
 
-    fn is_iterate(&self)-> bool {
+    fn is_iterate(&self) -> bool {
         match self {
             Self::Iterate(..) => true,
             _ => false
         }
     }
+
     fn iterate_listing(&self) -> &[Self] {
         match self {
             Self::Iterate(_, _, listing, ..) => listing.as_slice(),
             _ => unreachable!()
         }
     }
-    fn iterate_counter_name(&self) -> &str  {
+
+    fn iterate_counter_name(&self) -> &str {
         match self {
             Self::Iterate(name, ..) => name.as_str(),
             _ => unreachable!()
         }
     }
-    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr>  {
+
+    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr> {
         match self {
             Self::Iterate(_, values, ..) => values.as_ref(),
             _ => unreachable!()
         }
     }
 
-
-
     fn is_for(&self) -> bool {
         match self {
-            Self::For{..} => true,
+            Self::For { .. } => true,
             _ => false
         }
     }
-    fn for_listing(&self) -> &[Self]{
+
+    fn for_listing(&self) -> &[Self] {
         match self {
-            Self::For{listing, ..} => listing.as_slice(),
-            _ => unreachable!()
-        }
-    }
-    fn for_label(&self) -> &str {
-        match self {
-            Self::For{label, ..} => label.as_ref(),
-            _ => unreachable!()
-        }
-    }
-    fn for_start(&self) -> &Self::Expr {
-        match self {
-            Self::For{start, ..} => start,
-            _ => unreachable!()
-        }
-    }
-    fn for_stop(&self) -> &Self::Expr {
-        match self {
-            Self::For{stop, ..} => stop,
-            _ => unreachable!()
-        }
-    }
-    fn for_step(&self) -> Option<&Self::Expr>  {
-        match self {
-            Self::For{step, ..} => step.as_ref(),
+            Self::For { listing, .. } => listing.as_slice(),
             _ => unreachable!()
         }
     }
 
+    fn for_label(&self) -> &str {
+        match self {
+            Self::For { label, .. } => label.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn for_start(&self) -> &Self::Expr {
+        match self {
+            Self::For { start, .. } => start,
+            _ => unreachable!()
+        }
+    }
+
+    fn for_stop(&self) -> &Self::Expr {
+        match self {
+            Self::For { stop, .. } => stop,
+            _ => unreachable!()
+        }
+    }
+
+    fn for_step(&self) -> Option<&Self::Expr> {
+        match self {
+            Self::For { step, .. } => step.as_ref(),
+            _ => unreachable!()
+        }
+    }
 
     fn is_repeat_until(&self) -> bool {
         match self {
@@ -1219,12 +1218,14 @@ impl ListingElement for LocatedToken {
             _ => false
         }
     }
-    fn repeat_until_listing(&self) -> &[Self]{
+
+    fn repeat_until_listing(&self) -> &[Self] {
         match self {
             Self::RepeatUntil(_, code, ..) => code.as_slice(),
             _ => unreachable!()
         }
     }
+
     fn repeat_until_condition(&self) -> &Self::Expr {
         match self {
             Self::RepeatUntil(cond, ..) => cond,
@@ -1232,9 +1233,7 @@ impl ListingElement for LocatedToken {
         }
     }
 
-
-
-    fn is_repeat(&self) -> bool  {
+    fn is_repeat(&self) -> bool {
         match self {
             Self::Repeat(..) => true,
             _ => false
@@ -1254,27 +1253,20 @@ impl ListingElement for LocatedToken {
             _ => unreachable!()
         }
     }
+
     fn repeat_counter_name(&self) -> Option<&str> {
         match self {
             Self::Repeat(_, _, counter_name, ..) => counter_name.as_ref().map(|c| c.as_str()),
             _ => unreachable!()
         }
     }
+
     fn repeat_counter_start(&self) -> Option<&Self::Expr> {
         match self {
             Self::Repeat(_, _, _, start, _) => start.as_ref(),
             _ => unreachable!()
         }
     }
-
-
-
-
-
-
-
-
-
 
     fn is_macro_definition(&self) -> bool {
         match self {
@@ -1477,7 +1469,7 @@ pub type InnerLocatedListing = BaseListing<LocatedToken>;
 pub struct LocatedListing {
     /// Its source code. We want it to live as long as possible.
     /// A string is copied for the very beginning of the file parsing, while a span is used for the inner blocs. As this field is immutable and build before the listing, we do not store the span here
-    src: Option<std::sync::Arc<String> >,
+    src: Option<std::sync::Arc<String>>,
 
     /// Its Parsing Context whose source targets LocatedListing
     #[borrows(src)]
@@ -1559,16 +1551,9 @@ impl LocatedListing {
                 let input_start = Z80Span::new_extra(src, ctx);
 
                 // really make the parsing
-                let res = dbg!(
-                    map(
-                        many_till(
-                            parse_z80_line_complete,
-                            eof
-                        ),
-                    |(v,_)| {
-                        v.into_iter().flatten().collect_vec()
-                    }
-                )(input_start.clone()));
+                let res = dbg!(map(many_till(parse_z80_line_complete, eof), |(v, _)| {
+                    v.into_iter().flatten().collect_vec()
+                })(input_start.clone()));
 
                 // analyse result and can generate error even if parsing was ok
                 let res = match res {
@@ -1631,7 +1616,6 @@ impl LocatedListing {
         input_code: Z80Span,
         new_state: ParsingState
     ) -> IResult<Z80Span, Arc<LocatedListing>, Z80ParserError> {
-
         // The context is similar to the initial one ...
         let mut ctx = input_code.extra.clone();
         // ... but the state can be modified to forbid some keywords
@@ -1653,7 +1637,8 @@ impl LocatedListing {
 
             parse_result_builder: |_src, lst_ctx| {
                 // build a span with the appropriate novel context
-                let lst_ctx = unsafe { &*(lst_ctx as *const ParserContext) as &'static ParserContext }; // the context is stored within the object; so it is safe to set its lifetime to static
+                let lst_ctx =
+                    unsafe { &*(lst_ctx as *const ParserContext) as &'static ParserContext }; // the context is stored within the object; so it is safe to set its lifetime to static
 
                 // Build the span that will be parsed to collect inner tokens.
                 // It has a length of input_length.
@@ -1678,9 +1663,7 @@ impl LocatedListing {
                     // check if the line needs to be parsed (ie there is no end directive)
                     let must_break = inner_code.trim().is_empty() || {
                         // TODO take into account potential label
-                        let maybe_keyword = opt(
-                            parse_end_directive
-                        )(inner_code.clone());
+                        let maybe_keyword = opt(parse_end_directive)(inner_code.clone());
                         match maybe_keyword {
                             Ok((_, Some(_))) => true,
                             _ => false
@@ -1691,7 +1674,9 @@ impl LocatedListing {
                     };
 
                     // really parse the line
-                    match cut(context("[DBG] Inner loop", parse_z80_line_complete))(inner_code.clone()) {
+                    match cut(context("[DBG] Inner loop", parse_z80_line_complete))(
+                        inner_code.clone()
+                    ) {
                         Ok((next_input, mut tok)) => {
                             inner_code = next_input; // ensure next line parsing starts at the right place{}
                             tokens.append(&mut tok); // add the collected tokens to the complete tokens list
@@ -1707,9 +1692,7 @@ impl LocatedListing {
                 // Generate the appropriate parse result
                 match error {
                     // Parse error
-                    Some(e) => {
-                        ParseResult::FailureInner(e)
-                    },
+                    Some(e) => ParseResult::FailureInner(e),
                     // Correct parsing
                     None => {
                         // restore the appropriate context to the next_span (the original context in fact)
@@ -1734,22 +1717,26 @@ impl LocatedListing {
 
         match inner_listing.borrow_parse_result().clone() {
             ParseResult::SuccessInner { next_span, .. } => Ok((next_span.clone(), inner_listing)),
-            ParseResult::FailureInner(e) => 
+            ParseResult::FailureInner(e) => {
                 match e {
-                    Err::Error(e) => Err(Err::Error(Z80ParserError::from_inner_error(
-                        input_code,
-                        inner_listing.clone(),
-                        box e.clone()
-                    ))),
-                    Err::Failure(e) =>  Err(Err::Failure(Z80ParserError::from_inner_error(
-                        input_code,
-                        inner_listing.clone(),
-                        box e.clone()
-                    ))) ,
-                    Err::Incomplete(e) => Err(Err::Incomplete(*e))  ,
-
+                    Err::Error(e) => {
+                        Err(Err::Error(Z80ParserError::from_inner_error(
+                            input_code,
+                            inner_listing.clone(),
+                            box e.clone()
+                        )))
+                    }
+                    Err::Failure(e) => {
+                        Err(Err::Failure(Z80ParserError::from_inner_error(
+                            input_code,
+                            inner_listing.clone(),
+                            box e.clone()
+                        )))
+                    }
+                    Err::Incomplete(e) => Err(Err::Incomplete(*e))
                 }
-            
+            }
+
             _ => unreachable!()
         }
     }
@@ -1822,7 +1809,6 @@ impl LocatedListing {
     // }
 }
 
-
 impl Deref for LocatedListing {
     type Target = InnerLocatedListing;
 
@@ -1872,11 +1858,9 @@ impl LocatedListing {
 
     pub fn as_listing(&self) -> BaseListing<Token> {
         #[cfg(not(target_arch = "wasm32"))]
-        let iter = self.deref()
-            .par_iter();
+        let iter = self.deref().par_iter();
         #[cfg(target_arch = "wasm32")]
-        let iter = self.deref()
-            .iter();
+        let iter = self.deref().iter();
 
         iter.map(|lt| lt.to_token())
             .map(|c| -> Token { c.into_owned() })
@@ -1905,9 +1889,7 @@ impl ParseToken for Token {
         };
         match tokens.len() {
             0 => Err("No ASM found.".to_owned()),
-            1 => {
-                Ok(tokens[0].to_token().into_owned())
-            }
+            1 => Ok(tokens[0].to_token().into_owned()),
             _ => {
                 Err(format!(
                     "{} tokens are present instead of one",

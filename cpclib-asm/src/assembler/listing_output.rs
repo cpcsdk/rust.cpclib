@@ -79,15 +79,15 @@ impl ListingOutput {
 
     /// Check if the token is for the same source
     fn token_is_on_same_source(&self, token: &LocatedToken) -> bool {
-         match &self.current_source {
-         Some(current_source) => {
-         std::ptr::eq(
-         token.context().source.unwrap().as_ptr(),
-         current_source.as_ptr()
-         )
-         }
-         None => false
-         }
+        match &self.current_source {
+            Some(current_source) => {
+                std::ptr::eq(
+                    token.context().source.unwrap().as_ptr(),
+                    current_source.as_ptr()
+                )
+            }
+            None => false
+        }
     }
 
     /// Check if the token is for the same line than the previous token
@@ -299,7 +299,6 @@ pub struct ListingOutputTrigger {
 
 unsafe impl Sync for ListingOutputTrigger {}
 
-
 impl ListingOutputTrigger {
     pub fn write_byte(&mut self, b: u8) {
         self.bytes.push(b);
@@ -307,10 +306,12 @@ impl ListingOutputTrigger {
 
     pub fn new_token(&mut self, new: *const LocatedToken, address: u32, kind: AddressKind) {
         if let Some(token) = &self.token {
-            self.builder
-                .write()
-                .unwrap()
-                .add_token(unsafe{&**token}, &self.bytes, self.start, kind);
+            self.builder.write().unwrap().add_token(
+                unsafe { &**token },
+                &self.bytes,
+                self.start,
+                kind
+            );
         }
 
         self.token.replace(new.clone()); // TODO remove that clone that is memory/time eager
@@ -339,7 +340,7 @@ impl ListingOutputTrigger {
     pub fn finish(&mut self) {
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(
-                unsafe{&**token},
+                unsafe { &**token },
                 &self.bytes,
                 self.start,
                 AddressKind::Address

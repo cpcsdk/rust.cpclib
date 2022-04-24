@@ -9,17 +9,16 @@ use nom::multi::*;
 use nom::sequence::*;
 use nom::*;
 use nom_locate::LocatedSpan;
+#[cfg(not(target_arch = "wasm32"))]
+pub use rayon;
 #[cfg(feature = "cmdline")]
 pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
 pub use {
-    bitfield, bitflags, bitsets, bitvec, itertools, lazy_static, nom, nom_locate, num,
-    smallvec, smol_str, strsim
+    bitfield, bitflags, bitsets, bitvec, itertools, lazy_static, nom, nom_locate, num, smallvec,
+    smol_str, strsim
 };
-
-#[cfg(not(target_arch = "wasm32"))]
-pub use rayon;
 
 /// Read a valuepub
 pub fn parse_value<'src, T>(

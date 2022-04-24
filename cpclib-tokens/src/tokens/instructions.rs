@@ -1,13 +1,13 @@
-
 use std::borrow::Cow;
 use std::fmt;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::SnapshotVersion;
-use crate::tokens::listing::ListingElement;
+
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
+use crate::tokens::listing::ListingElement;
 use crate::{Listing, Register8};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -967,8 +967,6 @@ impl From<u8> for Token {
 
 #[allow(missing_docs)]
 impl Token {
-
-
     pub fn new_opcode(mne: Mnemonic, arg1: Option<DataAccess>, arg2: Option<DataAccess>) -> Self {
         Token::OpCode(mne, arg1, arg2, None)
     }
@@ -1063,8 +1061,6 @@ impl Token {
             _ => false
         }
     }
-
-
 
     pub fn macro_name(&self) -> Option<&str> {
         match self {

@@ -34,13 +34,12 @@ use std::io::Write;
 use std::sync::{Arc, RwLock};
 
 use cpclib_disc::amsdos::*;
+use lazy_static;
 use preamble::function::FunctionBuilder;
 use preamble::processed_token::ProcessedToken;
 use preamble::*;
 
 use self::listing_output::ListingOutput;
-
-use lazy_static;
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
 #[derive(Debug)]
@@ -184,7 +183,6 @@ mod test_super {
         static ref CTX: ParserContext = Default::default();
     }
 
-
     fn ctx() -> &'static ParserContext {
         &CTX
     }
@@ -197,7 +195,8 @@ mod test_super {
 		db 3, 4
 		";
 
-        let bytes = assemble(code, ctx()).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
+        let bytes =
+            assemble(code, ctx()).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
         assert_eq!(bytes.len(), 4);
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
@@ -210,7 +209,8 @@ mod test_super {
 		db 3, 4
 		";
 
-        let bytes = assemble(code, ctx()).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
+        let bytes =
+            assemble(code, ctx()).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
 

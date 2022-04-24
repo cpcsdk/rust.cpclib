@@ -5,18 +5,16 @@
 extern crate wasm_bindgen_test;
 use std::println;
 
-use wasm_bindgen_test::*;
 use cpclib_asm_webasm::*;
 use cpclib_sna::SnapshotFlag;
-
+use wasm_bindgen_test::*;
 
 // TODO find a way to init the thread pool...
 wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 fn asm_parse_failure() {
-
-    let source =  "ld hl, 1234  push hl";
+    let source = "ld hl, 1234  push hl";
     let config = asm::asm_create_parser_config("test.asm");
     let result = asm::asm_parse_source(&source, &config);
     assert!(result.is_err());
@@ -24,7 +22,7 @@ fn asm_parse_failure() {
 
 #[wasm_bindgen_test]
 fn asm_parse_success() {
-    let source =  "ld hl, 1234 :  push hl";
+    let source = "ld hl, 1234 :  push hl";
     let config = asm::asm_create_parser_config("test.asm");
     let result = asm::asm_parse_source(&source, &config);
     assert!(result.is_ok());
@@ -32,7 +30,7 @@ fn asm_parse_success() {
 
 #[wasm_bindgen_test]
 fn asm_assemble_failure() {
-    let source =  "ld hl, 1234  push hl";
+    let source = "ld hl, 1234  push hl";
     let config = asm::asm_create_parser_config("test.asm");
     let result = asm::asm_assemble_snapshot(&source, &config);
     assert!(result.is_err());
@@ -40,7 +38,7 @@ fn asm_assemble_failure() {
 
 #[wasm_bindgen_test]
 fn asm_assemble_success() {
-    let source =  "ld hl, 1234 :  push hl";
+    let source = "ld hl, 1234 :  push hl";
     let config = asm::asm_create_parser_config("test.asm");
     let result = asm::asm_assemble_snapshot(&source, &config);
     assert!(result.is_ok());
@@ -48,7 +46,7 @@ fn asm_assemble_success() {
 
 #[wasm_bindgen_test]
 fn asm_fail_save() {
-    let source =  " SAVE \"test\"";
+    let source = " SAVE \"test\"";
     let config = asm::asm_create_parser_config("test.asm");
     let result = asm::asm_assemble_snapshot(&source, &config);
     assert!(result.is_err());
@@ -56,23 +54,22 @@ fn asm_fail_save() {
 
 #[wasm_bindgen_test]
 fn asm_fail_include() {
-    let source =  " include \"test.asm\"";
+    let source = " include \"test.asm\"";
     let config = asm::asm_create_parser_config("test.asm");
     let result = asm::asm_assemble_snapshot(&source, &config);
     assert!(result.is_err());
 }
 
-
 #[wasm_bindgen_test]
 fn basic_parse_success_one_line() {
-    let source =  "10 PRINT \"HELLO WORLD\"";
+    let source = "10 PRINT \"HELLO WORLD\"";
     let result = basic::basic_parse_program(source);
     assert!(result.is_ok());
 }
 
 #[wasm_bindgen_test]
 fn basic_parse_success_two_lines() {
-    let source =  "10 PRINT \"HELLO\":20 PRINT \"WORLD\"";
+    let source = "10 PRINT \"HELLO\":20 PRINT \"WORLD\"";
     let result = basic::basic_parse_program(source);
     assert!(result.is_ok());
 
@@ -82,28 +79,33 @@ fn basic_parse_success_two_lines() {
 #[wasm_bindgen_test]
 // this test is a copy past of generate_loop4000.rs
 fn manually_generated_snapshot() {
-    use cpclib_asm::{preamble::{ParserContext, parse_z80_str_with_context}, AssemblingOptions, assembler::visit_tokens_all_passes_with_options};
-    use cpclib_sna::{SnapshotFlag, Snapshot};
+    use cpclib_asm::assembler::visit_tokens_all_passes_with_options;
+    use cpclib_asm::preamble::{parse_z80_str_with_context, ParserContext};
+    use cpclib_asm::AssemblingOptions;
+    use cpclib_sna::{Snapshot, SnapshotFlag};
 
-	let asm = "
+    let asm = "
 		org 0x4000
 		run $
 		jp $
 	";
 
     let mut ctx = ParserContext::default();
-	let mut options = AssemblingOptions::default();
-	let listing = parse_z80_str_with_context(asm, ctx).expect("Unable to parse z80 code");
-	let env = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx()).expect("Unable to assemble z80 code");
-	let sna = env.sna().clone();
-    assert_eq!(sna.get_value(&SnapshotFlag::Z80_PC).as_u16().unwrap(), 0x4000);
-    assert_eq!(sna.get_byte(0x4000), 0xc3);
-	assert_eq!(sna.get_byte(0x4001), 0x00);
-	assert_eq!(sna.get_byte(0x4002), 0x40);
+    let mut options = AssemblingOptions::default();
+    let listing = parse_z80_str_with_context(asm, ctx).expect("Unable to parse z80 code");
+    let env = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
+        .expect("Unable to assemble z80 code");
+    let sna = env.sna().clone();
+    assert_eq!(
+        sna.get_value(&SnapshotFlag::Z80_PC).as_u16().unwrap(),
+        0x4000
+    );
+    assert_eq!(sna.get_byte(0x4000), 0xC3);
+    assert_eq!(sna.get_byte(0x4001), 0x00);
+    assert_eq!(sna.get_byte(0x4002), 0x40);
 
     println!("Manual generation of snapshot succeeds");
 }
-
 
 #[wasm_bindgen_test]
 // this test is a copy past of generate_loop4000.rs
@@ -115,22 +117,22 @@ fn playground_generated_snapshot() {
     ";
     let config = asm::asm_create_parser_config("loop4000.asm");
     let sna = asm::asm_assemble_snapshot(&source, &config).expect("Unable to build the snapshot");
-    assert_eq!(sna.get_value(&SnapshotFlag::Z80_PC).as_u16().unwrap(), 0x4000);
+    assert_eq!(
+        sna.get_value(&SnapshotFlag::Z80_PC).as_u16().unwrap(),
+        0x4000
+    );
 
-
-	assert_eq!(sna.get_byte(0x4000), 0xc3);
-	assert_eq!(sna.get_byte(0x4001), 0x00);
-	assert_eq!(sna.get_byte(0x4002), 0x40);
+    assert_eq!(sna.get_byte(0x4000), 0xC3);
+    assert_eq!(sna.get_byte(0x4001), 0x00);
+    assert_eq!(sna.get_byte(0x4002), 0x40);
 
     let bytes = sna.bytes();
     assert_eq!(bytes.get_index(0x10), 2); // we currently want only snapshot v2
     assert_eq!(bytes.get_index(0x23), 0x00); // pc
-    assert_eq!(bytes.get_index(0x24), 0x40); 
-
+    assert_eq!(bytes.get_index(0x24), 0x40);
 
     let header_size = 0x100;
-    assert_eq!(bytes.get_index(header_size + 0x4000), 0xc3);
-	assert_eq!(bytes.get_index(header_size +0x4001), 0x00);
-	assert_eq!(bytes.get_index(header_size +0x4002), 0x40);
-
+    assert_eq!(bytes.get_index(header_size + 0x4000), 0xC3);
+    assert_eq!(bytes.get_index(header_size + 0x4001), 0x00);
+    assert_eq!(bytes.get_index(header_size + 0x4002), 0x40);
 }

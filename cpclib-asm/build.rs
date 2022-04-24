@@ -3,9 +3,7 @@ use std::path::Path;
 
 use cc;
 
-
-fn build() 
-{
+fn build() {
     let src = env::var("CARGO_MANIFEST_DIR").unwrap();
     let dst = Path::new(&env::var("OUT_DIR").unwrap()).join("built.rs");
 
@@ -25,9 +23,11 @@ fn build()
         .compile("apultra");
 }
 
-
 fn main() {
-    if !env::var("CARGO_CFG_TARGET_ARCH").unwrap().contains("wasm32") {
+    if !env::var("CARGO_CFG_TARGET_ARCH")
+        .unwrap()
+        .contains("wasm32")
+    {
         build();
     }
 }

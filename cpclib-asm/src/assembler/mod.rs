@@ -27,11 +27,8 @@ use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static::__Deref;
-
-
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
-
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::*;
@@ -794,8 +791,7 @@ impl Env {
                     AssemblingPass::SecondPass
                 }
             };
-        } 
-
+        }
 
         if !self.pass.is_finished() || self.pass.is_listing_pass() {
             if !self.pass.is_listing_pass() {
@@ -807,8 +803,6 @@ impl Env {
                 &mut self.previous_pass_discarded_errors
             );
             self.current_pass_discarded_errors.clear();
-
-
 
             self.stable_counters = StableTickerCounters::default();
             self.run_options = None;
@@ -831,7 +825,7 @@ impl Env {
             self.output_address = 0;
             let page_info = self.active_page_info_mut();
             page_info.logical_outputadr = 0;
-            page_info.logical_codeadr =0;
+            page_info.logical_codeadr = 0;
             self.update_dollar();
 
             self.ga_mmr = 0xC0;
@@ -840,16 +834,12 @@ impl Env {
             // self.sna = Default::default(); // We finally keep the snapshot for the memory function
             self.sna_version = cpclib_sna::SnapshotVersion::V3;
 
-
-
             self.can_skip_next_passes = true.into();
             if can_change_request {
                 self.request_additional_pass = false.into();
             }
             self.symbols.new_pass();
         }
-
-
     }
 
     /// Handle the actions to do after assembling.
@@ -1032,12 +1022,12 @@ impl Env {
         // save from extra memory / can be done in parallal
         self.ga_mmr = 0xC0;
 
-        
         #[cfg(not(target_arch = "wasm32"))]
         let iter = self.banks.par_iter();
         #[cfg(target_arch = "wasm32")]
         let iter = self.banks.iter();
-        let mut saved = iter.map(|bank| bank.1.execute_save(self))
+        let mut saved = iter
+            .map(|bank| bank.1.execute_save(self))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
         for s in &mut saved {
             saved_files.append(s);
@@ -1514,7 +1504,11 @@ impl Env {
         // Try to fallback on a macro call - parser is not that much great
         if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
             if kind == "macro" || kind == "struct" {
-                return Err(AssemblerError::AssemblingError { msg: "Use (void) for macros with no parameters to disambiguate them with labels".to_owned()});
+                return Err(AssemblerError::AssemblingError {
+                    msg:
+                        "Use (void) for macros with no parameters to disambiguate them with labels"
+                            .to_owned()
+                });
             // self.visit_call_macro_or_build_struct(&Token::MacroCall(
             // label.into(),
             // Default::default()
@@ -1962,9 +1956,9 @@ impl Env {
         _side: Option<&Expr>
     ) -> Result<(), AssemblerError> {
         if cfg!(target_arch = "wasm32") {
-            return Err(AssemblerError::AssemblingError { msg: 
-                "SAVE directive is not allowed in a web-based assembling.".to_owned()
-            })
+            return Err(AssemblerError::AssemblingError {
+                msg: "SAVE directive is not allowed in a web-based assembling.".to_owned()
+            });
         }
 
         let from = match address {
@@ -2112,10 +2106,11 @@ impl Env {
         // get the new data and crunch it if needed
         let bytes = crunched_env.produced_bytes();
 
-        let must_crunch = previous_bytes.as_ref().map(
-            |b| b.as_slice() != bytes.as_slice()
-            ).unwrap_or(true);
-        if  must_crunch{
+        let must_crunch = previous_bytes
+            .as_ref()
+            .map(|b| b.as_slice() != bytes.as_slice())
+            .unwrap_or(true);
+        if must_crunch {
             let crunched: Vec<u8> = if bytes.is_empty() {
                 Vec::new()
             }
@@ -2134,7 +2129,8 @@ impl Env {
             };
             previous_crunched_bytes.replace(crunched);
             previous_bytes.replace(bytes);
-        } else {
+        }
+        else {
         }
 
         let bytes = previous_bytes.as_ref().unwrap();
@@ -2302,9 +2298,8 @@ where
         env.pass = AssemblingPass::ListingPass;
         env.start_new_pass();
         processed_token::visit_processed_tokens(&mut tokens, &mut env)
-            .map_err(|e| eprintln!("{}",e))
-                .expect("No error can arise in listing output mode; there is a bug somewhere");
-        
+            .map_err(|e| eprintln!("{}", e))
+            .expect("No error can arise in listing output mode; there is a bug somewhere");
     }
 
     if let Some(trigger) = env.output_trigger.as_mut() {
@@ -2427,9 +2422,7 @@ pub fn visit_located_token(
             Ok(())
         }
 
-        LocatedToken::Repeat(..) |
-        LocatedToken::RepeatUntil(..) |
-        LocatedToken::Rorg(..) => {
+        LocatedToken::Repeat(..) | LocatedToken::RepeatUntil(..) | LocatedToken::Rorg(..) => {
             panic!("Should be handled by ProcessedToken")
         }
 
@@ -2442,8 +2435,10 @@ pub fn visit_located_token(
             )
         }
         LocatedToken::While(cond, inner, span) => env.visit_while(cond, inner, Some(span.clone())),
-        LocatedToken::Iterate(..) => { panic!("Should never be called")}
-        LocatedToken::For {..} => {
+        LocatedToken::Iterate(..) => {
+            panic!("Should never be called")
+        }
+        LocatedToken::For { .. } => {
             panic!("Should never be called")
         }
         LocatedToken::Label(label) => {
@@ -2513,13 +2508,9 @@ fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Bankset(ref v) => env.visit_bankset(v),
         Token::Breakpoint(ref exp) => env.visit_breakpoint(exp.as_ref(), None),
         Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
-        Token::Defb(l) => {
-            visit_db_or_dw_or_str(DbLikeKind::Defb, l.as_ref(), env)
-        } Token::Defw(l) => {
-            visit_db_or_dw_or_str(DbLikeKind::Defw, l.as_ref(), env)
-        } Token::Str(l) => {
-            visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), env)
-        },
+        Token::Defb(l) => visit_db_or_dw_or_str(DbLikeKind::Defb, l.as_ref(), env),
+        Token::Defw(l) => visit_db_or_dw_or_str(DbLikeKind::Defw, l.as_ref(), env),
+        Token::Str(l) => visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), env),
         Token::Defs(_) => visit_defs(token, env),
         Token::End => visit_end(env),
         Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
@@ -2593,7 +2584,9 @@ fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             Ok(())
         }
         Token::Fail(ref exp) => env.visit_fail(exp.as_ref().map(|v| v.as_slice())),
-        Token::Repeat(..) => { panic!("Should never be called")}
+        Token::Repeat(..) => {
+            panic!("Should never be called")
+        }
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
         Token::Rorg(ref exp, ref code) => panic!("Is delegated to ProcessedToken"),
         Token::Save {
@@ -2659,17 +2652,11 @@ fn visit_assert(
                     let res_left = left.resolve(env).unwrap();
                     let res_right = right.resolve(env).unwrap();
 
-
                     match (&res_left, &res_right) {
                         (ExprResult::Char(c1), ExprResult::Char(c2)) => {
-                            format!("['{}' {} '{}']",
-                                *c1 as char,
-                                oper,
-                                *c2 as char
-                            )
-                        },
-                        _  => {
-                    
+                            format!("['{}' {} '{}']", *c1 as char, oper, *c2 as char)
+                        }
+                        _ => {
                             format!("[{} {} {}] ", res_left, oper, res_right)
                                 + &format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right)
                         }
@@ -2802,8 +2789,9 @@ impl Env {
 
     /// Handle the iterate repetition directive
     /// Values is either a list of values or a Expression that represents a list
-    pub fn visit_iterate<'token,
-        E: ExprEvaluationExt ,
+    pub fn visit_iterate<
+        'token,
+        E: ExprEvaluationExt,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync
     >(
         &mut self,
@@ -2811,12 +2799,12 @@ impl Env {
         values: either::Either<&Vec<E>, &E>,
         code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> 
+    ) -> Result<(), AssemblerError>
     where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
-    ProcessedToken<'token, T>: FunctionBuilder
-    
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt,
+        ProcessedToken<'token, T>: FunctionBuilder
     {
         let counter_name = format!("{{{}}}", counter_name);
         let counter_name = counter_name.as_str();
@@ -2887,15 +2875,17 @@ impl Env {
     pub fn visit_rorg<'token, T, E>(
         &mut self,
         address: &E,
-        code:  &mut [ProcessedToken<'token,T>],
+        code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> 
+    ) -> Result<(), AssemblerError>
     where
         E: ExprEvaluationExt,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
-    ProcessedToken<'token, T>: FunctionBuilder {
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt,
+        ProcessedToken<'token, T>: FunctionBuilder
+    {
         // Get the next code address
         let address = self
             .resolve_expr_must_never_fail(address)
@@ -2946,12 +2936,14 @@ impl Env {
         step: Option<&E>,
         code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> 
-  where  
-    T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-<<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
-ProcessedToken<'token, T>: FunctionBuilder {
+    ) -> Result<(), AssemblerError>
+    where
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt,
+        ProcessedToken<'token, T>: FunctionBuilder
+    {
         let counter_name = format!("{{{}}}", label);
         if self.symbols().contains_symbol(&counter_name)? {
             return Err(AssemblerError::ForIssue {
@@ -3020,14 +3012,15 @@ ProcessedToken<'token, T>: FunctionBuilder {
     pub fn visit_repeat_until<'token, E, T>(
         &mut self,
         cond: &E,
-        code: &mut [ProcessedToken<'token,T>],
+        code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
         E: ExprEvaluationExt,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt,
         ProcessedToken<'token, T>: FunctionBuilder
     {
         let mut i = 0;
@@ -3047,7 +3040,7 @@ ProcessedToken<'token, T>: FunctionBuilder {
     pub fn visit_repeat<'token, T, E>(
         &mut self,
         count: &E,
-        code: &mut [ProcessedToken<'token,T>],
+        code: &mut [ProcessedToken<'token, T>],
         counter: Option<&str>,
         counter_start: Option<&E>,
         span: Option<&Z80Span>
@@ -3056,8 +3049,9 @@ ProcessedToken<'token, T>: FunctionBuilder {
         E: ExprEvaluationExt,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
-    ProcessedToken<'token, T>: FunctionBuilder
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt,
+        ProcessedToken<'token, T>: FunctionBuilder
     {
         // get the number of loops
         let count = self.resolve_expr_must_never_fail(count)?.int()?;
@@ -3109,14 +3103,14 @@ ProcessedToken<'token, T>: FunctionBuilder {
         counter_name: Option<&str>,
         counter_value: Option<ExprResult>,
         iteration: i32,
-        code: &mut [ProcessedToken<'token,T>],
+        code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> 
+    ) -> Result<(), AssemblerError>
     where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-    <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
-    ProcessedToken<'token, T>: FunctionBuilder
-    
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt,
+        ProcessedToken<'token, T>: FunctionBuilder
     {
         // handle symbols unicity
         {
@@ -3265,15 +3259,17 @@ fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerErro
     }
 }
 
-fn visit_assign(label: &str, exp: &Expr, op: Option<&BinaryOperation>, env: &mut Env) -> Result<(), AssemblerError> {
+fn visit_assign(
+    label: &str,
+    exp: &Expr,
+    op: Option<&BinaryOperation>,
+    env: &mut Env
+) -> Result<(), AssemblerError> {
     let value = if let Some(op) = op {
-        let new_exp = Expr::BinaryOperation(
-            *op, 
-            box Expr::Label(label.into()), 
-            box exp.clone()
-        );
+        let new_exp = Expr::BinaryOperation(*op, box Expr::Label(label.into()), box exp.clone());
         env.resolve_expr_must_never_fail(&new_exp)?
-    } else {
+    }
+    else {
         env.resolve_expr_may_fail_in_first_pass(exp)?
     };
 
@@ -3299,7 +3295,7 @@ fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     }
 }
 
-fn visit_end( env : &mut Env) -> Result<(), AssemblerError> {
+fn visit_end(env: &mut Env) -> Result<(), AssemblerError> {
     eprintln!("END directive is not implemented");
     Ok(())
 }
@@ -3354,9 +3350,10 @@ pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement>(
 
     let output_expr_result = |env: &mut Env, expr: ExprResult, mask: u16| {
         match &expr {
-            ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_)  | ExprResult::Char(_) => {
-                output(env, expr.int()?, mask)
-            }
+            ExprResult::Float(_)
+            | ExprResult::Value(_)
+            | ExprResult::Bool(_)
+            | ExprResult::Char(_) => output(env, expr.int()?, mask),
             ExprResult::String(s) => {
                 for c in s.chars() {
                     output(env, c as _, mask)?;
@@ -5355,22 +5352,21 @@ fn flag_test_to_code(flag: FlagTest) -> u8 {
 #[allow(deprecated)]
 mod test {
 
-    use super::{*, processed_token::build_processed_token};
-
+    use super::processed_token::build_processed_token;
+    use super::*;
 
     fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         let mut processed = build_processed_token(token, env);
         processed.visited(env)
     }
-    
+
     fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
         let mut env = Env::default();
         for t in tokens {
             visit_token(t, &mut env)?;
         }
-     Ok(env)
+        Ok(env)
     }
-
 
     #[test]
     pub fn test_inc_b() {
@@ -5413,14 +5409,22 @@ mod test {
         env.start_new_pass();
 
         assert!(visit_assert(
-            &Expr::BinaryOperation(BinaryOperation::Equal, Box::new(0i32.into()), Box::new(0i32.into())),
+            &Expr::BinaryOperation(
+                BinaryOperation::Equal,
+                Box::new(0i32.into()),
+                Box::new(0i32.into())
+            ),
             None,
             &mut env,
             None
         )
         .unwrap());
         assert!(!visit_assert(
-            &Expr::BinaryOperation(BinaryOperation::Equal, Box::new(1i32.into()), Box::new(0i32.into())),
+            &Expr::BinaryOperation(
+                BinaryOperation::Equal,
+                Box::new(1i32.into()),
+                Box::new(0i32.into())
+            ),
             None,
             &mut env,
             None
@@ -5691,14 +5695,13 @@ mod test {
             Some(DataAccess::Register8(Register8::A)),
             Some(DataAccess::Expression(Expr::UnaryTokenOperation(
                 UnaryTokenOperation::Duration,
-                Box::new(
-                Token::OpCode(
+                Box::new(Token::OpCode(
                     Mnemonic::Inc,
                     Some(DataAccess::Register16(Register16::Hl)),
                     None,
                     None
-                )
-            )))),
+                ))
+            ))),
             None
         )];
 
@@ -5716,14 +5719,13 @@ mod test {
             Some(DataAccess::Register8(Register8::A)),
             Some(DataAccess::Expression(Expr::UnaryTokenOperation(
                 UnaryTokenOperation::Opcode,
-                Box::new(
-                Token::OpCode(
+                Box::new(Token::OpCode(
                     Mnemonic::Inc,
                     Some(DataAccess::Register16(Register16::Hl)),
                     None,
                     None
-                )
-            )))),
+                ))
+            ))),
             None
         )];
 
@@ -5766,15 +5768,18 @@ mod test {
 
     #[test]
     pub fn test_jr() {
-        let res = dbg!(visit_tokens_all_passes(&[
-            Token::Org(0x4000.into(), None),
-            Token::OpCode(
-                Mnemonic::Jr,
-                None,
-                Some(DataAccess::Expression(Expr::Label("$".into()))),
-                None,
-            ),
-        ], ctx()));
+        let res = dbg!(visit_tokens_all_passes(
+            &[
+                Token::Org(0x4000.into(), None),
+                Token::OpCode(
+                    Mnemonic::Jr,
+                    None,
+                    Some(DataAccess::Expression(Expr::Label("$".into()))),
+                    None,
+                ),
+            ],
+            ctx()
+        ));
 
         assert!(res.is_ok());
         let env = res.unwrap();
@@ -5788,23 +5793,29 @@ mod test {
     /// Check if  label already exists
     #[test]
     pub fn label_exists() {
-        let res = visit_tokens_all_passes(&[
-            Token::Org(0x4000.into(), None),
-            Token::Label("hello".into()),
-            Token::Label("hello".into())
-        ], ctx());
+        let res = visit_tokens_all_passes(
+            &[
+                Token::Org(0x4000.into(), None),
+                Token::Label("hello".into()),
+                Token::Label("hello".into())
+            ],
+            ctx()
+        );
         assert!(res.is_err());
     }
 
     #[test]
     pub fn test_rorg() {
-        let res = visit_tokens_all_passes(&[
-            Token::Org(0x4000i32.into(), None),
-            Token::Rorg(
-                0x8000i32.into(),
-                vec![Token::Defb(vec![Expr::Label("$".into())])].into()
-            )
-        ], ctx());
+        let res = visit_tokens_all_passes(
+            &[
+                Token::Org(0x4000i32.into(), None),
+                Token::Rorg(
+                    0x8000i32.into(),
+                    vec![Token::Defb(vec![Expr::Label("$".into())])].into()
+                )
+            ],
+            ctx()
+        );
         assert!(res.is_ok());
     }
 
@@ -5857,18 +5868,21 @@ mod test {
 
     #[test]
     pub fn test_undocumented_rlc() {
-        let res = visit_tokens_all_passes(&[
-            Token::Org(0x100.into(), None),
-            Token::OpCode(
-                Mnemonic::Rlc,
-                Some(DataAccess::IndexRegister16WithIndex(
-                    IndexRegister16::Iy,
-                    2.into()
-                )),
-                Some(DataAccess::Register8(Register8::C)),
-                None
-            )
-        ], ctx());
+        let res = visit_tokens_all_passes(
+            &[
+                Token::Org(0x100.into(), None),
+                Token::OpCode(
+                    Mnemonic::Rlc,
+                    Some(DataAccess::IndexRegister16WithIndex(
+                        IndexRegister16::Iy,
+                        2.into()
+                    )),
+                    Some(DataAccess::Register8(Register8::C)),
+                    None
+                )
+            ],
+            ctx()
+        );
         assert!(res.is_ok());
         let env = res.unwrap();
         let bytes = env.memory(0x100, 4);
@@ -5878,39 +5892,45 @@ mod test {
     #[test]
     pub fn test_undocumented_res() {
         // normal case
-        let res = visit_tokens_all_passes(&[
-            Token::Org(0x100.into(), None),
-            Token::OpCode(
-                Mnemonic::Res,
-                Some(DataAccess::Expression(4.into())),
-                Some(DataAccess::MemoryRegister16(Register16::Hl)),
-                None
-            )
-        ], ctx());
+        let res = visit_tokens_all_passes(
+            &[
+                Token::Org(0x100.into(), None),
+                Token::OpCode(
+                    Mnemonic::Res,
+                    Some(DataAccess::Expression(4.into())),
+                    Some(DataAccess::MemoryRegister16(Register16::Hl)),
+                    None
+                )
+            ],
+            ctx()
+        );
         assert!(res.is_ok());
         let env = res.unwrap();
         let bytes = env.memory(0x100, 2);
         assert_eq!(bytes, vec![0xCB, 0xA6]);
 
-        let res = visit_tokens_all_passes(&[
-            Token::Org(0x100.into(), None),
-            Token::OpCode(
-                Mnemonic::Res,
-                Some(DataAccess::Expression(4.into())),
-                Some(DataAccess::IndexRegister16WithIndex(
-                    IndexRegister16::Iy,
-                    2.into()
-                )),
-                Some(Register8::A)
-            )
-        ], ctx());
+        let res = visit_tokens_all_passes(
+            &[
+                Token::Org(0x100.into(), None),
+                Token::OpCode(
+                    Mnemonic::Res,
+                    Some(DataAccess::Expression(4.into())),
+                    Some(DataAccess::IndexRegister16WithIndex(
+                        IndexRegister16::Iy,
+                        2.into()
+                    )),
+                    Some(Register8::A)
+                )
+            ],
+            ctx()
+        );
         assert!(res.is_ok());
         let env = res.unwrap();
         let bytes = env.memory(0x100, 4);
         assert_eq!(bytes, vec![0xFD, 0xCB, 0x2, 0xA7]);
     }
 
-    lazy_static::lazy_static!{
+    lazy_static::lazy_static! {
         static ref  CTX: ParserContext = Default::default();
     }
     fn ctx() -> &'static ParserContext {

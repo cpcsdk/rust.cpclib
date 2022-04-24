@@ -1,13 +1,12 @@
 use core::fmt::Debug;
-
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 
 use cpclib_common::smallvec::SmallVec;
 
 use crate::{
-    BinaryTransformation, CrunchType, ExprElement, MacroParamElement,
-    TestKindElement, Mnemonic, DataAccess
+    BinaryTransformation, CrunchType, DataAccess, ExprElement, MacroParamElement, Mnemonic,
+    TestKindElement
 };
 /// The ListingElement trait contains the public method any memeber of a listing should contain
 /// ATM there is nothing really usefull
@@ -15,21 +14,19 @@ pub trait ListingElement: Debug + Sized {
     type MacroParam: MacroParamElement;
     type TestKind: TestKindElement;
     type Expr: ExprElement;
-    
+
     fn mnemonic(&self) -> Option<&Mnemonic>;
     fn mnemonic_arg1(&self) -> Option<&DataAccess>;
     fn mnemonic_arg2(&self) -> Option<&DataAccess>;
     fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess>;
     fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess>;
 
-
     fn is_directive(&self) -> bool;
 
-    fn is_iterate(&self)-> bool;
+    fn is_iterate(&self) -> bool;
     fn iterate_listing(&self) -> &[Self];
     fn iterate_counter_name(&self) -> &str;
-    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr> ;
-
+    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr>;
 
     fn is_for(&self) -> bool;
     fn for_listing(&self) -> &[Self];
@@ -37,7 +34,6 @@ pub trait ListingElement: Debug + Sized {
     fn for_start(&self) -> &Self::Expr;
     fn for_stop(&self) -> &Self::Expr;
     fn for_step(&self) -> Option<&Self::Expr>;
-
 
     fn is_repeat_until(&self) -> bool;
     fn repeat_until_listing(&self) -> &[Self];

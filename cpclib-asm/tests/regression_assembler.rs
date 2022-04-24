@@ -2,11 +2,11 @@ use cpclib_asm::assemble;
 use cpclib_asm::preamble::ParserContext;
 
 lazy_static::lazy_static! {
-	static ref CTX: ParserContext = Default::default();
+    static ref CTX: ParserContext = Default::default();
 }
 
 fn ctx() -> &'static ParserContext {
-	&CTX
+    &CTX
 }
 
 #[test]

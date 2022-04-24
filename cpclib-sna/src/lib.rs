@@ -52,8 +52,6 @@ pub enum SnapshotVersion {
     V3
 }
 
-
-
 impl SnapshotVersion {
     /// Check if snapshot ius V3 version
     pub fn is_v3(self) -> bool {
@@ -218,10 +216,10 @@ impl Snapshot {
                 }
             }
             SnapshotVersion::V2 => {
-               // for idx in 0x75..=0xFF {
-               //     cloned.header[idx] = 0;
-               // }
-               // unused but not set to 0
+                // for idx in 0x75..=0xFF {
+                //     cloned.header[idx] = 0;
+                // }
+                // unused but not set to 0
             }
             SnapshotVersion::V3 => {}
         };
@@ -280,7 +278,11 @@ impl Snapshot {
         self.write(&mut buffer, version)
     }
 
-    pub fn write<B: Write>(&self, buffer: &mut B , version: SnapshotVersion) -> Result<(), std::io::Error> {
+    pub fn write<B: Write>(
+        &self,
+        buffer: &mut B,
+        version: SnapshotVersion
+    ) -> Result<(), std::io::Error> {
         // Convert the snapshot to ensure header is correct
         let sna = self.fix_version(version);
 

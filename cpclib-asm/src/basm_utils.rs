@@ -306,7 +306,7 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
         }
     })?;
 
-  //  eprintln!("TODO: include parse warnings");
+    //  eprintln!("TODO: include parse warnings");
     // warnings.extend_from_slice(env.warnings());
     let warnings = env.warnings().to_vec();
 

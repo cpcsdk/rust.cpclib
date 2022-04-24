@@ -4,7 +4,6 @@ use web_sys::console;
 
 use crate::sna::JsSnapshot;
 
-
 #[wasm_bindgen]
 #[derive(Debug)]
 pub struct JsBasicError(BasicError);
@@ -17,7 +16,6 @@ impl From<BasicError> for JsBasicError {
 
 #[wasm_bindgen]
 impl JsBasicError {
-
     #[wasm_bindgen(getter)]
     pub fn msg(&self) -> String {
         self.0.to_string()
@@ -33,13 +31,11 @@ impl From<BasicProgram> for JsBasicProgram {
     }
 }
 
-
 #[wasm_bindgen]
 impl JsBasicProgram {
     #[wasm_bindgen(catch)]
     pub fn sna(&self) -> Result<JsSnapshot, String> {
-        self.0.as_sna()
-            .map(|sna| sna.into())
+        self.0.as_sna().map(|sna| sna.into())
     }
 }
 
@@ -56,7 +52,5 @@ pub fn basic_parse_program(src: &str) -> Result<JsBasicProgram, JsBasicError> {
 #[wasm_bindgen(catch)]
 
 pub fn basic_snapshot(src: &str) -> Result<JsSnapshot, String> {
-   basic_parse_program(src)
-    .map_err(|e| e.0.to_string())?
-    .sna()
+    basic_parse_program(src).map_err(|e| e.0.to_string())?.sna()
 }

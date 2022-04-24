@@ -14,7 +14,7 @@ use crate::SymbolFor;
 /// The result of expression (without taking into account the strings) is either a int (no complex mathematical expression) or a float (division/sinus and so on)
 
 /// Evaluate an aexpression
-pub trait ExprEvaluationExt : Display {
+pub trait ExprEvaluationExt: Display {
     /// Simple evaluation without context => can only evaluate number based operations.
     fn eval(&self) -> Result<ExprResult, AssemblerError> {
         let env = Env::default();
@@ -433,7 +433,6 @@ impl ExprEvaluationExt for Expr {
 
             Expr::UnaryTokenOperation(_, box t) => {
                 unimplemented!("Need to retreive the symbols from the operation")
-
             }
         }
     }

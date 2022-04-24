@@ -1,5 +1,4 @@
-use std::borrow::Borrow;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -152,10 +151,9 @@ impl ParserContext {
 
 #[allow(missing_docs)]
 impl ParserContext {
-
     //#[deprecated(note="Totally unsafe. Every test should be modified to not use it")]
     pub fn build_span<S: AsRef<str>>(&self, src: S) -> Z80Span {
-     Z80Span::new_extra(src.as_ref(), self)
+        Z80Span::new_extra(src.as_ref(), self)
     }
 
     /// Specify the path that contains the code
@@ -240,15 +238,17 @@ impl ParserContext {
 
     /// Return the real path name that correspond to the requested file.
     /// Do it in a case insensitive way (for compatibility reasons)
-    pub fn get_path_for(&self, fname: &str, env: Option<&Env>) -> Result<PathBuf, either::Either<AssemblerError, Vec<String>>> {
+    pub fn get_path_for(
+        &self,
+        fname: &str,
+        env: Option<&Env>
+    ) -> Result<PathBuf, either::Either<AssemblerError, Vec<String>>> {
         use globset::*;
         let mut does_not_exists = Vec::new();
-
 
         // When an environnement is provided, we can handle fname replacement
         let fname: Cow<str> = if let Some(env) = env {
             let mut fname = fname.to_owned();
-
 
             lazy_static::lazy_static! {
                 static ref RE: Regex = Regex::new(r"\{+[^\}]+\}+").unwrap();
@@ -263,29 +263,26 @@ impl ParserContext {
             // make the replacement
             for model in replace.iter() {
                 let local_symbol = &model[1..model.len() - 1]; // remove {}
-                let local_value = match env.symbols().value(local_symbol)   {
+                let local_value = match env.symbols().value(local_symbol) {
                     Ok(Some(Value::String(s))) => s.to_string(),
                     Ok(Some(Value::Expr(e))) => e.to_string(),
                     Ok(Some(Value::Counter(e))) => e.to_string(),
                     Ok(Some(unkn)) => {
                         unimplemented!("{:?}", unkn)
-                    },
+                    }
                     Ok(None) => {
-                        return Err(Either::Left(AssemblerError::UnknownSymbol{
+                        return Err(Either::Left(AssemblerError::UnknownSymbol {
                             symbol: model.into(),
-                            closest: env.symbols()
-                                        .closest_symbol(model, SymbolFor::Any)
-                                        .unwrap() 
+                            closest: env.symbols().closest_symbol(model, SymbolFor::Any).unwrap()
                         }))
                     }
-                Err(e) => {
-                    return Err(Either::Left(e.into()))
-                }
+                    Err(e) => return Err(Either::Left(e.into()))
                 };
                 fname = fname.replace(model, &local_value);
             }
             Cow::Owned(fname)
-        } else {
+        }
+        else {
             Cow::Borrowed(fname)
         };
 

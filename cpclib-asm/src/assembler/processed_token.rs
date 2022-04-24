@@ -1,7 +1,7 @@
 use std::any::Any;
-use std::borrow::{Cow, Borrow};
-use std::collections::{BTreeMap, HashMap};
+use std::borrow::{Borrow, Cow};
 use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::Read;
@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
+#[cfg(not(target_arch = "wasm32"))]
+use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::symbols::{Macro, SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
@@ -19,7 +21,7 @@ use cpclib_tokens::{
 use either::Either;
 use ouroboros::*;
 
-use super::file::{load_binary, get_filename};
+use super::file::{get_filename, load_binary};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
@@ -28,9 +30,6 @@ use crate::preamble::{
     parse_z80_str, parse_z80_str_with_context, LocatedListing, MayHaveSpan, Z80Span
 };
 use crate::{r#macro, AssemblerError, Env, LocatedToken, ParserContext, Visited};
-
-#[cfg(not(target_arch = "wasm32"))]
-use cpclib_common::rayon::prelude::*;
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
@@ -69,12 +68,10 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     Rorg(SimpleListingState<'token, T>)
 }
 
-
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
-struct IncbinState{
-    contents: BTreeMap<PathBuf, Vec<u8>>,
+struct IncbinState {
+    contents: BTreeMap<PathBuf, Vec<u8>>
 }
-
 
 #[derive(PartialEq, Eq, Clone)]
 struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> {
@@ -91,11 +88,8 @@ impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListing
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FunctionDefinitionState(Option<Arc<Function>>);
 
-
 #[derive(PartialEq, Eq, Clone, Debug)]
-struct IncludeState(
-    BTreeMap<PathBuf, IncludeStateInner>
-);
+struct IncludeState(BTreeMap<PathBuf, IncludeStateInner>);
 
 impl Default for IncludeState {
     fn default() -> Self {
@@ -329,19 +323,19 @@ where
         let state = IfState::new(token);
         Some(ProcessedTokenState::If(state))
     }
-    else if token.is_include(){
+    else if token.is_include() {
         let fname = token.include_fname();
         let ctx = &env.ctx;
         match get_filename(fname, ctx, Some(env)) {
             Ok(fname) => {
-                 match read_source(fname.clone(), ctx, Some(env)) {
+                match read_source(fname.clone(), ctx, Some(env)) {
                     Ok(content) => {
                         let new_ctx = {
                             let mut new_ctx = ctx.clone();
                             new_ctx.set_current_filename(fname.clone());
                             new_ctx
                         };
-            
+
                         match parse_z80_str_with_context(content, new_ctx) {
                             Ok(listing) => {
                                 let include_state = IncludeStateInnerBuilder {
@@ -354,19 +348,17 @@ where
 
                                 let mut map = BTreeMap::new();
                                 map.insert(fname, include_state);
-                
-                                Some(ProcessedTokenState::Include(IncludeState(map))) 
-                            },
-                            Err(_) => Some(ProcessedTokenState::Include(Default::default())),
-                        }
 
-                    },
-                    Err(_) => Some(ProcessedTokenState::Include(Default::default())),
+                                Some(ProcessedTokenState::Include(IncludeState(map)))
+                            }
+                            Err(_) => Some(ProcessedTokenState::Include(Default::default()))
+                        }
+                    }
+                    Err(_) => Some(ProcessedTokenState::Include(Default::default()))
                 }
-            },
-            Err(_) =>  Some(ProcessedTokenState::Include(Default::default())) // we were unable to get the filename with the provided information
+            }
+            Err(_) => Some(ProcessedTokenState::Include(Default::default())) /* we were unable to get the filename with the provided information */
         }
-       
     }
     else if token.is_incbin() {
         Some(ProcessedTokenState::Incbin(Default::default()))
@@ -414,7 +406,7 @@ where
         }))
     }
     else if token.is_rorg() {
-        Some(ProcessedTokenState::Rorg(SimpleListingState{
+        Some(ProcessedTokenState::Rorg(SimpleListingState {
             processed_tokens: build_processed_tokens_list(token.rorg_listing(), env),
             span: token.possible_span().cloned()
         }))
@@ -440,7 +432,6 @@ pub fn build_processed_tokens_list<
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
-
     #[cfg(not(target_arch = "wasm32"))]
     let iter = tokens.par_iter();
     #[cfg(target_arch = "wasm32")]
@@ -565,14 +556,15 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
 
         return Ok(());
     }
-
- 
 }
 
 /// Read the content of the source file.
 /// Uses the context to obtain the appropriate file other the included directories
-pub fn read_source<P: AsRef<Path>>(fname: P, ctx: &ParserContext, env: Option<&Env>) -> Result<String, AssemblerError> {
-
+pub fn read_source<P: AsRef<Path>>(
+    fname: P,
+    ctx: &ParserContext,
+    env: Option<&Env>
+) -> Result<String, AssemblerError> {
     let fname = fname.as_ref();
     let mut f = File::open(&fname).map_err(|e| {
         AssemblerError::IOError {
@@ -588,8 +580,7 @@ pub fn read_source<P: AsRef<Path>>(fname: P, ctx: &ParserContext, env: Option<&E
     })?;
 
     let result = chardet::detect(&content);
-    let coder =
-        encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
+    let coder = encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
 
     let content = match coder {
         Some(coder) => {
@@ -606,7 +597,6 @@ pub fn read_source<P: AsRef<Path>>(fname: P, ctx: &ParserContext, env: Option<&E
     };
 
     Ok(content)
-    
 }
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
@@ -617,12 +607,10 @@ where
 {
     /// Due to the state management, the signature requires mutability
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
-
         let mut really_does_the_job = move || {
-        let ctx = &env.ctx;
+            let ctx = &env.ctx;
 
             {
-
                 // Generate the code of a macro/struct
                 if self.token.is_call_macro_or_build_struct() {
                     self.update_macro_or_struct_state(env)?;
@@ -641,12 +629,15 @@ where
             else {
                 // Handle the tokens depending on their specific state
                 match &mut self.state {
-                    Some(ProcessedTokenState::CrunchedSection{listing:  SimpleListingState {
-                        ref mut processed_tokens,
-                        span
-                    }, 
-                    ref mut previous_bytes, 
-                    ref mut previous_compressed_bytes}) => {
+                    Some(ProcessedTokenState::CrunchedSection {
+                        listing:
+                            SimpleListingState {
+                                ref mut processed_tokens,
+                                span
+                            },
+                        ref mut previous_bytes,
+                        ref mut previous_compressed_bytes
+                    }) => {
                         env.visit_crunched_section(
                             self.token.crunched_section_kind(),
                             processed_tokens,
@@ -697,7 +688,7 @@ where
                         Ok(())
                     }
 
-                    Some(ProcessedTokenState::Incbin(IncbinState{contents})) => {
+                    Some(ProcessedTokenState::Incbin(IncbinState { contents })) => {
                         if cfg!(target_arch = "wasm32") {
                             return Err(AssemblerError::AssemblingError { msg: 
                                 "INCBIN-like directives are not allowed in a web-based assembling.".to_owned()
@@ -709,9 +700,9 @@ where
                         let fname = get_filename(fname, ctx, Some(env))?;
 
                         // get the data for the given file
-                        let data = if !contents.contains_key(&fname){
+                        let data = if !contents.contains_key(&fname) {
                             // need to load the file
-                           
+
                             let data = load_binary(Either::Left(fname.as_ref()), ctx, env)?;
                             // get a slice on the data to ease its cut
                             let mut data = &data[..];
@@ -721,12 +712,12 @@ where
                                 let info = Some(if header.is_checksum_valid() {
                                     data = &data[128..];
 
-                                AssemblerError::AssemblingError{
+                                    AssemblerError::AssemblingError{
                                     msg: format!("{:?} is a valid Amsdos file. It is included without its header.", fname)
                                 }
-                            }
-                            else {
-                                AssemblerError::AssemblingError{
+                                }
+                                else {
+                                    AssemblerError::AssemblingError{
                                             msg: format!("{:?} does not contain a valid Amsdos file. It is fully included.", fname)
                                         }
                                 });
@@ -740,7 +731,6 @@ where
 
                         let mut data = data.as_slice();
 
-
                         // Extract the appropriate content to the file
                         let offset = self.token.incbin_offset();
                         let length = self.token.incbin_length();
@@ -748,7 +738,8 @@ where
 
                         match offset {
                             Some(offset) => {
-                                let offset = env.resolve_expr_must_never_fail(offset)?.int()? as usize;
+                                let offset =
+                                    env.resolve_expr_must_never_fail(offset)?.int()? as usize;
                                 if offset >= data.len() {
                                     return Err(AssemblerError::AssemblingError {
                                         msg: format!(
@@ -765,7 +756,8 @@ where
 
                         match length {
                             Some(length) => {
-                                let length = env.resolve_expr_must_never_fail(length)?.int()? as usize;
+                                let length =
+                                    env.resolve_expr_must_never_fail(length)?.int()? as usize;
                                 if data.len() < length {
                                     return Err(AssemblerError::AssemblingError {
                                         msg: format!(
@@ -783,23 +775,21 @@ where
 
                         let data = match transformation {
                             BinaryTransformation::None => Cow::Borrowed(data),
-    
+
                             other => {
                                 if data.len() == 0 {
                                     return Err(AssemblerError::EmptyBinaryFile(
                                         self.token.incbin_fname().to_string()
                                     ));
                                 }
-    
+
                                 let crunch_type = other.crunch_type().unwrap();
                                 Cow::Owned(crunch_type.crunch(&data)?)
                             }
                         };
 
-
                         env.visit_incbin(data.borrow())
-                    },
-
+                    }
 
                     Some(ProcessedTokenState::Include(IncludeState(ref mut contents))) => {
                         if cfg!(target_arch = "wasm32") {
@@ -819,13 +809,13 @@ where
                             // Build the state if needed / retreive it otherwhise
                             let state: &mut IncludeStateInner = if !contents.contains_key(&fname) {
                                 let content = read_source(fname.clone(), ctx, Some(env))?;
-                    
+
                                 let new_ctx = {
                                     let mut new_ctx = ctx.clone();
                                     new_ctx.set_current_filename(fname.clone());
                                     new_ctx
                                 };
-                    
+
                                 let listing = parse_z80_str_with_context(content, new_ctx)?;
                                 let include_state = IncludeStateInnerBuilder {
                                     listing,
@@ -836,10 +826,10 @@ where
                                 .build();
 
                                 contents.try_insert(fname.clone(), include_state).unwrap()
-                            } else {
+                            }
+                            else {
                                 contents.get_mut(&fname).unwrap()
                             };
-
 
                             // handle the listing
                             env.mark_included(fname);
@@ -865,13 +855,11 @@ where
                             }
 
                             Ok(())
-                        } else {
+                        }
+                        else {
                             Ok(())
                         }
-                    
                     }
-
-
 
                     Some(ProcessedTokenState::If(if_state)) => {
                         let listing = if_state.choose_listing_to_assemble(env)?;
@@ -975,17 +963,10 @@ where
                         )
                     }
 
-
                     Some(ProcessedTokenState::Rorg(SimpleListingState {
                         processed_tokens,
                         span
-                    })) => {
-                        env.visit_rorg(
-                            self.token.rorg_expr(),
-                            processed_tokens,
-                            span.as_ref()
-                        )
-                    }
+                    })) => env.visit_rorg(self.token.rorg_expr(), processed_tokens, span.as_ref()),
 
                     // no state implies a standard visit
                     None => self.token.visited(env)
@@ -994,7 +975,6 @@ where
 
             env.update_dollar();
             Ok(res)
-
         };
 
         really_does_the_job().map_err(|e| AssemblerError::AlreadyRenderedError(e.to_string()))

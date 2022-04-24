@@ -220,8 +220,7 @@ impl cpclib_common::nom::InputTake for Z80Span {
     }
 
     #[inline]
-    fn take_split(&self,
-        count: usize) -> (Self, Self) {
+    fn take_split(&self, count: usize) -> (Self, Self) {
         let res = self.deref().take_split(count);
         (Self(res.0), Self(res.1))
     }
