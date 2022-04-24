@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-basm"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 description = "z80 assembler relying on cpclib-asm"
 repository = "https://github.com/cpcsdk/rust.cpclib"
@@ -12,8 +12,8 @@ license = "MIT"
 independent = true
 
 [dependencies]
-cpclib-asm = { version = "0.5.0", features = ["basm"] }
-cpclib-common = "0.5.0"
+cpclib-asm = { version = "0.6.0", features = ["basm"] }
+cpclib-common = "0.6.0"
 time = "0.3.9"
 
 [dev-dependencies]

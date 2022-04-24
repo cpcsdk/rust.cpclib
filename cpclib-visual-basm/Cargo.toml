@@ -1,6 +1,6 @@
 [package]
 name = "visual-basm"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [package.metadata.workspaces]
@@ -10,7 +10,7 @@ independent = true
 
 [dependencies]
 eframe = "0.17.0"
-cpclib-asm = { version = "0.5.0", features = ["basm"] }
+cpclib-asm = { version = "0.6.0", features = ["basm"] }
 temp-file = "0.1.7"
 rfd= "0.8.2"
 

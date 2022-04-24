@@ -1,7 +1,7 @@
 [package]
 
 name = "cpclib"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -17,17 +17,17 @@ independent = true
 
 [dependencies]
 
-cpclib-basic = "0.5.0"
-cpclib-sna = "0.5.0"
+cpclib-basic = "0.6.0"
+cpclib-sna = "0.6.0"
 
 
-cpclib-asm = "0.5.0"
-cpclib-z80emu = "0.5.0"
-cpclib-xfer = "0.5.0"
-cpclib-disc = "0.5.0"
-cpclib-macros = "0.5.0"
-cpclib-common = "0.5.0"
-cpclib-image = "0.5.0"
+cpclib-asm = "0.6.0"
+cpclib-z80emu = "0.6.0"
+cpclib-xfer = "0.6.0"
+cpclib-disc = "0.6.0"
+cpclib-macros = "0.6.0"
+cpclib-common = "0.6.0"
+cpclib-image = "0.6.0"
 
 anyhow = "1.0.57"
 arrayref= "0.3.6"
