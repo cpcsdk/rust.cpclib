@@ -1,0 +1,19 @@
+[package]
+name = "visual-basm"
+version = "0.1.0"
+edition = "2021"
+
+[package.metadata.workspaces]
+independent = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+eframe = "0.17.0"
+cpclib-asm = { version = "0.5", features = ["basm"] }
+temp-file = "0.1.6"
+rfd= "0.8.2"
+
+[[bin]]
+name = "visual-basm"
+path = "src/main.rs"

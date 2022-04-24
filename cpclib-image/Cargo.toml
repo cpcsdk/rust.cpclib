@@ -12,7 +12,7 @@ independent = true
 
 [dependencies]
 cpclib-common = "0.5.0"
-image = "0.23.14"
+image = "0.24.1"
 anyhow = "1.0.41"
 gif = "0.11.2"
 gif-dispose = "3.1.1"

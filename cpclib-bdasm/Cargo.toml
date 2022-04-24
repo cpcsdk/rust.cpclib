@@ -1,0 +1,25 @@
+[package]
+name = "cpclib-bdasm"
+version = "0.5.0"
+edition = "2021"
+description = "Z80 disassembler. Still contains some bugs."
+license = "MIT"
+
+[package.metadata.workspaces]
+independent = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cpclib-asm = {version="0.5.0"}
+cpclib-disc = {version="0.5.0"}
+clap = "3.1.12"
+time = "0.3.9"
+
+[build-dependencies]
+built = { version = "0.5.1", features = ["chrono"] }
+
+[[bin]]
+name = "bdasm"
+path = "src/main.rs"
+

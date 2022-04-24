@@ -13,9 +13,9 @@ members = [
   #  "cpclib-xferfs",
     "cpclib-z80emu",
     "cpclib",
-    "basm", "bdasm",
-    "imgconverter",
-    "visual-basm",
+    "cpclib-basm", "cpclib-bdasm",
+    "cpclib-imgconverter",
+    "cpclib-visual-basm",
     "cpclib-wasm"
 ]
 
@@ -33,9 +33,9 @@ cpclib-xfer = {path = "./cpclib-xfer/"}
 cpclib-xfertool = {path = "./cpclib-xfertool/"}
 cpclib-z80emu = {path = "./cpclib-z80emu/"}
 cpclib-wasm = {path="./cpclib-wasm"}
-basm = {path = "./basm/"}
-bdasm = {path = "./bdasm/"}
-imgconverter = {path = "./imgconverter/"}
+cpclib-basm = {path = "./cpclib-basm/"}
+cpclib-bdasm = {path = "./cpclib-bdasm/"}
+cpclib-imgconverter = {path = "./cpclib-imgconverter/"}
 
 #cpclib-xferfs = {path = "./cpclib-xferfs/"}
 

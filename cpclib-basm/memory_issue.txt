@@ -1,0 +1,2973 @@
+==2848905== Memcheck, a memory error detector
+==2848905== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2848905== Using Valgrind-3.17.0 and LibVEX; rerun with -h for copyright info
+==2848905== Command: ../target/debug/basm tests/asm/good_struct2.asm
+==2848905== 
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "  ;; Define a 3 fields structure",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "  struct point",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Struct(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:3:10 <point>,
+        [
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:4:1 <xx>,
+                Defb(
+                    [
+                        Value(
+                            4,
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:4:10 <4>,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:4:7 <db 4>,
+                ),
+            ),
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:5:1 <yy>,
+                Defb(
+                    [
+                        Value(
+                            5,
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:5:10 <5>,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:5:7 <db 5>,
+                ),
+            ),
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:6:1 <zz>,
+                Defb(
+                    [
+                        Value(
+                            6,
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:6:10 <6>,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:6:7 <db 6>,
+                ),
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:3:3 <struct point
+        xx    db 4
+        yy    db 5
+        zz    db 6
+          endstruct>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Struct(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:3:10 <point>,
+        [
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:4:1 <xx>,
+                Defb(
+                    [
+                        Value(
+                            4,
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:4:10 <4>,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:4:7 <db 4>,
+                ),
+            ),
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:5:1 <yy>,
+                Defb(
+                    [
+                        Value(
+                            5,
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:5:10 <5>,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:5:7 <db 5>,
+                ),
+            ),
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:6:1 <zz>,
+                Defb(
+                    [
+                        Value(
+                            6,
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:6:10 <6>,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:6:7 <db 6>,
+                ),
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:3:3 <struct point
+        xx    db 4
+        yy    db 5
+        zz    db 6
+          endstruct>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "  assert point == 3",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "point",
+                ),
+                Value(
+                    3,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:9:3 <assert point == 3>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "point",
+                ),
+                Value(
+                    3,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:9:3 <assert point == 3>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "  assert point.xx == 0",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "point.xx",
+                ),
+                Value(
+                    0,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:10:3 <assert point.xx == 0>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "point.xx",
+                ),
+                Value(
+                    0,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:10:3 <assert point.xx == 0>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "  assert point.yy == 1",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "point.yy",
+                ),
+                Value(
+                    1,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:11:3 <assert point.yy == 1>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "point.yy",
+                ),
+                Value(
+                    1,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:11:3 <assert point.yy == 1>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "  assert point.zz == 2",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "point.zz",
+                ),
+                Value(
+                    2,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:12:3 <assert point.zz == 2>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "point.zz",
+                ),
+                Value(
+                    2,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:12:3 <assert point.zz == 2>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    " point 1, 2 , 3",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:14:2 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:14:8 <1>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:14:11 <2 >,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:14:15 <3>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:14:2 <point 1, 2 , 3>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:14:2 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:14:8 <1>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:14:11 <2 >,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:14:15 <3>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:14:2 <point 1, 2 , 3>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    " point ,,8",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:15:2 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:15:8 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:15:9 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:15:10 <8>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:15:2 <point ,,8>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:15:2 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:15:8 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:15:9 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:15:10 <8>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:15:2 <point ,,8>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    " point 9",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:16:2 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:16:8 <9>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:16:2 <point 9>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:16:2 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:16:8 <9>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:16:2 <point 9>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "; force values",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "; : after label name allows to disambiguate parser that does not try to check if label is a macro (less errors/faster)",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "my_point1: point 1, 2, 3",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:1 <my_point1>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:12 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:18 <1>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:21 <2>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:24 <3>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:12 <point 1, 2, 3>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:1 <my_point1>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:12 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:18 <1>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:21 <2>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:24 <3>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:21:12 <point 1, 2, 3>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "; use all default values",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "my_point2: point (void)",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:24:1 <my_point2>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:24:12 <point>,
+        [],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:24:12 <point (void)>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:24:1 <my_point2>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:24:12 <point>,
+        [],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:24:12 <point (void)>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "; use default at the end",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "my_point3: point 1",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:27:1 <my_point3>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:27:12 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:27:18 <1>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:27:12 <point 1>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:27:1 <my_point3>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:27:12 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:27:18 <1>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:27:12 <point 1>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "; use default at the beginning",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "my_point4: point ,,1",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:1 <my_point4>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:12 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:18 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:19 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:20 <1>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:12 <point ,,1>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:1 <my_point4>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:12 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:18 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:19 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:20 <1>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:30:12 <point ,,1>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "p1: point 1, 2 , 3",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:1 <p1>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:5 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:11 <1>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:14 <2 >,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:18 <3>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:5 <point 1, 2 , 3>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:1 <p1>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:5 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:11 <1>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:14 <2 >,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:18 <3>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:33:5 <point 1, 2 , 3>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "p2: point ,,8",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:1 <p2>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:5 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:11 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:12 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:13 <8>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:5 <point ,,8>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:1 <p2>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:5 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:11 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:12 <>,
+            ),
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:13 <8>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:34:5 <point ,,8>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "p3: point 9",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:35:1 <p3>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:35:5 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:35:11 <9>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:35:5 <point 9>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:35:1 <p3>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:35:5 <point>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:35:11 <9>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:35:5 <point 9>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "\tstruct triangle",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Struct(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:40:9 <triangle>,
+        [
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:1 <p1>,
+                MacroCall(
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:4 <point>,
+                    [
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:10 <1>,
+                        ),
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:13 <2 >,
+                        ),
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:17 <3>,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:4 <point 1, 2 , 3>,
+                ),
+            ),
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:1 <p2>,
+                MacroCall(
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:4 <point>,
+                    [
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:10 <>,
+                        ),
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:11 <>,
+                        ),
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:12 <8>,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:4 <point ,,8>,
+                ),
+            ),
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:43:1 <p3>,
+                MacroCall(
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:43:4 <point>,
+                    [
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:43:10 <9 >,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:43:4 <point 9 >,
+                ),
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:40:2 <struct triangle
+        p1 point 1, 2 , 3
+        p2 point ,,8
+        p3 point 9 ; third point
+        	endstruct>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Struct(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:40:9 <triangle>,
+        [
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:1 <p1>,
+                MacroCall(
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:4 <point>,
+                    [
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:10 <1>,
+                        ),
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:13 <2 >,
+                        ),
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:17 <3>,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:41:4 <point 1, 2 , 3>,
+                ),
+            ),
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:1 <p2>,
+                MacroCall(
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:4 <point>,
+                    [
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:10 <>,
+                        ),
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:11 <>,
+                        ),
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:12 <8>,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:42:4 <point ,,8>,
+                ),
+            ),
+            (
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:43:1 <p3>,
+                MacroCall(
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:43:4 <point>,
+                    [
+                        Single(
+                            /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:43:10 <9 >,
+                        ),
+                    ],
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:43:4 <point 9 >,
+                ),
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:40:2 <struct triangle
+        p1 point 1, 2 , 3
+        p2 point ,,8
+        p3 point 9 ; third point
+        	endstruct>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "\tassert triangle == 9",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "triangle",
+                ),
+                Value(
+                    9,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:46:2 <assert triangle == 9>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "triangle",
+                ),
+                Value(
+                    9,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:46:2 <assert triangle == 9>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "\tassert triangle.p1 == 0",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "triangle.p1",
+                ),
+                Value(
+                    0,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:47:2 <assert triangle.p1 == 0>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "triangle.p1",
+                ),
+                Value(
+                    0,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:47:2 <assert triangle.p1 == 0>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "\tassert triangle.p2 == 3",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "triangle.p2",
+                ),
+                Value(
+                    3,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:48:2 <assert triangle.p2 == 3>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "triangle.p2",
+                ),
+                Value(
+                    3,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:48:2 <assert triangle.p2 == 3>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "\tassert triangle.p3 == 6",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "triangle.p3",
+                ),
+                Value(
+                    6,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:49:2 <assert triangle.p3 == 6>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Standard {
+        token: Assert(
+            BinaryOperation(
+                Equal,
+                Label(
+                    "triangle.p3",
+                ),
+                Value(
+                    6,
+                ),
+            ),
+            None,
+        ),
+        span: /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:49:2 <assert triangle.p3 == 6>,
+    },
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "my_triangle2: triangle [1, 2, 3], [4, 5, 6], [7, 8 , 9]",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:1 <my_triangle2>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:15 <triangle>,
+        [
+            List(
+                [
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:25 <1>,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:28 <2>,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:31 <3>,
+                    ),
+                ],
+            ),
+            List(
+                [
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:36 <4>,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:39 <5>,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:42 <6>,
+                    ),
+                ],
+            ),
+            List(
+                [
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:47 <7>,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:50 <8 >,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:54 <9>,
+                    ),
+                ],
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:15 <triangle [1, 2, 3], [4, 5, 6], [7, 8 , 9]>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    Label(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:1 <my_triangle2>,
+    ),
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:15 <triangle>,
+        [
+            List(
+                [
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:25 <1>,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:28 <2>,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:31 <3>,
+                    ),
+                ],
+            ),
+            List(
+                [
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:36 <4>,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:39 <5>,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:42 <6>,
+                    ),
+                ],
+            ),
+            List(
+                [
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:47 <7>,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:50 <8 >,
+                    ),
+                    Single(
+                        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:54 <9>,
+                    ),
+                ],
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:52:15 <triangle [1, 2, 3], [4, 5, 6], [7, 8 , 9]>,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    " if 0",
+)
+[cpclib-asm/src/parser/obtained.rs:1605] &tokens = []
+[cpclib-asm/src/parser/obtained.rs:1606] &inner_code = /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:56:1 <
+
+my_triangle1. triangle
+
+my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+ endif
+>
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/obtained.rs:1605] &tokens = []
+[cpclib-asm/src/parser/obtained.rs:1606] &inner_code = /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:57:1 <
+my_triangle1. triangle
+
+my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+ endif
+>
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "",
+)
+[cpclib-asm/src/parser/obtained.rs:1605] &tokens = []
+[cpclib-asm/src/parser/obtained.rs:1606] &inner_code = /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:1 <my_triangle1. triangle
+
+my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+ endif
+>
+[cpclib-asm/src/parser/parser.rs:890] input.split("\n").next() = Some(
+    "my_triangle1. triangle",
+)
+[cpclib-asm/src/parser/parser.rs:956] &tokens = [
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:1 <my_triangle1>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:13 <.>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:1 <my_triangle1. >,
+    ),
+]
+[cpclib-asm/src/parser/parser.rs:979] &tokens = [
+    MacroCall(
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:1 <my_triangle1>,
+        [
+            Single(
+                /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:13 <.>,
+            ),
+        ],
+        /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:1 <my_triangle1. >,
+    ),
+]
+[cpclib-asm/src/parser/obtained.rs:1639] ParseResult::FailureInner(e) = FailureInner(
+    Failure(
+        VerboseError {
+            errors: [
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15 <triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Nom(
+                        CrLf,
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15 <triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Nom(
+                        Alt,
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15 <triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Context(
+                        "Line ending expected",
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:1 <my_triangle1. triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Context(
+                        "[DBG] Inner loop",
+                    ),
+                ),
+            ],
+        },
+    ),
+)
+[cpclib-asm/src/parser/parser.rs:253] LocatedListing::parse_inner(input, new_state) = Err(
+    Failure(
+        VerboseError {
+            errors: [
+                (
+==2848905== Invalid read of size 8
+==2848905==    at 0x6EEA6D: core::option::Option<T>::as_ref (option.rs:624)
+==2848905==    by 0x399DAC: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:64)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==    by 0xB97558: core::fmt::builders::DebugSet::entry (builders.rs:479)
+==2848905==    by 0x504D60: core::fmt::builders::DebugList::entries (builders.rs:643)
+==2848905==    by 0x224893: <[T] as core::fmt::Debug>::fmt (mod.rs:2331)
+==2848905==    by 0x4C6017: <alloc::vec::Vec<T,A> as core::fmt::Debug>::fmt (mod.rs:2839)
+==2848905==    by 0x4B49E6: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==  Address 0x4ff0510 is 0 bytes inside a block of size 136 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA29A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x3CA36A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x50949B: alloc::alloc::box_free (alloc.rs:340)
+==2848905==    by 0x48B5CC: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48FEBE: <aliasable::boxed::AliasableBox<T> as core::ops::drop::Drop>::drop (boxed.rs:72)
+==2848905==    by 0x47F09A: core::ptr::drop_in_place<aliasable::boxed::AliasableBox<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48C6F4: core::ptr::drop_in_place<cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing> (mod.rs:188)
+==2848905==    by 0x27E93E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1666)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA0BB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0x3CA146: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0x3CA3D9: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0x3CA01C: alloc::alloc::exchange_malloc (alloc.rs:318)
+==2848905==    by 0x4E99A0: new<cpclib_asm::parser::context::ParserContext> (boxed.rs:195)
+==2848905==    by 0x4E99A0: ouroboros::macro_help::aliasable_boxed (lib.rs:314)
+==2848905==    by 0x2ABD72: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing::new (obtained.rs:1405)
+==2848905==    by 0x2ABB8F: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListingBuilder<CtxBuilder_,ParseResultBuilder_>::build (obtained.rs:1405)
+==2848905==    by 0x27E75E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1573)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0x9A66D9: alloc::raw_vec::RawVec<T,A>::ptr (raw_vec.rs:224)
+==2848905==    by 0x9A30DE: alloc::vec::Vec<T,A>::as_ptr (mod.rs:1134)
+==2848905==    by 0x9A31A3: <alloc::vec::Vec<T,A> as core::ops::deref::Deref>::deref (mod.rs:2437)
+==2848905==    by 0x9AE64E: std::sys::unix::os_str::Buf::as_slice (os_str.rs:146)
+==2848905==    by 0x9A1E7D: <std::ffi::os_str::OsString as core::ops::index::Index<core::ops::range::RangeFull>>::index (os_str.rs:468)
+==2848905==    by 0x9A23A4: <std::ffi::os_str::OsString as core::ops::deref::Deref>::deref (os_str.rs:486)
+==2848905==    by 0x9A243D: <std::ffi::os_str::OsString as core::convert::AsRef<std::ffi::os_str::OsStr>>::as_ref (os_str.rs:1258)
+==2848905==    by 0x9ACD7D: std::path::Path::new (path.rs:1978)
+==2848905==    by 0x3C237E: <std::path::PathBuf as core::ops::deref::Deref>::deref (path.rs:1725)
+==2848905==    by 0x226E1D: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt::{{closure}} (source.rs:67)
+==2848905==    by 0x234341: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x399DBC: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:64)
+==2848905==  Address 0x4ff0510 is 0 bytes inside a block of size 136 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA29A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x3CA36A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x50949B: alloc::alloc::box_free (alloc.rs:340)
+==2848905==    by 0x48B5CC: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48FEBE: <aliasable::boxed::AliasableBox<T> as core::ops::drop::Drop>::drop (boxed.rs:72)
+==2848905==    by 0x47F09A: core::ptr::drop_in_place<aliasable::boxed::AliasableBox<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48C6F4: core::ptr::drop_in_place<cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing> (mod.rs:188)
+==2848905==    by 0x27E93E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1666)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA0BB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0x3CA146: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0x3CA3D9: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0x3CA01C: alloc::alloc::exchange_malloc (alloc.rs:318)
+==2848905==    by 0x4E99A0: new<cpclib_asm::parser::context::ParserContext> (boxed.rs:195)
+==2848905==    by 0x4E99A0: ouroboros::macro_help::aliasable_boxed (lib.rs:314)
+==2848905==    by 0x2ABD72: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing::new (obtained.rs:1405)
+==2848905==    by 0x2ABB8F: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListingBuilder<CtxBuilder_,ParseResultBuilder_>::build (obtained.rs:1405)
+==2848905==    by 0x27E75E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1573)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0x9A31B3: <alloc::vec::Vec<T,A> as core::ops::deref::Deref>::deref (mod.rs:2437)
+==2848905==    by 0x9AE64E: std::sys::unix::os_str::Buf::as_slice (os_str.rs:146)
+==2848905==    by 0x9A1E7D: <std::ffi::os_str::OsString as core::ops::index::Index<core::ops::range::RangeFull>>::index (os_str.rs:468)
+==2848905==    by 0x9A23A4: <std::ffi::os_str::OsString as core::ops::deref::Deref>::deref (os_str.rs:486)
+==2848905==    by 0x9A243D: <std::ffi::os_str::OsString as core::convert::AsRef<std::ffi::os_str::OsStr>>::as_ref (os_str.rs:1258)
+==2848905==    by 0x9ACD7D: std::path::Path::new (path.rs:1978)
+==2848905==    by 0x3C237E: <std::path::PathBuf as core::ops::deref::Deref>::deref (path.rs:1725)
+==2848905==    by 0x226E1D: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt::{{closure}} (source.rs:67)
+==2848905==    by 0x234341: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x399DBC: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:64)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==  Address 0x4ff0520 is 16 bytes inside a block of size 136 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA29A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x3CA36A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x50949B: alloc::alloc::box_free (alloc.rs:340)
+==2848905==    by 0x48B5CC: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48FEBE: <aliasable::boxed::AliasableBox<T> as core::ops::drop::Drop>::drop (boxed.rs:72)
+==2848905==    by 0x47F09A: core::ptr::drop_in_place<aliasable::boxed::AliasableBox<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48C6F4: core::ptr::drop_in_place<cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing> (mod.rs:188)
+==2848905==    by 0x27E93E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1666)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA0BB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0x3CA146: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0x3CA3D9: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0x3CA01C: alloc::alloc::exchange_malloc (alloc.rs:318)
+==2848905==    by 0x4E99A0: new<cpclib_asm::parser::context::ParserContext> (boxed.rs:195)
+==2848905==    by 0x4E99A0: ouroboros::macro_help::aliasable_boxed (lib.rs:314)
+==2848905==    by 0x2ABD72: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing::new (obtained.rs:1405)
+==2848905==    by 0x2ABB8F: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListingBuilder<CtxBuilder_,ParseResultBuilder_>::build (obtained.rs:1405)
+==2848905==    by 0x27E75E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1573)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905== 
+==2848905== Invalid read of size 1
+==2848905==    at 0xB99D3B: run_utf8_validation (validations.rs:0)
+==2848905==    by 0xB99D3B: core::str::converts::from_utf8 (converts.rs:88)
+==2848905==    by 0xB7ACD2: std::sys::unix::os_str::Slice::to_str (os_str.rs:199)
+==2848905==    by 0x5C95B3: std::ffi::os_str::OsStr::to_str (os_str.rs:667)
+==2848905==    by 0x3C1B82: std::path::Path::to_str (path.rs:2019)
+==2848905==    by 0x226E36: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt::{{closure}} (source.rs:67)
+==2848905==    by 0x234341: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x399DBC: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:64)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==  Address 0x4ff0240 is 0 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB99D79: run_utf8_validation (validations.rs:224)
+==2848905==    by 0xB99D79: core::str::converts::from_utf8 (converts.rs:88)
+==2848905==    by 0xB7ACD2: std::sys::unix::os_str::Slice::to_str (os_str.rs:199)
+==2848905==    by 0x5C95B3: std::ffi::os_str::OsStr::to_str (os_str.rs:667)
+==2848905==    by 0x3C1B82: std::path::Path::to_str (path.rs:2019)
+==2848905==    by 0x226E36: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt::{{closure}} (source.rs:67)
+==2848905==    by 0x234341: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x399DBC: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:64)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==  Address 0x4ff0240 is 0 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB99D7D: contains_nonascii (validations.rs:121)
+==2848905==    by 0xB99D7D: run_utf8_validation (validations.rs:224)
+==2848905==    by 0xB99D7D: core::str::converts::from_utf8 (converts.rs:88)
+==2848905==    by 0xB7ACD2: std::sys::unix::os_str::Slice::to_str (os_str.rs:199)
+==2848905==    by 0x5C95B3: std::ffi::os_str::OsStr::to_str (os_str.rs:667)
+==2848905==    by 0x3C1B82: std::path::Path::to_str (path.rs:2019)
+==2848905==    by 0x226E36: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt::{{closure}} (source.rs:67)
+==2848905==    by 0x234341: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x399DBC: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:64)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==  Address 0x4ff0248 is 8 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB99D77: run_utf8_validation (validations.rs:216)
+==2848905==    by 0xB99D77: core::str::converts::from_utf8 (converts.rs:88)
+==2848905==    by 0xB7ACD2: std::sys::unix::os_str::Slice::to_str (os_str.rs:199)
+==2848905==    by 0x5C95B3: std::ffi::os_str::OsStr::to_str (os_str.rs:667)
+==2848905==    by 0x3C1B82: std::path::Path::to_str (path.rs:2019)
+==2848905==    by 0x226E36: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt::{{closure}} (source.rs:67)
+==2848905==    by 0x234341: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x399DBC: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:64)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==  Address 0x4ff0250 is 16 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 1
+==2848905==    at 0xB99D90: run_utf8_validation (validations.rs:233)
+==2848905==    by 0xB99D90: core::str::converts::from_utf8 (converts.rs:88)
+==2848905==    by 0xB7ACD2: std::sys::unix::os_str::Slice::to_str (os_str.rs:199)
+==2848905==    by 0x5C95B3: std::ffi::os_str::OsStr::to_str (os_str.rs:667)
+==2848905==    by 0x3C1B82: std::path::Path::to_str (path.rs:2019)
+==2848905==    by 0x226E36: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt::{{closure}} (source.rs:67)
+==2848905==    by 0x234341: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x399DBC: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:64)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==  Address 0x4ff0280 is 64 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+                    ==2848905== Invalid read of size 8
+==2848905==    at 0xB96E50: memchr_general_case (memchr.rs:77)
+==2848905==    by 0xB96E50: memchr (memchr.rs:48)
+==2848905==    by 0xB96E50: next_match (pattern.rs:417)
+==2848905==    by 0xB96E50: find<char> (mod.rs:1134)
+==2848905==    by 0xB96E50: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==    by 0xB97558: core::fmt::builders::DebugSet::entry (builders.rs:479)
+==2848905==    by 0x504D60: core::fmt::builders::DebugList::entries (builders.rs:643)
+==2848905==  Address 0x4ff0240 is 0 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB96E55: memchr_general_case (memchr.rs:78)
+==2848905==    by 0xB96E55: memchr (memchr.rs:48)
+==2848905==    by 0xB96E55: next_match (pattern.rs:417)
+==2848905==    by 0xB96E55: find<char> (mod.rs:1134)
+==2848905==    by 0xB96E55: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==    by 0xB97558: core::fmt::builders::DebugSet::entry (builders.rs:479)
+==2848905==    by 0x504D60: core::fmt::builders::DebugList::entries (builders.rs:643)
+==2848905==  Address 0x4ff0248 is 8 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 1
+==2848905==    at 0xB96EC0: {closure#1} (memchr.rs:91)
+==2848905==    by 0xB96EC0: position<u8, core::slice::memchr::memchr_general_case::{closure_env#1}> (macros.rs:295)
+==2848905==    by 0xB96EC0: memchr_general_case (memchr.rs:91)
+==2848905==    by 0xB96EC0: memchr (memchr.rs:48)
+==2848905==    by 0xB96EC0: next_match (pattern.rs:417)
+==2848905==    by 0xB96EC0: find<char> (mod.rs:1134)
+==2848905==    by 0xB96EC0: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==    by 0xB97558: core::fmt::builders::DebugSet::entry (builders.rs:479)
+==2848905==    by 0x504D60: core::fmt::builders::DebugList::entries (builders.rs:643)
+==2848905==  Address 0x4ff0280 is 64 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB96E50: memchr_general_case (memchr.rs:77)
+==2848905==    by 0xB96E50: memchr (memchr.rs:48)
+==2848905==    by 0xB96E50: next_match (pattern.rs:417)
+==2848905==    by 0xB96E50: find<char> (mod.rs:1134)
+==2848905==    by 0xB96E50: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==    by 0xB97558: core::fmt::builders::DebugSet::entry (builders.rs:479)
+==2848905==  Address 0x4ff0240 is 0 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB96E55: memchr_general_case (memchr.rs:78)
+==2848905==    by 0xB96E55: memchr (memchr.rs:48)
+==2848905==    by 0xB96E55: next_match (pattern.rs:417)
+==2848905==    by 0xB96E55: find<char> (mod.rs:1134)
+==2848905==    by 0xB96E55: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==    by 0xB97558: core::fmt::builders::DebugSet::entry (builders.rs:479)
+==2848905==  Address 0x4ff0248 is 8 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 1
+==2848905==    at 0xB96EC0: {closure#1} (memchr.rs:91)
+==2848905==    by 0xB96EC0: position<u8, core::slice::memchr::memchr_general_case::{closure_env#1}> (macros.rs:295)
+==2848905==    by 0xB96EC0: memchr_general_case (memchr.rs:91)
+==2848905==    by 0xB96EC0: memchr (memchr.rs:48)
+==2848905==    by 0xB96EC0: next_match (pattern.rs:417)
+==2848905==    by 0xB96EC0: find<char> (mod.rs:1134)
+==2848905==    by 0xB96EC0: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==    by 0xB97558: core::fmt::builders::DebugSet::entry (builders.rs:479)
+==2848905==  Address 0x4ff0280 is 64 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB96E50: memchr_general_case (memchr.rs:77)
+==2848905==    by 0xB96E50: memchr (memchr.rs:48)
+==2848905==    by 0xB96E50: next_match (pattern.rs:417)
+==2848905==    by 0xB96E50: find<char> (mod.rs:1134)
+==2848905==    by 0xB96E50: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==  Address 0x4ff0240 is 0 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB96E55: memchr_general_case (memchr.rs:78)
+==2848905==    by 0xB96E55: memchr (memchr.rs:48)
+==2848905==    by 0xB96E55: next_match (pattern.rs:417)
+==2848905==    by 0xB96E55: find<char> (mod.rs:1134)
+==2848905==    by 0xB96E55: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==  Address 0x4ff0248 is 8 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 1
+==2848905==    at 0xB96EC0: {closure#1} (memchr.rs:91)
+==2848905==    by 0xB96EC0: position<u8, core::slice::memchr::memchr_general_case::{closure_env#1}> (macros.rs:295)
+==2848905==    by 0xB96EC0: memchr_general_case (memchr.rs:91)
+==2848905==    by 0xB96EC0: memchr (memchr.rs:48)
+==2848905==    by 0xB96EC0: next_match (pattern.rs:417)
+==2848905==    by 0xB96EC0: find<char> (mod.rs:1134)
+==2848905==    by 0xB96EC0: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB9751D: {closure#0} (builders.rs:398)
+==2848905==    by 0xB9751D: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#5}::entry::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB9751D: core::fmt::builders::DebugInner::entry (builders.rs:390)
+==2848905==  Address 0x4ff0280 is 64 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB96E50: memchr_general_case (memchr.rs:77)
+==2848905==    by 0xB96E50: memchr (memchr.rs:48)
+==2848905==    by 0xB96E50: next_match (pattern.rs:417)
+==2848905==    by 0xB96E50: find<char> (mod.rs:1134)
+==2848905==    by 0xB96E50: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==  Address 0x4ff0240 is 0 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB96E55: memchr_general_case (memchr.rs:78)
+==2848905==    by 0xB96E55: memchr (memchr.rs:48)
+==2848905==    by 0xB96E55: next_match (pattern.rs:417)
+==2848905==    by 0xB96E55: find<char> (mod.rs:1134)
+==2848905==    by 0xB96E55: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==  Address 0x4ff0248 is 8 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 1
+==2848905==    at 0xB96EC0: {closure#1} (memchr.rs:91)
+==2848905==    by 0xB96EC0: position<u8, core::slice::memchr::memchr_general_case::{closure_env#1}> (macros.rs:295)
+==2848905==    by 0xB96EC0: memchr_general_case (memchr.rs:91)
+==2848905==    by 0xB96EC0: memchr (memchr.rs:48)
+==2848905==    by 0xB96EC0: next_match (pattern.rs:417)
+==2848905==    by 0xB96EC0: find<char> (mod.rs:1134)
+==2848905==    by 0xB96EC0: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:37)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x399F54: <cpclib_asm::parser::source::Z80Span as core::fmt::Debug>::fmt (source.rs:61)
+==2848905==    by 0x2246C5: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==    by 0xB97388: {closure#0} (builders.rs:327)
+==2848905==    by 0xB97388: and_then<(), core::fmt::Error, (), core::fmt::builders::{impl#4}::field::{closure_env#0}> (result.rs:1311)
+==2848905==    by 0xB97388: core::fmt::builders::DebugTuple::field (builders.rs:319)
+==2848905==    by 0x225365: <(T10,T11) as core::fmt::Debug>::fmt (mod.rs:2311)
+==2848905==    by 0x224636: <&T as core::fmt::Debug>::fmt (mod.rs:2128)
+==2848905==  Address 0x4ff0280 is 64 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Syscall param write(buf) points to unaddressable byte(s)
+==2848905==    at 0x4A869D7: write (write.c:26)
+==2848905==    by 0xB72898: write (fd.rs:137)
+==2848905==    by 0xB72898: write (stdio.rs:66)
+==2848905==    by 0xB72898: std::io::Write::write_all (mod.rs:1515)
+==2848905==    by 0xB71C15: write_all (stdio.rs:172)
+==2848905==    by 0xB71C15: <std::io::stdio::StderrLock as std::io::Write>::write_all (stdio.rs:895)
+==2848905==    by 0xB73030: <std::io::Write::write_fmt::Adapter<T> as core::fmt::Write>::write_str (mod.rs:1644)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0xB96F21: <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str (builders.rs:47)
+==2848905==    by 0x9D8660: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==  Address 0x4ff0240 is 0 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+/home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15 <triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Nom(
+                        CrLf,
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15 <triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Nom(
+                        Alt,
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15 <triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Context(
+                        "Line ending expected",
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:1 <my_triangle1. triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Context(
+                        "[DBG] Inner loop",
+                    ),
+                ),
+            ],
+        },
+    ),
+)
+[cpclib-asm/src/parser/obtained.rs:1491] map(many_till(parse_z80_line_complete, eof),
+        |(v, _)|
+            { v.into_iter().flatten().collect_vec() })(input_start.clone()) = Err(
+    Failure(
+        VerboseError {
+            errors: [
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15 <triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Nom(
+                        CrLf,
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15 <triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Nom(
+                        Alt,
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15 <triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Context(
+                        "Line ending expected",
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:1 <my_triangle1. triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Context(
+                        "[DBG] Inner loop",
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:56:1 <
+                    
+                    my_triangle1. triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Context(
+                        "Condition: syntax error in code condition",
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:55:2 <if 0
+                    
+                    
+                    my_triangle1. triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Context(
+                        "[DBG] condition",
+                    ),
+                ),
+                (
+                    /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:55:2 <if 0
+                    
+                    
+                    my_triangle1. triangle
+                    
+                    my_triangle2: triangle [1, 2, 3], , [7, 8 , 9]
+                     endif
+                    >,
+                    Context(
+                        "block instruction",
+                    ),
+                ),
+            ],
+        },
+    ),
+)
+==2848905== Invalid read of size 8
+==2848905==    at 0x6EEA6D: core::option::Option<T>::as_ref (option.rs:624)
+==2848905==    by 0x3637AC: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==    by 0x362C7E: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &mut F>::call_once (function.rs:280)
+==2848905==    by 0x2300A1: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x379360: <core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::next (map.rs:103)
+==2848905==    by 0x3868EF: itertools::Itertools::join (lib.rs:2062)
+==2848905==    by 0x3BADA3: cpclib_asm::error::AssemblerError::format (error.rs:368)
+==2848905==    by 0x3B5EC8: <cpclib_asm::error::AssemblerError as core::fmt::Display>::fmt (error.rs:357)
+==2848905==    by 0x362A06: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x3BB0E0: cpclib_asm::error::AssemblerError::format (error.rs:826)
+==2848905==  Address 0x4ff0510 is 0 bytes inside a block of size 136 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA29A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x3CA36A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x50949B: alloc::alloc::box_free (alloc.rs:340)
+==2848905==    by 0x48B5CC: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48FEBE: <aliasable::boxed::AliasableBox<T> as core::ops::drop::Drop>::drop (boxed.rs:72)
+==2848905==    by 0x47F09A: core::ptr::drop_in_place<aliasable::boxed::AliasableBox<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48C6F4: core::ptr::drop_in_place<cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing> (mod.rs:188)
+==2848905==    by 0x27E93E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1666)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA0BB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0x3CA146: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0x3CA3D9: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0x3CA01C: alloc::alloc::exchange_malloc (alloc.rs:318)
+==2848905==    by 0x4E99A0: new<cpclib_asm::parser::context::ParserContext> (boxed.rs:195)
+==2848905==    by 0x4E99A0: ouroboros::macro_help::aliasable_boxed (lib.rs:314)
+==2848905==    by 0x2ABD72: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing::new (obtained.rs:1405)
+==2848905==    by 0x2ABB8F: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListingBuilder<CtxBuilder_,ParseResultBuilder_>::build (obtained.rs:1405)
+==2848905==    by 0x27E75E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1573)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905== 
+==2848905== Invalid read of size 1
+==2848905==    at 0xB99D3B: run_utf8_validation (validations.rs:0)
+==2848905==    by 0xB99D3B: core::str::converts::from_utf8 (converts.rs:88)
+==2848905==    by 0xB7ACD2: std::sys::unix::os_str::Slice::to_str (os_str.rs:199)
+==2848905==    by 0x5C95B3: std::ffi::os_str::OsStr::to_str (os_str.rs:667)
+==2848905==    by 0x364216: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==    by 0x362C7E: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &mut F>::call_once (function.rs:280)
+==2848905==    by 0x2300A1: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x379360: <core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::next (map.rs:103)
+==2848905==    by 0x3868EF: itertools::Itertools::join (lib.rs:2062)
+==2848905==    by 0x3BADA3: cpclib_asm::error::AssemblerError::format (error.rs:368)
+==2848905==    by 0x3B5EC8: <cpclib_asm::error::AssemblerError as core::fmt::Display>::fmt (error.rs:357)
+==2848905==  Address 0x4ff0240 is 0 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB99D79: run_utf8_validation (validations.rs:224)
+==2848905==    by 0xB99D79: core::str::converts::from_utf8 (converts.rs:88)
+==2848905==    by 0xB7ACD2: std::sys::unix::os_str::Slice::to_str (os_str.rs:199)
+==2848905==    by 0x5C95B3: std::ffi::os_str::OsStr::to_str (os_str.rs:667)
+==2848905==    by 0x364216: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==    by 0x362C7E: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &mut F>::call_once (function.rs:280)
+==2848905==    by 0x2300A1: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x379360: <core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::next (map.rs:103)
+==2848905==    by 0x3868EF: itertools::Itertools::join (lib.rs:2062)
+==2848905==    by 0x3BADA3: cpclib_asm::error::AssemblerError::format (error.rs:368)
+==2848905==    by 0x3B5EC8: <cpclib_asm::error::AssemblerError as core::fmt::Display>::fmt (error.rs:357)
+==2848905==  Address 0x4ff0240 is 0 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB99D7D: contains_nonascii (validations.rs:121)
+==2848905==    by 0xB99D7D: run_utf8_validation (validations.rs:224)
+==2848905==    by 0xB99D7D: core::str::converts::from_utf8 (converts.rs:88)
+==2848905==    by 0xB7ACD2: std::sys::unix::os_str::Slice::to_str (os_str.rs:199)
+==2848905==    by 0x5C95B3: std::ffi::os_str::OsStr::to_str (os_str.rs:667)
+==2848905==    by 0x364216: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==    by 0x362C7E: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &mut F>::call_once (function.rs:280)
+==2848905==    by 0x2300A1: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x379360: <core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::next (map.rs:103)
+==2848905==    by 0x3868EF: itertools::Itertools::join (lib.rs:2062)
+==2848905==    by 0x3BADA3: cpclib_asm::error::AssemblerError::format (error.rs:368)
+==2848905==    by 0x3B5EC8: <cpclib_asm::error::AssemblerError as core::fmt::Display>::fmt (error.rs:357)
+==2848905==  Address 0x4ff0248 is 8 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0xB99D77: run_utf8_validation (validations.rs:216)
+==2848905==    by 0xB99D77: core::str::converts::from_utf8 (converts.rs:88)
+==2848905==    by 0xB7ACD2: std::sys::unix::os_str::Slice::to_str (os_str.rs:199)
+==2848905==    by 0x5C95B3: std::ffi::os_str::OsStr::to_str (os_str.rs:667)
+==2848905==    by 0x364216: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==    by 0x362C7E: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &mut F>::call_once (function.rs:280)
+==2848905==    by 0x2300A1: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x379360: <core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::next (map.rs:103)
+==2848905==    by 0x3868EF: itertools::Itertools::join (lib.rs:2062)
+==2848905==    by 0x3BADA3: cpclib_asm::error::AssemblerError::format (error.rs:368)
+==2848905==    by 0x3B5EC8: <cpclib_asm::error::AssemblerError as core::fmt::Display>::fmt (error.rs:357)
+==2848905==  Address 0x4ff0250 is 16 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 1
+==2848905==    at 0xB99D90: run_utf8_validation (validations.rs:233)
+==2848905==    by 0xB99D90: core::str::converts::from_utf8 (converts.rs:88)
+==2848905==    by 0xB7ACD2: std::sys::unix::os_str::Slice::to_str (os_str.rs:199)
+==2848905==    by 0x5C95B3: std::ffi::os_str::OsStr::to_str (os_str.rs:667)
+==2848905==    by 0x364216: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==    by 0x362C7E: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &mut F>::call_once (function.rs:280)
+==2848905==    by 0x2300A1: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x379360: <core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::next (map.rs:103)
+==2848905==    by 0x3868EF: itertools::Itertools::join (lib.rs:2062)
+==2848905==    by 0x3BADA3: cpclib_asm::error::AssemblerError::format (error.rs:368)
+==2848905==    by 0x3B5EC8: <cpclib_asm::error::AssemblerError as core::fmt::Display>::fmt (error.rs:357)
+==2848905==  Address 0x4ff0280 is 64 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0x484D865: memmove (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x68A398: core::intrinsics::copy_nonoverlapping (intrinsics.rs:2103)
+==2848905==    by 0x694207: core::ptr::const_ptr::<impl *const T>::copy_to_nonoverlapping (const_ptr.rs:899)
+==2848905==    by 0x686836: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:232)
+==2848905==    by 0x6868DB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0x68A79B: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x68A76A: alloc::slice::<impl [T]>::to_vec (slice.rs:477)
+==2848905==    by 0x68A7CA: alloc::slice::<impl alloc::borrow::ToOwned for [T]>::to_owned (slice.rs:845)
+==2848905==    by 0x3B2E03: alloc::str::<impl alloc::borrow::ToOwned for str>::to_owned (str.rs:227)
+==2848905==    by 0x364253: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==  Address 0x4ff0240 is 0 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0x484D87F: memmove (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x68A398: core::intrinsics::copy_nonoverlapping (intrinsics.rs:2103)
+==2848905==    by 0x694207: core::ptr::const_ptr::<impl *const T>::copy_to_nonoverlapping (const_ptr.rs:899)
+==2848905==    by 0x686836: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:232)
+==2848905==    by 0x6868DB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0x68A79B: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x68A76A: alloc::slice::<impl [T]>::to_vec (slice.rs:477)
+==2848905==    by 0x68A7CA: alloc::slice::<impl alloc::borrow::ToOwned for [T]>::to_owned (slice.rs:845)
+==2848905==    by 0x3B2E03: alloc::str::<impl alloc::borrow::ToOwned for str>::to_owned (str.rs:227)
+==2848905==    by 0x364253: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==  Address 0x4ff0248 is 8 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0x484D887: memmove (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x68A398: core::intrinsics::copy_nonoverlapping (intrinsics.rs:2103)
+==2848905==    by 0x694207: core::ptr::const_ptr::<impl *const T>::copy_to_nonoverlapping (const_ptr.rs:899)
+==2848905==    by 0x686836: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:232)
+==2848905==    by 0x6868DB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0x68A79B: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x68A76A: alloc::slice::<impl [T]>::to_vec (slice.rs:477)
+==2848905==    by 0x68A7CA: alloc::slice::<impl alloc::borrow::ToOwned for [T]>::to_owned (slice.rs:845)
+==2848905==    by 0x3B2E03: alloc::str::<impl alloc::borrow::ToOwned for str>::to_owned (str.rs:227)
+==2848905==    by 0x364253: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==  Address 0x4ff0250 is 16 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0x484D88F: memmove (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x68A398: core::intrinsics::copy_nonoverlapping (intrinsics.rs:2103)
+==2848905==    by 0x694207: core::ptr::const_ptr::<impl *const T>::copy_to_nonoverlapping (const_ptr.rs:899)
+==2848905==    by 0x686836: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:232)
+==2848905==    by 0x6868DB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0x68A79B: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x68A76A: alloc::slice::<impl [T]>::to_vec (slice.rs:477)
+==2848905==    by 0x68A7CA: alloc::slice::<impl alloc::borrow::ToOwned for [T]>::to_owned (slice.rs:845)
+==2848905==    by 0x3B2E03: alloc::str::<impl alloc::borrow::ToOwned for str>::to_owned (str.rs:227)
+==2848905==    by 0x364253: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==  Address 0x4ff0258 is 24 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0x484D874: memmove (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x68A398: core::intrinsics::copy_nonoverlapping (intrinsics.rs:2103)
+==2848905==    by 0x694207: core::ptr::const_ptr::<impl *const T>::copy_to_nonoverlapping (const_ptr.rs:899)
+==2848905==    by 0x686836: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:232)
+==2848905==    by 0x6868DB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0x68A79B: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x68A76A: alloc::slice::<impl [T]>::to_vec (slice.rs:477)
+==2848905==    by 0x68A7CA: alloc::slice::<impl alloc::borrow::ToOwned for [T]>::to_owned (slice.rs:845)
+==2848905==    by 0x3B2E03: alloc::str::<impl alloc::borrow::ToOwned for str>::to_owned (str.rs:227)
+==2848905==    by 0x364253: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==  Address 0x4ff0260 is 32 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 2
+==2848905==    at 0x484D920: memmove (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x68A398: core::intrinsics::copy_nonoverlapping (intrinsics.rs:2103)
+==2848905==    by 0x694207: core::ptr::const_ptr::<impl *const T>::copy_to_nonoverlapping (const_ptr.rs:899)
+==2848905==    by 0x686836: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:232)
+==2848905==    by 0x6868DB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0x68A79B: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x68A76A: alloc::slice::<impl [T]>::to_vec (slice.rs:477)
+==2848905==    by 0x68A7CA: alloc::slice::<impl alloc::borrow::ToOwned for [T]>::to_owned (slice.rs:845)
+==2848905==    by 0x3B2E03: alloc::str::<impl alloc::borrow::ToOwned for str>::to_owned (str.rs:227)
+==2848905==    by 0x364253: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==  Address 0x4ff0280 is 64 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 2
+==2848905==    at 0x484D92F: memmove (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x68A398: core::intrinsics::copy_nonoverlapping (intrinsics.rs:2103)
+==2848905==    by 0x694207: core::ptr::const_ptr::<impl *const T>::copy_to_nonoverlapping (const_ptr.rs:899)
+==2848905==    by 0x686836: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:232)
+==2848905==    by 0x6868DB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0x68A79B: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x68A76A: alloc::slice::<impl [T]>::to_vec (slice.rs:477)
+==2848905==    by 0x68A7CA: alloc::slice::<impl alloc::borrow::ToOwned for [T]>::to_owned (slice.rs:845)
+==2848905==    by 0x3B2E03: alloc::str::<impl alloc::borrow::ToOwned for str>::to_owned (str.rs:227)
+==2848905==    by 0x364253: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==  Address 0x4ff0284 is 68 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 1
+==2848905==    at 0x484D950: memmove (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x68A398: core::intrinsics::copy_nonoverlapping (intrinsics.rs:2103)
+==2848905==    by 0x694207: core::ptr::const_ptr::<impl *const T>::copy_to_nonoverlapping (const_ptr.rs:899)
+==2848905==    by 0x686836: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:232)
+==2848905==    by 0x6868DB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0x68A79B: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x68A76A: alloc::slice::<impl [T]>::to_vec (slice.rs:477)
+==2848905==    by 0x68A7CA: alloc::slice::<impl alloc::borrow::ToOwned for [T]>::to_owned (slice.rs:845)
+==2848905==    by 0x3B2E03: alloc::str::<impl alloc::borrow::ToOwned for str>::to_owned (str.rs:227)
+==2848905==    by 0x364253: cpclib_asm::error::AssemblerError::format::{{closure}}::{{closure}} (error.rs:401)
+==2848905==    by 0x2327D3: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x3637CF: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:398)
+==2848905==  Address 0x4ff0286 is 70 bytes inside a block of size 71 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x6F358A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x6F365A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x6F181A: <alloc::raw_vec::RawVec<T,A> as core::ops::drop::Drop>::drop (raw_vec.rs:478)
+==2848905==    by 0x6F1F4A: core::ptr::drop_in_place<alloc::raw_vec::RawVec<u8>> (mod.rs:188)
+==2848905==    by 0x6F1F13: core::ptr::drop_in_place<alloc::vec::Vec<u8>> (mod.rs:188)
+==2848905==    by 0x6EDCCA: core::ptr::drop_in_place<std::sys::unix::os_str::Buf> (mod.rs:188)
+==2848905==    by 0x6EDCBA: core::ptr::drop_in_place<std::ffi::os_str::OsString> (mod.rs:188)
+==2848905==    by 0x6EDC8A: core::ptr::drop_in_place<std::path::PathBuf> (mod.rs:188)
+==2848905==    by 0x6EDE52: core::ptr::drop_in_place<core::option::Option<std::path::PathBuf>> (mod.rs:188)
+==2848905==    by 0x488AE6: core::ptr::drop_in_place<cpclib_asm::parser::context::ParserContext> (mod.rs:188)
+==2848905==    by 0x48B599: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0xB2BFDB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0xB2C066: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0xB2CB59: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0xB270CB: alloc::raw_vec::RawVec<T,A>::allocate_in (raw_vec.rs:185)
+==2848905==    by 0xB2785C: alloc::raw_vec::RawVec<T,A>::with_capacity_in (raw_vec.rs:132)
+==2848905==    by 0xB29DF3: alloc::vec::Vec<T,A>::with_capacity_in (mod.rs:609)
+==2848905==    by 0xB24DB3: <T as alloc::slice::hack::ConvertVec>::to_vec (slice.rs:227)
+==2848905==    by 0xB251BB: alloc::slice::hack::to_vec (slice.rs:176)
+==2848905==    by 0xB2BDFB: alloc::slice::<impl [T]>::to_vec_in (slice.rs:501)
+==2848905==    by 0x9F05AC: <alloc::vec::Vec<T,A> as core::clone::Clone>::clone (mod.rs:2483)
+==2848905==    by 0x5DFD1D: <std::sys::unix::os_str::Buf as core::clone::Clone>::clone (os_str.rs:70)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0x52552C: cpclib_asm::parser::context::ParserContext::complete_source (context.rs:350)
+==2848905==    by 0x363950: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:412)
+==2848905==    by 0x362C7E: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &mut F>::call_once (function.rs:280)
+==2848905==    by 0x2300A1: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x379360: <core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::next (map.rs:103)
+==2848905==    by 0x3868EF: itertools::Itertools::join (lib.rs:2062)
+==2848905==    by 0x3BADA3: cpclib_asm::error::AssemblerError::format (error.rs:368)
+==2848905==    by 0x3B5EC8: <cpclib_asm::error::AssemblerError as core::fmt::Display>::fmt (error.rs:357)
+==2848905==    by 0x362A06: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x3BB0E0: cpclib_asm::error::AssemblerError::format (error.rs:826)
+==2848905==  Address 0x4ff0580 is 112 bytes inside a block of size 136 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA29A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x3CA36A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x50949B: alloc::alloc::box_free (alloc.rs:340)
+==2848905==    by 0x48B5CC: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48FEBE: <aliasable::boxed::AliasableBox<T> as core::ops::drop::Drop>::drop (boxed.rs:72)
+==2848905==    by 0x47F09A: core::ptr::drop_in_place<aliasable::boxed::AliasableBox<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48C6F4: core::ptr::drop_in_place<cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing> (mod.rs:188)
+==2848905==    by 0x27E93E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1666)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA0BB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0x3CA146: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0x3CA3D9: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0x3CA01C: alloc::alloc::exchange_malloc (alloc.rs:318)
+==2848905==    by 0x4E99A0: new<cpclib_asm::parser::context::ParserContext> (boxed.rs:195)
+==2848905==    by 0x4E99A0: ouroboros::macro_help::aliasable_boxed (lib.rs:314)
+==2848905==    by 0x2ABD72: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing::new (obtained.rs:1405)
+==2848905==    by 0x2ABB8F: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListingBuilder<CtxBuilder_,ParseResultBuilder_>::build (obtained.rs:1405)
+==2848905==    by 0x27E75E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1573)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905== 
+==2848905== Invalid read of size 8
+==2848905==    at 0x525530: cpclib_asm::parser::context::ParserContext::complete_source (context.rs:350)
+==2848905==    by 0x363950: cpclib_asm::error::AssemblerError::format::{{closure}} (error.rs:412)
+==2848905==    by 0x362C7E: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &mut F>::call_once (function.rs:280)
+==2848905==    by 0x2300A1: core::option::Option<T>::map (option.rs:906)
+==2848905==    by 0x379360: <core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::next (map.rs:103)
+==2848905==    by 0x3868EF: itertools::Itertools::join (lib.rs:2062)
+==2848905==    by 0x3BADA3: cpclib_asm::error::AssemblerError::format (error.rs:368)
+==2848905==    by 0x3B5EC8: <cpclib_asm::error::AssemblerError as core::fmt::Display>::fmt (error.rs:357)
+==2848905==    by 0x362A06: <&T as core::fmt::Display>::fmt (mod.rs:2128)
+==2848905==    by 0xB9831B: core::fmt::write (mod.rs:1190)
+==2848905==    by 0xB99243: core::fmt::Formatter::write_fmt (mod.rs:1644)
+==2848905==    by 0x3BB0E0: cpclib_asm::error::AssemblerError::format (error.rs:826)
+==2848905==  Address 0x4ff0588 is 120 bytes inside a block of size 136 free'd
+==2848905==    at 0x484621F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA29A: alloc::alloc::dealloc (alloc.rs:105)
+==2848905==    by 0x3CA36A: <alloc::alloc::Global as core::alloc::Allocator>::deallocate (alloc.rs:242)
+==2848905==    by 0x50949B: alloc::alloc::box_free (alloc.rs:340)
+==2848905==    by 0x48B5CC: core::ptr::drop_in_place<alloc::boxed::Box<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48FEBE: <aliasable::boxed::AliasableBox<T> as core::ops::drop::Drop>::drop (boxed.rs:72)
+==2848905==    by 0x47F09A: core::ptr::drop_in_place<aliasable::boxed::AliasableBox<cpclib_asm::parser::context::ParserContext>> (mod.rs:188)
+==2848905==    by 0x48C6F4: core::ptr::drop_in_place<cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing> (mod.rs:188)
+==2848905==    by 0x27E93E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1666)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905==  Block was alloc'd at
+==2848905==    at 0x4843839: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==2848905==    by 0x3CA0BB: alloc::alloc::alloc (alloc.rs:87)
+==2848905==    by 0x3CA146: alloc::alloc::Global::alloc_impl (alloc.rs:169)
+==2848905==    by 0x3CA3D9: <alloc::alloc::Global as core::alloc::Allocator>::allocate (alloc.rs:229)
+==2848905==    by 0x3CA01C: alloc::alloc::exchange_malloc (alloc.rs:318)
+==2848905==    by 0x4E99A0: new<cpclib_asm::parser::context::ParserContext> (boxed.rs:195)
+==2848905==    by 0x4E99A0: ouroboros::macro_help::aliasable_boxed (lib.rs:314)
+==2848905==    by 0x2ABD72: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing::new (obtained.rs:1405)
+==2848905==    by 0x2ABB8F: cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListingBuilder<CtxBuilder_,ParseResultBuilder_>::build (obtained.rs:1405)
+==2848905==    by 0x27E75E: cpclib_asm::parser::obtained::<impl cpclib_asm::parser::obtained::ouroboros_impl_located_listing::LocatedListing>::parse_inner (obtained.rs:1573)
+==2848905==    by 0x2704BC: cpclib_asm::parser::parser::inner_code_with_state::{{closure}} (parser.rs:253)
+==2848905==    by 0x2D0DDD: cpclib_asm::parser::parser::inner_code (parser.rs:245)
+==2848905==    by 0x47AA87: core::ops::function::FnMut::call_mut (function.rs:150)
+==2848905== 
+Error while assembling.
+Assembling error:
+[0m[1m[38;5;9merror[0m[1m: Syntax error[0m
+   [0m[34m┌─[0m /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15
+   [0m[34m│[0m
+[0m[34m58[0m [0m[34m│[0m my_triangle1. [0m[31mtriangle[0m
+   [0m[34m│[0m               [0m[31m^^^^^^^^[0m [0m[31mUnknown error[0m
+
+
+[0m[1m[38;5;9merror[0m[1m: Syntax error[0m
+   [0m[34m┌─[0m /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15
+   [0m[34m│[0m
+[0m[34m58[0m [0m[34m│[0m my_triangle1. [0m[31mtriangle[0m
+   [0m[34m│[0m               [0m[31m^^^^^^^^[0m [0m[31mUnknown error[0m
+
+
+[0m[1m[38;5;9merror[0m[1m: Syntax error[0m
+   [0m[34m┌─[0m /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:58:15
+   [0m[34m│[0m
+[0m[34m58[0m [0m[34m│[0m my_triangle1. [0m[31mtriangle[0m
+   [0m[34m│[0m               [0m[31m^^^^^^^^[0m [0m[31mLine ending expected[0m
+
+
+[0m[1m[38;5;9merror[0m[1m: Syntax error[0m
+   [0m[34m┌─[0m /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:56:1
+   [0m[34m│[0m
+[0m[34m56[0m [0m[34m│[0m 
+   [0m[34m│[0m [0m[31m^[0m [0m[31mCondition: syntax error in code condition[0m
+
+
+[0m[1m[38;5;9merror[0m[1m: Syntax error[0m
+   [0m[34m┌─[0m /home/rgiot/Perso/CPC/rust.cpcdemotools/basm/tests/asm/good_struct2.asm:55:2
+   [0m[34m│[0m
+[0m[34m55[0m [0m[34m│[0m  [0m[31mif 0[0m
+   [0m[34m│[0m  [0m[31m^^^^[0m [0m[31mblock instruction[0m
+
+
+==2848905== 
+==2848905== HEAP SUMMARY:
+==2848905==     in use at exit: 3,823 bytes in 42 blocks
+==2848905==   total heap usage: 36,745 allocs, 36,703 frees, 2,217,286 bytes allocated
+==2848905== 
+==2848905== LEAK SUMMARY:
+==2848905==    definitely lost: 0 bytes in 0 blocks
+==2848905==    indirectly lost: 0 bytes in 0 blocks
+==2848905==      possibly lost: 642 bytes in 8 blocks
+==2848905==    still reachable: 3,181 bytes in 34 blocks
+==2848905==         suppressed: 0 bytes in 0 blocks
+==2848905== Rerun with --leak-check=full to see details of leaked memory
+==2848905== 
+==2848905== For lists of detected and suppressed errors, rerun with: -s
+==2848905== ERROR SUMMARY: 859 errors from 37 contexts (suppressed: 0 from 0)
