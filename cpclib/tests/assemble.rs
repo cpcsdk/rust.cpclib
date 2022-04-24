@@ -1,9 +1,9 @@
-#[macro_use]
+
 extern crate matches;
 
 #[cfg(test)]
 mod tests {
-    use cpclib_asm::{preamble::*, assembler::processed_token::{ProcessedToken, build_processed_token}};
+    use cpclib_asm::{preamble::*, assembler::processed_token::{build_processed_token}};
 
     fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         let mut processed = build_processed_token(token, env);
@@ -23,11 +23,11 @@ mod tests {
     pub fn test_visit() {
         let mut env = Env::default();
 
-        visit_token(&Token::Org(Expr::Value(10), None), &mut env);
+        visit_token(&Token::Org(Expr::Value(10), None), &mut env).unwrap();
         visit_token(
             &Token::Defb(vec![Expr::Value(10), Expr::Value(5)]),
             &mut env
-        );
+        ).unwrap();
         visit_token(
             &Token::OpCode(
                 Mnemonic::Ld,
@@ -36,7 +36,7 @@ mod tests {
                 None
             ),
             &mut env
-        );
+        ).unwrap();
     }
 
     #[test]
@@ -52,7 +52,7 @@ mod tests {
                 None
             ),
             &mut env
-        );
+        ).unwrap();
         assert_eq!(env.peek(&0x0000.into()), 0x7F);
 
         visit_token(
@@ -63,7 +63,7 @@ mod tests {
                 None
             ),
             &mut env
-        );
+        ).unwrap();
         assert_eq!(env.peek(&0x0001.into()), 0x7D);
 
         visit_token(
@@ -74,7 +74,7 @@ mod tests {
                 None
             ),
             &mut env
-        );
+        ).unwrap();
         assert_eq!(env.peek(&0x0002.into()), 0x49);
     }
 
