@@ -38,13 +38,5 @@ jobs:
           tag: latest
           name: "Development Build"
           generateReleaseNotes: true
-          artifacts: |
-            target/x86_64-pc-windows-gnu/release/basm.exe,
-            target/x86_64-pc-windows-gnu/release/visual-basm.exe,
-            target/x86_64-pc-windows-gnu/release/bdasm.exe,
-            target/x86_64-pc-windows-gnu/release/catalog.exe,
-            target/x86_64-pc-windows-gnu/release/hideur.exe,
-            target/x86_64-pc-windows-gnu/release/imgconverter.exe,
-            target/x86_64-pc-windows-gnu/release/snapshot.exe,
-            target/x86_64-pc-windows-gnu/release/locomotive.exe
+          artifacts: "target/x86_64-pc-windows-gnu/release/*.exe,target/x86_64-pc-windows-gnu/release/locomotive.exe"
   
