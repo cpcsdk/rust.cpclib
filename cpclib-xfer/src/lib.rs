@@ -273,8 +273,8 @@ impl CpcXfer {
 
         // sleep a bit to be sure the file is not deleted BEFORE sending it to CPC
         std::thread::sleep(std::time::Duration::from_secs(5));
-        temp_path.close();
-        Ok(())
+        temp_path.close()
+            .map_err(|e| XferError::InternalError { reason: e.to_string() })
     }
 
     pub fn upload_and_run<P: AsRef<Path>>(

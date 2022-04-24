@@ -988,7 +988,6 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
                     }
                     offset
                 }
-                _ => unimplemented!()
             }
         }
     }

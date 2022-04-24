@@ -163,17 +163,19 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                 match arg1 {
                     ExprResult::Float(f) => Ok(f.into_inner().powf(power as f64).into()),
                     ExprResult::Value(v) => Ok(v.pow(power as _).into()),
-                    _ => {
-                        Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                            box AssemblerError::AssemblingError {
-                                msg: format!("pow cannot be applied to a string")
-                            }
-                        )))
-                    }
+
                     ExprResult::List(_) => {
                         Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                             box AssemblerError::AssemblingError {
                                 msg: format!("pow cannot be applied to a list")
+                            }
+                        )))
+                    },
+
+                    _ => {
+                        Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                            box AssemblerError::AssemblingError {
+                                msg: format!("pow cannot be applied to a string")
                             }
                         )))
                     }

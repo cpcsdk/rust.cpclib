@@ -21,7 +21,7 @@ fn lz48_encode_block(
     odata.push(0x00); // Will be overriden at the very last instruction
     let first_idx = odata.len() - 1; // by construction is >0
 
-    if offset < 0 || offset > 255 {
+    if /*offset < 0 ||*/ offset > 255 {
         panic!("internal offset error!\n");
     }
 

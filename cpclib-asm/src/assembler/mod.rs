@@ -1830,7 +1830,7 @@ impl Env {
             return Err(AssemblerError::NotAllowed);
         }
 
-        if page < 0 || page >= 8 {
+        if /* page < 0 || */ page >= 8 {
             return Err(AssemblerError::InvalidArgument {
                 msg: format!(
                     "{} is invalid. BANKSET only accept values from 0 to 7",
@@ -2343,7 +2343,7 @@ pub fn visit_located_token(
         LocatedToken::Standard { token, span } => {
             match token {
                 Token::Assert(exp, txt) => {
-                    visit_assert(exp, txt.as_ref(), env, Some(span.clone()));
+                    visit_assert(exp, txt.as_ref(), env, Some(span.clone()))?;
                     Ok(())
                 }
 
@@ -3213,7 +3213,7 @@ impl Env {
             return Err(AssemblerError::RunAlreadySpecified);
         }
         self.sna
-            .set_value(cpclib_sna::SnapshotFlag::Z80_PC, address as _);
+            .set_value(cpclib_sna::SnapshotFlag::Z80_PC, address as _)?;
 
         match ga {
             None => {

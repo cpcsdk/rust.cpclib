@@ -592,7 +592,7 @@ impl TestKindElement for LocatedTestKind {
 
     fn expr_unchecked(&self) -> &Self::Expr {
         match self {
-            LocatedTestKind::True(exp) | LocatedTestKind::True(exp) => exp,
+            LocatedTestKind::True(exp) | LocatedTestKind::False(exp) => exp,
             _ => panic!()
         }
     }

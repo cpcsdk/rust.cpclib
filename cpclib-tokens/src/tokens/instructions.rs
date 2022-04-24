@@ -890,12 +890,14 @@ impl fmt::Display for Token {
                     Ok(())
             },
 
+            Token::MultiPop(ref regs) => {
+                write!(f, "POP {}", data_access_list_to_string(regs))
+            },
+            
             Token::MultiPush(ref regs) => {
                 write!(f, "PUSH {}", data_access_list_to_string(regs))
             },
-            Token::MultiPush(ref regs) => {
-                write!(f, "POP {}", data_access_list_to_string(regs))
-            },
+
 
                 // TODO remove this one / it is not coherent as we have the PortC
             Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2), None) if &Mnemonic::Out == mne
