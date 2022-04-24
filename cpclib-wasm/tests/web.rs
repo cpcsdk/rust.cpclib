@@ -5,7 +5,7 @@
 extern crate wasm_bindgen_test;
 use std::println;
 
-use cpclib_asm_webasm::*;
+use cpclib_wasm::*;
 use cpclib_sna::SnapshotFlag;
 use wasm_bindgen_test::*;
 

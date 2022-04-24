@@ -705,21 +705,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cpclib-asm-webasm"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "cpclib-asm",
- "cpclib-basic",
- "cpclib-sna",
- "js-sys",
- "wasm-bindgen",
- "wasm-bindgen-test",
- "web-sys",
- "wee_alloc",
-]
-
-[[package]]
 name = "cpclib-basic"
 version = "0.5.0"
 dependencies = [
@@ -840,6 +825,21 @@ dependencies = [
  "regex",
  "remain",
  "serde",
+]
+
+[[package]]
+name = "cpclib-wasm"
+version = "0.1.0"
+dependencies = [
+ "console_error_panic_hook",
+ "cpclib-asm",
+ "cpclib-basic",
+ "cpclib-sna",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+ "web-sys",
+ "wee_alloc",
 ]
 
 [[package]]
