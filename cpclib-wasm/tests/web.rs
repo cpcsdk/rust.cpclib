@@ -5,8 +5,8 @@
 extern crate wasm_bindgen_test;
 use std::println;
 
-use cpclib_wasm::*;
 use cpclib_sna::SnapshotFlag;
+use cpclib_wasm::*;
 use wasm_bindgen_test::*;
 
 // TODO find a way to init the thread pool...

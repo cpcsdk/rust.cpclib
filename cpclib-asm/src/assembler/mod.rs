@@ -1830,7 +1830,9 @@ impl Env {
             return Err(AssemblerError::NotAllowed);
         }
 
-        if /* page < 0 || */ page >= 8 {
+        if
+        // page < 0 ||
+        page >= 8 {
             return Err(AssemblerError::InvalidArgument {
                 msg: format!(
                     "{} is invalid. BANKSET only accept values from 0 to 7",

@@ -227,12 +227,10 @@ impl epi::App for BasmApp {
             }
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                ui.add(
-                    egui::Hyperlink::from_label_and_url(
-                        "powered by basm",
-                        "https://github.com/cpcsdk/rust.cpclib")
-                        
-                );
+                ui.add(egui::Hyperlink::from_label_and_url(
+                    "powered by basm",
+                    "https://github.com/cpcsdk/rust.cpclib"
+                ));
             });
         });
 
@@ -261,15 +259,13 @@ impl epi::App for BasmApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // 	ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-            ScrollArea::both()
-                .always_show_scroll(true)
-                .show(ui, |ui| {
-                    ui.vertical(|ui| {
-                        ui.set_enabled(false);
-                        ui.max_rect();
-                        ui.text_edit_multiline(lst_content);
-                    });
+            ScrollArea::both().always_show_scroll(true).show(ui, |ui| {
+                ui.vertical(|ui| {
+                    ui.set_enabled(false);
+                    ui.max_rect();
+                    ui.text_edit_multiline(lst_content);
                 });
+            });
         });
         // 	});
 

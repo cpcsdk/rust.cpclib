@@ -15,10 +15,10 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
+use cpclib_basic::BasicProgram;
 /// ! Locomotive BASIC manipulation tool.
 use cpclib_common::clap;
 use cpclib_common::clap::*;
-use cpclib_basic::BasicProgram;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 fn main() -> std::io::Result<()> {

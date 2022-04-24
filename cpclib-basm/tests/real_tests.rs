@@ -64,8 +64,8 @@ fn expect_one_line_success(real_fname: &str) {
     let listing_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let content =
-        std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..])).expect("Unable to read_source");
+    let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
+        .expect("Unable to read_source");
 
     lazy_static::lazy_static! {
         static ref RE1: Regex = Regex::new(r";.*$").unwrap();
@@ -146,8 +146,8 @@ fn expect_several_empty_lines_success(real_fname: &str) {
     let listing_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let content =
-        std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..])).expect("Unable to read_source");
+    let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
+        .expect("Unable to read_source");
 
     lazy_static::lazy_static! {
         static ref RE1: Regex = Regex::new(r"(?m)([^\\])\n").unwrap();

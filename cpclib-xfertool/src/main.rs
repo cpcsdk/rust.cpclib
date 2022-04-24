@@ -19,12 +19,11 @@ use std::env;
 use std::path::Path;
 use std::time::Duration;
 
+use cpclib_common::clap::{self, Command};
 use crossbeam_channel::unbounded;
 use hotwatch::{Event, Hotwatch};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use {anyhow, cpclib_disc as disc, cpclib_sna as sna, cpclib_xfer as xfer};
-use cpclib_common::clap::{self, Command};
-
 
 /// Send and run the file on the CPC.
 /// Snapshot V3 are downgraded to the V2 version

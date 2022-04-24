@@ -91,7 +91,8 @@ pub fn asm_assemble_snapshot(
             options.set_case_sensitive(conf.case_sensitive);
             options
                 .symbols_mut()
-                .assign_symbol_to_value(Symbol::from("__CPC_PLAYGROUND__"), Value::from(true)).unwrap();
+                .assign_symbol_to_value(Symbol::from("__CPC_PLAYGROUND__"), Value::from(true))
+                .unwrap();
 
             console::log_1(&"Assemble options".into());
 
