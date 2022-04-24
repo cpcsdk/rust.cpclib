@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+
+
 // trick to not be distirb by Register8/16
 use std::fmt;
 use std::fmt::Debug;

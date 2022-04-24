@@ -187,9 +187,9 @@ impl ParserContext {
 
             // manual fix for for windows. No idea why
             let path = path.to_str().unwrap();
-            const prefix: &'static str = "\\\\?\\";
-            let path = if path.starts_with(prefix) {
-                path[prefix.len()..].to_string()
+            const PREFIX: &'static str = "\\\\?\\";
+            let path = if path.starts_with(PREFIX) {
+                path[PREFIX.len()..].to_string()
             }
             else {
                 path.to_string()

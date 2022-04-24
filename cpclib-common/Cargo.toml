@@ -6,6 +6,9 @@ description = "common libraries used in cpclib"
 repository = "https://github.com/cpcsdk/rust.cpclib"
 license = "MIT"
 
+[package.metadata.workspaces]
+independent = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

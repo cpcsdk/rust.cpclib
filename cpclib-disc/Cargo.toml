@@ -8,6 +8,9 @@ license = "MIT"
 description = "cpclib libraries related to snapshots"
 repository = "https://github.com/cpcsdk/rust.cpclib"
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 cpclib-tokens = "0.5.0"
 cpclib-common = "0.5.0"

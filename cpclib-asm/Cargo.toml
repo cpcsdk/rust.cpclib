@@ -8,6 +8,8 @@ license = "MIT"
 description = "cpclib libraries related to z80 assembling"
 repository = "https://github.com/cpcsdk/rust.cpclib"
 
+[package.metadata.workspaces]
+independent = true
 
 [dependencies]
 

@@ -541,7 +541,7 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
             listing
         };
 
-        let expandState = ExpandStateBuilder {
+        let expand_state = ExpandStateBuilder {
             listing,
             processed_tokens_builder: |listing: &LocatedListing| {
                 build_processed_tokens_list(listing.as_slice(), env)
@@ -549,7 +549,7 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
         }
         .build();
 
-        self.state = Some(ProcessedTokenState::MacroCallOrBuildStruct(expandState));
+        self.state = Some(ProcessedTokenState::MacroCallOrBuildStruct(expand_state));
 
         return Ok(());
     }

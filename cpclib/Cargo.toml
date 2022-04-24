@@ -12,6 +12,8 @@ readme = "Readme.mkd"
 keywords = ["amstrad", "demo", "z80", "dsk" ,"sna"]
 categories = ["command-line-utilities", "development-tools", "emulators"]
 
+[package.metadata.workspaces]
+independent = true
 
 [dependencies]
 

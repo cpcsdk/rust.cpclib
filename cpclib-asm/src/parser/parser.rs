@@ -3624,9 +3624,9 @@ pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserEr
         ))),
         move |name: &Z80Span| {
             let _first = name.fragment().chars().next().unwrap();
-            let KEYWORD = name.as_str().to_ascii_uppercase();
+            let keyword = name.as_str().to_ascii_uppercase();
 
-            if impossible_names(dotted_directive).any(|&val| val == &KEYWORD) {
+            if impossible_names(dotted_directive).any(|&val| val == &keyword) {
                 return false;
             }
             else {

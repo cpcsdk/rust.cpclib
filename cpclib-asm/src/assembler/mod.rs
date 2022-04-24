@@ -1619,10 +1619,10 @@ impl Env {
         let mut index = 0;
         for (f, s) in r#struct.fields_size(self.symbols()) {
             self.symbols_mut()
-                .set_symbol_to_value(format!("{}.{}", name, f), index);
+                .set_symbol_to_value(format!("{}.{}", name, f), index)?;
             index += s;
         }
-        self.symbols_mut().set_symbol_to_value(name, r#struct);
+        self.symbols_mut().set_symbol_to_value(name, r#struct)?;
 
         Ok(())
     }

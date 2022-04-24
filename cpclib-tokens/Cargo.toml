@@ -8,6 +8,9 @@ license = "MIT"
 description = "cpclib libraries related to assembly tokens. Only structures are provided there. Intelligence is within cpclib-asm"
 repository = "https://github.com/cpcsdk/rust.cpclib"
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 cpclib-sna = "0.5.0"
 cpclib-common = "0.5.0"
