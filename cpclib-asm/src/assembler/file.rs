@@ -36,7 +36,7 @@ pub fn load_binary(
     };
 
     // Load data
-    std::fs::read(fname.clone()).map_err(|e| {
+    std::fs::read(fname.clone()).map_err(|_e| {
         AssemblerError::IOError {
             msg: format!("Unable to read {}.", fname.to_string_lossy().to_string())
         }

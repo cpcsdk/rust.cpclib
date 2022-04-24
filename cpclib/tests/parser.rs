@@ -7,7 +7,7 @@ mod tests {
     use std::u32;
 
     use cpclib_asm::preamble::*;
-    use cpclib_common::lazy_static;
+    
     use cpclib_common::nom::IResult;
 
     fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
@@ -1138,7 +1138,7 @@ INC_H equ opcode(inc h)
     defs 64 - 4
     dec a
     jr nz, .other_lines";
-        let (_ctx, span) = ctx_and_span(code);
+        let (_ctx, _span) = ctx_and_span(code);
 
         // assemble line per line
         for line in code.split("\n").filter(|l| l.len() > 0) {

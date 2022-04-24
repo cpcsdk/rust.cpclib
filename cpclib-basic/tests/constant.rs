@@ -1,5 +1,5 @@
 use cpclib_basic::parser::parse_floating_point;
-use cpclib_basic::BasicLine;
+
 
 #[test]
 pub fn parse_float() {

@@ -1,14 +1,14 @@
-use std::fs::remove_dir;
-use std::process::{Command, Output};
+
+use std::process::{Command};
 
 use cpclib_asm::assembler::Env;
 use cpclib_asm::basm_utils::{build_args_parser, process, BasmError};
 use cpclib_asm::error::AssemblerError;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
-use pretty_assertions::{assert_eq, assert_ne};
+use pretty_assertions::{assert_eq};
 use regex::Regex;
-use serial_test::serial;
+
 use test_generator::test_resources;
 
 const BUILD_BASM: bool = true;

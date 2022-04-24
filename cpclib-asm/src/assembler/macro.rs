@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_tokens::symbols::{Macro, Source, Struct};
-use cpclib_tokens::{MacroParam, MacroParamElement, Token};
+use cpclib_tokens::{MacroParamElement, Token};
 
 use crate::error::AssemblerError;
 use crate::preamble::Z80Span;

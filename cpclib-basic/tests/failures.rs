@@ -8,7 +8,7 @@ pub fn failures() {
 
     for code in codes {
         let basic = BasicProgram::parse(code);
-        if let Err(err) = basic {
+        if let Err(_err) = basic {
             // everything is ok
         }
         else {

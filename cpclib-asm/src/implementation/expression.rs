@@ -6,7 +6,7 @@ use cpclib_tokens::tokens::*;
 
 use crate::assembler::Env;
 use crate::error::{ExpressionError, *};
-use crate::implementation::tokens::{TokenExt, *};
+use crate::implementation::tokens::{TokenExt};
 use crate::SymbolFor;
 
 /// ! Add all important methods to expresison-like structure sthat are not availalbe in the cpclib_tokens crate.
@@ -431,7 +431,7 @@ impl ExprEvaluationExt for Expr {
                 l.iter().map(|e| e.symbols_used()).flatten().collect_vec()
             }
 
-            Expr::UnaryTokenOperation(_, box t) => {
+            Expr::UnaryTokenOperation(_, box _t) => {
                 unimplemented!("Need to retreive the symbols from the operation")
             }
         }

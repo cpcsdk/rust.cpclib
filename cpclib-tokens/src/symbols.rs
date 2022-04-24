@@ -308,11 +308,11 @@ impl Into<evalexpr::Value> for Value {
                     ExprResult::Char(c) => evalexpr::Value::Int(c as _),
                     ExprResult::Bool(b) => evalexpr::Value::Boolean(b),
                     ExprResult::String(s) => evalexpr::Value::String(s.into()),
-                    ExprResult::List(l) => unimplemented!(),
+                    ExprResult::List(_l) => unimplemented!(),
                     ExprResult::Matrix {
-                        width,
-                        height,
-                        content
+                        width: _,
+                        height: _,
+                        content: _
                     } => unimplemented!()
                 }
             }
@@ -689,7 +689,7 @@ impl SymbolsTable {
                     // evaluate the expression
                     let res = tree
                         .eval_with_context(&context)
-                        .map_err(|e| SymbolError::CannotModify(local_expr.into()))?;
+                        .map_err(|_e| SymbolError::CannotModify(local_expr.into()))?;
 
                     res.to_string()
                 }

@@ -48,7 +48,7 @@ impl Z80ParserError {
         let mut res = Vec::new();
 
         for e in self.0.iter() {
-            if let Z80ParserErrorKind::Inner { listing, error } = &e.1 {
+            if let Z80ParserErrorKind::Inner { listing: _, error } = &e.1 {
                 res.extend(error.errors())
             }
             else {
@@ -1753,7 +1753,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Pa
             ))
         ))(input)?;
 
-        let code_input = input.clone();
+        let _code_input = input.clone();
         let (input, code) = cut(context(
             "Condition: syntax error in code condition",
             inner_code
@@ -2267,7 +2267,7 @@ pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80P
     Ok((input, name))
 }
 pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, LocatedMacroParam, Z80ParserError> {
-    let start_input = input.clone();
+    let _start_input = input.clone();
     let (stop_input, param) = alt((
         map(
             delimited(
@@ -3503,7 +3503,7 @@ pub fn parse_label(
     doubledots: bool
 ) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
     move |input: Z80Span| {
-        let start = input.clone();
+        let _start = input.clone();
 
         let (input, obtained_label) = recognize(tuple((
             opt(alt((tag("::"), tag("@"), tag(".")))),
@@ -3624,7 +3624,7 @@ pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserEr
             is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
         ))),
         move |name: &Z80Span| {
-            let first = name.fragment().chars().next().unwrap();
+            let _first = name.fragment().chars().next().unwrap();
             let KEYWORD = name.as_str().to_ascii_uppercase();
 
             if impossible_names(dotted_directive).any(|&val| val == &KEYWORD) {

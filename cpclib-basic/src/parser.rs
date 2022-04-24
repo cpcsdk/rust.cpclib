@@ -91,7 +91,7 @@ pub fn parse_assign(input: &str) -> BasicSeveralTokensResult {
         Int,
         String
     };
-    let (input, mut var) = alt((
+    let (input, var) = alt((
         map(parse_string_variable, |v| (Kind::String, v)),
         map(parse_integer_variable, |v| (Kind::Int, v)),
         map(parse_float_variable, |v| (Kind::Float, v))
@@ -425,7 +425,7 @@ pub fn parse_call(input: &str) -> BasicSeveralTokensResult {
 }
 
 pub fn parse_input(input: &str) -> BasicSeveralTokensResult {
-    let (input, (_, mut space_a, mut canal, mut space_b, sep, mut space_c, string, args)) =
+    let (input, (_, mut space_a, canal, mut space_b, sep, mut space_c, string, args)) =
         tuple((
             tag_no_case("INPUT"),
             parse_space1,
@@ -450,7 +450,7 @@ pub fn parse_input(input: &str) -> BasicSeveralTokensResult {
         res.append(&mut canal)
     };
     res.append(&mut space_b);
-    if let Some(mut sep) = sep {
+    if let Some(sep) = sep {
         res.push(BasicToken::SimpleToken(sep.into()))
     };
     res.append(&mut space_c);
@@ -802,7 +802,7 @@ pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8; 5], BasicError> {
     let (is_pos, nb) = if nb >= 0f64 { (true, nb) } else { (false, -nb) };
 
     let deci = nb.trunc() as u64;
-    let fract = nb.fract();
+    let _fract = nb.fract();
 
     let mut bitpos = 0;
     let mut exp: i32 = 0;
@@ -1122,7 +1122,7 @@ mod test {
         check_line_tokenisation("10 REM fldsfksjfksjkg");
         check_line_tokenisation("10 ' fldsfksjfksjkg");
 
-        let line = check_line_tokenisation("10 REM fldsfksjfksjkg:CALL\n");
+        let _line = check_line_tokenisation("10 REM fldsfksjfksjkg:CALL\n");
     }
 
     fn check_expression(code: &str) {

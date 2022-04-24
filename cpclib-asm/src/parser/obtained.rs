@@ -3,13 +3,13 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_common::nom::bytes::complete::tag;
-use cpclib_common::nom::character::complete::space0;
+
+
 use cpclib_common::nom::combinator::{cut, eof, map, opt};
 use cpclib_common::nom::error::{context, ErrorKind, VerboseError};
-use cpclib_common::nom::multi::{fold_many0, many_till};
-use cpclib_common::nom::sequence::{delimited, preceded};
-use cpclib_common::nom::{self, Err, IResult, InputLength, InputTake};
+use cpclib_common::nom::multi::{many_till};
+
+use cpclib_common::nom::{Err, IResult, InputLength, InputTake};
 use cpclib_common::nom_locate::LocatedSpan;
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
@@ -22,7 +22,7 @@ use cpclib_tokens::{
 };
 use ouroboros::self_referencing;
 
-use super::{parse_z80_line, parse_z80_line_complete, ParserContext, Z80ParserError, Z80Span};
+use super::{parse_z80_line_complete, ParserContext, Z80ParserError, Z80Span};
 use crate::assembler::Env;
 use crate::error::AssemblerError;
 /// ! This crate is related to the adaptation of tokens and listing for the case where they are parsed
@@ -339,8 +339,8 @@ impl ExprElement for LocatedExpr {
     fn function_name(&self) -> &str {
         match self {
             Self::AnyFunction(n, ..) => n.as_str(),
-            Self::UnaryFunction(f, ..) => todo!(),
-            Self::BinaryFunction(f, ..) => todo!(),
+            Self::UnaryFunction(_f, ..) => todo!(),
+            Self::BinaryFunction(_f, ..) => todo!(),
             _ => unreachable!()
         }
     }
@@ -411,7 +411,7 @@ impl ExprEvaluationExt for LocatedExpr {
                 l.iter().map(|e| e.symbols_used()).flatten().collect_vec()
             }
 
-            LocatedExpr::UnaryTokenOperation(_, box t, _) => {
+            LocatedExpr::UnaryTokenOperation(_, box _t, _) => {
                 unimplemented!("Need to retreive the symbols from the operation")
             }
         }
@@ -883,7 +883,7 @@ impl LocatedToken {
             LocatedToken::While(e, l, _span) => {
                 Cow::Owned(Token::While(e.to_expr(), l.as_listing()))
             }
-            LocatedToken::Iterate(name, values, code, span) => {
+            LocatedToken::Iterate(_name, _values, _code, _span) => {
                 todo!()
             }
             LocatedToken::Module(..) => todo!(),
@@ -893,7 +893,7 @@ impl LocatedToken {
                 stop,
                 step,
                 listing,
-                span
+                span: _
             } => {
                 Cow::Owned(Token::For {
                     label: label.into(),
@@ -931,19 +931,19 @@ impl LocatedToken {
 
             LocatedToken::Include(..) => todo!(),
             LocatedToken::Incbin {
-                fname,
-                offset,
-                length,
-                extended_offset,
-                off,
-                transformation,
-                span
+                fname: _,
+                offset: _,
+                length: _,
+                extended_offset: _,
+                off: _,
+                transformation: _,
+                span: _
             } => todo!(),
             LocatedToken::Macro {
                 name,
                 params,
                 content,
-                span
+                span: _
             } => {
                 Cow::Owned(Token::Macro(
                     name.into(),
@@ -954,7 +954,7 @@ impl LocatedToken {
         }
     }
 
-    pub fn parse_token(value: &str) -> Result<(), String> {
+    pub fn parse_token(_value: &str) -> Result<(), String> {
         unimplemented!("Should return a LocatedToken reference + its  LocatedListing")
     }
 
@@ -1055,7 +1055,7 @@ impl TokenExt for LocatedToken {
         todo!()
     }
 
-    fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
+    fn unroll(&self, _env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
         todo!()
     }
 
@@ -1065,7 +1065,7 @@ impl TokenExt for LocatedToken {
 
     fn to_bytes_with_options(
         &self,
-        option: &crate::AssemblingOptions
+        _option: &crate::AssemblingOptions
     ) -> Result<Vec<u8>, AssemblerError> {
         todo!()
     }
@@ -1878,7 +1878,7 @@ impl ParseToken for Token {
     type Output = Token;
 
     fn parse_token(src: &str) -> Result<Self::Output, String> {
-        let mut tokens = {
+        let tokens = {
             let res = parse_z80_str(src);
             match res {
                 Ok(tokens) => tokens,

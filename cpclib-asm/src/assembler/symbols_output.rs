@@ -37,8 +37,8 @@ impl SymbolOutputGenerator {
         for (k, v) in symbs
             .expression_symbol()
             .iter()
-            .filter(|(s, v)| self.keep_symbol(s))
-            .sorted_by_key(|(s, v)| s.to_string().to_ascii_lowercase())
+            .filter(|(s, _v)| self.keep_symbol(s))
+            .sorted_by_key(|(s, _v)| s.to_string().to_ascii_lowercase())
         {
             match v {
                 Value::Address(a) => {

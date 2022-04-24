@@ -1,6 +1,6 @@
-use std::any::Any;
+
 use std::borrow::{Borrow, Cow};
-use std::collections::btree_map::Entry;
+
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
@@ -13,9 +13,9 @@ use cpclib_common::itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
-use cpclib_tokens::symbols::{Macro, SymbolFor, SymbolsTableTrait};
+use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
-    BinaryTransformation, Listing, ListingElement, MacroParamElement, TestKindElement,
+    BinaryTransformation, ListingElement, MacroParamElement, TestKindElement,
     ToSimpleToken, Token
 };
 use either::Either;
@@ -562,8 +562,8 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
 /// Uses the context to obtain the appropriate file other the included directories
 pub fn read_source<P: AsRef<Path>>(
     fname: P,
-    ctx: &ParserContext,
-    env: Option<&Env>
+    _ctx: &ParserContext,
+    _env: Option<&Env>
 ) -> Result<String, AssemblerError> {
     let fname = fname.as_ref();
     let mut f = File::open(&fname).map_err(|e| {
@@ -662,7 +662,7 @@ where
                     }
 
                     Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(
-                        Some(fun)
+                        Some(_fun)
                     ))) => {
                         // TODO check if the funtion has already been defined during this pass
                         Ok(())
@@ -709,7 +709,7 @@ where
 
                             if data.len() >= 128 {
                                 let header = AmsdosHeader::from_buffer(&data);
-                                let info = Some(if header.is_checksum_valid() {
+                                let _info = Some(if header.is_checksum_valid() {
                                     data = &data[128..];
 
                                     AssemblerError::AssemblingError{

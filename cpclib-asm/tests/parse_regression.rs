@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use assert_matches::assert_matches;
+
 use cpclib_asm::parser::ParserContext;
 use cpclib_asm::preamble::*;
 
@@ -50,10 +50,10 @@ fn test_regression1() {
 
 #[test]
 fn expr_negative_regression() {
-    let (ctx_, span) = ctx_and_span("18");
+    let (_ctx_, span) = ctx_and_span("18");
     assert_eq!(expr2(span).unwrap().1.to_expr(), Expr::Value(18));
 
-    let (ctx_, span) = ctx_and_span("-18");
+    let (_ctx_, span) = ctx_and_span("-18");
     assert_eq!(expr2(span).unwrap().1.to_expr(), Expr::Value(-18));
 }
 
@@ -111,7 +111,7 @@ fn macro_args1() {
 #[test]
 fn macro_args_single() {
     let code = "1";
-    let (ctx_, span) = ctx_and_span(code);
+    let (_ctx_, span) = ctx_and_span(code);
     let arg = dbg!(parse_macro_arg(span)).unwrap().1;
 
     assert_eq!(arg.to_macro_param(), MacroParam::Single("1".to_string()))
@@ -120,7 +120,7 @@ fn macro_args_single() {
 #[test]
 fn macro_args_list_1() {
     let code = "[1]";
-    let (ctx_, span) = ctx_and_span(code);
+    let (_ctx_, span) = ctx_and_span(code);
     let arg = dbg!(parse_macro_arg(span)).unwrap().1;
 
     assert_eq!(
@@ -132,7 +132,7 @@ fn macro_args_list_1() {
 #[test]
 fn macro_args_list_2() {
     let code = "[1, 3]";
-    let (ctx_, input) = ctx_and_span(code);
+    let (_ctx_, input) = ctx_and_span(code);
     let arg = dbg!(parse_macro_arg(input)).unwrap().1;
 
     assert_eq!(
@@ -147,7 +147,7 @@ fn macro_args_list_2() {
 #[test]
 fn macro_args_list_3() {
     let code = "[1, ,3]";
-    let (ctx_, span) = ctx_and_span(code);
+    let (_ctx_, span) = ctx_and_span(code);
     let arg = dbg!(parse_macro_arg(span)).unwrap().1;
 
     assert_eq!(
@@ -172,7 +172,7 @@ fn regression_akm1() {
                             ENDIF ;PLY_CFG_UseEffect_ArpeggioTable
                             ";
 
-    let (ctx_, input) = ctx_and_span(input);
+    let (_ctx_, input) = ctx_and_span(input);
 
     let bin = dbg!(parse_conditional(input));
     assert!(bin.is_ok());
@@ -190,7 +190,7 @@ fn regression_akm2() {
         inc hl
         ENDIF ;PLY_CFG_UseEffect_PitchTable
 ";
-    let (ctx_, input) = ctx_and_span(input);
+    let (_ctx_, input) = ctx_and_span(input);
 
     let bin = dbg!(parse_conditional(input));
     assert!(bin.is_ok());
@@ -205,7 +205,7 @@ fn regression_akm3() {
         nop
     ENDIF ;PLY_CFG_UseEffects
 ";
-    let (ctx_, input) = ctx_and_span(input);
+    let (_ctx_, input) = ctx_and_span(input);
 
     let bin = dbg!(parse_conditional(input));
     assert!(bin.is_ok());
@@ -221,7 +221,7 @@ dknr3:  ld de,4
     add hl,de
     ENDIF ;PLY_CFG_UseEffects
 ";
-    let (ctx_, input) = ctx_and_span(input);
+    let (_ctx_, input) = ctx_and_span(input);
 
     let bin = dbg!(parse_conditional(input));
     assert!(bin.is_ok());
@@ -253,7 +253,7 @@ dknr3:  ld de,4
     ENDIF ;PLY_CFG_UseEffects
 
 ";
-    let (ctx_, input) = ctx_and_span(input);
+    let (_ctx_, input) = ctx_and_span(input);
     let bin = dbg!(parse_conditional(input));
     assert!(bin.is_ok());
     dbg!(bin.unwrap().1.to_token());

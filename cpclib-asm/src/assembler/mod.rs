@@ -13,7 +13,7 @@ pub mod symbols_output;
 
 pub mod processed_token;
 
-use std::any::Any;
+
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
@@ -30,17 +30,17 @@ use cpclib_common::lazy_static::__Deref;
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
-use cpclib_common::smol_str::SmolStr;
+
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
 
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
-use self::processed_token::{build_processed_tokens_list, ProcessedToken};
+use self::processed_token::{ProcessedToken};
 use self::report::SavedFile;
 use self::symbols_output::SymbolOutputGenerator;
 use crate::assembler::processed_token::visit_processed_tokens;
-use crate::assembler::r#macro::Expandable;
+
 use crate::delayed_command::*;
 use crate::page_info::PageInformation;
 use crate::preamble::*;
@@ -1449,7 +1449,7 @@ impl Env {
         listing: &[T]
     ) -> Result<(), AssemblerError> {
         for token in listing.iter() {
-            let res = token.visited(self)?;
+            let _res = token.visited(self)?;
         }
 
         Ok(())
@@ -2133,7 +2133,7 @@ impl Env {
         else {
         }
 
-        let bytes = previous_bytes.as_ref().unwrap();
+        let _bytes = previous_bytes.as_ref().unwrap();
         let crunched = previous_crunched_bytes.as_ref().unwrap();
 
         // inject the crunched data
@@ -2352,7 +2352,7 @@ pub fn visit_located_token(
 
                 Token::Breakpoint(expr) => env.visit_breakpoint(expr.as_ref(), Some(span.clone())),
 
-                Token::Macro(name, arguments, code) => {
+                Token::Macro(_name, _arguments, _code) => {
                     panic!("Should delegate it to ProcessedToken")
                 }
                 Token::MacroCall(..) => {
@@ -2445,7 +2445,7 @@ pub fn visit_located_token(
             env.visit_label(label.as_str())
                 .map_err(|e| e.locate(label.clone()))
         }
-        LocatedToken::MacroCall(name, args, span) => {
+        LocatedToken::MacroCall(_name, _args, _span) => {
             panic!("Should never be called")
         }
         LocatedToken::Struct(name, args, span) => {
@@ -2466,10 +2466,10 @@ pub fn visit_located_token(
         LocatedToken::Include(..) => panic!("Should never been called"),
         LocatedToken::Incbin { .. } => panic!("Should never been called"),
         LocatedToken::Macro {
-            name,
-            params,
-            content,
-            span
+            name: _,
+            params: _,
+            content: _,
+            span: _
         } => panic!("Should never been called")
     }?;
 
@@ -2535,7 +2535,7 @@ fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             });
             Ok(())
         }
-        Token::Include(_, namespace, once) => {
+        Token::Include(_, _namespace, _once) => {
             panic!("ERROR - Should never be executed");/*
             if *once {
                 unimplemented!("ONCE on hardcoded tokens");
@@ -2563,7 +2563,7 @@ fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             transformation: _
         } => panic!("Error - should never be called"),
 
-        Token::If(ref cases, ref other) => {
+        Token::If(ref _cases, ref _other) => {
             panic!("Should be handled by ProcessedToken")
         }
         Token::Label(ref label) => env.visit_label(label),
@@ -2588,7 +2588,7 @@ fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
             panic!("Should never be called")
         }
         Token::Run(address, gate_array) => env.visit_run(address, gate_array.as_ref()),
-        Token::Rorg(ref exp, ref code) => panic!("Is delegated to ProcessedToken"),
+        Token::Rorg(ref _exp, ref _code) => panic!("Is delegated to ProcessedToken"),
         Token::Save {
             filename,
             address,
@@ -2610,7 +2610,7 @@ fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::SnaSet(flag, value) => env.visit_snaset(flag, value),
         Token::StableTicker(ref ticker) => visit_stableticker(ticker, env),
         Token::Undef(ref label) => env.visit_undef(label),
-        Token::Macro(name, arguments, code) => {
+        Token::Macro(_name, _arguments, _code) => {
             panic!("Is delegated to ProcessedToken")
         }
         Token::MacroCall(_name, _parameters) => panic!("Should never been called"),
@@ -3295,7 +3295,7 @@ fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
     }
 }
 
-fn visit_end(env: &mut Env) -> Result<(), AssemblerError> {
+fn visit_end(_env: &mut Env) -> Result<(), AssemblerError> {
     eprintln!("END directive is not implemented");
     Ok(())
 }

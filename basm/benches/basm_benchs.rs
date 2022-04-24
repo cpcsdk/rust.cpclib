@@ -1,10 +1,10 @@
 #![feature(path_file_prefix)]
 
-use std::{env, fs};
+use std::{fs};
 
 use cpclib_asm::basm_utils::{build_args_parser, process};
 use cpclib_common::itertools::Itertools;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use globset::Glob;
 use tempfile::NamedTempFile;
 

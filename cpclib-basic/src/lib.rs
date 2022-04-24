@@ -3,7 +3,7 @@ pub mod parser;
 /// Basic token encoding.
 pub mod tokens;
 
-use std::fmt::{self, Display};
+use std::fmt::{self};
 
 use cpclib_common::nom::error::convert_error;
 use cpclib_common::nom::{self};
@@ -332,7 +332,7 @@ impl BasicProgram {
 #[allow(clippy::shadow_unrelated)]
 #[cfg(test)]
 pub mod test {
-    use cpclib_common::nom::IResult;
+    
 
     use super::*;
 

@@ -70,7 +70,7 @@ impl Display for BasmError {
             BasmError::InvalidArgument(msg) => {
                 write!(f, "Invalid argument: {}", msg)
             }
-            BasmError::ErrorWithListing { box error, listing } => error.fmt(f)
+            BasmError::ErrorWithListing { box error, listing: _ } => error.fmt(f)
         }
     }
 }

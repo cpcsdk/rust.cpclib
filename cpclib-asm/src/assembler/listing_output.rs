@@ -323,7 +323,7 @@ impl ListingOutputTrigger {
     /// BUGGY when it is not a number ...
     pub fn replace_address(&mut self, address: ExprResult) {
         match address {
-            ExprResult::Float(f) => {}
+            ExprResult::Float(_f) => {}
             ExprResult::Value(v) => self.start = v as _,
             ExprResult::Char(v) => self.start = v as _,
             ExprResult::Bool(b) => self.start = if b { 1 } else { 0 },
@@ -332,7 +332,7 @@ impl ListingOutputTrigger {
             ExprResult::Matrix {
                 width,
                 height,
-                content
+                content: _
             } => self.start = (width + height) as _
         }
     }
