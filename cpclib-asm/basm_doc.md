@@ -33,6 +33,15 @@ Function, endf
 
 ## Memory related
 
+
+### CONFINED
+
+Confine a memory area of 256 bytes maximum in such a way that it is always possible to navigate in the data by only modifying the low byte address (*i.e* INC L always works).
+
+CONFINED
+  ...
+ENDCONFINED
+
 ### ORG
 
 ### ALIGN

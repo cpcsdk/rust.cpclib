@@ -2,6 +2,9 @@
 name = "cpclib-imgconverter"
 version = "0.6.0"
 edition = "2021"
+description = "Image manipulation tool for amstrad CPC"
+repository = "https://github.com/cpcsdk/rust.cpclib"
+license = "MIT"
 
 [package.metadata.workspaces]
 independent = true

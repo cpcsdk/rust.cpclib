@@ -40,6 +40,7 @@ pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync> {
 /// Specific state to maintain for the current token
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
+    Confined(SimpleListingState<'token, T>),
     CrunchedSection {
         /// The token to assemble
         listing: SimpleListingState<'token, T>,
@@ -316,7 +317,13 @@ pub fn build_processed_token<'token, T: Visited + Debug + Sync + ListingElement 
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
-    let state = if token.is_if() {
+    let state = if token.is_confined() {
+        Some(ProcessedTokenState::Confined(SimpleListingState {
+            processed_tokens: build_processed_tokens_list(token.confined_listing(), env),
+            span: token.possible_span().cloned()
+        }))
+    }
+    else if token.is_if() {
         let state = IfState::new(token);
         Some(ProcessedTokenState::If(state))
     }
@@ -626,6 +633,12 @@ where
             else {
                 // Handle the tokens depending on their specific state
                 match &mut self.state {
+                    Some(ProcessedTokenState::Confined(SimpleListingState {
+                        ref mut processed_tokens,
+                        span
+                    })) => {
+                        env.visit_confined(processed_tokens, span.as_ref())
+                    },
                     Some(ProcessedTokenState::CrunchedSection {
                         listing:
                             SimpleListingState {

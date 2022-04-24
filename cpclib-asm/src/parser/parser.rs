@@ -210,6 +210,7 @@ const STAND_ALONE_DIRECTIVE: &[&str] = &[
 ];
 
 const START_DIRECTIVE: &[&str] = &[
+    "CONFINED",
     "FOR", "IF", "IFDEF", "IFNDEF", "IFUSED", "ITER", "ITERATE", "LZ4", "LZ48", "LZ49", "LZAPU",
     "LZEXO", "LZX7", "MACRO", "MODULE", "PHASE", "REPEAT", "REPT", "STRUCT", "SWITCH", "WHILE"
 ];
@@ -218,9 +219,12 @@ const START_DIRECTIVE: &[&str] = &[
 const END_DIRECTIVE: &[&str] = &[
     "BREAK",
     "CASE",
+    "CEND",
     "DEFAULT",
     "DEPHASE",
     "ELSE",
+    "ENDC",
+    "ENDCONFINED",
     "ENDF",
     "ENDFOR",
     "ENDFUNCTION",
@@ -684,6 +688,36 @@ pub fn parse_for(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserErro
     ))
 }
 
+
+pub fn parse_confined(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    let (input, _) = space0(input)?;
+    let confined_start = input.clone();
+
+    let (input, _) = parse_directive_word("CONFINED")(input)?;
+
+    let (input, inner) = cut(context("CONFINED: issue in the content", inner_code))(input)?;
+
+    let (input, _) = cut(context(
+        "CONFINED: not closed",
+        preceded(
+            space0,
+            alt((
+                parse_directive_word("ENDCONFINED"),
+                parse_directive_word("CEND"),
+                parse_directive_word("ENDC"),
+            ))
+        )
+    ))(input)?;
+
+    Ok((
+        input.clone(),
+        LocatedToken::Confined(
+            inner,
+            confined_start.take(confined_start.input_len() - input.input_len())
+        )
+    ))
+}
+
 pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let repeat_start = input.clone();
     let (input, _) = preceded(
@@ -962,6 +996,7 @@ pub fn parse_z80_directive_with_block(
                 context("macro definition", parse_macro),
                 context("[DBG] crunched section", parse_crunched_section),
                 context("[DBG] module", parse_module),
+                context("[DBG] confined", parse_confined),
                 context("[DBG] repeat", parse_repeat),
                 context("[DBG] for", parse_for),
                 context("Function definition", parse_function),

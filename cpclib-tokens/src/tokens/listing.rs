@@ -82,6 +82,9 @@ pub trait ListingElement: Debug + Sized {
     fn function_definition_name(&self) -> &str;
     fn function_definition_params(&self) -> SmallVec<[&str; 4]>;
     fn function_definition_inner(&self) -> &[Self];
+
+    fn is_confined(&self) -> bool;
+    fn confined_listing(&self) -> &[Self];
 }
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]

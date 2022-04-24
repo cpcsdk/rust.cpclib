@@ -11,3 +11,5 @@ test.dsk
 tests/dsk/AMSTRAD CPC eDSK Editor - 07-05-2019.exe
 .gitignore
 .vscode/
+**/perf.data
+**/perf.data.old

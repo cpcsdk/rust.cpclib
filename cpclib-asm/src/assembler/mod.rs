@@ -2462,14 +2462,10 @@ pub fn visit_located_token(
             visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), env)
                 .map_err(|e| e.locate(span.clone()))
         }
-        LocatedToken::Include(..) => panic!("Should never been called"),
-        LocatedToken::Incbin { .. } => panic!("Should never been called"),
-        LocatedToken::Macro {
-            name: _,
-            params: _,
-            content: _,
-            span: _
-        } => panic!("Should never been called")
+        LocatedToken::Confined(..) |
+        LocatedToken::Include(..) |
+        LocatedToken::Incbin { .. } |
+        LocatedToken::Macro {..} => panic!("Should never been called")
     }?;
 
     // Patch the warnings to inject them a location
@@ -2924,6 +2920,67 @@ impl Env {
         page_info.logical_codeadr = page_info.logical_outputadr;
 
         Ok(())
+    }
+
+    pub fn visit_confined<'token, E: ExprEvaluationExt, T>(
+        &mut self,
+        lst: &mut [ProcessedToken<'token, T>],
+        span: Option<&Z80Span>
+    ) -> Result<(), AssemblerError>
+    where
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt,
+        ProcessedToken<'token, T>: FunctionBuilder
+    {
+        // Visit the confined section a first time
+        // TODO: refactor this code with visit_crunched_section
+        let mut confined_env = self.clone();
+        confined_env.active_page_info_mut().logical_outputadr = 0;
+        confined_env.active_page_info_mut().startadr = None; // reset the counter to obtain the bytes
+        confined_env.active_page_info_mut().maxadr = 0;
+        confined_env.active_page_info_mut().limit = 0xFFFF; // disable limit (to be redone in the area)
+        confined_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
+        confined_env.output_address = 0;
+        // TODO: forbid a subset of instructions to ensure it works properly
+        visit_processed_tokens(lst, &mut confined_env)
+            .map_err(|e| {
+                panic!("{:?}", e);
+                match span {
+                    Some(span) => e.locate(span.clone()),
+                    None => e
+                }
+            })?;
+
+
+        // compute its size
+        let bytes = confined_env.produced_bytes();
+        let bytes_len = bytes.len() as u16;
+
+        if bytes_len > 256 {
+            let e = AssemblerError::AssemblingError { 
+                msg: format!("CONFINED error: content uses {} bytes instead of a maximum of 256.", bytes.len())
+            };
+            match span {
+                Some(span) => return Err(e.locate(span.clone())),
+                None => return Err(e)
+            }
+        }
+
+
+
+        // Add the delta if needed and recompute the confined section a second time to properly setup the side effects
+        if ((self.logical_code_address().wrapping_add(bytes_len)) & 0xff00) 
+        != self.logical_code_address() & 0xff00 {
+            while (self.logical_code_address() & 0x00ff) != 0x0000 {
+                self.output(0)?;
+                self.update_dollar();
+            }
+        } 
+        
+        visit_processed_tokens(lst,  self)
+
     }
 
     /// Handle the for directive

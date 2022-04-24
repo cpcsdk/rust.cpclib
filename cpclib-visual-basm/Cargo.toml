@@ -2,6 +2,9 @@
 name = "visual-basm"
 version = "0.2.0"
 edition = "2021"
+description = "Visual z80 assembler relying on cpclib-asm"
+repository = "https://github.com/cpcsdk/rust.cpclib"
+license = "MIT"
 
 [package.metadata.workspaces]
 independent = true

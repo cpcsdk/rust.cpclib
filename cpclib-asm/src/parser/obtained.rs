@@ -619,6 +619,7 @@ pub enum LocatedToken {
         /// The span that correspond to the token
         span: Z80Span
     },
+    Confined(LocatedListing, Z80Span),
     Defb(Vec<LocatedExpr>, Z80Span),
     Defw(Vec<LocatedExpr>, Z80Span),
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
@@ -730,6 +731,7 @@ impl MayHaveSpan for LocatedToken {
     fn span(&self) -> &Z80Span {
         match self {
             LocatedToken::Standard { span, .. }
+            | LocatedToken::Confined(_, span)
             | LocatedToken::CrunchedSection(_, _, span)
             | LocatedToken::For { span, .. }
             | LocatedToken::Function(_, _, _, span)
@@ -948,6 +950,7 @@ impl LocatedToken {
                     content.as_str().to_owned()
                 ))
             }
+            LocatedToken::Confined(_, _) => todo!(),
         }
     }
 
@@ -1453,6 +1456,20 @@ impl ListingElement for LocatedToken {
     fn crunched_section_kind(&self) -> &CrunchType {
         match self {
             Self::CrunchedSection(kind, ..) => kind,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_confined(&self) -> bool {
+        match self {
+            Self::Confined(..) => true,
+            _ => false
+        }
+    }
+
+    fn confined_listing(&self) -> &[Self] {
+        match self {
+            Self::Confined(lst, _) => {lst.as_slice()},
             _ => unreachable!()
         }
     }

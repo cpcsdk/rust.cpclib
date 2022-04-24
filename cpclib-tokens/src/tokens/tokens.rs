@@ -391,6 +391,14 @@ impl ListingElement for Token {
             _ => unreachable!()
         }
     }
+
+    fn is_confined(&self) -> bool {
+        todo!()
+    }
+
+    fn confined_listing(&self) -> &[Self] {
+        todo!()
+    }
 }
 
 /// Standard listing is a specific implementation
