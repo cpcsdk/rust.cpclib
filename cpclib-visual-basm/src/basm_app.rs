@@ -116,7 +116,7 @@ impl BasmApp {
 }
 
 impl epi::App for BasmApp {
-    fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
+    fn update(&mut self, ctx: &egui::Context, frame: &eframe::epi::Frame) {
         let Self {
             fname,
             include_dirs,
@@ -152,7 +152,7 @@ impl epi::App for BasmApp {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
-                egui::menu::menu(ui, "File", |ui| {
+                ui.menu_button("File", |ui| {
                     if ui.button("Quit").clicked() {
                         frame.quit();
                     }
@@ -228,8 +228,10 @@ impl epi::App for BasmApp {
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                 ui.add(
-                    egui::Hyperlink::new("https://github.com/cpcsdk/rust.cpclib")
-                        .text("powered by basm")
+                    egui::Hyperlink::from_label_and_url(
+                        "powered by basm",
+                        "https://github.com/cpcsdk/rust.cpclib")
+                        
                 );
             });
         });
@@ -259,7 +261,7 @@ impl epi::App for BasmApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // 	ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-            ScrollArea::auto_sized()
+            ScrollArea::both()
                 .always_show_scroll(true)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {

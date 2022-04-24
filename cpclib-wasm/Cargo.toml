@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-wasm-bindgen = "0.2.79"
+wasm-bindgen = "0.2.80"
 cpclib-asm = "0.5.0"
 cpclib-sna = "0.5.0"
 cpclib-basic = "0.5.0"
@@ -32,10 +32,10 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 # Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
 wee_alloc = "0.4.5"
 
-js-sys = "0.3.4"
+js-sys = "0.3.57"
 
 [dependencies.web-sys]
-version = "0.3.4"
+version = "0.3.57"
 features = [
   'console',
   'Blob', 'BlobPropertyBag',
@@ -46,7 +46,7 @@ features = [
 
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.29"
+wasm-bindgen-test = "0.3.30"
 
 [profile.release]
 debug = true

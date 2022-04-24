@@ -22,7 +22,9 @@ use std::time::Duration;
 use crossbeam_channel::unbounded;
 use hotwatch::{Event, Hotwatch};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use {anyhow, clap, cpclib_disc as disc, cpclib_sna as sna, cpclib_xfer as xfer};
+use {anyhow, cpclib_disc as disc, cpclib_sna as sna, cpclib_xfer as xfer};
+use cpclib_common::clap::{self, Command};
+
 
 /// Send and run the file on the CPC.
 /// Snapshot V3 are downgraded to the V2 version
@@ -60,27 +62,27 @@ fn send_and_run_file(xfer: &xfer::CpcXfer, fname: &str, run: bool) {
 }
 
 fn main() -> anyhow::Result<()> {
-    let matches = clap::App::new("CPC xfer to M4")
+    let matches = clap::Command::new("CPC xfer to M4")
         .author("Krusty/Benediction")
         .about("RUST version of the communication tool between a PC and a CPC through the CPC Wifi card")
         .arg(
-            clap::Arg::with_name("CPCADDR")
+            clap::Arg::new("CPCADDR")
             .help("Specify the address of the M4. This argument is optional. If not set up, the content of the environment variable CPCIP is used.")
             .required(false) 
         )
         .subcommand(
-            clap::SubCommand::with_name("-r")
+            Command::new("-r")
             .about("Reboot M4.")
         )
         .subcommand(
-            clap::SubCommand::with_name("-s")
+            Command::new("-s")
             .about("Reboot CPC.")
         )
         .subcommand(
-            clap::SubCommand::with_name("-p")
+            Command::new("-p")
             .about("Upload the given file in the current folder or the provided one")
             .arg(
-                clap::Arg::with_name("fname")
+                clap::Arg::new("fname")
                 .help("Filename to send to the CPC")
                 .validator(|fname| {
                     if Path::new(&fname).exists() {
@@ -99,18 +101,18 @@ fn main() -> anyhow::Result<()> {
             )*/
         )
         .subcommand(
-            clap::SubCommand::with_name("-y")
+            Command::new("-y")
             .about("Upload a file on the M4 in the /tmp folder and launch it. V3 snapshots are automatically downgraded to V2 version")
             .arg(
-                clap::Arg::with_name("WATCH")
+                clap::Arg::new("WATCH")
                     .help("Watch the file and resend it on the M4 if modified (so xfer does not end when started with this option).")
-                    .short("w")
+                    .short('w')
                     .long("watch")
-                    .multiple(false)
+                    .multiple_occurrences(false)
                     .takes_value(false)
             )
             .arg(
-                clap::Arg::with_name("fname")
+                clap::Arg::new("fname")
                 .help("Filename to send and execute. Can be an executable (Amsdos header expected) or a snapshot V2")
                 .validator(|fname| {
                     if Path::new(&fname).exists() {
@@ -125,32 +127,32 @@ fn main() -> anyhow::Result<()> {
             )
         )
         .subcommand(
-            clap::SubCommand::with_name("-x")
+            Command::new("-x")
             .about("Execute a file on the cpc (executable or snapshot)")
             .arg(
-                clap::Arg::with_name("fname")
+                clap::Arg::new("fname")
                 .help("Filename to execute on the CPC")
             )
         )
         .subcommand(
-            clap::SubCommand::with_name("--ls")
+            Command::new("--ls")
             .about("Display contents of the M4")
         )
         .subcommand(
-            clap::SubCommand::with_name("--pwd")
+            Command::new("--pwd")
             .about("Display the current working directory selected on the M4")
         )
         .subcommand(
-            clap::SubCommand::with_name("--cd")
+            Command::new("--cd")
             .about("Change of current directory in the M4.")
             .arg(
-                clap::Arg::with_name("directory")
+                clap::Arg::new("directory")
                 .help("Directory to move on. Must exists")
                 .required(true)
             )
         )
         .subcommand(
-            clap::SubCommand::with_name("--interactive")
+            Command::new("--interactive")
             .about("Start an interactive session")
         )
         .get_matches();

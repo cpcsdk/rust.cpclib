@@ -34,22 +34,22 @@ delegate = "0.6.2"
 either = "1.6.1"
 encoding = "0.2.33"
 failure = "0.1.8"
-getset = "0.1.1"
+getset = "0.1.2"
 globset = "0.4.8"
 lazy_static = "1.4.0"
-libc = "0.2.97"
-matches = "0.1.8"
+libc = "0.2.124"
+matches = "0.1.9"
 ouroboros = "0.15.0"
-paste = "1.0.5"
+paste = "1.0.7"
 regex = "1.5.5"
-serde = { version = "1.0.126", features = ["derive"] }
+serde = { version = "1.0.136", features = ["derive"] }
 substring = "1.4.5"
 velcro = "0.5.3"
 assert_matches = "1.5.0"
 
 [build-dependencies]
 built = { version = "0.5.1", features = ["chrono"] }
-cc = "1.0.68"
+cc = "1.0.73"
 
 #[lib]
 #crate-type = ["cdylib", "dylib"]

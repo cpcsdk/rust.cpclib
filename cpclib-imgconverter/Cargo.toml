@@ -9,14 +9,14 @@ independent = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cpclib = {version="0.5.0", features=["cmdline"]}
+cpclib = { version = "0.5.0", features = ["cmdline"] }
 
-lz4 =  "1.23.2"
-notify = "5.0.0-pre.10"
-crossbeam-channel =  "0.5.1"
+lz4 = "1.23.3"
+notify = "5.0.0-pre.14"
+crossbeam-channel = "0.5.4"
 exitcode = "1.1.2"
-tempfile= "3.2.0"
-anyhow = "1.0.41"
+tempfile= "3.3.0"
+anyhow = "1.0.57"
 
 [build-dependencies]
 built = { version = "0.5.1", features = ["chrono"] }

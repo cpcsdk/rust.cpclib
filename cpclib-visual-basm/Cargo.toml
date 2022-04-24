@@ -10,8 +10,8 @@ independent = true
 
 [dependencies]
 eframe = "0.17.0"
-cpclib-asm = { version = "0.5", features = ["basm"] }
-temp-file = "0.1.6"
+cpclib-asm = { version = "0.5.0", features = ["basm"] }
+temp-file = "0.1.7"
 rfd= "0.8.2"
 
 [[bin]]

@@ -16,17 +16,17 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 /// ! Locomotive BASIC manipulation tool.
-use clap;
-use clap::*;
+use cpclib_common::clap;
+use cpclib_common::clap::*;
 use cpclib_basic::BasicProgram;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 fn main() -> std::io::Result<()> {
-    let matches = App::new("locomotive")
+    let matches = Command::new("locomotive")
         .about("Locomotive basic manipulation tool")
         .after_help("Krusty/Benediction 2019")
         .arg(
-            Arg::with_name("BASIC_SOURCE")
+            Arg::new("BASIC_SOURCE")
                 .long("basic")
                 .short("b")
                 .help("Source file that contains the basic program")
@@ -34,13 +34,13 @@ fn main() -> std::io::Result<()> {
                 .required(true)
         )
         .arg(
-            Arg::with_name("HEADER")
+            Arg::new("HEADER")
                 .long("header")
                 .short("h")
                 .help("Add the Amsdos header to the generated file")
         )
         .arg(
-            Arg::with_name("OUTPUT")
+            Arg::new("OUTPUT")
                 .help("Output file")
                 .takes_value(true)
                 .required(true)
