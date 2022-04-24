@@ -42,7 +42,7 @@ mod tests {
     #[test]
     pub fn test_ld() {
         let mut env = Env::default();
-        assert_eq!(env.peek(&0x0000.into()), 0x00);
+        assert_ne!(env.peek(&0x0000.into()), 0x7f);
 
         visit_token(
             &Token::OpCode(
