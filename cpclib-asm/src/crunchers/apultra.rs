@@ -40,7 +40,6 @@ pub fn compress(data: &[u8]) -> Vec<u8> {
             libc::free(dataout as _);
         }
 
-        println!("AP ultra: {} => {}", len, lenout);
         crunched
     }
 }
