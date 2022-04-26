@@ -8,6 +8,7 @@ use cpclib_common::lazy_static;
 use either::Either;
 use regex::Regex;
 
+use crate::assembler::embedded::EmbeddedFiles;
 use crate::error::AssemblerError;
 use crate::preamble::*;
 use crate::LocatedToken;
@@ -245,7 +246,7 @@ impl ParserContext {
         use globset::*;
         let mut does_not_exists = Vec::new();
 
-        // When an environnement is provided, we can handle fname replacement
+        // Make the expansion in the filename
         let fname: Cow<str> = if let Some(env) = env {
             let mut fname = fname.to_owned();
 
@@ -286,6 +287,13 @@ impl ParserContext {
         };
 
         let fname: &str = fname.borrow();
+
+        // early exit if the fname goes in an embedding file
+        if fname.starts_with("inner://") {
+            return Ok(std::path::Path::new(fname).into());
+        }
+
+
         let fname = std::path::Path::new(fname);
 
         // We expect the file to exists if no search_path is provided

@@ -11,6 +11,7 @@ pub mod save_command;
 pub mod stable_ticker;
 pub mod symbols_output;
 
+pub(crate) mod embedded;
 pub mod processed_token;
 
 use std::borrow::Borrow;

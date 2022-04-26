@@ -1,6 +1,11 @@
+use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use either::Either;
+
 use super::Env;
+use super::embedded::EmbeddedFiles;
 use crate::error::AssemblerError;
 use crate::preamble::ParserContext;
 
@@ -35,10 +40,76 @@ pub fn load_binary(
         either::Either::Left(p) => p.into()
     };
 
-    // Load data
-    std::fs::read(fname.clone()).map_err(|_e| {
-        AssemblerError::IOError {
-            msg: format!("Unable to read {}.", fname.to_string_lossy().to_string())
+
+
+    let fname_repr = fname.to_str().unwrap();
+
+    let content = if fname_repr.starts_with("inner://"){
+        // handle inner file
+        EmbeddedFiles::get(fname_repr)
+            .ok_or(
+                AssemblerError::IOError {
+                    msg: format!("Unable to open {:?}; it is not embedded.", fname_repr)
+                }
+            )?
+            .data.to_vec()
+    }
+    else {
+        // handle real file
+        let mut f = File::open(&fname).map_err(|e| {
+            AssemblerError::IOError {
+                msg: format!("Unable to open {:?}. {}", fname, e)
+            }
+        })?;
+
+        let mut content = Vec::new();
+        f.read_to_end(&mut content).map_err(|e| {
+            AssemblerError::IOError {
+                msg: format!("Unable to read {:?}. {}", fname, e.to_string())
+            }
+        })?;
+        content
+    };
+
+    Ok(content)
+
+}
+
+
+
+
+/// Read the content of the source file.
+/// Uses the context to obtain the appropriate file other the included directories
+pub fn read_source<P: AsRef<Path>>(
+    fname: P,
+    ctx: &ParserContext,
+    env: &Env
+) -> Result<String, AssemblerError> {
+    let fname = fname.as_ref();
+
+    let content = load_binary(Either::Left(fname), ctx, env)?;
+    handle_source_encoding(fname.to_str().unwrap(), &content)
+}
+
+
+pub fn handle_source_encoding(fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
+
+    let result = chardet::detect(content);
+    let coder = encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
+
+    let content = match coder {
+        Some(coder) => {
+            let utf8reader = coder
+                .decode(&content, encoding::DecoderTrap::Ignore)
+                .expect("Error");
+            utf8reader.to_string()
         }
-    })
+        None => {
+            return Err(AssemblerError::IOError {
+                msg: format!("Encoding error for {:?}.", fname)
+            });
+        }
+    };
+
+    Ok(content)
 }

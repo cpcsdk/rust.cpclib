@@ -18,7 +18,8 @@ use cpclib_tokens::{
 use either::Either;
 use ouroboros::*;
 
-use super::file::{get_filename, load_binary};
+use super::embedded::EmbeddedFiles;
+use super::file::{get_filename, load_binary, read_source};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
@@ -332,7 +333,7 @@ where
         let ctx = &env.ctx;
         match get_filename(fname, ctx, Some(env)) {
             Ok(fname) => {
-                match read_source(fname.clone(), ctx, Some(env)) {
+                match read_source(fname.clone(), ctx, env) {
                     Ok(content) => {
                         let new_ctx = {
                             let mut new_ctx = ctx.clone();
@@ -562,46 +563,6 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
     }
 }
 
-/// Read the content of the source file.
-/// Uses the context to obtain the appropriate file other the included directories
-pub fn read_source<P: AsRef<Path>>(
-    fname: P,
-    _ctx: &ParserContext,
-    _env: Option<&Env>
-) -> Result<String, AssemblerError> {
-    let fname = fname.as_ref();
-    let mut f = File::open(&fname).map_err(|e| {
-        AssemblerError::IOError {
-            msg: format!("Unable to open {:?}. {}", fname, e)
-        }
-    })?;
-
-    let mut content = Vec::new();
-    f.read_to_end(&mut content).map_err(|e| {
-        AssemblerError::IOError {
-            msg: format!("Unable to read {:?}. {}", fname, e.to_string())
-        }
-    })?;
-
-    let result = chardet::detect(&content);
-    let coder = encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
-
-    let content = match coder {
-        Some(coder) => {
-            let utf8reader = coder
-                .decode(&content, encoding::DecoderTrap::Ignore)
-                .expect("Error");
-            utf8reader.to_string()
-        }
-        None => {
-            return Err(AssemblerError::IOError {
-                msg: format!("Encoding error for {:?}.", fname)
-            });
-        }
-    };
-
-    Ok(content)
-}
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
 where
@@ -818,7 +779,7 @@ where
                         if (!once) || (!env.has_included(&fname)) {
                             // Build the state if needed / retreive it otherwhise
                             let state: &mut IncludeStateInner = if !contents.contains_key(&fname) {
-                                let content = read_source(fname.clone(), ctx, Some(env))?;
+                                let content = read_source(fname.clone(), ctx, env)?;
 
                                 let new_ctx = {
                                     let mut new_ctx = ctx.clone();

@@ -118,6 +118,10 @@ do_stuff
 
 ## Data loading and transformation directives
 
+Filenames are stored in a string.
+These string can do expansion of formulas embedded in {}.
+
+basm embeds some files in its executable, they are access under the name "inner://" :
 ### LZAPU, LZ48, LZ49
 
 ### INCBIN, BINCLUDE

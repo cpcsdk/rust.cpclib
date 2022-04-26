@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::fs::File;
+use std::fs::{File, self};
 use std::io;
 use std::io::Write;
 use std::path::Path;
@@ -8,9 +8,8 @@ use cpclib_common::clap;
 use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
-use crate::assembler::file::get_filename;
+use crate::assembler::file::{get_filename, handle_source_encoding};
 use crate::preamble::*;
-use crate::processed_token::read_source;
 
 #[derive(Debug)]
 pub enum BasmError {
@@ -116,7 +115,13 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
     // get the source code if any
     let code = if matches.is_present("INPUT") {
         let filename = get_filename(filename, &context, None)?;
-        read_source(filename, &context, None)?
+        let content = fs::read(filename.clone()).map_err(|e| {
+            AssemblerError::IOError {
+                msg: format!("Unable to open {:?}. {}", filename, e)
+            }
+        })?;
+        handle_source_encoding(filename.to_str().unwrap(), &content)?
+
     }
     else if let Some(code) = matches.value_of("INLINE") {
         format!(" {}", code)
