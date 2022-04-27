@@ -2151,7 +2151,7 @@ pub fn parse_res_set_bit(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserErr
 
     let (input, bit) = cut(context(
         "Wrong bit definition",
-        preceded(space1, parse_expr)
+        parse_expr
     ))(input)?;
 
     let (input, _) = cut(parse_comma)(input)?;

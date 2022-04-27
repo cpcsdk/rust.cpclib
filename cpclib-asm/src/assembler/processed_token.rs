@@ -480,6 +480,7 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSp
 }
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T> {
+
     /// Generate the tokens needed for the macro or the struct
     pub fn update_macro_or_struct_state(&mut self, env: &Env) -> Result<(), AssemblerError>
     where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt {
@@ -572,6 +573,7 @@ where
 {
     /// Due to the state management, the signature requires mutability
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
+        let possible_span = self.possible_span().cloned();
         let mut really_does_the_job = move || {
             let ctx = &env.ctx;
 
@@ -881,7 +883,7 @@ where
                                     root: Box::new(e)
                                 };
                                 let caller_span = self.possible_span();
-                                match caller_span {
+                                dbg!(match caller_span {
                                     Some(span) => {
                                         Err(AssemblerError::RelocatedError {
                                             error: e.into(),
@@ -889,7 +891,7 @@ where
                                         })
                                     }
                                     None => Err(e)
-                                }
+                                })
                             })?;
 
                         let caller_span = self.possible_span();
@@ -948,7 +950,14 @@ where
             Ok(res)
         };
 
-        really_does_the_job().map_err(|e| AssemblerError::AlreadyRenderedError(e.to_string()))
+        really_does_the_job()
+            .map_err(|e| {
+                let e = match possible_span {
+                    Some(span) => e.locate(span.clone()),
+                    None => e
+                };
+                AssemblerError::AlreadyRenderedError(e.to_string())
+        })
     }
 }
 

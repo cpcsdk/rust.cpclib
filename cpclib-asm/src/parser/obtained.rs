@@ -1052,7 +1052,7 @@ impl Locate for Token {
 
 impl TokenExt for LocatedToken {
     fn estimated_duration(&self) -> Result<usize, AssemblerError> {
-        todo!()
+        self.token().unwrap().estimated_duration()
     }
 
     fn unroll(&self, _env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
