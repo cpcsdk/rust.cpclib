@@ -30,7 +30,6 @@ fn build() {
         .cargo_metadata(true)
         .compile("exomizer");
 
-
     cc::Build::new()
         .warnings(false)
         .file("extra/zx0/compress.c")
@@ -40,6 +39,14 @@ fn build() {
         .shared_flag(false)
         .cargo_metadata(true)
         .compile("zx0");
+
+    cc::Build::new()
+        .warnings(false)
+        .file("extra/lz4.c")
+        .opt_level(0)
+        .shared_flag(true)
+        .cargo_metadata(true)
+        .compile("lz4");
 }
 
 fn main() {
