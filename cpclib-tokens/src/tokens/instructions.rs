@@ -362,6 +362,7 @@ pub enum CrunchType {
     LZ49,
     LZ4,
     LZX7,
+    LZX0,
     LZEXO,
     #[cfg(not(target_arch = "wasm32"))]
     LZAPU

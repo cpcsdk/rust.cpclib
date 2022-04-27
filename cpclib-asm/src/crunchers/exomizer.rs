@@ -4,7 +4,7 @@ fn Exomizer_crunch(input_data: *const libc::c_uchar, input_len: libc::c_int, ret
 }
 
 
-/// Compress the givne block using apultra method
+/// Compress the given block using exomizer  method
 pub fn compress(data: &[u8]) -> Vec<u8> {
     unsafe {
         let len = data.len() as libc::c_int;

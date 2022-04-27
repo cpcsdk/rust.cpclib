@@ -393,7 +393,7 @@ impl ListingElement for Token {
     }
 
     fn is_confined(&self) -> bool {
-        todo!()
+        return false; // TODO implement properly
     }
 
     fn confined_listing(&self) -> &[Self] {

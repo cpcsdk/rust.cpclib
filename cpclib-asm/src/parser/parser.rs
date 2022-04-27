@@ -536,6 +536,7 @@ pub fn parse_crunched_section(input: Z80Span) -> IResult<Z80Span, LocatedToken, 
             map(parse_directive_word("LZ48"), |_| CrunchType::LZ48),
             map(parse_directive_word("LZ49"), |_| CrunchType::LZ49),
             map(parse_directive_word("LZX7"), |_| CrunchType::LZX7),
+            map(parse_directive_word("LZX0"), |_| CrunchType::LZX0),
             #[cfg(not(target_arch = "wasm32"))]
             map(parse_directive_word("LZAPU"), |_| CrunchType::LZAPU)
         ))
