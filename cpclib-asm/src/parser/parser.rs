@@ -170,6 +170,7 @@ const STAND_ALONE_DIRECTIVE: &[&str] = &[
     "DW",
     "ELSE",
     "END",
+    "EQU",
     "EXPORT",
     "FAIL",
     "INCBIN",
@@ -355,7 +356,7 @@ fn inner_code(input: Z80Span) -> IResult<Z80Span, LocatedListing, Z80ParserError
 
 /// Workaround because many0 is not used in the main root function
 /// TODO add an argument to handle context change
-fn inner_code_with_state(
+pub fn inner_code_with_state(
     new_state: ParsingState
 ) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedListing, Z80ParserError> {
     move |input: Z80Span| {
@@ -1068,8 +1069,6 @@ pub fn parse_z80_line_complete(
         }
     )(input)?;
 
-    dbg!(&input);
-
     // we may have some space after the last component
     // also a : that is not cpatured when there is nothing after
     let (input, _) = tuple((space0, opt(tag(":")), space0))(input)?;
@@ -1137,8 +1136,6 @@ pub fn parse_z80_line_label_aware_directive(
     let _after_let = input.clone();
     let (input, label) = context("Label issue", preceded(space0, parse_label(false)))(input)?;
 
-    dbg!(&label, "<========================");
-
     // TODO make these stuff alternatives ...
     // Manage Equ
     // BUG Equ and = are supposed to be different
@@ -1177,12 +1174,11 @@ pub fn parse_z80_line_label_aware_directive(
         }
         else {
             // ensure there is nothing after
-            dbg!(&input);
-            let _ = dbg!(alt((
+            let _ = alt((
                 tuple((my_space0, tag(":"))),
                 tuple((my_space0, my_line_ending)),
-            ))(input.clone()))?;
-            return dbg!(Ok((input, LocatedToken::Label(label))));
+            ))(input.clone())?;
+            return Ok((input, LocatedToken::Label(label)));
         }
     }
 
@@ -1790,7 +1786,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Pa
 
         let _code_input = input.clone();
         let (input, code) = cut(context(
-            "Condition: syntax error in code condition",
+            "Condition: syntax error in conditionnal code",
             inner_code
         ))(input)?;
 
@@ -2148,9 +2144,9 @@ fn parse_ld_normal_src(
 /// Parse RES, SET and BIT instructions
 pub fn parse_res_set_bit(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     let (input, res_or_set) = alt((
-        map(tag_no_case("RES"), |_| Mnemonic::Res),
-        map(tag_no_case("BIT"), |_| Mnemonic::Bit),
-        map(tag_no_case("SET"), |_| Mnemonic::Set)
+        map(parse_word("RES"), |_| Mnemonic::Res),
+        map(parse_word("BIT"), |_| Mnemonic::Bit),
+        map(parse_word("SET"), |_| Mnemonic::Set)
     ))(input)?;
 
     let (input, bit) = cut(context(
@@ -3555,7 +3551,6 @@ pub fn parse_label(
             )))
         )))(input)?;
 
-        dbg!(&obtained_label);
 
         // fail to parse a label when it is 100% sure it corresponds to  a macro call
         let (input, macro_arg) = opt(preceded(space1, tag_no_case("(void)".into())))(input)?;
@@ -3592,7 +3587,7 @@ pub fn parse_label(
             )))
         }
         else {
-            dbg!(Ok((input, obtained_label)))
+            Ok((input, obtained_label))
         }
     }
 }
@@ -3682,7 +3677,7 @@ pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80P
     ))(input)?;
     let (input, label) = preceded(
         space0,
-        alt((parse_label(false), tag_no_case("$"), tag_no_case("$$")))
+        alt((parse_label(false), tag("$"), tag("$$")))
     )(input)?;
 
     let span = input_start.take(input_start.input_len() - input.input_len());
@@ -3786,6 +3781,7 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
             context(
                 "[DBG]alt",
                 alt((
+                    prefixed_label_expr,
                     parse_expr_bracketed_list,
                     // Manage functions
                     map(parse_word("RND()"), |w| LocatedExpr::Rnd(w)),
@@ -3803,7 +3799,6 @@ pub fn factor(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
                     map(tag("$$"), |l| LocatedExpr::Label(l)),
                     map(tag("$"), |l| LocatedExpr::Label(l)),
                     parse_bool_expr,
-                    prefixed_label_expr,
                     // manage labels
                     map(parse_label(false), |l| LocatedExpr::Label(l)),
                     parens

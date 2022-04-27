@@ -166,7 +166,7 @@ impl Snapshot {
         let memory_dump_size = sna.memory_size_header() as usize;
         let version = sna.version_header();
 
-        assert!(dbg!(memory_dump_size * 1024) <= dbg!(file_content.len()));
+        assert!(memory_dump_size * 1024 <= file_content.len());
         sna.memory = SnapshotMemory::new(file_content.drain(0..memory_dump_size * 1024).as_slice());
 
         if version == 3 {

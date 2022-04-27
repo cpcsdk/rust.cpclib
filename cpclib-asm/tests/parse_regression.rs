@@ -373,3 +373,49 @@ BD = B_ + D_
     let bin = dbg!(parse_z80_str(code));
     assert!(bin.is_ok());
 }
+
+
+#[test]
+fn regression_label_parsing() {
+    assert!(
+        dbg!(parse_z80_str("ds_m4_rom_byte_storage equ $")).is_ok()
+    );
+
+    let (_ctx_, input) = ctx_and_span("ds_m4_rom_byte_storage equ $");
+
+    assert!(
+        dbg!(inner_code_with_state(ParsingState::Standard)(input)).is_ok()
+    );
+
+    let (_ctx_, input) = ctx_and_span("ds_m4_rom_byte_storage equ $
+    ");
+
+    assert!(
+        dbg!(inner_code_with_state(ParsingState::Standard)(input)).is_ok()
+    );
+
+
+    let (_ctx_, input) = ctx_and_span(
+    "ifndef ds_m4_rom_byte_storage
+    ds_m4_rom_byte_storage equ $
+        assert ds_m4_rom_byte_storage < 0x0010
+        endif
+        ");
+    assert!(
+        dbg!(inner_code_with_state(ParsingState::Standard)(input)).is_ok()
+    );
+
+    let (_ctx_, input) = ctx_and_span("    if USE_CPCWIFI
+
+    ifndef ds_m4_rom_byte_storage
+ds_m4_rom_byte_storage equ $
+    assert ds_m4_rom_byte_storage < 0x0010
+    endif
+
+    assert ds_m4_rom_byte_storage == 0xe, \"Check if it is not hardcoded in memory\"
+    endif
+    ");
+    assert!(
+        dbg!(inner_code_with_state(ParsingState::Standard)(input)).is_ok()
+    );
+}

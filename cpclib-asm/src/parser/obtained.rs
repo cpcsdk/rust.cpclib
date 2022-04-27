@@ -1565,9 +1565,9 @@ impl LocatedListing {
                 let input_start = Z80Span::new_extra(src, ctx);
 
                 // really make the parsing
-                let res = dbg!(map(many_till(parse_z80_line_complete, eof), |(v, _)| {
+                let res = map(many_till(parse_z80_line_complete, eof), |(v, _)| {
                     v.into_iter().flatten().collect_vec()
-                })(input_start.clone()));
+                })(input_start.clone());
 
                 // analyse result and can generate error even if parsing was ok
                 let res = match res {
@@ -1672,8 +1672,6 @@ impl LocatedListing {
 
                 // we parse until we met an error or the end of the parse
                 loop {
-                    dbg!(&tokens);
-                    dbg!(&inner_code);
                     // check if the line needs to be parsed (ie there is no end directive)
                     let must_break = inner_code.trim().is_empty() || {
                         // TODO take into account potential label
