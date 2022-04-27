@@ -27,11 +27,7 @@ impl Cruncher for CrunchType {
                     msg: "LZX7 compression not implemented".to_owned()
                 })
             }
-            CrunchType::LZEXO => {
-                Err(AssemblerError::AssemblingError {
-                    msg: "LZEXO compression not implemented".to_owned()
-                })
-            }
+            CrunchType::LZEXO => Ok(crunchers::exomizer::compress(raw)),
             #[cfg(not(target_arch = "wasm32"))]
             CrunchType::LZAPU => Ok(crunchers::apultra::compress(raw))
         }

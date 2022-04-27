@@ -15,7 +15,7 @@ extern "C" {
     ) -> libc::c_int;
 }
 
-/// Compress the givne block using apultra method
+/// Compress the given block using apultra method
 pub fn compress(data: &[u8]) -> Vec<u8> {
     unsafe {
         let len = data.len() as libc::c_int;

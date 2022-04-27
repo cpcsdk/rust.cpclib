@@ -21,6 +21,14 @@ fn build() {
         .shared_flag(true)
         .cargo_metadata(true)
         .compile("apultra");
+
+    cc::Build::new()
+        .warnings(false)
+        .file("extra/exomizer.c")
+        .opt_level(0)
+        .shared_flag(true)
+        .cargo_metadata(true)
+        .compile("exomizer");
 }
 
 fn main() {
