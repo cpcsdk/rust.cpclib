@@ -122,7 +122,7 @@ impl MyDefault for Banks {
 /// This structure allows to code which pass is going to be analysed.
 /// First pass consists in collecting the various labels to manipulate and so on. Some labels stay unknown at this moment.
 /// Second pass serves to get the final values
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AssemblingPass {
     Uninitialized,
     FirstPass,
@@ -2426,14 +2426,7 @@ pub fn visit_located_token(
             panic!("Should be handled by ProcessedToken")
         }
 
-        LocatedToken::Switch(value, cases, default, span) => {
-            env.visit_switch(
-                value,
-                cases.iter().map(|c| (&c.0, &c.1[..], c.2)),
-                default.as_ref().map(|l| &l[..]),
-                Some(span)
-            )
-        }
+
         LocatedToken::While(cond, inner, span) => env.visit_while(cond, inner, Some(span.clone())),
         LocatedToken::Iterate(..) => {
             panic!("Should never be called")
@@ -2463,10 +2456,12 @@ pub fn visit_located_token(
             visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), env)
                 .map_err(|e| e.locate(span.clone()))
         }
+
+        LocatedToken::Switch(..) |
         LocatedToken::Confined(..) |
         LocatedToken::Include(..) |
         LocatedToken::Incbin { .. } |
-        LocatedToken::Macro {..} => panic!("Should never been called")
+        LocatedToken::Macro {..} => panic!("Should never been called {:?}", outer_token)
     }?;
 
     // Patch the warnings to inject them a location
@@ -2737,47 +2732,6 @@ impl Env {
                     span: span.clone()
                 }
             })?;
-        }
-
-        Ok(())
-    }
-
-    /// Handle the switch directive
-    pub fn visit_switch<'a, T, E>(
-        &mut self,
-        value: &E,
-        cases: impl Iterator<Item = (&'a E, &'a [T], bool)>,
-        default: Option<&'a [T]>,
-        _span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError>
-    where
-        E: ExprEvaluationExt,
-        E: 'a,
-        T: 'a + ListingElement<Expr = E> + Visited + MayHaveSpan
-    {
-        let value = self.resolve_expr_must_never_fail(value)?;
-        let mut met = false;
-        let mut broken = false;
-        for (case, listing, r#break) in cases {
-            // check if case must be executed
-            let case = self.resolve_expr_must_never_fail(case)?;
-            met |= case == value;
-
-            // inject code if needed and leave if break is present
-            if met {
-                self.visit_listing(listing)?;
-                if r#break {
-                    broken = true;
-                    break;
-                }
-            }
-        }
-
-        // execute default if any
-        if !met || !broken {
-            if let Some(default) = default {
-                self.visit_listing(default)?;
-            }
         }
 
         Ok(())

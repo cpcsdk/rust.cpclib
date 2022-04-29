@@ -11,7 +11,7 @@ use failure::Fail;
 
 use crate::edsk::{ExtendedDsk, Head};
 
-#[derive(Debug, Fail, Clone)]
+#[derive(Debug, Fail, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum AmsdosError {
     #[fail(display = "No more entries available.")]

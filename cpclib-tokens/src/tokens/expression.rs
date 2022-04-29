@@ -861,7 +861,7 @@ impl Expr {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpressionTypeError(String);
 
 impl Display for ExpressionTypeError {

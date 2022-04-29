@@ -399,6 +399,22 @@ impl ListingElement for Token {
     fn confined_listing(&self) -> &[Self] {
         todo!()
     }
+
+    fn is_switch(&self) -> bool {
+        todo!()
+    }
+
+    fn switch_expr(&self) -> &Self::Expr {
+        todo!()
+    }
+
+    fn switch_cases(&self) -> Box<dyn Iterator<Item=(&Self::Expr, &[Self], bool) > + '_>  {
+        todo!()
+    }
+
+    fn switch_default(&self) -> Option<&[Self]> {
+        todo!()
+    }
 }
 
 /// Standard listing is a specific implementation

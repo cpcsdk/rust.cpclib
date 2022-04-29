@@ -566,7 +566,7 @@ pub enum NumericExpressionConstraint {
 /// TODO check that some generated functions do not generate strings even if they consume numbers
 pub fn parse_numeric_expression<'code>(
     constraint: NumericExpressionConstraint
-) -> impl Fn(&'code str) -> BasicSeveralTokensResult {
+) -> impl Fn(&'code str) -> BasicSeveralTokensResult<'code> {
     // XXX Functions must be parsed first
     move |input: &'code str| {
         match constraint {
@@ -599,8 +599,8 @@ pub fn parse_numeric_expression<'code>(
 fn parse_any_string_function<'code>(
     name: &'static str,
     code: BasicToken
-) -> impl Fn(&'code str) -> BasicSeveralTokensResult {
-    move |input: &'code str| -> BasicSeveralTokensResult {
+) -> impl Fn(&'code str) -> BasicSeveralTokensResult<'code> {
+    move |input: &'code str| -> BasicSeveralTokensResult<'code> {
         let (input, (code, mut space_a, open, mut expr, close)) = tuple((
             map(tag_no_case(name), |_| code.clone()),
             parse_space0,
@@ -698,8 +698,8 @@ fn parse_any_numeric_function<'code>(
     name: &'static str,
     code: BasicToken,
     constraint: NumericExpressionConstraint
-) -> impl Fn(&'code str) -> BasicSeveralTokensResult {
-    move |input: &'code str| -> BasicSeveralTokensResult {
+) -> impl Fn(&'code str) -> BasicSeveralTokensResult<'code> {
+    move |input: &'code str| -> BasicSeveralTokensResult<'code> {
         let (input, (code, mut space_a, open, mut expr, close)) = tuple((
             map(tag_no_case(name), |_| code.clone()),
             parse_space0,

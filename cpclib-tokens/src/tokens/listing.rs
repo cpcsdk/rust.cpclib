@@ -13,7 +13,7 @@ use crate::{
 pub trait ListingElement: Debug + Sized {
     type MacroParam: MacroParamElement;
     type TestKind: TestKindElement;
-    type Expr: ExprElement;
+    type Expr: ExprElement + Debug + Eq + Clone ;
 
     fn mnemonic(&self) -> Option<&Mnemonic>;
     fn mnemonic_arg1(&self) -> Option<&DataAccess>;
@@ -22,6 +22,11 @@ pub trait ListingElement: Debug + Sized {
     fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess>;
 
     fn is_directive(&self) -> bool;
+
+    fn is_switch(&self) -> bool;
+    fn switch_expr(&self) -> &Self::Expr;
+    fn switch_cases(&self) -> Box<dyn Iterator<Item=(&Self::Expr, &[Self], bool) > + '_>;
+    fn switch_default(&self) -> Option<&[Self]>;
 
     fn is_iterate(&self) -> bool;
     fn iterate_listing(&self) -> &[Self];

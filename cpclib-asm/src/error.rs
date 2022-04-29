@@ -20,7 +20,7 @@ use crate::parser::ParserContext;
 use crate::preamble::{LocatedListing, Z80ParserError, Z80ParserErrorKind};
 use crate::{PhysicalAddress, Z80Span};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExpressionError {
     LeftError(BinaryOperation, Box<AssemblerError>),
     RightError(BinaryOperation, Box<AssemblerError>),
@@ -29,7 +29,7 @@ pub enum ExpressionError {
     InvalidSize(usize, usize) // expected index
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum AssemblerError {
     /// Dirty trick to not play with memory

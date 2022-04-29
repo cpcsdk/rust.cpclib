@@ -25,7 +25,7 @@ use super::obtained::*;
 use super::*;
 use crate::preamble::*;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Z80ParserErrorKind {
     /// Static string added by the `context` function
     Context(&'static str),
@@ -40,7 +40,7 @@ pub enum Z80ParserErrorKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Z80ParserError(Vec<(Z80Span, Z80ParserErrorKind)>);
 
 impl Z80ParserError {
@@ -993,16 +993,16 @@ pub fn parse_z80_directive_with_block(
     alt((
         context("basic", parse_basic),
         context(
-            "block instruction",
+            "[DBG] block instruction",
             alt((
-                context("macro definition", parse_macro),
+                context("[DBG] Macro definition", parse_macro),
                 context("[DBG] crunched section", parse_crunched_section),
                 context("[DBG] module", parse_module),
                 context("[DBG] confined", parse_confined),
                 context("[DBG] repeat", parse_repeat),
                 context("[DBG] for", parse_for),
-                context("Function definition", parse_function),
-                context("SWITCH parse error", parse_switch),
+                context("[DBG] Function definition", parse_function),
+                context("[DBG] SWITCH parse error", parse_switch),
                 context("[DBG] iterate", parse_iterate),
                 context("[DBG] while", parse_while),
                 context("[DBG] rorg", parse_rorg),

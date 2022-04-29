@@ -1,8 +1,6 @@
 use std::borrow::{Borrow, Cow};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
-use std::fs::File;
-use std::io::Read;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,7 +11,7 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
-    BinaryTransformation, ListingElement, MacroParamElement, TestKindElement, ToSimpleToken, Token
+    BinaryTransformation, ListingElement, MacroParamElement, TestKindElement, ToSimpleToken, Token, Listing
 };
 use either::Either;
 use ouroboros::*;
@@ -25,14 +23,15 @@ use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Cruncher;
 use crate::preamble::{
-    parse_z80_str, parse_z80_str_with_context, LocatedListing, MayHaveSpan, Z80Span
+    parse_z80_str, parse_z80_str_with_context, LocatedListing, MayHaveSpan, Z80Span, Z80ParserError
 };
 use crate::{r#macro, AssemblerError, Env, LocatedToken, ParserContext, Visited};
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync> {
+pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync> 
+{
     /// The token being processed by the assembler
     token: &'token T,
     state: Option<ProcessedTokenState<'token, T>>
@@ -40,7 +39,8 @@ pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync> {
 
 /// Specific state to maintain for the current token
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
+enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> 
+{
     Confined(SimpleListingState<'token, T>),
     CrunchedSection {
         /// The token to assemble
@@ -64,7 +64,8 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     MacroCallOrBuildStruct(ExpandState),
     Repeat(SimpleListingState<'token, T>),
     RepeatUntil(SimpleListingState<'token, T>),
-    Rorg(SimpleListingState<'token, T>)
+    Rorg(SimpleListingState<'token, T>),
+    Switch(SwitchState<'token, T>),
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
@@ -73,19 +74,46 @@ struct IncbinState {
 }
 
 #[derive(PartialEq, Eq, Clone)]
-struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> {
+struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> 
+{
     processed_tokens: Vec<ProcessedToken<'token, T>>,
     span: Option<Z80Span>
 }
 
-impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListingState<'token, T> {
+impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListingState<'token, T> 
+{
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "SimpleListingState")
     }
 }
 
+impl<'token, T: Visited + ListingElement + Debug + Sync  + MayHaveSpan> SimpleListingState<'token, T> 
+where
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+{
+    fn build(tokens: &'token [T], span: Option<Z80Span>, env: &Env) -> Self {
+        Self  {
+            processed_tokens: build_processed_tokens_list(tokens, env),
+            span
+        }
+    }
+
+    fn tokens_mut(&mut self) -> &mut[ProcessedToken<'token, T>] {
+        &mut self.processed_tokens
+    }
+}
+
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FunctionDefinitionState(Option<Arc<Function>>);
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+
+struct SwitchState<'token, T: Visited + ListingElement + Debug + Sync>
+{
+    cases: Vec<SimpleListingState<'token, T>>,
+    default: Option<SimpleListingState<'token, T>>
+}
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 struct IncludeState(BTreeMap<PathBuf, IncludeStateInner>);
@@ -153,7 +181,8 @@ impl Debug for ExpandState {
 
 /// Store for each branch (if passed at some point) the test result and the listing
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct IfState<'token, T: Visited + Debug + ListingElement + Sync> {
+struct IfState<'token, T: Visited + Debug + ListingElement + Sync> 
+{
     // The token that contains the tests and listings
     token: &'token T,
     if_token_adr_to_used_decision: std::collections::HashMap<usize, bool>,
@@ -302,6 +331,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + ToSimpleToken> ToSimpleToken
     for ProcessedToken<'token, T>
+where <T as ListingElement>::Expr: ExprEvaluationExt
+
 {
     fn as_simple_token(&self) -> Cow<Token> {
         self.token.as_simple_token()
@@ -416,6 +447,19 @@ where
             span: token.possible_span().cloned()
         }))
     }
+    else if token.is_switch() {
+        // todo setup properly the spans
+        Some(ProcessedTokenState::Switch(SwitchState{
+            cases: token.switch_cases()
+            .map(|(v, l, b)| {
+                SimpleListingState::build(l, token.possible_span().cloned(), env)
+            }).collect_vec(),
+
+            default: token.switch_default().map(|l| {
+                SimpleListingState::build(l, token.possible_span().cloned(), env)   
+            })
+        }))
+    }
     else if token.is_call_macro_or_build_struct() {
         // one day, we may whish to maintain a state
         None
@@ -442,7 +486,7 @@ where
     #[cfg(target_arch = "wasm32")]
     let iter = tokens.iter();
 
-    iter.map(|t| build_processed_token(t, env))
+    iter.map(|t| build_processed_token(t, env)) 
         .collect::<Vec<_>>()
 }
 
@@ -465,6 +509,8 @@ where
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSpan
     for ProcessedToken<'token, T>
+where <T as ListingElement>::Expr: ExprEvaluationExt
+
 {
     fn possible_span(&self) -> Option<&Z80Span> {
         self.token.possible_span()
@@ -479,7 +525,9 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSp
     }
 }
 
-impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T> {
+impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T> 
+where <T as ListingElement>::Expr: ExprEvaluationExt
+{
 
     /// Generate the tokens needed for the macro or the struct
     pub fn update_macro_or_struct_state(&mut self, env: &Env) -> Result<(), AssemblerError>
@@ -941,6 +989,39 @@ where
                         span
                     })) => env.visit_rorg(self.token.rorg_expr(), processed_tokens, span.as_ref()),
 
+
+                    Some(ProcessedTokenState::Switch(ref mut state)) => {
+
+                        let value = env.resolve_expr_must_never_fail(self.token.switch_expr())?;
+                        let mut met = false;
+                        let mut broken = false;
+                        for (case, listing, r#break) in state.cases.iter_mut().zip(self.token.switch_cases())
+                        .map(|(pt, t)| {
+                            (t.0, pt.tokens_mut(), t.2)
+                        }) {
+                            // check if case must be executed
+                            let case = env.resolve_expr_must_never_fail(case)?;
+                            met |= case == value;
+                
+                            // inject code if needed and leave if break is present
+                            if met {
+                                visit_processed_tokens(listing, env)?;
+                                if r#break {
+                                    broken = true;
+                                    break;
+                                }
+                            }
+                        }
+                
+                        // execute default if any
+                        if !met || !broken {
+                            if let Some(ref mut default) = state.default {
+                                visit_processed_tokens(&mut default.processed_tokens, env)?;
+                            }
+                        }
+                
+                        Ok(())
+                    }
                     // no state implies a standard visit
                     None => self.token.visited(env)
                 }

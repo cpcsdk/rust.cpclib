@@ -29,7 +29,7 @@ use crate::implementation::tokens::TokenExt;
 use crate::preamble::{parse_end_directive, parse_z80_str};
 use crate::{resolve_impl, BinaryTransformation, ExprElement, ParsingState, SymbolFor};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocatedExpr {
     RelativeDelta(i8, Z80Span),
     Value(i32, Z80Span),
@@ -470,7 +470,7 @@ impl LocatedExpr {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocatedMacroParam {
     Empty,
     /// Standard argument
@@ -536,7 +536,7 @@ impl LocatedMacroParam {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocatedTestKind {
     // Test succeed if it is an expression that returns True
     True(LocatedExpr),
@@ -608,7 +608,7 @@ impl TestKindElement for LocatedTestKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 /// Add span information for a Token.
 /// This hierarchy is a mirror of the original token one
 pub enum LocatedToken {
@@ -1473,12 +1473,47 @@ impl ListingElement for LocatedToken {
             _ => unreachable!()
         }
     }
+
+    fn is_switch(&self) -> bool {
+        match self {
+            Self::Switch(..) => true,
+            _ => false
+        }
+    }
+
+    fn switch_expr(&self) -> &Self::Expr {
+        match self {
+            Self::Switch(expr, ..) => expr,
+            _ => unreachable!()
+        }
+    }
+
+    fn switch_cases(&self) -> Box<dyn Iterator<Item=(&Self::Expr, &[Self], bool) > + '_>  {
+        match self {
+            Self::Switch(_, cases, ..) => box cases.iter().map(|c| {
+                (
+                    &c.0,
+                    c.1.deref().as_slice(),
+                    c.2
+                )
+            }),
+            _ => unreachable!()
+        }
+    }
+
+    fn switch_default(&self) -> Option<&[Self]> {
+        match self {
+            Self::Switch(_, _, default, ..) => default.as_ref().map(|l| l.as_slice()),
+            _ => unreachable!()
+        }
+    }
 }
 
 pub type InnerLocatedListing = BaseListing<LocatedToken>;
 
 /// Represents a Listing of located tokens
 /// Lifetimes 'src and 'ctx are in fact the same and correspond to hte lifetime of the object itself
+#[derive(Eq)]
 #[self_referencing]
 pub struct LocatedListing {
     /// Its source code. We want it to live as long as possible.
@@ -1510,7 +1545,7 @@ impl std::fmt::Debug for LocatedListing {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ParseResult {
     /// Success for a complete file
     SuccessComplete(InnerLocatedListing),

@@ -12,7 +12,7 @@ use failure::Fail;
 use parser::parse_basic_program;
 use tokens::BasicToken;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Basic line representation
 pub enum BasicProgramLineIdx {
     /// The basic line is indexed by its position in the listing
@@ -21,7 +21,7 @@ pub enum BasicProgramLineIdx {
     Number(u16)
 }
 
-#[derive(Debug, Fail, PartialEq, Clone)]
+#[derive(Debug, Fail, PartialEq, Eq, Clone)]
 #[allow(missing_docs)]
 pub enum BasicError {
     #[fail(display = "Line does not exist: {:?}", idx)]
