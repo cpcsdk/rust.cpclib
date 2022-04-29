@@ -1,5 +1,6 @@
 use cpclib_asm::assemble;
-use cpclib_asm::preamble::ParserContext;
+use cpclib_asm::preamble::{ParserContext, parse_z80_line_label_aware_directive, Z80Span, parse_z80_line_complete, parse_crunched_section};
+use std::ops::Deref;
 
 lazy_static::lazy_static! {
     static ref CTX: ParserContext = Default::default();
@@ -7,6 +8,14 @@ lazy_static::lazy_static! {
 
 fn ctx() -> &'static ParserContext {
     &CTX
+}
+
+fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
+	let mut ctx = Box::new(ParserContext::default());
+	ctx.source = Some(code);
+	ctx.context_name = Some("TEST".into());
+	let span = Z80Span::new_extra(code, ctx.deref());
+	(ctx, span)
 }
 
 #[test]
@@ -325,4 +334,40 @@ BD = B_ + D_
 
     let bin = dbg!(assemble(code, ctx()));
     assert!(bin.is_ok());
+}
+
+
+#[test]
+fn label_colon_equ() {
+
+	let code = "PLY_AKY_OPCODE_OR_A: equ #b7";
+	let (ctx, span) = ctx_and_span(code);
+
+	assert!(
+		dbg!(parse_z80_line_label_aware_directive(span.clone())).is_ok()
+	);
+
+	assert!(
+		dbg!(parse_z80_line_complete(span)).is_ok()
+	);
+}
+
+
+#[test]
+fn lzclose() {
+
+	let code = "LZX0
+	INNER_START
+			defs 100
+	INNER_STOP
+		LZCLOSE";
+	let (ctx, span) = ctx_and_span(code);
+
+	assert!(
+		dbg!(parse_crunched_section(span.clone())).is_ok()
+	);
+
+	assert!(
+		dbg!(parse_z80_line_complete(span)).is_ok()
+	);
 }

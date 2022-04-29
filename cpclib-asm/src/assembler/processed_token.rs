@@ -481,9 +481,9 @@ pub fn build_processed_tokens_list<
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
-    #[cfg(not(target_arch = "wasm32"))]
-    let iter = tokens.par_iter();
-    #[cfg(target_arch = "wasm32")]
+   // #[cfg(not(target_arch = "wasm32"))]
+  //  let iter = tokens.par_iter();
+  //  #[cfg(target_arch = "wasm32")]
     let iter = tokens.iter();
 
     iter.map(|t| build_processed_token(t, env)) 

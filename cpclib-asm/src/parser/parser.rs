@@ -212,8 +212,9 @@ const STAND_ALONE_DIRECTIVE: &[&str] = &[
 
 const START_DIRECTIVE: &[&str] = &[
     "CONFINED",
-    "FOR", "IF", "IFDEF", "IFNDEF", "IFUSED", "ITER", "ITERATE", "LZ4", "LZ48", "LZ49", "LZAPU",
-    "LZEXO", "LZX7", "MACRO", "MODULE", "PHASE", "REPEAT", "REPT", "STRUCT", "SWITCH", "WHILE"
+    "FOR", "IF", "IFDEF", "IFNDEF", "IFUSED", "ITER", "ITERATE", "LZ4", "LZ48", "LZ49", "LZ48", "LZAPU", "LZX0",
+    "LZEXO", "LZ4", "LZX7", 
+    "MACRO", "MODULE", "PHASE", "REPEAT", "REPT", "STRUCT", "SWITCH", "WHILE"
 ];
 
 // This table is supposed to contain the keywords that finish a section
@@ -549,7 +550,7 @@ pub fn parse_crunched_section(input: Z80Span) -> IResult<Z80Span, LocatedToken, 
     ))(input)?;
 
     let (input, _) = cut(context(
-        "REPEAT: not closed",
+        "CRUNCHED SECTION section: not closed",
         tuple((space0, parse_directive_word("LZCLOSE"), space0))
     ))(input)?;
 
@@ -1029,6 +1030,11 @@ pub fn parse_z80_line_complete(
             tuple((space0, tag(":"), space0)),
             // Take care of the order to not break parse
             alt((
+                map(
+                    // handle set/equ/ and so on
+                    parse_z80_line_label_aware_directive,
+                    |l| vec![l]
+                ),
                 // move all of these in z80_line_component and rename line_component in something else ...
                 map(
                     // a simple token mnemonic or directive (except macro call)
@@ -1040,11 +1046,7 @@ pub fn parse_z80_line_complete(
                     preceded(space0, parse_z80_directive_with_block),
                     |b| vec![b]
                 ),
-                map(
-                    // handle set/equ/ and so on
-                    parse_z80_line_label_aware_directive,
-                    |l| vec![l]
-                ),
+
                 map(
                     // a label followed by a simple token mnomonic or directive (except macro call)
                     pair(
@@ -1134,7 +1136,7 @@ pub fn parse_z80_line_label_aware_directive(
     let (input, r#let) = opt(delimited(space0, parse_directive_word("LET"), space0))(input)?;
 
     let _after_let = input.clone();
-    let (input, label) = context("Label issue", preceded(space0, parse_label(false)))(input)?;
+    let (input, label) = context("Label issue", preceded(space0, parse_label(true)))(input)?; // here there is true because of arkos tracker 2 player
 
     // TODO make these stuff alternatives ...
     // Manage Equ
@@ -3651,7 +3653,8 @@ pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserEr
     verify(
         recognize(tuple((
             one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"),
-            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
+            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"),
+            not(char('{'))
         ))),
         move |name: &Z80Span| {
             let _first = name.fragment().chars().next().unwrap();

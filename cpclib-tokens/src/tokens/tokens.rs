@@ -401,19 +401,35 @@ impl ListingElement for Token {
     }
 
     fn is_switch(&self) -> bool {
-        todo!()
+        match self {
+            Self::Switch(..) => true,
+            _ => false
+        }
     }
 
     fn switch_expr(&self) -> &Self::Expr {
-        todo!()
+        match self {
+            Self::Switch(expr, ..) => expr,
+            _ => unreachable!()
+        }
     }
 
     fn switch_cases(&self) -> Box<dyn Iterator<Item=(&Self::Expr, &[Self], bool) > + '_>  {
-        todo!()
+        match self {
+            Self::Switch(_, cases, ..) => Box::new(cases.iter().map(|c|{(
+                &c.0,
+                c.1.as_slice(),
+                c.2
+            )})),
+            _ => unreachable!()
+        }
     }
 
     fn switch_default(&self) -> Option<&[Self]> {
-        todo!()
+        match self {
+            Self::Switch(_, _, default, ..) => default.as_ref().map(|l| l.as_slice()),
+            _ => unreachable!()
+        }
     }
 }
 
