@@ -496,7 +496,7 @@ impl Default for Env {
             macro_seed: 0,
             charset_encoding: CharsetEncoding::new(),
             sna: {
-                let mut sna = Snapshot::new_6128().unwrap();
+                let mut sna = Snapshot::default(); //Snapshot::new_6128().unwrap();
                 sna.unwrap_memory_chunks();
                 sna
             },
