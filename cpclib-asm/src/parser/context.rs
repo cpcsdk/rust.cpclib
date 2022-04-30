@@ -96,6 +96,7 @@ pub struct ParserContext {
     pub search_path: Vec<PathBuf>,
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
     pub read_referenced_files: bool,
+    pub show_progress: bool,
     /// Set to true when directives must start by a dot
     pub dotted_directive: bool,
     /// indicate we are parsing a listing generating by a struct
@@ -111,6 +112,7 @@ impl Eq for ParserContext {
 impl PartialEq for ParserContext {
     fn eq(&self, other: &Self) -> bool {
         self.state == other.state && self.current_filename == other.current_filename && self.context_name == other.context_name && self.search_path == other.search_path && self.read_referenced_files == other.read_referenced_files && self.dotted_directive == other.dotted_directive && self.parse_warning.read().unwrap().deref() == other.parse_warning.read().unwrap().deref() && self.source == other.source
+        && self.show_progress == other.show_progress
     }
 }
 
@@ -124,7 +126,8 @@ impl Clone for ParserContext {
             parse_warning: self.parse_warning.write().unwrap().clone().into(),
             state: self.state.clone(),
             dotted_directive: self.dotted_directive.clone(),
-            source: self.source.clone()
+            source: self.source.clone(),
+            show_progress: self.show_progress
         }
     }
 }
@@ -139,7 +142,8 @@ impl Default for ParserContext {
             parse_warning: Default::default(),
             state: ParsingState::Standard,
             dotted_directive: false,
-            source: None
+            source: None,
+            show_progress: false
         }
     }
 }
@@ -154,6 +158,7 @@ impl ParserContext {
             parse_warning: self.parse_warning.write().unwrap().clone().into(),
             dotted_directive: self.dotted_directive.clone(),
             source: self.source.clone(),
+            show_progress: self.show_progress.clone(),
             state
         }
     }

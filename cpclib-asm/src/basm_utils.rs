@@ -91,10 +91,13 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
     let inline_fname = "<inline code>";
     let filename = matches.value_of("INPUT").unwrap_or(inline_fname);
 
+    let show_progress = matches.is_present("PROGRESS");
+
     // prepare the context for the included directories
     let mut context = ParserContext::default();
     context.set_dotted_directives(matches.is_present("DOTTED_DIRECTIVES"));
     context.set_current_filename(&filename);
+    context.show_progress = show_progress;
 
     match std::env::current_dir() {
         Ok(cwd) => {
@@ -141,17 +144,26 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
             context.context_name.as_ref().unwrap()
         });
 
-    let bar = Progress::progress()
-        .add_bar("Parse sources");
+    let bar = if context.show_progress{
+        Some(Progress::progress()
+            .add_bar("Parse sources"))
+    } else {
+        None
+    };
 
 
     let res = crate::parse_z80_str_with_context(code, context.clone())
         .map_err(|e| BasmError::from(AssemblerError::AlreadyRenderedError(e.to_string())));
 
-    if res.is_ok() {
-        Progress::progress().remove_bar_ok(&bar);
-    } else {
-        Progress::progress().remove_bar_err(&bar, "Parse error");
+    match bar {
+        Some(bar) => {
+            if res.is_ok() {
+                Progress::progress().remove_bar_ok(&bar);
+            } else {
+                Progress::progress().remove_bar_err(&bar, "Parse error");
+            }
+        }
+        None => {}
     }
 
     res
@@ -163,6 +175,11 @@ pub fn assemble<'arg>(
     matches: &'arg ArgMatches,
     listing: &LocatedListing
 ) -> Result<Env, BasmError> {
+
+    let show_progress = matches.is_present("PROGRESS");
+
+
+
     let mut options = AssemblingOptions::default();
     options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
 
@@ -215,13 +232,19 @@ pub fn assemble<'arg>(
         }
     }
 
-    let bar = Progress::progress()
-    .add_bar("Assemble sources");
+    let bar = if show_progress {
+        Some(Progress::progress()
+            .add_bar("Assemble sources"))
+    } else {
+        None
+    };
 
     let (tokens, mut env) = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
         .map_err(|e| BasmError::AssemblerError { error: e })?;
 
-    Progress::progress().remove_bar_ok(&bar);
+    if let Some(bar) = bar {
+        Progress::progress().remove_bar_ok(&bar);
+    }
 
     env.handle_post_actions()
         .map_err(|e| BasmError::AssemblerError { error: e })?;
@@ -254,8 +277,15 @@ pub fn assemble<'arg>(
 /// TODO manage the various save options and delegate them with save commands
 pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
-    let bar = Progress::progress()
-    .add_bar("Save result");
+    let show_progress = matches.is_present("PROGRESS");
+
+
+    let bar = if show_progress {
+        Some(Progress::progress()
+            .add_bar("Save result"))
+    } else {
+        None
+    };
 
     if matches.is_present("SNAPSHOT") {
         let pc_filename = matches.value_of("OUTPUT").unwrap();
@@ -337,7 +367,9 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
         }
     }
 
-    Progress::progress().remove_bar_ok(&bar);
+    if let Some(bar) = bar {
+        Progress::progress().remove_bar_ok(&bar);
+    }
 
     Ok(())
 }
@@ -475,6 +507,11 @@ pub fn build_args_parser() -> clap::Command<'static> {
                         .help("Warning are considered to be errors")
                         .long("Werror")
                         .takes_value(false)
+                    )
+                    .arg(
+                        Arg::new("PROGRESS")
+                        .help("Show a progress bar.")
+                        .long("progress")
                     )
 					.group( // only one type of header can be provided
 						ArgGroup::new("HEADER")

@@ -279,25 +279,33 @@ pub fn parse_z80_str_with_context<S: Into<String>>(
     context: ParserContext
 ) -> Result<LocatedListing, AssemblerError> {
 
-    let fname = context.current_filename
-    .as_ref()
-    .map(|fname| {
-        fname.to_str().unwrap()
-    })
-    .unwrap_or_else(||{
-        context.context_name.as_ref().unwrap()
-    });
+    let bar = if context.show_progress{
+        let fname = context.current_filename
+        .as_ref()
+        .map(|fname| {
+            fname.to_str().unwrap()
+        })
+        .unwrap_or_else(||{
+            context.context_name.as_ref().unwrap()
+        });
 
-    let bar = Progress::progress().add_bar(&format!("Parse {}", fname));
-
+        Some(Progress::progress().add_bar(&format!("Parse {}", fname)))
+    } else {
+        None
+    };
 
     let res = LocatedListing::new_complete_source(str.into(), context.clone())
         .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)));
 
-    if res.is_ok() {
-        Progress::progress().remove_bar_ok(&bar);
-    } else {
-        Progress::progress().remove_bar_err(&bar, "Parse error");
+    match bar {
+        Some(bar) => {
+            if res.is_ok() {
+                Progress::progress().remove_bar_ok(&bar);
+            } else {
+                Progress::progress().remove_bar_err(&bar, "Parse error");
+            }
+        },
+        None => {}
     }
 
     res
