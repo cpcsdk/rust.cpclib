@@ -842,11 +842,12 @@ impl Env {
 
     /// Handle the actions to do after assembling.
     /// ATM it is only the save of data for each page
-    fn handle_post_actions(&mut self) -> Result<Vec<SavedFile>, AssemblerError> {
+    pub fn handle_post_actions(&mut self) -> Result<(), AssemblerError> {
         self.handle_assert()?;
         self.handle_print()?;
         self.handle_breakpoints()?;
-        self.handle_file_save()
+        self.saved_files = Some(self.handle_file_save()?);
+        Ok(())
     }
 
     /// We handle breakpoint ONLY for the pages stored in the snapshot
@@ -2306,7 +2307,6 @@ where
         trigger.finish()
     }
 
-    env.saved_files = Some(env.handle_post_actions()?);
 
     Ok(env)
 }
