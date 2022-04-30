@@ -10,6 +10,8 @@ use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 use crate::assembler::file::{get_filename, handle_source_encoding};
 use crate::preamble::*;
+use crate::progress::Progress;
+
 
 #[derive(Debug)]
 pub enum BasmError {
@@ -130,8 +132,29 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
         panic!("No code provided to assemble");
     };
 
-    crate::parse_z80_str_with_context(code, context)
-        .map_err(|e| BasmError::from(AssemblerError::AlreadyRenderedError(e.to_string())))
+    let fname = context.current_filename
+        .as_ref()
+        .map(|fname| {
+            fname.to_str().unwrap()
+        })
+        .unwrap_or_else(||{
+            context.context_name.as_ref().unwrap()
+        });
+
+    let bar = Progress::progress()
+        .add_bar("Parse sources");
+
+
+    let res = crate::parse_z80_str_with_context(code, context.clone())
+        .map_err(|e| BasmError::from(AssemblerError::AlreadyRenderedError(e.to_string())));
+
+    if res.is_ok() {
+        Progress::progress().remove_bar_ok(&bar);
+    } else {
+        Progress::progress().remove_bar_err(&bar, "Parse error");
+    }
+
+    res
 }
 
 /// Assemble the given code
@@ -192,8 +215,14 @@ pub fn assemble<'arg>(
         }
     }
 
+    let bar = Progress::progress()
+    .add_bar("Assemble sources");
+
     let env = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
         .map_err(|e| BasmError::AssemblerError { error: e })?;
+
+    Progress::progress().remove_bar_ok(&bar);
+
 
     if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
         if dest == "-" {
@@ -221,6 +250,10 @@ pub fn assemble<'arg>(
 /// Save the provided result
 /// TODO manage the various save options and delegate them with save commands
 pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
+
+    let bar = Progress::progress()
+    .add_bar("Save result");
+
     if matches.is_present("SNAPSHOT") {
         let pc_filename = matches.value_of("OUTPUT").unwrap();
         env.save_sna(pc_filename).map_err(|e| {
@@ -300,6 +333,9 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             })?;
         }
     }
+
+    Progress::progress().remove_bar_ok(&bar);
+
     Ok(())
 }
 

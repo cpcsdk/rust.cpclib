@@ -623,7 +623,9 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
+ "regex",
  "terminal_size",
+ "unicode-width",
  "winapi 0.3.9",
 ]
 
@@ -803,6 +805,7 @@ dependencies = [
  "failure",
  "getset",
  "globset",
+ "indicatif",
  "lazy_static",
  "libc",
  "matches",
@@ -2433,6 +2436,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "indicatif"
+version = "0.17.0-rc.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "088977cb4de4e09ea0232bd51c844490475ad94344fb0c60784f1fb380059b6d"
+dependencies = [
+ "console",
+ "number_prefix",
+ "unicode-width",
+]
+
+[[package]]
 name = "inflate"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3170,6 +3184,12 @@ checksum = "97ba99ba6393e2c3734791401b66902d981cb03bf190af674ca69949b6d5fb15"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "number_prefix"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 
 [[package]]
 name = "objc"

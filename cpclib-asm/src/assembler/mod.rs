@@ -1821,7 +1821,7 @@ impl Env {
 
         let page = self.resolve_expr_must_never_fail(exp)?.int()? as u8; // This value MUST be interpretable once executed
 
-        eprintln!("Warning need to code sna memory extension if needed");
+ //       eprintln!("Warning need to code sna memory extension if needed");
         self.select_page(page)?;
         Ok(())
     }

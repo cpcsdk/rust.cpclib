@@ -24,6 +24,7 @@ use super::context::*;
 use super::obtained::*;
 use super::*;
 use crate::preamble::*;
+use crate::progress::Progress;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Z80ParserErrorKind {
@@ -275,10 +276,31 @@ lazy_static::lazy_static! {
 /// In case of success loop over all the tokens in order to expand those that read files
 pub fn parse_z80_str_with_context<S: Into<String>>(
     str: S,
-    ctx: ParserContext
+    context: ParserContext
 ) -> Result<LocatedListing, AssemblerError> {
-    LocatedListing::new_complete_source(str.into(), ctx)
-        .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)))
+
+    let fname = context.current_filename
+    .as_ref()
+    .map(|fname| {
+        fname.to_str().unwrap()
+    })
+    .unwrap_or_else(||{
+        context.context_name.as_ref().unwrap()
+    });
+
+    let bar = Progress::progress().add_bar(&format!("Parse {}", fname));
+
+
+    let res = LocatedListing::new_complete_source(str.into(), context.clone())
+        .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)));
+
+    if res.is_ok() {
+        Progress::progress().remove_bar_ok(&bar);
+    } else {
+        Progress::progress().remove_bar_err(&bar, "Parse error");
+    }
+
+    res
 }
 
 /// TODO better to build parse_z80_str_with_context from parse_z80_span than the opposite
