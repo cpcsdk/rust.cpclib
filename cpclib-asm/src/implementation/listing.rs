@@ -71,7 +71,7 @@ impl ListingExt for Listing {
         &self,
         options: &AssemblingOptions
     ) -> Result<Vec<u8>, AssemblerError> {
-        let env = crate::assembler::visit_tokens_all_passes_with_options(
+        let (_,env) = crate::assembler::visit_tokens_all_passes_with_options(
             &self.listing(),
             options,
             &ParserContext::default()

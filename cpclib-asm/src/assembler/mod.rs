@@ -2215,7 +2215,7 @@ where
     ProcessedToken<'token, T>: FunctionBuilder
 {
     let options = AssemblingOptions::default();
-    visit_tokens_all_passes_with_options(tokens, &options, ctx)
+    visit_tokens_all_passes_with_options(tokens, &options, ctx).map(|r| r.1) // TODO really return both
 }
 
 impl Env {
@@ -2274,7 +2274,7 @@ pub fn visit_tokens_all_passes_with_options<'token, T>(
     tokens: &'token [T],
     options: &AssemblingOptions,
     ctx: &ParserContext
-) -> Result<Env, AssemblerError>
+) -> Result<(Vec<ProcessedToken<'token, T>>, Env), AssemblerError>
 where
     T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
@@ -2308,7 +2308,7 @@ where
     }
 
 
-    Ok(env)
+    Ok((tokens,env))
 }
 
 /// Visit the tokens during a single pass. Is deprecated in favor to the mulitpass version

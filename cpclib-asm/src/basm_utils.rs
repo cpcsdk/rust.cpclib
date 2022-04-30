@@ -218,7 +218,7 @@ pub fn assemble<'arg>(
     let bar = Progress::progress()
     .add_bar("Assemble sources");
 
-    let mut env = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
+    let (tokens, mut env) = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
         .map_err(|e| BasmError::AssemblerError { error: e })?;
 
     Progress::progress().remove_bar_ok(&bar);
