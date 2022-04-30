@@ -283,7 +283,12 @@ pub fn parse_z80_str_with_context<S: Into<String>>(
         let fname = context.current_filename
         .as_ref()
         .map(|fname| {
+            let cwd = std::env::current_dir()
+                .unwrap();
+            let cwd = format!("{}/", cwd.to_str()
+                .unwrap());
             fname.to_str().unwrap()
+                .trim_start_matches(&cwd)
         })
         .unwrap_or_else(||{
             context.context_name.as_ref().unwrap()
