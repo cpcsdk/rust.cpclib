@@ -246,6 +246,7 @@ impl DelayedCommands {
     }
 
     pub fn execute_print_or_pause(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
+        // todo aggregate successive print to write them in one time
         let res = self
             .print_commands
             .iter()

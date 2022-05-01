@@ -7,7 +7,7 @@ fn build_sna(code: &str) -> Snapshot {
     let ctx = ParserContext::default();
     let options = AssemblingOptions::default();
     let listing = parse_z80_str_with_context(code, ctx).expect("Unable to parse z80 code");
-    let env = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
+    let (_, env) = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
         .expect("Unable to assemble z80 code");
     let sna = env.sna().clone();
 

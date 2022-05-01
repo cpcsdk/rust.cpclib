@@ -101,7 +101,7 @@ pub fn asm_assemble_snapshot(
                     console::log_1(&"ASM error".into());
                     JsAssemblerError::from(e)
                 })
-                .map(|env| {
+                .map(|(_, env)| {
                     console::log_1(&"SNA OK".into());
                     let sna = env.sna();
                     let mut sna = sna.clone();
