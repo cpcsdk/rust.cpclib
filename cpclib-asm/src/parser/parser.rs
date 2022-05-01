@@ -574,7 +574,6 @@ pub fn parse_crunched_section(input: Z80Span) -> IResult<Z80Span, LocatedToken, 
             map(parse_directive_word("LZ49"), |_| CrunchType::LZ49),
             map(parse_directive_word("LZX7"), |_| CrunchType::LZX7),
             map(parse_directive_word("LZX0"), |_| CrunchType::LZX0),
-            #[cfg(not(target_arch = "wasm32"))]
             map(parse_directive_word("LZAPU"), |_| CrunchType::LZAPU)
         ))
     )(input)?;
@@ -1378,11 +1377,12 @@ pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
             alt((tag_no_case("INCBIN"), tag_no_case("BINCLUDE"))),
             |_| BinaryTransformation::None
         ),
-        map(tag_no_case("INCEXO"), |_| BinaryTransformation::Exomizer),
-        map(tag_no_case("INCL48"), |_| BinaryTransformation::Lz48),
-        map(tag_no_case("INCL49"), |_| BinaryTransformation::Lz49),
-        #[cfg(not(target_arch = "wasm32"))]
-        map(tag_no_case("INCAPU"), |_| BinaryTransformation::Aplib)
+        map(tag_no_case("INCEXO"), |_| BinaryTransformation::Crunch(CrunchType::LZEXO)),
+        map(tag_no_case("INCLZ4"), |_| BinaryTransformation::Crunch(CrunchType::LZ4)),
+        map(tag_no_case("INCL48"), |_| BinaryTransformation::Crunch(CrunchType::LZ48)),
+        map(tag_no_case("INCL49"), |_| BinaryTransformation::Crunch(CrunchType::LZ49)),
+        map(tag_no_case("INCAPU"), |_| BinaryTransformation::Crunch(CrunchType::LZAPU)),
+        map(tag_no_case("INCZX0"), |_| BinaryTransformation::Crunch(CrunchType::LZX0)),
     ))(input)?;
 
     let (input, fname) = preceded(space1, parse_fname)(input)?;

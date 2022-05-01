@@ -1,3 +1,6 @@
+
+#ifndef __wasm
+
 /*
 https://raw.githubusercontent.com/EdouardBERGE/rasm/85246ce1cd9e9467b05f116647eea1ca8591433a/lz4.h
 
@@ -3345,3 +3348,5 @@ unsigned char *LZ4_crunch(unsigned char *data, int zelen, int *retlen){
 	*retlen=LZ4_compress_HC((char*)data,(char*)lzdest,zelen,65536,9);
 	return lzdest;
 }
+
+#endif

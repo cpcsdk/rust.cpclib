@@ -1,3 +1,5 @@
+#ifndef __wasm
+
 /*
  * (c) Copyright 2021 by Einar Saukas. All rights reserved.
  *
@@ -48,3 +50,4 @@ unsigned char *zx0_compress(BLOCK *optimal, unsigned char *input_data, int input
 unsigned char * do_zx0_compress(unsigned char * input_data, int input_size, int *slzlen) ;
 
 
+#endif

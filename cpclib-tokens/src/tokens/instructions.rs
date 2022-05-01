@@ -364,7 +364,6 @@ pub enum CrunchType {
     LZX7,
     LZX0,
     LZEXO,
-    #[cfg(not(target_arch = "wasm32"))]
     LZAPU
 }
 
@@ -451,25 +450,14 @@ impl TestKindElement for TestKind {
 pub enum BinaryTransformation {
     // Raw include of the data
     None,
-    // Compression with exomizer
-    Exomizer,
-    // Compression with lz49
-    Lz49,
-    Lz48,
-    // compression with aplib
-    #[cfg(not(target_arch = "wasm32"))]
-    Aplib
+    Crunch(CrunchType)
 }
 
 impl BinaryTransformation {
     pub fn crunch_type(&self) -> Option<CrunchType> {
         match self {
             BinaryTransformation::None => None,
-            BinaryTransformation::Exomizer => Some(CrunchType::LZEXO),
-            BinaryTransformation::Lz49 => Some(CrunchType::LZ49),
-            #[cfg(not(target_arch = "wasm32"))]
-            BinaryTransformation::Aplib => Some(CrunchType::LZAPU),
-            BinaryTransformation::Lz48 => Some(CrunchType::LZ48)
+            BinaryTransformation::Crunch(crunch) => Some(*crunch)
         }
     }
 }
@@ -843,11 +831,17 @@ impl fmt::Display for Token {
 
                     let directive = match transformation {
                         BinaryTransformation::None => "INCBIN",
-                        BinaryTransformation::Exomizer => "INCEXO",
-                        BinaryTransformation::Lz49 => "INCL49",
-                        #[cfg(not(target_arch = "wasm32"))]
-                        BinaryTransformation::Aplib => "INCAPU",
-                        BinaryTransformation::Lz48 =>"INCL48",
+                        BinaryTransformation::Crunch(crunch) => {
+                            match crunch {
+                                CrunchType::LZ48 =>"INCL48",
+                                CrunchType::LZ49 => "INCL49",
+                                CrunchType::LZ4 =>"INCLZ4",
+                                CrunchType::LZX7 =>"INCZX7",
+                                CrunchType::LZX0 => "INCZX0",
+                                CrunchType::LZEXO => "INCEXO",
+                                CrunchType::LZAPU => "INCAPU"
+                            }
+                        }
                     };
 
                      write!(f, "{} \"{}\"", directive, fname)?;

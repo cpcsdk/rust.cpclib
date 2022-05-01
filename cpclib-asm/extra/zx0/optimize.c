@@ -1,3 +1,4 @@
+#ifndef __wasm
 /*
  * (c) Copyright 2021 by Einar Saukas. All rights reserved.
  *
@@ -135,3 +136,4 @@ BLOCK* zx0_optimize(unsigned char *input_data, int input_size, int skip, int off
 
     return optimal[input_size-1];
 }
+#endif

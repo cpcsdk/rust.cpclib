@@ -12,6 +12,9 @@ To sum up:
 
 */
 
+#ifndef __wasm
+
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -4954,3 +4957,4 @@ printf("crunching with exomizer (the art of patience...)\n");
 
     return output_data;
 }
+#endif

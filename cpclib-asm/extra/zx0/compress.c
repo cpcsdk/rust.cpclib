@@ -1,3 +1,5 @@
+#ifndef __wasm
+
 /*
  * (c) Copyright 2021 by Einar Saukas. All rights reserved.
  *
@@ -179,3 +181,4 @@ unsigned char * do_zx0_compress(unsigned char * input_data, int input_size, int 
 
     return newdata;
 }
+#endif

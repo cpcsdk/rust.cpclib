@@ -1,3 +1,4 @@
+#ifndef __wasm
 /*
  * (c) Copyright 2021 by Einar Saukas. All rights reserved.
  *
@@ -73,3 +74,4 @@ void assign(BLOCK **ptr, BLOCK *chain) {
     }
     *ptr = chain;
 }
+#endif

@@ -2,6 +2,9 @@
 pub mod apultra;
 pub mod lz48;
 pub mod lz49;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod exomizer;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod zx0;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod lz4;
