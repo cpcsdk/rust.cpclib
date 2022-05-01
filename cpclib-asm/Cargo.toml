@@ -20,6 +20,7 @@ cpclib-tokens = "0.6.0"
 cpclib-disc = "0.6.0"
 cpclib-common = "0.6.0"
 cpclib-image = "0.6.0"
+cpclib-xfer = "0.6.0"
 
 
 #humantime = "2.1.0"

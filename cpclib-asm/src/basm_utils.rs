@@ -7,6 +7,7 @@ use std::path::Path;
 use cpclib_common::clap;
 use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
+use cpclib_xfer::CpcXfer;
 
 use crate::assembler::file::{get_filename, handle_source_encoding};
 use crate::preamble::*;
@@ -295,6 +296,17 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 ctx: format!("saving \"{}\"", pc_filename)
             }
         })?;
+
+
+        match matches.value_of("TO_M4") {
+            Some(m4) => {
+                let xfer = CpcXfer::new(m4);
+                xfer.upload_and_run(pc_filename, None)
+                    .expect("An error occured while transfering the snapshot");
+            },
+            None => {}
+        } 
+
     }
     else if matches.is_present("OUTPUT") || matches.is_present("DB_LIST") {
         // Collect the produced bytes
@@ -492,6 +504,15 @@ pub fn build_args_parser() -> clap::Command<'static> {
                             .short('D')
                             .takes_value(true)
                             .multiple_occurrences(true)
+                            .number_of_values(1)
+                    )
+                    .arg(
+                        Arg::new("TO_M4")
+                            .help("Provide the IP address of the M4")
+                            .long("m4")
+                            .takes_value(true)
+                            .multiple_occurrences(false)
+                            .requires("SNAPSHOT")
                             .number_of_values(1)
                     )
                     .arg(

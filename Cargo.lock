@@ -798,6 +798,7 @@ dependencies = [
  "cpclib-image",
  "cpclib-sna",
  "cpclib-tokens",
+ "cpclib-xfer",
  "custom_error",
  "delegate",
  "either",
