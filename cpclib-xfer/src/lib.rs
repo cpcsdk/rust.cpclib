@@ -233,8 +233,6 @@ impl CpcXfer {
         );
         let destination = destination.to_str().unwrap().to_owned();
 
-        println!("Destination : {:?}", destination);
-
         let mut form = Form::new();
         form.part("upfile")
             .file(local_fname)
