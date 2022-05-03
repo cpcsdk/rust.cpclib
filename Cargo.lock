@@ -806,6 +806,7 @@ dependencies = [
  "failure",
  "getset",
  "globset",
+ "hashbag",
  "indicatif",
  "lazy_static",
  "libc",
@@ -2231,6 +2232,12 @@ name = "half"
 version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
+
+[[package]]
+name = "hashbag"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "021a178f0e7e9ff6f9312759b849f0fbadf22ee8666ac163d502a8496691c01a"
 
 [[package]]
 name = "hashbrown"

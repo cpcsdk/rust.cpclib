@@ -283,18 +283,15 @@ pub fn parse_z80_str_with_context<S: Into<String>>(
         let fname = context.current_filename
         .as_ref()
         .map(|fname| {
-            let cwd = std::env::current_dir()
-                .unwrap();
-            let cwd = format!("{}/", cwd.to_str()
-                .unwrap());
-            fname.to_str().unwrap()
-                .trim_start_matches(&cwd)
+            fname.file_name().unwrap()
+            .to_str().unwrap()
         })
         .unwrap_or_else(||{
             context.context_name.as_ref().unwrap()
         });
 
-        Some(Progress::progress().add_bar(&format!("Parse {}", fname)))
+        Progress::progress().add_parse(fname);
+        Some(fname)
     } else {
         None
     };
@@ -303,11 +300,10 @@ pub fn parse_z80_str_with_context<S: Into<String>>(
         .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)));
 
     match bar {
-        Some(bar) => {
+        Some(fname) => {
             if res.is_ok() {
-                Progress::progress().remove_bar_ok(&bar);
+                Progress::progress().remove_parse(&fname);
             } else {
-                Progress::progress().remove_bar_err(&bar, "Parse error");
             }
         },
         None => {}

@@ -8,6 +8,7 @@ use super::Env;
 use super::embedded::EmbeddedFiles;
 use crate::error::AssemblerError;
 use crate::preamble::ParserContext;
+use crate::progress::Progress;
 
 pub fn get_filename(
     fname: &str,
@@ -44,6 +45,13 @@ pub fn load_binary(
 
     let fname_repr = fname.to_str().unwrap();
 
+    let progress = if ctx.show_progress {
+        Progress::progress().add_load(fname_repr);
+        Some(fname_repr)
+    } else {
+        None
+    };
+
     let content = if fname_repr.starts_with("inner://"){
         // handle inner file
         EmbeddedFiles::get(fname_repr)
@@ -71,6 +79,9 @@ pub fn load_binary(
         content
     };
 
+    if let Some(progress) = progress {
+        Progress::progress().remove_load(progress);
+    }
     Ok(content)
 
 }
