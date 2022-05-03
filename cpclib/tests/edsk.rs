@@ -75,7 +75,8 @@ mod tests {
         let dsk = cpclib::disc::edsk::ExtendedDsk::open("./tests/dsk/pirate.dsk").unwrap();
         test_single_dsk(&dsk);
 
-        let tmp_file = "/tmp/tmp.dsk";
+        let f = tempfile::NamedTempFile::new().unwrap();
+        let tmp_file = f.path();
         dsk.save(tmp_file).unwrap();
         let dsk = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
         test_single_dsk(&dsk);
@@ -93,7 +94,9 @@ mod tests {
         let dsk = cpclib::disc::edsk::ExtendedDsk::open("./tests/dsk/bf2sides.dsk").unwrap();
         test_double_head_bf_edsk(&dsk);
 
-        let tmp_file = "/tmp/tmp.dsk";
+        let f = tempfile::NamedTempFile::new().unwrap();
+
+        let tmp_file = f.path();
         dsk.save(tmp_file).unwrap();
         let dsk = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
         test_double_head_bf_edsk(&dsk);
@@ -101,7 +104,8 @@ mod tests {
 
     #[test]
     fn save_edsk() {
-        let tmp_file = "/tmp/tmp.dsk";
+        let f = tempfile::NamedTempFile::new().unwrap();
+        let tmp_file = f.path();
         let dsk1 = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/pirate.dsk").unwrap();
         dsk1.save(tmp_file).unwrap();
         let _ds2 = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();

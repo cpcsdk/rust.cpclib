@@ -64,7 +64,8 @@ mod tests {
         );
 
         // Save to reload (directly from V2)
-        let tmp_fname = "/tmp/test.sna"; // TODO really use a tmp file
+        let f = tempfile::NamedTempFile::new().unwrap();
+        let tmp_fname = f.path(); // TODO really use a tmp file
         v2.save(tmp_fname, SnapshotVersion::V2)
             .expect("Unable to save");
 
@@ -84,7 +85,8 @@ mod tests {
         );
 
         // Should also work from V3
-        let tmp_fname = "/tmp/test.sna"; // TODO really use a tmp file
+        let f = tempfile::NamedTempFile::new().unwrap();
+        let tmp_fname = f.path();
         sna1.save(tmp_fname, SnapshotVersion::V2)
             .expect("Unable to save");
 
