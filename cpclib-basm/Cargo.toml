@@ -37,7 +37,7 @@ harness = false
 strip = true
 lto = true
 codegen-units = 1
-
+opt-level = 3
 [rust]
 debuginfo-level = 1
 

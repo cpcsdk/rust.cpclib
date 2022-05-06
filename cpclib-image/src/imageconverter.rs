@@ -48,8 +48,14 @@ pub type TransformationColumnPosition = TransformationPosition;
 /// List of all the possible transformations applicable to a ColorMatrix
 #[derive(Clone, Debug)]
 pub enum Transformation {
-    /// When using mode 0, do not read all the pixels lines
+    /// When using mode 0, do not read all the pixel columns
     SkipOddPixels,
+    /// Shorten lines of several pixel columns on the left
+    SkipLeftPixelColumns(u16),
+    /// Shorten columns of several pixel columns on the top
+    SkipTopPixelLines(u16), 
+    KeepLeftPixelColumns(u16),
+    KeepTopPixelLines(u16),
     /// Add artifical blank lines. The line is build by repeating the background the right amount of time
     BlankLines {
         /// The pattern to use to fill the background
@@ -85,13 +91,46 @@ impl Transformation {
     /// Apply the transformation to the given image
     pub fn apply(&self, matrix: &ColorMatrix) -> ColorMatrix {
         match self {
-            Self::SkipOddPixels => {
+            Transformation::SkipOddPixels => {
                 let mut res = matrix.clone();
                 res.remove_odd_columns();
                 res
             }
 
-            Self::BlankLines {
+            Transformation::SkipLeftPixelColumns(amount) => {
+                matrix.window(
+                    *amount as _, 
+                    0, 
+                    matrix.width().saturating_sub(*amount as _) as _,
+                    matrix.height() as _)
+            }
+
+            Transformation::SkipTopPixelLines(amount) => {
+                matrix.window(
+                    0 as _,
+                    *amount as _, 
+                    matrix.width() as _,
+                    matrix.height().saturating_sub(*amount as _) as _)
+            }
+
+            Transformation::KeepLeftPixelColumns(usize) => {
+                matrix.window(
+                    0, 
+                    0, 
+                    *usize as _, 
+                    matrix.height() as _)
+            }
+
+            Transformation::KeepTopPixelLines(usize) => {
+                matrix.window(
+                    0,
+                    0,
+                    matrix.width() as _,
+                    *usize as _
+                )
+            }
+
+            Transformation::BlankLines {
                 pattern,
                 position,
                 amount
@@ -116,7 +155,7 @@ impl Transformation {
                 res
             }
 
-            Self::BlankColumns {
+            Transformation::BlankColumns {
                 pattern,
                 position,
                 amount
@@ -138,6 +177,7 @@ impl Transformation {
 
                 res
             }
+
         }
     }
 
@@ -193,10 +233,29 @@ impl TransformationsList {
     }
 
     /// Add a transformation that remove one pixel column out of two
-    pub fn skip_odd_pixels(self) -> Self {
-        let mut transformations = self.transformations.clone();
-        transformations.push(Transformation::SkipOddPixels);
-        Self { transformations }
+    pub fn skip_odd_pixels(mut self) -> Self {
+        self.transformations.push(Transformation::SkipOddPixels);
+        self
+    }
+
+    pub fn column_start(mut self, count: u16) -> Self {
+        self.transformations.push(Transformation::SkipLeftPixelColumns(count));
+        self
+    }
+
+    pub fn columns_kept(mut self, count:u16) -> Self {
+        self.transformations.push(Transformation::KeepLeftPixelColumns(count));
+        self
+    }
+
+    pub fn lines_kept(mut self, count: u16) -> Self {
+        self.transformations.push(Transformation::KeepTopPixelLines(count));
+        self
+    }
+
+    pub fn line_start(mut self, count: u16) -> Self {
+        self.transformations.push(Transformation::SkipTopPixelLines(count));
+        self
     }
 
     /// Apply ALL the transformation (in order of addition)

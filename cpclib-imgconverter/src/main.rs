@@ -401,6 +401,30 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     if matches.is_present("SKIP_ODD_PIXELS") {
         transformations = transformations.skip_odd_pixels();
     }
+    if matches.is_present("PIXEL_COLUMN_START") {
+        transformations = transformations.column_start(
+            matches.value_of("PIXEL_COLUMN_START").unwrap()
+            .parse::<u16>().unwrap()
+        )
+    }
+    if matches.is_present("PIXEL_LINE_START") {
+        transformations = transformations.line_start(
+            matches.value_of("PIXEL_LINE_START").unwrap()
+            .parse::<u16>().unwrap()
+        )
+    }
+    if matches.is_present("PIXEL_COLUMNS_KEPT") {
+        transformations = transformations.columns_kept(
+            matches.value_of("PIXEL_COLUMNS_KEPT").unwrap()
+            .parse::<u16>().unwrap()
+        )
+    }
+    if matches.is_present("PIXEL_LINES_KEPT") {
+        transformations = transformations.lines_kept(
+            matches.value_of("PIXEL_LINES_KEPT").unwrap()
+            .parse::<u16>().unwrap()
+        )
+    }
 
     let sub_sna = matches.subcommand_matches("sna");
     let sub_m4 = matches.subcommand_matches("m4");
@@ -805,6 +829,7 @@ fn main() -> anyhow::Result<()> {
                             .default_value("linear")
                             .possible_values(&["linear", "graycoded", "zigzag+graycoded"])
                         )
+
                         .arg(
                             Arg::new("SPRITE_FNAME")
                             .takes_value(true)
@@ -912,6 +937,34 @@ fn main() -> anyhow::Result<()> {
                             .long("skipoddpixels")
                             .short('s')
                             .help("Skip odd pixels when reading the image (usefull when the picture is mode 0 with duplicated pixels")
+                    )
+                    .arg(
+                        Arg::new("PIXEL_COLUMN_START")
+                        .long("columnstart")
+                        .required(false)
+                        .help("Number of pixel columns to skip on the left.")
+                        .takes_value(true)
+                    )
+                    .arg(
+                        Arg::new("PIXEL_COLUMNS_KEPT")
+                        .long("columnskept")
+                        .required(false)
+                        .help("Number of pixel columns to keep.")
+                        .takes_value(true)
+                    )
+                    .arg(
+                        Arg::new("PIXEL_LINE_START")
+                        .long("linestart")
+                        .required(false)
+                        .help("Number of pixel lines to skip.")
+                        .takes_value(true)
+                    )
+                    .arg(
+                        Arg::new("PIXEL_LINES_KEPT")
+                        .long("lineskept")
+                        .required(false)
+                        .help("Number of pixel lines to keep.")
+                        .takes_value(true)
                     )
                     .arg(Arg::new("PENS")
                             .long("pens")
