@@ -157,6 +157,14 @@ pub struct ColorMatrix {
     data: Vec<Vec<Ink>>
 }
 
+impl From<Vec<Vec<Ink>>> for ColorMatrix {
+    fn from(data: Vec<Vec<Ink>>) -> Self {
+        ColorMatrix {
+            data
+        }
+    }
+}
+
 /// We have to choose a strategy when reducing the number of colors of an image.
 /// This enumeration allows to set up them
 #[derive(Debug, Copy, Clone)]
