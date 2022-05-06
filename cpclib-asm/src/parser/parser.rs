@@ -23,7 +23,7 @@ use cpclib_sna::{FlagValue, SnapshotVersion};
 use super::context::*;
 use super::obtained::*;
 use super::*;
-use crate::preamble::*;
+use crate::{preamble::*, progress};
 use crate::progress::Progress;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -279,35 +279,9 @@ pub fn parse_z80_str_with_context<S: Into<String>>(
     context: ParserContext
 ) -> Result<LocatedListing, AssemblerError> {
 
-    let bar = if context.show_progress{
-        let fname = context.current_filename
-        .as_ref()
-        .map(|fname| {
-            fname.file_name().unwrap()
-            .to_str().unwrap()
-        })
-        .unwrap_or_else(||{
-            context.context_name.as_ref().unwrap()
-        });
-
-        Progress::progress().add_parse(fname);
-        Some(fname)
-    } else {
-        None
-    };
 
     let res = LocatedListing::new_complete_source(str.into(), context.clone())
         .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)));
-
-    match bar {
-        Some(fname) => {
-            if res.is_ok() {
-                Progress::progress().remove_parse(&fname);
-            } else {
-            }
-        },
-        None => {}
-    }
 
     res
 }

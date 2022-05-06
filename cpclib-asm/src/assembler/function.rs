@@ -490,7 +490,7 @@ impl HardCodedFunction {
             HardCodedFunction::Load => {
                 let fname = params[0].string()?;
                 let ctx = &env.ctx;
-                let data = file::load_binary(Either::Right(fname), ctx, env)?;
+                let data = file::load_binary(Either::Right((fname, env)), ctx)?;
                 Ok(ExprResult::from(data.as_slice()))
             }
         }

@@ -1,5 +1,5 @@
-[build.x86_64-unknown-linux-gnu]
-rustc-wrapper = '/home/rgiot/.cargo/bin/sccache'
+#[build.x86_64-unknown-linux-gnu]
+#rustc-wrapper = '/home/rgiot/.cargo/bin/sccache'
 
 [target.x86_64-unknown-linux-gnu]
 rustflags = [

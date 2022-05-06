@@ -34,7 +34,9 @@ name = "basm_benchs"
 harness = false
 
 [profile.release]
-debug = 1
+strip = true
+lto = true
+codegen-units = 1
 
 [rust]
 debuginfo-level = 1

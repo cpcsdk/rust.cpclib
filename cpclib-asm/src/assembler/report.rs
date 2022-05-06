@@ -33,12 +33,16 @@ impl<'env> From<(&'env Env, &Instant)> for Report<'env> {
 
 impl<'env> Display for Report<'env> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        
         let duration = self.duration.as_secs_f64();
-        let saved = self.saved_files
-            .iter()
-            .map(|s| format!("Saved \"{}\" for {} bytes.\n", s.name, s.size))
-            .join("");
-        write!(f, "{}", saved)?;
+        
+        if false {
+            let saved = self.saved_files
+                .iter()
+                .map(|s| format!("Saved \"{}\" for {} bytes.\n", s.name, s.size))
+                .join("");
+            write!(f, "{}", saved)?;
+        }
         write!(
             f,
             "Assembled in {} passes and {}.",

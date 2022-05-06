@@ -229,6 +229,10 @@ impl DelayedCommands {
         Ok(res)
     }
 
+    pub fn nb_files_to_save(&self) -> usize {
+        self.save_commands.len()
+    }
+
     /// Return Ok if no assertion error, Err otherwise
     pub fn collect_assert_failure(&self) -> Result<(), AssemblerError> {
         if self.failed_assert_commands.is_empty() {

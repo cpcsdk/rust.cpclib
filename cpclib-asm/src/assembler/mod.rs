@@ -42,6 +42,7 @@ use crate::assembler::processed_token::visit_processed_tokens;
 use crate::delayed_command::*;
 use crate::page_info::PageInformation;
 use crate::preamble::*;
+use crate::progress::Progress;
 use crate::report::Report;
 use crate::save_command::*;
 use crate::stable_ticker::*;
@@ -766,6 +767,7 @@ impl Env {
     pub(crate) fn start_new_pass(&mut self) {
         self.requested_additional_pass |= !self.current_pass_discarded_errors.is_empty();
 
+
         let mut can_change_request = true;
         if !self.pass.is_listing_pass() {
             self.pass = if self.real_nb_passes == 0
@@ -837,7 +839,12 @@ impl Env {
                 self.request_additional_pass = false.into();
             }
             self.symbols.new_pass();
+
+            Progress::progress().new_pass();
+
         }
+
+
     }
 
     /// Handle the actions to do after assembling.
@@ -1011,6 +1018,16 @@ impl Env {
 
         let mut saved_files = Vec::new();
 
+        // count the number of files to save to build the process bar
+        let mut nb_files_to_save: u64 = 0;
+        nb_files_to_save += pages_mmr[0..self.pages_info_sna.len()].iter().enumerate().map(|(activepage,page)| {
+            self.ga_mmr = *page;
+            self.pages_info_sna[activepage].nb_files_to_save() as u64
+        }).sum::<u64>() as u64;
+        nb_files_to_save += self.banks.iter() .map(|b| b.1.nb_files_to_save() as u64).sum::<u64>() as u64;
+
+        Progress::progress().create_save_bar(nb_files_to_save);
+
         // save from snapshot
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
             self.ga_mmr = *page;
@@ -1032,6 +1049,10 @@ impl Env {
             saved_files.append(s);
         }
 
+
+        if self.ctx.show_progress {
+            Progress::progress().finish_save();
+        }
         // restor memory conf
         self.ga_mmr = backup;
         Ok(saved_files)

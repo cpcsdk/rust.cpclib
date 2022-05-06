@@ -7,6 +7,7 @@ use cpclib_tokens::SaveType;
 use super::report::SavedFile;
 use super::Env;
 use crate::error::AssemblerError;
+use crate::progress::{Progress, self};
 
 /// Save command information
 #[derive(Debug, Clone)]
@@ -37,6 +38,11 @@ impl SaveCommand {
 
     /// Really make the save - Prerequisit : the page is properly selected
     pub fn execute_on(&self, env: &Env) -> Result<SavedFile, AssemblerError> {
+        if env.ctx.show_progress {
+            Progress::progress().add_save(progress::normalize(&self.filename.clone().into()));
+        }
+       
+       
         let from = match self.from {
             Some(from) => from,
             None => env.start_address().unwrap() as _
@@ -118,6 +124,11 @@ impl SaveCommand {
                     }
                 })?;
             }
+        }
+
+
+        if env.ctx.show_progress {
+            Progress::progress().remove_save(progress::normalize(&self.filename.clone().into()));
         }
 
         Ok(SavedFile {

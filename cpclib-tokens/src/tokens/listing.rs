@@ -82,6 +82,11 @@ pub trait ListingElement: Debug + Sized {
     fn include_fname(&self) -> &str;
     fn include_namespace(&self) -> Option<&str>;
     fn include_once(&self) -> bool;
+    fn include_is_standard_include(&self) -> bool {
+        self.is_include() && 
+        !self.include_fname().contains("{") && // no expansion
+        !self.include_once()
+    }
 
     fn is_function_definition(&self) -> bool;
     fn function_definition_name(&self) -> &str;

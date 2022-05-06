@@ -63,6 +63,7 @@ impl PageInformation {
 
 
             pub fn execute_save(&self, env: &Env) -> Result<Vec<SavedFile>, AssemblerError>;
+            pub fn nb_files_to_save(&self) -> usize;
             pub fn collect_assert_failure(&self) -> Result<(), AssemblerError>;
             pub fn execute_print_or_pause(&self, writer: &mut impl Write)-> Result<(), AssemblerError>;
             pub fn collect_breakpoints(&self)-> &[BreakpointCommand];

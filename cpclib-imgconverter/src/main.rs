@@ -681,7 +681,26 @@ fn main() -> anyhow::Result<()> {
                     .author("Krusty/Benediction")
                     .about("Simple CPC image conversion tool")
                     .before_help(&desc_before[..])
-
+                    .arg(
+                        Arg::new("help")
+                        .long("help")
+                    )
+                    .arg(
+                        Arg::new("SOURCE")
+                            .takes_value(true)
+                            .help("Filename to convert")
+//                            .last(true)
+                            .required(true)
+                            .forbid_empty_values(true)
+                            .validator(|source| {
+                              if Path::new(&source).exists() {
+                                  Ok(())
+                              }
+                              else {
+                                  Err(format!("{} does not exists!", source))
+                              }
+                            })
+                   )
                     .subcommand(
                         Command::new("sna")
                             .about("Generate a snapshot with the converted image.")
@@ -852,6 +871,8 @@ fn main() -> anyhow::Result<()> {
                             )
                             .arg(
                                 Arg::new("SPRITE_FNAME")
+                                .short('o')
+                                .long("output")
                                 .takes_value(true)
                                 .help("Filename to generate. Will be postfixed by the number")
                                 .required(true)
@@ -1026,24 +1047,9 @@ fn main() -> anyhow::Result<()> {
                             .help("Ink number of the pen 15")
                             .conflicts_with("PENS")
                         )
-                    .arg(
-                        Arg::new("SOURCE")
-                            .takes_value(true)
-                            .help("Filename to convert")
-//                            .last(true)
-                            .required(true)
-                            .forbid_empty_values(true)
-                            .validator(|source| {
-                              if Path::new(&source).exists() {
-                                  Ok(())
-                              }
-                              else {
-                                  Err(format!("{} does not exists!", source))
-                              }
-                            })
-                   );
+                    ;
 
-    let matches = if cfg!(feature = "xferlib") {
+    let mut args = if cfg!(feature = "xferlib") {
         args.subcommand(
                         Command::new("m4")
                         .about("Directly send the code on the M4 through a snapshot")
@@ -1064,8 +1070,13 @@ fn main() -> anyhow::Result<()> {
     }
     else {
         args
+    };
+
+    let matches = args.clone().get_matches();
+
+    if matches.is_present("help") {
+        args.print_long_help();
     }
-    .get_matches();
 
     if matches.subcommand_matches("m4").is_none()
         && matches.subcommand_matches("dsk").is_none()

@@ -10,6 +10,8 @@ use crate::error::AssemblerError;
 use crate::preamble::ParserContext;
 use crate::progress::Progress;
 
+type Fname<'a, 'b> = either::Either<&'a Path, (&'a str, &'b Env)>;
+
 pub fn get_filename(
     fname: &str,
     ctx: &ParserContext,
@@ -31,13 +33,12 @@ pub fn get_filename(
 /// - if path is provided, this is the file name used
 /// - if a string is provided, there is a search of appropriate filename
 pub fn load_binary(
-    fname: either::Either<&Path, &str>,
+    fname: Fname,
     ctx: &ParserContext,
-    env: &Env
 ) -> Result<Vec<u8>, AssemblerError> {
     // Retreive fname
     let fname = match &fname {
-        either::Either::Right(p) => get_filename(p, ctx, Some(env))?,
+        either::Either::Right((p, env)) => get_filename(p, ctx, Some(env))?,
         either::Either::Left(p) => p.into()
     };
 
@@ -93,12 +94,11 @@ pub fn load_binary(
 /// Uses the context to obtain the appropriate file other the included directories
 pub fn read_source<P: AsRef<Path>>(
     fname: P,
-    ctx: &ParserContext,
-    env: &Env
+    ctx: &ParserContext
 ) -> Result<String, AssemblerError> {
     let fname = fname.as_ref();
 
-    let content = load_binary(Either::Left(fname), ctx, env)?;
+    let content = load_binary(Either::Left(fname), ctx)?;
     handle_source_encoding(fname.to_str().unwrap(), &content)
 }
 

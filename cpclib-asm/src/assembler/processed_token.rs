@@ -11,7 +11,7 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
-    BinaryTransformation, ListingElement, MacroParamElement, TestKindElement, ToSimpleToken, Token, Listing
+    BinaryTransformation, ListingElement, MacroParamElement, TestKindElement, ToSimpleToken, Token, Listing, ExprElement
 };
 use either::Either;
 use ouroboros::*;
@@ -25,6 +25,7 @@ use crate::implementation::instructions::Cruncher;
 use crate::preamble::{
     parse_z80_str, parse_z80_str_with_context, LocatedListing, MayHaveSpan, Z80Span, Z80ParserError
 };
+use crate::progress::{Progress, self, normalize};
 use crate::{r#macro, AssemblerError, Env, LocatedToken, ParserContext, Visited};
 
 /// Tokens are read only elements extracted from the parser
@@ -117,6 +118,100 @@ struct SwitchState<'token, T: Visited + ListingElement + Debug + Sync>
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 struct IncludeState(BTreeMap<PathBuf, IncludeStateInner>);
+
+
+
+impl IncludeState {
+
+
+    fn retreive_listing(&mut self, env: &mut Env, fname: &PathBuf) -> Result<&mut IncludeStateInner, AssemblerError> {
+        if cfg!(target_arch = "wasm32") {
+            return Err(AssemblerError::AssemblingError { msg: 
+                "INCLUDE-like directives are not allowed in a web-based assembling.".to_owned()
+            });
+        }
+
+        let ctx = &env.ctx;
+
+
+        // Build the state if needed / retreive it otherwhise
+        let state: &mut IncludeStateInner = if !self.0.contains_key(fname) {
+
+
+            let content = read_source(fname.clone(), ctx)?;
+
+            let new_ctx = {
+                let mut new_ctx = ctx.clone();
+                new_ctx.set_current_filename(fname.clone());
+                new_ctx
+            };
+
+            Progress::progress().add_parse(progress::normalize(fname));
+
+            let listing = parse_z80_str_with_context(content, new_ctx)?;
+
+            // Remove the progression
+            Progress::progress().remove_parse(progress::normalize(fname));
+
+            let include_state = IncludeStateInnerBuilder {
+                listing,
+                processed_tokens_builder: |listing: &LocatedListing| {
+                    build_processed_tokens_list(listing.as_slice(), env)
+                }
+            }
+            .build();
+
+            self.0.try_insert(fname.clone(), include_state).unwrap()
+        }
+        else {
+            self.0.get_mut(fname).unwrap()
+        };
+
+
+        // handle the listing
+        env.mark_included(fname.clone());
+
+        Ok(state)
+
+    }
+
+    fn handle(&mut self, env: &mut Env, fname: &str, namespace: Option<&str>, once: bool) -> Result<(), AssemblerError> {
+
+        let fname = get_filename(fname, &env.ctx, Some(env))?;
+
+
+        // Process the inclusion only if necessary
+        if (!once) || (!env.has_included(&fname)) {
+            // most of the time, file has been loaded
+            let state = self.retreive_listing(env, &fname)?;
+
+            // handle module if necessary
+            if let Some(namespace) = namespace {
+                env.enter_namespace(namespace)?;
+                // TODO handle the locating of error
+                //.map_err(|e| e.locate(span.clone()))?;
+            }
+
+            // Visit the included listing
+            state.with_processed_tokens_mut(|tokens| {
+                let tokens: &mut [ProcessedToken<'_, LocatedToken>] =
+                    &mut tokens[..];
+                visit_processed_tokens::<'_, LocatedToken>(tokens, env)
+            })?;
+
+            // Remove module if necessary
+            if namespace.is_some() {
+                env.leave_namespace()?;
+                //.map_err(|e| e.locate(span.clone()))?;
+            }
+
+            Ok(())
+        }
+        else {
+            Ok(())
+        }
+    }
+}
 
 impl Default for IncludeState {
     fn default() -> Self {
@@ -364,7 +459,7 @@ where
         let ctx = &env.ctx;
         match get_filename(fname, ctx, Some(env)) {
             Ok(fname) => {
-                match read_source(fname.clone(), ctx, env) {
+                match read_source(fname.clone(), ctx) {
                     Ok(content) => {
                         let new_ctx = {
                             let mut new_ctx = ctx.clone();
@@ -374,6 +469,14 @@ where
 
                         match parse_z80_str_with_context(content, new_ctx) {
                             Ok(listing) => {
+                                // Filename has already been added
+                                if token.include_is_standard_include() {
+                                        Progress::progress()
+                                            .remove_parse(progress::normalize(&fname));
+                                }
+
+
+
                                 let include_state = IncludeStateInnerBuilder {
                                     listing,
                                     processed_tokens_builder: |listing: &LocatedListing| {
@@ -486,12 +589,43 @@ where
     #[cfg(target_arch = "wasm32")]
     let iter = tokens.iter();
 
+
+
+    // get filename of files that will be read in parallal
+    let include_fnames = tokens.par_iter()
+        .filter(|t| {
+            t.include_is_standard_include()
+        })
+        .map(|t| {
+            get_filename(
+                t.include_fname(),
+                &env.ctx,
+                Some(env)
+            )
+        })
+        .filter(|f| f.is_ok())
+        .map(|f| f.unwrap())
+        .collect::<Vec<_>>();
+
+        // inform the progress bar
+        if !include_fnames.is_empty() {
+            // add all fnames in one time
+            Progress::progress().add_parses(
+                include_fnames.iter()
+                    .map(|t| {
+                        progress::normalize(t)
+                    })
+            );
+        }
+
+
+    // the files will be read here
     iter.map(|t| build_processed_token(t, env)) 
         .collect::<Vec<_>>()
 }
 
 /// Visit all the tokens until an error occurs
-pub fn visit_processed_tokens<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan>(
+pub fn visit_processed_tokens<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan >(
     tokens: &mut [ProcessedToken<'token, T>],
     env: &mut Env
 ) -> Result<(), AssemblerError>
@@ -500,9 +634,26 @@ where
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
-    for token in tokens.iter_mut() {
-        token.visited(env)?;
+
+    if env.ctx.show_progress {
+        // setup the amount of tokens that will be processed
+        Progress::progress().add_expected_to_pass(tokens.len() as _);
+        for chunk in &tokens.iter_mut().chunks(64) {
+            let mut visited = 0;
+            for token in chunk {
+                token.visited(env)?;
+                visited += 1;
+            }
+            Progress::progress().add_visited_to_pass(visited);
+        }
     }
+    else {
+        // normal iteration
+        for token in tokens.iter_mut() {
+            token.visited(env)?;
+        }
+    }
+
 
     Ok(())
 }
@@ -724,7 +875,7 @@ where
                         let data = if !contents.contains_key(&fname) {
                             // need to load the file
 
-                            let data = load_binary(Either::Left(fname.as_ref()), ctx, env)?;
+                            let data = load_binary(Either::Left(fname.as_ref()), ctx)?;
                             // get a slice on the data to ease its cut
                             let mut data = &data[..];
 
@@ -812,75 +963,12 @@ where
                         env.visit_incbin(data.borrow())
                     }
 
-                    Some(ProcessedTokenState::Include(IncludeState(ref mut contents))) => {
-                        if cfg!(target_arch = "wasm32") {
-                            return Err(AssemblerError::AssemblingError { msg: 
-                                "INCLUDE-like directives are not allowed in a web-based assembling.".to_owned()
-                            });
-                        }
-
-                        let fname = self.token.include_fname();
-                        let fname = get_filename(fname, ctx, Some(env))?;
-
-                        let namespace = self.token.include_namespace();
-                        let once = self.token.include_once();
-
-                        // Process the inclusion only if necessary
-                        if (!once) || (!env.has_included(&fname)) {
-                            // Build the state if needed / retreive it otherwhise
-                            let state: &mut IncludeStateInner = if !contents.contains_key(&fname) {
-                                let content = read_source(fname.clone(), ctx, env)?;
-
-                                let new_ctx = {
-                                    let mut new_ctx = ctx.clone();
-                                    new_ctx.set_current_filename(fname.clone());
-                                    new_ctx
-                                };
-
-                                let listing = parse_z80_str_with_context(content, new_ctx)?;
-                                let include_state = IncludeStateInnerBuilder {
-                                    listing,
-                                    processed_tokens_builder: |listing: &LocatedListing| {
-                                        build_processed_tokens_list(listing.as_slice(), env)
-                                    }
-                                }
-                                .build();
-
-                                contents.try_insert(fname.clone(), include_state).unwrap()
-                            }
-                            else {
-                                contents.get_mut(&fname).unwrap()
-                            };
-
-                            // handle the listing
-                            env.mark_included(fname);
-
-                            // handle module if necessary
-                            if let Some(namespace) = namespace {
-                                env.enter_namespace(namespace)?;
-                                // TODO handle the locating of error
-                                //.map_err(|e| e.locate(span.clone()))?;
-                            }
-
-                            // Visit the included listing
-                            state.with_processed_tokens_mut(|tokens| {
-                                let tokens: &mut [ProcessedToken<'_, LocatedToken>] =
-                                    &mut tokens[..];
-                                visit_processed_tokens::<'_, LocatedToken>(tokens, env)
-                            })?;
-
-                            // Remove module if necessary
-                            if namespace.is_some() {
-                                env.leave_namespace()?;
-                                //.map_err(|e| e.locate(span.clone()))?;
-                            }
-
-                            Ok(())
-                        }
-                        else {
-                            Ok(())
-                        }
-                    }
+                    Some(ProcessedTokenState::Include(ref mut state)) => state.handle(
+                        env, 
+                        self.token.include_fname(),
+                        self.token.include_namespace(),
+                        self.token.include_once()
+                    ) ,
 
                     Some(ProcessedTokenState::If(if_state)) => {
                         let listing = if_state.choose_listing_to_assemble(env)?;
