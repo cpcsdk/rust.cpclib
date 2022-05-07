@@ -16,6 +16,11 @@ fn main() {
 				.default_value("0")
 				.possible_values(&["0", "1", "2"])
 		)
+		.arg(
+			Arg::new("MODE0RATIO")
+			.long("mode0ratio")
+			.help("Horizontally double the pixels")
+		)
 		.subcommand(Command::new("SPRITE")
 			.about("Load from a linear sprite data")
 			.name("sprite")
@@ -38,13 +43,14 @@ fn main() {
 	);
 	
 	let matches = cmd.get_matches();
-	let palette = get_requested_palette(&matches).unwrap_or_default();
+	let palette = dbg!(get_requested_palette(&matches).unwrap_or_default());
 	let input_fname = matches.value_of("INPUT").unwrap();
 	let output_fname = matches.value_of("OUTPUT").unwrap();
 	let mode = matches.value_of("MODE").unwrap()
 								.parse().unwrap();
 
 
+	let mode0ratio = matches.is_present("MODE0RATIO");
 										// read the data file
 	let data = std::fs::read(input_fname).expect("Unable to read input file");
 
@@ -55,7 +61,7 @@ fn main() {
 		&data
 	};
 
-	let matrix: ColorMatrix = if let Some(sprite) = matches.subcommand_matches("SPRITE") {
+	let mut matrix: ColorMatrix = if let Some(sprite) = matches.subcommand_matches("SPRITE") {
 
 
 
@@ -94,6 +100,10 @@ fn main() {
 		unimplemented!()
 	};
 
+
+	if mode0ratio {
+		matrix.double_horizontally();
+	}
 	// save the generated file
 	let img = matrix.as_image();
 	img.save(output_fname).expect("Error while saving the file");

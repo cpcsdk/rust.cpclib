@@ -152,7 +152,7 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Option<Palette> {
     }
     else {
         let mut one_pen_set = false;
-        let mut palette = Palette::new();
+        let mut palette = Palette::empty();
         for i in 0..16 {
             let key = format!("PEN{}", i);
             if matches.is_present(&key) {
