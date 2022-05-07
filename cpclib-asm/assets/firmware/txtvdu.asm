@@ -1,0 +1,189 @@
+
+; Action: Initialise the text VDU to its settings when the computer is switched on, includes resetting all the text VDU indirections, selecting Stream 0, resetting the text paper to pen 0 and the text pen to pen 1, moving the cursor to the top left corner of the screen and setting the writing mode to be opaque
+; Entry: No entry conditions
+; Exit: AF, BC, DE and HL are corrupt, and all others are preserved
+TXT_INITIALISE equ #BB4E
+
+; Action: Resets the text VDU indirections and the control code table
+; Entry: No entry conditions
+; Exit: AF, BC, DE and HL are corrupt, and all the other registers are preserved
+TXT_RESET equ #BB51
+
+; Action: Allows characters to be printed on the screen in the current stream
+; Entry: No entry conditions
+; Exit: AF is corrupt, and all other registers are preserved
+TXT_VDU_ENABLE equ #BB54
+
+; Action: Prevents characters from being printed to the current stream
+; Entry: No entry conditions
+; Exit: AF is corrupt, and al1 the other registers are preserved
+TXT_VDU_DISABLE equ #BB57
+
+; Action: Output a character or control code (&00 to &1F) to the screen
+; Entry: A contains the character to output
+; Exit: All registers are preserved
+; Notes: Any control codes are obeyed and nothing is printed if the VDU is disabled; characters are printed using the TXT OUT ACTION routine; if using graphics printing mode, then control codes are printed and not obeyed
+TXT_OUTPUT equ #BB5A
+
+; Action: Print a character at the current cursor position - control codes are printed and not obeyed
+; Entry: A contains the character to be printed
+; Exit: AF, BC, DE and HL are corrupt, and all others are preserved
+; Notes: This routine uses the TXT WRITE CHAR indirection to put the character on the screen
+TXT_WR_CHAR equ #BB5D
+
+; Action: Read a character from the screen at the current cursor position
+; Entry: No entry conditions
+; Exit: If it was successful then A contains the character that was read from the screen and Carry is true; otherwise Carry is false, and A holds 0; in either case, the other flags are corrupt, and all registers are preserved
+; Notes: This routine uses the TXT UNWRITE indirection
+TXT_RD_CHAR equ #BB60
+
+; Action: Enables or disables graphics print character mode
+; Entry: To switch graphics printing mode on, A must be non- zero; to turn it off, A must contain zero
+; Exit: AF corrupt, and all other registers are preserved
+; Notes: When turned on, control codes are printed and not obeyed; characters are printed by GRA WR CHAR
+TXT_SET_GRAPHIC equ #BB63
+
+; Action: Sets the boundaries of the current text window - uses physical coordinates
+; Entry: H hoIds the column number of one edge, D holds the column number of the other edge, L holds the line number of one edge, and E holds the line number of the other edge
+; Exit: AF, BC, DE and HL are corrupt
+; Notes: The window is not cleared but the cursor is moved to the top left corner of the window
+TXT_WIN_ENABLE equ #BB66
+
+; Action: Returns the size of the current window - returns physical coordinates
+; Entry: No entry conditions
+; Exit: H holds the column number of the left edge, D holds the column number of the right edge, L holds the line number of the top edge, E holds the line number of the bottom edge, A is corrupt, Carry is false if the window covers the entire screen, and the other registers are always preserved
+TXT_GET_WINDOW equ #BB69
+
+; Action: Clears the window (of the current stream) and moves the cursor to the top left corner of the window
+; Entry: No entry conditions
+; Exit: AF, BC, DE and HL are corrupt, and alI others are preserved
+TXT_CLEAR_WINDOW equ #BB6C
+
+; Action: Sets the cursor's horizontal position
+; Entry: A contains the logical column number to move the cursor to
+; Exit: AF and HL are corrupt, and all the other registers are preserved
+; Notes: See also TXT SET CURSOR
+TXT_SET_COLUMN equ #BB6F
+
+; Action: Sets the cursor's vertical position
+; Entry: A contains the logical line number to move the cursor to
+; Exit: AF and HL are corrupt, and all others are preserved
+; Notes: See also TXT SET CURSOR
+TXT_SET_ROW equ #BB72
+
+; Action: Sets the cursor's vertical and horizontal position
+; Entry: H contains the logical column number and L contains the logical line number
+; Exit: AF and HL are corrupt, and all the others are preserved
+; Notes: See also TXT SET COLUMN and TXT SET ROW
+TXT_SET_CURSOR equ #BB75
+
+; Action: Gets the cursor's current position
+; Entry: No entry conditions
+; Exit: H holds the logical column number, L holds the logical line number, and A contains the roll count, the flags are corrupt, and all the other registers are preserved
+; Notes: The roll count is increased when the screen is scrolled down, and is decreased when it is scrolled up
+TXT_GET_CURSOR equ #BB78
+
+; Action: Allows the text cursor to be displayed (if it is allowed by TXT CUR ON) - intended for use by the user
+; Entry: No entry conditions
+; Exit: AF is corrupt, and all other registers are preserved
+TXT_CUR_ENABLE equ #BB7B
+
+; Action: Prevents the text cursor from being displayed -intended for use by the user
+; Entry: No entry conditions
+; Exit: AF is corrupt, and all others are preserved
+TXT_CUR_DISABLE equ #BB7E
+
+; Action: Allows the text cursor to be displayed - intended for use by the operating system
+; Entry: No entry conditions
+; Exit: All registers and flags are preserved
+TXT_CUR_ON equ #BB81
+
+; Action: Prevents the text cursor from being displayed -intended for use by the operating system
+; Entry: No entry conditions
+; Exit: All registers and flags are preserved
+TXT_CUR_OFF equ #BB84
+
+; Action: Checks whether a cursor position is within the current window
+; Entry: H contains the logical column number to check, and L holds the logical line number
+; Exit: H holds the logical column number where the next character will be printed, L holds the logical line number; if printing at this position would make the window scroll up, then Carry is false and B holds &FF; if printing at this position would make the window scroll down, then Carry is false and B contains &00; if printing at the specified cursor position would not scroll the window, then Carry is true and B is corrupt; always, A and the other flags are corrupt, and all others are preserved
+TXT_VALIDATE equ #BB87
+
+; Action: Puts a `cursor blob' on the screen at the current cursor position
+; Entry: No entry conditions
+; Exit: AF is corrupt, and all other registers are preserved
+; Notes: It is possible to have more than one cursor in a window (see also TXT DRAW CURSOR); do not use this routine twice without using TXT REMOVE CURSOR between
+TXT_PLACE_CURSOR equ #BB8A
+
+; Action: Removes a `cursor blob' from the current cursor position
+; Entry: No entry conditions
+; Exit: AF is corrupt, and all the others are preserved
+; Notes: This should be used only to remove cursors created by TXT PLACE CURSOR, but see also TXT UNDRAW CURSOR
+TXT_REMOVE_CURSOR equ #BB8D
+
+; Action: Sets the foreground PEN for the current stream
+; Entry: A contams the PEN number to use
+; Exit: AF and HL are corrupt, and all other registers are preserved
+TXT_SET_PEN equ #BB90
+
+; Action: Gets the foreground PEN for the current stream
+; Entry: No entry conditions
+; Exit: A contains the PEN number, the flags are corrupt, and all other registers are preserved
+TXT_GET_PEN equ #BB93
+
+; Action: Sets the background PAPER for the current stream
+; Entry: A contains the PEN number to use
+; Exit: AF and HL are corrupt, and all other registers are preserved
+TXT_SET_PAPER equ #BB96
+
+; Action: Gets the background PAPER for the current stream
+; Entry: No entry conditions
+; Exit: A contains the PEN number, the flags are corrupt, and all other registers are preserved
+TXT_GET_PAPER equ #BB99
+
+; Action: Swaps the current PEN and PAPER colours over for the current stream
+; Entry: No entry conditions
+; Exit: AF and HL are corrupt, and all others are preserved
+TXT_INVERSE equ #BB9C
+
+; Action: Sets the character write mode to either opaque or transparent
+; Entry: For transparent mode, A must be non-zero; for opaque mode, A has to hold zero
+; Exit: AF and HL are corrupt, and all other registers are preserved
+; Notes: Setting the character write mode has no effects on the graphics VDU
+TXT_SET_BACK equ #BB9F
+
+; Action: Gets the character write mode for the current stream
+; Entry: No entry conditions
+; Exit: If in transparent mode, A is non-zero; in opaque mode, A is zero; in either case DE, HL and flags are corrupt, and the other registers are preserved
+TXT_GET_BACK equ #BBA2
+
+; Action: Gets the address of a character matrix
+; Entry: A contains the character whose matrix is to be found
+; Exit: If it is a user-defined matrix, then Carry is true; if it is in the lower ROM then Carry is false; in either event, HL contains the address of the matrix, A and other flags are corrupt, and others are preserved
+; Notes: The character matrix is stored in 8 bytes; the first byte is for the top row of the character, and the last byte refers to the bottom row of the character; bit 7 of a byte refers to the leftmost pixel of a line, and bit 0 refers to the rightmost pixel in Mode 2.
+TXT_GET_MATRIX equ #BBA5
+
+; Action: Installs a matrix for a user-defined character
+; Entry: A contains the character which is being defined and HL contains the address of the matrix to be used
+; Exit: If the character is user-definable then Carry is true; otherwise Carry is false, and no action is taken; in both cases AF, BC, DE and HL are corrupt, and all other registers are preserved
+TXT_SET_MATRIX equ #BBA8
+
+; Action: Sets the address of a user-defined matrix table
+; Entry: DE is the first character in the table and HL is the table's address (in the central 32K of RAM)
+; Exit: If there are no existing tables then Carry is false, and A and HL are both corrupt; otherwise Carry is true, A is the first character and HL is the table's address; in both cases BC, DE and the other flags are corrupt
+TXT_SET_M_TABLE equ #BBAB
+
+; Action: Gets the address of a user-defined matrix table
+; Entry: No entry conditions
+; Exit: See TXT SET M TABLE above for details of the values that can be returned
+TXT_GET_M_TABLE equ #BBAE
+
+; Action: Gets the address of the control code table
+; Entry: No entry conditions
+; Exit: HL contains the address of the table, and all others are preserved
+; Notes: The table has 32 entries, and each entry has three bytesbyte 1 is the number of parameters needed by the control codebytes 2 and 3 are the address of the routine, in the Lower ROM, to execute the control code
+TXT_GET_CONTROLS equ #BBB1
+
+; Action: Selects a new VDU text stream
+; Entry: A contains the value of the stream to change to
+; Exit: A contains the previously selected stream, HL and the flags are corrupt, and all others are preserved
+TXT_STR_SELECT equ #BBB4

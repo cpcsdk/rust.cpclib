@@ -1,0 +1,87 @@
+
+; Action: Resets the computer as if it has just been switched on
+; Entry: No entry conditions
+; Exit: This routine is never returned from
+; Notes: After initialisation of the hardware and firmware, control is handed over to ROM 0 (usually BASIC)
+RESET_ENTRY_ equ #0000
+
+; Action: Jumps to a routine in either the lower ROM or low RAM
+; Entry: No entry conditions - all the registers are passed to the destination routine unchanged
+; Exit: The registers are as set by the routine in the lower ROM or RAM or are returned unaltered
+; Notes: The RST 1 instruction is followed by a two byte low address, which is defmed as followsif bit 15 is set, then the upper ROM is disabledif bit 14 is set, then the lower ROM is disabledbits 13 to 0 contain the address of the routine to jump to. This command is used by the majority of entries in the main firmware jumpblock
+LOW_JUMP_ equ #0008
+
+; Action: Jumps to a routine in either the lower ROM or low RAM
+; Entry: HL contains the low address - all the registers are passed to the destination routine unchanged
+; Exit: The registers are as set by the routine in the lower ROM or RAM or are returned unaltered
+; Notes: The two byte low address in the HL register pair is defined as followsif bit 15 is set, then the upper ROM is disabledif bit 14 is set, then the lower ROM is disabledbits 13 to 0 contain the address of the routine to jump to
+KL_LOW_PCHL equ #000B
+
+; Action: Jumps to the specified address
+; Entry: BC contains the address to jump to - all the registers are passed to the destination routine unaltered
+; Exit: The registers are as set by the destination routine or are returned unchanged
+PCBC_INSTRUCTION equ #000E
+
+; Action: Calls a routine in ROM, in a group of up to four foreground ROMs
+; Entry: No entry conditions - all the registers apart from IY are passed to the destination routine unaltered
+; Exit: IY is corrupt, and the other registers are as set by the destination routine or are returned unchanged
+; Notes: The RST 2 instruction is followed by a two byte side address, which is defined as followsbits 14 and 15 give a number between 0 and 3, which is added to the main foreground ROM select address - this is then used as the ROM select address bits 0 to 13 contain the address to which is added &C000 - this gives the address of the routine to be called
+SIDE_CALL_ equ #0010
+
+; Action: Calls a routine in another ROM
+; Entry: HL contains the side address - all the registers apart from IY are passed to the destination routine unaltered
+; Exit: IY is corrupt, and the other registers are as set by the destination routine or are returned unchanged
+; Notes: The two byte side address is defined as followsbits 14 and 15 give a number between 0 and 3, which is added to the main foreground ROM select address - this is then used as the ROM select address bits 0 to 13 contain the address to which is added &C000 - this gives the address of the routine to be called
+KL_SIDE_PCHL equ #0013
+
+; Action: Jumps to the specified address
+; Entry: DE contains the address to jump to - all the registers are passed to the destination routine unaltered
+; Exit: The registers are as set by the destination routine or are returned unchanged
+PCDE_INSTRUCTION equ #0016
+
+; Action: Calls a routine anywhere in ROM or ROM
+; Entry: No entry conditions - all the registers apart from IY are passed to the destination routine unaltered
+; Exit: IY is preserved, and the other registers are as set by the destination routine or are returned unchanged
+; Notes: The RST 3 instruction is followed by a two byte in-line address. At this address, there is a three byte far address, which is defined as followsbytes 0 and 1 give the address of the routine to be calledbyte 2 is the ROM select byte which has values as follows&00 to &FB-- select the given upper ROM, enable the upper ROM and disable the lower ROM&FC - no change to the ROM selection, enable the upper and lower ROMs&FD - no change to the ROM selection, enable the upper ROM and disable the lower ROM&FE - no change to the ROM selection, disable the upper ROM and enable the lower ROM&FF - no change to the ROM selection, disable the upper and lower ROMsWhen it is retumed from, the ROM selection and state are restored to their settings before the RST 3 command
+FAR_CALL_ equ #0018
+
+; Action: Calls a routine, given by the far address in HL & C, anywhere in RAM or ROM
+; Entry: HL holds the address of the routine to be called, and C holds the ROM select byte - all the registers apart from IY are passed to the destination routine unaltered
+; Exit: IY is preserved, and the other registers are as set by the destination routine or are returned unchanged
+; Notes: See FAR CALL (RST 3) above for more details on the ROM select byte
+KL_FAR_PCHL equ #001B
+
+; Action: Jumps to the specified address
+; Entry: HL contains the address to jump to - all the registers are passed to the destination routine unaltered
+; Exit: The registers are as set by the destination routine or are returned unchanged
+PCHL_INSTRUCTION equ #001E
+
+; Action: Puts the contents of a RAM memory location into the A register
+; Entry: HL contains the address of the memory location
+; Exit: A holds the contents of the memory location, and all other registers are preserved
+; Notes: This routine always reads from RAM, even if the upper or lower ROM is enabled
+RAM_LAM equ #0020
+
+; Action: Calls a routine anywhere in RAM or ROM
+; Entry: HL holds the address of the three byte far address that is to be used - all the registers apart from IY are passed to the destination routine unaltered
+; Exit: IY is preserved, and the other registers are as set by the destination routine or are returned unchanged
+; Notes: See FAR CALL above for more details on the three byte far address
+KL_FAR_CALL equ #0023
+
+; Action: Jumps to a routine in either the lower ROM or the central 32K of RAM
+; Entry: No entry conditions - all the registers are passed to the destination routine unchanged
+; Exit: The registers are as set by the routine in the lower ROM or RAM or are returned unaltered
+; Notes: The RST 5 instruction is followed by a two byte address, which is the address to jump to; before the jump is made, the lower ROM is enabled, and is disabled when the destination routine is returned from
+FIRM_JUMP_ equ #0028
+
+; Action: This is an RST instruction that may be set aside by the user for any purpose
+; Entry: Defined by the user
+; Exit: Defined by the user
+; Notes: The bytes from &0030 to &0037 are available for the user to put their own code in if they wish
+USER_RESTART_ equ #0030
+
+; Action: Deals with normal interrupts
+; Entry: No entry conditions
+; Exit: All registers are preserved
+; Notes: The RST 7 instruction must not be used by the user; any external interrupts that are generated by hardware on the expansion port will be dealt with by the EXT INTERRUPT routine (see Low Kernel Jumpblock)
+INTERRUPT_ENTRY_ equ #0038

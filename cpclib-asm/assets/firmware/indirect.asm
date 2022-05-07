@@ -1,0 +1,74 @@
+
+; Action: Places the cursor on the screen, if the cursor is enabled
+; Entry: No entry conditions
+; Exit: AF is corrupt, and all other registers are preserved
+; Notes: The cursor is an inverse blob which appears at the current text position
+TXT_DRAW_CURSOR equ #BDCD
+
+; Action: Removes the cursor from the screen, if the cursor is enabled
+; Entry: No entry conditions
+; Exit: AF is corrupt, and all the other registers are preserved
+TXT_UNDRAW_CURSOR equ #BDD0
+
+; Action: Writes a character onto the screen
+; Entry: A holds the character to be wntten, H holds the physical column number, and L holds the physical line number
+; Exit: AF, BC, DE and HL are corrupt, and all other registers are preserved
+TXT_WRITE_CHAR equ #BDD3
+
+; Action: Reads a character from the screen
+; Entry: H contains the physical column number, and L contains the physical line number to read from
+; Exit: If a character was found, then Carry is true, and A contains the character; if no character was found, then Carry is false, and A contains zero; in either case, BC, DE, HL and the other nags are corrupt, and all other registers are preserved
+; Notes: This routine works by comparing the image on the screen with the character matrices; therefore if the character matrices have been altered the routine may not find a readable a character
+TXT_UNWRITE equ #BDD6
+
+; Action: Writes a character to the screen or obeys a control code (&00 to &1F)
+; Entry: A contains the character or code
+; Exit: AF, BC, DE and HL are corrupt, and all other registers are preserved
+; Notes: Control codes may take a maximum of nine parameters; when a control code is found, the required number of parameters is read into the control code buffer, and then the control code is acted upon; if the graphics character wnte mode is enabled, then characters and codes are printed using the graphics VDU; when using the graphics VDU control codes are printed and not obeyed
+TXT_OUT_ACTION equ #BDD9
+
+; Action: Plots a point in the current graphics PEN
+; Entry: DE contains the user X coordinate, and HL contains the user Y coordinate of the point
+; Exit: AF, BC, DE and HL are corrupt, and all other registers are preserved
+; Notes: This routine uses the SCR WRITE indirection to write the point to the screen
+GRA_PLOT equ #BDDC
+
+; Action: Tests a point and finds out what PEN it is set to
+; Entry: DE contains the user X coordinate, and HL contains the user Y coordinate of the point
+; Exit: A contains the PEN that the point is written in, BC, DE and HL are corrupt, and all others are preserved
+; Notes: This routine uses the SCR READ indirection to test a point on the screen
+GRA_TEST equ #BDDF
+
+; Action: Draws a line in the current graphics PEN, from the current graphics position to the specified point
+; Entry: DE contains the user X coordinate, and HL contains the user Y coordinate for the endpoint
+; Exit: AF, BC, DE and HL are corrupt, and all others are preserved
+; Notes: This routine uses the SCR WRITE indirection to write the points of the line on the screen
+GRA_LINE equ #BDE2
+
+; Action: Reads a pixel from the screen and returns its decode a PEN
+; Entry: HL contains the screen address of the pixel, and C contains the mask for the pixel
+; Exit: A contains the decoded PEN of the pixel, the flags are corrupt, and all others are preserved
+; Notes: The mask should be for a single pixel, and is dependent on the screen mode
+SCR_READ equ #BDE5
+
+; Action: Writes one or more pixels to the screen
+; Entry: HL contains the screen address of the pixel, C contains the mask, and B contains the encoded PEN
+; Exit: AF is corrupt, and all other registers are preserved
+; Notes: The mask should determine which pixels in the screen byte are to be plotted
+SCR_WRITE equ #BDE8
+
+; Action: Fills the entire screen memory with &00, which clears the screen to PEN 0
+; Entry: No entry conditions
+; Exit: AF, BC, DE and HL are corrupt, and all the other registers are preserved
+SCR_MODE_CLEAR equ #BDEB
+
+; Action: Tests if the ESC key has been pressed, and acts accordingly
+; Entry: C contains the Shift and Control key states, and interrupts must be disabled
+; Exit: AF and HL are corrupt, and all other registers are preserved
+; Notes: If bit 7 of C is set, then the Control key is pressed; if bit 5 of C is set, then the Shift key is pressed; if ESC, Shift and Control are pressed at the sarne time, then it initiates a system reset; otherwise it reports a break event
+KM_TEST_BREAK equ #BDEE
+
+; Action: Sends a character to the printer if it is not busy
+; Entry: A contains the character to be sent to the printer
+; Exit: If the character was printed successfully, then Carry is true; if the printer was busy for too long (more than 0.4 seconds), then Carry is false; in either case, A and BC are corrupt, and all other registers are preserved
+MC_WAIT_PRINTER equ #BDF1

@@ -1,0 +1,109 @@
+import subprocess
+import requests
+from bs4 import BeautifulSoup
+import os
+import sys
+import re
+
+CHECK_WITH_BASM = True
+
+
+BASE_URL = "http://www.cantrell.org.uk/david/tech/cpc/cpc-firmware/"
+PAGES = [
+	"kernel",
+	"lowkern",
+	"highkern",
+	"keymng",
+	"txtvdu",
+	"gfxvdu",
+	"scrpack",
+	"casmng",
+	"amsdos",
+	"sound",
+	"machine",
+	"!464",
+	"indirect",
+	"math",
+	"math!6xx",
+	"math!464",
+]
+
+RST_REGEX = re.compile(r"\(RST_\d\)")
+
+class FirmwareCall:
+	address: str
+	call: str
+	comments: list[str]
+
+	def __init__(self, address, call):
+		self.address = address.replace("&", "#").replace("S", "5")
+		self.call = re.sub(RST_REGEX, "", call).replace("*10^A", "MUL10POWA").replace("*", "").replace("/","_")
+		self.comments = []
+
+	def add_comment(self, kind, value):
+		self.comments.append(
+			"; %s: %s" % (kind, value)
+		)
+
+	def __str__(self) -> str:
+		return  "%s\n%s equ %s\n" % ("\n".join(self.comments), self.call, self.address)
+
+
+
+def generate_for(url, dest):
+	print("Handle", url)
+	page = requests.get(url)
+	soup = BeautifulSoup(page.content, "html.parser")
+
+	lines = soup.find_all("tr")
+	call = None
+	calls = []
+	for line in lines:
+		if line.td.strong is not None:
+			if call is not None:
+				calls.append(call)
+			call = FirmwareCall(
+				line.td.strong.text, 
+				line.contents[1].strong.text.replace(' ', '_')
+				)
+		else:
+			if "David Cantrell" not in line.td.text :
+				call.add_comment(
+					line.td.text,
+					line.contents[1].text
+				)
+
+	calls = [call for call in calls 
+		if "INTERNAL_SUBROUTINE" not in call.call]
+
+	fname = os.path.basename(url).replace("!", "not")
+	fname = os.path.splitext(fname)[0]
+	if fname == "math":
+		fname = "math6128"
+	fname = fname + ".asm"
+	fname = os.path.join(dest, fname)
+
+	# TODO cleanup this part to generate the 464 version
+	with open(fname, "w") as f:
+		print(fname)
+		for call in calls:
+			if "math6128" in fname:
+				f.write(mixed_math_to_6128("\n%s" % call))
+			else:
+				f.write("\n%s" % call)
+
+	if CHECK_WITH_BASM:
+		print("Check if basm can compile file")
+		res = subprocess.run(["basm", fname])
+		if not res.returncode == 0:
+			sys.exit(-1)
+
+def mixed_math_to_6128(content):
+	return re.sub(r"_\(.*\)", "", content)
+
+if __name__ == "__main__":
+	dest = sys.argv[1]
+	assert os.path.exists(dest), "Destination does not exist."
+
+	for page in PAGES:
+		generate_for("%s%s.htm" % (BASE_URL, page), dest)

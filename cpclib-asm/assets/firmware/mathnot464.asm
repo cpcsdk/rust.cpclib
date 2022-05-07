@@ -1,0 +1,11 @@
+
+; Action: Allows upto 255 characters to be input from the keyboard into a buffer (hmmm ... not really a maths routine ...)
+; Entry: HL points to the start of the buffer - a NUL character must be placed after any characters already present, or at the start of the buffer if there is no text
+; Exit: A has the last key pressed, HL points to the start of the buffer, the flags are corrupt, and all others are preserved
+; Notes: This routine prints any existing contents of the buffer (upto the NUL character) and then echoes any keys used; it allows full line editing with the cursor keys and DEL, etc; it is exited only by use of ENTER or ESC
+TEXT_INPUT equ #BD5E
+
+; Action: Creates a new RND real value at a location pointed to by HL
+; Entry: HL points to the destination for the result
+; Exit: HL points to the RND value, AF, BC, DE and IX registers are corrupt; and all others are preserved
+REAL_RND equ #BD7F

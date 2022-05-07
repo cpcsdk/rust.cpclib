@@ -1,0 +1,67 @@
+
+; Action: Enables the current upper ROM
+; Entry: No entry conditions
+; Exit: A contains the previous state of the ROM, the flags are corrupt, and all other registers are preserved
+; Notes: After this routine has been called, all reading from addresses between &C000 and &FFFF refers to the upper ROM, and not the top 16K of RAM which is usually the screen memory; any writing to these addresses still affects the RAM as, by its nature, ROM cannot be written to
+KL_U_ROM_ENABLE equ #B900
+
+; Action: Disables the upper ROM
+; Entry: No entry conditions
+; Exit: A contains the previous state of the ROM, the flags are corrupt, and all other registers are preserved
+; Notes: After this routine has been called, all reading from addresses between &C000 and &FFFF refers to the top 16K of RAM which is usually the screen memory
+KL_U_ROM_DISABLE equ #B903
+
+; Action: Enables the lower ROM
+; Entry: No entry conditions
+; Exit: A contains the previous state of the ROM, the flags are corrupt, and all other registers are preserved
+; Notes: After this routine has been called, all reading from addresses between &0000 and &4000 refers to the lower ROM, and not the bottom 16K of RAM; any writing to these addresses still affects the RAM as a ROM cannot be written to; the lower ROM is automatically enabled when a firmware routine is called, and is then disabled when the routine returns
+KL_L_ROM_ENABLE equ #B906
+
+; Action: Disables the lower ROM
+; Entry: No entry conditions
+; Exit: A contains the previous state of the ROM, the flags are corrupt, and all other registers are preserved
+; Notes: After this routine has been called, all reading from addresses between &0000 and &4000 refers to the bottom 16K of RAM; the lower ROM is automatically enabled when a firmware routine is called, and is then disabled when the routine returns
+KL_L_ROM_DISABLE equ #B909
+
+; Action: Restores the ROM to its previous state
+; Entry: A contains the previous state of the ROM
+; Exit: AF is corrupt, and all other registers are preserved
+; Notes: The previous four routines all return values in the A register which are suitable for use by KL ROM RESTORE
+KL_ROM_RESTORE equ #B90C
+
+; Action: Selects an upper ROM and also enables it
+; Entry: C contains the ROM select address of the required ROM
+; Exit: C contains the ROM select address of the previous ROM, and B contains the state of the previous ROM
+KL_ROM_SELECT equ #B90F
+
+; Action: Gets the ROM select address of the current ROM
+; Entry: No entry conditions
+; Exit: A contains the ROM select address of the current ROM, and all other registers are preserved
+KL_CURR_SELECTION equ #B912
+
+; Action: Gets the class and version of a specified ROM
+; Entry: C contains the ROM select address of the required ROM
+; Exit: A contains the class of the ROM, H holds the version number, L holds me mark number, B and the flags are corrupt, and all other registers are preserved
+; Notes: The ROM class may be one of the following:&00 - a foregroumd ROM&01 - a background ROM&02 - an extension foreground ROM&80 - the built in ROM (ie the BASIC ROM)
+KL_PROBE_ROM equ #B915
+
+; Action: Selects the previous upper ROM and sets its state
+; Entry: C contains me ROM select address of the ROM to be reselected, and B contains the state of the required ROM
+; Exit: C contains the ROM select address of me current ROM, B is corrupt, and all others are preserved
+; Notes: This routine reverses the acoon of KL ROM SELECT, and uses the values that it returns in B and C
+KL_ROM_DESELECT equ #B918
+
+; Action: Switches off the upper and lower ROMs, and moves a block of memory
+; Entry: As for a standard LDIR instruction (ie DE holds the destination location, HL points to the first byte to be moved, and BC holds the length of the block to be moved)
+; Exit: F, BC, DE amd HL are set as for a normal LDIR instruction, and all other registers are preserved
+KL_LDIR equ #B91B
+
+; Action: Switches off the upper and lower ROMs, amd moves a block of memory
+; Entry: As for a standard LDDR instruction (ie DE holds the first desination location, HL points to the highest byte lit in memory to be moved, amd BC holds the number of bytes to be moved)
+; Exit: F, BC, DE amd HL, are set as for a nommal LDDR instruction, and all other registers are preserved
+KL_LDDR equ #B91E
+
+; Action: Tests whether an event with a higher priority than the current event is waiting to be dealt with
+; Entry: No entry conditions
+; Exit: If there is a higher priority event, then Carry is false; if there is no higher priority event, then Carry is true; in either case, A and the other flags are corrupt, and all other registers are preserved
+KL_POLL_SYNCHRONOUS equ #B921

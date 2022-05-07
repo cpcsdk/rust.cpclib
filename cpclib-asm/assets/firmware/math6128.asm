@@ -1,0 +1,139 @@
+
+; Action: Copies the five bytes that are pointed to by DE to the location held in HL
+; Entry: DE points to the source real value, and HL points to the destination
+; Exit: HL points to the real value in the destination, Carry is true if the move went properly, F is corrupt, and all other registers are preserved
+; Notes: For the 464 only, A holds the exponent byte of the real value when the routine is exited
+MOVE_REAL equ #BDC1
+
+; Action: Converts an integer value into a real value
+; Entry: HL holds the integer value, DE points to the desti- nation for the real value, bit 7 of A holds the sign of the integer value - it is taken to be negative if bit 7 is set
+; Exit: HL points to the real value in the destination, AF and DE are corrupt, and all others are preserved
+INTEGER_TO_REAL equ #BD64
+
+; Action: Converts a four byte binary value into a real value at the same location
+; Entry: HL points to the binary value, bit 7 of A holds the sign of the binary value - negative if it is set
+; Exit: HL points to the real value in lieu of the four byte binary value, AF is corrupt, and all others are preserved
+; Notes: A four byte binary value is an unsigned integer up to &FFFFFFFF and is stored with the least significant byte first, and with the most significant byte last
+BINARY_TO_REAL equ #BD67
+
+; Action: Converts a real value, rounding it into an unsigned integer value held in HL
+; Entry: HL points to the real value
+; Exit: HL holds the integer value, Carry is true if the conversion worked successfully, the Sign flag holds the sign of the integer (negative if it is set). A, IX and the other flags are corrupt, and all other registers are preserved
+; Notes: This rounds the decimal part down if it is less than 0.5, but rounds up if it is greater than, or equal to 0.5
+REAL_TO_INTEGER equ #BD6A
+
+; Action: Converts a real value, rounding it into a four byte binary value at the same location
+; Entry: HL points to the real value
+; Exit: HL points to the binary value in lieu of the real value, bit 7 of B holds the sign for the binary value (it is negative if bit 7 is set), AF, B and IX are corrupt, and all other registers are preserved
+; Notes: See REAL TO INTEGER for details of how the values are rounded up or down
+REAL_TO_BINARY equ #BD6D
+
+; Action: Performs an equivalent of BASIC's FIX function on a real value, leaving the result as a four byte binary value at the same location
+; Entry: HL points to the real value
+; Exit: HL points to the binary value in lieu of the real value, bit 7 of B has the sign of the binary value (it is negative if bit 7 is set), AF, B and IX are corrupt, and all others are preserved
+; Notes: FIX removes any decimal part of the value, rounding down whether positive or negative - see the BASIC handbook for more details on the FIX command
+REAL_FIX equ #BD70
+
+; Action: Performs an equivalent of BASIC's INT function on a real value, leaving the result as a four byte binary value at the same location
+; Entry: HL points to the real value
+; Exit: HL points to the binary value in lieu of the real value, bit 7 of B has the sign of the binary value (it is negative if bit 7 is set), AF, B and IX are corrupt, and all others are preserved
+; Notes: INT removes any decimal part of the value, rounding down if the nurnber is positive, but rounding up if it is negative
+REAL_INT equ #BD73
+
+; Action: Multiplies a real value by 10 to the power of the value in the A register, leaving the result at the same location
+; Entry: HL points to the real value, and A holds the power of 10
+; Exit: HL points to the result, AF, BC, DE, IX and IY are corrupt
+REAL_MUL10POWA equ #BD79
+
+; Action: Adds two real values, and leaves the result in lieu of the first real number
+; Entry: HL points to the first real value, and DE points to the second real value
+; Exit: HL points to the result, AF, BC, DE, IX and IY are corrupt
+REAL_ADDITION equ #BD7C
+
+; Action: Subtracts the first real value from the second real value, and leaves the result in lieu of the first number
+; Entry: HL points to the first real value, and DE points to the second real value
+; Exit: HL points to the result in place of the first real value, AF, BC, DE, IX and IY are corrupt
+REAL_REVERSE_SUBTRACTION equ #BD82
+
+; Action: Multiplies two real values together, and leaves the result in lieu of the first number
+; Entry: HL points to the first real value, and DE points to the second real value
+; Exit: HL points to the result in place of the first real value, AF, BC, DE, IX and IY are corrupt
+REAL_MULTIPLICATION equ #BD85
+
+; Action: Divides the first real value by the second real value, and leaves the result in lieu of the first number
+; Entry: HL points to the first real value, and DE points to the second real value
+; Exit: HL points to the result in place of the first real value, AF, BC, DE, IX and IY are corrupt
+REAL_DIVISION equ #BD88
+
+; Action: Compares two real values
+; Entry: HL points to the first real value, and DE points to the second real value
+; Exit: A holds the result of the comparison process, IX, IY, and the other flags are corrupt, and all others are preserved
+; Notes: After this routine has been called, the value in A depends on the result of the comparison as followsif the first real number is greater than the second real number, then A holds &01if the first real number is the same as the second real number, then A holds &00if the second real number is greater than the first real number, then A holds &FF
+REAL_COMPARISON equ #BD8E
+
+; Action: Reverses the sign of a real value
+; Entry: HL points to the real value
+; Exit: HL points to the new value of the real number (which is stored in place of the original number), bit 7 of A holds the sign of the result (it is negative if bit 7 is set), AF and IX are corrupt, and all other registers are preserved
+REAL_UNARY_MINUS equ #BD91
+
+; Action: Tests a real value, and compares it with zero
+; Entry: HL points to the real value
+; Exit: A holds the result of this comparison process, IX and the other ¡lags are corrupt, and all others are preserved
+; Notes: After this routine has been called, the value in A depends on the result of the comparison as followsif the real number is greater than 0, then A holds &01, Carry is false, and Zero is falseif the real number is the same as 0, then A holds &00, Carry is false, and Zero is trueif the real number is smaller than 0, then A holds &FF, Carry is true, and Zero is false
+REAL_SIGNUM_SGN equ #BD94
+
+; Action: Sets the angular calculation mode to either degrees (DEG) or radians (RAD)
+; Entry: A holds the mode setting - 0 for RAD, and any other value for DEG
+; Exit: All registers are preserved
+SET_ANGLE_MODE equ #BD97
+
+; Action: Places the real value of pi at a given memory location
+; Entry: HL holds the address at which the value of pi is to be placed
+; Exit: AF and DE are corrupt, and all other registers are preserved
+REAL_PI equ #BD9A
+
+; Action: Calculates the square root of a real value, leaving the result in lieu of the real value
+; Entry: HL points to the real value
+; Exit: HL points to the result of the calculation, AF, BC, DE, IX and IY are corrupt
+REAL_SQR equ #BD9D
+
+; Action: Raises the first real value to the power of the second real value, leaving the result in lieu of the ¡irst real value
+; Entry: HL points to the first real value, and DE points to the second real value
+; Exit: HL points to the result of the calculation, AF, BC, DE, IX and IY are corrupt
+REAL_POWER equ #BDA0
+
+; Action: Returns the naperian logarithm (to base e) of a real value, leaving the result in lieu of the real value
+; Entry: HL points to the real value
+; Exit: HL points to the logarithrn that has been calculated, AF, BC, DE, LY and IY are corrupt
+REAL_LOG equ #BDA3
+
+; Action: Returns the logarithm (to base 10) of a real value, leaving the result in lieu of the real value
+; Entry: HL points to the real value
+; Exit: HL points to the logarithrn that has been calculated, AF, BC, DE, IX and IY are corrupt
+REAL_LOG_10 equ #BDA6
+
+; Action: Returns the antilogarithm (base e) of a real value, leaving the result in lieu of the real value
+; Entry: HL points to the real value
+; Exit: HL points to the antilogarithm that has been cal- culated, AF, BC, DE, IX and IY are corrupt
+; Notes: See the BASIC handbook for details of EXP
+REAL_EXP equ #BDA9
+
+; Action: Returns the sine of a real value, leaving the result in lieu of the real value
+; Entry: HL points to the real value (ie all angle)
+; Exit: HL points to the sine value that has been calculated, AF, BC, DE, IX and IY are corrupt
+REAL_SINE equ #BDAC
+
+; Action: Returns the cosine of a real value, leaving a the result in lieu of the real value
+; Entry: HL points to the real value (ie an angle)
+; Exit: HL points to the cosine value that has been calculated, AF, BC, DE, IX and IY are corrupt
+REAL_COSINE equ #BDAF
+
+; Action: Returns the tangent of a real value, leaving the result in lieu of the real value
+; Entry: HL points to the real value (ie an angle)
+; Exit: HL points to the tangent value that has been cal- culated, AF, BC, DE, IX and IY are corrupt
+REAL_TANGENT equ #BDB2
+
+; Action: Returns the arctangent of a real value, leaving the result in lieu of the real value
+; Entry: HL points to the real value (ie an angle)
+; Exit: HL points to the arctangent value that has been calculated, AF, BC, DE, IX and IY are corrupt All of the above routines to calculate sine, cosine, tangent and arctangent are slightly inaccuarate
+REAL_ARCTANGENT equ #BDB5

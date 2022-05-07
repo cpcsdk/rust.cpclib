@@ -1,0 +1,130 @@
+
+; Action: Clears all event queues and timer lists, with the exception of keyboard scanning and sound routines
+; Entry: No entry conditions
+; Exit: B contains the foreground ROM select address (if any), DE contains the ROM entry address, C holds the ROM select address for a RAM foreground program, AF and HL are corrupt, and all others are preserved
+KL_CHOKE_OFF equ #BCC8
+
+; Action: Finds and initialises all background ROMs
+; Entry: DE holds the address of the first usable byte of memory, HL holds the address of the last usable byte
+; Exit: DE holds the address of the new first usable byte of memory, HL holds the address of the new last usable byte, AF and BC are corrupt, and all other registers are preserved
+; Notes: This routine looks at the ROM select addresses from 0 to l5 (1 to 7 for the 464) and calls the initialisation routine of any ROMs present; these routines may reserve memory by adjusting DE and HL before returning control to KL ROM WALK, and the ROM is then added to the list of command handling routines
+KL_ROM_WALK equ #BCCB
+
+; Action: Finds and initialises a specific background ROM
+; Entry: C contains the ROM select address of the ROM, DE holds the address of the first usable byte of memorv, HL holds the address of the last usable byte of memory
+; Exit: DE holds the address of the new first usaUe byte of memory, HL holds the address of the new last usable byte. AF and B are corrupt, and all other registers are preserved
+; Notes: The ROM select address must be in the range of 0 to 15 (or 1 to 7 for the 464) although address 7 is tor the AMSDOS/CPM ROM if present. The ROM's initialisation routine is then called and some memory may be reserved for the ROM by adjusting the values of DE and HL before returning control to KL INlT BACK
+KL_INIT_BACK equ #BCCE
+
+; Action: Logs on a new RSX to the firmware
+; Entry: BC contains the address of the RSX's command table, HL contains the address of four bytes exclusively for use by the firmware
+; Exit: DE is corrupt, and all other registers are preserved
+KL_LOG_EXT equ #BCD1
+
+; Action: Searches an RSX, background ROM or foreground ROM, to find a command in its table
+; Entry: HL contains the address of the command name (in RAM only) which is being searched for
+; Exit: If the narne was found in a RSX or background ROM then Carry is true, C contains the ROM select address, and HL contains the address of the routine; if the command was not found, then Carry is false, C and HL are corrupt; in either case, A, B and DE are corrupt, and all others are preserved
+; Notes: The command names should be in upper case and the last character should have &80 added to it; the sequence of searching is RSXs, then ROMs with lower numbers before ROMs with higher numbers
+KL_FIND_COMMAND equ #BCD4
+
+; Action: Sets up a frame flyback event block which will be acted on whenever a frame flyback occurs
+; Entry: HL contains the address of the event block in the central 32K of RAM, B contains the event class. C contains the ROM select address (if any), and DE contains the address if the event routine
+; Exit: AF, DE and HL are corrupt, and all other registers are preserved
+KL_NEW_FRAME_FLY equ #BCD7
+
+; Action: Adds an existing but deleted frame flyback event block to the list of routines run when a frame flyback occurs
+; Entry: HL contains the address of the event block (in the central 32K of RAM)
+; Exit: AF, DE and HL are corrupt, and all others are preserved
+KL_ADD_FRAME_FLY equ #BCDA
+
+; Action: Removes a frame flyback event block from the list of routines which are mn when a frame flyback occurs
+; Entry: HL contains the address of the event block
+; Exit: AF, DE and HL are corrupt, and all others are preserved
+KL_DEL_FRAME_FLY equ #BCDD
+
+; Action: Sets up a fast ticker event block which will be run whenever the l/300th second ticker interrupt occurs
+; Entry: HL contains the address of the event block (in the central 32K of RAM), B contains the event class, C contains the ROM select address (if any), and DE contains the address of the event routine
+; Exit: AF, DE and HL are corrupt, and all other registers are preserved
+KL_NEW_FAST_TICKER equ #BCE0
+
+; Action: Adds an existing but deleted fast ticker event block to the list of routines which are run when the l/300th sec ticker interrupt occurs
+; Entry: HL contains the address of the event block
+; Exit: AF, DE and HL are corrupt, and all the other registers are preserved
+KL_ADD_FAST_TICKER equ #BCE3
+
+; Action: Removes a fast ticker event block from the list of routines run when the l/300th sec ticker interrupt occurs
+; Entry: HL contains the address of the event block
+; Exit: AF, DE and HL are corrupt, and all others are preserved
+KL_DEL_FAST_TICKER equ #BCE6
+
+; Action: Sets up a ticker event block which will be run whenever a 1/50th second ticker interrupt occurs
+; Entry: HL contains the address of the event block (in the central 32K of RAM), DE contains the initial value for the counter, and BC holds the value that the counter will be given whenever it reaches zero
+; Exit: AF, BC, DE and HL are corrupt, and all the other registers are preserved
+; Notes: Every 1/50th of a second all the tick blocks are looked at and their counter is decreased by 1; when the counter reaches zero, the event is `kicked' and the counter is loaded with the value in BC; any tick block with a counter of 0 is ignored, and therefore if the value in BC is 0, the event will be kicked only once and ignored after that
+KL_ADD_TICKER equ #BCE9
+
+; Action: Removes a ticker event block from the list of routines that are run when a l/50th sec ticker interrupt occurs
+; Entry: HL contains the address of the event block
+; Exit: If the event block was found, then Carry is true, and DE holds the value remaining of the counter; if the event block was not found, then Carry is false, and DE is corrupt; in both cases, A, HL and the other flags are corrupt, and all other registers are preserved
+KL_DEL_TICKER equ #BCEC
+
+; Action: Initialises an event block
+; Entry: HL contains the address of the event block (in the central 32K of RAM), B contains the class of event, and C contains the ROM select address, and DE holds the address of the event routine
+; Exit: HL holds the address of the event block+7, and all other registers are preserved
+; Notes: The event class is derived as followsbit 0 -indicates a near addressbits 1 to 4 - hold the synchronous event prioritybit 5 - always zerobit 6 - if bit 6 is set, then it is an express eventbit 7 - if bit 7 is set, then it is an asynchronous event.Asynchronous events do not have priorities; if it is an express asynchronous event, then its event routine is called from the interrupt path; if it is a normal asynchronous event, then its event routine is called just before returning from the interrupt; if it is an express synchronous event, then it has a higher priority than normal synchronous events, and it may not be disabled through use of KL EVENT DISABLE; if the near address bit is set, then the routine is located in the central 32K of RAM and is called directly, so saving time; no event may have a priority of zero
+KL_INIT_EVENT equ #BCEF
+
+; Action: Kicks an event block
+; Ently: HL contains the address of the event block
+; Exit: AF, BC, DE and HL are corrupt, and all other registers are preserved
+KL_EVENT equ #BCF2
+
+; Action: Clears the synchronous event queue
+; Entry: No entry conditions
+; Exit: AF and HL are corrupt, and all other registers are preserved
+; Notes: When using this routine, all events that are waiting to be dealt with are simply discarded
+KL_SYNC_RESET equ #BCF5
+
+; Action: Removes a synchronous event from the event queue
+; Entry: HL contains the address of the event block
+; Exit: AF, BC, DE and HL are corrupt, and all other registers are preserved
+KL_DEL_SYNCHRONOUS equ #BCF8
+
+; Action: Finds out if there is a synchronous event with a higher priority
+; Entry: No entry conditions
+; Exit: If there is an event to be processed, then Carry is true, HL contains the address of the event block, and A contains the priority of the previous event; if there is no event to be processed, then Carry is false, and A and HL are corrupt; in either case, DE is corrupt, and all other registers are preserved
+KL_NEXT_SYNC equ #BCFB
+
+; Action: Runs a synchronous event routine
+; Entry: HL contains the address of the event block
+; Exit: AF, BC, DE and HL are corrupt, and all other registers are preserved
+; Notes: See KL DONE SYNC below
+KL_DO_SYNC equ #BCFE
+
+; Action: Finishes running a synchronous event routine
+; Entry: A contains the priority of the previous event, and HL contains the address of the event block
+; Exit: AF, BC, DE and HL are corrupt, and all other registers are preserved
+; Notes: When an event that is waiting to be processed has been found by KL NEXT SYNC, the event routine should be run by KL DO SYNC; after this KL DONE SYNC should be called so that the event counter can be decreased - if the counter is greater than zero then the event is placed back on the synchronous event queue
+KL_DONE_SYNC equ #BD01
+
+; Action: Disables norrnal synchronous events
+; Entry: No entry conditions
+; Exit: HL is corrupt, and all other registers are preserved
+KL_EVENT_DISABLE equ #BD04
+
+; Action: Enables normal synchronous events
+; Entry: No entry conditions
+; Exit: HL is corrupt, and all other registers are preserved
+KL_EVENT_ENABLE equ #BD07
+
+; Action: Disarrns a specific event and stops it from occurring
+; Entry: HL contains the address of the event block
+; Exit: AF is corrupt, and all other registers are preserved
+; Notes: This routine should be used to disarm only asynchronous events; see also KL DEL SYNCHRONOUS
+KL_DISARM_EVENT equ #BD0A
+
+; Action: Returns the time that has elapsed since the computer was switched on or reset (in 1/300ths of a second)
+; Entry: No entry conditions
+; Exit: DEHL contains the four byte count of the time elapsed, and all other registers are preserved
+; Notes: D holds the most signifilcant byte of the time elapsed, and L holds the least significant; the four byte count overflows after approximately l66 days have elapsed.
+KL_TIME_PLEASE equ #BD0D

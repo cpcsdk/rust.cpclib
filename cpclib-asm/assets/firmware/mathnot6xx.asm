@@ -1,0 +1,54 @@
+
+; Action: Subtracts the second real value from the first real value, and leaves the result in lieu of the first number
+; Entry: HL points to the first real value, and DE points to the second real value
+; Exit: HL points to the result in place of the first real value, AF, BC, DE, IX and IY are corrupt
+REAL_SUBTRACTION equ #BD5B
+
+; Action: Adds the value of the A register to the exponent byte of a real number
+; Entry: HL points to the real value, and A holds the value to he added
+; Exit: HL points to the result in place of the first real value, AF and IX are corrupt, and all others are preserved
+REAL_EXPONENT_ADDITION equ #BD67
+
+; Action: Adds two signed integer values
+; Entry: HL holds the first integer value, and DE holds the second integer value
+; Exit: HL holds the result of the addition, A holds &FF if there is an overflow but is preserved otherwise, the flags Z are corrupt, and all other registers are preserved
+INTEGER_ADDITION equ #BDAC
+
+; Action: Subtracts the second signed integer value from the first signed integer value
+; Entry: HL holds the first integer value, and DE holds the second integer value
+; Exit: HL holds the result of the subtraction, A holds &FF if there is an overflow but is preserved othenvise, the flags are corrupt, and all the other registers are preserved
+INTEGER_SUBTRACTION equ #BDAF
+
+; Action: Subtracts the first signed integer value from the second signed integer value
+; Entry: HL holds the first integer value, and DE holds the second integer value
+; Exit: HL holds the result of the subtraction, AF and DE are corrupt, and all others are preserved
+INTEGER_REVERSE_SUBTRACTION equ #BDB2
+
+; Action: Multiplies two signed integer values together, and leaves the result in lieu of the first number
+; Entry: HL holds the first integer value, and DE holds the second integer value
+; Exit: HL holds the result of the multiplication, A holds &FF if there is an overflow but is corrupted otherwise, the flags, BC and DE are corrupt, and the other registers are preserved
+; Notes: Multiplication of signed integers does not produce the sarne result as with unsigned integers
+INTEGER_MULTIPLICATION equ #BDB5
+
+; Action: Divides the first signed integer value by the second signed integer value
+; Entry: HL holds the first integer value, and DE holds the second integer value
+; Exit: HL holds the result of the division, DE holds the remainder, AF and BC are corrupt, and all others are preserved
+; Notes: Division of signed integers does not produce the same result as with unsigned integers
+INTEGER_DIVISION equ #BDB8
+
+; Action: Divides the first signed integer value by the second signed integer value
+; Entry: HL holds the first integer value, and DE holds the second integer value
+; Exit: DE holds the result of the division, HL holds the remainder, AF and BC are corrupt, and all others are preserved
+; Notes: Division of signed integers does not produce the same result as with unsigned integers
+INTEGER_DIVISION_2 equ #BDBB
+
+; Action: Compares two signed integer values
+; Entry: HL holds the first integer value, and DE holds the second integer value
+; Exit: A holds the result of the comparison process, the flags are corrupt, and all others are preserved
+; Notes: After this routine has been called, the value in A depends on the result of the comparison as followsif the first real number is greater than the second real number, then A holds &01if the first real number is the same as the second real number, then A holds &00if the second real number is greater than the first real number, then A holds &FFWith signed integers, the range of values runs from &8000 (-32768) via zero to &7FFF (+32767) and so any value which is greater than &8000 is considered as being less than a value of &7FFF or less
+INTEGER_COMPARISON equ #BDC4
+
+; Action: Reverses the sign of an integer value (by subtracting it from &10000)
+; Entry: HL holds the integer value
+; Exit: HL holds the new value of the integer number, AF is corrupt, cmd all other registers are preserved
+INTEGER_UNARY_MINUS equ #BDC7
