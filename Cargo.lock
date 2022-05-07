@@ -817,6 +817,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "substring",
+ "tempfile",
  "velcro",
 ]
 

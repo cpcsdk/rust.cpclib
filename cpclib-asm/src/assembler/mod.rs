@@ -2013,7 +2013,11 @@ impl Env {
     }
 
     pub fn visit_snainit(&mut self, fname: &str) -> Result<(), AssemblerError> {
-        if self.byte_written {
+    	if !self.pass.is_first_pass() {
+    		return Ok(());
+    	}
+    
+        if self.byte_written  {
             return Err(AssemblerError::AssemblingError {
                 msg: format!(
                     "Some bytes has alrady been produced; you cannot import the snapshot {}.",

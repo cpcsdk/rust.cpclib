@@ -1,6 +1,9 @@
+	snainit "../cpclib-sna/src/cpc6128.sna" ; should be uneeded by properly specifying sna properties
+	
 	org 0x4000
+	run $
 
-	include "inner://firmware/txtvdu.asm"
+	
 
 	ld hl, text_content
 loop
@@ -9,6 +12,7 @@ loop
 		jp z, finished
 
 		call TXT_OUTPUT
+		inc hl
 		jp loop
 
 finished
@@ -16,3 +20,4 @@ finished
 
 text_content
 	db "Hello, world!", 0
+	include "inner://firmware/txtvdu.asm"

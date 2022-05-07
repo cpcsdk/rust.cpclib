@@ -271,15 +271,33 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
     let show_progress = matches.is_present("PROGRESS");
 
+    if matches.is_present("SNAPSHOT") && ! matches.is_present("TO_M4") &&  !matches.is_present("OUTPUT"){
+        return Err(BasmError::InvalidArgument("You have not provided an output file name".to_owned()));
+    }
 
 
 
-    if matches.is_present("SNAPSHOT") {
-        let pc_filename = matches.value_of("OUTPUT").unwrap();
-        env.save_sna(pc_filename).map_err(|e| {
+    if matches.is_present("SNAPSHOT") || matches.is_present("TO_M4") {
+        
+
+        // Get the appropriate filename
+        let pc_filename = matches.value_of("OUTPUT");
+        let temp_file = if pc_filename.is_none() { // create a tempfile that will not be erased
+            Some(tempfile::NamedTempFile::new().unwrap().keep().unwrap())
+        } else {
+            None
+        };
+        let pc_filename = if let Some(temp_file) = &temp_file {
+            temp_file.1.to_owned()
+        } else {
+            pc_filename.unwrap().into()
+        };
+
+
+        env.save_sna(pc_filename.clone()).map_err(|e| {
             BasmError::Io {
                 io: e,
-                ctx: format!("saving \"{}\"", pc_filename)
+                ctx: format!("saving \"{}\"", pc_filename.display())
             }
         })?;
 
@@ -510,7 +528,6 @@ pub fn build_args_parser() -> clap::Command<'static> {
                             .long("m4")
                             .takes_value(true)
                             .multiple_occurrences(false)
-                            .requires("SNAPSHOT")
                             .number_of_values(1)
                     )
                     .arg(
