@@ -277,27 +277,16 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
 
 
-    if matches.is_present("SNAPSHOT") || matches.is_present("TO_M4") {
+    if matches.is_present("SNAPSHOT") && matches.is_present("OUTPUT") {
         
 
         // Get the appropriate filename
-        let pc_filename = matches.value_of("OUTPUT");
-        let temp_file = if pc_filename.is_none() { // create a tempfile that will not be erased
-            Some(tempfile::NamedTempFile::new().unwrap().keep().unwrap())
-        } else {
-            None
-        };
-        let pc_filename = if let Some(temp_file) = &temp_file {
-            temp_file.1.to_owned()
-        } else {
-            pc_filename.unwrap().into()
-        };
-
+        let pc_filename = matches.value_of("OUTPUT").unwrap();
 
         env.save_sna(pc_filename.clone()).map_err(|e| {
             BasmError::Io {
                 io: e,
-                ctx: format!("saving \"{}\"", pc_filename.display())
+                ctx: format!("saving \"{}\"", pc_filename)
             }
         })?;
 
@@ -314,6 +303,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                     None
                 };
 
+                
                 let xfer = CpcXfer::new(m4);
                 xfer.upload_and_run(pc_filename, None)
                     .expect("An error occured while transfering the snapshot");
@@ -321,10 +311,32 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 if let Some(bar) = bar {
                     Progress::progress().remove_bar_ok(&bar);
                 }
+                
+  
             },
             None => {}
         } 
 
+    }
+    else if matches.is_present("TO_M4") && !matches.is_present("OUTPUT")  {
+    	let sna = env.sna();
+    	let m4 = matches.value_of("TO_M4").unwrap();
+    	
+    	                let bar = if show_progress {
+                    Some(Progress::progress()
+                        .add_bar("Send to M4"))
+                } else {
+                    None
+                };
+    	
+	let xfer = CpcXfer::new(m4);
+	xfer.upload_and_run_sna(sna)
+	    .expect("An error occured while transfering the snapshot");
+
+	if let Some(bar) = bar {
+	    Progress::progress().remove_bar_ok(&bar);
+	}
+    	
     }
     else if matches.is_present("OUTPUT") || matches.is_present("DB_LIST") {
         // Collect the produced bytes
