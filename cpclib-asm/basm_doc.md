@@ -25,6 +25,39 @@ If it fails in properly recognizing macros or label, you can guide it by suffixi
 
 ## Provided functions
 
+- mode0_byte_to_pen_at
+- mode1_byte_to_pen_at
+- mode2_byte_to_pen_at
+- pen_at_mode0_byte
+- pen_at_mode1_byte
+- pen_at_mode2_byte
+- pens_to_mode0_byte
+- pens_to_mode1_byte
+- pens_to_mode2_byte
+- list_new
+- list_get(LIST, INDEX)
+- list_set
+- list_len
+- list_sublist
+- list_sort
+- list_argsort
+- list_push
+- string_new
+- string_push
+- string_concat
+- string_from_list
+- assemble
+- matrix_new
+- matrix_set
+- matrix_get
+- matrix_col
+- matrix_row
+- matrix_set_row
+- matrix_set_col
+- matrix_width
+- matrix_height
+- load
+
 ## User defined functions
 
 Function, endf
