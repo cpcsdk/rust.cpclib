@@ -19,6 +19,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{bin_number, dec_number, hex_number, lazy_static};
 use cpclib_sna::parse::{parse_flag, parse_flag_value};
 use cpclib_sna::{FlagValue, SnapshotVersion};
+use either::Either;
 
 use super::context::*;
 use super::obtained::*;
@@ -299,6 +300,7 @@ pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, Assembl
     parse_z80_str_with_context(code, ctx)
 }
 
+#[inline]
 /// nom many0 does not seem to fit our parser requirements
 pub fn my_many0<O, E, F>(mut f: F) -> impl FnMut(Z80Span) -> IResult<Z80Span, Vec<O>, E>
 where
@@ -324,38 +326,145 @@ where
     }
 }
 
-/// Parse a single line of Z80. Code useing directive on several lines cannot work
-pub fn parse_z80_line(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, Z80ParserError> {
-    // let before_elem = input.clone();
-    // let (input2, tokens) = tuple((
-    //     context("[DBG]not eof", not(eof)),
-    //     alt((
-    //         context("[DBG] empty line", parse_empty_line),
-    //         context("[DBG] label related", parse_empty_line),
-    //         context(
-    //             "[DBG] code embeders",
-    //             delimited(
-    //                 space0,
-    //                 map(parse_z80_directive_with_block, |b| vec![b]),
-    //                 cut(context(
-    //                     "Line ending issue",
-    //                     preceded(
-    //                         space0,
-    //                         alt((recognize(parse_comment), line_ending, eof, tag(":")))
-    //                     )
-    //                 ))
-    //             )
-    //         ),
-    //         context("[DBG] line with label only", parse_z80_line_label_only),
-    //         context("[DBG] standard line", parse_z80_line_complete)
-    //     ))
-    // ))(input)?;
+#[inline]
+pub fn my_many0_in<'vec,O, E, F>(mut f: F, r#in: &'vec mut Vec<O>) -> impl FnMut(Z80Span) -> IResult<Z80Span, (), E> + 'vec
+where
+    F: Parser<Z80Span, O, E> + 'vec,
+    E: ParseError<Z80Span>
+{
+    move |mut i: Z80Span| {
+        loop {
+            match f.parse(i.clone()) {
+                Err(Err::Error(_)) => return Ok((i, ())),
+                Err(e) => return Err(e),
+                Ok((i1, o)) => {
+                    if i1 == i {
+                        return Ok((i, ())); // diff is here
+                    }
 
-    // Ok((input2, tokens.1))
-
-    parse_z80_line_complete(input)
+                    i = i1;
+                    r#in.push(o);
+                }
+            }
+        }
+    }
 }
 
+#[inline]
+ fn my_separated_list0_in<'vec, I, O, O2, E, F, G>(
+    mut sep: G,
+    mut f: F, 
+    r#in: &'vec mut Vec<O>
+  ) -> impl FnMut(I) -> IResult<I, (), E> + 'vec
+  where
+    I: Clone + InputLength,
+    F: Parser<I, Either<O, Vec<O>>, E> + 'vec,
+    G: Parser<I, O2, E> + 'vec,
+    E: ParseError<I>,
+  {
+    move |mut i: I| {
+  
+      match f.parse(i.clone()) {
+        Err(Err::Error(_)) => return Ok((i, ())),
+        Err(e) => return Err(e),
+        Ok((i1, o)) => {
+            match o {
+                Either::Left(o) => {r#in.push(o);},
+                Either::Right(mut os) => {r#in.append(&mut os);},
+            }
+          i = i1;
+        }
+      }
+  
+      loop {
+        let len = i.input_len();
+        match sep.parse(i.clone()) {
+          Err(Err::Error(_)) => return Ok((i, ())),
+          Err(e) => return Err(e),
+          Ok((i1, _)) => {
+            // infinite loop check: the parser must always consume
+            if i1.input_len() == len {
+              return Err(Err::Error(E::from_error_kind(i1, ErrorKind::SeparatedList)));
+            }
+  
+            match f.parse(i1.clone()) {
+              Err(Err::Error(_)) => return Ok((i, ())),
+              Err(e) => return Err(e),
+              Ok((i2, o)) => {
+                    match o {
+                        Either::Left(o) => {r#in.push(o);},
+                        Either::Right(mut os) => {r#in.append(&mut os);}
+                    }
+                
+                i = i2;
+              }
+            }
+        }
+      }
+    }
+    }}
+
+#[inline]
+pub fn my_many0_nocollect<O, E, F>(mut f: F) -> impl FnMut(Z80Span) -> IResult<Z80Span, (), E>
+where
+    F: Parser<Z80Span, O, E>,
+    E: ParseError<Z80Span>
+{
+    move |mut i: Z80Span| {
+        loop {
+            match f.parse(i.clone()) {
+                Err(Err::Error(_)) => return Ok((i, ())),
+                Err(e) => return Err(e),
+                Ok((i1, _)) => {
+                    if i1 == i {
+                        return Ok((i, ())); // diff is here
+                    }
+
+                    i = i1;
+                }
+            }
+        }
+    }
+}
+
+#[inline]
+pub fn my_many_till_nocollect<I, O, P, E, F, G>(
+    mut f: F,
+    mut g: G,
+  ) -> impl FnMut(I) -> IResult<I, ((), P), E>
+  where
+    I: Clone + InputLength,
+    F: Parser<I, O, E>,
+    G: Parser<I, P, E>,
+    E: ParseError<I>,
+  {
+    move |mut i: I| {
+      loop {
+        let len = i.input_len();
+        match g.parse(i.clone()) {
+          Ok((i1, o)) => return Ok((i1, ((), o))),
+          Err(Err::Error(_)) => {
+            match f.parse(i.clone()) {
+              Err(Err::Error(err)) => return Err(Err::Error(E::append(i, ErrorKind::ManyTill, err))),
+              Err(e) => return Err(e),
+              Ok((i1, o)) => {
+                // infinite loop check: the parser must always consume
+                if i1.input_len() == len {
+                  return Err(Err::Error(E::from_error_kind(i1, ErrorKind::ManyTill)));
+                }
+  
+                i = i1;
+              }
+            }
+          }
+          Err(e) => return Err(e),
+        }
+      }
+    }
+  }
+  
+
+#[inline]
 fn inner_code(input: Z80Span) -> IResult<Z80Span, LocatedListing, Z80ParserError> {
     inner_code_with_state(input.extra.state.clone())(input)
 }
@@ -929,21 +1038,23 @@ pub fn parse_flag_value_inner(input: Z80Span) -> IResult<Z80Span, FlagValue, Z80
 }
 
 /// TODO - currently consume several lines. Should do it only one time
-pub fn parse_empty_line(input: Z80Span) -> IResult<Z80Span, Vec<LocatedToken>, Z80ParserError> {
+pub fn parse_empty_line(input: Z80Span) -> IResult<Z80Span, Option<LocatedToken>, Z80ParserError> {
     // let (input, _) = opt(line_ending)(input)?;
     let before_comment = input.clone();
     let (input, comment) = delimited(space0, opt(parse_comment), space0)(input)?;
     let (input, _) = alt((line_ending, eof))(input)?;
 
-    let mut res = Vec::new();
-    if comment.is_some() {
+    let  res = if comment.is_some() {
         let size = before_comment.input_len() - input.input_len();
-        res.push(comment.unwrap().locate(before_comment, size));
-    }
+        Some(comment.unwrap().locate(before_comment, size))
+    } else {
+        None
+    };
 
     Ok((input, res))
 }
 
+#[inline]
 fn parse_single_token(
     first: bool
 ) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
@@ -992,6 +1103,7 @@ enum LabelModifier {
     Next
 }
 
+#[inline]
 pub fn parse_z80_directive_with_block(
     input: Z80Span
 ) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
@@ -1017,38 +1129,90 @@ pub fn parse_z80_directive_with_block(
     ))(input)
 }
 
+#[inline]
+pub fn my_separated_list0<'vec, I, O, O2, E, F, G>(
+    res: &'vec mut Vec<O>,
+    mut sep: G,
+    mut f: F,
+  ) -> impl FnMut(I) -> IResult<I, (), E> + 'vec
+  where
+    I: Clone + InputLength,
+    F: Parser<I, O, E> + 'vec,
+    G: Parser<I, O2, E>+ 'vec,
+    E: ParseError<I>,
+  {
+    move |mut i: I| {
+  
+      match f.parse(i.clone()) {
+        Err(Err::Error(_)) => return Ok((i, ())),
+        Err(e) => return Err(e),
+        Ok((i1, o)) => {
+          res.push(o);
+          i = i1;
+        }
+      }
+  
+      loop {
+        let len = i.input_len();
+        match sep.parse(i.clone()) {
+          Err(Err::Error(_)) => return Ok((i, ())),
+          Err(e) => return Err(e),
+          Ok((i1, _)) => {
+            // infinite loop check: the parser must always consume
+            if i1.input_len() == len {
+              return Err(Err::Error(E::from_error_kind(i1, ErrorKind::SeparatedList)));
+            }
+  
+            match f.parse(i1.clone()) {
+              Err(Err::Error(_)) => return Ok((i, ())),
+              Err(e) => return Err(e),
+              Ok((i2, o)) => {
+                res.push(o);
+                i = i2;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+
+
 /// Parse a line (ie a set of components separated by :) until the end of the line or a stop directive
-/// TODO add an argument o manage cases like '... : ENDIF'
-pub fn parse_z80_line_complete(
-    input: Z80Span
-) -> IResult<Z80Span, Vec<LocatedToken>, Z80ParserError> {
+/// XXX: In opposite to the other functions, the result is stored in the parameter (to avoid unecessary memory allocations)
+#[inline]
+pub fn parse_z80_line_complete(r#in: &mut Vec<LocatedToken>) -> impl FnMut(Z80Span) -> IResult<Z80Span, (), Z80ParserError> + '_ {
+    
+    move |input: Z80Span|  -> IResult<Z80Span, (), Z80ParserError> {
     // Early exit if line is empty
     let (input, empty) = opt(parse_empty_line)(input)?;
-    if let Some(empty) = empty {
-        return Ok((input, empty));
+    if let Some(Some(notempty)) = empty {
+        r#in.push(notempty);
+        return Ok((input, ()));
     }
 
     // get the line components
-    let (input, mut tokens) = map(
-        separated_list0(
+    let (input, ()) =
+        my_separated_list0_in(
             tuple((space0, tag(":"), space0)),
             // Take care of the order to not break parse
             alt((
                 map(
                     // handle set/equ/ and so on
                     parse_z80_line_label_aware_directive,
-                    |l| vec![l]
+                    |l| Either::Left(l)
                 ),
                 // move all of these in z80_line_component and rename line_component in something else ...
                 map(
                     // a simple token mnemonic or directive (except macro call)
                     parse_single_token(true),
-                    |t| vec![t]
+                    |t| Either::Left(t)
                 ),
                 map(
                     // macros/loops/...
                     preceded(space0, parse_z80_directive_with_block),
-                    |b| vec![b]
+                    |b| Either::Left(b)
                 ),
 
                 map(
@@ -1057,23 +1221,22 @@ pub fn parse_z80_line_complete(
                         terminated(parse_label(false), not(line_ending)),
                         parse_single_token(true)
                     ),
-                    |t| vec![LocatedToken::Label(t.0), t.1]
+                    |t| Either::Right(
+                       vec![ 
+                        LocatedToken::Label(t.0),
+                        t.1]
+                        )
                 ),
                 // TODO add syntax where block-lmike directives have there name provided in a precedding label
-                map(parse_macro_or_struct_call(false, false), |m| vec![m]),
-                map(pair(space0, peek(tag(":"))), |_| Vec::new()), // a duplicated :
+                map(parse_macro_or_struct_call(false, false), |m| Either::Left(m)),
+                map(pair(space0, peek(tag(":"))), |_| Either::Right(vec![])), // a duplicated :
                 map(preceded(space0, parse_label(false)), |l| {
-                    vec![LocatedToken::Label(l)]
+                    Either::Left(LocatedToken::Label(l))
                 })  // a single label
-            ))
-        ),
-        |obtained| {
-            obtained.into_iter().fold(Vec::new(), |mut acc, mut line| {
-                acc.append(&mut line);
-                acc
-            })
-        }
-    )(input)?;
+            )),
+            r#in
+        )(input)?;
+
 
     // we may have some space after the last component
     // also a : that is not cpatured when there is nothing after
@@ -1082,7 +1245,7 @@ pub fn parse_z80_line_complete(
     // early stop in case of stop directive
     let (_, stop) = opt(parse_end_directive)(input.clone())?;
     if stop.is_some() {
-        return Ok((input, tokens));
+        return Ok((input, ()));
     }
 
     // get the possible comment
@@ -1093,7 +1256,7 @@ pub fn parse_z80_line_complete(
 
     if let Some(comment) = comment {
         let size = before_comment.input_len() - input.input_len();
-        tokens.push(comment.locate(before_comment, size));
+        r#in.push(comment.locate(before_comment, size));
     }
 
     let (input, _) = cut(context(
@@ -1104,8 +1267,8 @@ pub fn parse_z80_line_complete(
         )
     ))(input)?;
 
-    Ok((input, tokens))
-}
+    Ok((input, ()))
+}}
 
 #[inline]
 pub fn parse_assign_operator(
@@ -1132,6 +1295,7 @@ pub fn parse_assign_operator(
 /// Initially it was supposed to manage lines with only labels, however it has been extended
 /// to labels fallowed by specific commands.
 /// TODO this complete piece of code MUST be removed and integrated within parse_z80_line_complete
+#[inline]
 pub fn parse_z80_line_label_aware_directive(
     input: Z80Span
 ) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
@@ -2340,6 +2504,7 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, LocatedMacroParam, Z8
 
 /// Manage the call of a macro.
 /// When ambiguou may return a label
+#[inline]
 pub fn parse_macro_or_struct_call(
     allowed_to_return_a_label: bool,
     for_struct: bool
@@ -2457,6 +2622,7 @@ pub fn parse_macro_or_struct_call(
     }
 }
 
+#[inline]
 fn parse_directive_word(
     name: &'static str
 ) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> + 'static {
@@ -3537,6 +3703,7 @@ pub fn char_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError
 
 /// Parse a label(label: S)
 /// TODO reimplement to never build a string
+#[inline]
 pub fn parse_label(
     doubledots: bool
 ) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {

@@ -1,5 +1,6 @@
 use std::borrow::Cow;
-use std::ops::Deref;
+use std::cell::RefCell;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
@@ -19,7 +20,7 @@ use cpclib_tokens::{
 };
 use ouroboros::self_referencing;
 
-use super::{parse_z80_line_complete, ParserContext, Z80ParserError, Z80Span};
+use super::{parse_z80_line_complete, ParserContext, Z80ParserError, Z80Span, my_many0, my_many0_in, my_many0_nocollect, my_many_till_nocollect};
 use crate::assembler::Env;
 use crate::error::AssemblerError;
 /// ! This crate is related to the adaptation of tokens and listing for the case where they are parsed
@@ -1575,6 +1576,7 @@ impl LocatedListing {
     /// Build the listing from the current code and context
     /// In case of error, the listing is provided as error message refer to its owned source code... FInal version should behave differently
     /// The listing embeds the error
+    #[inline]
     pub fn new_complete_source(
         code: String,
         mut ctx: ParserContext
@@ -1599,14 +1601,13 @@ impl LocatedListing {
                 let src = ctx.source.as_ref().unwrap();
                 let input_start = Z80Span::new_extra(src, ctx);
 
+                let mut tokens = Vec::with_capacity(100);
                 // really make the parsing
-                let res = map(many_till(parse_z80_line_complete, eof), |(v, _)| {
-                    v.into_iter().flatten().collect_vec()
-                })(input_start.clone());
+                let res = my_many_till_nocollect(parse_z80_line_complete(&mut tokens), eof)(input_start.clone());
 
                 // analyse result and can generate error even if parsing was ok
                 let res = match res {
-                    Ok((input_stop, tokens)) => {
+                    Ok((input_stop, _)) => {
                         if input_stop.trim().is_empty() {
                             // no more things to assemble
                             Ok(InnerLocatedListing::from(tokens))
@@ -1661,10 +1662,14 @@ impl LocatedListing {
 
     /// By definition code is store in a Z80Span because the original string is Already contained in another Listing as a String
     /// As the code is already owned by another LocatedListing, we can return error messages that refer it
+    #[inline]
     pub fn parse_inner(
         input_code: Z80Span,
         new_state: ParsingState
     ) -> IResult<Z80Span, Arc<LocatedListing>, Z80ParserError> {
+       // let mut tokens = RefCell::new(Vec::new());
+        let mut tokens = Vec::with_capacity(20);
+
         // The context is similar to the initial one ...
         let mut ctx = input_code.extra.clone();
         // ... but the state can be modified to forbid some keywords
@@ -1685,13 +1690,15 @@ impl LocatedListing {
             },
 
             parse_result_builder: |_src, lst_ctx| {
+
+
                 // build a span with the appropriate novel context
                 let lst_ctx =
                     unsafe { &*(lst_ctx as *const ParserContext) as &'static ParserContext }; // the context is stored within the object; so it is safe to set its lifetime to static
 
                 // Build the span that will be parsed to collect inner tokens.
                 // It has a length of input_length.
-                let mut inner_code = Z80Span(unsafe {
+                let inner_code = Z80Span(unsafe {
                     LocatedSpan::new_from_raw_offset(
                         input_code.location_offset(),
                         input_code.location_line(),
@@ -1702,62 +1709,28 @@ impl LocatedListing {
                 // keep a track of the very beginning of the span
                 let inner_start: Z80Span = inner_code.clone();
 
-                let mut tokens = Vec::new(); // container of the parsed tokens
-                let mut error = None; // container of the potential parse error
 
-                // we parse until we met an error or the end of the parse
-                loop {
-                    // check if the line needs to be parsed (ie there is no end directive)
-                    let must_break = inner_code.trim().is_empty() || {
-                        // TODO take into account potential label
-                        let maybe_keyword = opt(parse_end_directive)(inner_code.clone());
-                        match maybe_keyword {
-                            Ok((_, Some(_))) => true,
-                            _ => false
-                        }
-                    };
-                    if must_break {
-                        break;
-                    };
+                let res = cut(context("[DBG] Inner loop", my_many0_nocollect(
+                    parse_z80_line_complete(&mut tokens)
+                )))(inner_code.clone());
+                match res {
+                        Ok( (next_input, _)) => {
+                            let mut next_span = next_input;
+                            next_span.extra = input_code.extra;
 
-                    // really parse the line
-                    match cut(context("[DBG] Inner loop", parse_z80_line_complete))(
-                        inner_code.clone()
-                    ) {
-                        Ok((next_input, mut tok)) => {
-                            inner_code = next_input; // ensure next line parsing starts at the right place{}
-                            tokens.append(&mut tok); // add the collected tokens to the complete tokens list
-                        }
-                        Err(e) => {
-                            error = Some(e);
-                            break;
-                        }
+                            // shorten the inner_code
+                            let inner_span =
+                                inner_start.take(inner_start.input_len() - next_span.input_len());
+
+                            ParseResult::SuccessInner {
+                                inner_span,
+                                next_span,
+                                listing: InnerLocatedListing::from(tokens)
+                            }
+                        },
+                        Err(e) =>  ParseResult::FailureInner(e),
                     }
                 }
-
-                // here we may have left because of an error or the end of parsing.
-                // Generate the appropriate parse result
-                match error {
-                    // Parse error
-                    Some(e) => ParseResult::FailureInner(e),
-                    // Correct parsing
-                    None => {
-                        // restore the appropriate context to the next_span (the original context in fact)
-                        let mut next_span = inner_code;
-                        next_span.extra = input_code.extra;
-
-                        // shorten the inner_code
-                        let inner_span =
-                            inner_start.take(inner_start.input_len() - next_span.input_len());
-
-                        ParseResult::SuccessInner {
-                            inner_span,
-                            next_span,
-                            listing: InnerLocatedListing::from(tokens)
-                        }
-                    }
-                }
-            }
         }
         .build();
         let inner_listing = Arc::new(inner_listing);
