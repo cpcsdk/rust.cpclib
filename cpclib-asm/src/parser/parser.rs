@@ -1086,19 +1086,8 @@ pub fn parse_empty_line(input: Z80Span) -> IResult<Z80Span, Option<LocatedToken>
 }
 
 #[inline]
-fn parse_single_token(
-    first: bool
-) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    move |input: Z80Span| {
-        // Do not match ':' for the first case
-        let input = if first {
-            input
-        }
-        else {
-            let (input, _) =
-                context("[DBG] delimitation", delimited(space0, char(':'), space0))(input)?;
-            input
-        };
+fn parse_single_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+
 
         // Get the token
         let (input, opcode) = context(
@@ -1114,7 +1103,7 @@ fn parse_single_token(
 
         Ok((input, opcode))
     }
-}
+
 
 fn eof(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
     if input.len() == 0 {
@@ -1237,7 +1226,7 @@ pub fn parse_z80_line_complete(r#in: &mut Vec<LocatedToken>) -> impl FnMut(Z80Sp
                 // move all of these in z80_line_component and rename line_component in something else ...
                 map(
                     // a simple token mnemonic or directive (except macro call)
-                    parse_single_token(true),
+                    parse_single_token,
                     |t| Either::Left(t)
                 ),
                 map(
@@ -1250,7 +1239,7 @@ pub fn parse_z80_line_complete(r#in: &mut Vec<LocatedToken>) -> impl FnMut(Z80Sp
                     // a label followed by a simple token mnomonic or directive (except macro call)
                     pair(
                         terminated(parse_label(false), not(line_ending)),
-                        parse_single_token(true)
+                        parse_single_token
                     ),
                     |t| Either::Right(
                        vec![ 
