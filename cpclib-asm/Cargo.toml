@@ -28,12 +28,10 @@ cpclib-xfer = "0.6.0"
 #phf = {version="0.9.0", features=["macros"]} // unable to use as I whish
 arrayref= "0.3.6"
 cfg-if = "1.0.0"
-chardet = "0.2.4"
 codespan-reporting = "0.11.1"
 custom_error = "1.9.2"
 delegate = "0.6.2"
 either = "1.6.1"
-encoding = "0.2.33"
 failure = "0.1.8"
 getset = "0.1.2"
 globset = "0.4.8"
@@ -51,6 +49,7 @@ substring = "1.4.5"
 velcro = "0.5.3"
 assert_matches = "1.5.0"
 tempfile = "3.3.0"
+chardetng = "0.1.17"
 
 [build-dependencies]
 built = { version = "0.5.1", features = ["chrono"] }

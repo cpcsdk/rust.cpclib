@@ -103,24 +103,15 @@ pub fn read_source<P: AsRef<Path>>(
 }
 
 
+// Never fail
 pub fn handle_source_encoding(fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
 
-    let result = chardet::detect(content);
-    let coder = encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&result.0));
+    let mut decoder = chardetng::EncodingDetector::new();
+    decoder.feed(content, true);
+    let encoding = decoder.guess( None, true);
+    let content = encoding.decode(content).0;
 
-    let content = match coder {
-        Some(coder) => {
-            let utf8reader = coder
-                .decode(&content, encoding::DecoderTrap::Ignore)
-                .expect("Error");
-            utf8reader.to_string()
-        }
-        None => {
-            return Err(AssemblerError::IOError {
-                msg: format!("Encoding error for {:?}.", fname)
-            });
-        }
-    };
+    let content = content.into_owned();
 
     Ok(content)
 }
