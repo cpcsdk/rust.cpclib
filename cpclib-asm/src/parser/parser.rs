@@ -1,5 +1,6 @@
 #![allow(clippy::cast_lossless)]
 
+use std::collections::{HashSet, BTreeSet};
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -15,6 +16,7 @@ use cpclib_common::nom::sequence::*;
 #[allow(missing_docs)]
 use cpclib_common::nom::*;
 use cpclib_common::nom_locate::LocatedSpan;
+use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{bin_number, dec_number, hex_number, lazy_static};
 use cpclib_sna::parse::{parse_flag, parse_flag_value};
@@ -271,6 +273,26 @@ lazy_static::lazy_static! {
     static ref DOTTED_STAND_ALONE_DIRECTIVE: Vec<&'static str> = _DOTTED_STAND_ALONE_DIRECTIVE.iter().map(String::as_str).collect_vec();
     static ref DOTTED_START_DIRECTIVE: Vec<&'static str> = _DOTTED_START_DIRECTIVE.iter().map(String::as_str).collect_vec();
     static ref DOTTED_END_DIRECTIVE: Vec<&'static str> = _DOTTED_END_DIRECTIVE.iter().map(String::as_str).collect_vec();
+
+
+    static ref DOTTED_IMPOSSIBLE_NAMES: Vec<&'static str> = REGISTERS
+        .into_iter()
+        .chain(INSTRUCTIONS.into_iter())
+        .chain(DOTTED_STAND_ALONE_DIRECTIVE.iter())
+        .chain(DOTTED_START_DIRECTIVE.iter())
+        .chain(DOTTED_END_DIRECTIVE.iter())
+        .cloned()
+        .collect();
+
+    static ref IMPOSSIBLE_NAMES: Vec<&'static str> = REGISTERS
+        .into_iter()
+        .chain(INSTRUCTIONS.into_iter())
+        .chain(STAND_ALONE_DIRECTIVE.into_iter())
+        .chain(START_DIRECTIVE.into_iter())
+        .chain(END_DIRECTIVE.into_iter())
+        .cloned()
+        .collect();
+
 }
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
@@ -2522,7 +2544,7 @@ pub fn parse_macro_or_struct_call(
         )(input_label.clone())?;
 
         // Check if the macro name is allowed
-        if impossible_names(input.context().dotted_directive).any(|&a| a == name.to_uppercase()) {
+        if !allowed_label(&name.to_uppercase(), input.context().dotted_directive) {
             return Err(Err::Failure(
                 cpclib_common::nom::error::VerboseError::<Z80Span>::add_context(
                     input_label,
@@ -3752,9 +3774,7 @@ pub fn parse_label(
         };
 
         // Be sure that ::ld is not considered to be a label
-        if impossible_names(input.context().dotted_directive)
-            .any(|val| val == &true_label.to_uppercase())
-        {
+        if !allowed_label( &true_label.to_uppercase(), input.context().dotted_directive)  {
             Err(cpclib_common::nom::Err::Error(error_position!(
                 input,
                 ErrorKind::OneOf
@@ -3766,23 +3786,21 @@ pub fn parse_label(
     }
 }
 
-fn impossible_names(dotted_directive: bool) -> impl Iterator<Item = &'static &'static str> {
+#[inline]
+fn impossible_names(dotted_directive: bool) -> &'static [&'static str] {
     if dotted_directive {
-        REGISTERS
-            .into_iter()
-            .chain(INSTRUCTIONS.into_iter())
-            .chain(DOTTED_STAND_ALONE_DIRECTIVE.iter())
-            .chain(DOTTED_START_DIRECTIVE.iter())
-            .chain(DOTTED_END_DIRECTIVE.iter())
+        &DOTTED_IMPOSSIBLE_NAMES
     }
     else {
-        REGISTERS
-            .into_iter()
-            .chain(INSTRUCTIONS.into_iter())
-            .chain(STAND_ALONE_DIRECTIVE.into_iter())
-            .chain(START_DIRECTIVE.into_iter())
-            .chain(END_DIRECTIVE.into_iter())
+        &IMPOSSIBLE_NAMES
     }
+}
+
+#[inline]
+fn allowed_label(name: &str, dotted_directive: bool) -> bool {
+    !impossible_names(dotted_directive)
+        .par_iter()
+        .any(|&content| content == name)
 }
 
 pub fn parse_end_directive(input: Z80Span) -> IResult<Z80Span, String, Z80ParserError> {
@@ -3832,7 +3850,7 @@ pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserEr
             let _first = name.fragment().chars().next().unwrap();
             let keyword = name.as_str().to_ascii_uppercase();
 
-            if impossible_names(dotted_directive).any(|&val| val == &keyword) {
+            if !allowed_label(&keyword, dotted_directive) {
                 return false;
             }
             else {
