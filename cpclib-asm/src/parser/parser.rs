@@ -4,6 +4,7 @@ use std::collections::{HashSet, BTreeSet};
 use std::ops::Deref;
 use std::sync::Arc;
 
+use cpclib_tokens::ListingElement;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::branch::*;
 use cpclib_common::nom::bytes::complete::{tag, tag_no_case, *};
@@ -1488,13 +1489,11 @@ pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, CharsetFormat, Z
 /// Parser for the include directive
 pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let include_start = input.clone();
-    let (input, once_fname) = preceded(
-        alt((parse_directive_word("INCLUDE"), parse_word("READ"))),
+    let (input, once_fname) =
         pair(
             opt(delimited(space0, parse_word("ONCE"), space0)),
             parse_fname
-        )
-    )(input)?;
+        )(input)?;
 
     let (once, fname) = once_fname;
 
@@ -1523,23 +1522,12 @@ pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Parser
 }
 
 /// Parse for the various binary include directives
-pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let input_start = input.clone();
+#[inline]
+pub fn parse_incbin(input_start: Z80Span, transformation: BinaryTransformation) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    
+    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
 
-    let (input, transformation) = alt((
-        map(
-            alt((tag_no_case("INCBIN"), tag_no_case("BINCLUDE"))),
-            |_| BinaryTransformation::None
-        ),
-        map(tag_no_case("INCEXO"), |_| BinaryTransformation::Crunch(CrunchType::LZEXO)),
-        map(tag_no_case("INCLZ4"), |_| BinaryTransformation::Crunch(CrunchType::LZ4)),
-        map(tag_no_case("INCL48"), |_| BinaryTransformation::Crunch(CrunchType::LZ48)),
-        map(tag_no_case("INCL49"), |_| BinaryTransformation::Crunch(CrunchType::LZ49)),
-        map(tag_no_case("INCAPU"), |_| BinaryTransformation::Crunch(CrunchType::LZAPU)),
-        map(tag_no_case("INCZX0"), |_| BinaryTransformation::Crunch(CrunchType::LZX0)),
-    ))(input)?;
-
-    let (input, fname) = preceded(space1, parse_fname)(input)?;
+    let (input, fname) = preceded(space0, parse_fname)(input)?;
 
     let (input, offset) = opt(preceded(tuple((space0, char(','), space0)), located_expr))(input)?;
     let (input, length) = opt(preceded(tuple((space0, char(','), space0)), located_expr))(input)?;
@@ -1562,7 +1550,7 @@ pub fn parse_incbin(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
             span
         }
     ))
-}
+}}
 
 /// parse write direct in memory / converted to a bank directive
 /// we do not care of the parameters for roms as we are not working in an emulator
@@ -1571,8 +1559,6 @@ pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Z80P
 
     // filter all the stuff before
     let (input, _) = tuple((
-        tag_no_case("WRITE"),
-        space1,
         tag_no_case("DIRECT"),
         space1,
         tag_no_case("-1"),
@@ -1594,24 +1580,25 @@ pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Z80P
 
     Ok((input, Token::Bank(Some(bank))))
 }
+#[derive(PartialEq)]
+pub enum SaveKind {
+    Save,
+    WriteDirect
+}
 
 /// Parse both save directive and write direct in a file
-pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    #[derive(PartialEq)]
-    enum SaveKind {
-        Save,
-        WriteDirect
-    }
+pub fn parse_save(save_kind: SaveKind) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 
-    let (input, (save_kind, filename)) = pair(
-        alt((
-            map(parse_directive_word("SAVE"), |_| SaveKind::Save),
-            map(tuple((parse_word("WRITE"), parse_word("DIRECT"))), |_| {
-                SaveKind::WriteDirect
-            })
-        )),
-        parse_fname
-    )(input)?;
+    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
+
+
+        let input = if save_kind == SaveKind::WriteDirect {
+            parse_word("DIRECT")(input)?.0
+        }  else {
+            input
+        } ;
+        
+        let (input, filename) = parse_fname(input)?;
 
     let (input, address) = opt(preceded(parse_comma, opt(expr)))(input)?;
     let (input, size) = if address.is_some() {
@@ -1669,35 +1656,29 @@ pub fn parse_save(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
             side
         }
     ))
-}
+}}
 
 /// Parse  UNDEF directive.
 pub fn parse_undef(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, label) =
-        preceded(tuple((tag_no_case("UNDEF"), space1)), parse_label(false))(input)?;
+    let (input, label) = parse_label(false)(input)?;
 
     Ok((input, Token::Undef(label.into())))
 }
 
 /// Parse return from a function
 pub fn parse_return(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, expr) = preceded(parse_directive_word("RETURN"), expr)(input)?;
+    let (input, expr) = expr(input)?;
 
     Ok((input, Token::Return(expr)))
 }
 
 pub fn parse_section(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = parse_directive_word("SECTION")(input)?;
     let (input, name) = preceded(space0, parse_label(false))(input)?;
 
     Ok((input, Token::Section(name.into())))
 }
 
 pub fn parse_range(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = alt((
-        parse_directive_word("DEFSECTION"),
-        parse_directive_word("RANGE")
-    ))(input)?;
 
     let (input, start) = cut(context(
         "RANGE: wrong start address",
@@ -1899,7 +1880,6 @@ pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError
 fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let dir_start = input.clone();
     let (input, token) = alt((
-        context("[DBG] assert", parse_assert),
         context("[DBG] bankset", parse_bankset),
         context("[DBG] bank", parse_bank),
         context("[DBG] charset", parse_charset),
@@ -1929,53 +1909,93 @@ fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
     let dir_start = input.clone();
 
     let (input2, directive) = alt((
-        context("[DBG] write direct memory", parse_write_direct_memory),
-        context("[DBG] save", parse_save),
-        context("[DBG] ticker", parse_stable_ticker),
-        context("[DBG] waitnops", parse_waitnops),
-        context("[DBG] undef", parse_undef),
-        context("[DBG] return", parse_return),
-        context("[DBG] noargs", parse_noarg_directive),
-        context("[DBG] assign", parse_assign),
-        context("[DBG] range", parse_range),
-        context("[DBG] section", parse_section),
-        context("[DBG] snainit", parse_snainit)
+        context("[DBG] assign", parse_assign), // cannot be simplified now
     ))(input.clone())?;
 
     let size = dir_start.input_len() - input.input_len();
     Ok((input2, directive.locate(dir_start, size)))
 }
 
-// Concerns directive that already produce a LocatedToken
-fn parse_directive3(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    alt((
-        context("[DBG] db", parse_db_or_dw_or_str),
-        context("[DBG] incbin", parse_incbin),
-        context("[DBG] include", parse_include),
-        context("[DBG] struct", parse_struct) /* context(
-                                               * "[DBG] macro or struct call",
-                                               * parse_macro_or_struct_call(true, false)
-                                               * ) */
-    ))(input)
-}
+
 
 /// Parse any directive
 pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let parsing_state = input.context().state.clone();
     verify(
-        alt((parse_directive1, parse_directive2, parse_directive3)),
+        alt((parse_directive_new, parse_directive2, parse_directive1)),
         move |d| d.is_accepted(&parsing_state)
     )(input.clone())
 }
 
-/// Parse directives with no arguments
-pub fn parse_noarg_directive(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    alt((
-        map(parse_directive_word("list"), |_| Token::List),
-        map(parse_directive_word("nolist"), |_| Token::NoList),
-        map(parse_directive_word("end"), |_| Token::End)
-    ))(input)
+#[inline]
+pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    let input_start = input.clone();
+
+    // Get the first word that will drive the rest of parsing
+    let (rest, word) = delimited(
+        space0,
+        alpha1,
+        space0
+    )(input.clone())?;
+
+    let upper_word = word.as_str().to_uppercase();
+    let upper_word = upper_word.as_str();
+
+    match upper_word {
+        "DB" | "DEFB" | "DM" | "DEFM" | "BYTE" | "TEXT" => parse_db_or_dw_or_str(input_start, 0)(rest),
+        "WORD" | "DW" | "DEFW" => parse_db_or_dw_or_str(input_start, 1)(rest),
+        "STR" => parse_db_or_dw_or_str(input_start, 2)(rest),
+
+        "INCBIN" | "BINCLUDE" => parse_incbin(input_start, BinaryTransformation::None)(rest),
+        "INCEXO" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZEXO))(rest),
+        "INCLZ4" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ4))(rest),
+        "INCL48" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ48))(rest),
+        "INCL49" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ49))(rest),
+        "INCAPU" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZAPU))(rest),
+        "INCZX0" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZX0))(rest),
+
+        "INCLUDE" | "READ" => parse_include(rest),
+
+        "STRUCT" => parse_struct(input_start)(rest),
+    
+        word => {
+            let (input, token) = match word {
+                "ASSERT" => parse_assert(rest),
+
+                "DEFSECTION" => parse_range(rest),
+                
+                "END" => Ok((rest, Token::End)),
+
+                "LIST" => Ok((rest, Token::List)),
+
+                "NOLIST" => Ok((rest, Token::NoList)),
+
+                "RANGE" => parse_range(rest),
+                "RETURN" => parse_return(rest),
+
+                "SAVE" => parse_save(SaveKind::Save)(rest),
+                "SECTION" => parse_section(rest),
+
+                "SNAPINIT" | "SNAINIT" => parse_snainit(rest),
+
+                "TICKER" => parse_stable_ticker(rest),
+
+                "UNDEF" => parse_undef(rest),
+
+                "WAITNOPS" => parse_waitnops(rest),
+                "WRITE" => alt((parse_save(SaveKind::WriteDirect),parse_write_direct_memory))(rest),
+
+                _ => Err(Err::Error(Z80ParserError::from_error_kind(input, ErrorKind::Alt)))
+            }?;
+
+            let size = input_start.input_len() - input.input_len();
+            Ok((input, token.locate(input_start, size)))
+        }
+
+    }
+
 }
+
 
 #[derive(Clone, Copy, Debug)]
 enum KindOfConditional {
@@ -2172,7 +2192,7 @@ pub fn parse_limit(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 }
 
 pub fn parse_waitnops(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, exp) = preceded(parse_directive_word("WAITNOPS"), expr)(input)?;
+    let (input, exp) =  expr(input)?;
 
     Ok((input, Token::WaitNops(exp)))
 }
@@ -2187,9 +2207,6 @@ pub fn parse_stable_ticker_start(input: Z80Span) -> IResult<Z80Span, Token, Z80P
     map(
         preceded(
             tuple((
-                opt(tag_no_case("stable")),
-                tag_no_case("ticker"),
-                space1,
                 tag_no_case("start"),
                 space1
             )),
@@ -2202,12 +2219,7 @@ pub fn parse_stable_ticker_start(input: Z80Span) -> IResult<Z80Span, Token, Z80P
 /// Parse end of ticker
 pub fn parse_stable_ticker_stop(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     map(
-        tuple((
-            opt(tag_no_case("stable")),
-            tag_no_case("ticker"),
-            space1,
-            tag_no_case("stop")
-        )),
+            tag_no_case("stop"),
         |_| Token::StableTicker(StableTickerAction::Stop)
     )(input)
 }
@@ -2477,35 +2489,12 @@ pub fn parse_export(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
         Ok((input, Token::NoExport(labels)))
     }
 }
-/// Parse DB DW directives
-pub fn parse_db_or_dw_or_str(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let input_start = input.clone();
 
-    let (input, code) = alt((
-        map(
-            alt((
-                parse_directive_word("BYTE"),
-                terminated(
-                    parse_directive_word("TEXT"),
-                    not(pair(space0, alt((tag(":"), line_ending))))
-                ),
-                parse_directive_word("DB"),
-                parse_directive_word("DEFB"),
-                parse_directive_word("DM"),
-                parse_directive_word("DEFM")
-            )),
-            |_| 0
-        ),
-        map(
-            alt((
-                parse_directive_word("WORD"),
-                parse_directive_word("DW"),
-                parse_directive_word("DEFW")
-            )),
-            |_| 1
-        ),
-        map(parse_directive_word("STR"), |_| 2)
-    ))(input)?;
+#[inline]
+/// Parse DB DW directives
+pub fn parse_db_or_dw_or_str(input_start: Z80Span, code: u8) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    
+    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
 
     let (input, expr) = expr_list(input)?;
 
@@ -2525,7 +2514,7 @@ pub fn parse_db_or_dw_or_str(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z
             LocatedToken::Str(expr, token_span)
         }
     ))
-}
+}}
 
 // Fail if we do not read a forbidden keyword
 pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
@@ -2767,7 +2756,6 @@ pub fn expr_list(input: Z80Span) -> IResult<Z80Span, Vec<LocatedExpr>, Z80Parser
 
 /// ...
 pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = context("assert", preceded(space0, parse_directive_word("ASSERT")))(input)?;
 
     let (input, expr) = cut(context("ASSERT: expression error", expr))(input)?;
 
@@ -3649,18 +3637,14 @@ pub fn parse_opcode_no_arg(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
 
 
 fn parse_snainit(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = alt((
-        parse_directive_word("SNAPINIT"),
-        parse_directive_word("SNAINIT")
-    ))(input)?;
     let (input, fname) = parse_fname(input)?;
 
     Ok((input, Token::SnaInit(fname.to_string())))
 }
 
-fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let input_start = input.clone();
-    let (input, _) = parse_directive_word("STRUCT")(input)?;
+fn parse_struct(input_start: Z80Span) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    
+    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let (input, name) = cut(parse_label(false))(input)?;
 
     let (input, fields) = cut(context(
@@ -3679,10 +3663,10 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError
                         label.to_ascii_lowercase() != "endstruct"
                     })
                 ),
-                cut(alt((
-                    parse_db_or_dw_or_str,
-                    parse_macro_or_struct_call(false, true)
-                )))
+                cut(verify(
+                    parse_directive,
+                    |t| t.is_call_macro_or_build_struct() | t.is_db() | t.is_dw() | t.is_str()
+                ))
             ),
             many0(alt((
                 space1,
@@ -3697,7 +3681,7 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError
 
     let all_span = input_start.take(input_start.input_len() - input.input_len());
     Ok((input, LocatedToken::Struct(name, fields, all_span)))
-}
+}}
 
 fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     let (input, _) = parse_directive_word("SNASET")(input)?;

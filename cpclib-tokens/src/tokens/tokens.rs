@@ -431,6 +431,29 @@ impl ListingElement for Token {
             _ => unreachable!()
         }
     }
+
+
+
+    fn is_db(&self) -> bool {
+        match self {
+            Self::Defb(..) => true,
+            _ => false
+        }
+    }
+    fn is_dw(&self) -> bool {
+        match self {
+            Self::Defw(..) => true,
+            _ => false
+        }
+    }
+    fn is_str(&self) -> bool {
+        match self {
+            Self::Str(..) => true,
+            _ => false
+        }
+    }
+
+    
 }
 
 /// Standard listing is a specific implementation

@@ -675,7 +675,7 @@ pub enum LocatedToken {
     RepeatUntil(LocatedExpr, LocatedListing, Z80Span),
     Rorg(LocatedExpr, LocatedListing, Z80Span),
     /// Name, Parameters, FullSpan
-    Struct(Z80Span, Vec<(Z80Span, LocatedToken)>, Z80Span),
+    Struct(Z80Span, Vec<(Z80Span, LocatedToken)>, Z80Span), // TODO Store a listing that can embed if / db /dw/ str/ struct calls
     Switch(
         LocatedExpr,
         Vec<(LocatedExpr, LocatedListing, bool)>,
@@ -1506,6 +1506,25 @@ impl ListingElement for LocatedToken {
         match self {
             Self::Switch(_, _, default, ..) => default.as_ref().map(|l| l.as_slice()),
             _ => unreachable!()
+        }
+    }
+
+    fn is_db(&self) -> bool {
+        match self {
+            Self::Standard{token: Token::Defb(..), ..} => true,
+            _ => false
+        }
+    }
+    fn is_dw(&self) -> bool {
+        match self {
+            Self::Standard{token: Token::Defw(..), ..} => true,
+            _ => false
+        }
+    }
+    fn is_str(&self) -> bool {
+        match self {
+            Self::Standard{token: Token::Str(..), ..} => true,
+            _ => false
         }
     }
 }

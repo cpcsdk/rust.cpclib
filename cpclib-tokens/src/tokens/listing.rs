@@ -95,6 +95,11 @@ pub trait ListingElement: Debug + Sized {
 
     fn is_confined(&self) -> bool;
     fn confined_listing(&self) -> &[Self];
+
+
+    fn is_db(&self) -> bool;
+    fn is_dw(&self) -> bool;
+    fn is_str(&self) -> bool;
 }
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]
