@@ -3647,6 +3647,8 @@ fn parse_struct(input_start: Z80Span) -> impl Fn(Z80Span) -> IResult<Z80Span, Lo
     move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let (input, name) = cut(parse_label(false))(input)?;
 
+    // TODO parse inner with filtering on the allowed operations 
+    // would be easier to write and would allow conditional operations
     let (input, fields) = cut(context(
         "STRUCT: error in inner content",
         many1(delimited(
@@ -3663,10 +3665,10 @@ fn parse_struct(input_start: Z80Span) -> impl Fn(Z80Span) -> IResult<Z80Span, Lo
                         label.to_ascii_lowercase() != "endstruct"
                     })
                 ),
-                cut(verify(
-                    parse_directive,
-                    |t| t.is_call_macro_or_build_struct() | t.is_db() | t.is_dw() | t.is_str()
-                ))
+                cut(context("STRUCT: Invalid operation", verify(
+                    alt((parse_directive,parse_macro_or_struct_call(false, true))),
+                    |t| true | t.is_call_macro_or_build_struct() | t.is_db() | t.is_dw() | t.is_str()
+                )))
             ),
             many0(alt((
                 space1,
