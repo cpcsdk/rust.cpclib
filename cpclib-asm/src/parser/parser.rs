@@ -338,7 +338,22 @@ where
 {
 #[inline]
     move |mut i: Z80Span| {
-        let mut acc = Vec::with_capacity(4);
+        let mut acc;
+
+        match f.parse(i.clone()) {
+            Err(Err::Error(_)) => return Ok((i, Vec::with_capacity(0))),
+            Err(e) => return Err(e),
+            Ok((i1, o)) => {
+                if i1 == i {
+                    return Ok((i, Vec::with_capacity(0))); // diff is here
+                }
+                acc = Some(Vec::with_capacity(2)); // allocated only if used
+                i = i1;
+                acc.as_mut().map(|acc| acc.push(o));
+            }
+        }
+
+        let mut acc = acc.unwrap();
         loop {
             match f.parse(i.clone()) {
                 Err(Err::Error(_)) => return Ok((i, acc)),
@@ -349,7 +364,8 @@ where
                     }
 
                     i = i1;
-                    acc.push(o);
+                    acc.push(o) ;
+
                 }
             }
         }
@@ -498,6 +514,42 @@ pub fn my_many_till_nocollect<I, O, P, E, F, G>(
   }
   
 
+
+
+#[inline]
+  pub fn my_many1_nocollect<I, O, E, F>(mut f: F) -> impl FnMut(I) -> IResult<I, (), E>
+where
+  I: Clone + InputLength,
+  F: Parser<I, O, E>,
+  E: ParseError<I>,
+{
+#[inline]
+  move |mut i: I| match f.parse(i.clone()) {
+    Err(Err::Error(err)) => Err(Err::Error(E::append(i, ErrorKind::Many1, err))),
+    Err(e) => Err(e),
+    Ok((i1, o)) => {
+      i = i1;
+
+      loop {
+        let len = i.input_len();
+        match f.parse(i.clone()) {
+          Err(Err::Error(_)) => return Ok((i, ())),
+          Err(e) => return Err(e),
+          Ok((i1, o)) => {
+            // infinite loop check: the parser must always consume
+            if i1.input_len() == len {
+              return Err(Err::Error(E::from_error_kind(i, ErrorKind::Many1)));
+            }
+
+            i = i1;
+          }
+        }
+      }
+    }
+  }
+}
+
+
 #[inline]
 fn inner_code(input: Z80Span) -> IResult<Z80Span, LocatedListing, Z80ParserError> {
     inner_code_with_state(input.extra.state.clone())(input)
@@ -562,7 +614,7 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Parse
     let (before_expr, listing) =
         cut(context("FUNCTION: invalid content", parse_function_listing))(input)?;
 
-    let (input, _) = many0(my_line_ending)(before_expr)?;
+    let (input, _) = my_many0_nocollect(my_line_ending)(before_expr)?;
     let (input, _) = alt((
         parse_directive_word("ENDF"),
         parse_directive_word("ENDFUNCTION")
@@ -1450,8 +1502,6 @@ pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError>
 }
 
 pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = parse_directive_word("CHARSET")(input)?;
-
     let (input, charset) = opt(alt((parse_charset_string, parse_charset_start_stop_end)))(input)?;
 
     Ok((
@@ -1880,44 +1930,7 @@ pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError
     ))
 }
 
-fn parse_directive1(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let dir_start = input.clone();
-    let (input, token) = alt((
-        context("[DBG] bankset", parse_bankset),
-        context("[DBG] bank", parse_bank),
-        context("[DBG] charset", parse_charset),
-        context("[DBG] align", parse_align),
-        context("[DBG] breakpoint", parse_breakpoint),
-        context("[DBG] buildsna", parse_buildsna),
-        context("[DBG] org", parse_org),
-        context("[DBG] defs", parse_defs),
-        context("[DBG] nop", parse_nop),
-        context("[DBG] export", parse_export),
-        context("[DBG] limit", parse_limit),
-        context("[DBG] print", parse_print),
-        context("[DBG] fail", parse_fail),
-        context("[DBG] protext", parse_protect),
-        context("[DBG] run", parse_run),
-        context("[DBG] snaset", parse_snaset),
-        map(preceded(space0, parse_directive_word("PAUSE")), |_| {
-            Token::Pause
-        })
-    ))(input)?;
 
-    let size = dir_start.input_len() - input.input_len();
-    Ok((input, token.locate(dir_start, size)))
-}
-
-fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let dir_start = input.clone();
-
-    let (input2, directive) = alt((
-        context("[DBG] assign", parse_assign), // cannot be simplified now
-    ))(input.clone())?;
-
-    let size = dir_start.input_len() - input.input_len();
-    Ok((input2, directive.locate(dir_start, size)))
-}
 
 
 
@@ -1925,7 +1938,7 @@ fn parse_directive2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
 pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let parsing_state = input.context().state.clone();
     verify(
-        alt((parse_directive_new, parse_directive2, parse_directive1)),
+        parse_directive_new,
         move |d| d.is_accepted(&parsing_state)
     )(input.clone())
 }
@@ -1957,27 +1970,55 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
         "INCAPU" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZAPU))(rest),
         "INCZX0" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZX0))(rest),
 
+
         "INCLUDE" | "READ" => parse_include(rest),
 
         "STRUCT" => parse_struct(input_start)(rest),
     
         word => {
             let (input, token) = match word {
+                "FILL" | "DS" | "DEFS" | "RMEM" => parse_defs(rest),
+
+
+                "ALIGN" => parse_align(rest),
                 "ASSERT" => parse_assert(rest),
+
+                "BANK" => parse_bank(rest),
+                "BANKSET" => parse_bankset(rest),
+                "BREAKPOINT" => parse_breakpoint(rest),
+                "BUILDSNA" => parse_buildsna(rest),
+
+                "CHARSET" => parse_charset(rest),
+
+
 
                 "DEFSECTION" => parse_range(rest),
                 
                 "END" => Ok((rest, Token::End)),
+                "EXPORT" => parse_export(ExportKind::Export)(rest),
 
+                "FAIL" => parse_fail(rest),
+
+                "LIMIT" => parse_limit(rest),
                 "LIST" => Ok((rest, Token::List)),
 
+                "NOEXPORT" => parse_export(ExportKind::NoExport)(rest),
                 "NOLIST" => Ok((rest, Token::NoList)),
+                "NOP" => parse_nop(rest),
+
+                "ORG" => parse_org(rest),
+
+                "PAUSE" => Ok((rest, Token::Pause)),
+                "PRINT" => parse_print(rest),
+                "PROTECT" => parse_protect(rest),
 
                 "RANGE" => parse_range(rest),
                 "RETURN" => parse_return(rest),
+                "RUN" => parse_run(rest),
 
                 "SAVE" => parse_save(SaveKind::Save)(rest),
                 "SECTION" => parse_section(rest),
+                "SNASET" => parse_snaset(rest),
 
                 "SNAPINIT" | "SNAINIT" => parse_snainit(rest),
 
@@ -2141,16 +2182,12 @@ fn parse_conditional_condition(
 /// Parse a breakpint instruction
 pub fn parse_breakpoint(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     map(
-        preceded(
-            delimited(space0, parse_directive_word("BREAKPOINT"), space0),
-            opt(expr)
-        ),
+            opt(expr),
         |exp| Token::Breakpoint(exp)
     )(input)
 }
 
 pub fn parse_bankset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = parse_directive_word("bankset")(input)?;
     let (input, count) = expr(input)?;
 
     Ok((input, Token::Bankset(count)))
@@ -2159,11 +2196,9 @@ pub fn parse_bankset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> 
 pub fn parse_buildsna(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     terminated(
         map(
-            preceded(
-                parse_directive_word("BUILDSNA"),
                 cut(opt(alt((tag_no_case("V2"), tag_no_case("V3")))))
-            ),
-            |v| {
+            ,
+            |v: Option<Z80Span>| {
                 Token::BuildSna(match v {
                     Some(txt) => {
                         if txt.to_lowercase() == "v2" {
@@ -2182,14 +2217,14 @@ pub fn parse_buildsna(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError>
 }
 
 pub fn parse_run(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, exp) = preceded(parse_directive_word("RUN"), expr)(input)?;
+    let (input, exp) = expr(input)?;
     let (input, ga) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
 
     Ok((input, Token::Run(exp, ga)))
 }
 
 pub fn parse_limit(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, exp) = preceded(parse_directive_word("LIMIT"), expr)(input)?;
+    let (input, exp) =  expr(input)?;
 
     Ok((input, Token::Limit(exp)))
 }
@@ -2228,7 +2263,6 @@ pub fn parse_stable_ticker_stop(input: Z80Span) -> IResult<Z80Span, Token, Z80Pa
 }
 
 pub fn parse_bank(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = parse_directive_word("bank")(input)?;
     let (input, count) = opt(expr)(input)?;
 
     Ok((input, Token::Bank(count)))
@@ -2473,11 +2507,16 @@ pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     )(input)
 }
 
-pub fn parse_export(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, code) = alt((
-        map(parse_directive_word("EXPORT"), |_| 0),
-        map(parse_directive_word("NOEXPORT"), |_| 1)
-    ))(input)?;
+#[derive(PartialEq)]
+pub enum ExportKind {
+    Export,
+    NoExport
+}
+
+#[inline]
+pub fn parse_export(code: ExportKind) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+    #[inline]
+    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
 
     let (input, labels) = cut(context(
         "Wrong parameters",
@@ -2485,13 +2524,13 @@ pub fn parse_export(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     ))(input)?;
 
     let labels = labels.iter().map(|l| SmolStr::from(l)).collect_vec(); // TODO really use LocatedToken
-    if code == 0 {
+    if code == ExportKind::Export {
         Ok((input, Token::Export(labels)))
     }
     else {
         Ok((input, Token::NoExport(labels)))
     }
-}
+}}
 
 #[inline]
 /// Parse DB DW directives
@@ -2772,7 +2811,7 @@ pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 
 /// ...
 pub fn parse_align(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, boundary) = preceded(parse_directive_word("ALIGN"), expr)(input)?;
+    let (input, boundary) =  expr(input)?;
     let (input, fill) = opt(preceded(parse_comma, expr))(input)?;
 
     Ok((input, Token::Align(boundary, fill)))
@@ -2795,14 +2834,14 @@ pub fn parse_print_inner(input: Z80Span) -> IResult<Z80Span, Vec<FormattedExpr>,
 /// ...
 pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     map(
-        preceded(parse_directive_word("PRINT"), cut(parse_print_inner)),
+        cut(parse_print_inner),
         |exps| Token::Print(exps)
     )(input)
 }
 
 pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     map(
-        preceded(parse_directive_word("FAIL"), opt(parse_print_inner)),
+        opt(parse_print_inner),
         |exps| Token::Fail(exps)
     )(input)
 }
@@ -2840,7 +2879,7 @@ fn my_space0(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
 /// Handle \ in end of line
 #[inline]
 fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
-    recognize(many1(alt((
+    recognize(my_many1_nocollect(alt((
         recognize(eof),
         recognize(tuple((
             space0,
@@ -2850,7 +2889,8 @@ fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
             space0
         ))),
         recognize(space1)
-    ))))(input)
+    ))
+))(input)
 }
 
 #[inline]
@@ -2865,7 +2905,7 @@ fn parse_comma(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
 
 /// ...
 pub fn parse_protect(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, start) = preceded(parse_directive_word("PROTECT"), expr)(input)?;
+    let (input, start) = expr(input)?;
 
     let (input, end) = preceded(parse_comma, expr)(input)?;
 
@@ -3533,7 +3573,6 @@ pub fn parse_expr(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError
 
 /// Parse standard org directive
 pub fn parse_org(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = parse_directive_word("ORG")(input)?;
 
     let (input, val1) = cut(context("Invalid argument", expr))(input)?;
     let (input, val2) = opt(preceded(parse_comma, expr))(input)?;
@@ -3543,13 +3582,6 @@ pub fn parse_org(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 
 /// Parse defs instruction. TODO add optional parameters
 pub fn parse_defs(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = alt((
-        parse_directive_word("FILL"),
-        parse_directive_word("DS"),
-        parse_directive_word("DEFS"),
-        parse_directive_word("RMEM")
-    ))(input)?;
-
     let (input, val) = separated_list1(
         parse_comma,
         cut(context(
@@ -3562,7 +3594,6 @@ pub fn parse_defs(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 }
 
 pub fn parse_nop(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = parse_word("NOP")(input)?;
 
     let (input, val) = cut(context(
         "Wrong argument. NOP expects an expression",
@@ -3689,7 +3720,6 @@ fn parse_struct(input_start: Z80Span) -> impl Fn(Z80Span) -> IResult<Z80Span, Lo
 }}
 
 fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, _) = parse_directive_word("SNASET")(input)?;
 
     let (input, flagname) = cut(context(SNASET_WRONG_LABEL, parse_label(false)))(input)?;
     let (input, _) = context(SNASET_MISSING_COMMA, cut(parse_comma))(input)?;
@@ -4120,7 +4150,7 @@ pub fn term(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
     let input_start = input.clone();
 
     let (input, initial) = factor(input)?;
-    let (input, remainder) = many0(alt((
+    let (input, remainder) = my_many0(alt((
         parse_oper(factor, "*", BinaryOperation::Mul),
         parse_oper(factor, "%", BinaryOperation::Mod),
         parse_oper(factor, "/", BinaryOperation::Div)
@@ -4178,7 +4208,7 @@ pub fn expr2(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
     let input_start = input.clone();
 
     let (input, initial) = shift(input)?;
-    let (input, remainder) = many0(alt((
+    let (input, remainder) = my_many0(alt((
         parse_oper(shift, "<=", BinaryOperation::LowerOrEqual),
         parse_oper(shift, "<", BinaryOperation::StrictlyLower),
         parse_oper(shift, ">=", BinaryOperation::GreaterOrEqual),
@@ -4200,7 +4230,7 @@ pub fn located_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserEr
     let input_start = input.clone();
 
     let (input, initial) = expr2(input)?;
-    let (input, remainder) = many0(alt((
+    let (input, remainder) = my_many0(alt((
         parse_oper(expr2, "&&", BinaryOperation::BooleanAnd),
         parse_oper(expr2, "||", BinaryOperation::BooleanOr)
     )))(input)?;
@@ -4343,7 +4373,7 @@ pub fn shift(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
     let input_start = input.clone();
 
     let (input, initial) = comp(input)?;
-    let (input, remainder) = many0(alt((
+    let (input, remainder) = my_many0(alt((
         parse_oper(comp, "<<", BinaryOperation::LeftShift),
         parse_oper(comp, ">>", BinaryOperation::RightShift)
     )))(input)?;
@@ -4356,7 +4386,7 @@ pub fn comp(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
     let input_start = input.clone();
 
     let (input, initial) = term(input)?;
-    let (input, remainder) = many0(alt((
+    let (input, remainder) = my_many0(alt((
         parse_oper(term, "+", BinaryOperation::Add),
         parse_oper(term, "-", BinaryOperation::Sub),
         parse_oper(term, "&", BinaryOperation::BinaryAnd), /* TODO check if it works and not compete with && */
