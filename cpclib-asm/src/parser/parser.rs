@@ -297,6 +297,9 @@ lazy_static::lazy_static! {
         .cloned()
         .collect();
 
+    static ref MIN_MAX_LABEL_SIZE: (usize, usize) = DOTTED_IMPOSSIBLE_NAMES.iter().map(|l| l.len()).minmax().into_option().unwrap();
+    static ref DOTTED_MIN_MAX_LABEL_SIZE:  (usize, usize) = DOTTED_IMPOSSIBLE_NAMES.iter().map(|l| l.len()).minmax().into_option().unwrap();
+
 }
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
@@ -707,7 +710,7 @@ pub fn parse_crunched_section(input: Z80Span) -> IResult<Z80Span, LocatedToken, 
 
 /// Parse the switch directive
 pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let (switch_start, _) = many0(alt((space1, my_line_ending)))(input)?;
+    let (switch_start, _) = my_many0_nocollect(alt((space1, my_line_ending)))(input)?;
     let (input, _) = parse_directive_word("SWITCH")(switch_start.clone())?;
 
     let (input, value) = cut(context(
@@ -722,7 +725,7 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
     loop {
         let (input, _) = cut(context(
             "SWITCH: whitespace error",
-            many0(alt((
+            my_many0_nocollect(alt((
                 space1,
                 line_ending,
                 tag(":"),
@@ -2070,7 +2073,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Pa
             conditions.push((condition, code));
 
             let (input, r#else) = opt(preceded(
-                many0(alt((space1, line_ending, tag(":")))),
+                my_many0_nocollect(alt((space1, line_ending, tag(":")))),
                 parse_directive_word("ELSE")
             ))(input)?;
             input_loop = input;
@@ -2566,7 +2569,7 @@ pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, LocatedMacroParam, Z8
                 alt((
                     recognize(expr), // TODO handle evaluation or transposition
                     string_between_quotes,
-                    recognize(many0(none_of(" ,\r\n\t][;:")))
+                    recognize(my_many0_nocollect(none_of(" ,\r\n\t][;:")))
                 )), // TODO find a way to give arguments with space
                 alt((space0, eof))
             ),
@@ -3652,7 +3655,7 @@ fn parse_struct(input_start: Z80Span) -> impl Fn(Z80Span) -> IResult<Z80Span, Lo
     let (input, fields) = cut(context(
         "STRUCT: error in inner content",
         many1(delimited(
-            many0(alt((
+            my_many0_nocollect(alt((
                 space1,
                 recognize(parse_comment),
                 line_ending,
@@ -3670,7 +3673,7 @@ fn parse_struct(input_start: Z80Span) -> impl Fn(Z80Span) -> IResult<Z80Span, Lo
                     |t| true | t.is_call_macro_or_build_struct() | t.is_db() | t.is_dw() | t.is_str()
                 )))
             ),
-            many0(alt((
+            my_many0_nocollect(alt((
                 space1,
                 recognize(parse_comment),
                 line_ending,
@@ -3810,7 +3813,10 @@ pub fn parse_label(
         */
 
         // Be sure that ::ld is not considered to be a label
-        if !allowed_label( &true_label.to_uppercase(), input.context().dotted_directive)  {
+        let label_len = true_label.len();
+        if label_len >= MIN_MAX_LABEL_SIZE.0 &&
+        label_len <= DOTTED_MIN_MAX_LABEL_SIZE.1 &&
+            !allowed_label( &true_label.to_uppercase(), input.context().dotted_directive)  {
             Err(cpclib_common::nom::Err::Error(error_position!(
                 input,
                 ErrorKind::OneOf
