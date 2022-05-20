@@ -3764,6 +3764,8 @@ pub fn parse_label(
     move |input: Z80Span| {
         let _start = input.clone();
 
+
+        // Finger crosses that no allocation is done there
         let (input, obtained_label) = recognize(tuple((
             opt(alt((tag("::"), tag("@"), tag(".")))),
             alt((
@@ -3772,14 +3774,14 @@ pub fn parse_label(
                 )),
                 recognize(delimited(char('{'), expr, char('}')))
             )),
-            many0(alt((
+            my_many0_nocollect(alt((
                 is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"),
                 tag("."),
                 recognize(delimited(char('{'), expr, char('}')))
             )))
         )))(input)?;
 
-
+/*
         // fail to parse a label when it is 100% sure it corresponds to  a macro call
         let (input, macro_arg) = opt(preceded(space1, tag_no_case("(void)".into())))(input)?;
         if macro_arg.is_some() {
@@ -3788,7 +3790,7 @@ pub fn parse_label(
                 ErrorKind::OneOf
             )));
         }
-
+*/
         let start_with_double_dots = obtained_label.len() > 2 && &obtained_label[..2] == "::";
         let true_label = if start_with_double_dots {
             &obtained_label[2..]
@@ -3797,6 +3799,7 @@ pub fn parse_label(
             &obtained_label[..]
         };
 
+        /*
         let input = if doubledots {
             let (input, _) = opt(tag_no_case(":"))(input)?;
             input
@@ -3804,6 +3807,7 @@ pub fn parse_label(
         else {
             input
         };
+        */
 
         // Be sure that ::ld is not considered to be a label
         if !allowed_label( &true_label.to_uppercase(), input.context().dotted_directive)  {
