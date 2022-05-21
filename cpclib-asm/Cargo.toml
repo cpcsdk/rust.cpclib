@@ -51,6 +51,7 @@ velcro = "0.5.3"
 assert_matches = "1.5.0"
 tempfile = "3.3.0"
 chardetng = "0.1.17"
+smartstring = "1.0.1"
 
 [build-dependencies]
 built = { version = "0.5.1", features = ["chrono"] }

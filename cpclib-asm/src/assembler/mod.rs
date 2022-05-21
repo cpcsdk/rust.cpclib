@@ -2674,7 +2674,7 @@ fn visit_assert(
                         }
                         _ => {
                             format!("[{} {} {}] ", res_left, oper, res_right)
-                                + &format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right)
+                                + format!("[0x{:x} {} 0x{:x}] ", res_left, oper, res_right).as_str()
                         }
                     }
                 };
@@ -2707,12 +2707,12 @@ fn visit_assert(
 
                 Err(AssemblerError::AssertionFailed {
                     msg: prefix
-                        + &if txt.is_some() {
+                        + (if txt.is_some() {
                             env.build_string_from_formatted_expression(txt.unwrap())?
                         }
                         else {
                             "".to_owned()
-                        },
+                        }).as_str(),
                     test: exp.to_string(),
                     guidance: env.to_assert_string(exp)
                 })

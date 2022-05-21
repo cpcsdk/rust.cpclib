@@ -1787,9 +1787,12 @@ pub fn parse_token2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
         space0
     )(input.clone())?;
 
+    let mut word : smartstring::SmartString<smartstring::Compact> = smartstring::SmartString::from(word.as_str());
+    word.as_mut_str().make_ascii_uppercase();
+
     // Apply the right parsing
     // We use this way of doing to reduce function calls and error. Let's hope it will speed everything
-    let (input, token) = match word.as_str().to_ascii_uppercase().as_str() {
+    let (input, token) = match word.as_str() {
         "ADC" => parse_add_or_adc(Mnemonic::Adc)(rest),
         "ADD" => parse_add_or_adc(Mnemonic::Add)(rest),
         "AND" => parse_logical_operator(Mnemonic::And)(rest),
@@ -1954,10 +1957,10 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
         space0
     )(input.clone())?;
 
-    let upper_word = word.as_str().to_ascii_uppercase();
-    let upper_word = upper_word.as_str();
+    let mut upper_word : smartstring::SmartString<smartstring::Compact> = smartstring::SmartString::from(word.as_str());
+    upper_word.as_mut_str().make_ascii_uppercase();
 
-    match upper_word {
+    match upper_word.as_str() {
         "DB" | "DEFB" | "DM" | "DEFM" | "BYTE" | "TEXT" => parse_db_or_dw_or_str(input_start, 0)(rest),
         "WORD" | "DW" | "DEFW" => parse_db_or_dw_or_str(input_start, 1)(rest),
         "STR" => parse_db_or_dw_or_str(input_start, 2)(rest),

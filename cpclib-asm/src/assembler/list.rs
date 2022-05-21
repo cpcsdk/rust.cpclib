@@ -240,7 +240,7 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
 pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
     match (s1, s2) {
         (ExprResult::String(s1), ExprResult::String(s2)) => {
-            let s1 = s1.to_string() + &fix_string(s2);
+            let s1 = s1.to_string() + fix_string(s2).as_str();
             Ok(ExprResult::String(s1.into()))
         }
         (ExprResult::String(s1), ExprResult::List(l)) => {
