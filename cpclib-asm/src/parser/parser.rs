@@ -1789,7 +1789,7 @@ pub fn parse_token2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
 
     // Apply the right parsing
     // We use this way of doing to reduce function calls and error. Let's hope it will speed everything
-    let (input, token) = match word.as_str().to_uppercase().as_str() {
+    let (input, token) = match word.as_str().to_ascii_uppercase().as_str() {
         "ADC" => parse_add_or_adc(Mnemonic::Adc)(rest),
         "ADD" => parse_add_or_adc(Mnemonic::Add)(rest),
         "AND" => parse_logical_operator(Mnemonic::And)(rest),
@@ -1954,7 +1954,7 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
         space0
     )(input.clone())?;
 
-    let upper_word = word.as_str().to_uppercase();
+    let upper_word = word.as_str().to_ascii_uppercase();
     let upper_word = upper_word.as_str();
 
     match upper_word {
@@ -2573,7 +2573,7 @@ pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80P
         END_DIRECTIVE.iter()
     };
     if !end_directive_iter
-        .find(|&&a| a == name.to_uppercase())
+        .find(|&&a| a == name.to_ascii_uppercase())
         .is_some()
     {
         return Err(Err::Error(
@@ -2639,7 +2639,7 @@ pub fn parse_macro_or_struct_call(
         )(input_label.clone())?;
 
         // Check if the macro name is allowed
-        if !allowed_label(&name.to_uppercase(), input.context().dotted_directive) {
+        if !allowed_label(&name.to_ascii_uppercase(), input.context().dotted_directive) {
             return Err(Err::Failure(
                 cpclib_common::nom::error::VerboseError::<Z80Span>::add_context(
                     input_label,
@@ -2880,18 +2880,19 @@ fn my_space0(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
 #[inline]
 fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
     recognize(my_many1_nocollect(alt((
-        recognize(eof),
-        recognize(tuple((
+        map(eof, |_| ()),
+        map(tuple((
             space0,
             tag("\\"), // do we keep it ?
             opt(pair(space0, parse_comment)),
             line_ending,
             space0
-        ))),
-        recognize(space1)
+        )), |_| ()),
+        map(space1, |_| ())
     ))
 ))(input)
 }
+
 
 #[inline]
 fn my_line_ending(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
@@ -3627,7 +3628,7 @@ pub fn parse_opcode_no_arg(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
         consumed(map_opt(
             alpha1,
             |word: Z80Span| {
-                match word.as_str().to_uppercase().as_str() {
+                match word.as_str().to_ascii_uppercase().as_str() {
                     "CCF" => Some(Mnemonic::Ccf),
                     "CPD" => Some(Mnemonic::Cpd),
                     "CPDR" => Some(Mnemonic::Cpdr),
@@ -3859,7 +3860,7 @@ pub fn parse_label(
         let label_len = true_label.len();
         if label_len >= MIN_MAX_LABEL_SIZE.0 &&
         label_len <= DOTTED_MIN_MAX_LABEL_SIZE.1 &&
-            !allowed_label( &true_label.to_uppercase(), input.context().dotted_directive)  {
+            !allowed_label( &true_label.to_ascii_uppercase(), input.context().dotted_directive)  {
             Err(cpclib_common::nom::Err::Error(error_position!(
                 input,
                 ErrorKind::OneOf
