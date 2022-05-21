@@ -2758,6 +2758,7 @@ fn parse_directive_word(
 
 #[inline]
 fn parse_word(name: &'static str) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
+#[inline]
     move |input: Z80Span| {
         map(
             tuple((
@@ -2937,13 +2938,6 @@ impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     Ok((input, Token::new_opcode(operator, Some(operand), None)))
 }}
 
-/// ...
-#[inline]
-pub fn parse_add_or_adc(add_or_adc: Mnemonic) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
-
-    alt((parse_add_or_adc_complete(add_or_adc), parse_add_or_adc_shorten(add_or_adc)))(input)
-}}
 
 /// Substraction with A register
 pub fn parse_sub(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
@@ -2993,19 +2987,21 @@ pub fn parse_sbc(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 
 /// Parse ADC and ADD instructions
 #[inline]
-pub fn parse_add_or_adc_complete(add_or_adc: Mnemonic) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_add_or_adc(add_or_adc: Mnemonic) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
 
 
-    let (input, first) = alt((
+    let (input, first) = opt(terminated(
+        alt((
         map(parse_register_a, |_| DataAccess::Register8(Register8::A)),
-        map(parse_register_hl, |_| {
-            DataAccess::Register16(Register16::Hl)
-        }),
+        map(parse_register_hl, |_| DataAccess::Register16(Register16::Hl)),
         parse_indexregister16
-    ))(input)?;
+    )),
+    parse_comma))(input)?;
 
-    let (input, _) = tuple((space0, tag(","), space0))(input)?;
+    // no operand implies it is A
+    let first = first.unwrap_or(DataAccess::Register8(Register8::A));
+
 
     let (input, second) = if first.is_register8() {
         alt((
@@ -3041,27 +3037,7 @@ pub fn parse_add_or_adc_complete(add_or_adc: Mnemonic) -> impl Fn(Z80Span) -> IR
     ))
 }}
 
-/// TODO Find a way to not duplicate code with complete version
-pub fn parse_add_or_adc_shorten(add_or_adc: Mnemonic) -> impl  Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
 
-    let (input, second) = alt((
-        parse_register8,
-        parse_indexregister8,
-        parse_hl_address,
-        parse_indexregister_with_index,
-        parse_expr
-    ))(input)?;
-
-    Ok((
-        input,
-        Token::new_opcode(
-            add_or_adc,
-            Some(DataAccess::Register8(Register8::A)),
-            Some(second)
-        )
-    ))
-}}
 
 /// ...
 #[inline]
