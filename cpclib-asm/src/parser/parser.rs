@@ -3295,12 +3295,23 @@ pub fn parse_flag_test(input: Z80Span) -> IResult<Z80Span, FlagTest, Z80ParserEr
 /// Parse any standard 16bits register
 /// TODO rename to emphasize it is standard reigsters
 pub fn parse_register16(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    alt((
-        parse_register_hl,
-        parse_register_bc,
-        parse_register_de,
-        parse_register_af
-    ))(input)
+
+    let (next, code) = recognize(terminated(pair(
+        one_of("abdhABDH"),
+        one_of("fcelFCEL")
+    ), not(alpha1)))(input.clone())?;
+
+    let code = code.to_ascii_uppercase();
+    let reg = match code.as_str() {
+        "AF" => DataAccess::Register16(Register16::Af),
+        "BC" => DataAccess::Register16(Register16::Bc),
+        "DE" => DataAccess::Register16(Register16::De),
+        "HL" => DataAccess::Register16(Register16::Hl),
+        _ => return Err(Err::Error(Z80ParserError::from_error_kind(input, ErrorKind::Alt)))
+    };
+    
+    
+    Ok((next, reg))
 }
 
 /// Parse any standard 16bits register
@@ -3372,10 +3383,12 @@ parse_any_register8!(parse_register_h, "h", Register8::H);
 parse_any_register8!(parse_register_l, "l", Register8::L);
 
 /// Produce the function that parse a given register
+#[inline]
 fn register16_parser(
     representation: &'static str,
     register: Register16
 ) -> impl for<'src, 'ctx> Fn(Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
+#[inline]
     move |input: Z80Span| {
         value(
             DataAccess::Register16(register),
