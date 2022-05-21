@@ -3928,6 +3928,10 @@ pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserEr
 pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
     let input_start = input.clone();
 
+    if &input_start[..0] != "{" {
+        return Err(Err::Error(Z80ParserError::from_error_kind(input, ErrorKind::Alt)));
+    }
+
     let (input, prefix) = alt((
         value(LabelPrefix::Bank, tag_no_case("{bank}")),
         value(LabelPrefix::Page, tag_no_case("{page}")),
@@ -4234,47 +4238,55 @@ pub fn located_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserEr
 /// parse functions with one argument
 pub fn parse_unary_function_call(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
     let input_start = input.clone();
-    let (input, func) = alt((
-        value(
-            UnaryFunction::High,
-            alt((parse_word("HIGH"), parse_word("HI")))
-        ),
-        value(
-            UnaryFunction::Low,
-            alt((parse_word("LOW"), parse_word("LO")))
-        ),
-        value(
-            UnaryFunction::Memory,
-            alt((parse_word("PEEK"), parse_word("MEMORY")))
-        ),
-        value(UnaryFunction::Floor, parse_word("FLOOR")),
-        value(UnaryFunction::Ceil, parse_word("CEIL")),
-        value(UnaryFunction::Frac, parse_word("FRAC")),
-        value(UnaryFunction::Char, parse_word("CHAR")),
-        value(UnaryFunction::Int, parse_word("INT")),
-        value(UnaryFunction::Sin, parse_word("SIN")),
-        value(UnaryFunction::Cos, parse_word("COS")),
-        value(UnaryFunction::ASin, parse_word("ASIN")),
-        value(UnaryFunction::ACos, parse_word("ACOS")),
-        value(UnaryFunction::Abs, parse_word("ABS")),
-        value(UnaryFunction::Ln, parse_word("LN")),
-        value(UnaryFunction::Log10, parse_word("LOG10")),
-        value(UnaryFunction::Exp, parse_word("EXP")),
-        value(UnaryFunction::Sqrt, parse_word("SQRT"))
-    ))(input)?;
 
-    let (input, exp) = cut(context(
+    let (input, (word, exp) ) = pair(delimited(
+        space0,
+        alpha1,
+        space0
+    ), 
+    context(
         "UNARY function: error in parameters",
         delimited(
             tuple((space0, tag("("), space0)),
             located_expr,
             tuple((space0, tag(")")))
         )
-    ))(input)?;
+    ))
+    (input)?;
 
+
+    let mut upper_word : smartstring::SmartString<smartstring::Compact> = smartstring::SmartString::from(word.as_str());
+    upper_word.as_mut_str().make_ascii_uppercase();
+
+    let  func = match upper_word.as_str() {
+        "HIGH" | "HI" => Some(UnaryFunction::High),
+        "LOW" | "LO" => Some(UnaryFunction::Low),
+        "PEEK" | "MEMORY" => Some(UnaryFunction::Memory),
+        "FLOOR" => Some(UnaryFunction::Floor),
+        "CEIL" => Some(UnaryFunction::Ceil),
+        "FRAC" => Some(UnaryFunction::Frac),
+        "CHAR" => Some(UnaryFunction::Char),
+        "INT" => Some(UnaryFunction::Int),
+        "SIN" => Some(UnaryFunction::Sin),
+        "COS" => Some(UnaryFunction::Cos),
+        "ASIN" => Some(UnaryFunction::ASin),
+        "ACOS" => Some(UnaryFunction::ACos),
+        "LN" => Some(UnaryFunction::Ln),
+        "LOG10" => Some(UnaryFunction::Log10),
+        "EXP" => Some(UnaryFunction::Exp),
+        "SQRT" => Some(UnaryFunction::Char),
+        "ABS" => Some(UnaryFunction::Sqrt),
+        _ => None
+    };
+    
     let span = input_start.take(input_start.input_len() - input.input_len());
 
-    Ok((input, LocatedExpr::UnaryFunction(func, Box::new(exp), span)))
+    let token = match func {
+        Some(func) => LocatedExpr::UnaryFunction(func, Box::new(exp), span),
+        None => LocatedExpr::AnyFunction(word, vec![exp], span)
+    };
+
+    Ok((input, token))
 }
 
 /// parse functions with two arguments
