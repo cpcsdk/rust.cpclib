@@ -1129,6 +1129,7 @@ pub fn parse_flag_value_inner(input: Z80Span) -> IResult<Z80Span, FlagValue, Z80
 }
 
 /// TODO - currently consume several lines. Should do it only one time
+#[inline]
 pub fn parse_empty_line(input: Z80Span) -> IResult<Z80Span, Option<LocatedToken>, Z80ParserError> {
     // let (input, _) = opt(line_ending)(input)?;
     let before_comment = input.clone();
@@ -1957,13 +1958,13 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
     // Get the first word that will drive the rest of parsing
     let (rest, word) = delimited(
         space0,
-        alpha1,
+        terminated(alpha1, not(is_a("0123456789._"))),
         space0
     )(input.clone())?;
 
     let mut upper_word : smartstring::SmartString<smartstring::Compact> = smartstring::SmartString::from(word.as_str());
     upper_word.as_mut_str().make_ascii_uppercase();
-
+    
     match upper_word.as_str() {
         "DB" | "DEFB" | "DM" | "DEFM" | "BYTE" | "TEXT" => parse_db_or_dw_or_str(input_start, 0)(rest),
         "WORD" | "DW" | "DEFW" => parse_db_or_dw_or_str(input_start, 1)(rest),
@@ -3829,7 +3830,7 @@ pub fn parse_label(
             &obtained_label[..]
         };
 
-        /*
+        //needed because of AT2
         let input = if doubledots {
             let (input, _) = opt(tag_no_case(":"))(input)?;
             input
@@ -3837,7 +3838,7 @@ pub fn parse_label(
         else {
             input
         };
-        */
+        
 
         // Be sure that ::ld is not considered to be a label
         let label_len = true_label.len();
