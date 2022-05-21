@@ -1081,6 +1081,7 @@ pub fn parse_basic_hide_lines(input: Z80Span) -> IResult<Z80Span, Vec<u16>, Z80P
         preceded(space0, map(dec_number_inner, |d| d as u16))
     )(input)
 }
+#[inline]
 pub fn dec_number_inner(input: Z80Span) -> IResult<Z80Span, u32, Z80ParserError> {
     let input_inner = input.deref().clone();
     let (input, number) = dec_number(input_inner).map_err(|_err| {
@@ -1091,6 +1092,7 @@ pub fn dec_number_inner(input: Z80Span) -> IResult<Z80Span, u32, Z80ParserError>
 
     Ok((Z80Span(input), number))
 }
+#[inline]
 pub fn bin_number_inner(input: Z80Span) -> IResult<Z80Span, u32, Z80ParserError> {
     let input_inner = input.deref().clone();
     let (input, number) = bin_number(input_inner).map_err(|_err| {
@@ -1101,6 +1103,8 @@ pub fn bin_number_inner(input: Z80Span) -> IResult<Z80Span, u32, Z80ParserError>
 
     Ok((Z80Span(input), number))
 }
+
+#[inline]
 pub fn hex_number_inner(input: Z80Span) -> IResult<Z80Span, u32, Z80ParserError> {
     let input_inner = input.deref().clone();
     let (input, number) = hex_number(input_inner).map_err(|_err| {

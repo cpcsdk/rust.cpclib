@@ -25,7 +25,7 @@ pub fn parse_value<'src, T>(
     input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
 where T: Clone {
-    alt((hex_number, bin_number, dec_number))(input)
+    alt((dec_number, hex_number, bin_number))(input)
 }
 
 #[inline]
@@ -34,10 +34,10 @@ pub fn dec_number<'src, T>(
     input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
 where T: Clone {
-    let (input, digits) = verify(
-        recognize(many1(is_a("0123456789_"))),
+    let (input, digits) = terminated(verify(
+        is_a("0123456789_"),
         |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
-    )(input)?;
+    ), not(alpha1))(input)?;
     let number = digits
         .chars()
         .filter(|c| *c != '_')
@@ -47,6 +47,7 @@ where T: Clone {
     Ok((input, number))
 }
 
+#[inline]
 pub fn hex_number<'src, T>(
     input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
@@ -54,14 +55,16 @@ where T: Clone {
     alt((hex_number1, hex_number2))(input)
 }
 
+// Prefixed version
+#[inline]
 pub fn hex_number1<'src, T>(
     input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
 where T: Clone {
     let (input, digits) = preceded(
-        alt((tag("0x"), tag("#"), tag("$"), tag("&"))),
+        alt((tag_no_case("0x"), tag("#"), tag("$"), tag("&"))),
         verify(
-            recognize(many1(is_a("0123456789abcdefABCDEF_"))),
+            is_a("0123456789abcdefABCDEF_"),
             |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
         )
     )(input)?;
@@ -74,16 +77,17 @@ where T: Clone {
     Ok((input, number))
 }
 
+#[inline]
 pub fn hex_number2<'src, T>(
     input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
 where T: Clone {
     let (input, digits) = terminated(
         verify(
-            recognize(many1(is_a("0123456789abcdefABCDEF_"))),
+            is_a("0123456789abcdefABCDEF_"),
             |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
         ),
-        terminated(tag_no_case("h"), not(alpha1))
+        terminated(is_a("hH"), not(alpha1))
     )(input)?;
     let number = digits
         .chars()
@@ -94,6 +98,7 @@ where T: Clone {
     Ok((input, number))
 }
 
+#[inline]
 pub fn bin_number<'src, T>(
     input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
@@ -101,7 +106,7 @@ where T: Clone {
     let (input, digits) = preceded(
         alt((tag("0b"), tag("%"))),
         verify(
-            recognize(many1(is_a("01_"))),
+            is_a("01_"),
             |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
         )
     )(input)?;
