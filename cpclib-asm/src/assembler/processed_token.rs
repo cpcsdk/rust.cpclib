@@ -65,6 +65,7 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync>
     MacroCallOrBuildStruct(ExpandState),
     Repeat(SimpleListingState<'token, T>),
     RepeatUntil(SimpleListingState<'token, T>),
+    While(SimpleListingState<'token, T>),
     Rorg(SimpleListingState<'token, T>),
     Switch(SwitchState<'token, T>),
 }
@@ -561,6 +562,12 @@ where
             default: token.switch_default().map(|l| {
                 SimpleListingState::build(l, token.possible_span().cloned(), env)   
             })
+        }))
+    }
+    else if token.is_while() {
+        Some(ProcessedTokenState::While(SimpleListingState {
+            processed_tokens: build_processed_tokens_list(token.while_listing(), env),
+            span: token.possible_span().cloned()
         }))
     }
     else if token.is_call_macro_or_build_struct() {
@@ -1109,7 +1116,19 @@ where
                         }
                 
                         Ok(())
+                    },
+
+                    Some(ProcessedTokenState::While(SimpleListingState {
+                        processed_tokens,
+                        ..
+                    })) => {
+                        env.visit_while(
+                            self.token.while_expr(),
+                            processed_tokens,
+                            self.token.possible_span()
+                        )
                     }
+
                     // no state implies a standard visit
                     None => self.token.visited(env)
                 }

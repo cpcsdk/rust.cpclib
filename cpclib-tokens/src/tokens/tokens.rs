@@ -11,6 +11,28 @@ impl ListingElement for Token {
     type MacroParam = MacroParam;
     type TestKind = TestKind;
 
+
+    fn is_while(&self) -> bool {
+        match self {
+            Token::While(..) => true,
+            _ => false
+        }
+    }
+
+    fn while_expr(&self) -> &Self::Expr {
+        match self {
+            Token::While(expr, ..) => expr,
+            _ => unreachable!()
+        }
+    }
+
+    fn while_listing(&self) -> &[Self]  {
+        match self {
+            Token::While(_, lst, ..) => lst.as_slice(),
+            _ => unreachable!()
+        }
+    }
+
     fn mnemonic(&self) -> Option<&Mnemonic> {
         match self {
             Token::OpCode(ref mnemonic, ..) => Some(mnemonic),

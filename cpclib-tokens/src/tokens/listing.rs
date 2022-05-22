@@ -23,6 +23,10 @@ pub trait ListingElement: Debug + Sized {
 
     fn is_directive(&self) -> bool;
 
+    fn is_while(&self) -> bool;
+    fn while_expr(&self) -> &Self::Expr;
+    fn while_listing(&self) -> &[Self];
+
     fn is_switch(&self) -> bool;
     fn switch_expr(&self) -> &Self::Expr;
     fn switch_cases(&self) -> Box<dyn Iterator<Item=(&Self::Expr, &[Self], bool) > + '_>;

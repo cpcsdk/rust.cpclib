@@ -2452,7 +2452,9 @@ pub fn visit_located_token(
         }
 
 
-        LocatedToken::While(cond, inner, span) => env.visit_while(cond, inner, Some(span.clone())),
+        LocatedToken::While(..) => {
+            panic!("Should never be called")
+        },
         LocatedToken::Iterate(..) => {
             panic!("Should never be called")
         }
@@ -2741,20 +2743,27 @@ fn visit_assert(
 
 impl Env {
     pub fn visit_while<
-        E: ExprEvaluationExt,
-        T: ListingElement<Expr = E> + Visited + MayHaveSpan
+        'token,
+        E,
+        T
     >(
         &mut self,
         cond: &E,
-        code: &[T],
-        span: Option<Z80Span>
-    ) -> Result<(), AssemblerError> {
+        code: &mut [ProcessedToken<'token, T>],
+        span: Option<&Z80Span>
+    ) -> Result<(), AssemblerError> 
+    where
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt,
+        ProcessedToken<'token, T>: FunctionBuilder {
         while self.resolve_expr_must_never_fail(cond)?.bool()? {
             // generate the bytes
-            self.visit_listing(code).map_err(|e| {
+            visit_processed_tokens(code, self).map_err(|e| {
                 AssemblerError::WhileIssue {
                     error: Box::new(e),
-                    span: span.clone()
+                    span: span.cloned()
                 }
             })?;
         }

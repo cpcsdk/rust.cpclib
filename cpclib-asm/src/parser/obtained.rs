@@ -1077,6 +1077,28 @@ impl ListingElement for LocatedToken {
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
 
+
+    fn is_while(&self) -> bool {
+        match self {
+            LocatedToken::While(..) => true,
+            _ => false
+        }
+    }
+
+    fn while_expr(&self) -> &Self::Expr {
+        match self {
+            LocatedToken::While(expr, ..) => expr,
+            _ => unreachable!()
+        }
+    }
+
+    fn while_listing(&self) -> &[Self]  {
+        match self {
+            LocatedToken::While(_, lst, ..) => lst.as_slice(),
+            _ => unreachable!()
+        }
+    }
+
     fn mnemonic(&self) -> Option<&Mnemonic> {
         match self {
             Self::Standard { token, .. } => token.mnemonic(),
