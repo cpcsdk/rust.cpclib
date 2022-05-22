@@ -63,6 +63,7 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync>
 
     Iterate(SimpleListingState<'token, T>),
     MacroCallOrBuildStruct(ExpandState),
+    Module(SimpleListingState<'token, T>),
     Repeat(SimpleListingState<'token, T>),
     RepeatUntil(SimpleListingState<'token, T>),
     While(SimpleListingState<'token, T>),
@@ -530,6 +531,12 @@ where
     else if token.is_iterate() {
         Some(ProcessedTokenState::Iterate(SimpleListingState {
             processed_tokens: build_processed_tokens_list(token.iterate_listing(), env),
+            span: token.possible_span().cloned()
+        }))
+    }
+    else if token.is_module() {
+        Some(ProcessedTokenState::Module(SimpleListingState {
+            processed_tokens: build_processed_tokens_list(token.module_listing(), env),
             span: token.possible_span().cloned()
         }))
     }
@@ -1054,6 +1061,20 @@ where
 
                         Ok(())
                     }
+
+                    Some(ProcessedTokenState::Module(SimpleListingState {
+                        processed_tokens,
+                        ..
+                    })) => {
+                        env.enter_namespace(self.token.module_name())?;
+                        visit_processed_tokens(processed_tokens, env)?;
+                        env.leave_namespace()?;
+                    
+                        Ok(())
+
+
+                    }
+
 
                     Some(ProcessedTokenState::Repeat(SimpleListingState {
                         processed_tokens,

@@ -556,7 +556,7 @@ pub enum Token {
     Macro(SmolStr, Vec<SmolStr>, String), // Content of the macro is parsed on use
     // macro call can be used for struct too
     MacroCall(SmolStr, Vec<MacroParam>), /* String are used in order to not be limited to expression and allow opcode/registers use */
-
+    Module(SmolStr, Listing),
     // Fake pop directive with several arguments
     MultiPop(Vec<DataAccess>),
     // Fake push directive with several arguments
@@ -676,6 +676,7 @@ impl Clone for Token {
             Token::List => Token::List,
             Token::Macro(a, b, c) => Token::Macro(a.clone(), b.clone(), c.clone()),
             Token::MacroCall(n, p) => Token::MacroCall(n.clone(), p.clone()),
+            Token::Module(a, b) => Token::Module(a.clone(), b.clone()),
             Token::MultiPop(a) => Token::MultiPop(a.clone()),
             Token::MultiPush(b) => Token::MultiPush(b.clone()),
             Token::Next(a, b, c) => Token::Next(a.clone(), b.clone(), c.clone()),

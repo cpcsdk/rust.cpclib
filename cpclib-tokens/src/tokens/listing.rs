@@ -23,6 +23,10 @@ pub trait ListingElement: Debug + Sized {
 
     fn is_directive(&self) -> bool;
 
+    fn is_module(&self) -> bool;
+    fn module_listing(&self) -> &[Self];
+    fn module_name(&self) -> &str;
+
     fn is_while(&self) -> bool;
     fn while_expr(&self) -> &Self::Expr;
     fn while_listing(&self) -> &[Self];

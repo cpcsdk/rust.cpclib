@@ -1077,6 +1077,25 @@ impl ListingElement for LocatedToken {
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
 
+    fn is_module(&self) -> bool{
+        match self {
+            LocatedToken::Module(..) => true,
+            _ => false
+        }
+    }
+    fn module_listing(&self) -> &[Self] {
+        match self {
+            LocatedToken::Module(_, lst, ..) => lst.as_slice(),
+            _ => unreachable!()
+        }
+    }
+    fn module_name(&self) -> &str{
+        match self {
+            LocatedToken::Module(name, ..) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
 
     fn is_while(&self) -> bool {
         match self {

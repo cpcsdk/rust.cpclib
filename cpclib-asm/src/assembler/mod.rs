@@ -2377,12 +2377,7 @@ pub fn visit_located_token(
 
                 Token::Breakpoint(expr) => env.visit_breakpoint(expr.as_ref(), Some(span.clone())),
 
-                Token::Macro(_name, _arguments, _code) => {
-                    panic!("Should delegate it to ProcessedToken")
-                }
-                Token::MacroCall(..) => {
-                    panic!("Should not be called")
-                }
+
 
                 Token::Pause => {
                     env.visit_pause(Some(span.clone()));
@@ -2427,47 +2422,11 @@ pub fn visit_located_token(
             }
         }
 
-        LocatedToken::CrunchedSection(..) => {
-            panic!("Should be handled by ProcessedToken")
-        }
-
-        LocatedToken::Function(..) => {
-            panic!("Should be handled by ProcessedToken")
-        }
-
-        LocatedToken::If(..) => {
-            panic!("Should be handled by ProcessedToken")
-        }
-
-        LocatedToken::Module(name, code, span) => {
-            env.enter_namespace(name)
-                .map_err(|e| e.locate(span.clone()))?;
-            env.visit_listing(code)?;
-            env.leave_namespace().map_err(|e| e.locate(span.clone()))?;
-            Ok(())
-        }
-
-        LocatedToken::Repeat(..) | LocatedToken::RepeatUntil(..) | LocatedToken::Rorg(..) => {
-            panic!("Should be handled by ProcessedToken")
-        }
-
-
-        LocatedToken::While(..) => {
-            panic!("Should never be called")
-        },
-        LocatedToken::Iterate(..) => {
-            panic!("Should never be called")
-        }
-        LocatedToken::For { .. } => {
-            panic!("Should never be called")
-        }
         LocatedToken::Label(label) => {
             env.visit_label(label.as_str())
                 .map_err(|e| e.locate(label.clone()))
         }
-        LocatedToken::MacroCall(_name, _args, _span) => {
-            panic!("Should never be called")
-        }
+
         LocatedToken::Struct(name, args, span) => {
             env.visit_struct_definition(name.as_str(), args, Some(span))
         }
@@ -2484,6 +2443,17 @@ pub fn visit_located_token(
                 .map_err(|e| e.locate(span.clone()))
         }
 
+        LocatedToken::Module(..) |
+        LocatedToken::CrunchedSection(..) |
+        LocatedToken::Function(..) |
+        LocatedToken::If(..) |
+        LocatedToken::MacroCall(..) |
+        LocatedToken::Repeat(..) | 
+        LocatedToken::RepeatUntil(..) | 
+        LocatedToken::Rorg(..) |
+        LocatedToken::While(..) |
+        LocatedToken::Iterate(..) |
+        LocatedToken::For { .. } |
         LocatedToken::Switch(..) |
         LocatedToken::Confined(..) |
         LocatedToken::Include(..) |

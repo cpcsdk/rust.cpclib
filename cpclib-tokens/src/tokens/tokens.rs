@@ -11,6 +11,25 @@ impl ListingElement for Token {
     type MacroParam = MacroParam;
     type TestKind = TestKind;
 
+    fn is_module(&self) -> bool{
+        match self {
+            Token::Module(..) => true,
+            _ => false
+        }
+    }
+    fn module_listing(&self) -> &[Self] {
+        match self {
+            Token::Module(_, lst, ..) => lst.as_slice(),
+            _ => unreachable!()
+        }
+    }
+    fn module_name(&self) -> &str{
+        match self {
+            Token::Module(name, ..) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
 
     fn is_while(&self) -> bool {
         match self {
