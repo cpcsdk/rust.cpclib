@@ -1175,7 +1175,7 @@ fn eof(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum LabelModifier {
     Equ,
     Set,
@@ -1355,21 +1355,31 @@ pub fn parse_z80_line_complete(r#in: &mut Vec<LocatedToken>) -> impl FnMut(Z80Sp
 pub fn parse_assign_operator(
     input: Z80Span
 ) -> IResult<Z80Span, Option<BinaryOperation>, Z80ParserError> {
-    alt((
-        value(None, tag("=")),
-        value(Some(BinaryOperation::RightShift), tag(">>=")),
-        value(Some(BinaryOperation::LeftShift), tag("<<=")),
-        value(Some(BinaryOperation::Add), tag("+=")),
-        value(Some(BinaryOperation::Sub), tag("-=")),
-        value(Some(BinaryOperation::Mul), tag("*=")),
-        value(Some(BinaryOperation::Div), tag("/=")),
-        value(Some(BinaryOperation::Mod), tag("%=")),
-        value(Some(BinaryOperation::BinaryAnd), tag("&=")),
-        value(Some(BinaryOperation::BinaryOr), tag("|=")),
-        value(Some(BinaryOperation::BinaryXor), tag("^=")),
-        value(Some(BinaryOperation::BooleanAnd), tag("&&=")),
-        value(Some(BinaryOperation::BooleanOr), tag("||="))
-    ))(input)
+
+    let (rest, word) = is_a("=<>+-*/%^|&")(input.clone())?;
+    let oper = match word.as_str() {
+        "=" => None,
+
+        ">>=" => Some(BinaryOperation::RightShift),
+        "<<=" => Some(BinaryOperation::LeftShift),
+
+        "+=" => Some(BinaryOperation::Add),
+        "-=" => Some(BinaryOperation::Sub),
+        "*=" => Some(BinaryOperation::Mul),
+        "/=" => Some(BinaryOperation::Div),
+        "%=" => Some(BinaryOperation::Mod),
+
+        "&=" => Some(BinaryOperation::BinaryAnd),
+        "|=" => Some(BinaryOperation::BinaryOr),
+        "^=" => Some(BinaryOperation::BinaryXor),
+        
+        "&&=" => Some(BinaryOperation::BooleanAnd),
+        "||=" => Some(BinaryOperation::BooleanOr),
+
+        _ => return Err(Err::Error(Z80ParserError::from_error_kind(input, ErrorKind::Alt)))
+    };
+
+    Ok((rest, oper))
 }
 
 /// No opcodes are expected there.
@@ -1387,34 +1397,65 @@ pub fn parse_z80_line_label_aware_directive(
     let _after_let = input.clone();
     let (input, label) = context("Label issue", preceded(space0, parse_label(true)))(input)?; // here there is true because of arkos tracker 2 player
 
-    // TODO make these stuff alternatives ...
-    // Manage Equ
-    // BUG Equ and = are supposed to be different
-    let (input, label_modifier) = opt(alt((
-        map(preceded(space1, parse_directive_word("DEFL")), |_| {
-            LabelModifier::Equ
-        }),
-        map(preceded(space1, parse_directive_word("EQU")), |_| {
-            LabelModifier::Equ
-        }),
-        map(preceded(space1, parse_directive_word("SETN")), |_| {
-            LabelModifier::SetN
-        }),
-        map(preceded(space1, parse_directive_word("NEXT")), |_| {
-            LabelModifier::Next
-        }),
-        map(
-            delimited(
-                space1,
-                parse_directive_word("SET"),
-                not(tuple((space0, expr, parse_comma)))
-            ),
-            |_| LabelModifier::Set
-        ),
-        map(delimited(space0, parse_assign_operator, space0), |op| {
-            LabelModifier::Equal(op)
-        })
-    )))(input)?;
+    let (next, label_modifier) = opt(
+        preceded(
+            space0,
+            is_a("DEFLdeflQUquSTNstnXx=<>+-*/%^|&"),
+        )
+    )(input.clone())?;
+
+
+    let (input , label_modifier ): (Z80Span, Option<LabelModifier>) = match label_modifier {
+        Some(label_modifier) => {
+            let mut label_modifier = smartstring::SmartString::<smartstring::Compact>::from(label_modifier.as_str());
+            label_modifier.as_mut_str()
+                .make_ascii_uppercase();
+
+
+            match label_modifier.as_str() {
+                "DEFL" => (next, Some(LabelModifier::Equ)),
+                "EQU" => (next, Some(LabelModifier::Equ)),
+                "SETN" => (next, Some(LabelModifier::SetN)),
+                "NEXT" => (next, Some(LabelModifier::Next)),
+                "SET" => if tuple((space0, expr, parse_comma))(next.clone()).is_err() {
+                            (next, Some(LabelModifier::Set))
+                        } else {
+                            (input, None)
+                        },
+                "=" => (next, Some(LabelModifier::Equal(None))),
+                oper => {
+                    let oper = match oper {
+                        ">>=" => Some(BinaryOperation::RightShift),
+                        "<<=" => Some(BinaryOperation::LeftShift),
+                
+                        "+=" => Some(BinaryOperation::Add),
+                        "-=" => Some(BinaryOperation::Sub),
+                        "*=" => Some(BinaryOperation::Mul),
+                        "/=" => Some(BinaryOperation::Div),
+                        "%=" => Some(BinaryOperation::Mod),
+                
+                        "&=" => Some(BinaryOperation::BinaryAnd),
+                        "|=" => Some(BinaryOperation::BinaryOr),
+                        "^=" => Some(BinaryOperation::BinaryXor),
+                        
+                        "&&=" => Some(BinaryOperation::BooleanAnd),
+                        "||=" => Some(BinaryOperation::BooleanOr),
+
+                        _ => None
+                    };
+
+                    if oper.is_some() {
+                        (next, Some(LabelModifier::Equal(oper)))
+                    } else {
+                        (input, None)
+                    }
+                }
+            }
+        },
+        
+        None => {(input, None)}
+    };
+
 
     // early quite if there is only one label and nothing else
     if let Option::None = label_modifier {
@@ -1458,7 +1499,7 @@ pub fn parse_z80_line_label_aware_directive(
         LabelModifier::Next | LabelModifier::SetN => {
             cut(context(
                 "Label expected",
-                map(parse_label(false), |l| Some(l))
+                map(preceded(space0,parse_label(false)), |l| Some(l))
             ))(input)?
         }
         _ => (input, None)
