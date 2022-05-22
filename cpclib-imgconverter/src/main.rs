@@ -13,7 +13,6 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
-
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -360,8 +359,6 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     }
 }
 
-
-
 // TODO - Add the ability to import a target palette
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
@@ -377,26 +374,38 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     }
     if matches.is_present("PIXEL_COLUMN_START") {
         transformations = transformations.column_start(
-            matches.value_of("PIXEL_COLUMN_START").unwrap()
-            .parse::<u16>().unwrap()
+            matches
+                .value_of("PIXEL_COLUMN_START")
+                .unwrap()
+                .parse::<u16>()
+                .unwrap()
         )
     }
     if matches.is_present("PIXEL_LINE_START") {
         transformations = transformations.line_start(
-            matches.value_of("PIXEL_LINE_START").unwrap()
-            .parse::<u16>().unwrap()
+            matches
+                .value_of("PIXEL_LINE_START")
+                .unwrap()
+                .parse::<u16>()
+                .unwrap()
         )
     }
     if matches.is_present("PIXEL_COLUMNS_KEPT") {
         transformations = transformations.columns_kept(
-            matches.value_of("PIXEL_COLUMNS_KEPT").unwrap()
-            .parse::<u16>().unwrap()
+            matches
+                .value_of("PIXEL_COLUMNS_KEPT")
+                .unwrap()
+                .parse::<u16>()
+                .unwrap()
         )
     }
     if matches.is_present("PIXEL_LINES_KEPT") {
         transformations = transformations.lines_kept(
-            matches.value_of("PIXEL_LINES_KEPT").unwrap()
-            .parse::<u16>().unwrap()
+            matches
+                .value_of("PIXEL_LINES_KEPT")
+                .unwrap()
+                .parse::<u16>()
+                .unwrap()
         )
     }
 

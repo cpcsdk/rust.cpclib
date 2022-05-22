@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::fs::{File, self};
+use std::fs::{self, File};
 use std::io;
 use std::io::Write;
 use std::path::Path;
@@ -10,9 +10,9 @@ use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 use cpclib_xfer::CpcXfer;
 
 use crate::assembler::file::{get_filename, handle_source_encoding};
-use crate::{preamble::*, progress};
-use crate::progress::{Progress, normalize};
-
+use crate::preamble::*;
+use crate::progress;
+use crate::progress::{normalize, Progress};
 
 #[derive(Debug)]
 pub enum BasmError {
@@ -127,7 +127,6 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
             }
         })?;
         handle_source_encoding(filename.to_str().unwrap(), &content)?
-
     }
     else if let Some(code) = matches.value_of("INLINE") {
         format!(" {}", code)
@@ -136,26 +135,22 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
         panic!("No code provided to assemble");
     };
 
-    let fname = context.current_filename
+    let fname = context
+        .current_filename
         .as_ref()
-        .map(|fname| {
-            normalize(fname)
-        })
-        .unwrap_or_else(||{
-            context.context_name.as_ref().unwrap()
-        });
+        .map(|fname| normalize(fname))
+        .unwrap_or_else(|| context.context_name.as_ref().unwrap());
 
-    if context.show_progress{
+    if context.show_progress {
         Progress::progress().add_parse(fname);
     };
-
 
     let res = crate::parse_z80_str_with_context(code, context.clone())
         .map_err(|e| BasmError::from(AssemblerError::AlreadyRenderedError(e.to_string())));
 
-        if context.show_progress{
-            Progress::progress().remove_parse(fname);
-        };
+    if context.show_progress {
+        Progress::progress().remove_parse(fname);
+    };
 
     res
 }
@@ -166,10 +161,7 @@ pub fn assemble<'arg>(
     matches: &'arg ArgMatches,
     listing: &LocatedListing
 ) -> Result<Env, BasmError> {
-
     let show_progress = matches.is_present("PROGRESS");
-
-
 
     let mut options = AssemblingOptions::default();
     options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
@@ -224,10 +216,11 @@ pub fn assemble<'arg>(
     }
 
     let bar = if show_progress {
-      //  Some(Progress::progress()
-     //       .add_bar("Assemble sources"))
-     None
-    } else {
+        //  Some(Progress::progress()
+        //       .add_bar("Assemble sources"))
+        None
+    }
+    else {
         None
     };
 
@@ -240,7 +233,6 @@ pub fn assemble<'arg>(
 
     env.handle_post_actions()
         .map_err(|e| BasmError::AssemblerError { error: e })?;
-
 
     if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
         if dest == "-" {
@@ -268,18 +260,18 @@ pub fn assemble<'arg>(
 /// Save the provided result
 /// TODO manage the various save options and delegate them with save commands
 pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
-
     let show_progress = matches.is_present("PROGRESS");
 
-    if matches.is_present("SNAPSHOT") && ! matches.is_present("TO_M4") &&  !matches.is_present("OUTPUT"){
-        return Err(BasmError::InvalidArgument("You have not provided an output file name".to_owned()));
+    if matches.is_present("SNAPSHOT")
+        && !matches.is_present("TO_M4")
+        && !matches.is_present("OUTPUT")
+    {
+        return Err(BasmError::InvalidArgument(
+            "You have not provided an output file name".to_owned()
+        ));
     }
 
-
-
     if matches.is_present("SNAPSHOT") && matches.is_present("OUTPUT") {
-        
-
         // Get the appropriate filename
         let pc_filename = matches.value_of("OUTPUT").unwrap();
 
@@ -290,20 +282,15 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             }
         })?;
 
-
         match matches.value_of("TO_M4") {
-
-
             Some(m4) => {
-
                 let bar = if show_progress {
-                    Some(Progress::progress()
-                        .add_bar("Send to M4"))
-                } else {
+                    Some(Progress::progress().add_bar("Send to M4"))
+                }
+                else {
                     None
                 };
 
-                
                 let xfer = CpcXfer::new(m4);
                 xfer.upload_and_run(pc_filename, None)
                     .expect("An error occured while transfering the snapshot");
@@ -311,32 +298,28 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 if let Some(bar) = bar {
                     Progress::progress().remove_bar_ok(&bar);
                 }
-                
-  
-            },
+            }
             None => {}
-        } 
-
+        }
     }
-    else if matches.is_present("TO_M4") && !matches.is_present("OUTPUT")  {
-    	let sna = env.sna();
-    	let m4 = matches.value_of("TO_M4").unwrap();
-    	
-    	                let bar = if show_progress {
-                    Some(Progress::progress()
-                        .add_bar("Send to M4"))
-                } else {
-                    None
-                };
-    	
-	let xfer = CpcXfer::new(m4);
-	xfer.upload_and_run_sna(sna)
-	    .expect("An error occured while transfering the snapshot");
+    else if matches.is_present("TO_M4") && !matches.is_present("OUTPUT") {
+        let sna = env.sna();
+        let m4 = matches.value_of("TO_M4").unwrap();
 
-	if let Some(bar) = bar {
-	    Progress::progress().remove_bar_ok(&bar);
-	}
-    	
+        let bar = if show_progress {
+            Some(Progress::progress().add_bar("Send to M4"))
+        }
+        else {
+            None
+        };
+
+        let xfer = CpcXfer::new(m4);
+        xfer.upload_and_run_sna(sna)
+            .expect("An error occured while transfering the snapshot");
+
+        if let Some(bar) = bar {
+            Progress::progress().remove_bar_ok(&bar);
+        }
     }
     else if matches.is_present("OUTPUT") || matches.is_present("DB_LIST") {
         // Collect the produced bytes
@@ -408,8 +391,6 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             })?;
         }
     }
-
-
 
     Ok(())
 }

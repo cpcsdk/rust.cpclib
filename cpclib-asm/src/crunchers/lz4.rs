@@ -1,8 +1,10 @@
 extern "C" {
-	fn LZ4_crunch(input_data: *const libc::c_uchar, input_len: libc::c_int, retlen: *mut libc::c_int) -> *const libc::c_uchar;
+    fn LZ4_crunch(
+        input_data: *const libc::c_uchar,
+        input_len: libc::c_int,
+        retlen: *mut libc::c_int
+    ) -> *const libc::c_uchar;
 }
-
-
 
 pub fn compress(data: &[u8]) -> Vec<u8> {
     unsafe {
@@ -11,8 +13,7 @@ pub fn compress(data: &[u8]) -> Vec<u8> {
 
         let mut lenout: libc::c_int = 0;
 
-		let dataout = LZ4_crunch(data, len, &mut lenout);
-
+        let dataout = LZ4_crunch(data, len, &mut lenout);
 
         // copy the crunched C bytes in a rust struct
         let crunched = {

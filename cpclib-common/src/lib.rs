@@ -34,10 +34,12 @@ pub fn dec_number<'src, T>(
     input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
 where T: Clone {
-    let (input, digits) = terminated(verify(
-        is_a("0123456789_"),
-        |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
-    ), not(alpha1))(input)?;
+    let (input, digits) = terminated(
+        verify(is_a("0123456789_"), |s: &LocatedSpan<&'src str, T>| {
+            !s.starts_with("_")
+        }),
+        not(alpha1)
+    )(input)?;
     let number = digits
         .chars()
         .filter(|c| *c != '_')
@@ -105,10 +107,9 @@ pub fn bin_number<'src, T>(
 where T: Clone {
     let (input, digits) = preceded(
         alt((tag("0b"), tag("%"))),
-        verify(
-            is_a("01_"),
-            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
-        )
+        verify(is_a("01_"), |s: &LocatedSpan<&'src str, T>| {
+            !s.starts_with("_")
+        })
     )(input)?;
     let number = digits
         .chars()

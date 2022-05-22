@@ -13,7 +13,7 @@ use crate::{
 pub trait ListingElement: Debug + Sized {
     type MacroParam: MacroParamElement;
     type TestKind: TestKindElement;
-    type Expr: ExprElement + Debug + Eq + Clone ;
+    type Expr: ExprElement + Debug + Eq + Clone;
 
     fn mnemonic(&self) -> Option<&Mnemonic>;
     fn mnemonic_arg1(&self) -> Option<&DataAccess>;
@@ -33,7 +33,7 @@ pub trait ListingElement: Debug + Sized {
 
     fn is_switch(&self) -> bool;
     fn switch_expr(&self) -> &Self::Expr;
-    fn switch_cases(&self) -> Box<dyn Iterator<Item=(&Self::Expr, &[Self], bool) > + '_>;
+    fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_>;
     fn switch_default(&self) -> Option<&[Self]>;
 
     fn is_iterate(&self) -> bool;
@@ -103,7 +103,6 @@ pub trait ListingElement: Debug + Sized {
 
     fn is_confined(&self) -> bool;
     fn confined_listing(&self) -> &[Self];
-
 
     fn is_db(&self) -> bool;
     fn is_dw(&self) -> bool;

@@ -159,9 +159,7 @@ pub struct ColorMatrix {
 
 impl From<Vec<Vec<Ink>>> for ColorMatrix {
     fn from(data: Vec<Vec<Ink>>) -> Self {
-        ColorMatrix {
-            data
-        }
+        ColorMatrix { data }
     }
 }
 

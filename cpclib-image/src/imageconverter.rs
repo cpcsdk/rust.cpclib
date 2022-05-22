@@ -53,7 +53,7 @@ pub enum Transformation {
     /// Shorten lines of several pixel columns on the left
     SkipLeftPixelColumns(u16),
     /// Shorten columns of several pixel columns on the top
-    SkipTopPixelLines(u16), 
+    SkipTopPixelLines(u16),
     KeepLeftPixelColumns(u16),
     KeepTopPixelLines(u16),
     /// Add artifical blank lines. The line is build by repeating the background the right amount of time
@@ -99,35 +99,28 @@ impl Transformation {
 
             Transformation::SkipLeftPixelColumns(amount) => {
                 matrix.window(
-                    *amount as _, 
-                    0, 
+                    *amount as _,
+                    0,
                     matrix.width().saturating_sub(*amount as _) as _,
-                    matrix.height() as _)
+                    matrix.height() as _
+                )
             }
 
             Transformation::SkipTopPixelLines(amount) => {
                 matrix.window(
                     0 as _,
-                    *amount as _, 
+                    *amount as _,
                     matrix.width() as _,
-                    matrix.height().saturating_sub(*amount as _) as _)
+                    matrix.height().saturating_sub(*amount as _) as _
+                )
             }
 
             Transformation::KeepLeftPixelColumns(usize) => {
-                matrix.window(
-                    0, 
-                    0, 
-                    *usize as _, 
-                    matrix.height() as _)
+                matrix.window(0, 0, *usize as _, matrix.height() as _)
             }
 
             Transformation::KeepTopPixelLines(usize) => {
-                matrix.window(
-                    0,
-                    0,
-                    matrix.width() as _,
-                    *usize as _
-                )
+                matrix.window(0, 0, matrix.width() as _, *usize as _)
             }
 
             Transformation::BlankLines {
@@ -177,7 +170,6 @@ impl Transformation {
 
                 res
             }
-
         }
     }
 
@@ -239,22 +231,26 @@ impl TransformationsList {
     }
 
     pub fn column_start(mut self, count: u16) -> Self {
-        self.transformations.push(Transformation::SkipLeftPixelColumns(count));
+        self.transformations
+            .push(Transformation::SkipLeftPixelColumns(count));
         self
     }
 
-    pub fn columns_kept(mut self, count:u16) -> Self {
-        self.transformations.push(Transformation::KeepLeftPixelColumns(count));
+    pub fn columns_kept(mut self, count: u16) -> Self {
+        self.transformations
+            .push(Transformation::KeepLeftPixelColumns(count));
         self
     }
 
     pub fn lines_kept(mut self, count: u16) -> Self {
-        self.transformations.push(Transformation::KeepTopPixelLines(count));
+        self.transformations
+            .push(Transformation::KeepTopPixelLines(count));
         self
     }
 
     pub fn line_start(mut self, count: u16) -> Self {
-        self.transformations.push(Transformation::SkipTopPixelLines(count));
+        self.transformations
+            .push(Transformation::SkipTopPixelLines(count));
         self
     }
 

@@ -11,7 +11,8 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
-    BinaryTransformation, ListingElement, MacroParamElement, TestKindElement, ToSimpleToken, Token, Listing, ExprElement
+    BinaryTransformation, ExprElement, Listing, ListingElement, MacroParamElement, TestKindElement,
+    ToSimpleToken, Token
 };
 use either::Either;
 use ouroboros::*;
@@ -23,16 +24,15 @@ use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Cruncher;
 use crate::preamble::{
-    parse_z80_str, parse_z80_str_with_context, LocatedListing, MayHaveSpan, Z80Span, Z80ParserError
+    parse_z80_str, parse_z80_str_with_context, LocatedListing, MayHaveSpan, Z80ParserError, Z80Span
 };
-use crate::progress::{Progress, self, normalize};
+use crate::progress::{self, normalize, Progress};
 use crate::{r#macro, AssemblerError, Env, LocatedToken, ParserContext, Visited};
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync> 
-{
+pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync> {
     /// The token being processed by the assembler
     token: &'token T,
     state: Option<ProcessedTokenState<'token, T>>
@@ -40,8 +40,7 @@ pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync>
 
 /// Specific state to maintain for the current token
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> 
-{
+enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     Confined(SimpleListingState<'token, T>),
     CrunchedSection {
         /// The token to assemble
@@ -68,7 +67,7 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync>
     RepeatUntil(SimpleListingState<'token, T>),
     While(SimpleListingState<'token, T>),
     Rorg(SimpleListingState<'token, T>),
-    Switch(SwitchState<'token, T>),
+    Switch(SwitchState<'token, T>)
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
@@ -77,43 +76,38 @@ struct IncbinState {
 }
 
 #[derive(PartialEq, Eq, Clone)]
-struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> 
-{
+struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> {
     processed_tokens: Vec<ProcessedToken<'token, T>>,
     span: Option<Z80Span>
 }
 
-impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListingState<'token, T> 
-{
+impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListingState<'token, T> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "SimpleListingState")
     }
 }
 
-impl<'token, T: Visited + ListingElement + Debug + Sync  + MayHaveSpan> SimpleListingState<'token, T> 
-where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+impl<'token, T: Visited + ListingElement + Debug + Sync + MayHaveSpan> SimpleListingState<'token, T>
+where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
     fn build(tokens: &'token [T], span: Option<Z80Span>, env: &Env) -> Self {
-        Self  {
+        Self {
             processed_tokens: build_processed_tokens_list(tokens, env),
             span
         }
     }
 
-    fn tokens_mut(&mut self) -> &mut[ProcessedToken<'token, T>] {
+    fn tokens_mut(&mut self) -> &mut [ProcessedToken<'token, T>] {
         &mut self.processed_tokens
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FunctionDefinitionState(Option<Arc<Function>>);
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 
-struct SwitchState<'token, T: Visited + ListingElement + Debug + Sync>
-{
+struct SwitchState<'token, T: Visited + ListingElement + Debug + Sync> {
     cases: Vec<SimpleListingState<'token, T>>,
     default: Option<SimpleListingState<'token, T>>
 }
@@ -121,25 +115,23 @@ struct SwitchState<'token, T: Visited + ListingElement + Debug + Sync>
 #[derive(PartialEq, Eq, Clone, Debug)]
 struct IncludeState(BTreeMap<PathBuf, IncludeStateInner>);
 
-
-
 impl IncludeState {
-
-
-    fn retreive_listing(&mut self, env: &mut Env, fname: &PathBuf) -> Result<&mut IncludeStateInner, AssemblerError> {
+    fn retreive_listing(
+        &mut self,
+        env: &mut Env,
+        fname: &PathBuf
+    ) -> Result<&mut IncludeStateInner, AssemblerError> {
         if cfg!(target_arch = "wasm32") {
-            return Err(AssemblerError::AssemblingError { msg: 
-                "INCLUDE-like directives are not allowed in a web-based assembling.".to_owned()
+            return Err(AssemblerError::AssemblingError {
+                msg: "INCLUDE-like directives are not allowed in a web-based assembling."
+                    .to_owned()
             });
         }
 
         let ctx = &env.ctx;
 
-
         // Build the state if needed / retreive it otherwhise
         let state: &mut IncludeStateInner = if !self.0.contains_key(fname) {
-
-
             let content = read_source(fname.clone(), ctx)?;
 
             let new_ctx = {
@@ -169,18 +161,20 @@ impl IncludeState {
             self.0.get_mut(fname).unwrap()
         };
 
-
         // handle the listing
         env.mark_included(fname.clone());
 
         Ok(state)
-
     }
 
-    fn handle(&mut self, env: &mut Env, fname: &str, namespace: Option<&str>, once: bool) -> Result<(), AssemblerError> {
-
+    fn handle(
+        &mut self,
+        env: &mut Env,
+        fname: &str,
+        namespace: Option<&str>,
+        once: bool
+    ) -> Result<(), AssemblerError> {
         let fname = get_filename(fname, &env.ctx, Some(env))?;
-
 
         // Process the inclusion only if necessary
         if (!once) || (!env.has_included(&fname)) {
@@ -196,8 +190,7 @@ impl IncludeState {
 
             // Visit the included listing
             state.with_processed_tokens_mut(|tokens| {
-                let tokens: &mut [ProcessedToken<'_, LocatedToken>] =
-                    &mut tokens[..];
+                let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut tokens[..];
                 visit_processed_tokens::<'_, LocatedToken>(tokens, env)
             })?;
 
@@ -278,8 +271,7 @@ impl Debug for ExpandState {
 
 /// Store for each branch (if passed at some point) the test result and the listing
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct IfState<'token, T: Visited + Debug + ListingElement + Sync> 
-{
+struct IfState<'token, T: Visited + Debug + ListingElement + Sync> {
     // The token that contains the tests and listings
     token: &'token T,
     if_token_adr_to_used_decision: std::collections::HashMap<usize, bool>,
@@ -429,7 +421,6 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 impl<'token, T: Visited + Debug + ListingElement + Sync + ToSimpleToken> ToSimpleToken
     for ProcessedToken<'token, T>
 where <T as ListingElement>::Expr: ExprEvaluationExt
-
 {
     fn as_simple_token(&self) -> Cow<Token> {
         self.token.as_simple_token()
@@ -473,11 +464,8 @@ where
                             Ok(listing) => {
                                 // Filename has already been added
                                 if token.include_is_standard_include() {
-                                        Progress::progress()
-                                            .remove_parse(progress::normalize(&fname));
+                                    Progress::progress().remove_parse(progress::normalize(&fname));
                                 }
-
-
 
                                 let include_state = IncludeStateInnerBuilder {
                                     listing,
@@ -560,15 +548,15 @@ where
     }
     else if token.is_switch() {
         // todo setup properly the spans
-        Some(ProcessedTokenState::Switch(SwitchState{
-            cases: token.switch_cases()
-            .map(|(v, l, b)| {
-                SimpleListingState::build(l, token.possible_span().cloned(), env)
-            }).collect_vec(),
+        Some(ProcessedTokenState::Switch(SwitchState {
+            cases: token
+                .switch_cases()
+                .map(|(v, l, b)| SimpleListingState::build(l, token.possible_span().cloned(), env))
+                .collect_vec(),
 
-            default: token.switch_default().map(|l| {
-                SimpleListingState::build(l, token.possible_span().cloned(), env)   
-            })
+            default: token
+                .switch_default()
+                .map(|l| SimpleListingState::build(l, token.possible_span().cloned(), env))
         }))
     }
     else if token.is_while() {
@@ -603,43 +591,28 @@ where
     #[cfg(target_arch = "wasm32")]
     let iter = tokens.iter();
 
-
-
     // get filename of files that will be read in parallal
-    let include_fnames = tokens.par_iter()
-        .filter(|t| {
-            t.include_is_standard_include()
-        })
-        .map(|t| {
-            get_filename(
-                t.include_fname(),
-                &env.ctx,
-                Some(env)
-            )
-        })
+    let include_fnames = tokens
+        .par_iter()
+        .filter(|t| t.include_is_standard_include())
+        .map(|t| get_filename(t.include_fname(), &env.ctx, Some(env)))
         .filter(|f| f.is_ok())
         .map(|f| f.unwrap())
         .collect::<Vec<_>>();
 
-        // inform the progress bar
-        if !include_fnames.is_empty() {
-            // add all fnames in one time
-            Progress::progress().add_parses(
-                include_fnames.iter()
-                    .map(|t| {
-                        progress::normalize(t)
-                    })
-            );
-        }
-
+    // inform the progress bar
+    if !include_fnames.is_empty() {
+        // add all fnames in one time
+        Progress::progress().add_parses(include_fnames.iter().map(|t| progress::normalize(t)));
+    }
 
     // the files will be read here
-    iter.map(|t| build_processed_token(t, env)) 
+    iter.map(|t| build_processed_token(t, env))
         .collect::<Vec<_>>()
 }
 
 /// Visit all the tokens until an error occurs
-pub fn visit_processed_tokens<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan >(
+pub fn visit_processed_tokens<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan>(
     tokens: &mut [ProcessedToken<'token, T>],
     env: &mut Env
 ) -> Result<(), AssemblerError>
@@ -648,7 +621,6 @@ where
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
-
     if env.ctx.show_progress {
         // setup the amount of tokens that will be processed
         Progress::progress().add_expected_to_pass(tokens.len() as _);
@@ -668,14 +640,12 @@ where
         }
     }
 
-
     Ok(())
 }
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSpan
     for ProcessedToken<'token, T>
 where <T as ListingElement>::Expr: ExprEvaluationExt
-
 {
     fn possible_span(&self) -> Option<&Z80Span> {
         self.token.possible_span()
@@ -690,10 +660,9 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
     }
 }
 
-impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T> 
+impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
 where <T as ListingElement>::Expr: ExprEvaluationExt
 {
-
     /// Generate the tokens needed for the macro or the struct
     pub fn update_macro_or_struct_state(&mut self, env: &Env) -> Result<(), AssemblerError>
     where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt {
@@ -777,7 +746,6 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
     }
 }
 
-
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
@@ -812,9 +780,7 @@ where
                     Some(ProcessedTokenState::Confined(SimpleListingState {
                         ref mut processed_tokens,
                         span
-                    })) => {
-                        env.visit_confined(processed_tokens, span.as_ref())
-                    },
+                    })) => env.visit_confined(processed_tokens, span.as_ref()),
                     Some(ProcessedTokenState::CrunchedSection {
                         listing:
                             SimpleListingState {
@@ -977,12 +943,14 @@ where
                         env.visit_incbin(data.borrow())
                     }
 
-                    Some(ProcessedTokenState::Include(ref mut state)) => state.handle(
-                        env, 
-                        self.token.include_fname(),
-                        self.token.include_namespace(),
-                        self.token.include_once()
-                    ) ,
+                    Some(ProcessedTokenState::Include(ref mut state)) => {
+                        state.handle(
+                            env,
+                            self.token.include_fname(),
+                            self.token.include_namespace(),
+                            self.token.include_once()
+                        )
+                    }
 
                     Some(ProcessedTokenState::If(if_state)) => {
                         let listing = if_state.choose_listing_to_assemble(env)?;
@@ -1069,12 +1037,9 @@ where
                         env.enter_namespace(self.token.module_name())?;
                         visit_processed_tokens(processed_tokens, env)?;
                         env.leave_namespace()?;
-                    
+
                         Ok(())
-
-
                     }
-
 
                     Some(ProcessedTokenState::Repeat(SimpleListingState {
                         processed_tokens,
@@ -1105,20 +1070,20 @@ where
                         span
                     })) => env.visit_rorg(self.token.rorg_expr(), processed_tokens, span.as_ref()),
 
-
                     Some(ProcessedTokenState::Switch(ref mut state)) => {
-
                         let value = env.resolve_expr_must_never_fail(self.token.switch_expr())?;
                         let mut met = false;
                         let mut broken = false;
-                        for (case, listing, r#break) in state.cases.iter_mut().zip(self.token.switch_cases())
-                        .map(|(pt, t)| {
-                            (t.0, pt.tokens_mut(), t.2)
-                        }) {
+                        for (case, listing, r#break) in state
+                            .cases
+                            .iter_mut()
+                            .zip(self.token.switch_cases())
+                            .map(|(pt, t)| (t.0, pt.tokens_mut(), t.2))
+                        {
                             // check if case must be executed
                             let case = env.resolve_expr_must_never_fail(case)?;
                             met |= case == value;
-                
+
                             // inject code if needed and leave if break is present
                             if met {
                                 visit_processed_tokens(listing, env)?;
@@ -1128,16 +1093,16 @@ where
                                 }
                             }
                         }
-                
+
                         // execute default if any
                         if !met || !broken {
                             if let Some(ref mut default) = state.default {
                                 visit_processed_tokens(&mut default.processed_tokens, env)?;
                             }
                         }
-                
+
                         Ok(())
-                    },
+                    }
 
                     Some(ProcessedTokenState::While(SimpleListingState {
                         processed_tokens,
@@ -1159,13 +1124,12 @@ where
             Ok(res)
         };
 
-        really_does_the_job()
-            .map_err(|e| {
-                let e = match possible_span {
-                    Some(span) => e.locate(span.clone()),
-                    None => e
-                };
-                AssemblerError::AlreadyRenderedError(e.to_string())
+        really_does_the_job().map_err(|e| {
+            let e = match possible_span {
+                Some(span) => e.locate(span.clone()),
+                None => e
+            };
+            AssemblerError::AlreadyRenderedError(e.to_string())
         })
     }
 }

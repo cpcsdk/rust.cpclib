@@ -54,7 +54,6 @@ pub struct MacroWithArgs<'m, 'a, P: MacroParamElement> {
 impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
     /// The construction fails if the number pf arguments is incorrect
     pub fn build(r#macro: &'m Macro, args: &'a [P]) -> Result<Self, AssemblerError> {
-        
         if r#macro.nb_args() != args.len() {
             Err(AssemblerError::MacroError {
                 name: r#macro.name().into(),

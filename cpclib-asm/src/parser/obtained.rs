@@ -20,7 +20,10 @@ use cpclib_tokens::{
 };
 use ouroboros::self_referencing;
 
-use super::{parse_z80_line_complete, ParserContext, Z80ParserError, Z80Span, my_many0, my_many0_in, my_many0_nocollect, my_many_till_nocollect};
+use super::{
+    my_many0, my_many0_in, my_many0_nocollect, my_many_till_nocollect, parse_z80_line_complete,
+    ParserContext, Z80ParserError, Z80Span
+};
 use crate::assembler::Env;
 use crate::error::AssemblerError;
 /// ! This crate is related to the adaptation of tokens and listing for the case where they are parsed
@@ -675,7 +678,7 @@ pub enum LocatedToken {
     RepeatUntil(LocatedExpr, LocatedListing, Z80Span),
     Rorg(LocatedExpr, LocatedListing, Z80Span),
     /// Name, Parameters, FullSpan
-    Struct(Z80Span, Vec<(Z80Span, LocatedToken)>, Z80Span), // TODO Store a listing that can embed if / db /dw/ str/ struct calls
+    Struct(Z80Span, Vec<(Z80Span, LocatedToken)>, Z80Span), /* TODO Store a listing that can embed if / db /dw/ str/ struct calls */
     Switch(
         LocatedExpr,
         Vec<(LocatedExpr, LocatedListing, bool)>,
@@ -951,7 +954,7 @@ impl LocatedToken {
                     content.as_str().to_owned()
                 ))
             }
-            LocatedToken::Confined(_, _) => todo!(),
+            LocatedToken::Confined(..) => todo!()
         }
     }
 
@@ -1077,25 +1080,26 @@ impl ListingElement for LocatedToken {
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
 
-    fn is_module(&self) -> bool{
+    fn is_module(&self) -> bool {
         match self {
             LocatedToken::Module(..) => true,
             _ => false
         }
     }
+
     fn module_listing(&self) -> &[Self] {
         match self {
             LocatedToken::Module(_, lst, ..) => lst.as_slice(),
             _ => unreachable!()
         }
     }
-    fn module_name(&self) -> &str{
+
+    fn module_name(&self) -> &str {
         match self {
             LocatedToken::Module(name, ..) => name.as_str(),
             _ => unreachable!()
         }
     }
-
 
     fn is_while(&self) -> bool {
         match self {
@@ -1111,7 +1115,7 @@ impl ListingElement for LocatedToken {
         }
     }
 
-    fn while_listing(&self) -> &[Self]  {
+    fn while_listing(&self) -> &[Self] {
         match self {
             LocatedToken::While(_, lst, ..) => lst.as_slice(),
             _ => unreachable!()
@@ -1511,7 +1515,7 @@ impl ListingElement for LocatedToken {
 
     fn confined_listing(&self) -> &[Self] {
         match self {
-            Self::Confined(lst, _) => {lst.as_slice()},
+            Self::Confined(lst, _) => lst.as_slice(),
             _ => unreachable!()
         }
     }
@@ -1530,15 +1534,11 @@ impl ListingElement for LocatedToken {
         }
     }
 
-    fn switch_cases(&self) -> Box<dyn Iterator<Item=(&Self::Expr, &[Self], bool) > + '_>  {
+    fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_> {
         match self {
-            Self::Switch(_, cases, ..) => box cases.iter().map(|c| {
-                (
-                    &c.0,
-                    c.1.deref().as_slice(),
-                    c.2
-                )
-            }),
+            Self::Switch(_, cases, ..) => {
+                box cases.iter().map(|c| (&c.0, c.1.deref().as_slice(), c.2))
+            }
             _ => unreachable!()
         }
     }
@@ -1552,19 +1552,30 @@ impl ListingElement for LocatedToken {
 
     fn is_db(&self) -> bool {
         match self {
-            Self::Standard{token: Token::Defb(..), ..} => true,
+            Self::Standard {
+                token: Token::Defb(..),
+                ..
+            } => true,
             _ => false
         }
     }
+
     fn is_dw(&self) -> bool {
         match self {
-            Self::Standard{token: Token::Defw(..), ..} => true,
+            Self::Standard {
+                token: Token::Defw(..),
+                ..
+            } => true,
             _ => false
         }
     }
+
     fn is_str(&self) -> bool {
         match self {
-            Self::Standard{token: Token::Str(..), ..} => true,
+            Self::Standard {
+                token: Token::Str(..),
+                ..
+            } => true,
             _ => false
         }
     }
@@ -1663,7 +1674,9 @@ impl LocatedListing {
 
                 let mut tokens = Vec::with_capacity(100);
                 // really make the parsing
-                let res = my_many_till_nocollect(parse_z80_line_complete(&mut tokens), eof)(input_start.clone());
+                let res = my_many_till_nocollect(parse_z80_line_complete(&mut tokens), eof)(
+                    input_start.clone()
+                );
 
                 // analyse result and can generate error even if parsing was ok
                 let res = match res {
@@ -1727,7 +1740,7 @@ impl LocatedListing {
         input_code: Z80Span,
         new_state: ParsingState
     ) -> IResult<Z80Span, Arc<LocatedListing>, Z80ParserError> {
-       // let mut tokens = RefCell::new(Vec::new());
+        // let mut tokens = RefCell::new(Vec::new());
         let mut tokens = Vec::with_capacity(20);
 
         // The context is similar to the initial one ...
@@ -1750,8 +1763,6 @@ impl LocatedListing {
             },
 
             parse_result_builder: |_src, lst_ctx| {
-
-
                 // build a span with the appropriate novel context
                 let lst_ctx =
                     unsafe { &*(lst_ctx as *const ParserContext) as &'static ParserContext }; // the context is stored within the object; so it is safe to set its lifetime to static
@@ -1769,28 +1780,28 @@ impl LocatedListing {
                 // keep a track of the very beginning of the span
                 let inner_start: Z80Span = inner_code.clone();
 
-
-                let res = cut(context("[DBG] Inner loop", my_many0_nocollect(
-                    parse_z80_line_complete(&mut tokens)
-                )))(inner_code.clone());
+                let res = cut(context(
+                    "[DBG] Inner loop",
+                    my_many0_nocollect(parse_z80_line_complete(&mut tokens))
+                ))(inner_code.clone());
                 match res {
-                        Ok( (next_input, _)) => {
-                            let mut next_span = next_input;
-                            next_span.extra = input_code.extra;
+                    Ok((next_input, _)) => {
+                        let mut next_span = next_input;
+                        next_span.extra = input_code.extra;
 
-                            // shorten the inner_code
-                            let inner_span =
-                                inner_start.take(inner_start.input_len() - next_span.input_len());
+                        // shorten the inner_code
+                        let inner_span =
+                            inner_start.take(inner_start.input_len() - next_span.input_len());
 
-                            ParseResult::SuccessInner {
-                                inner_span,
-                                next_span,
-                                listing: InnerLocatedListing::from(tokens)
-                            }
-                        },
-                        Err(e) =>  ParseResult::FailureInner(e),
+                        ParseResult::SuccessInner {
+                            inner_span,
+                            next_span,
+                            listing: InnerLocatedListing::from(tokens)
+                        }
                     }
+                    Err(e) => ParseResult::FailureInner(e)
                 }
+            }
         }
         .build();
         let inner_listing = Arc::new(inner_listing);

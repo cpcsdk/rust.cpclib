@@ -166,7 +166,7 @@ pub fn assemble_to_amsdos_file(
     let tokens = parser::parse_z80_str(code)?;
     let options = AssemblingOptions::default();
 
-    let (_,env) = assembler::visit_tokens_all_passes_with_options(&tokens, &options, ctx)?;
+    let (_, env) = assembler::visit_tokens_all_passes_with_options(&tokens, &options, ctx)?;
 
     Ok(AmsdosFile::binary_file_from_buffer(
         &amsdos_filename,

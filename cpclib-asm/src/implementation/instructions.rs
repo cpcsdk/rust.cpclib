@@ -24,7 +24,7 @@ impl Cruncher for CrunchType {
                 })
             }
             #[cfg(target_arch = "wasm32")]
-            CrunchType::LZ4  => {
+            CrunchType::LZ4 => {
                 Err(AssemblerError::AssemblingError {
                     msg: "LZ4 compression not available".to_owned()
                 })
@@ -49,7 +49,7 @@ impl Cruncher for CrunchType {
             }
 
             #[cfg(not(target_arch = "wasm32"))]
-            CrunchType::LZ4  => Ok(crunchers::lz4::compress(raw)),
+            CrunchType::LZ4 => Ok(crunchers::lz4::compress(raw)),
             #[cfg(not(target_arch = "wasm32"))]
             CrunchType::LZX0 => Ok(crunchers::zx0::compress(raw)),
             #[cfg(not(target_arch = "wasm32"))]

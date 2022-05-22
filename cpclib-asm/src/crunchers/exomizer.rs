@@ -1,8 +1,11 @@
 extern "C" {
-fn Exomizer_crunch(input_data: *const libc::c_uchar, input_len: libc::c_int, retlen: *mut libc::c_int) -> *const libc::c_uchar;
- 
-}
+    fn Exomizer_crunch(
+        input_data: *const libc::c_uchar,
+        input_len: libc::c_int,
+        retlen: *mut libc::c_int
+    ) -> *const libc::c_uchar;
 
+}
 
 /// Compress the given block using exomizer  method
 pub fn compress(data: &[u8]) -> Vec<u8> {
@@ -12,8 +15,7 @@ pub fn compress(data: &[u8]) -> Vec<u8> {
 
         let mut lenout: libc::c_int = 0;
 
-		let dataout = Exomizer_crunch(data, len, &mut lenout);
-
+        let dataout = Exomizer_crunch(data, len, &mut lenout);
 
         // copy the crunched C bytes in a rust struct
         let crunched = {

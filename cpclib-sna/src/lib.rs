@@ -251,7 +251,7 @@ impl Snapshot {
 
         // Compress memory chunks for V3
         if version == SnapshotVersion::V3 && !self.has_memory_chunk() {
-            //println!("Generate chunks from standard memory");
+            // println!("Generate chunks from standard memory");
             let chunks = cloned.memory.to_chunks();
             for idx in 0..chunks.len() {
                 cloned.chunks.insert(idx, chunks[idx].clone());
@@ -297,14 +297,14 @@ impl Snapshot {
             );
             buffer.write_all(&sna.memory.memory())?;
         }
-        //println!("Memory header: {}", sna.memory_size_header());
+        // println!("Memory header: {}", sna.memory_size_header());
 
         // Write chunks if any
         for chunk in &sna.chunks {
-         //   println!(
-          //      "Add chunk: {}",
-          //      chunk.code().iter().map(|c| *c as char).collect::<String>()
-           // );
+            //   println!(
+            //      "Add chunk: {}",
+            //      chunk.code().iter().map(|c| *c as char).collect::<String>()
+            // );
             buffer.write_all(chunk.code())?;
             buffer.write_all(&chunk.size_as_array())?;
             buffer.write_all(chunk.data())?;

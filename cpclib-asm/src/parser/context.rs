@@ -105,14 +105,20 @@ pub struct ParserContext {
     pub source: Option<&'static str>
 }
 
-impl Eq for ParserContext {
-
-}
+impl Eq for ParserContext {}
 
 impl PartialEq for ParserContext {
     fn eq(&self, other: &Self) -> bool {
-        self.state == other.state && self.current_filename == other.current_filename && self.context_name == other.context_name && self.search_path == other.search_path && self.read_referenced_files == other.read_referenced_files && self.dotted_directive == other.dotted_directive && self.parse_warning.read().unwrap().deref() == other.parse_warning.read().unwrap().deref() && self.source == other.source
-        && self.show_progress == other.show_progress
+        self.state == other.state
+            && self.current_filename == other.current_filename
+            && self.context_name == other.context_name
+            && self.search_path == other.search_path
+            && self.read_referenced_files == other.read_referenced_files
+            && self.dotted_directive == other.dotted_directive
+            && self.parse_warning.read().unwrap().deref()
+                == other.parse_warning.read().unwrap().deref()
+            && self.source == other.source
+            && self.show_progress == other.show_progress
     }
 }
 
@@ -307,7 +313,6 @@ impl ParserContext {
         if fname.starts_with("inner://") {
             return Ok(std::path::Path::new(fname).into());
         }
-
 
         let fname = std::path::Path::new(fname);
 

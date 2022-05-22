@@ -497,7 +497,7 @@ impl Default for Env {
             macro_seed: 0,
             charset_encoding: CharsetEncoding::new(),
             sna: {
-                let mut sna = Snapshot::default(); //Snapshot::new_6128().unwrap();
+                let mut sna = Snapshot::default(); // Snapshot::new_6128().unwrap();
                 sna.unwrap_memory_chunks();
                 sna
             },
@@ -767,7 +767,6 @@ impl Env {
     pub(crate) fn start_new_pass(&mut self) {
         self.requested_additional_pass |= !self.current_pass_discarded_errors.is_empty();
 
-
         let mut can_change_request = true;
         if !self.pass.is_listing_pass() {
             self.pass = if self.real_nb_passes == 0
@@ -841,10 +840,7 @@ impl Env {
             self.symbols.new_pass();
 
             Progress::progress().new_pass();
-
         }
-
-
     }
 
     /// Handle the actions to do after assembling.
@@ -1020,11 +1016,19 @@ impl Env {
 
         // count the number of files to save to build the process bar
         let mut nb_files_to_save: u64 = 0;
-        nb_files_to_save += pages_mmr[0..self.pages_info_sna.len()].iter().enumerate().map(|(activepage,page)| {
-            self.ga_mmr = *page;
-            self.pages_info_sna[activepage].nb_files_to_save() as u64
-        }).sum::<u64>() as u64;
-        nb_files_to_save += self.banks.iter() .map(|b| b.1.nb_files_to_save() as u64).sum::<u64>() as u64;
+        nb_files_to_save += pages_mmr[0..self.pages_info_sna.len()]
+            .iter()
+            .enumerate()
+            .map(|(activepage, page)| {
+                self.ga_mmr = *page;
+                self.pages_info_sna[activepage].nb_files_to_save() as u64
+            })
+            .sum::<u64>() as u64;
+        nb_files_to_save += self
+            .banks
+            .iter()
+            .map(|b| b.1.nb_files_to_save() as u64)
+            .sum::<u64>() as u64;
 
         Progress::progress().create_save_bar(nb_files_to_save);
 
@@ -1048,7 +1052,6 @@ impl Env {
         for s in &mut saved {
             saved_files.append(s);
         }
-
 
         if self.ctx.show_progress {
             Progress::progress().finish_save();
@@ -1843,7 +1846,7 @@ impl Env {
 
         let page = self.resolve_expr_must_never_fail(exp)?.int()? as u8; // This value MUST be interpretable once executed
 
- //       eprintln!("Warning need to code sna memory extension if needed");
+        //       eprintln!("Warning need to code sna memory extension if needed");
         self.select_page(page)?;
         Ok(())
     }
@@ -2013,11 +2016,11 @@ impl Env {
     }
 
     pub fn visit_snainit(&mut self, fname: &str) -> Result<(), AssemblerError> {
-    	if !self.pass.is_first_pass() {
-    		return Ok(());
-    	}
-    
-        if self.byte_written  {
+        if !self.pass.is_first_pass() {
+            return Ok(());
+        }
+
+        if self.byte_written {
             return Err(AssemblerError::AssemblingError {
                 msg: format!(
                     "Some bytes has alrady been produced; you cannot import the snapshot {}.",
@@ -2332,8 +2335,7 @@ where
         trigger.finish()
     }
 
-
-    Ok((tokens,env))
+    Ok((tokens, env))
 }
 
 /// Visit the tokens during a single pass. Is deprecated in favor to the mulitpass version
@@ -2376,8 +2378,6 @@ pub fn visit_located_token(
                 }
 
                 Token::Breakpoint(expr) => env.visit_breakpoint(expr.as_ref(), Some(span.clone())),
-
-
 
                 Token::Pause => {
                     env.visit_pause(Some(span.clone()));
@@ -2443,22 +2443,22 @@ pub fn visit_located_token(
                 .map_err(|e| e.locate(span.clone()))
         }
 
-        LocatedToken::Module(..) |
-        LocatedToken::CrunchedSection(..) |
-        LocatedToken::Function(..) |
-        LocatedToken::If(..) |
-        LocatedToken::MacroCall(..) |
-        LocatedToken::Repeat(..) | 
-        LocatedToken::RepeatUntil(..) | 
-        LocatedToken::Rorg(..) |
-        LocatedToken::While(..) |
-        LocatedToken::Iterate(..) |
-        LocatedToken::For { .. } |
-        LocatedToken::Switch(..) |
-        LocatedToken::Confined(..) |
-        LocatedToken::Include(..) |
-        LocatedToken::Incbin { .. } |
-        LocatedToken::Macro {..} => panic!("Should never been called {:?}", outer_token)
+        LocatedToken::Module(..)
+        | LocatedToken::CrunchedSection(..)
+        | LocatedToken::Function(..)
+        | LocatedToken::If(..)
+        | LocatedToken::MacroCall(..)
+        | LocatedToken::Repeat(..)
+        | LocatedToken::RepeatUntil(..)
+        | LocatedToken::Rorg(..)
+        | LocatedToken::While(..)
+        | LocatedToken::Iterate(..)
+        | LocatedToken::For { .. }
+        | LocatedToken::Switch(..)
+        | LocatedToken::Confined(..)
+        | LocatedToken::Include(..)
+        | LocatedToken::Incbin { .. }
+        | LocatedToken::Macro { .. } => panic!("Should never been called {:?}", outer_token)
     }?;
 
     // Patch the warnings to inject them a location
@@ -2684,7 +2684,8 @@ fn visit_assert(
                         }
                         else {
                             "".to_owned()
-                        }).as_str(),
+                        })
+                        .as_str(),
                     test: exp.to_string(),
                     guidance: env.to_assert_string(exp)
                 })
@@ -2712,22 +2713,19 @@ fn visit_assert(
 }
 
 impl Env {
-    pub fn visit_while<
-        'token,
-        E,
-        T
-    >(
+    pub fn visit_while<'token, E, T>(
         &mut self,
         cond: &E,
         code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> 
+    ) -> Result<(), AssemblerError>
     where
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
             ExprEvaluationExt,
-        ProcessedToken<'token, T>: FunctionBuilder {
+        ProcessedToken<'token, T>: FunctionBuilder
+    {
         while self.resolve_expr_must_never_fail(cond)?.bool()? {
             // generate the bytes
             visit_processed_tokens(code, self).map_err(|e| {
@@ -2903,23 +2901,24 @@ impl Env {
         confined_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
         confined_env.output_address = 0;
         // TODO: forbid a subset of instructions to ensure it works properly
-        visit_processed_tokens(lst, &mut confined_env)
-            .map_err(|e| {
-                panic!("{:?}", e);
-                match span {
-                    Some(span) => e.locate(span.clone()),
-                    None => e
-                }
-            })?;
-
+        visit_processed_tokens(lst, &mut confined_env).map_err(|e| {
+            panic!("{:?}", e);
+            match span {
+                Some(span) => e.locate(span.clone()),
+                None => e
+            }
+        })?;
 
         // compute its size
         let bytes = confined_env.produced_bytes();
         let bytes_len = bytes.len() as u16;
 
         if bytes_len > 256 {
-            let e = AssemblerError::AssemblingError { 
-                msg: format!("CONFINED error: content uses {} bytes instead of a maximum of 256.", bytes.len())
+            let e = AssemblerError::AssemblingError {
+                msg: format!(
+                    "CONFINED error: content uses {} bytes instead of a maximum of 256.",
+                    bytes.len()
+                )
             };
             match span {
                 Some(span) => return Err(e.locate(span.clone())),
@@ -2927,19 +2926,17 @@ impl Env {
             }
         }
 
-
-
         // Add the delta if needed and recompute the confined section a second time to properly setup the side effects
-        if ((self.logical_code_address().wrapping_add(bytes_len)) & 0xff00) 
-        != self.logical_code_address() & 0xff00 {
-            while (self.logical_code_address() & 0x00ff) != 0x0000 {
+        if ((self.logical_code_address().wrapping_add(bytes_len)) & 0xFF00)
+            != self.logical_code_address() & 0xFF00
+        {
+            while (self.logical_code_address() & 0x00FF) != 0x0000 {
                 self.output(0)?;
                 self.update_dollar();
             }
-        } 
-        
-        visit_processed_tokens(lst,  self)
+        }
 
+        visit_processed_tokens(lst, self)
     }
 
     /// Handle the for directive
