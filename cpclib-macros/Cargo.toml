@@ -16,9 +16,9 @@ independent = true
 cpclib-asm = "0.6.0"
 cpclib-common = "0.6.0"
 
-syn = "1.0.91"
+syn = "1.0.95"
 quote = "1.0.18"
-proc-macro2 = "1.0.37"
+proc-macro2 = "1.0.39"
 
 [lib]
 proc-macro = true

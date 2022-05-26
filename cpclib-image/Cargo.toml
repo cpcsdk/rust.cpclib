@@ -12,11 +12,11 @@ independent = true
 
 [dependencies]
 cpclib-common = "0.6.0"
-image = "0.24.1"
+image = "0.24.2"
 anyhow = "1.0.57"
 gif = "0.11.3"
 gif-dispose = "3.1.1"
 as-slice = "0.2.1"
 contracts = "0.6.3"
 
-serde = { version = "1.0.136", features = ["derive"] }
+serde = { version = "1.0.137", features = ["derive"] }

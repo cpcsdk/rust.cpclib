@@ -25,7 +25,7 @@ failure = "0.1.8"
 getset = "0.1.2"
 matches = "0.1.9"
 #memchr = "2.4.0"
-serde = { version = "1.0.136", features = ["derive"] }
+serde = { version = "1.0.137", features = ["derive"] }
 tempfile= "3.3.0"
 
 path-absolutize = { version = "3.0.13", optional = false }

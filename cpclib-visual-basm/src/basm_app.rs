@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use cpclib_asm::basm_utils::*;
 use eframe::egui::{self, ScrollArea};
-use eframe::epi::{self};
 
 enum AssembleState {
     Ok,
@@ -115,8 +114,8 @@ impl BasmApp {
     }
 }
 
-impl epi::App for BasmApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &eframe::epi::Frame) {
+impl eframe::App for BasmApp {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let Self {
             fname,
             include_dirs,
@@ -280,7 +279,5 @@ impl epi::App for BasmApp {
         }
     }
 
-    fn name(&self) -> &str {
-        "Visual BASM"
-    }
+
 }

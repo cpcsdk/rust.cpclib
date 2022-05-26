@@ -21,11 +21,11 @@ delegate = "0.6.2"
 either = "1.6.1"
 evalexpr = "7.2.0"
 matches = "0.1.9"
-ordered-float = "2.10.0"
+ordered-float = "3.0.0"
 paste = "1.0.7"
-remain = "0.2.2"
-serde = { version = "1.0.136", features = ["derive"] }
-regex = "1.5.5"
+remain = "0.2.3"
+serde = { version = "1.0.137", features = ["derive"] }
+regex = "1.5.6"
 
 [build-dependencies]
 built = { version = "0.5.1", features = ["chrono"] }

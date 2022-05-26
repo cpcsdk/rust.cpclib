@@ -15,7 +15,7 @@ independent = true
 cpclib = { version = "0.6.0", features = ["cmdline"] }
 
 lz4 = "1.23.3"
-notify = "5.0.0-pre.14"
+notify = "5.0.0-pre.15"
 crossbeam-channel = "0.5.4"
 exitcode = "1.1.2"
 tempfile= "3.3.0"

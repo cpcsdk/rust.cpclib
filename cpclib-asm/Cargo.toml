@@ -38,14 +38,14 @@ getset = "0.1.2"
 globset = "0.4.8"
 indicatif = "0.17.0-rc.10"
 lazy_static = "1.4.0"
-libc = "0.2.124"
+libc = "0.2.126"
 matches = "0.1.9"
 hashbag = "0.1.5"
 ouroboros = "0.15.0"
 paste = "1.0.7"
-regex = "1.5.5"
-rust-embed = { version="6.4.0", features = ["compression"] }
-serde = { version = "1.0.136", features = ["derive"] }
+regex = "1.5.6"
+rust-embed = { version = "6.4.0", features = ["compression"] }
+serde = { version = "1.0.137", features = ["derive"] }
 substring = "1.4.5"
 velcro = "0.5.3"
 assert_matches = "1.5.0"

@@ -29,7 +29,7 @@ getset = "0.1.2"
 lazy_static= "1.4.0"
 matches = "0.1.9"
 #memchr = "2.4.0"
-serde = { version = "1.0.136", features = ["derive"] }
+serde = { version = "1.0.137", features = ["derive"] }
 tempfile= "3.3.0"
 
 path-absolutize = { version = "3.0.13", optional = false }
@@ -41,8 +41,8 @@ time = { version = "0.3.9", optional = false }
 
 rustyline = { version = "9.1.2", optional = false }
 rustyline-derive = { version = "0.6.0", optional = false }
-subprocess = { version = "0.2.8", optional = false }
-notify = { version = "5.0.0-pre.14", optional = false }
+subprocess = { version = "0.2.9", optional = false }
+notify = { version = "5.0.0-pre.15", optional = false }
 crossbeam-channel = { version = "0.5.4", optional = false }
 hotwatch = { version = "0.4.6", optional = false }
 

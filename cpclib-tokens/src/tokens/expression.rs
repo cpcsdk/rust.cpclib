@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, Sub};
+use core::ops::Deref;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
@@ -1301,7 +1302,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
     fn add(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
         match (&self, rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 + f2).into()),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1.into_inner() + f2.into_inner()).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1 + rhs.float()?).into()),
             (ExprResult::Value(_) | ExprResult::Char(_), ExprResult::Float(f2)) => {
                 Ok((self.float()? + f2.into_inner()).into())
@@ -1327,7 +1328,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
     fn sub(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
         match (&self, rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 - f2).into()),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1.into_inner() - f2.into_inner()).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() - rhs.float()?).into())
             }
@@ -1351,7 +1352,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
     fn mul(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
         match (&self, rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 * f2).into()),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1.into_inner() * f2.into_inner()).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() * rhs.float()?).into())
             }
@@ -1379,7 +1380,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Div<T> for ExprResult {
     fn div(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
         match (&self, rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 / f2).into()),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1.into_inner() / f2.into_inner()).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() / rhs.float()?).into())
             }
@@ -1405,7 +1406,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
     fn rem(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
         match (&self, &rhs) {
-            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1 % f2).into()),
+            (ExprResult::Float(f1), ExprResult::Float(f2)) => Ok((f1.into_inner() % f2.into_inner()).into()),
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() % rhs.float()?).into())
             }

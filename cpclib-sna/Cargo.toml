@@ -16,7 +16,7 @@ cpclib-common = "0.6.0"
 cfg-if = "1.0.0"
 delegate  = "0.6.2"
 matches = "0.1.9"
-serde = { version = "1.0.136", features = ["derive"] }
+serde = { version = "1.0.137", features = ["derive"] }
 num_enum = "0.5.7"
 
 [dev-dependencies]
