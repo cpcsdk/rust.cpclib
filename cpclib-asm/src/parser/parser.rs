@@ -184,6 +184,7 @@ const STAND_ALONE_DIRECTIVE: &[&str] = &[
     "FAIL",
     "INCBIN",
     "INCLUDE",
+    "INCLZ4", "INCEXO", "INCL48", "INCL49", "INCAPU", "INCZX0",
     "LET",
     "LIMIT",
     "LIST",
@@ -1978,7 +1979,7 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
     // Get the first word that will drive the rest of parsing
     let (rest, word) = delimited(
         space0,
-        terminated(alpha1, not(is_a("0123456789._"))),
+        terminated(alphanumeric1, not(is_a("._"))),
         space0
     )(input.clone())?;
 
@@ -1997,7 +1998,7 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
         "INCEXO" => {
             parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZEXO))(rest)
         }
-        "INCLZ4" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ4))(rest),
+        "INCLZ4" => dbg!(parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ4))(rest)),
         "INCL48" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ48))(rest),
         "INCL49" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ49))(rest),
         "INCAPU" => {
