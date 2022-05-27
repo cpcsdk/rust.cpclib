@@ -84,7 +84,15 @@ impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
 
         // replace the arguments for the listing
         for (argname, argvalue) in self.r#macro.params().iter().zip(self.args.iter()) {
-            listing = listing.replace(&format!("{{{}}}", argname), &expand_param(argvalue, env)?);
+
+            let expanded = expand_param(argvalue, env)?;
+            listing = if argname.starts_with("r#") 
+                & expanded.starts_with("\"") 
+                & expanded.ends_with("\"") { // remove " " before doing the expansion
+                listing.replace(&format!("{{{}}}", &argname[2..]), &expanded[1..(expanded.len()-1)])
+            } else {
+                listing.replace(&format!("{{{}}}", argname), &expanded)
+            }
         }
 
         Ok(listing)
