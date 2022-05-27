@@ -7,6 +7,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token};
 use either::Either;
+use crate::section::*;
 
 use super::list::{
     list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_from_list,
@@ -223,7 +224,11 @@ lazy_static::lazy_static! {
         "matrix_set_col": Function::HardCoded(HardCodedFunction::MatrixSetCol),
         "matrix_width": Function::HardCoded(HardCodedFunction::MatrixWidth),
         "matrix_height": Function::HardCoded(HardCodedFunction::MatrixHeight),
-        "load": Function::HardCoded(HardCodedFunction::Load)
+        "load": Function::HardCoded(HardCodedFunction::Load),
+        "section_start": Function::HardCoded(HardCodedFunction::SectionStart),
+        "section_stop": Function::HardCoded(HardCodedFunction::SectionStop),
+        "section_length": Function::HardCoded(HardCodedFunction::SectionLength),
+        "section_used": Function::HardCoded(HardCodedFunction::SectionUsed),
     };
 }
 
@@ -259,6 +264,11 @@ pub enum HardCodedFunction {
     MatrixSetCol,
     MatrixWidth,
     MatrixHeight,
+
+    SectionStart,
+    SectionStop,
+    SectionLength,
+    SectionUsed,
 
     StringNew,
     StringPush,
@@ -311,7 +321,13 @@ impl HardCodedFunction {
             HardCodedFunction::MatrixWidth => Some(1),
             HardCodedFunction::MatrixHeight => Some(1),
 
-            HardCodedFunction::Load => Some(1)
+            HardCodedFunction::Load => Some(1),
+
+            HardCodedFunction::SectionStart => Some(1),
+            HardCodedFunction::SectionStop => Some(1),
+            HardCodedFunction::SectionLength => Some(1),
+            HardCodedFunction::SectionUsed => Some(1),
+
         }
     }
 
@@ -487,11 +503,25 @@ impl HardCodedFunction {
             }
             HardCodedFunction::MatrixWidth => matrix_width(&params[0]),
             HardCodedFunction::MatrixHeight => matrix_height(&params[0]),
+            
             HardCodedFunction::Load => {
                 let fname = params[0].string()?;
                 let ctx = &env.ctx;
                 let data = file::load_binary(Either::Right((fname, env)), ctx)?;
                 Ok(ExprResult::from(data.as_slice()))
+            },
+
+            HardCodedFunction::SectionStart => {
+                section_start(params[0].string()?, env)
+            },
+            HardCodedFunction::SectionStop => {
+                section_stop(params[0].string()?, env)
+            },
+            HardCodedFunction::SectionLength => {
+                section_length(params[0].string()?, env)
+            },
+            HardCodedFunction::SectionUsed => {
+                section_used(params[0].string()?, env)
             }
         }
     }

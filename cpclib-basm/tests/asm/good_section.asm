@@ -25,3 +25,7 @@ section code
 	call 0xbb5a
 	inc hl
 	jr print_message
+
+	assert section_start("data") ==  0x4000
+	assert section_length("data") == 0x4000
+	assert section_used("data") == 40

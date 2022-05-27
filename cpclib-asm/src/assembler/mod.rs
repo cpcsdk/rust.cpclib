@@ -10,8 +10,9 @@ pub mod report;
 pub mod save_command;
 pub mod stable_ticker;
 pub mod symbols_output;
+pub mod section;
 
-pub(crate) mod embedded;
+pub mod embedded;
 pub mod processed_token;
 
 use std::borrow::Borrow;
@@ -47,6 +48,7 @@ use crate::report::Report;
 use crate::save_command::*;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, PhysicalAddress};
+use crate::section::Section;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -287,43 +289,6 @@ impl CharsetEncoding {
     }
 }
 
-#[derive(Clone, Debug)]
-struct Section {
-    /// Name of the section
-    name: String,
-    /// Start address of the section
-    start: u16,
-    /// Last (included) address of the section
-    stop: u16,
-    /// Expected mmr configuration
-    mmr: u8,
-
-    output_adr: u16,
-    code_adr: u16
-}
-
-impl Section {
-    fn new(name: &str, start: u16, stop: u16, mmr: u8) -> Self {
-        Section {
-            mmr,
-            name: name.to_owned(),
-            start,
-            stop,
-
-            output_adr: start,
-            code_adr: start
-        }
-    }
-
-    fn contains(&self, addr: u16) -> bool {
-        addr >= self.start && addr <= self.stop
-    }
-
-    fn new_pass(&mut self) {
-        self.output_adr = self.start;
-        self.code_adr = self.start;
-    }
-}
 
 /// Environment of the assembly
 #[allow(missing_docs)]
@@ -1278,8 +1243,10 @@ impl Env {
             );
 
             if let Some(section) = &mut self.current_section {
-                section.write().unwrap().output_adr = output;
-                section.write().unwrap().code_adr = code;
+                let mut section = section.write().unwrap();
+                section.output_adr = output;
+                section.code_adr = code;
+                section.max_output_adr = section.max_output_adr.max(output);
             }
         }
 
@@ -1677,6 +1644,17 @@ impl Env {
         }
 
         Ok(())
+    }
+
+    fn get_section_description(&self, name: &str) -> Result<Section, AssemblerError> {
+        match self.sections.get(name) {
+            Some(section) => Ok(section.read().unwrap().clone()),
+            None => {
+                Err(AssemblerError::AssemblingError {
+                    msg: format!("Section '{}' does not exists", name)
+                })
+            }
+        }
     }
 
     fn visit_section(&mut self, name: &str) -> Result<(), AssemblerError> {
@@ -2355,7 +2333,7 @@ pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerE
     Ok(env)
 }
 
-/// Apply the effect of the localised token. Most of the action is delegated to visit_token.
+/// Apply the effect of the localized token. Most of the action is delegated to visit_token.
 /// The difference with the standard token is the ability to embed listing
 pub fn visit_located_token(
     outer_token: &LocatedToken,
