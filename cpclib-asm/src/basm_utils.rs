@@ -397,6 +397,30 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
 /// Launch the assembling of everythin
 pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
+
+    if matches.is_present("LIST_EMBEDDED") {
+        use crate::embedded::EmbeddedFiles;
+        for fname in EmbeddedFiles::iter() {
+            println!("{}", fname)
+        }
+        std::process::exit(0);
+    }
+
+    if let Some(fname) = matches.value_of("VIEW_EMBEDDED") {
+        use crate::embedded::EmbeddedFiles;
+
+        match EmbeddedFiles::get(fname) {
+            Some(content) => {
+                println!("{}", std::str::from_utf8(content.data.as_ref()).unwrap());
+                std::process::exit(0);
+            },
+            None => {   
+                eprintln!("Embedded file {fname} does not exist");
+                std::process::exit(-1);
+            }
+        }
+    }
+
     // standard assembling
     let listing = parse(matches)?;
     let env = assemble(matches, &listing).map_err(move |error| {
@@ -422,7 +446,7 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
 pub fn build_args_parser() -> clap::Command<'static> {
     Command::new("basm")
 					.author("Krusty/Benediction")
-					.about("Benediction ASM -- z80 assembler that tailor Amstrad CPC")
+					.about("Benediction ASM -- z80 assembler that mainly targets Amstrad CPC")
                     .after_help("Work In Progress")
                     .arg(
                         Arg::new("INLINE")
@@ -435,11 +459,7 @@ pub fn build_args_parser() -> clap::Command<'static> {
 							.help("Input file to read.")
 							.takes_value(true)
                     )
-                    .group(
-                        ArgGroup::new("ANY_INPUT")
-                            .args(&["INLINE", "INPUT"])
-                            .required(true)
-                    )
+
 					.arg(
 						Arg::new("OUTPUT")
 							.help("Filename of the output.")
@@ -542,6 +562,18 @@ pub fn build_args_parser() -> clap::Command<'static> {
                         .help("Show a progress bar.")
                         .long("progress")
                     )
+                    .arg(
+                        Arg::new("LIST_EMBEDDED")
+                        .help("List the embedded files")
+                        .long("list-embedded")
+                    )
+                    .arg(
+                        Arg::new("VIEW_EMBEDDED")
+                        .help("Display one specific embedded file")
+                        .long("view-embedded")
+                        .takes_value(true)
+                        .number_of_values(1)
+                    )
 					.group( // only one type of header can be provided
 						ArgGroup::new("HEADER")
 							.args(&["BINARY_HEADER", "BASIC_HEADER"])
@@ -549,5 +581,10 @@ pub fn build_args_parser() -> clap::Command<'static> {
                     .group( // only one type of output can be provided
                         ArgGroup::new("ARTEFACT_TYPE")
                         .args(&["BINARY_HEADER", "BASIC_HEADER", "SNAPSHOT"])
+                    )
+                    .group(
+                        ArgGroup::new("ANY_INPUT")
+                            .args(&["INLINE", "INPUT", "LIST_EMBEDDED", "VIEW_EMBEDDED"])
+                            .required(true)
                     )
 }
