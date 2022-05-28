@@ -1998,7 +1998,7 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
         "INCEXO" => {
             parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZEXO))(rest)
         }
-        "INCLZ4" => dbg!(parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ4))(rest)),
+        "INCLZ4" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ4))(rest),
         "INCL48" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ48))(rest),
         "INCL49" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ49))(rest),
         "INCAPU" => {
@@ -2611,6 +2611,8 @@ pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80P
     Ok((input, name))
 }
 pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, LocatedMacroParam, Z80ParserError> {
+
+    dbg!(&input.extra);
     let _start_input = input.clone();
     let (stop_input, param) = alt((
         map(

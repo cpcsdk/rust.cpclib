@@ -1663,13 +1663,14 @@ impl LocatedListing {
                     .as_ref()
                     .map(|arc| arc.deref())
                     .map(|s| s.as_str())
-                    .map(|s| unsafe { &*(s as *const str) as &'static str });
+                    .map(|s| unsafe { &*(s as *const str) as &'static str })
+                    .unwrap();
                 ctx
             },
 
             // tokens depend both on the source and context. However source can be obtained from context so we do not use it here (it is usefull for the inner case)
             parse_result_builder: |_, ctx| {
-                let src = ctx.source.as_ref().unwrap();
+                let src = ctx.source;
                 let input_start = Z80Span::new_extra(src, ctx);
 
                 let mut tokens = Vec::with_capacity(100);
@@ -1793,6 +1794,21 @@ impl LocatedListing {
                         let inner_span =
                             inner_start.take(inner_start.input_len() - next_span.input_len());
 
+                         // Properly setup the source of the context
+                         /*
+                        {
+                            let lst_ctx =
+                                unsafe { 
+                                    &mut *((lst_ctx as *const ParserContext) 
+                                    as *mut ParserContext)
+                                    as &'static mut  ParserContext
+                                }; 
+                            let inner_src = inner_span.as_str() as *const str;
+                            let inner_src = unsafe{&*inner_src as &'static str};
+                            lst_ctx.source.replace(inner_src);
+                        }
+                        */
+
                         ParseResult::SuccessInner {
                             inner_span,
                             next_span,
@@ -1804,10 +1820,12 @@ impl LocatedListing {
             }
         }
         .build();
-        let inner_listing = Arc::new(inner_listing);
+        let mut inner_listing = Arc::new(inner_listing);
 
         match inner_listing.borrow_parse_result().clone() {
-            ParseResult::SuccessInner { next_span, .. } => Ok((next_span.clone(), inner_listing)),
+            ParseResult::SuccessInner { next_span, .. } => {
+                Ok((next_span.clone(), inner_listing))
+            },
             ParseResult::FailureInner(e) => {
                 match e {
                     Err::Error(e) => {

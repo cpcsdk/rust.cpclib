@@ -82,7 +82,7 @@ impl ListingOutput {
         match &self.current_source {
             Some(current_source) => {
                 std::ptr::eq(
-                    token.context().source.unwrap().as_ptr(),
+                    token.context().source.as_ptr(),
                     current_source.as_ptr()
                 )
             }
@@ -137,7 +137,7 @@ impl ListingOutput {
             self.process_current_line(); // request a display
 
             // replace the objects of interest
-            self.current_source = Some(token.context().source.unwrap());
+            self.current_source = Some(token.context().source);
 
             // TODO manage differently for macros and so on
             // let current_line = current_line.split("\n").next().unwrap_or(current_line);

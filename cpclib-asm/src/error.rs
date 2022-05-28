@@ -861,6 +861,9 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
 }
 
 pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
+
+    dbg!(span.extra);
+    
     let filename = build_filename(span);
     let source = span.extra.complete_source();
 

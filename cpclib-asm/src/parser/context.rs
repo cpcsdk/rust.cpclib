@@ -101,8 +101,8 @@ pub struct ParserContext {
     pub dotted_directive: bool,
     /// indicate we are parsing a listing generating by a struct
     pub parse_warning: RwLock<Vec<AssemblerError>>,
-    /// source code of the parsing state
-    pub source: Option<&'static str>
+    /// Full source code of the parsing state
+    pub source: &'static str
 }
 
 impl Eq for ParserContext {}
@@ -138,6 +138,8 @@ impl Clone for ParserContext {
     }
 }
 
+const NO_CODE:&'static str = "";
+
 impl Default for ParserContext {
     fn default() -> Self {
         ParserContext {
@@ -148,7 +150,7 @@ impl Default for ParserContext {
             parse_warning: Default::default(),
             state: ParsingState::Standard,
             dotted_directive: false,
-            source: None,
+            source: &NO_CODE,
             show_progress: false
         }
     }
@@ -373,7 +375,7 @@ impl ParserContext {
     }
 
     pub fn complete_source(&self) -> &str {
-        self.source.unwrap()
+        self.source
     }
 }
 // pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
