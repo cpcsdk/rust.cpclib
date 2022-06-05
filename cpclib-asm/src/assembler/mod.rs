@@ -68,6 +68,44 @@ const MMR_PAGES_SELECTION: [u8; 9] = [
 #[allow(missing_docs)]
 pub type Bytes = SmallVec<[u8; MAX_SIZE]>;
 
+#[derive(Clone, Default, Debug)]
+pub struct EnvOptions {
+    parse: ParserOptions,
+    assemble: AssemblingOptions
+}
+
+impl EnvOptions {
+    pub fn new(parse: ParserOptions, assemble: AssemblingOptions) -> Self {
+        Self {parse, assemble}
+    }
+
+    pub fn parse_options(&self) -> &ParserOptions {
+        &self.parse
+    }
+
+    pub fn assemble_options(&self) -> &AssemblingOptions {
+        &self.assemble
+    }
+
+    pub fn show_progress(&self) -> bool {
+        self.parse.show_progress
+    }
+
+    delegate::delegate! {
+        to self.parse {
+            pub fn context_builder(self) -> ParserContextBuilder;
+        }
+
+        to self.assemble {
+            pub fn case_sensitive(&self) -> bool;
+            pub fn symbols(&self) -> &cpclib_tokens::symbols::SymbolsTable;
+            pub fn symbols_mut(&mut self) -> &mut cpclib_tokens::symbols::SymbolsTable;
+        }
+    }
+
+}
+
+
 /// Add the encoding of an indexed structure
 fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
     if idx < -127 || idx > 128 {
@@ -295,7 +333,7 @@ impl CharsetEncoding {
 pub struct Env {
     /// Current pass
     pass: AssemblingPass,
-    pub(crate) ctx: ParserContext,
+    options: EnvOptions,
     real_nb_passes: usize,
     /// If true at the end of the pass, can prematurely stop the assembling
     /// Hidden in a rwlock to allow a modification even in non mutable state
@@ -384,7 +422,7 @@ pub struct Env {
 impl Clone for Env {
     fn clone(&self) -> Self {
         Self {
-            ctx: self.ctx.clone(),
+            options: self.options.clone(),
             can_skip_next_passes: (*self.can_skip_next_passes.read().unwrap().deref()).into(),
             request_additional_pass: (*self.request_additional_pass.read().unwrap().deref()).into(),
             pass: self.pass.clone(),
@@ -454,8 +492,8 @@ impl Default for Env {
     fn default() -> Self {
         Self {
             pass: AssemblingPass::Uninitialized,
+            options: EnvOptions::default(),
             stable_counters: StableTickerCounters::default(),
-            ctx: Default::default(),
             pages_info_sna: vec![Default::default(); 2],
             ga_mmr: 0xC0, // standard memory configuration
 
@@ -512,6 +550,11 @@ impl Default for Env {
 
 /// Symbols handling
 impl Env {
+
+    pub fn options(&self) -> &EnvOptions {
+        &self.options
+    }
+
     pub fn symbols(&self) -> &SymbolsTableCaseDependent {
         &self.symbols
     }
@@ -1018,7 +1061,7 @@ impl Env {
             saved_files.append(s);
         }
 
-        if self.ctx.show_progress {
+        if self.options().show_progress() {
             Progress::progress().finish_save();
         }
         // restor memory conf
@@ -2212,7 +2255,6 @@ pub fn visit_tokens_all_passes<
     T: 'token + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
 >(
     tokens: &'token [T],
-    ctx: &ParserContext
 ) -> Result<Env, AssemblerError>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
@@ -2220,18 +2262,21 @@ where
         ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
-    let options = AssemblingOptions::default();
-    visit_tokens_all_passes_with_options(tokens, &options, ctx).map(|r| r.1) // TODO really return both
+    let options = EnvOptions::default();
+    visit_tokens_all_passes_with_options(tokens, options).map(|r| r.1) // TODO really return both
 }
 
 impl Env {
-    pub fn new(options: &AssemblingOptions, ctx: &ParserContext) -> Self {
+    pub fn new(options: EnvOptions) -> Self {
         let mut env = Env::default();
-        env.ctx = ctx.clone();
-        env.symbols =
-            SymbolsTableCaseDependent::new(options.symbols().clone(), options.case_sensitive());
+        env.options = options;
 
-        if let Some(builder) = &options.output_builder {
+        env.symbols =
+            SymbolsTableCaseDependent::new(
+                env.options().symbols().clone(), 
+                env.options().case_sensitive());
+
+        if let Some(builder) = &env.options().assemble_options().output_builder {
             env.output_trigger = ListingOutputTrigger {
                 token: None,
                 bytes: Vec::new(),
@@ -2278,8 +2323,7 @@ impl Env {
 /// Warning Listing output is only possible for LocatedToken
 pub fn visit_tokens_all_passes_with_options<'token, T>(
     tokens: &'token [T],
-    options: &AssemblingOptions,
-    ctx: &ParserContext
+    options: EnvOptions,
 ) -> Result<(Vec<ProcessedToken<'token, T>>, Env), AssemblerError>
 where
     T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
@@ -2287,7 +2331,9 @@ where
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
-    let mut env = Env::new(options, ctx);
+    assert!(!tokens.is_empty());
+
+    let mut env = Env::new(options);
     let mut tokens = processed_token::build_processed_tokens_list(tokens, &mut env);
     loop {
         env.start_new_pass();
@@ -2301,7 +2347,7 @@ where
     }
 
     // Add an additional pass to build the listing (this way it is built only one time)
-    if options.output_builder.is_some() {
+    if env.options().assemble_options().output_builder.is_some() {
         env.pass = AssemblingPass::ListingPass;
         env.start_new_pass();
         processed_token::visit_processed_tokens(&mut tokens, &mut env)

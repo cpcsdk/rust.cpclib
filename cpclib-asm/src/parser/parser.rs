@@ -305,27 +305,28 @@ lazy_static::lazy_static! {
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
 /// In case of success loop over all the tokens in order to expand those that read files
-pub fn parse_z80_str_with_context<S: Into<String>>(
+pub fn parse_z80_with_context_builder<S: Into<String>>(
     str: S,
-    context: ParserContext
+    builder: ParserContextBuilder,
+
 ) -> Result<LocatedListing, AssemblerError> {
-    let res = LocatedListing::new_complete_source(str.into(), context.clone())
+    let res = LocatedListing::new_complete_source(str.into(), builder)
         .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)));
 
     res
 }
 
-/// TODO better to build parse_z80_str_with_context from parse_z80_span than the opposite
-pub fn parse_z80_span(span: Z80Span) -> Result<LocatedListing, AssemblerError> {
-    let ctx = span.extra.clone();
-    parse_z80_str_with_context(span.as_str(), ctx)
-}
+
+
+/// TODO better to build parse_z80_with_options from parse_z80_span than the opposite
+//pub fn parse_z80_span(span: Z80Span) -> Result<LocatedListing, AssemblerError> {
+//    let ctx = span.extra.clone();
+//    parse_z80_with_options(span.as_str(), ctx)
+//}
 
 /// Parse a string and return the corresponding listing
 pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, AssemblerError> {
-    let mut ctx: ParserContext = Default::default();
-    ctx.context_name = Some("Unamed".into());
-    parse_z80_str_with_context(code, ctx)
+    parse_z80_with_context_builder(code, ParserContextBuilder::default())
 }
 
 #[inline]
@@ -2591,7 +2592,7 @@ pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80P
         is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
     )(input)?;
 
-    let mut end_directive_iter = if input.context().dotted_directive {
+    let mut end_directive_iter = if input.context().options().dotted_directive {
         DOTTED_END_DIRECTIVE.iter()
     }
     else {
@@ -2666,7 +2667,7 @@ pub fn parse_macro_or_struct_call(
         )(input_label.clone())?;
 
         // Check if the macro name is allowed
-        if !allowed_label(&name.to_ascii_uppercase(), input.context().dotted_directive) {
+        if !allowed_label(&name.to_ascii_uppercase(), input.context().options().dotted_directive) {
             return Err(Err::Failure(
                 cpclib_common::nom::error::VerboseError::<Z80Span>::add_context(
                     input_label,
@@ -2771,7 +2772,7 @@ fn parse_directive_word(
     name: &'static str
 ) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> + 'static {
     move |input: Z80Span| {
-        if input.context().dotted_directive {
+        if input.context().options().dotted_directive {
             preceded(tag("."), parse_word(name))(input)
         }
         else {
@@ -3866,7 +3867,7 @@ pub fn parse_label(
         let label_len = true_label.len();
         if label_len >= MIN_MAX_LABEL_SIZE.0 &&
         label_len <= DOTTED_MIN_MAX_LABEL_SIZE.1 &&
-            !allowed_label( &true_label.to_ascii_uppercase(), input.context().dotted_directive)  {
+            !allowed_label( &true_label.to_ascii_uppercase(), input.context().options().dotted_directive)  {
             Err(cpclib_common::nom::Err::Error(error_position!(
                 input,
                 ErrorKind::OneOf
@@ -3896,7 +3897,7 @@ fn allowed_label(name: &str, dotted_directive: bool) -> bool {
 }
 
 pub fn parse_end_directive(input: Z80Span) -> IResult<Z80Span, String, Z80ParserError> {
-    let (input, dot) = if input.context().dotted_directive {
+    let (input, dot) = if input.context().options().dotted_directive {
         value(Some('.'), tag("."))(input)?
     }
     else {
@@ -3913,7 +3914,7 @@ pub fn parse_end_directive(input: Z80Span) -> IResult<Z80Span, String, Z80Parser
         .collect::<String>()
         .to_ascii_uppercase();
 
-    let mut end_directive_iter = if input.context().dotted_directive {
+    let mut end_directive_iter = if input.context().options().dotted_directive {
         DOTTED_END_DIRECTIVE.iter()
     }
     else {
@@ -3931,7 +3932,7 @@ pub fn parse_end_directive(input: Z80Span) -> IResult<Z80Span, String, Z80Parser
 }
 
 pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
-    let dotted_directive = input.context().dotted_directive;
+    let dotted_directive = input.context().options().dotted_directive;
     verify(
         recognize(tuple((
             one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"),

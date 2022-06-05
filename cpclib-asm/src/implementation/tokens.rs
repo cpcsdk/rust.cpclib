@@ -4,7 +4,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
-
+use crate::EnvOptions;
 use crate::assembler::{assemble_defs_item, Env, Visited};
 use crate::error::*;
 use crate::implementation::expression::ExprEvaluationExt;
@@ -20,7 +20,7 @@ pub trait TokenExt: ListingElement + Clone + Debug {
     /// Generate the listing of opcodes for directives that embed bytes
     fn disassemble_data(&self) -> Result<Listing, String>;
 
-    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError>;
+    fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, AssemblerError>;
 
     fn number_of_bytes(&self) -> Result<usize, String> {
         let bytes = self.to_bytes();
@@ -68,7 +68,9 @@ pub trait TokenExt: ListingElement + Clone + Debug {
             AssemblingOptions::new_case_insensitive()
         };
         options.set_symbols(table.table());
-        self.to_bytes_with_options(&options)
+
+        let options = EnvOptions::new(Default::default(), options);
+        self.to_bytes_with_options(options)
     }
 
     /// Check if the token is valid. We consider a token vlaid if it is possible to assemble it
@@ -172,8 +174,8 @@ impl TokenExt for Token {
         }
     }
 
-    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
-        let mut env = Env::new(option, &ParserContext::default());
+    fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, AssemblerError> {
+        let mut env = Env::new(option);
         // we need several passes in case the token is a directive that contains code
         loop {
             env.start_new_pass();

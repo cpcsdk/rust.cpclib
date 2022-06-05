@@ -24,10 +24,10 @@ use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Cruncher;
 use crate::preamble::{
-    parse_z80_str, parse_z80_str_with_context, LocatedListing, MayHaveSpan, Z80ParserError, Z80Span
+   LocatedListing, MayHaveSpan, Z80ParserError, Z80Span
 };
 use crate::progress::{self, normalize, Progress};
-use crate::{r#macro, AssemblerError, Env, LocatedToken, ParserContext, Visited};
+use crate::{r#macro, AssemblerError, Env, LocatedToken, ParserContext, Visited, parse_z80_with_context_builder};
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
@@ -128,24 +128,26 @@ impl IncludeState {
             });
         }
 
-        let ctx = &env.ctx;
+        let options = env.options();
 
-        // Build the state if needed / retreive it otherwhise
+        // Build the state if needed / retreive it otherwise
         let state: &mut IncludeStateInner = if !self.0.contains_key(fname) {
-            let content = read_source(fname.clone(), ctx)?;
+            let content = read_source(fname.clone(), options.parse_options())?;
 
-            let new_ctx = {
-                let mut new_ctx = ctx.clone();
-                new_ctx.set_current_filename(fname.clone());
-                new_ctx
-            };
+            if options.show_progress() {
+                Progress::progress().add_parse(progress::normalize(fname));
+            }
 
-            Progress::progress().add_parse(progress::normalize(fname));
+            let builder = options.clone()
+                .context_builder()
+                .set_current_filename(fname.clone());
 
-            let listing = parse_z80_str_with_context(content, new_ctx)?;
+            let listing = parse_z80_with_context_builder(content, builder)?;
 
             // Remove the progression
-            Progress::progress().remove_parse(progress::normalize(fname));
+            if options.show_progress() {
+                Progress::progress().remove_parse(progress::normalize(fname));
+            }
 
             let include_state = IncludeStateInnerBuilder {
                 listing,
@@ -174,7 +176,7 @@ impl IncludeState {
         namespace: Option<&str>,
         once: bool
     ) -> Result<(), AssemblerError> {
-        let fname = get_filename(fname, &env.ctx, Some(env))?;
+        let fname = get_filename(fname, &env.options().parse_options(), Some(env))?;
 
         // Process the inclusion only if necessary
         if (!once) || (!env.has_included(&fname)) {
@@ -449,18 +451,17 @@ where
     }
     else if token.is_include() {
         let fname = token.include_fname();
-        let ctx = &env.ctx;
-        match get_filename(fname, ctx, Some(env)) {
+        let options = env.options().parse_options();
+        match get_filename(fname.clone(), options, Some(env)) {
             Ok(fname) => {
-                match read_source(fname.clone(), ctx) {
+                match read_source(fname.clone(), options) {
                     Ok(content) => {
-                        let new_ctx = {
-                            let mut new_ctx = ctx.clone();
-                            new_ctx.set_current_filename(fname.clone());
-                            new_ctx
-                        };
 
-                        match parse_z80_str_with_context(content, new_ctx) {
+                        let ctx_builder = options.clone()
+                            .context_builder()
+                            .set_current_filename(fname.clone());
+
+                        match parse_z80_with_context_builder(content, ctx_builder) {
                             Ok(listing) => {
                                 // Filename has already been added
                                 if token.include_is_standard_include() {
@@ -591,11 +592,13 @@ where
     #[cfg(target_arch = "wasm32")]
     let iter = tokens.iter();
 
+    let options = env.options().parse_options();
+
     // get filename of files that will be read in parallal
     let include_fnames = tokens
         .par_iter()
         .filter(|t| t.include_is_standard_include())
-        .map(|t| get_filename(t.include_fname(), &env.ctx, Some(env)))
+        .map(|t| get_filename(t.include_fname(), options, Some(env)))
         .filter(|f| f.is_ok())
         .map(|f| f.unwrap())
         .collect::<Vec<_>>();
@@ -621,7 +624,9 @@ where
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
-    if env.ctx.show_progress {
+    let options = env.options();
+
+    if options.show_progress() {
         // setup the amount of tokens that will be processed
         Progress::progress().add_expected_to_pass(tokens.len() as _);
         for chunk in &tokens.iter_mut().chunks(64) {
@@ -714,9 +719,10 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
             // Tokenize with the same parsing  parameters and context when possible
             let listing = match self.token.possible_span() {
                 Some(span) => {
-                    let mut ctx = span.extra.deref().clone();
-                    ctx.remove_filename();
-                    ctx.set_context_name(&format!(
+                    use crate::ParserContextBuilder;
+                    let mut ctx_builder = ParserContextBuilder::from(span.extra.deref().clone())
+                        .remove_filename()
+                        .set_context_name(&format!(
                         "{}:{}:{} > {} {}:",
                         source.map(|s| s.fname()).unwrap_or_else(|| "???"),
                         source.map(|s| s.line()).unwrap_or(0),
@@ -724,10 +730,12 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                         if r#macro.is_some() { "MACRO" } else { "STRUCT" },
                         name,
                     ));
-                    let code = Box::new(code);
-                    parse_z80_str_with_context(code.as_ref(), ctx)?
+                    parse_z80_with_context_builder(code, ctx_builder)?
                 }
-                _ => parse_z80_str(&code)?
+                _ => {
+                    use crate::parse_z80_str;
+                    parse_z80_str(&code)?
+                }
             };
             listing
         };
@@ -756,7 +764,6 @@ where
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
         let possible_span = self.possible_span().cloned();
         let mut really_does_the_job = move || {
-            let ctx = &env.ctx;
 
             {
                 // Generate the code of a macro/struct
@@ -775,6 +782,7 @@ where
             }
             // Behavior based on the state (for ease of writting)
             else {
+                let options = env.options();
                 // Handle the tokens depending on their specific state
                 match &mut self.state {
                     Some(ProcessedTokenState::Confined(SimpleListingState {
@@ -849,13 +857,13 @@ where
 
                         // Handle file loading
                         let fname = self.token.incbin_fname();
-                        let fname = get_filename(fname, ctx, Some(env))?;
+                        let fname = get_filename(fname, options.parse_options(), Some(env))?;
 
                         // get the data for the given file
                         let data = if !contents.contains_key(&fname) {
                             // need to load the file
 
-                            let data = load_binary(Either::Left(fname.as_ref()), ctx)?;
+                            let data = load_binary(Either::Left(fname.as_ref()), options.parse_options())?;
                             // get a slice on the data to ease its cut
                             let mut data = &data[..];
 

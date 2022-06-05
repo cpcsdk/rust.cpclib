@@ -44,10 +44,10 @@ use preamble::*;
 use self::listing_output::ListingOutput;
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AssemblingOptions {
     /// Set to true to consider that the assembler pay attention to the case of the labels
-    case_sensitive: bool,
+    case_sensitive: bool, 
     /// Contains some symbols that could be used during assembling
     symbols: cpclib_tokens::symbols::SymbolsTable,
     output_builder: Option<Arc<RwLock<ListingOutput>>>
@@ -119,20 +119,20 @@ impl AssemblingOptions {
 }
 
 /// Assemble a piece of code and returns the associated list of bytes.
-pub fn assemble(code: &str, ctx: &ParserContext) -> Result<Vec<u8>, AssemblerError> {
-    let options = AssemblingOptions::default();
+pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
+    let options = EnvOptions::default();
     // let options = AssemblingOptions::new_with_table(table);
-    assemble_with_options(code, &options, ctx).map(|(bytes, _symbols)| bytes)
+    assemble_with_options(code, options).map(|(bytes, _symbols)| bytes)
 }
 
 /// Assemble a piece of code and returns the associates liste of bytes as well as the generated reference table.
 pub fn assemble_with_options(
     code: &str,
-    options: &AssemblingOptions,
-    ctx: &ParserContext
+    options: EnvOptions,
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
-    let tokens = parser::parse_z80_str(code)?;
-    assemble_tokens_with_options(&tokens, &options, ctx)
+    let builder = options.parse_options().clone().context_builder();
+    let tokens = parser::parse_z80_with_context_builder(code, builder)?;
+    assemble_tokens_with_options(&tokens, options)
 }
 
 /// Assemble the predifined list of tokens
@@ -141,8 +141,7 @@ pub fn assemble_tokens_with_options<
     T: 'static + Visited + ToSimpleToken + Clone + ListingElement + Sync + MayHaveSpan
 >(
     tokens: &'tokens [T],
-    options: &AssemblingOptions,
-    ctx: &ParserContext
+    options: EnvOptions
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
@@ -150,7 +149,7 @@ where
         implementation::expression::ExprEvaluationExt,
     ProcessedToken<'tokens, T>: FunctionBuilder
 {
-    let (tok, env) = assembler::visit_tokens_all_passes_with_options(tokens, &options, ctx)?;
+    let (tok, env) = assembler::visit_tokens_all_passes_with_options(tokens, options)?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
 }
 
@@ -160,14 +159,13 @@ where
 pub fn assemble_to_amsdos_file(
     code: &str,
     amsdos_filename: &str,
-    ctx: &ParserContext
 ) -> Result<AmsdosFile, AssemblerError> {
     let amsdos_filename = AmsdosFileName::try_from(amsdos_filename)?;
 
     let tokens = parser::parse_z80_str(code)?;
-    let options = AssemblingOptions::default();
+    let options = EnvOptions::default();
 
-    let (_, env) = assembler::visit_tokens_all_passes_with_options(&tokens, &options, ctx)?;
+    let (_, env) = assembler::visit_tokens_all_passes_with_options(&tokens, options)?;
 
     Ok(AmsdosFile::binary_file_from_buffer(
         &amsdos_filename,

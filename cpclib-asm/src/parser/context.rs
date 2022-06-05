@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::RwLock;
-
+use std::path::Path;
 use cpclib_common::lazy_static;
 use either::Either;
 use regex::Regex;
@@ -82,16 +82,8 @@ impl ParsingStateVerified for Token {
     }
 }
 
-/// Context information that can guide the parser
-/// TODO add assembling flags
-#[derive(Debug)]
-pub struct ParserContext {
-    /// Limitation on the kind of intruction to parse
-    pub state: ParsingState,
-    /// Filename that is currently parsed
-    pub current_filename: Option<PathBuf>,
-    /// Current context (mainly when playing with macros)
-    pub context_name: Option<String>,
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ParserOptions {
     /// Search path to find files
     pub search_path: Vec<PathBuf>,
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
@@ -99,100 +91,95 @@ pub struct ParserContext {
     pub show_progress: bool,
     /// Set to true when directives must start by a dot
     pub dotted_directive: bool,
-    /// indicate we are parsing a listing generating by a struct
-    pub parse_warning: RwLock<Vec<AssemblerError>>,
-    /// Full source code of the parsing state
-    pub source: &'static str
 }
 
-impl Eq for ParserContext {}
-
-impl PartialEq for ParserContext {
-    fn eq(&self, other: &Self) -> bool {
-        self.state == other.state
-            && self.current_filename == other.current_filename
-            && self.context_name == other.context_name
-            && self.search_path == other.search_path
-            && self.read_referenced_files == other.read_referenced_files
-            && self.dotted_directive == other.dotted_directive
-            && self.parse_warning.read().unwrap().deref()
-                == other.parse_warning.read().unwrap().deref()
-            && self.source == other.source
-            && self.show_progress == other.show_progress
-    }
-}
-
-impl Clone for ParserContext {
-    fn clone(&self) -> Self {
-        Self {
-            current_filename: self.current_filename.clone(),
-            context_name: self.context_name.clone(),
-            search_path: self.search_path.clone(),
-            read_referenced_files: self.read_referenced_files.clone(),
-            parse_warning: self.parse_warning.write().unwrap().clone().into(),
-            state: self.state.clone(),
-            dotted_directive: self.dotted_directive.clone(),
-            source: self.source.clone(),
-            show_progress: self.show_progress
-        }
-    }
-}
-
-const NO_CODE:&'static str = "";
-
-impl Default for ParserContext {
+impl Default for ParserOptions {
     fn default() -> Self {
-        ParserContext {
-            current_filename: None,
-            context_name: None,
+        ParserOptions {
             search_path: Default::default(),
             read_referenced_files: true,
-            parse_warning: Default::default(),
-            state: ParsingState::Standard,
             dotted_directive: false,
-            source: &NO_CODE,
             show_progress: false
         }
     }
 }
 
-impl ParserContext {
-    pub fn clone_with_state(&self, state: ParsingState) -> Self {
-        Self {
-            current_filename: self.current_filename.clone(),
-            context_name: self.context_name.clone(),
-            search_path: self.search_path.clone(),
-            read_referenced_files: self.read_referenced_files.clone(),
-            parse_warning: self.parse_warning.write().unwrap().clone().into(),
-            dotted_directive: self.dotted_directive.clone(),
-            source: self.source.clone(),
-            show_progress: self.show_progress.clone(),
-            state
+impl ParserOptions {
+    pub fn context_builder(self) -> ParserContextBuilder {
+        ParserContextBuilder {
+            options: self,
+            current_filename: None,
+            context_name: Some("Unamed".into()),
+            state: ParsingState::Standard,
         }
     }
 }
 
-#[allow(missing_docs)]
-impl ParserContext {
-    //#[deprecated(note="Totally unsafe. Every test should be modified to not use it")]
-    pub fn build_span<S: AsRef<str>>(&self, src: S) -> Z80Span {
-        Z80Span::new_extra(src.as_ref(), self)
+pub struct ParserContextBuilder {
+    options: ParserOptions,
+    current_filename: Option<PathBuf>,
+    context_name: Option<String>,
+    state: ParsingState,
+}
+
+impl Default for ParserContextBuilder {
+    fn default() -> Self {
+        ParserOptions::default().context_builder()
+    }
+}
+
+impl From<ParserContext> for ParserContextBuilder {
+    fn from(ctx: ParserContext) -> Self {
+        Self {
+            state: ctx.state,
+            current_filename: ctx.current_filename,
+            context_name: ctx.context_name,
+            options: ctx.options,
+        }
+    }
+}
+
+impl ParserContextBuilder {
+
+    pub fn current_filename(&self) -> Option<&Path> {
+        self.current_filename.as_ref().map(|p| p.as_path())
+    }
+    pub fn context_name(&self) -> Option<&str> {
+        self.context_name.as_ref().map(|s| s.as_str())
     }
 
-    /// Specify the path that contains the code
-    pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
-        let file = file.into();
-        self.current_filename = Some(file.canonicalize().unwrap_or(file))
+    pub fn set_current_filename<S: Into<PathBuf>>(mut self, fname: S) -> ParserContextBuilder {
+        self.current_filename = Some(fname.into());
+        self
+    }
+    pub fn remove_filename(mut self) -> Self {
+        self.current_filename.take();
+        self
     }
 
-    pub fn remove_filename(&mut self) {
-        self.current_filename = None;
+    pub fn set_context_name<S: Into<String>>(mut self,name: S) -> ParserContextBuilder {
+        self.context_name = Some(name.into());
+        self
     }
 
-    pub fn set_context_name(&mut self, name: &str) {
-        self.context_name = Some(name.to_owned());
+    pub fn set_state(mut self, state: ParsingState) -> Self {
+        self.state = state;
+        self
     }
 
+    pub fn build(self, code: &str) -> ParserContext {
+        ParserContext {
+            options: self.options,
+            current_filename: self.current_filename,
+            context_name: self.context_name,
+            parse_warning: Default::default(),
+            state: self.state,
+            source: unsafe{&*(code as *const str) as &'static str}
+        }
+    }
+}
+
+impl ParserOptions {
     pub fn set_read_referenced_files(&mut self, tag: bool) {
         self.read_referenced_files = tag;
     }
@@ -362,6 +349,104 @@ impl ParserContext {
         return Err(Either::Right(does_not_exists));
     }
 
+}
+/// Context information that can guide the parser
+/// TODO add assembling flags
+#[derive(Debug)]
+pub struct ParserContext {
+    /// Limitation on the kind of intruction to parse
+    pub state: ParsingState,
+    /// Filename that is currently parsed
+    pub current_filename: Option<PathBuf>,
+    /// Current context (mainly when playing with macros)
+    pub context_name: Option<String>,
+    pub options: ParserOptions,
+    /// indicate we are parsing a listing generating by a struct
+    pub parse_warning: RwLock<Vec<AssemblerError>>,
+    /// Full source code of the parsing state
+    pub source: &'static str
+}
+
+impl Eq for ParserContext {}
+
+impl PartialEq for ParserContext {
+    fn eq(&self, other: &Self) -> bool {
+        self.state == other.state
+            && self.current_filename == other.current_filename
+            && self.context_name == other.context_name
+            && self.parse_warning.read().unwrap().deref()
+                == other.parse_warning.read().unwrap().deref()
+            && self.source == other.source
+            && self.options == other.options
+    }
+}
+
+impl Clone for ParserContext {
+    fn clone(&self) -> Self {
+        Self {
+            current_filename: self.current_filename.clone(),
+            context_name: self.context_name.clone(),
+            state: self.state.clone(),
+            source: self.source.clone(),
+            options: self.options.clone(),
+            parse_warning: self.parse_warning.read().unwrap().clone().into()
+        }
+    }
+}
+
+/*
+impl Default for ParserContext {
+    fn default() -> Self {
+        ParserContext {
+            current_filename: None,
+            context_name: None,
+            search_path: Default::default(),
+            read_referenced_files: true,
+            parse_warning: Default::default(),
+            state: ParsingState::Standard,
+            dotted_directive: false,
+            source: &NO_CODE,
+            show_progress: false
+        }
+    }
+}
+*/
+
+impl ParserContext {
+    pub fn clone_with_state(&self, state: ParsingState) -> Self {
+        Self {
+            current_filename: self.current_filename.clone(),
+            context_name: self.context_name.clone(),
+            parse_warning: self.parse_warning.write().unwrap().clone().into(),
+            source: self.source.clone(),
+            options: self.options.clone(),
+            state
+        }
+    }
+}
+
+#[allow(missing_docs)]
+impl ParserContext {
+    //#[deprecated(note="Totally unsafe. Every test should be modified to not use it")]
+    pub fn build_span<S: AsRef<str>>(&self, src: S) -> Z80Span {
+        Z80Span::new_extra(src.as_ref(), self)
+    }
+
+    /// Specify the path that contains the code
+    pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
+        let file = file.into();
+        self.current_filename = Some(file.canonicalize().unwrap_or(file))
+    }
+
+    pub fn remove_filename(&mut self) {
+        self.current_filename = None;
+    }
+
+    pub fn set_context_name(&mut self, name: &str) {
+        self.context_name = Some(name.to_owned());
+    }
+
+
     pub fn add_warning(&self, warning: AssemblerError) {
         self.parse_warning.write().unwrap().push(warning)
     }
@@ -376,6 +461,10 @@ impl ParserContext {
 
     pub fn complete_source(&self) -> &str {
         self.source
+    }
+
+    pub fn options(&self) -> &ParserOptions {
+        &self.options
     }
 }
 // pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {

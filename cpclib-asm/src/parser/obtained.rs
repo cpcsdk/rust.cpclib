@@ -19,6 +19,7 @@ use cpclib_tokens::{
     TestKindElement, ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation
 };
 use ouroboros::self_referencing;
+use crate::ParserContextBuilder;
 
 use super::{
     my_many0, my_many0_in, my_many0_nocollect, my_many_till_nocollect, parse_z80_line_complete,
@@ -1069,7 +1070,7 @@ impl TokenExt for LocatedToken {
 
     fn to_bytes_with_options(
         &self,
-        _option: &crate::AssemblingOptions
+        _option: crate::assembler::EnvOptions
     ) -> Result<Vec<u8>, AssemblerError> {
         todo!()
     }
@@ -1650,7 +1651,7 @@ impl LocatedListing {
     #[inline]
     pub fn new_complete_source(
         code: String,
-        mut ctx: ParserContext
+        builder: ParserContextBuilder,
     ) -> Result<LocatedListing, LocatedListing> {
         // generate the listing
         let listing = LocatedListingBuilder {
@@ -1658,14 +1659,14 @@ impl LocatedListing {
             src: Some(code.into()),
 
             // context keeps a reference on the full listing (but is it really needed yet ?)
-            ctx_builder: |src: &Option<Arc<String>>| {
-                ctx.source = src
+            ctx_builder: move |src: &Option<Arc<String>>| {
+                let source = src
                     .as_ref()
                     .map(|arc| arc.deref())
                     .map(|s| s.as_str())
                     .map(|s| unsafe { &*(s as *const str) as &'static str })
                     .unwrap();
-                ctx
+                builder.build(source)
             },
 
             // tokens depend both on the source and context. However source can be obtained from context so we do not use it here (it is usefull for the inner case)

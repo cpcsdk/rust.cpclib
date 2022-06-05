@@ -1,6 +1,7 @@
 use core::time::Duration;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::path::Path;
 
 use cpclib_common::itertools::Itertools;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -31,8 +32,9 @@ struct CountedProgress {
     freeze_amount: bool
 }
 
-pub fn normalize(path: &PathBuf) -> &str {
-    path.file_name().unwrap().to_str().unwrap()
+pub fn normalize(path: &std:: path::Path) -> & str {
+    path.file_name().unwrap()
+        .to_str().unwrap()
 }
 
 impl CountedProgress {

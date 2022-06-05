@@ -2,6 +2,7 @@ use std::fmt;
 
 use cpclib_tokens::symbols::PhysicalAddress;
 use cpclib_tokens::tokens::*;
+use crate::EnvOptions;
 
 use crate::error::*;
 use crate::implementation::expression::*;
@@ -18,11 +19,11 @@ pub trait ListingExt {
 
     /// Assemble the listing (without context) and returns the bytes
     fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
-        let options = crate::AssemblingOptions::default();
-        self.to_bytes_with_options(&options)
+        let options = EnvOptions::default();
+        self.to_bytes_with_options(options)
     }
 
-    fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError>;
+    fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, AssemblerError>;
 
     /// Compute the size of the listing.
     /// The listing has a size only if its tokens has a size
@@ -69,12 +70,11 @@ impl ListingExt for Listing {
 
     fn to_bytes_with_options(
         &self,
-        options: &AssemblingOptions
+        options: EnvOptions
     ) -> Result<Vec<u8>, AssemblerError> {
         let (_, env) = crate::assembler::visit_tokens_all_passes_with_options(
             &self.listing(),
             options,
-            &ParserContext::default()
         )?;
         Ok(env.produced_bytes())
     }
@@ -104,7 +104,7 @@ impl ListingExt for Listing {
         let mut res = String::new();
         let mut current_address: Option<u16> = None;
 
-        let mut options = AssemblingOptions::default();
+        let mut options = EnvOptions::default();
 
         for instruction in self.listing() {
             if let Token::Org(address, _) = instruction {
@@ -123,7 +123,7 @@ impl ListingExt for Listing {
                 }
             }
 
-            let remaining = match instruction.to_bytes_with_options(&options) {
+            let remaining = match instruction.to_bytes_with_options(options.clone()) {
                 Ok(bytes) => {
                     for i in 0..4 {
                         if bytes.len() > i {

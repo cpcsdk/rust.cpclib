@@ -506,8 +506,7 @@ impl HardCodedFunction {
             
             HardCodedFunction::Load => {
                 let fname = params[0].string()?;
-                let ctx = &env.ctx;
-                let data = file::load_binary(Either::Right((fname, env)), ctx)?;
+                let data = file::load_binary(Either::Right((fname, env)), env.options().parse_options())?;
                 Ok(ExprResult::from(data.as_slice()))
             },
 
@@ -623,10 +622,12 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
         }
     };
 
-    let mut parser_context = ParserContext::default();
-    parser_context.state = ParsingState::GeneratedLimited;
-    parser_context.context_name = Some("Generated source".to_owned());
-    let tokens = crate::parse_z80_str_with_context(code, parser_context)?;
+    let builder = base_env.options().clone()
+        .context_builder()
+        .set_state(ParsingState::GeneratedLimited)
+        .set_context_name("Generated source");
+
+    let tokens = crate::parse_z80_with_context_builder(code, builder)?;
 
     let mut env = Env::default();
     env.symbols = base_env.symbols().clone();

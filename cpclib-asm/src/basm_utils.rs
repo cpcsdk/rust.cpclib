@@ -88,25 +88,24 @@ impl From<AssemblerError> for BasmError {
 
 /// Parse the given code.
 /// TODO read options to configure the search path
-pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmError> {
+pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<(LocatedListing, ParserOptions), BasmError> {
     let inline_fname = "<inline code>";
     let filename = matches.value_of("INPUT").unwrap_or(inline_fname);
 
     let show_progress = matches.is_present("PROGRESS");
 
     // prepare the context for the included directories
-    let mut context = ParserContext::default();
-    context.set_dotted_directives(matches.is_present("DOTTED_DIRECTIVES"));
-    context.set_current_filename(&filename);
-    context.show_progress = show_progress;
+    let mut options  = ParserOptions::default();
+    options.set_dotted_directives(matches.is_present("DOTTED_DIRECTIVES"));
+    options.show_progress = show_progress;
 
     match std::env::current_dir() {
         Ok(cwd) => {
-            context.add_search_path(cwd)?;
+            options.add_search_path(cwd)?;
         }
         Err(_) => todo!()
     }
-    context.add_search_path_from_file(&filename); // we ignore the potential error
+    options.add_search_path_from_file(&filename); // we ignore the potential error
     if let Some(directories) = matches.values_of("INCLUDE_DIRECTORIES") {
         for directory in directories {
             if !Path::new(directory).is_dir() {
@@ -114,13 +113,16 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
                     path: directory.to_owned()
                 });
             }
-            context.add_search_path(directory)?;
+            options.add_search_path(directory)?;
         }
     }
 
+    let mut builder = options.clone().context_builder();
+
     // get the source code if any
     let code = if matches.is_present("INPUT") {
-        let filename = get_filename(filename, &context, None)?;
+        builder = builder.set_current_filename(&filename);
+        let filename = get_filename(filename, &options, None)?;
         let content = fs::read(filename.clone()).map_err(|e| {
             AssemblerError::IOError {
                 msg: format!("Unable to open {:?}. {}", filename, e)
@@ -129,42 +131,45 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<LocatedListing, BasmErro
         handle_source_encoding(filename.to_str().unwrap(), &content)?
     }
     else if let Some(code) = matches.value_of("INLINE") {
+        builder = builder.set_context_name("INLINED CODE");
         format!(" {}", code)
     }
     else {
         panic!("No code provided to assemble");
     };
 
-    let fname = context
-        .current_filename
-        .as_ref()
-        .map(|fname| normalize(fname))
-        .unwrap_or_else(|| context.context_name.as_ref().unwrap());
 
-    if context.show_progress {
-        Progress::progress().add_parse(fname);
+    let fname = builder
+        .current_filename()
+        .map(|fname| normalize(fname))
+        .unwrap_or_else(|| builder.context_name().unwrap())
+        .to_owned();
+
+    if options.show_progress {
+        Progress::progress().add_parse(&fname);
     };
 
-    let res = crate::parse_z80_str_with_context(code, context.clone())
+    let res = crate::parse_z80_with_context_builder(code, builder)
         .map_err(|e| BasmError::from(AssemblerError::AlreadyRenderedError(e.to_string())));
 
-    if context.show_progress {
-        Progress::progress().remove_parse(fname);
+    if options.show_progress {
+        Progress::progress().remove_parse(&fname);
     };
 
-    res
+    Ok( (res?, options))
 }
 
 /// Assemble the given code
 /// TODO use options to configure the base symbole table
 pub fn assemble<'arg>(
     matches: &'arg ArgMatches,
-    listing: &LocatedListing
+    listing: &LocatedListing,
+    parse_options: ParserOptions,
 ) -> Result<Env, BasmError> {
     let show_progress = matches.is_present("PROGRESS");
 
-    let mut options = AssemblingOptions::default();
-    options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
+    let mut assemble_options = AssemblingOptions::default();
+    assemble_options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
 
     // TODO add symbols if any
     if let Some(files) = matches.values_of("LOAD_SYMBOLS") {
@@ -186,14 +191,18 @@ pub fn assemble<'arg>(
                     None => (definition, "1")
                 }
             };
-            let ctx = ParserContext::default();
+
+            let ctx = ParserOptions::default().context_builder()
+                .set_context_name("BASM OPTIONS")
+                .build(value);
+
             let span = Z80Span::new_extra(value, &ctx);
             let value = /*cpclib_common::*/parse_value(span)
                     .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))
                     ?
                     .1;
 
-            options
+            assemble_options
                 .symbols_mut()
                 .assign_symbol_to_value(symbol, value.eval()?)
                 .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))?;
@@ -202,7 +211,7 @@ pub fn assemble<'arg>(
 
     if let Some(dest) = matches.value_of("LISTING_OUTPUT") {
         if dest == "-" {
-            options.write_listing_output(std::io::stdout());
+            assemble_options.write_listing_output(std::io::stdout());
         }
         else {
             let file = File::create(dest).map_err(|e| {
@@ -211,7 +220,7 @@ pub fn assemble<'arg>(
                     ctx: format!("creating {}", dest)
                 }
             })?;
-            options.write_listing_output(file);
+            assemble_options.write_listing_output(file);
         }
     }
 
@@ -224,7 +233,8 @@ pub fn assemble<'arg>(
         None
     };
 
-    let (tokens, mut env) = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
+    let options = EnvOptions::new(parse_options, assemble_options);
+    let (tokens, mut env) = visit_tokens_all_passes_with_options(&listing, options)
         .map_err(|e| BasmError::AssemblerError { error: e })?;
 
     if let Some(bar) = bar {
@@ -422,8 +432,8 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
     }
 
     // standard assembling
-    let listing = parse(matches)?;
-    let env = assemble(matches, &listing).map_err(move |error| {
+    let (listing, options) = parse(matches)?;
+    let env = assemble(matches, &listing, options).map_err(move |error| {
         BasmError::ErrorWithListing {
             error: box error,
             listing

@@ -14,7 +14,7 @@ use crate::progress::{self, Progress};
 pub struct SaveCommand {
     from: Option<i32>,
     size: Option<i32>,
-    filename: String,
+    filename: std::path::PathBuf,
     save_type: Option<SaveType>,
     dsk_filename: Option<String>
 }
@@ -30,7 +30,7 @@ impl SaveCommand {
         SaveCommand {
             from,
             size,
-            filename,
+            filename: filename.into(),
             save_type,
             dsk_filename
         }
@@ -38,8 +38,9 @@ impl SaveCommand {
 
     /// Really make the save - Prerequisit : the page is properly selected
     pub fn execute_on(&self, env: &Env) -> Result<SavedFile, AssemblerError> {
-        if env.ctx.show_progress {
-            Progress::progress().add_save(progress::normalize(&self.filename.clone().into()));
+        if env.options().show_progress() {
+            Progress::progress()
+                .add_save(progress::normalize(&self.filename));
         }
 
         let from = match self.from {
@@ -68,13 +69,13 @@ impl SaveCommand {
 
                 let amsdos_file = if r#type == SaveType::AmsdosBas {
                     AmsdosFile::basic_file_from_buffer(
-                        &AmsdosFileName::try_from(self.filename.as_str())?,
+                        &AmsdosFileName::try_from(self.filename.as_os_str().to_str().unwrap())?,
                         &data
                     )?
                 }
                 else {
                     AmsdosFile::binary_file_from_buffer(
-                        &AmsdosFileName::try_from(self.filename.as_str())?,
+                        &AmsdosFileName::try_from(self.filename.as_os_str().to_str().unwrap())?,
                         loading_address,
                         execution_address,
                         &data
@@ -117,7 +118,7 @@ impl SaveCommand {
                     AssemblerError::AssemblingError {
                         msg: format!(
                             "Error while saving \"{}\". {}",
-                            &self.filename,
+                            &self.filename.display(),
                             e.to_string()
                         )
                     }
@@ -125,8 +126,8 @@ impl SaveCommand {
             }
         }
 
-        if env.ctx.show_progress {
-            Progress::progress().remove_save(progress::normalize(&self.filename.clone().into()));
+        if env.options().show_progress() {
+            Progress::progress().remove_save(progress::normalize(&self.filename));
         }
 
         Ok(SavedFile {

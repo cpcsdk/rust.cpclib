@@ -20,8 +20,11 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
         let trimmed = s.trim();
         const EVAL: &str = "{eval}";
         if trimmed.starts_with(EVAL) {
+            use crate::ParserContextBuilder;
+            
             let src = &s[EVAL.len()..];
-            let ctx = ParserContext::default(); // TODO really use the good context
+            let ctx_builder = ParserContextBuilder::default(); // TODO really use the good context
+            let ctx = ctx_builder.build(src);
             let src = Z80Span::new_extra(src, &ctx);
             let expr_token = crate::parser::located_expr(src)
                 .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?
