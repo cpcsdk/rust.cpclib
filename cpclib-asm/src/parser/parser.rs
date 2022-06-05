@@ -2613,7 +2613,6 @@ pub fn parse_forbidden_keyword(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80P
 }
 pub fn parse_macro_arg(input: Z80Span) -> IResult<Z80Span, LocatedMacroParam, Z80ParserError> {
 
-    dbg!(&input.extra);
     let _start_input = input.clone();
     let (stop_input, param) = alt((
         map(

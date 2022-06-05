@@ -682,12 +682,17 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                 .macro_value(name)?
                 .map(|m| r#macro::MacroWithArgs::build(m, parameters))
                 .transpose()?;
-            let r#struct = env
-                .symbols()
-                .struct_value(name)?
-                .map(|s| r#macro::StructWithArgs::build(s, parameters))
-                .transpose()?;
+            let r#struct = if r#macro.is_none() {
+                    env
+                    .symbols()
+                    .struct_value(name)?
+                    .map(|s| r#macro::StructWithArgs::build(s, parameters))
+                    .transpose()?
+                } else {
+                    None
+                };
 
+            // Leave if it corresponds to nothing
             if r#macro.is_none() && r#struct.is_none() {
                 let e = AssemblerError::UnknownMacro {
                     symbol: name.into(),
@@ -703,6 +708,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                     None => Err(e)
                 };
             }
+
 
             // get the generated code
             // TODO handle some errors there
@@ -762,15 +768,16 @@ where
 {
     /// Due to the state management, the signature requires mutability
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
+
         let possible_span = self.possible_span().cloned();
         let mut really_does_the_job = move || {
 
-            {
-                // Generate the code of a macro/struct
-                if self.token.is_call_macro_or_build_struct() {
-                    self.update_macro_or_struct_state(env)?;
-                }
-            }
+            
+        // Generate the code of a macro/struct
+        if self.token.is_call_macro_or_build_struct() {
+            self.update_macro_or_struct_state(env)?;
+        }
+            
 
             // Behavior based on the token
             let res = if self.token.is_macro_definition() {
@@ -1009,7 +1016,7 @@ where
                                     root: Box::new(e)
                                 };
                                 let caller_span = self.possible_span();
-                                dbg!(match caller_span {
+                                match caller_span {
                                     Some(span) => {
                                         Err(AssemblerError::RelocatedError {
                                             error: e.into(),
@@ -1017,7 +1024,7 @@ where
                                         })
                                     }
                                     None => Err(e)
-                                })
+                                }
                             })?;
 
                         let caller_span = self.possible_span();
@@ -1033,7 +1040,6 @@ where
                         }
 
                         env.symbols_mut().pop_seed();
-                        //   dbg!("done");
 
                         Ok(())
                     }
@@ -1195,10 +1201,8 @@ mod test_super {
         let token = parse_include(span).unwrap().1;
         let env = Env::default();
 
-        dbg!(&token);
 
         let processed = build_processed_token(&token, &env);
-        dbg!(&processed);
         assert!(matches!(
             processed.state,
             Some(ProcessedTokenState::Include(..))

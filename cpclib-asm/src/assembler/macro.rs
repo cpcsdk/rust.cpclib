@@ -23,13 +23,21 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
             use crate::ParserContextBuilder;
             
             let src = &s[EVAL.len()..];
-            let ctx_builder = ParserContextBuilder::default(); // TODO really use the good context
+            let ctx_builder = env.options().parse_options()
+                .clone()
+                .context_builder()
+                .remove_filename()
+                .set_context_name("MACRO parameter expansion");
             let ctx = ctx_builder.build(src);
             let src = Z80Span::new_extra(src, &ctx);
             let expr_token = crate::parser::located_expr(src)
-                .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?
+                .map_err(|e| AssemblerError::AssemblingError { 
+                    msg: e.to_string() 
+                })?
                 .1;
-            let value = env.resolve_expr_must_never_fail(&expr_token)?;
+            let value = env.resolve_expr_must_never_fail(&expr_token).map_err(|e| AssemblerError::AssemblingError { 
+                msg: e.to_string() 
+            })?;
             return Ok(value.to_string());
         }
         else {
@@ -49,6 +57,7 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
 }
 
 /// Encodes both the arguments and the macro
+#[derive(Debug)]
 pub struct MacroWithArgs<'m, 'a, P: MacroParamElement> {
     r#macro: &'m Macro,
     args: &'a [P]
@@ -102,6 +111,7 @@ impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
     }
 }
 
+#[derive(Debug)]
 pub struct StructWithArgs<'s, 'a, P: MacroParamElement> {
     r#struct: &'s Struct,
     args: &'a [P]
@@ -289,3 +299,5 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
         Ok(developped)
     }
 }
+
+

@@ -109,7 +109,7 @@ impl ParserOptions {
         ParserContextBuilder {
             options: self,
             current_filename: None,
-            context_name: Some("Unamed".into()),
+            context_name: None,
             state: ParsingState::Standard,
         }
     }
@@ -427,6 +427,13 @@ impl ParserContext {
 
 #[allow(missing_docs)]
 impl ParserContext {
+    pub fn context_name(&self) -> Option<&str> {
+        self.context_name.as_ref().map(|b| b.as_str())
+    }
+
+    pub fn filename(&self) -> Option<&Path> {
+        self.current_filename.as_ref().map(|p| p.as_path())
+    }
     //#[deprecated(note="Totally unsafe. Every test should be modified to not use it")]
     pub fn build_span<S: AsRef<str>>(&self, src: S) -> Z80Span {
         Z80Span::new_extra(src.as_ref(), self)

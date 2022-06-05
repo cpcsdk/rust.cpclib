@@ -394,18 +394,15 @@ impl AssemblerError {
                                 // Add filename to database if needed
                                 let filename =
                                     e.0.extra
-                                        .current_filename
-                                        .as_ref()
-                                        .map(|p| p.as_os_str().to_str().unwrap().to_owned());
+                                        .filename()
+                                        .map(|p| p.as_os_str().to_str().unwrap());
 
                                 let filename = filename.unwrap_or_else(|| {
                                     e.0.extra
-                                        .context_name
-                                        .as_ref()
-                                        .cloned()
-                                        .unwrap_or_else(|| "no file".to_owned())
+                                        .context_name()
+                                        .unwrap_or_else(|| "no file")
                                 });
-                                let filename = Box::new(filename);
+                                let filename = Box::new(filename.to_owned());
 
                                 let source = e.0.extra.complete_source();
                                 let file_id = match fname_to_id.get(filename.deref()) {
@@ -862,8 +859,6 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
 
 pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
 
-    dbg!(span.extra);
-    
     let filename = build_filename(span);
     let source = span.extra.complete_source();
 
@@ -898,8 +893,8 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
 }
 
 fn build_filename(span: &Z80Span) -> Box<String> {
-    let fname = &span.extra.current_filename;
-    let context = &span.extra.context_name;
+    let fname = &span.extra.filename();
+    let context = &span.extra.context_name();
 
     let name = fname
         .as_ref()

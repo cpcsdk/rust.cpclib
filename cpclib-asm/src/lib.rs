@@ -5,6 +5,7 @@
 #![feature(let_chains)]
 #![feature(box_syntax)]
 #![feature(box_patterns)]
+#![feature(box_into_inner)]
 #![feature(string_extend_from_within)]
 #![recursion_limit = "256"]
 #![feature(map_try_insert)]
