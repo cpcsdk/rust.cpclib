@@ -772,11 +772,19 @@ where
         let possible_span = self.possible_span().cloned();
         let mut really_does_the_job = move || {
 
-            
-        // Generate the code of a macro/struct
-        if self.token.is_call_macro_or_build_struct() {
-            self.update_macro_or_struct_state(env)?;
-        }
+            // handle the listing
+            // will crash on non located tokens stuff
+            {
+                let outer_token = unsafe { (self.token as *const T as *const LocatedToken).as_ref().unwrap() };
+
+                env.handle_output_trigger(outer_token);
+            }
+
+                
+            // Generate the code of a macro/struct
+            if self.token.is_call_macro_or_build_struct() {
+                self.update_macro_or_struct_state(env)?;
+            }
             
 
             // Behavior based on the token
