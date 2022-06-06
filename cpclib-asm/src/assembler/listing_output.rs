@@ -211,7 +211,14 @@ impl ListingOutput {
                 )
             };
 
-            let phys_addr_representation = format!("{:05X}{}", self.current_physical_address.offset_in_cpc(), self.current_address_kind);
+            // Physical address is only printed if it differs from the code address
+            let offset = self.current_physical_address.offset_in_cpc();
+            let phys_addr_representation = if offset == self.current_first_address {
+                "     ".to_owned()
+            }
+            else {
+                format!("{:05X}{}", offset, self.current_address_kind)
+            };
 
             let line_nb_representation = if current_inner_line.is_none() {
                 "    ".to_owned()
