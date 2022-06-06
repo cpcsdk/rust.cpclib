@@ -19,7 +19,7 @@ use crate::tokens::expression::LabelPrefix;
 use crate::{ExprResult, ListingElement, ToSimpleToken, Token};
 
 /// Structure that ease the addresses manipulation to read/write at the right place
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PhysicalAddress {
     /// Page number (0 for base, 1 for first page, 2 ...)
     page: u8,

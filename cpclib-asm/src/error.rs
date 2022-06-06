@@ -53,6 +53,8 @@ pub enum AssemblerError {
 
     //#[fail(display = "Assembling bug: {}", msg)]
     BugInAssembler {
+        file: &'static str,
+        line: u32,
         msg: String
     },
 
@@ -555,7 +557,7 @@ impl AssemblerError {
             AssemblerError::AmsdosError { error: _ } => {
                 todo!()
             }
-            AssemblerError::BugInAssembler { msg } => write!(f, "BUG in assembler: {}", msg),
+            AssemblerError::BugInAssembler { file, line, msg } => write!(f, "BUG in assembler {}:{} {}", file, line, msg),
             AssemblerError::BugInParser {
                 error: _,
                 context: _

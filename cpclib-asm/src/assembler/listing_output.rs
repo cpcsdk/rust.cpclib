@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::{ExprResult, Token};
+use  cpclib_tokens::symbols::PhysicalAddress;
 
 use crate::preamble::{LocatedToken, MayHaveSpan};
 /// Generate an output listing.
@@ -26,6 +27,7 @@ pub struct ListingOutput {
 
     current_first_address: u32,
     current_address_kind: AddressKind,
+    current_physical_address: PhysicalAddress,
     crunched_section_counter: usize
 }
 #[derive(PartialEq)]
@@ -69,7 +71,8 @@ impl ListingOutput {
             current_source: None,
             current_first_address: 0,
             current_address_kind: AddressKind::None,
-            crunched_section_counter: 0
+            crunched_section_counter: 0,
+            current_physical_address: PhysicalAddress::new(0, 0)
         }
     }
 
@@ -125,7 +128,8 @@ impl ListingOutput {
         token: &LocatedToken,
         bytes: &[u8],
         address: u32,
-        address_kind: AddressKind
+        address_kind: AddressKind,
+        physical_address: PhysicalAddress,
     ) {
         if !self.activated {
             return;
@@ -144,6 +148,7 @@ impl ListingOutput {
             self.current_line_group =
                 Some((token.span().location_line(), Self::extract_code(token)));
             self.current_first_address = address;
+            self.current_physical_address = physical_address;
             self.current_address_kind = AddressKind::None;
             self.manage_fname(token);
         }
@@ -201,10 +206,12 @@ impl ListingOutput {
             }
             else {
                 format!(
-                    "{:04X}{} ",
-                    self.current_first_address, self.current_address_kind
+                    "{:04X}",
+                    self.current_first_address
                 )
             };
+
+            let phys_addr_representation = format!("{:05X}{}", self.current_physical_address.offset_in_cpc(), self.current_address_kind);
 
             let line_nb_representation = if current_inner_line.is_none() {
                 "    ".to_owned()
@@ -215,9 +222,10 @@ impl ListingOutput {
 
             writeln!(
                 self.writer,
-                "{} {} {:bytes_width$} {} ",
+                "{} {} {} {:bytes_width$} {} ",
                 line_nb_representation,
                 loc_representation,
+                phys_addr_representation,
                 current_inner_data.unwrap_or(&"".to_owned()),
                 current_inner_line.unwrap_or(""),
                 bytes_width = self.bytes_per_line() * 3
@@ -293,6 +301,7 @@ pub struct ListingOutputTrigger {
     /// the bytes progressively collected
     pub(crate) bytes: Vec<u8>,
     pub(crate) start: u32,
+    pub(crate) physical_address:PhysicalAddress, 
     pub(crate) builder: Arc<RwLock<ListingOutput>>
 }
 
@@ -303,24 +312,29 @@ impl ListingOutputTrigger {
         self.bytes.push(b);
     }
 
-    pub fn new_token(&mut self, new: *const LocatedToken, address: u32, kind: AddressKind) {
+    pub fn new_token(&mut self, new: *const LocatedToken, code: u32, kind: AddressKind, physical_address: PhysicalAddress) {
+
+
+
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(
                 unsafe { &**token },
                 &self.bytes,
                 self.start,
-                kind
+                kind,
+                self.physical_address
             );
         }
 
         self.token.replace(new.clone()); // TODO remove that clone that is memory/time eager
         self.bytes.clear();
-        self.start = address;
+        self.start = code;
+        self.physical_address = physical_address;
     }
 
-    /// Override the address value by the expressio nresult
+    /// Override the address value by the expression result
     /// BUGGY when it is not a number ...
-    pub fn replace_address(&mut self, address: ExprResult) {
+    pub fn replace_code_address(&mut self, address: ExprResult) {
         match address {
             ExprResult::Float(_f) => {}
             ExprResult::Value(v) => self.start = v as _,
@@ -336,13 +350,18 @@ impl ListingOutputTrigger {
         }
     }
 
+    pub fn replace_physical_address(&mut self, address: PhysicalAddress) {
+        self.physical_address = address;
+    }
+
     pub fn finish(&mut self) {
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(
                 unsafe { &**token },
                 &self.bytes,
                 self.start,
-                AddressKind::Address
+                AddressKind::Address,
+                self.physical_address
             );
         }
         self.builder.write().unwrap().finish();

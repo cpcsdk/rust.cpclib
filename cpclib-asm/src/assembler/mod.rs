@@ -755,17 +755,25 @@ impl Env {
     /// Manage the play with data for the output listing
     fn handle_output_trigger(&mut self, new: &LocatedToken) {
         if self.pass.is_listing_pass() && self.output_trigger.is_some() {
-            let addr = self.logical_output_address();
-            let trigg = self.output_trigger.as_mut().unwrap();
-            trigg.new_token(
+            
+            let code_addr = self.logical_code_address();
+            let phy_addr = self.logical_to_physical_address(self.logical_output_address());
+            
+            let kind = if self.crunched_section_state.is_some() {
+                AddressKind::CrunchedArea
+            }
+            else {
+                AddressKind::Address
+            };
+
+            let trig = self.output_trigger.as_mut().unwrap();
+
+
+            trig.new_token(
                 new,
-                addr as _,
-                if self.crunched_section_state.is_some() {
-                    AddressKind::CrunchedArea
-                }
-                else {
-                    AddressKind::Address
-                }
+                code_addr as _,
+                kind,
+                phy_addr
             );
         }
     }
@@ -1180,6 +1188,8 @@ impl Env {
         //   dbg!(self.logical_output_address(), self.output_address);
         if self.logical_output_address() != self.output_address {
             return Err(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
                 msg: format!(
                     "Sync issue with output address (0x{:x} != 0x{:x})",
                     self.logical_output_address(),
@@ -1443,6 +1453,8 @@ impl Env {
     ) -> Result<(), AssemblerError> {
         if exp.is_some() {
             return Err(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
                 msg: format!("Breakpoint with an expression is not yet implemented")
             });
         }
@@ -1453,6 +1465,8 @@ impl Env {
             1 => 1,
             _ => {
                 return Err(AssemblerError::BugInAssembler {
+                    file: file!(),
+                    line: line!(),
                     msg: format!(
                         "Page selection not handled 0x{:x}",
                         self.logical_to_physical_address(current_address).page()
@@ -1733,7 +1747,7 @@ impl Env {
         self.update_dollar();
         self.output_trigger
             .as_mut()
-            .map(|o| o.replace_address(code_adr.into()));
+            .map(|o| o.replace_code_address(code_adr.into()));
         Ok(())
     }
 
@@ -1793,7 +1807,7 @@ impl Env {
         }
         self.output_trigger
             .as_mut()
-            .map(|o| o.replace_address(value.clone()));
+            .map(|o| o.replace_code_address(value.clone()));
 
         // increase next one
         let delta = match delta {
@@ -2281,7 +2295,8 @@ impl Env {
                 token: None,
                 bytes: Vec::new(),
                 builder: builder.clone(),
-                start: 0
+                start: 0,
+                physical_address: PhysicalAddress::new(0, 0)
             }
             .into();
         }
@@ -2889,7 +2904,7 @@ impl Env {
 
         self.output_trigger
             .as_mut()
-            .map(|o| o.replace_address(value.into()));
+            .map(|o| o.replace_code_address(value.into()));
 
         // execute the listing
         self.nested_rorg += 1; // used to disable page functionalities
@@ -3246,7 +3261,7 @@ impl Env {
 
         self.output_trigger
             .as_mut()
-            .map(|o| o.replace_address(address.into()));
+            .map(|o| o.replace_code_address(address.into()));
 
         if self.run_options.is_some() {
             return Err(AssemblerError::RunAlreadySpecified);
@@ -3290,7 +3305,7 @@ fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerErro
         let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
         env.output_trigger
             .as_mut()
-            .map(|o| o.replace_address(value.clone()));
+            .map(|o| o.replace_code_address(value.clone()));
         env.add_symbol_to_symbol_table(label, value)
     }
 }
@@ -3311,7 +3326,7 @@ fn visit_assign(
 
     env.output_trigger
         .as_mut()
-        .map(|o| o.replace_address(value.clone()));
+        .map(|o| o.replace_code_address(value.clone()));
 
     env.symbols_mut().assign_symbol_to_value(label, value)?;
 
@@ -3750,6 +3765,7 @@ pub fn assemble_opcode(
 }
 
 fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(), AssemblerError> {
+
     // org $ set org to the output address (cf. rasm)
     let code_adr = if address2.is_none() && address == &"$".into() {
         if env.start_address().is_none() {
@@ -3784,9 +3800,25 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     .into();
 
     env.output_address = output_adr as _;
-
-    assert_eq!(env.logical_output_address(), env.output_address);
     env.update_dollar();
+
+
+    // update the erroneous information for the listing
+    if env.pass.is_listing_pass() && env.output_trigger.is_some() {
+        let output_adr = env.logical_to_physical_address(output_adr as _);
+
+        let trigger = env.output_trigger.as_mut().unwrap();
+        trigger.replace_code_address(code_adr.into());
+        trigger.replace_physical_address(output_adr);
+    }
+
+    if env.logical_output_address() !=  env.output_address {
+        return Err(AssemblerError::BugInAssembler{
+            file: file!(),
+            line: line!(),
+            msg: format!("BUG in assembler:{}!= {}", env.logical_output_address(), env.logical_output_address() )
+        })
+    }
     Ok(())
 }
 
@@ -3830,6 +3862,8 @@ fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, AssemblerError> {
         Mnemonic::Rrd => &[0xED, 0x67],
         _ => {
             return Err(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
                 msg: format!("{} not treated", mnemonic)
             });
         }
@@ -3886,6 +3920,8 @@ fn assemble_inc_dec(mne: Mnemonic, arg1: &DataAccess, env: &Env) -> Result<Bytes
         }
         _ => {
             return Err(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
                 msg: format!(
                     "{}: not implemented for {:?}",
                     mne.to_string().to_owned(),
@@ -4096,6 +4132,8 @@ pub fn assemble_call_jr_or_jp(
     }
     else {
         return Err(AssemblerError::BugInAssembler {
+            file: file!(),
+            line: line!(),
             msg: format!("{}: parameter {:?} not treated", mne, arg2)
         });
     }
@@ -4449,6 +4487,8 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
             _ => {
                 return Err(AssemblerError::BugInAssembler {
+                    file: file!(),
+                    line: line!(),
                     msg: format!("LD: not properly implemented for '{:?}, {:?}'", arg1, arg2)
                 });
             }
@@ -4873,6 +4913,8 @@ fn assemble_ld(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
     if bytes.is_empty() {
         Err(AssemblerError::BugInAssembler {
+            file: file!(),
+            line: line!(),
             msg: format!("LD: not properly implemented for '{:?}, {:?}'", arg1, arg2)
         })
     }
@@ -4915,6 +4957,8 @@ fn assemble_in(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes,
 
     if bytes.is_empty() {
         Err(AssemblerError::BugInAssembler {
+            file: file!(),
+            line: line!(),
             msg: format!("IN: not properly implemented for '{:?}, {:?}'", arg1, arg2)
         })
     }
@@ -4958,6 +5002,8 @@ fn assemble_out(arg1: &DataAccess, arg2: &DataAccess, env: &Env) -> Result<Bytes
 
     if bytes.is_empty() {
         Err(AssemblerError::BugInAssembler {
+            file: file!(),
+            line: line!(),
             msg: format!("OUT: not properly implemented for '{:?}, {:?}'", arg1, arg2)
         })
     }
@@ -5211,6 +5257,8 @@ fn assemble_add_or_adc(
 
     if bytes.is_empty() {
         Err(AssemblerError::BugInAssembler {
+            file: file!(),
+            line: line!(),
             msg: format!("{:?} not implemented for {:?} {:?}", mnemonic, arg1, arg2)
         })
     }

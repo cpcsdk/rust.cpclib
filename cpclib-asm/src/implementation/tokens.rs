@@ -468,6 +468,8 @@ impl TokenExt for Token {
             }
             _ => {
                 return Err(AssemblerError::BugInAssembler {
+            file: file!(),
+            line: line!(),
                     msg: format!("Duration computation for {:?} not yet coded", self)
                 })
             }
