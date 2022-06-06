@@ -3806,8 +3806,8 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     // update the erroneous information for the listing
     if env.pass.is_listing_pass() && env.output_trigger.is_some() {
         let output_adr = env.logical_to_physical_address(output_adr as _);
-
         let trigger = env.output_trigger.as_mut().unwrap();
+
         trigger.replace_code_address(code_adr.into());
         trigger.replace_physical_address(output_adr);
     }

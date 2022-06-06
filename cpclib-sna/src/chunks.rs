@@ -290,6 +290,16 @@ pub enum SnapshotChunk {
 
 #[allow(missing_docs)]
 impl SnapshotChunk {
+
+    pub fn print_info(&self) {
+        println!("- Chunk: {}{}{}{}", 
+            self.code()[0] as char,
+            self.code()[1] as char,
+            self.code()[2] as char,
+            self.code()[3] as char,
+        );
+    }
+
     pub fn is_memory_chunk(&self) -> bool {
         self.memory_chunk().is_some()
     }
