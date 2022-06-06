@@ -162,6 +162,8 @@ impl MemoryChunk {
             return self.data.data.clone();
         }
 
+        dbg!(self.data.data.len());
+
         let mut content = Vec::new();
 
         let mut idx = 0;

@@ -847,6 +847,7 @@ dependencies = [
  "delegate",
  "matches",
  "num_enum",
+ "rustyline",
  "serde",
  "similar-asserts",
  "tempfile",

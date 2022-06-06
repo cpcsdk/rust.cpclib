@@ -19,6 +19,8 @@ matches = "0.1.9"
 serde = { version = "1.0.137", features = ["derive"] }
 num_enum = "0.5.7"
 
+rustyline = { version ="9.1.2", optional = true}
+
 [dev-dependencies]
 tempfile = "3.3.0"
 similar-asserts = "1.2.0"
@@ -28,7 +30,7 @@ built = { version = "0.5.1", features = ["chrono"] }
 
 [features]
 default = ["snapshot"]
-snapshot = ["cpclib-common/cmdline"]
+snapshot = ["cpclib-common/cmdline", "rustyline"]
 
 
 [[bin]]

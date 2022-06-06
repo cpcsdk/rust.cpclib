@@ -14,6 +14,9 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::identity_op)]
 
+
+pub mod cli;
+
 use std::path::Path;
 use std::str::FromStr;
 
@@ -57,6 +60,11 @@ fn main() {
                                .long("info")
                                .requires("inSnapshot")
                            )
+                           .arg(Arg::new("cli")
+                               .help("Run the CLI interface for an interactive manipulation of snapshot")
+                               .long("cli")
+                               .requires("inSnapshot")
+                           )
                           .arg(Arg::new("debug")
                             .help("Display debugging information while manipulating the snapshot")
                             .long("debug")
@@ -64,6 +72,7 @@ fn main() {
                           .arg(Arg::new("OUTPUT")
                                .help("Sets the output file to generate")
                                .conflicts_with("flags")
+                               .conflicts_with("cli")
                                .conflicts_with("info")
                                .conflicts_with("getToken")
                                .last(true)
@@ -150,6 +159,11 @@ fn main() {
 
     if matches.is_present("info") {
         sna.print_info();
+        return;
+    }
+
+    if matches.is_present("cli") {
+        cli::cli(sna);
         return;
     }
 

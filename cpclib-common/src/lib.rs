@@ -8,7 +8,7 @@ use nom::error::*;
 use nom::multi::*;
 use nom::sequence::*;
 use nom::*;
-use nom_locate::LocatedSpan;
+pub use nom_locate::LocatedSpan;
 #[cfg(not(target_arch = "wasm32"))]
 pub use rayon;
 #[cfg(feature = "cmdline")]
