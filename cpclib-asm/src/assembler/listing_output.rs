@@ -199,9 +199,7 @@ impl ListingOutput {
                 break;
             }
 
-            let loc_representation = if false
-            // (data_representation.is_empty() && !self.current_address_is_value) || idx!=0
-            {
+            let loc_representation = if current_inner_line.is_none() {
                 "    ".to_owned()
             }
             else {
@@ -213,7 +211,7 @@ impl ListingOutput {
 
             // Physical address is only printed if it differs from the code address
             let offset = self.current_physical_address.offset_in_cpc();
-            let phys_addr_representation = if offset == self.current_first_address {
+            let phys_addr_representation = if  current_inner_line.is_none() || offset == self.current_first_address {
                 "     ".to_owned()
             }
             else {
