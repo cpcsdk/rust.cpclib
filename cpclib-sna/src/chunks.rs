@@ -60,6 +60,14 @@ impl MemoryChunk {
         }
     }
 
+    pub fn print_info(&self) {
+        println!(
+            "\t* Address: 0x{:X}\n\t* Size: 0x{:X}",
+            self.abstract_address(),
+            self.uncrunched_memory().len()
+        );
+    }
+
     /// Create a memory chunk.
     /// `code` identify with memory block is concerned
     /// `data` contains the crunched version of the code
@@ -150,29 +158,34 @@ impl MemoryChunk {
 
     /// Uncrunch the 64kbio of RLE crunched data if crunched. Otherwise, return the whole memory
     pub fn uncrunched_memory(&self) -> Vec<u8> {
-        if self.is_crunched() {
+        if !self.is_crunched() {
             return self.data.data.clone();
         }
 
         let mut content = Vec::new();
 
-        let idx = std::rc::Rc::new(std::cell::RefCell::new(0));
-        let read_byte = || {
-            let byte = self.data.data[*idx.borrow()];
-            idx.borrow_mut().deref_mut().add_assign(1);
-            byte
+        let mut idx = 0;
+        let data = &self.data.data;
+        let mut read_byte = move || {
+            if idx == self.data.data.len() {
+                None
+            } else {
+                let byte = data[idx];
+                idx += 1;
+                Some (byte)
+            }
         };
-        while *idx.borrow() != self.data.data.len() {
-            match read_byte() {
+        while let Some(byte) = read_byte() {
+            match byte {
                 0xE5 => {
-                    let amount = read_byte();
+                    let amount = read_byte().unwrap();
                     if amount == 0 {
                         content.push(0xE5)
                     }
                     else {
-                        let val = read_byte();
+                        let val = read_byte().unwrap();
+                        content.reserve(content.len() + amount as usize);
                         for _idx in 0..amount {
-                            // TODO use resize
                             content.push(val);
                         }
                     }
@@ -195,7 +208,7 @@ impl MemoryChunk {
 
     /// A uncrunched memory taaks 64*1024 bytes
     pub fn is_crunched(&self) -> bool {
-        self.data.data.len() == 64 * 1024
+        self.data.data.len() != 64 * 1024
     }
 }
 
@@ -298,6 +311,10 @@ impl SnapshotChunk {
             self.code()[2] as char,
             self.code()[3] as char,
         );
+
+        if self.is_memory_chunk() {
+            self.memory_chunk().unwrap().print_info();
+        }
     }
 
     pub fn is_memory_chunk(&self) -> bool {
@@ -324,7 +341,6 @@ impl SnapshotChunk {
         match self {
             SnapshotChunk::Memory(chunk) => chunk.size(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.size(),
-
             SnapshotChunk::Unknown(chunk) => chunk.size()
         }
     }
@@ -333,7 +349,6 @@ impl SnapshotChunk {
         match self {
             SnapshotChunk::Memory(chunk) => chunk.size_as_array(),
             SnapshotChunk::WinapeBreakPoint(ref chunk) => chunk.size_as_array(),
-
             SnapshotChunk::Unknown(chunk) => chunk.size_as_array()
         }
     }
@@ -342,7 +357,6 @@ impl SnapshotChunk {
         match self {
             SnapshotChunk::Memory(chunk) => chunk.data(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.data(),
-
             SnapshotChunk::Unknown(chunk) => chunk.data()
         }
     }
