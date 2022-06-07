@@ -101,59 +101,78 @@ impl MemoryChunk {
             res.extend(data);
             assert_eq!(res.len(), data.len());
             res.resize(0x100000, 0);
+            return Self::from(code, res);
+
         }
         else {
             let mut previous = None;
             let mut count = 0;
 
+            let mut rle = |previous_value, count| {
+                if count == 1 {
+                    if previous_value == 0xE5 {
+                        res.push(0xE5);
+                        res.push(0x00);
+                    } else {
+                        res.push(previous_value);
+                    }
+                }
+                else if count == 2 && previous_value != 0xE5 {
+                    res.push(previous_value);
+                    res.push(previous_value);
+                }
+                else {
+                    res.push(0xE5);
+                    res.push(count);
+                    res.push(previous_value);
+                }
+            };
+
             for current in data.iter() {
+                let current = *current;
                 match previous {
                     None => {
-                        previous = Some(*current);
+                        previous.replace(current);
                         count = 1;
                     }
                     Some(previous_value) => {
-                        if *current == 0xE5 || previous_value != *current || count == 255 {
-                            if previous.is_some() {
-                                // previous value has been repeated several times
-                                if count > 1 {
-                                    res.push(0xE5);
-                                    res.push(count);
-                                }
-                                res.push(previous_value); // store the value to be replaced
-                            }
+                        // we stop when 255 are read or when current differs
+                        if previous_value != current || count == 255 {
 
-                            if *current == 0xE5 {
-                                previous = None;
-                                count = 0;
-                                res.push(0xE5);
-                                res.push(0);
-                            }
-                            else {
-                                previous = Some(*current);
-                                count = 1;
-                            }
+                            rle(previous_value, count);
+
+                            previous.replace(current);
+                            count = 1;
                         }
                         else {
-                            assert_eq!(previous_value, *current);
                             count += 1;
-                            previous = Some(*current);
                         }
                     }
                 } // end match
             } // end for
 
-            if previous.is_some() {
-                // previous value has been repeated several times
-                if count > 1 {
-                    res.push(0xE5);
-                    res.push(count);
-                }
-                res.push(previous.unwrap()); // store the value to be replaced
+            if count > 0 {
+                rle(previous.unwrap(), count);
             }
-        }
 
-        Self::from(code, res)
+            // We may be unable to crunch the memory
+            if res.len() >=  65536 {
+                return Self::from(code, data.to_vec());
+            }
+
+            let chunk = Self::from(code, res.clone());
+
+        // #[cfg(debug_assertions)]
+            {
+                let produced = chunk.uncrunched_memory();
+                assert_eq!(
+                    &data,
+                    &produced
+                );
+            }
+
+            chunk
+        }
     }
 
     /// Uncrunch the 64kbio of RLE crunched data if crunched. Otherwise, return the whole memory
@@ -161,8 +180,6 @@ impl MemoryChunk {
         if !self.is_crunched() {
             return self.data.data.clone();
         }
-
-        dbg!(self.data.data.len());
 
         let mut content = Vec::new();
 

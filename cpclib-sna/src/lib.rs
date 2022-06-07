@@ -284,7 +284,7 @@ impl Snapshot {
         version: SnapshotVersion
     ) -> Result<(), std::io::Error> {
         // Convert the snapshot to ensure header is correct
-        let sna = self.fix_version(version);
+        let sna = self.fix_version(dbg!(version));
 
         // Write header
         buffer.write_all(&sna.header)?;
@@ -301,10 +301,10 @@ impl Snapshot {
 
         // Write chunks if any
         for chunk in &sna.chunks {
-            //   println!(
-            //      "Add chunk: {}",
-            //      chunk.code().iter().map(|c| *c as char).collect::<String>()
-            // );
+               println!(
+                  "Add chunk: {}",
+                  chunk.code().iter().map(|c| *c as char).collect::<String>()
+            );
             buffer.write_all(chunk.code())?;
             buffer.write_all(&chunk.size_as_array())?;
             buffer.write_all(chunk.data())?;
