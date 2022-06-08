@@ -2518,6 +2518,9 @@ pub fn visit_located_token(
                 span: span.clone()
             };
         }
+        *warning = AssemblerError::AssemblingError {
+            msg: (*warning).to_string()
+        }
     }
 
     env.move_delayed_commands_of_functions();
