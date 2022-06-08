@@ -11,6 +11,17 @@ impl ListingElement for Token {
     type MacroParam = MacroParam;
     type TestKind = TestKind;
 
+    fn is_warning(&self) -> bool {
+        false
+    }
+    fn warning_token(&self) -> &Self {
+        unreachable!()
+    }
+    fn warning_message(&self) -> &str {
+        unreachable!()
+    }
+
+
     fn is_module(&self) -> bool {
         match self {
             Token::Module(..) => true,

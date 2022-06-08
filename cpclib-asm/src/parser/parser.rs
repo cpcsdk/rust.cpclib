@@ -1591,8 +1591,10 @@ pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, CharsetFormat, Z
 }
 
 /// Parser for the include directive
-pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let include_start = input.clone();
+pub fn parse_include(include_start: Z80Span) 
+ -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+
+move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let (input, once_fname) = pair(
         opt(delimited(space0, parse_word("ONCE"), space0)),
         parse_fname
@@ -1622,7 +1624,7 @@ pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Parser
         input,
         LocatedToken::Include(fname, namespace, once.is_some(), include_start.take(size))
     ))
-}
+}}
 
 /// Parse for the various binary include directives
 #[inline]
@@ -1662,8 +1664,10 @@ pub fn parse_incbin(
 
 /// parse write direct in memory / converted to a bank directive
 /// we do not care of the parameters for roms as we are not working in an emulator
-pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let input_start = input.clone();
+pub fn parse_write_direct_memory(input_start: Z80Span)
+-> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+
+move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
 
     // filter all the stuff before
     let (input, _) = tuple((
@@ -1677,17 +1681,19 @@ pub fn parse_write_direct_memory(input: Z80Span) -> IResult<Z80Span, Token, Z80P
 
     let (input, bank) = expr(input)?;
 
-    // TODO add an additional note that
-    let warning = AssemblerError::RelocatedWarning {
-        warning: Box::new(AssemblerError::AssemblingError {
-            msg: "Prefer BANK or PAGE directives to write direct -1, -1, XX".into()
-        }),
-        span: input_start.clone()
-    };
-    input.extra.add_warning(warning);
+    let token = Token::Bank(Some(bank));
+    let size = input_start.input_len() - input.input_len();
+    let token = token.locate(input_start.clone(), size);
 
-    Ok((input, Token::Bank(Some(bank))))
-}
+    Ok((
+        input,
+        LocatedToken::WarningWrapper(
+            box token, 
+            "Prefer BANK or PAGE directives to write direct -1, -1, XX".to_owned()
+        )
+    ))
+}}
+
 #[derive(PartialEq)]
 pub enum SaveKind {
     Save,
@@ -1696,9 +1702,10 @@ pub enum SaveKind {
 
 /// Parse both save directive and write direct in a file
 pub fn parse_save(
+    input_start: Z80Span,
     save_kind: SaveKind
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
         let input = if save_kind == SaveKind::WriteDirect {
             parse_word("DIRECT")(input)?.0
         }
@@ -1753,6 +1760,10 @@ pub fn parse_save(
         let filename = filename.to_string();
         let dsk_filename = dsk_filename.map(|s| s.to_string());
 
+    
+        let span_size = input_start.input_len() - input.input_len();
+
+
         Ok((
             input,
             Token::Save {
@@ -1762,7 +1773,7 @@ pub fn parse_save(
                 save_type,
                 dsk_filename,
                 side
-            }
+            }.locate(input_start.clone(), span_size)
         ))
     }
 }
@@ -1838,68 +1849,74 @@ pub fn parse_token2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
 
     // Apply the right parsing
     // We use this way of doing to reduce function calls and error. Let's hope it will speed everything
-    let (input, token) = match word.as_str() {
-        "ADC" => parse_add_or_adc(Mnemonic::Adc)(rest),
-        "ADD" => parse_add_or_adc(Mnemonic::Add)(rest),
-        "AND" => parse_logical_operator(Mnemonic::And)(rest),
+    match word.as_str() {
+        // located tokens
+        "LD" => parse_ld(input_start)(rest),
+        
+        // tokens to locate
+        word => { let (input, token) = match word {
+            "ADC" => parse_add_or_adc(Mnemonic::Adc)(rest),
+            "ADD" => parse_add_or_adc(Mnemonic::Add)(rest),
+            "AND" => parse_logical_operator(Mnemonic::And)(rest),
 
-        "BIT" => parse_res_set_bit(Mnemonic::Bit)(rest),
+            "BIT" => parse_res_set_bit(Mnemonic::Bit)(rest),
 
-        "CALL" => parse_call_jp_or_jr(Mnemonic::Call)(rest),
-        "CP" => parse_cp(rest),
+            "CALL" => parse_call_jp_or_jr(Mnemonic::Call)(rest),
+            "CP" => parse_cp(rest),
 
-        "DEC" => parse_inc_dec(Mnemonic::Dec)(rest),
-        "DJNZ" => parse_djnz(rest),
+            "DEC" => parse_inc_dec(Mnemonic::Dec)(rest),
+            "DJNZ" => parse_djnz(rest),
 
-        "EX" => alt((parse_ex_af, parse_ex_hl_de, parse_ex_mem_sp))(rest),
+            "EX" => alt((parse_ex_af, parse_ex_hl_de, parse_ex_mem_sp))(rest),
 
-        "EXA" => Ok((rest, Token::new_opcode(Mnemonic::ExAf, None, None))),
-        "EXD" => Ok((rest, Token::new_opcode(Mnemonic::ExHlDe, None, None))),
+            "EXA" => Ok((rest, Token::new_opcode(Mnemonic::ExAf, None, None))),
+            "EXD" => Ok((rest, Token::new_opcode(Mnemonic::ExHlDe, None, None))),
 
-        "IN" => parse_in(rest),
-        "INC" => parse_inc_dec(Mnemonic::Inc)(rest),
-        "IM" => parse_im(rest),
+            "IN" => parse_in(rest),
+            "INC" => parse_inc_dec(Mnemonic::Inc)(rest),
+            "IM" => parse_im(rest),
 
-        "JP" => parse_call_jp_or_jr(Mnemonic::Jp)(rest),
-        "JR" => parse_call_jp_or_jr(Mnemonic::Jr)(rest),
+            "JP" => parse_call_jp_or_jr(Mnemonic::Jp)(rest),
+            "JR" => parse_call_jp_or_jr(Mnemonic::Jr)(rest),
 
-        "LD" => parse_ld(rest),
 
-        "OR" => parse_logical_operator(Mnemonic::Or)(rest),
-        "OUT" => parse_out(rest),
+            "OR" => parse_logical_operator(Mnemonic::Or)(rest),
+            "OUT" => parse_out(rest),
 
-        "POP" => parse_push_n_pop(Mnemonic::Pop)(rest),
-        "PUSH" => parse_push_n_pop(Mnemonic::Push)(rest),
+            "POP" => parse_push_n_pop(Mnemonic::Pop)(rest),
+            "PUSH" => parse_push_n_pop(Mnemonic::Push)(rest),
 
-        "RES" => parse_res_set_bit(Mnemonic::Res)(rest),
-        "RET" => parse_ret(rest),
-        "RLC" => parse_shifts_and_rotations(Mnemonic::Rlc)(rest),
-        "RL" => parse_shifts_and_rotations(Mnemonic::Rl)(rest),
-        "RRC" => parse_shifts_and_rotations(Mnemonic::Rrc)(rest),
-        "RR" => parse_shifts_and_rotations(Mnemonic::Rr)(rest),
-        "RST" => parse_rst(rest),
+            "RES" => parse_res_set_bit(Mnemonic::Res)(rest),
+            "RET" => parse_ret(rest),
+            "RLC" => parse_shifts_and_rotations(Mnemonic::Rlc)(rest),
+            "RL" => parse_shifts_and_rotations(Mnemonic::Rl)(rest),
+            "RRC" => parse_shifts_and_rotations(Mnemonic::Rrc)(rest),
+            "RR" => parse_shifts_and_rotations(Mnemonic::Rr)(rest),
+            "RST" => parse_rst(rest),
 
-        "SBC" => parse_sbc(rest),
-        "SET" => parse_res_set_bit(Mnemonic::Set)(rest),
-        "SL1" => parse_shifts_and_rotations(Mnemonic::Sl1)(rest),
-        "SLA" => parse_shifts_and_rotations(Mnemonic::Sla)(rest),
-        "SLL" => parse_shifts_and_rotations(Mnemonic::Sl1)(rest),
-        "SRA" => parse_shifts_and_rotations(Mnemonic::Sra)(rest),
-        "SRL" => parse_shifts_and_rotations(Mnemonic::Srl)(rest),
-        "SUB" => parse_sub(rest),
+            "SBC" => parse_sbc(rest),
+            "SET" => parse_res_set_bit(Mnemonic::Set)(rest),
+            "SL1" => parse_shifts_and_rotations(Mnemonic::Sl1)(rest),
+            "SLA" => parse_shifts_and_rotations(Mnemonic::Sla)(rest),
+            "SLL" => parse_shifts_and_rotations(Mnemonic::Sl1)(rest),
+            "SRA" => parse_shifts_and_rotations(Mnemonic::Sra)(rest),
+            "SRL" => parse_shifts_and_rotations(Mnemonic::Srl)(rest),
+            "SUB" => parse_sub(rest),
 
-        "XOR" => parse_logical_operator(Mnemonic::Xor)(rest),
+            "XOR" => parse_logical_operator(Mnemonic::Xor)(rest),
 
-        _ => {
-            Err(Err::Error(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
-            )))
-        }
-    }?;
+            _ => {
+                Err(Err::Error(Z80ParserError::from_error_kind(
+                    input,
+                    ErrorKind::Alt
+                )))
+            }
+        }?;
 
-    let size = input_start.input_len() - input.input_len();
-    Ok((input, token.locate(input_start, size)))
+        let size = input_start.input_len() - input.input_len();
+        Ok((input, token.locate(input_start, size)))
+    }
+}
 }
 
 /// Parse ex af, af' instruction
@@ -2007,9 +2024,13 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
         }
         "INCZX0" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZX0))(rest),
 
-        "INCLUDE" | "READ" => parse_include(rest),
+        "INCLUDE" | "READ" => parse_include(input_start)(rest),
 
         "STRUCT" => parse_struct(input_start)(rest),
+        "SAVE" => parse_save(input_start, SaveKind::Save)(rest),
+        "WRITE" => {
+            alt((parse_save(input_start.clone(), SaveKind::WriteDirect), parse_write_direct_memory(input_start.clone())))(rest)
+        }
 
         word => {
             let (input, token) = match word {
@@ -2049,7 +2070,6 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
                 "RETURN" => parse_return(rest),
                 "RUN" => parse_run(rest),
 
-                "SAVE" => parse_save(SaveKind::Save)(rest),
                 "SECTION" => parse_section(rest),
                 "SNASET" => parse_snaset(rest),
 
@@ -2060,9 +2080,7 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
                 "UNDEF" => parse_undef(rest),
 
                 "WAITNOPS" => parse_waitnops(rest),
-                "WRITE" => {
-                    alt((parse_save(SaveKind::WriteDirect), parse_write_direct_memory))(rest)
-                }
+
 
                 _ => {
                     Err(Err::Error(Z80ParserError::from_error_kind(
@@ -2295,19 +2313,24 @@ pub fn parse_bank(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 }
 
 /// Parse fake and real LD instructions
-pub fn parse_ld(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_ld(input_start: Z80Span) -> 
+impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+
+move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     context(
         "[DBG] ld",
         alt((
-            context("[DBG] fake ld", parse_ld_fake),
-            context("[DBG] normal ld", parse_ld_normal)
+            context("[DBG] fake ld", parse_ld_fake(input_start.clone())),
+            context("[DBG] normal ld", parse_ld_normal(input_start.clone()))
         ))
     )(input)
-}
+}}
 
 /// Parse artifical LD instruction (would be replaced by several real instructions)
-pub fn parse_ld_fake(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let input_start = input.clone();
+pub fn parse_ld_fake(input_start: Z80Span) -> 
+impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+
+move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     // let (input, _) = tuple((tag_no_case("LD"), space1))(input)?;
 
     let (input, dst) = alt((
@@ -2341,21 +2364,28 @@ pub fn parse_ld_fake(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> 
         )(input)?
     };
 
-    let warning = AssemblerError::RelocatedWarning {
-        warning: Box::new(AssemblerError::AssemblingError {
-            msg: "Fake instruction assembled using several opcodes".into()
-        }),
-        span: input_start.clone()
-    };
-    input.extra.add_warning(warning);
+    let token = Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src));
+    let size = input_start.input_len() - input.input_len();
+    let token = token.locate(input_start.clone(), size);
 
-    Ok((input, Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src))))
-}
+    let warning = LocatedToken::WarningWrapper(
+        box token,
+        "This is a fake instruction assembled using several opcodes".into()
+    );
+
+
+    Ok((input, warning))
+}}
 
 /// Parse the valids LD versions
-pub fn parse_ld_normal(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    //  let (input, _) = context("[DBG] ...", tuple((space0, parse_word("LD"), space0)))(input)?;
+pub fn parse_ld_normal(input_start: Z80Span) -> 
+impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
 
+move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    //  let (input, _) = context("[DBG] ...", tuple((space0, parse_word("LD"), space0)))(input)?;
+    
+
+    let start = input.clone();
     let (input, dst) = cut(context(
         LD_WRONG_DESTINATION,
         alt((
@@ -2382,8 +2412,13 @@ pub fn parse_ld_normal(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError
     // src possibilities depend on dst
     let (input, src) = cut(context(LD_WRONG_SOURCE, cut(parse_ld_normal_src(&dst))))(input)?;
 
-    Ok((input, Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src))))
-}
+
+    let token = Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src));
+    let size = input_start.input_len() - input.input_len();
+    let token = token.locate(input_start.clone(), size);
+
+    Ok((input, token))
+}}
 
 /// Parse the source of LD depending on its destination
 #[inline]
@@ -2689,14 +2724,12 @@ pub fn parse_macro_or_struct_call(
             pair(space0, alt((recognize(parse_comment), tag(":"), tag("\n"))))(input.clone())
                 .is_ok();
 
+        
         if allowed_to_return_a_label && nothing_after {
-            input.extra.add_warning(AssemblerError::RelocatedWarning{
-            warning: Box::new(AssemblerError::AssemblingError{
-                msg: format!("Ambiguous code. Use (void) for macro with no args, (default) for struct with default parameters; avoid labels that do not start at beginning of a line. {} is considered to be a label, not a macro.", name)
-            }),
-            span: input.clone()
-        });
-            return Ok((input, LocatedToken::Label(name)));
+            let token = LocatedToken::Label(name.clone());
+            let msg = format!("Ambiguous code. Use (void) for macro with no args, (default) for struct with default parameters; avoid labels that do not start at beginning of a line. {} is considered to be a label, not a macro.", name);
+            let warning = LocatedToken::WarningWrapper(box token, msg);
+            return Ok((input, warning));
         }
 
         let (input, _) = pair(space0, not(parse_comment))(input)?;

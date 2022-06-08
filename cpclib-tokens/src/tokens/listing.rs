@@ -15,6 +15,10 @@ pub trait ListingElement: Debug + Sized {
     type TestKind: TestKindElement;
     type Expr: ExprElement + Debug + Eq + Clone;
 
+    fn is_warning(&self) -> bool;
+    fn warning_token(&self) -> &Self;
+    fn warning_message(&self) -> &str;
+
     fn mnemonic(&self) -> Option<&Mnemonic>;
     fn mnemonic_arg1(&self) -> Option<&DataAccess>;
     fn mnemonic_arg2(&self) -> Option<&DataAccess>;

@@ -172,7 +172,6 @@ impl ParserContextBuilder {
             options: self.options,
             current_filename: self.current_filename,
             context_name: self.context_name,
-            parse_warning: Default::default(),
             state: self.state,
             source: unsafe{&*(code as *const str) as &'static str}
         }
@@ -361,8 +360,6 @@ pub struct ParserContext {
     /// Current context (mainly when playing with macros)
     pub context_name: Option<String>,
     pub options: ParserOptions,
-    /// indicate we are parsing a listing generating by a struct
-    pub parse_warning: RwLock<Vec<AssemblerError>>,
     /// Full source code of the parsing state
     pub source: &'static str
 }
@@ -374,8 +371,6 @@ impl PartialEq for ParserContext {
         self.state == other.state
             && self.current_filename == other.current_filename
             && self.context_name == other.context_name
-            && self.parse_warning.read().unwrap().deref()
-                == other.parse_warning.read().unwrap().deref()
             && self.source == other.source
             && self.options == other.options
     }
@@ -389,7 +384,6 @@ impl Clone for ParserContext {
             state: self.state.clone(),
             source: self.source.clone(),
             options: self.options.clone(),
-            parse_warning: self.parse_warning.read().unwrap().clone().into()
         }
     }
 }
@@ -417,7 +411,6 @@ impl ParserContext {
         Self {
             current_filename: self.current_filename.clone(),
             context_name: self.context_name.clone(),
-            parse_warning: self.parse_warning.write().unwrap().clone().into(),
             source: self.source.clone(),
             options: self.options.clone(),
             state
@@ -454,17 +447,8 @@ impl ParserContext {
     }
 
 
-    pub fn add_warning(&self, warning: AssemblerError) {
-        self.parse_warning.write().unwrap().push(warning)
-    }
 
-    pub fn warnings(&self) -> Vec<AssemblerError> {
-        self.parse_warning.write().unwrap().deref().clone() // TODO investigate why I cannot return a reference
-    }
 
-    pub fn pop_warning(&self) -> Option<AssemblerError> {
-        self.parse_warning.write().unwrap().pop() // TODO investigate why I cannot return a reference
-    }
 
     pub fn complete_source(&self) -> &str {
         self.source

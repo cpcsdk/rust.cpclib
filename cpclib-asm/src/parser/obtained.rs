@@ -663,6 +663,7 @@ pub enum LocatedToken {
     },
     /// Name, Parameters, FullSpan
     MacroCall(Z80Span, Vec<LocatedMacroParam>, Z80Span),
+    Module(Z80Span, LocatedListing, Z80Span),
     Repeat(
         LocatedExpr,
         LocatedListing,
@@ -686,8 +687,8 @@ pub enum LocatedToken {
         Option<LocatedListing>,
         Z80Span
     ),
+    WarningWrapper(Box<LocatedToken>, String),
     While(LocatedExpr, LocatedListing, Z80Span),
-    Module(Z80Span, LocatedListing, Z80Span)
 }
 
 impl std::fmt::Display for LocatedToken {
@@ -756,7 +757,8 @@ impl MayHaveSpan for LocatedToken {
             | LocatedToken::Defw(_, span)
             | LocatedToken::Str(_, span)
             | LocatedToken::Include(_, _, _, span) => span,
-            LocatedToken::Incbin { span, .. } => span
+            LocatedToken::Incbin { span, .. } => span,
+            LocatedToken::WarningWrapper(token, _) => token.span()
         }
     }
 }
@@ -955,7 +957,8 @@ impl LocatedToken {
                     content.as_str().to_owned()
                 ))
             }
-            LocatedToken::Confined(..) => todo!()
+            LocatedToken::Confined(..) => todo!(),
+            LocatedToken::WarningWrapper(..) => todo!(),
         }
     }
 
@@ -1080,6 +1083,27 @@ impl ListingElement for LocatedToken {
     type Expr = LocatedExpr;
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
+
+    fn is_warning(&self) -> bool {
+        match self {
+            Self::WarningWrapper(..) => true,
+            _ => false
+        }
+    }
+    fn warning_token(&self) -> &Self {
+        match self {
+            Self::WarningWrapper(token, _message) => token,
+            _ => unreachable!()
+        }
+    }
+
+    fn warning_message(&self) -> &str {
+        match self {
+            Self::WarningWrapper(_token, message) => message.as_str(),
+            _ => unreachable!()
+        }
+    }
+
 
     fn is_module(&self) -> bool {
         match self {

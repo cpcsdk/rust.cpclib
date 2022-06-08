@@ -408,6 +408,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 /// Launch the assembling of everythin
 pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
 
+    // Handle the display of embedded files list
     if matches.is_present("LIST_EMBEDDED") {
         use crate::embedded::EmbeddedFiles;
         for fname in EmbeddedFiles::iter() {
@@ -416,6 +417,7 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
         std::process::exit(0);
     }
 
+    // Handle the display of a specific embedded file
     if let Some(fname) = matches.value_of("VIEW_EMBEDDED") {
         use crate::embedded::EmbeddedFiles;
 

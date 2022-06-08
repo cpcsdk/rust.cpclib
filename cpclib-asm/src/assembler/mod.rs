@@ -1446,6 +1446,12 @@ impl Env {
 }
 
 impl Env {
+    pub fn add_warning(&mut self, warning: AssemblerWarning) {
+        self.warnings.push(warning);
+    }
+}
+
+impl Env {
     fn visit_breakpoint(
         &mut self,
         exp: Option<&Expr>,
@@ -2482,7 +2488,9 @@ pub fn visit_located_token(
                 .map_err(|e| e.locate(span.clone()))
         }
 
+
         LocatedToken::Module(..)
+        | LocatedToken::WarningWrapper(..)
         | LocatedToken::CrunchedSection(..)
         | LocatedToken::Function(..)
         | LocatedToken::If(..)

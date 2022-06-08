@@ -67,7 +67,8 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     RepeatUntil(SimpleListingState<'token, T>),
     While(SimpleListingState<'token, T>),
     Rorg(SimpleListingState<'token, T>),
-    Switch(SwitchState<'token, T>)
+    Switch(SwitchState<'token, T>),
+    Warning(Box<ProcessedToken<'token, T>>)
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
@@ -559,6 +560,9 @@ where
                 .switch_default()
                 .map(|l| SimpleListingState::build(l, token.possible_span().cloned(), env))
         }))
+    }
+    else if token.is_warning() {
+        Some(ProcessedTokenState::Warning(box build_processed_token(token.warning_token(), env)))
     }
     else if token.is_while() {
         Some(ProcessedTokenState::While(SimpleListingState {
@@ -1126,6 +1130,17 @@ where
                         Ok(())
                     }
 
+
+                    Some(ProcessedTokenState::Warning(box token)) => {
+                        let warning = AssemblerError::RelocatedWarning{
+                            warning: box AssemblerError::AssemblingError{msg: self.token.warning_message().to_owned()},
+                            span: self.token.possible_span().unwrap().clone()
+                        };
+                        let warning = AssemblerError::AlreadyRenderedError(warning.to_string());
+
+                        env.add_warning(warning);
+                        token.visited(env)
+                    }
                     Some(ProcessedTokenState::While(SimpleListingState {
                         processed_tokens,
                         ..
