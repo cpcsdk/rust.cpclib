@@ -8,7 +8,7 @@ use cpclib_common::clap;
 use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 use cpclib_xfer::CpcXfer;
-
+use cpclib_common::itertools::Itertools;
 use crate::assembler::file::{get_filename, handle_source_encoding};
 use crate::preamble::*;
 use crate::progress;
@@ -447,7 +447,18 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
     let warnings = env.warnings().to_vec();
 
     if matches.is_present("WERROR") && !warnings.is_empty() {
-        return Err(AssemblerError::MultipleErrors { errors: warnings }.into());
+
+        const KEPT: usize = 10;
+
+        if warnings.len() > KEPT {
+            eprintln!("Warnings are considered to be errors. The first 10 have been kept.");
+        } else {
+            eprintln!("Warnings are considered to be errors.");
+
+        }
+
+        //keep only the first 10
+        return Err(AssemblerError::MultipleErrors { errors: warnings.into_iter().take(KEPT).collect_vec() }.into());
     }
     else {
         save(matches, &env)?;
