@@ -15,8 +15,6 @@
 #![allow(clippy::identity_op)]
 
 
-pub mod cli;
-
 use std::path::Path;
 use std::str::FromStr;
 
@@ -163,7 +161,8 @@ fn main() {
     }
 
     if matches.is_present("cli") {
-        cli::cli(sna);
+        let fname = matches.value_of("inSnapshot").unwrap();
+        cli::cli(&fname, sna);
         return;
     }
 

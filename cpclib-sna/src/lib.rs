@@ -11,6 +11,9 @@ pub mod flags;
 mod memory;
 pub mod parse;
 
+#[cfg(feature = "snapshot")]
+pub mod cli;
+
 pub use chunks::*;
 pub use error::*;
 pub use flags::*;
