@@ -326,6 +326,11 @@ pub fn parse_z80_with_context_builder<S: Into<String>>(
 //    parse_z80_with_options(span.as_str(), ctx)
 //}
 
+#[inline]
+pub fn parse_z80<S: Into<String>>(code: S) -> Result<LocatedListing, AssemblerError> {
+    parse_z80_str(code)
+}
+
 /// Parse a string and return the corresponding listing
 pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, AssemblerError> {
     parse_z80_with_context_builder(code, ParserContextBuilder::default())
