@@ -9,7 +9,7 @@ use crate::assembler::{assemble_defs_item, Env, Visited};
 use crate::error::*;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
-use crate::{AssemblingOptions, EnvOptions, ParserContext};
+use crate::{AssemblingOptions, EnvOptions};
 
 /// Needed methods for the Token defined in cpclib_tokens
 pub trait TokenExt: ListingElement + Clone + Debug {

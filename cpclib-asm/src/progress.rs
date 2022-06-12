@@ -1,5 +1,5 @@
 use core::time::Duration;
-use std::path::{Path, PathBuf};
+
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use cpclib_common::itertools::Itertools;
@@ -188,7 +188,7 @@ impl Progress {
 
     pub fn new_pass(&mut self) {
         if self.pass.is_none() {
-            let mut bar = ProgressBar::new(0);
+            let bar = ProgressBar::new(0);
             bar.set_style(
                 ProgressStyle::with_template(PASS_STYLE)
                     .unwrap()

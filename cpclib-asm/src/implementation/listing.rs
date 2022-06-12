@@ -6,8 +6,8 @@ use cpclib_tokens::tokens::*;
 use crate::error::*;
 use crate::implementation::expression::*;
 use crate::implementation::tokens::*;
-use crate::preamble::{parse_z80_str, ParserContext};
-use crate::{AssemblingOptions, EnvOptions};
+use crate::preamble::{parse_z80_str};
+use crate::{EnvOptions};
 
 /// Additional methods for the listings
 pub trait ListingExt {

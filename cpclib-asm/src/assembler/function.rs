@@ -21,7 +21,7 @@ use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
-use crate::preamble::{LocatedToken, MayHaveSpan, ParserContext, ParsingState};
+use crate::preamble::{LocatedToken, MayHaveSpan, ParsingState};
 use crate::section::*;
 use crate::Visited;
 

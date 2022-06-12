@@ -1,14 +1,14 @@
 use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
-use std::ops::Deref;
+
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
+
 
 use cpclib_common::lazy_static;
 use either::Either;
 use regex::Regex;
 
-use crate::assembler::embedded::EmbeddedFiles;
+
 use crate::error::AssemblerError;
 use crate::preamble::*;
 use crate::LocatedToken;

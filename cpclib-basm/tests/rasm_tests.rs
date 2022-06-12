@@ -53,7 +53,7 @@ macro_rules! import_rasm_success {
 				#[ignore]
 				#[test]
 				fn $name() {
-					let mut verif = VerifyOutput::default();
+					let verif = VerifyOutput::default();
 					$(
 						//verif.chk = Some($chk);
 						import_rasm_check!(verif, $test($value));

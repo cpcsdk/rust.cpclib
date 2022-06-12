@@ -2,7 +2,7 @@ use std::borrow::{Borrow, Cow};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
@@ -11,22 +11,22 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
-    BinaryTransformation, ExprElement, Listing, ListingElement, MacroParamElement, TestKindElement,
+    BinaryTransformation, ExprElement, ListingElement, MacroParamElement, TestKindElement,
     ToSimpleToken, Token
 };
 use either::Either;
 use ouroboros::*;
 
-use super::embedded::EmbeddedFiles;
+
 use super::file::{get_filename, load_binary, read_source};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Cruncher;
-use crate::preamble::{LocatedListing, MayHaveSpan, Z80ParserError, Z80Span};
-use crate::progress::{self, normalize, Progress};
+use crate::preamble::{LocatedListing, MayHaveSpan, Z80Span};
+use crate::progress::{self, Progress};
 use crate::{
-    parse_z80_with_context_builder, r#macro, AssemblerError, Env, LocatedToken, ParserContext,
+    parse_z80_with_context_builder, r#macro, AssemblerError, Env, LocatedToken,
     Visited
 };
 
@@ -555,7 +555,7 @@ where
         Some(ProcessedTokenState::Switch(SwitchState {
             cases: token
                 .switch_cases()
-                .map(|(v, l, b)| SimpleListingState::build(l, token.possible_span().cloned(), env))
+                .map(|(_v, l, _b)| SimpleListingState::build(l, token.possible_span().cloned(), env))
                 .collect_vec(),
 
             default: token
@@ -734,7 +734,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
             let listing = match self.token.possible_span() {
                 Some(span) => {
                     use crate::ParserContextBuilder;
-                    let mut ctx_builder = ParserContextBuilder::from(span.extra.deref().clone())
+                    let ctx_builder = ParserContextBuilder::from(span.extra.deref().clone())
                         .remove_filename()
                         .set_context_name(&format!(
                             "{}:{}:{} > {} {}:",

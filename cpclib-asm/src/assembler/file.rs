@@ -94,7 +94,7 @@ pub fn read_source<P: AsRef<Path>>(
 }
 
 // Never fail
-pub fn handle_source_encoding(fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
+pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
     let mut decoder = chardetng::EncodingDetector::new();
     decoder.feed(content, true);
     let encoding = decoder.guess(None, true);

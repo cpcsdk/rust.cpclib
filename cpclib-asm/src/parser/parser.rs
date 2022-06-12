@@ -1,6 +1,6 @@
 #![allow(clippy::cast_lossless)]
 
-use std::collections::{BTreeSet, HashSet};
+
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -29,8 +29,8 @@ use super::context::*;
 use super::obtained::*;
 use super::*;
 use crate::preamble::*;
-use crate::progress;
-use crate::progress::Progress;
+
+
 
 const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
@@ -516,7 +516,7 @@ where
                             return Err(Err::Error(E::append(i, ErrorKind::ManyTill, err)))
                         }
                         Err(e) => return Err(e),
-                        Ok((i1, o)) => {
+                        Ok((i1, _o)) => {
                             // infinite loop check: the parser must always consume
                             if i1.input_len() == len {
                                 return Err(Err::Error(E::from_error_kind(
@@ -547,7 +547,7 @@ where
         match f.parse(i.clone()) {
             Err(Err::Error(err)) => Err(Err::Error(E::append(i, ErrorKind::Many1, err))),
             Err(e) => Err(e),
-            Ok((i1, o)) => {
+            Ok((i1, _o)) => {
                 i = i1;
 
                 loop {
@@ -555,7 +555,7 @@ where
                     match f.parse(i.clone()) {
                         Err(Err::Error(_)) => return Ok((i, ())),
                         Err(e) => return Err(e),
-                        Ok((i1, o)) => {
+                        Ok((i1, _o)) => {
                             // infinite loop check: the parser must always consume
                             if i1.input_len() == len {
                                 return Err(Err::Error(E::from_error_kind(i, ErrorKind::Many1)));
@@ -2391,7 +2391,7 @@ pub fn parse_ld_normal(
     move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
         //  let (input, _) = context("[DBG] ...", tuple((space0, parse_word("LD"), space0)))(input)?;
 
-        let start = input.clone();
+        let _start = input.clone();
         let (input, dst) = cut(context(
             LD_WRONG_DESTINATION,
             alt((

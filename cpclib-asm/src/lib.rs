@@ -150,7 +150,7 @@ where
         implementation::expression::ExprEvaluationExt,
     ProcessedToken<'tokens, T>: FunctionBuilder
 {
-    let (tok, env) = assembler::visit_tokens_all_passes_with_options(tokens, options)?;
+    let (_tok, env) = assembler::visit_tokens_all_passes_with_options(tokens, options)?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
 }
 

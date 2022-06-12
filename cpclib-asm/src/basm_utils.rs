@@ -12,7 +12,7 @@ use cpclib_xfer::CpcXfer;
 use crate::embedded::EmbeddedFiles;
 use crate::assembler::file::{get_filename, handle_source_encoding};
 use crate::preamble::*;
-use crate::progress;
+
 use crate::progress::{normalize, Progress};
 
 #[derive(Debug)]
@@ -237,7 +237,7 @@ pub fn assemble<'arg>(
     };
 
     let options = EnvOptions::new(parse_options, assemble_options);
-    let (tokens, mut env) = visit_tokens_all_passes_with_options(&listing, options)
+    let (_tokens, mut env) = visit_tokens_all_passes_with_options(&listing, options)
         .map_err(|e| BasmError::AssemblerError { error: e })?;
 
     if let Some(bar) = bar {

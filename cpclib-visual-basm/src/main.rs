@@ -10,7 +10,7 @@ fn main() {
         dbg!(matches);
         
         match process(matches) {
-            Ok((env, warnings)) => {
+            Ok((_env, warnings)) => {
                 let  warnings = warnings
                     .iter()
                     .map(|w| format!("{}", w))
