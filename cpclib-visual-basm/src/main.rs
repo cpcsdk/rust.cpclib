@@ -1,9 +1,26 @@
-mod basm_app;
-use basm_app::*;
 
-#[cfg(not(target_arch = "wasm32"))]
+use cpclib_asm::basm_utils::*;
+use klask::Settings;
+
+///#[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    let app = BasmApp::default();
-    let native_options = eframe::NativeOptions::default();
-    eframe::run_native("Visual BASM", native_options, Box::new(|_cc| Box::new(app)));
+    let app =  build_args_parser();
+    klask::run_app(app, Settings::default(), |matches| {
+
+        dbg!(matches);
+        
+        match process(matches) {
+            Ok((env, warnings)) => {
+                let  warnings = warnings
+                    .iter()
+                    .map(|w| format!("{}", w))
+                    .collect::<Vec<_>>();
+                
+                    eprintln!("{:?}", warnings);
+            }
+            Err(e) => {
+                eprintln!("{}", e);
+            }
+        }
+    });
 }

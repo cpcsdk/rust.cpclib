@@ -5,11 +5,11 @@ use std::io::Write;
 use std::path::Path;
 
 use cpclib_common::clap;
-use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command};
+use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command, ValueHint, PossibleValue};
 use cpclib_common::itertools::Itertools;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 use cpclib_xfer::CpcXfer;
-
+use crate::embedded::EmbeddedFiles;
 use crate::assembler::file::{get_filename, handle_source_encoding};
 use crate::preamble::*;
 use crate::progress;
@@ -470,7 +470,19 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
     }
 }
 
+lazy_static::lazy_static! {
+    static ref EMBEDDED_FILES_NAME: Vec<String> = EmbeddedFiles::iter().map(|s|s.into_owned()).collect_vec();
+    static ref EMBEDDED_FILES: Vec<PossibleValue<'static>>  = EMBEDDED_FILES_NAME.iter()
+        .map(|s| PossibleValue::from(s.as_str()))
+        .collect_vec();
+
+}
+
+/// Generated the clap Commands
 pub fn build_args_parser() -> clap::Command<'static> {
+
+
+
     Command::new("basm")
 					.author("Krusty/Benediction")
 					.about("Benediction ASM -- z80 assembler that mainly targets Amstrad CPC")
@@ -485,6 +497,7 @@ pub fn build_args_parser() -> clap::Command<'static> {
 						Arg::new("INPUT")
 							.help("Input file to read.")
 							.takes_value(true)
+                            .value_hint(ValueHint::FilePath)
                     )
 
 					.arg(
@@ -493,6 +506,7 @@ pub fn build_args_parser() -> clap::Command<'static> {
 							.short('o')
 							.long("output")
 							.takes_value(true)
+                            .value_hint(ValueHint::FilePath)
 					)
 					.arg(
                         Arg::new("DB_LIST")
@@ -503,11 +517,13 @@ pub fn build_args_parser() -> clap::Command<'static> {
                         .help("Filename of the listing output.")
                         .long("lst")
                         .takes_value(true)
+                        .value_hint(ValueHint::FilePath)
                     )
                     .arg(Arg::new("SYMBOLS_OUTPUT")
                         .help("Filename of the output symbols file.")
                         .long("sym")
                         .takes_value(true)
+                        .value_hint(ValueHint::FilePath)
                     )
                     .group(
                         ArgGroup::new("ANY_OUTPUT")
@@ -552,6 +568,7 @@ pub fn build_args_parser() -> clap::Command<'static> {
                             .takes_value(true)
                             .multiple_occurrences(true)
                             .number_of_values(1)
+                            .value_hint(ValueHint::DirPath)
                     )
                     .arg(
                         Arg::new("DEFINE_SYMBOL")
@@ -600,6 +617,7 @@ pub fn build_args_parser() -> clap::Command<'static> {
                         .long("view-embedded")
                         .takes_value(true)
                         .number_of_values(1)
+                        .possible_values(EMBEDDED_FILES.iter().cloned())
                     )
 					.group( // only one type of header can be provided
 						ArgGroup::new("HEADER")
