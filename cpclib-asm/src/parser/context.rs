@@ -1,13 +1,10 @@
 use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
-
 use std::path::{Path, PathBuf};
-
 
 use cpclib_common::lazy_static;
 use either::Either;
 use regex::Regex;
-
 
 use crate::error::AssemblerError;
 use crate::preamble::*;

@@ -1,6 +1,5 @@
 #![allow(clippy::cast_lossless)]
 
-
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -29,8 +28,6 @@ use super::context::*;
 use super::obtained::*;
 use super::*;
 use crate::preamble::*;
-
-
 
 const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 

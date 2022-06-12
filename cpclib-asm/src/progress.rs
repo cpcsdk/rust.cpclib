@@ -1,5 +1,4 @@
 use core::time::Duration;
-
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use cpclib_common::itertools::Itertools;

@@ -1,12 +1,10 @@
 use std::borrow::Cow;
-
-use std::ops::{Deref};
+use std::ops::Deref;
 use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::nom::combinator::{cut, eof};
 use cpclib_common::nom::error::{context, ErrorKind, VerboseError};
-
 use cpclib_common::nom::{Err, IResult, InputLength, InputTake};
 use cpclib_common::nom_locate::LocatedSpan;
 #[cfg(not(target_arch = "wasm32"))]
@@ -21,8 +19,8 @@ use cpclib_tokens::{
 use ouroboros::self_referencing;
 
 use super::{
-    my_many0_nocollect, my_many_till_nocollect, parse_z80_line_complete,
-    ParserContext, Z80ParserError, Z80Span
+    my_many0_nocollect, my_many_till_nocollect, parse_z80_line_complete, ParserContext,
+    Z80ParserError, Z80Span
 };
 use crate::assembler::Env;
 use crate::error::AssemblerError;
@@ -30,7 +28,7 @@ use crate::error::AssemblerError;
 use crate::error::ExpressionError;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::tokens::TokenExt;
-use crate::preamble::{parse_z80_str};
+use crate::preamble::parse_z80_str;
 use crate::{
     resolve_impl, BinaryTransformation, ExprElement, ParserContextBuilder, ParsingState, SymbolFor
 };

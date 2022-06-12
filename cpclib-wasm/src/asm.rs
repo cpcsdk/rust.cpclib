@@ -23,9 +23,9 @@ pub fn asm_create_parser_config(title: &str) -> AsmParserConfig {
 
 impl Into<ParserContextBuilder> for &AsmParserConfig {
     fn into(self) -> ParserContextBuilder {
-
         let options: ParserOptions = self.into();
-        options.context_builder()
+        options
+            .context_builder()
             .set_current_filename(self.file_name.clone())
     }
 }
@@ -95,7 +95,6 @@ pub fn asm_assemble_snapshot(
         .and_then(|JsAsmListing { listing }| {
             console::log_1(&"Parse OK".into());
 
-
             let mut assemble_options = AssemblingOptions::default();
             assemble_options.set_case_sensitive(conf.case_sensitive);
             assemble_options
@@ -105,7 +104,6 @@ pub fn asm_assemble_snapshot(
 
             let parse_options = conf.into();
             let options = EnvOptions::new(parse_options, assemble_options);
-
 
             console::log_1(&"Assemble options".into());
 
@@ -131,7 +129,6 @@ pub fn asm_parse_source(
     code: &str,
     conf: &AsmParserConfig
 ) -> Result<JsAsmListing, JsAssemblerError> {
-
     let res = parse_z80_with_context_builder(code, conf.into());
 
     res.map(|l| l.into()).map_err(|e| e.into())

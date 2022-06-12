@@ -6,7 +6,7 @@ use cpclib_tokens::{MacroParamElement, Token};
 
 use crate::error::AssemblerError;
 use crate::preamble::Z80Span;
-use crate::{Env};
+use crate::Env;
 
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
@@ -20,8 +20,6 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
         let trimmed = s.trim();
         const EVAL: &str = "{eval}";
         if trimmed.starts_with(EVAL) {
-            
-
             let src = &s[EVAL.len()..];
             let ctx_builder = env
                 .options()

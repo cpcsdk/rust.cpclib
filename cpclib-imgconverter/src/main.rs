@@ -594,17 +594,12 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         if sub_sna.is_some() || sub_m4.is_some() {
             let (palette, code) = match &conversion {
                 Output::CPCMemoryStandard(_memory, pal) => {
-                    (
-                        pal,
-                        assemble(&standard_display_code(output_mode)).unwrap()
-                    )
+                    (pal, assemble(&standard_display_code(output_mode)).unwrap())
                 }
 
                 Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
-                    let code = assemble(
-                        &fullscreen_display_code(output_mode, 96 / 2, &pal)
-                    )
-                    .unwrap();
+                    let code =
+                        assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal)).unwrap();
                     (pal, code)
                 }
 

@@ -5,14 +5,14 @@ use std::io::Write;
 use std::path::Path;
 
 use cpclib_common::clap;
-use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command, ValueHint, PossibleValue};
+use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command, PossibleValue, ValueHint};
 use cpclib_common::itertools::Itertools;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 use cpclib_xfer::CpcXfer;
-use crate::embedded::EmbeddedFiles;
-use crate::assembler::file::{get_filename, handle_source_encoding};
-use crate::preamble::*;
 
+use crate::assembler::file::{get_filename, handle_source_encoding};
+use crate::embedded::EmbeddedFiles;
+use crate::preamble::*;
 use crate::progress::{normalize, Progress};
 
 #[derive(Debug)]
@@ -480,9 +480,6 @@ lazy_static::lazy_static! {
 
 /// Generated the clap Commands
 pub fn build_args_parser() -> clap::Command<'static> {
-
-
-
     Command::new("basm")
 					.author("Krusty/Benediction")
 					.about("Benediction ASM -- z80 assembler that mainly targets Amstrad CPC")

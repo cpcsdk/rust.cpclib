@@ -2,7 +2,7 @@ use std::borrow::{Borrow, Cow};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
@@ -17,7 +17,6 @@ use cpclib_tokens::{
 use either::Either;
 use ouroboros::*;
 
-
 use super::file::{get_filename, load_binary, read_source};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
@@ -25,10 +24,7 @@ use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Cruncher;
 use crate::preamble::{LocatedListing, MayHaveSpan, Z80Span};
 use crate::progress::{self, Progress};
-use crate::{
-    parse_z80_with_context_builder, r#macro, AssemblerError, Env, LocatedToken,
-    Visited
-};
+use crate::{parse_z80_with_context_builder, r#macro, AssemblerError, Env, LocatedToken, Visited};
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
@@ -555,7 +551,9 @@ where
         Some(ProcessedTokenState::Switch(SwitchState {
             cases: token
                 .switch_cases()
-                .map(|(_v, l, _b)| SimpleListingState::build(l, token.possible_span().cloned(), env))
+                .map(|(_v, l, _b)| {
+                    SimpleListingState::build(l, token.possible_span().cloned(), env)
+                })
                 .collect_vec(),
 
             default: token
