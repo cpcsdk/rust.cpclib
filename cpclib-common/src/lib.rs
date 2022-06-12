@@ -5,7 +5,6 @@ use nom::bytes::complete::*;
 use nom::character::complete::*;
 use nom::combinator::*;
 use nom::error::*;
-
 use nom::sequence::*;
 use nom::*;
 pub use nom_locate::LocatedSpan;
@@ -16,12 +15,9 @@ pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
 pub use {
-    bitfield, bitflags, bitsets, bitvec, itertools, lazy_static, nom, nom_locate, num, smallvec,
-    smol_str, strsim,
-    resolve_path
+    bitfield, bitflags, bitsets, bitvec, itertools, lazy_static, nom, nom_locate, num,
+    resolve_path, smallvec, smol_str, strsim
 };
-
-
 
 /// Read a valuepub
 pub fn parse_value<'src, T>(

@@ -21,9 +21,11 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
         const EVAL: &str = "{eval}";
         if trimmed.starts_with(EVAL) {
             use crate::ParserContextBuilder;
-            
+
             let src = &s[EVAL.len()..];
-            let ctx_builder = env.options().parse_options()
+            let ctx_builder = env
+                .options()
+                .parse_options()
                 .clone()
                 .context_builder()
                 .remove_filename()
@@ -31,13 +33,11 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
             let ctx = ctx_builder.build(src);
             let src = Z80Span::new_extra(src, &ctx);
             let expr_token = crate::parser::located_expr(src)
-                .map_err(|e| AssemblerError::AssemblingError { 
-                    msg: e.to_string() 
-                })?
+                .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?
                 .1;
-            let value = env.resolve_expr_must_never_fail(&expr_token).map_err(|e| AssemblerError::AssemblingError { 
-                msg: e.to_string() 
-            })?;
+            let value = env
+                .resolve_expr_must_never_fail(&expr_token)
+                .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?;
             return Ok(value.to_string());
         }
         else {
@@ -96,15 +96,19 @@ impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
 
         // replace the arguments for the listing
         for (argname, argvalue) in self.r#macro.params().iter().zip(self.args.iter()) {
-
             let expanded = expand_param(argvalue, env)?;
-            listing = if argname.starts_with("r#") 
-                & expanded.starts_with("\"") 
-                & expanded.ends_with("\"") { // remove " " before doing the expansion
-                listing.replace(&format!("{{{}}}", &argname[2..]), &expanded[1..(expanded.len()-1)])
-            } else {
-                listing.replace(&format!("{{{}}}", argname), &expanded)
-            }
+            listing =
+                if argname.starts_with("r#") & expanded.starts_with("\"") & expanded.ends_with("\"")
+                {
+                    // remove " " before doing the expansion
+                    listing.replace(
+                        &format!("{{{}}}", &argname[2..]),
+                        &expanded[1..(expanded.len() - 1)]
+                    )
+                }
+                else {
+                    listing.replace(&format!("{{{}}}", argname), &expanded)
+                }
         }
 
         Ok(listing)
@@ -299,5 +303,3 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
         Ok(developped)
     }
 }
-
-

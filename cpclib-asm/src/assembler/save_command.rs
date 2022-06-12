@@ -39,8 +39,7 @@ impl SaveCommand {
     /// Really make the save - Prerequisit : the page is properly selected
     pub fn execute_on(&self, env: &Env) -> Result<SavedFile, AssemblerError> {
         if env.options().show_progress() {
-            Progress::progress()
-                .add_save(progress::normalize(&self.filename));
+            Progress::progress().add_save(progress::normalize(&self.filename));
         }
 
         let from = match self.from {

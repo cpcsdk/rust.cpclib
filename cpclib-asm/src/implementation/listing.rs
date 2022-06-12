@@ -2,13 +2,12 @@ use std::fmt;
 
 use cpclib_tokens::symbols::PhysicalAddress;
 use cpclib_tokens::tokens::*;
-use crate::EnvOptions;
 
 use crate::error::*;
 use crate::implementation::expression::*;
 use crate::implementation::tokens::*;
 use crate::preamble::{parse_z80_str, ParserContext};
-use crate::AssemblingOptions;
+use crate::{AssemblingOptions, EnvOptions};
 
 /// Additional methods for the listings
 pub trait ListingExt {
@@ -68,14 +67,9 @@ impl ListingExt for Listing {
         })
     }
 
-    fn to_bytes_with_options(
-        &self,
-        options: EnvOptions
-    ) -> Result<Vec<u8>, AssemblerError> {
-        let (_, env) = crate::assembler::visit_tokens_all_passes_with_options(
-            &self.listing(),
-            options,
-        )?;
+    fn to_bytes_with_options(&self, options: EnvOptions) -> Result<Vec<u8>, AssemblerError> {
+        let (_, env) =
+            crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), options)?;
         Ok(env.produced_bytes())
     }
 

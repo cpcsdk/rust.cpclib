@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
+use cpclib_tokens::symbols::PhysicalAddress;
 use cpclib_tokens::{ExprResult, Token};
-use  cpclib_tokens::symbols::PhysicalAddress;
 
 use crate::preamble::{LocatedToken, MayHaveSpan};
 /// Generate an output listing.
@@ -84,10 +84,7 @@ impl ListingOutput {
     fn token_is_on_same_source(&self, token: &LocatedToken) -> bool {
         match &self.current_source {
             Some(current_source) => {
-                std::ptr::eq(
-                    token.context().source.as_ptr(),
-                    current_source.as_ptr()
-                )
+                std::ptr::eq(token.context().source.as_ptr(), current_source.as_ptr())
             }
             None => false
         }
@@ -129,7 +126,7 @@ impl ListingOutput {
         bytes: &[u8],
         address: u32,
         address_kind: AddressKind,
-        physical_address: PhysicalAddress,
+        physical_address: PhysicalAddress
     ) {
         if !self.activated {
             return;
@@ -203,20 +200,18 @@ impl ListingOutput {
                 "    ".to_owned()
             }
             else {
-                format!(
-                    "{:04X}",
-                    self.current_first_address
-                )
+                format!("{:04X}", self.current_first_address)
             };
 
             // Physical address is only printed if it differs from the code address
             let offset = self.current_physical_address.offset_in_cpc();
-            let phys_addr_representation = if  current_inner_line.is_none() || offset == self.current_first_address {
-                "     ".to_owned()
-            }
-            else {
-                format!("{:05X}{}", offset, self.current_address_kind)
-            };
+            let phys_addr_representation =
+                if current_inner_line.is_none() || offset == self.current_first_address {
+                    "     ".to_owned()
+                }
+                else {
+                    format!("{:05X}{}", offset, self.current_address_kind)
+                };
 
             let line_nb_representation = if current_inner_line.is_none() {
                 "    ".to_owned()
@@ -306,7 +301,7 @@ pub struct ListingOutputTrigger {
     /// the bytes progressively collected
     pub(crate) bytes: Vec<u8>,
     pub(crate) start: u32,
-    pub(crate) physical_address:PhysicalAddress, 
+    pub(crate) physical_address: PhysicalAddress,
     pub(crate) builder: Arc<RwLock<ListingOutput>>
 }
 
@@ -317,10 +312,13 @@ impl ListingOutputTrigger {
         self.bytes.push(b);
     }
 
-    pub fn new_token(&mut self, new: *const LocatedToken, code: u32, kind: AddressKind, physical_address: PhysicalAddress) {
-
-
-
+    pub fn new_token(
+        &mut self,
+        new: *const LocatedToken,
+        code: u32,
+        kind: AddressKind,
+        physical_address: PhysicalAddress
+    ) {
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(
                 unsafe { &**token },

@@ -23,11 +23,12 @@ use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Cruncher;
-use crate::preamble::{
-   LocatedListing, MayHaveSpan, Z80ParserError, Z80Span
-};
+use crate::preamble::{LocatedListing, MayHaveSpan, Z80ParserError, Z80Span};
 use crate::progress::{self, normalize, Progress};
-use crate::{r#macro, AssemblerError, Env, LocatedToken, ParserContext, Visited, parse_z80_with_context_builder};
+use crate::{
+    parse_z80_with_context_builder, r#macro, AssemblerError, Env, LocatedToken, ParserContext,
+    Visited
+};
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
@@ -139,7 +140,8 @@ impl IncludeState {
                 Progress::progress().add_parse(progress::normalize(fname));
             }
 
-            let builder = options.clone()
+            let builder = options
+                .clone()
                 .context_builder()
                 .set_current_filename(fname.clone());
 
@@ -457,8 +459,8 @@ where
             Ok(fname) => {
                 match read_source(fname.clone(), options) {
                     Ok(content) => {
-
-                        let ctx_builder = options.clone()
+                        let ctx_builder = options
+                            .clone()
                             .context_builder()
                             .set_current_filename(fname.clone());
 
@@ -562,7 +564,10 @@ where
         }))
     }
     else if token.is_warning() {
-        Some(ProcessedTokenState::Warning(box build_processed_token(token.warning_token(), env)))
+        Some(ProcessedTokenState::Warning(box build_processed_token(
+            token.warning_token(),
+            env
+        )))
     }
     else if token.is_while() {
         Some(ProcessedTokenState::While(SimpleListingState {
@@ -687,14 +692,14 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                 .map(|m| r#macro::MacroWithArgs::build(m, parameters))
                 .transpose()?;
             let r#struct = if r#macro.is_none() {
-                    env
-                    .symbols()
+                env.symbols()
                     .struct_value(name)?
                     .map(|s| r#macro::StructWithArgs::build(s, parameters))
                     .transpose()?
-                } else {
-                    None
-                };
+            }
+            else {
+                None
+            };
 
             // Leave if it corresponds to nothing
             if r#macro.is_none() && r#struct.is_none() {
@@ -712,7 +717,6 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                     None => Err(e)
                 };
             }
-
 
             // get the generated code
             // TODO handle some errors there
@@ -733,13 +737,13 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                     let mut ctx_builder = ParserContextBuilder::from(span.extra.deref().clone())
                         .remove_filename()
                         .set_context_name(&format!(
-                        "{}:{}:{} > {} {}:",
-                        source.map(|s| s.fname()).unwrap_or_else(|| "???"),
-                        source.map(|s| s.line()).unwrap_or(0),
-                        source.map(|s| s.column()).unwrap_or(0),
-                        if r#macro.is_some() { "MACRO" } else { "STRUCT" },
-                        name,
-                    ));
+                            "{}:{}:{} > {} {}:",
+                            source.map(|s| s.fname()).unwrap_or_else(|| "???"),
+                            source.map(|s| s.line()).unwrap_or(0),
+                            source.map(|s| s.column()).unwrap_or(0),
+                            if r#macro.is_some() { "MACRO" } else { "STRUCT" },
+                            name,
+                        ));
                     parse_z80_with_context_builder(code, ctx_builder)?
                 }
                 _ => {
@@ -772,24 +776,24 @@ where
 {
     /// Due to the state management, the signature requires mutability
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
-
         let possible_span = self.possible_span().cloned();
         let mut really_does_the_job = move || {
-
             // handle the listing
             // will crash on non located tokens stuff
             {
-                let outer_token = unsafe { (self.token as *const T as *const LocatedToken).as_ref().unwrap() };
+                let outer_token = unsafe {
+                    (self.token as *const T as *const LocatedToken)
+                        .as_ref()
+                        .unwrap()
+                };
 
                 env.handle_output_trigger(outer_token);
             }
 
-                
             // Generate the code of a macro/struct
             if self.token.is_call_macro_or_build_struct() {
                 self.update_macro_or_struct_state(env)?;
             }
-            
 
             // Behavior based on the token
             let res = if self.token.is_macro_definition() {
@@ -882,7 +886,8 @@ where
                         let data = if !contents.contains_key(&fname) {
                             // need to load the file
 
-                            let data = load_binary(Either::Left(fname.as_ref()), options.parse_options())?;
+                            let data =
+                                load_binary(Either::Left(fname.as_ref()), options.parse_options())?;
                             // get a slice on the data to ease its cut
                             let mut data = &data[..];
 
@@ -1130,10 +1135,11 @@ where
                         Ok(())
                     }
 
-
                     Some(ProcessedTokenState::Warning(box token)) => {
-                        let warning = AssemblerError::RelocatedWarning{
-                            warning: box AssemblerError::AssemblingError{msg: self.token.warning_message().to_owned()},
+                        let warning = AssemblerError::RelocatedWarning {
+                            warning: box AssemblerError::AssemblingError {
+                                msg: self.token.warning_message().to_owned()
+                            },
                             span: self.token.possible_span().unwrap().clone()
                         };
                         let warning = AssemblerError::AlreadyRenderedError(warning.to_string());
@@ -1223,7 +1229,6 @@ mod test_super {
 
         let token = parse_include(span).unwrap().1;
         let env = Env::default();
-
 
         let processed = build_processed_token(&token, &env);
         assert!(matches!(

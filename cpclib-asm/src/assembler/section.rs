@@ -1,5 +1,4 @@
-use crate::Env;
-use crate::ExprResult;
+use crate::{Env, ExprResult};
 
 #[derive(Clone, Debug)]
 pub struct Section {
@@ -28,8 +27,7 @@ impl Section {
             output_adr: start,
             code_adr: start,
 
-            max_output_adr: start,
-
+            max_output_adr: start
         }
     }
 
@@ -37,7 +35,7 @@ impl Section {
         addr >= self.start && addr <= self.stop
     }
 
-    pub(crate)  fn new_pass(&mut self) {
+    pub(crate) fn new_pass(&mut self) {
         self.output_adr = self.start;
         self.code_adr = self.start;
     }
@@ -46,42 +44,26 @@ impl Section {
         self.stop - self.start + 1
     }
 
-	pub fn used(&self) -> u16 {
+    pub fn used(&self) -> u16 {
         self.max_output_adr - self.start
     }
 }
 
-
-
-/**
- * Returns the address of the beginning of the section
- */
-pub fn section_start(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError>  {
-	Ok(env.get_section_description(section_name)?
-		.start
-		.into())
+/// Returns the address of the beginning of the section
+pub fn section_start(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
+    Ok(env.get_section_description(section_name)?.start.into())
 }
 
-pub fn section_stop(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError>  {
-	Ok(env.get_section_description(section_name)?
-		.stop
-		.into())
+pub fn section_stop(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
+    Ok(env.get_section_description(section_name)?.stop.into())
 }
 
-/**
- * Returns the number of bytes available  in the section
- */
-pub fn section_length(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError>  {
-	Ok(env.get_section_description(section_name)?
-		.length()
-		.into())
+/// Returns the number of bytes available  in the section
+pub fn section_length(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
+    Ok(env.get_section_description(section_name)?.length().into())
 }
 
-/**
- * Returns the number of bytes consummed in the section
- */
- pub fn section_used(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError>  {
-	Ok(env.get_section_description(section_name)?
-		.used()
-		.into())
+/// Returns the number of bytes consummed in the section
+pub fn section_used(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
+    Ok(env.get_section_description(section_name)?.used().into())
 }

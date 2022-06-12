@@ -98,7 +98,6 @@ pub fn list_sublist(
     start: usize,
     end: usize // not included
 ) -> Result<ExprResult, crate::AssemblerError> {
-
     match list {
         ExprResult::String(s) => {
             if start >= s.len() {

@@ -278,6 +278,4 @@ impl eframe::App for BasmApp {
             self.assemble();
         }
     }
-
-
 }

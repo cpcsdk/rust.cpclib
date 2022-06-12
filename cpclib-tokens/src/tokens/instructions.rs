@@ -32,7 +32,7 @@ impl ToString for MacroParam {
     }
 }
 
-pub trait MacroParamElement: Clone +  core::fmt::Debug{
+pub trait MacroParamElement: Clone + core::fmt::Debug {
     fn empty() -> Self;
 
     fn is_single(&self) -> bool;

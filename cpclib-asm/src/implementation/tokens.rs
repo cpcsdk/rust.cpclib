@@ -4,12 +4,12 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
-use crate::EnvOptions;
+
 use crate::assembler::{assemble_defs_item, Env, Visited};
 use crate::error::*;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
-use crate::{AssemblingOptions, ParserContext};
+use crate::{AssemblingOptions, EnvOptions, ParserContext};
 
 /// Needed methods for the Token defined in cpclib_tokens
 pub trait TokenExt: ListingElement + Clone + Debug {
@@ -468,8 +468,8 @@ impl TokenExt for Token {
             }
             _ => {
                 return Err(AssemblerError::BugInAssembler {
-            file: file!(),
-            line: line!(),
+                    file: file!(),
+                    line: line!(),
                     msg: format!("Duration computation for {:?} not yet coded", self)
                 })
             }

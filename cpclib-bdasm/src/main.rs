@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Read;
 
 use clap;
-use clap::{App, Arg};
+use clap::{Command, Arg};
 use cpclib_asm::preamble::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 
@@ -16,7 +16,7 @@ fn main() {
         built_info::PROFILE,
         built_info::BUILT_TIME_UTC
     );
-    let matches = App::new("bdasm")
+    let matches = Command::new("bdasm")
 					.version(built_info::PKG_VERSION)
 					.author("Krusty/Benediction")
 					.about("Benediction disassembler")

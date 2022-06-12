@@ -19,7 +19,6 @@ use cpclib_tokens::{
     TestKindElement, ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation
 };
 use ouroboros::self_referencing;
-use crate::ParserContextBuilder;
 
 use super::{
     my_many0, my_many0_in, my_many0_nocollect, my_many_till_nocollect, parse_z80_line_complete,
@@ -32,7 +31,9 @@ use crate::error::ExpressionError;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::tokens::TokenExt;
 use crate::preamble::{parse_end_directive, parse_z80_str};
-use crate::{resolve_impl, BinaryTransformation, ExprElement, ParsingState, SymbolFor};
+use crate::{
+    resolve_impl, BinaryTransformation, ExprElement, ParserContextBuilder, ParsingState, SymbolFor
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocatedExpr {
@@ -688,7 +689,7 @@ pub enum LocatedToken {
         Z80Span
     ),
     WarningWrapper(Box<LocatedToken>, String),
-    While(LocatedExpr, LocatedListing, Z80Span),
+    While(LocatedExpr, LocatedListing, Z80Span)
 }
 
 impl std::fmt::Display for LocatedToken {
@@ -958,7 +959,7 @@ impl LocatedToken {
                 ))
             }
             LocatedToken::Confined(..) => todo!(),
-            LocatedToken::WarningWrapper(..) => todo!(),
+            LocatedToken::WarningWrapper(..) => todo!()
         }
     }
 
@@ -1090,6 +1091,7 @@ impl ListingElement for LocatedToken {
             _ => false
         }
     }
+
     fn warning_token(&self) -> &Self {
         match self {
             Self::WarningWrapper(token, _message) => token,
@@ -1103,7 +1105,6 @@ impl ListingElement for LocatedToken {
             _ => unreachable!()
         }
     }
-
 
     fn is_module(&self) -> bool {
         match self {
@@ -1675,7 +1676,7 @@ impl LocatedListing {
     #[inline]
     pub fn new_complete_source(
         code: String,
-        builder: ParserContextBuilder,
+        builder: ParserContextBuilder
     ) -> Result<LocatedListing, LocatedListing> {
         // generate the listing
         let listing = LocatedListingBuilder {
@@ -1848,9 +1849,7 @@ impl LocatedListing {
         let mut inner_listing = Arc::new(inner_listing);
 
         match inner_listing.borrow_parse_result().clone() {
-            ParseResult::SuccessInner { next_span, .. } => {
-                Ok((next_span.clone(), inner_listing))
-            },
+            ParseResult::SuccessInner { next_span, .. } => Ok((next_span.clone(), inner_listing)),
             ParseResult::FailureInner(e) => {
                 match e {
                     Err::Error(e) => {

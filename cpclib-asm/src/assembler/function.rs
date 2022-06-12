@@ -7,7 +7,6 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use cpclib_tokens::{Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token};
 use either::Either;
-use crate::section::*;
 
 use super::list::{
     list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_from_list,
@@ -23,6 +22,7 @@ use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::preamble::{LocatedToken, MayHaveSpan, ParserContext, ParsingState};
+use crate::section::*;
 use crate::Visited;
 
 /// Returns the expression of the RETURN directive
@@ -326,8 +326,7 @@ impl HardCodedFunction {
             HardCodedFunction::SectionStart => Some(1),
             HardCodedFunction::SectionStop => Some(1),
             HardCodedFunction::SectionLength => Some(1),
-            HardCodedFunction::SectionUsed => Some(1),
-
+            HardCodedFunction::SectionUsed => Some(1)
         }
     }
 
@@ -503,25 +502,18 @@ impl HardCodedFunction {
             }
             HardCodedFunction::MatrixWidth => matrix_width(&params[0]),
             HardCodedFunction::MatrixHeight => matrix_height(&params[0]),
-            
+
             HardCodedFunction::Load => {
                 let fname = params[0].string()?;
-                let data = file::load_binary(Either::Right((fname, env)), env.options().parse_options())?;
+                let data =
+                    file::load_binary(Either::Right((fname, env)), env.options().parse_options())?;
                 Ok(ExprResult::from(data.as_slice()))
-            },
-
-            HardCodedFunction::SectionStart => {
-                section_start(params[0].string()?, env)
-            },
-            HardCodedFunction::SectionStop => {
-                section_stop(params[0].string()?, env)
-            },
-            HardCodedFunction::SectionLength => {
-                section_length(params[0].string()?, env)
-            },
-            HardCodedFunction::SectionUsed => {
-                section_used(params[0].string()?, env)
             }
+
+            HardCodedFunction::SectionStart => section_start(params[0].string()?, env),
+            HardCodedFunction::SectionStop => section_stop(params[0].string()?, env),
+            HardCodedFunction::SectionLength => section_length(params[0].string()?, env),
+            HardCodedFunction::SectionUsed => section_used(params[0].string()?, env)
         }
     }
 }
@@ -622,7 +614,9 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
         }
     };
 
-    let builder = base_env.options().clone()
+    let builder = base_env
+        .options()
+        .clone()
         .context_builder()
         .set_state(ParsingState::GeneratedLimited)
         .set_context_name("Generated source");

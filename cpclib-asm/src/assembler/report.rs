@@ -1,6 +1,7 @@
 use std::fmt::Display;
-use std::time::Instant;
 use std::path::PathBuf;
+use std::time::Instant;
+
 use cpclib_common::itertools::Itertools;
 
 use super::Env;

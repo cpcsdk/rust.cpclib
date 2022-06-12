@@ -1,9 +1,9 @@
 use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::RwLock;
-use std::path::Path;
+
 use cpclib_common::lazy_static;
 use either::Either;
 use regex::Regex;
@@ -90,7 +90,7 @@ pub struct ParserOptions {
     pub read_referenced_files: bool,
     pub show_progress: bool,
     /// Set to true when directives must start by a dot
-    pub dotted_directive: bool,
+    pub dotted_directive: bool
 }
 
 impl Default for ParserOptions {
@@ -110,7 +110,7 @@ impl ParserOptions {
             options: self,
             current_filename: None,
             context_name: None,
-            state: ParsingState::Standard,
+            state: ParsingState::Standard
         }
     }
 }
@@ -119,7 +119,7 @@ pub struct ParserContextBuilder {
     options: ParserOptions,
     current_filename: Option<PathBuf>,
     context_name: Option<String>,
-    state: ParsingState,
+    state: ParsingState
 }
 
 impl Default for ParserContextBuilder {
@@ -134,16 +134,16 @@ impl From<ParserContext> for ParserContextBuilder {
             state: ctx.state,
             current_filename: ctx.current_filename,
             context_name: ctx.context_name,
-            options: ctx.options,
+            options: ctx.options
         }
     }
 }
 
 impl ParserContextBuilder {
-
     pub fn current_filename(&self) -> Option<&Path> {
         self.current_filename.as_ref().map(|p| p.as_path())
     }
+
     pub fn context_name(&self) -> Option<&str> {
         self.context_name.as_ref().map(|s| s.as_str())
     }
@@ -152,12 +152,13 @@ impl ParserContextBuilder {
         self.current_filename = Some(fname.into());
         self
     }
+
     pub fn remove_filename(mut self) -> Self {
         self.current_filename.take();
         self
     }
 
-    pub fn set_context_name<S: Into<String>>(mut self,name: S) -> ParserContextBuilder {
+    pub fn set_context_name<S: Into<String>>(mut self, name: S) -> ParserContextBuilder {
         self.context_name = Some(name.into());
         self
     }
@@ -173,7 +174,7 @@ impl ParserContextBuilder {
             current_filename: self.current_filename,
             context_name: self.context_name,
             state: self.state,
-            source: unsafe{&*(code as *const str) as &'static str}
+            source: unsafe { &*(code as *const str) as &'static str }
         }
     }
 }
@@ -347,7 +348,6 @@ impl ParserOptions {
         // No file found
         return Err(Either::Right(does_not_exists));
     }
-
 }
 /// Context information that can guide the parser
 /// TODO add assembling flags
@@ -383,28 +383,26 @@ impl Clone for ParserContext {
             context_name: self.context_name.clone(),
             state: self.state.clone(),
             source: self.source.clone(),
-            options: self.options.clone(),
+            options: self.options.clone()
         }
     }
 }
 
-/*
-impl Default for ParserContext {
-    fn default() -> Self {
-        ParserContext {
-            current_filename: None,
-            context_name: None,
-            search_path: Default::default(),
-            read_referenced_files: true,
-            parse_warning: Default::default(),
-            state: ParsingState::Standard,
-            dotted_directive: false,
-            source: &NO_CODE,
-            show_progress: false
-        }
-    }
-}
-*/
+// impl Default for ParserContext {
+// fn default() -> Self {
+// ParserContext {
+// current_filename: None,
+// context_name: None,
+// search_path: Default::default(),
+// read_referenced_files: true,
+// parse_warning: Default::default(),
+// state: ParsingState::Standard,
+// dotted_directive: false,
+// source: &NO_CODE,
+// show_progress: false
+// }
+// }
+// }
 
 impl ParserContext {
     pub fn clone_with_state(&self, state: ParsingState) -> Self {
@@ -427,6 +425,7 @@ impl ParserContext {
     pub fn filename(&self) -> Option<&Path> {
         self.current_filename.as_ref().map(|p| p.as_path())
     }
+
     //#[deprecated(note="Totally unsafe. Every test should be modified to not use it")]
     pub fn build_span<S: AsRef<str>>(&self, src: S) -> Z80Span {
         Z80Span::new_extra(src.as_ref(), self)
@@ -445,10 +444,6 @@ impl ParserContext {
     pub fn set_context_name(&mut self, name: &str) {
         self.context_name = Some(name.to_owned());
     }
-
-
-
-
 
     pub fn complete_source(&self) -> &str {
         self.source

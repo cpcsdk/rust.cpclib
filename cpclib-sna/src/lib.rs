@@ -304,9 +304,9 @@ impl Snapshot {
 
         // Write chunks if any
         for chunk in &sna.chunks {
-               println!(
-                  "Add chunk: {}",
-                  chunk.code().iter().map(|c| *c as char).collect::<String>()
+            println!(
+                "Add chunk: {}",
+                chunk.code().iter().map(|c| *c as char).collect::<String>()
             );
             buffer.write_all(chunk.code())?;
             buffer.write_all(&chunk.size_as_array())?;
@@ -376,7 +376,6 @@ impl Snapshot {
         for chunk in self.chunks() {
             chunk.print_info();
         }
-
     }
 }
 

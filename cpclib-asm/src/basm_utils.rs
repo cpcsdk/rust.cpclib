@@ -6,9 +6,10 @@ use std::path::Path;
 
 use cpclib_common::clap;
 use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command};
+use cpclib_common::itertools::Itertools;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 use cpclib_xfer::CpcXfer;
-use cpclib_common::itertools::Itertools;
+
 use crate::assembler::file::{get_filename, handle_source_encoding};
 use crate::preamble::*;
 use crate::progress;
@@ -88,14 +89,16 @@ impl From<AssemblerError> for BasmError {
 
 /// Parse the given code.
 /// TODO read options to configure the search path
-pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<(LocatedListing, ParserOptions), BasmError> {
+pub fn parse<'arg>(
+    matches: &'arg ArgMatches
+) -> Result<(LocatedListing, ParserOptions), BasmError> {
     let inline_fname = "<inline code>";
     let filename = matches.value_of("INPUT").unwrap_or(inline_fname);
 
     let show_progress = matches.is_present("PROGRESS");
 
     // prepare the context for the included directories
-    let mut options  = ParserOptions::default();
+    let mut options = ParserOptions::default();
     options.set_dotted_directives(matches.is_present("DOTTED_DIRECTIVES"));
     options.show_progress = show_progress;
 
@@ -138,7 +141,6 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<(LocatedListing, ParserO
         panic!("No code provided to assemble");
     };
 
-
     let fname = builder
         .current_filename()
         .map(|fname| normalize(fname))
@@ -156,7 +158,7 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<(LocatedListing, ParserO
         Progress::progress().remove_parse(&fname);
     };
 
-    Ok( (res?, options))
+    Ok((res?, options))
 }
 
 /// Assemble the given code
@@ -164,7 +166,7 @@ pub fn parse<'arg>(matches: &'arg ArgMatches) -> Result<(LocatedListing, ParserO
 pub fn assemble<'arg>(
     matches: &'arg ArgMatches,
     listing: &LocatedListing,
-    parse_options: ParserOptions,
+    parse_options: ParserOptions
 ) -> Result<Env, BasmError> {
     let show_progress = matches.is_present("PROGRESS");
 
@@ -192,7 +194,8 @@ pub fn assemble<'arg>(
                 }
             };
 
-            let ctx = ParserOptions::default().context_builder()
+            let ctx = ParserOptions::default()
+                .context_builder()
                 .set_context_name("BASM OPTIONS")
                 .build(value);
 
@@ -407,7 +410,6 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
 /// Launch the assembling of everythin
 pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
-
     // Handle the display of embedded files list
     if matches.is_present("LIST_EMBEDDED") {
         use crate::embedded::EmbeddedFiles;
@@ -425,8 +427,8 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
             Some(content) => {
                 println!("{}", std::str::from_utf8(content.data.as_ref()).unwrap());
                 std::process::exit(0);
-            },
-            None => {   
+            }
+            None => {
                 eprintln!("Embedded file {fname} does not exist");
                 std::process::exit(-1);
             }
@@ -447,18 +449,20 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
     let warnings = env.warnings().to_vec();
 
     if matches.is_present("WERROR") && !warnings.is_empty() {
-
         const KEPT: usize = 10;
 
         if warnings.len() > KEPT {
             eprintln!("Warnings are considered to be errors. The first 10 have been kept.");
-        } else {
+        }
+        else {
             eprintln!("Warnings are considered to be errors.");
-
         }
 
-        //keep only the first 10
-        return Err(AssemblerError::MultipleErrors { errors: warnings.into_iter().take(KEPT).collect_vec() }.into());
+        // keep only the first 10
+        return Err(AssemblerError::MultipleErrors {
+            errors: warnings.into_iter().take(KEPT).collect_vec()
+        }
+        .into());
     }
     else {
         save(matches, &env)?;

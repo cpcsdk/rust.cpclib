@@ -8,9 +8,9 @@ pub mod matrix;
 pub mod page_info;
 pub mod report;
 pub mod save_command;
+pub mod section;
 pub mod stable_ticker;
 pub mod symbols_output;
-pub mod section;
 
 pub mod embedded;
 pub mod processed_token;
@@ -46,9 +46,9 @@ use crate::preamble::*;
 use crate::progress::Progress;
 use crate::report::Report;
 use crate::save_command::*;
+use crate::section::Section;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, PhysicalAddress};
-use crate::section::Section;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -75,8 +75,20 @@ pub struct EnvOptions {
 }
 
 impl EnvOptions {
+    delegate::delegate! {
+        to self.parse {
+            pub fn context_builder(self) -> ParserContextBuilder;
+        }
+
+        to self.assemble {
+            pub fn case_sensitive(&self) -> bool;
+            pub fn symbols(&self) -> &cpclib_tokens::symbols::SymbolsTable;
+            pub fn symbols_mut(&mut self) -> &mut cpclib_tokens::symbols::SymbolsTable;
+        }
+    }
+
     pub fn new(parse: ParserOptions, assemble: AssemblingOptions) -> Self {
-        Self {parse, assemble}
+        Self { parse, assemble }
     }
 
     pub fn parse_options(&self) -> &ParserOptions {
@@ -90,21 +102,7 @@ impl EnvOptions {
     pub fn show_progress(&self) -> bool {
         self.parse.show_progress
     }
-
-    delegate::delegate! {
-        to self.parse {
-            pub fn context_builder(self) -> ParserContextBuilder;
-        }
-
-        to self.assemble {
-            pub fn case_sensitive(&self) -> bool;
-            pub fn symbols(&self) -> &cpclib_tokens::symbols::SymbolsTable;
-            pub fn symbols_mut(&mut self) -> &mut cpclib_tokens::symbols::SymbolsTable;
-        }
-    }
-
 }
-
 
 /// Add the encoding of an indexed structure
 fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
@@ -326,7 +324,6 @@ impl CharsetEncoding {
         s.chars().map(|c| self.transform_char(c)).collect_vec()
     }
 }
-
 
 /// Environment of the assembly
 #[allow(missing_docs)]
@@ -550,7 +547,6 @@ impl Default for Env {
 
 /// Symbols handling
 impl Env {
-
     pub fn options(&self) -> &EnvOptions {
         &self.options
     }
@@ -755,10 +751,9 @@ impl Env {
     /// Manage the play with data for the output listing
     fn handle_output_trigger(&mut self, new: &LocatedToken) {
         if self.pass.is_listing_pass() && self.output_trigger.is_some() {
-            
             let code_addr = self.logical_code_address();
             let phy_addr = self.logical_to_physical_address(self.logical_output_address());
-            
+
             let kind = if self.crunched_section_state.is_some() {
                 AddressKind::CrunchedArea
             }
@@ -768,13 +763,7 @@ impl Env {
 
             let trig = self.output_trigger.as_mut().unwrap();
 
-
-            trig.new_token(
-                new,
-                code_addr as _,
-                kind,
-                phy_addr
-            );
+            trig.new_token(new, code_addr as _, kind, phy_addr);
         }
     }
 
@@ -2274,7 +2263,7 @@ pub fn visit_tokens_all_passes<
     'token,
     T: 'token + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
 >(
-    tokens: &'token [T],
+    tokens: &'token [T]
 ) -> Result<Env, AssemblerError>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
@@ -2291,10 +2280,10 @@ impl Env {
         let mut env = Env::default();
         env.options = options;
 
-        env.symbols =
-            SymbolsTableCaseDependent::new(
-                env.options().symbols().clone(), 
-                env.options().case_sensitive());
+        env.symbols = SymbolsTableCaseDependent::new(
+            env.options().symbols().clone(),
+            env.options().case_sensitive()
+        );
 
         if let Some(builder) = &env.options().assemble_options().output_builder {
             env.output_trigger = ListingOutputTrigger {
@@ -2344,7 +2333,7 @@ impl Env {
 /// Warning Listing output is only possible for LocatedToken
 pub fn visit_tokens_all_passes_with_options<'token, T>(
     tokens: &'token [T],
-    options: EnvOptions,
+    options: EnvOptions
 ) -> Result<(Vec<ProcessedToken<'token, T>>, Env), AssemblerError>
 where
     T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
@@ -2487,7 +2476,6 @@ pub fn visit_located_token(
             visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), env)
                 .map_err(|e| e.locate(span.clone()))
         }
-
 
         LocatedToken::Module(..)
         | LocatedToken::WarningWrapper(..)
@@ -3776,7 +3764,6 @@ pub fn assemble_opcode(
 }
 
 fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(), AssemblerError> {
-
     // org $ set org to the output address (cf. rasm)
     let code_adr = if address2.is_none() && address == &"$".into() {
         if env.start_address().is_none() {
@@ -3813,7 +3800,6 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     env.output_address = output_adr as _;
     env.update_dollar();
 
-
     // update the erroneous information for the listing
     if env.pass.is_listing_pass() && env.output_trigger.is_some() {
         let output_adr = env.logical_to_physical_address(output_adr as _);
@@ -3823,12 +3809,16 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
         trigger.replace_physical_address(output_adr);
     }
 
-    if env.logical_output_address() !=  env.output_address {
-        return Err(AssemblerError::BugInAssembler{
+    if env.logical_output_address() != env.output_address {
+        return Err(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
-            msg: format!("BUG in assembler:{}!= {}", env.logical_output_address(), env.logical_output_address() )
-        })
+            msg: format!(
+                "BUG in assembler:{}!= {}",
+                env.logical_output_address(),
+                env.logical_output_address()
+            )
+        });
     }
     Ok(())
 }

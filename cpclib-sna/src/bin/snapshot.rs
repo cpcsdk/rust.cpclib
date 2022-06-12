@@ -14,7 +14,6 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::identity_op)]
 
-
 use std::path::Path;
 use std::str::FromStr;
 

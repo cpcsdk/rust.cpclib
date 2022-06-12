@@ -21,11 +21,19 @@ pub fn asm_create_parser_config(title: &str) -> AsmParserConfig {
     }
 }
 
-impl Into<ParserContext> for &AsmParserConfig {
-    fn into(self) -> ParserContext {
-        let mut ctx = ParserContext::default();
+impl Into<ParserContextBuilder> for &AsmParserConfig {
+    fn into(self) -> ParserContextBuilder {
+
+        let options: ParserOptions = self.into();
+        options.context_builder()
+            .set_current_filename(self.file_name.clone())
+    }
+}
+
+impl Into<ParserOptions> for &AsmParserConfig {
+    fn into(self) -> ParserOptions {
+        let mut ctx = ParserOptions::default();
         ctx.set_dotted_directives(self.dotted_directive);
-        ctx.set_current_filename(self.file_name.clone());
         ctx
     }
 }
@@ -87,16 +95,21 @@ pub fn asm_assemble_snapshot(
         .and_then(|JsAsmListing { listing }| {
             console::log_1(&"Parse OK".into());
 
-            let mut options = AssemblingOptions::default();
-            options.set_case_sensitive(conf.case_sensitive);
-            options
+
+            let mut assemble_options = AssemblingOptions::default();
+            assemble_options.set_case_sensitive(conf.case_sensitive);
+            assemble_options
                 .symbols_mut()
                 .assign_symbol_to_value(Symbol::from("__CPC_PLAYGROUND__"), Value::from(true))
                 .unwrap();
 
+            let parse_options = conf.into();
+            let options = EnvOptions::new(parse_options, assemble_options);
+
+
             console::log_1(&"Assemble options".into());
 
-            visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
+            visit_tokens_all_passes_with_options(&listing, options)
                 .map_err(|e| {
                     console::log_1(&"ASM error".into());
                     JsAssemblerError::from(e)
@@ -118,9 +131,8 @@ pub fn asm_parse_source(
     code: &str,
     conf: &AsmParserConfig
 ) -> Result<JsAsmListing, JsAssemblerError> {
-    let ctx: ParserContext = conf.into();
 
-    let res = parse_z80_str_with_context(code, ctx);
+    let res = parse_z80_with_context_builder(code, conf.into());
 
     res.map(|l| l.into()).map_err(|e| e.into())
 }

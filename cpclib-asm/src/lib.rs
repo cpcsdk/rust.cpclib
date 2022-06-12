@@ -48,7 +48,7 @@ use self::listing_output::ListingOutput;
 #[derive(Debug, Clone)]
 pub struct AssemblingOptions {
     /// Set to true to consider that the assembler pay attention to the case of the labels
-    case_sensitive: bool, 
+    case_sensitive: bool,
     /// Contains some symbols that could be used during assembling
     symbols: cpclib_tokens::symbols::SymbolsTable,
     output_builder: Option<Arc<RwLock<ListingOutput>>>
@@ -129,7 +129,7 @@ pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
 /// Assemble a piece of code and returns the associates liste of bytes as well as the generated reference table.
 pub fn assemble_with_options(
     code: &str,
-    options: EnvOptions,
+    options: EnvOptions
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
     let builder = options.parse_options().clone().context_builder();
     let tokens = parser::parse_z80_with_context_builder(code, builder)?;
@@ -159,7 +159,7 @@ where
 /// //
 pub fn assemble_to_amsdos_file(
     code: &str,
-    amsdos_filename: &str,
+    amsdos_filename: &str
 ) -> Result<AmsdosFile, AssemblerError> {
     let amsdos_filename = AmsdosFileName::try_from(amsdos_filename)?;
 

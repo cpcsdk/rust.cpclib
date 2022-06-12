@@ -400,9 +400,7 @@ impl AssemblerError {
                                         .map(|p| p.as_os_str().to_str().unwrap());
 
                                 let filename = filename.unwrap_or_else(|| {
-                                    e.0.extra
-                                        .context_name()
-                                        .unwrap_or_else(|| "no file")
+                                    e.0.extra.context_name().unwrap_or_else(|| "no file")
                                 });
                                 let filename = Box::new(filename.to_owned());
 
@@ -557,7 +555,9 @@ impl AssemblerError {
             AssemblerError::AmsdosError { error: _ } => {
                 todo!()
             }
-            AssemblerError::BugInAssembler { file, line, msg } => write!(f, "BUG in assembler {}:{} {}", file, line, msg),
+            AssemblerError::BugInAssembler { file, line, msg } => {
+                write!(f, "BUG in assembler {}:{} {}", file, line, msg)
+            }
             AssemblerError::BugInParser {
                 error: _,
                 context: _
@@ -860,7 +860,6 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
 }
 
 pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
-
     let filename = build_filename(span);
     let source = span.extra.complete_source();
 

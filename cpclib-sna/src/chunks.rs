@@ -1,5 +1,3 @@
-
-
 use delegate::delegate;
 
 #[derive(Clone, Debug)]
@@ -102,7 +100,6 @@ impl MemoryChunk {
             assert_eq!(res.len(), data.len());
             res.resize(0x100000, 0);
             return Self::from(code, res);
-
         }
         else {
             let mut previous = None;
@@ -113,7 +110,8 @@ impl MemoryChunk {
                     if previous_value == 0xE5 {
                         res.push(0xE5);
                         res.push(0x00);
-                    } else {
+                    }
+                    else {
                         res.push(previous_value);
                     }
                 }
@@ -138,7 +136,6 @@ impl MemoryChunk {
                     Some(previous_value) => {
                         // we stop when 255 are read or when current differs
                         if previous_value != current || count == 255 {
-
                             rle(previous_value, count);
 
                             previous.replace(current);
@@ -156,19 +153,16 @@ impl MemoryChunk {
             }
 
             // We may be unable to crunch the memory
-            if res.len() >=  65536 {
+            if res.len() >= 65536 {
                 return Self::from(code, data.to_vec());
             }
 
             let chunk = Self::from(code, res.clone());
 
-        // #[cfg(debug_assertions)]
+            // #[cfg(debug_assertions)]
             {
                 let produced = chunk.uncrunched_memory();
-                assert_eq!(
-                    &data,
-                    &produced
-                );
+                assert_eq!(&data, &produced);
             }
 
             chunk
@@ -188,10 +182,11 @@ impl MemoryChunk {
         let mut read_byte = move || {
             if idx == self.data.data.len() {
                 None
-            } else {
+            }
+            else {
                 let byte = data[idx];
                 idx += 1;
-                Some (byte)
+                Some(byte)
             }
         };
         while let Some(byte) = read_byte() {
@@ -322,9 +317,9 @@ pub enum SnapshotChunk {
 
 #[allow(missing_docs)]
 impl SnapshotChunk {
-
     pub fn print_info(&self) {
-        println!("- Chunk: {}{}{}{}", 
+        println!(
+            "- Chunk: {}{}{}{}",
             self.code()[0] as char,
             self.code()[1] as char,
             self.code()[2] as char,
