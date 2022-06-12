@@ -145,22 +145,22 @@ mod tests {
         assert_eq!(parse_label(false)(span).ok().unwrap().1.as_str(), ".label");
 
         let code = "label";
-        let code = code;
-        let tokens = parse_single_token(span).unwrap();
-        assert_eq!(tokens.1.len(), 1);
+        
+        let tokens = parse_z80(code).unwrap();
+        assert_eq!(tokens.len(), 1);
 
         let code = "label";
-        let code = code;
-        let tokens = get_val(parse_z80_line(span));
+        
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let code = "label      \n";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let code = "demo_system_binary_start \n";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
     }
@@ -168,9 +168,9 @@ mod tests {
     #[test]
     fn test_equ() {
         let code = "LABEL EQU VALUE";
-        let code = code;
-        let tokens = parse_single_token(span).unwrap();
-        assert_eq!(tokens.1.len(), 1);
+        
+        let tokens = parse_z80(code).unwrap();
+        assert_eq!(tokens.len(), 1);
     }
 
     #[test]
@@ -249,50 +249,50 @@ mod tests {
     #[test]
     fn test_address() {
         let code = "(125)";
-        let code = code;
+        
         let token = get_val(parse_address(span));
         assert_matches!(token, DataAccess::Memory(_));
     }
     #[test]
     fn test_ld() {
         let code = " ld hl, 0xc9fb\n";
-        let code = code;
+        
 
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld hl, 0xc9fb";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld de, 0xc9fb";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld de, (0xc9fb)";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld (0xc9fb),de";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld d, 0xc9";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld d, a";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " ld (hl), d";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
     }
@@ -300,32 +300,32 @@ mod tests {
     #[test]
     fn test_jump() {
         let code = " jr $";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " jp 0xc9fb\n";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " jr 0xc9fb";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " jp nz, 0xc9fb";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " jr nz, .other_lines";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 1);
 
         let code = " jp nz, .other_lines + (9+4+1+2)     ; 4";
-        let code = code;
+        
         let tokens = get_val(parse_z80_line(span));
         assert_eq!(tokens.len(), 2);
         assert_matches!(
@@ -365,85 +365,85 @@ mod tests {
     pub fn test_unique_lines_panic() {
         let line1 = "label1:fd";
         let code = line1;
-        let tokens = parse_single_token(span).unwrap();
-        assert_eq!(tokens.1.len(), 1);
+        let tokens = parse_z80(code).unwrap();
+        assert_eq!(tokens.len(), 1);
     }
 
     #[test]
     pub fn test_unique_lines() {
         let line1 = "label1";
         let code = line1;
-        let tokens = parse_single_token(span).unwrap();
-        assert_eq!(tokens.1.len(), 1);
+        let tokens = parse_z80(code).unwrap();
+        assert_eq!(tokens.len(), 1);
 
         let line1 = "label1  ";
         let code = line1;
-        let tokens = parse_single_token(span).unwrap();
-        assert_eq!(tokens.1.len(), 1);
+        let tokens = parse_z80(code).unwrap();
+        assert_eq!(tokens.len(), 1);
 
         let line1 = "label1 ; blabla ";
         let code = line1;
-        let tokens = parse_single_token(span).unwrap();
-        assert_eq!(tokens.1.len(), 2);
+        let tokens = parse_z80(code).unwrap();
+        assert_eq!(tokens.len(), 2);
 
         let line1 = "label1 ; blabla \n";
         let code = line1;
-        let tokens = parse_single_token(span).unwrap();
-        assert_eq!(tokens.1.len(), 2);
+        let tokens = parse_z80(code).unwrap();
+        assert_eq!(tokens.len(), 2);
 
         let line1 = "label1";
         let code = line1;
-        let tokens = get_val(parse_z80_line(span));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let line1 = "label1  ";
         let code = line1;
-        let tokens = get_val(parse_z80_line(span));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let line1 = "label1 ; blabla ";
         let code = line1;
-        let tokens = get_val(parse_z80_line(span));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 2);
 
         let line1 = "   org 0x100";
         let code = line1;
-        let tokens = get_val(parse_z80_line(span));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let line1 = "  di";
         let code = line1;
-        let tokens = get_val(parse_z80_line(span));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let line1 = "   ld hl, de"; // XXX
         let code = line1;
-        let tokens = get_val(parse_z80_line(span));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let line1 = "   ld (0x38), hl";
         let code = line1;
-        let tokens = get_val(parse_z80_line(span));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let line1 = "   ei";
         let code = line1;
-        let tokens = get_val(parse_z80_line(span));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let line1 = "   jp $";
         let code = line1;
-        let tokens = get_val(parse_z80_line(span));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let code = "  org 0x100 :  di : ld hl, 0xc9fb : ld (0x38), hl : ei : jp $";
-        let code = code;
-        let tokens = get_val(parse_z80_line(span));
+        
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code = "  org 0x100:di:ld hl, 0xc9fb:ld (0x38), hl :ei:jp $";
-        let code = code;
-        let tokens = get_val(parse_z80_line(span));
+        
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 6);
     }
 
@@ -458,61 +458,61 @@ mod tests {
     #[test]
     fn fn_test_empty() {
         let code = "\n";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 0);
 
         let code = ";with comment\n";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let code = "\n\n";
-        let code = code;
+        
         parse_z80(span).unwrap();
         parse_z80(code).unwrap();
 
         let code = "\n\n";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 0);
 
         let code = "";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 0);
 
         let code = "";
-        let code = code;
+        
         let tokens = parse_z80(span).unwrap();
         assert_eq!(tokens.len(), 0);
 
         let code = "  ";
-        let code = code;
+        
         let _tokens = parse_z80(span).unwrap();
 
         let code = "  ";
-        let code = code;
+        
         let tokens = parse_z80(span).unwrap();
         assert_eq!(tokens.len(), 0);
 
         let code = "  ";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 0);
 
         let code = "  \n";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
     //    assert_eq!(tokens.len(), 0);
 
         let code = "  ; comment \n";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
       //  assert_eq!(tokens.len(), 1);
 
         let code = "  ; comment \n";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
        // assert_eq!(tokens.len(), 1);
     }
@@ -841,7 +841,7 @@ mod tests {
         let code = "		ex af, af'
 			dec a
 			jr nz, player_line_loop";
-        let code = code;
+        
 
         let res = parse_z80(code);
         println!("{:?}", &res);
@@ -854,7 +854,7 @@ mod tests {
         stableticker start stuff
             inc a
         stableticker stop";
-        let code = code;
+        
         let res = parse_z80(code);
         println!("{:?}", &res);
         assert!(res.is_ok());
@@ -868,7 +868,7 @@ mod tests {
             ld a, duration(ld a, label)
             defs  duration(inc hl) + thing
         ";
-        let code = code;
+        
         let res = parse_z80(code);
         println!("{:?}", &res);
         assert!(res.is_ok());
@@ -880,28 +880,28 @@ mod tests {
         let code = "
             ld a, opcode(inc a)
         ";
-        let code = code;
+        
         let res = parse_z80(code);
         assert!(res.is_ok());
 
         let code = "
             ld hl, opcode(inc a)
         ";
-        let code = code;
+        
         let res = parse_z80(code);
         assert!(res.is_ok());
 
         let code = "
             ld a, opcode(ldd)
         ";
-        let code = code;
+        
         let res = parse_z80(code);
         assert!(res.is_ok()); // Failure is detected in the assembler pass not the parser pass
 
         let code = "
             ld hl, opcode(ldd)
         ";
-        let code = code;
+        
         let res = parse_z80(code);
         assert!(res.is_ok());
 
@@ -909,7 +909,7 @@ mod tests {
 INC_L equ opcode(inc l)
 INC_H equ opcode(inc h)
         ";
-        let code = code;
+        
         let res = parse_z80(code);
         println!("{:?}", res);
         assert!(res.is_ok());
@@ -920,7 +920,7 @@ INC_H equ opcode(inc h)
         ld a, INC_L
         ld (hl), a
         ";
-        let code = code;
+        
         let res = parse_z80(code);
         println!("{:?}", res);
         assert!(res.is_ok());
@@ -929,33 +929,33 @@ INC_H equ opcode(inc h)
     #[test]
     fn fn_test_asm_prog1() {
         let code = "  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n  jp $";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code = "\n\n  org 0x100\n  di\n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let code = code;
+        
         let tokens = dbg!(parse_z80(code)).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code =
             "  \n  \n  org 0x100\n  di\n    \n ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 6);
 
         let code = "  \n  \n  org 0x100\n  di\n    \nlabel ld hl, 0xc9fb \n ld (0x38), hl\n ei \n jp $\n\n ";
-        let code = code;
+        
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 7);
     }
@@ -967,7 +967,7 @@ INC_H equ opcode(inc h)
 20 call {toto}
 30 call {titi}
         ENDLOCOMOTIVE";
-        let code = code;
+        
 
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
@@ -980,7 +980,7 @@ INC_H equ opcode(inc h)
 20 call {toto_1}
 30 call {titi_2}
         ENDLOCOMOTIVE";
-        let code = code;
+        
 
         let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
@@ -993,20 +993,20 @@ INC_H equ opcode(inc h)
         ld a, b
         ld a, b
     ENDIF";
-        let code = code;
+        
 
         let _tokens = get_val(parse_conditional(span));
 
         let code = "IF expression
         ld a, b : ld a, b : ld a, b
     ENDIF";
-        let code = code;
+        
 
         let _tokens = get_val(parse_conditional(span));
 
         let code = "IF expression : ld a, b : ld a, b : ld a, b
     ENDIF";
-        let code = code;
+        
 
         let _tokens = get_val(parse_conditional(span));
 
@@ -1021,7 +1021,7 @@ INC_H equ opcode(inc h)
         call label
         ld a, b
     ENDIF";
-        let code = code;
+        
 
         let _tokens = get_val(parse_conditional(span));
 
@@ -1031,7 +1031,7 @@ INC_H equ opcode(inc h)
         call label
         ld a, b
     ENDIF";
-        let code = code;
+        
 
         let _tokens = parse_z80(code).unwrap();
 
@@ -1039,7 +1039,7 @@ INC_H equ opcode(inc h)
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let code = code;
+        
 
         let _tokens = parse_z80(code).unwrap();
 
@@ -1053,7 +1053,7 @@ INC_H equ opcode(inc h)
 		call blabla
 	endif
     ";
-        let code = code;
+        
 
         let _tokens = parse_z80(code);
 
@@ -1061,7 +1061,7 @@ INC_H equ opcode(inc h)
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let code = code;
+        
 
         let _tokens = parse_z80(code).unwrap();
 
@@ -1069,7 +1069,7 @@ INC_H equ opcode(inc h)
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let code = code;
+        
 
         let _tokens = parse_z80(code).unwrap();
 
@@ -1077,21 +1077,21 @@ INC_H equ opcode(inc h)
 		call crtc_display_catart_if_needed
 	endif
     ";
-        let code = code;
+        
 
         let _tokens = parse_z80(code).unwrap();
 
         let code =
             "\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\n"
         ;
-        let code = code;
+        
 
         let _tokens = parse_z80(code).unwrap();
 
         let code =
             "STACK_SIZE equ 20 ; XXX Very small stack; hope 10 calls is enough\n    ifndef DEMOSYSTEM_ADDRESS\nDEMOSYSTEM_ADDRESS equ 0xC000 + 0x3200\n    org DEMOSYSTEM_ADDRESS\n    endif\n\nSTACK_END"
         ;
-        let code = code;
+        
 
         let _tokens = parse_z80(code).unwrap();
     }
@@ -1111,7 +1111,7 @@ INC_H equ opcode(inc h)
     jr nz, .other_lines ; 3
     ";
 
-        let code = code;
+        
 
         let tokens = parse_z80(code).unwrap();
         println!("{:?}", tokens);
@@ -1256,7 +1256,7 @@ INC_H equ opcode(inc h)
     #[test]
     fn quoted_string() {
         let code = "\"file.asm\"";
-        let code = code;
+        
         let tokens = get_val(string_between_quotes(span));
         assert_eq!(tokens.to_string(), "file.asm".to_owned());
 
@@ -1291,85 +1291,78 @@ INC_H equ opcode(inc h)
     #[test]
     fn assert_test() {
         let code = " ASSERT 1\n";
-        let (_ctx, code) = ctx_and_span(code);
-        let token = dbg!(parse_assert(code.clone()));
-        assert!(token.is_ok());
+        let tokens = parse_z80(code).unwrap();
+        assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1\n";
-        let (_ctx, code) = ctx_and_span(code);
-        let tokens = get_val(dbg!(parse_single_token(code)));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1 == 2";
-        eprintln!("RES: {:?}", parse_z80_str(code));
-        let (_ctx, code) = ctx_and_span(code);
-        let tokens = get_val(parse_single_token(code));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1 < 0x1000";
-        eprintln!("RES: {:?}", parse_z80_str(code));
-        let (_ctx, code) = ctx_and_span(code);
-        let tokens = get_val(parse_single_token(code));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
 
         let code = " ASSERT 1 < 0x1000, \"blabla\"";
-        let (_ctx, code) = ctx_and_span(code);
-        let tokens = get_val(dbg!(parse_single_token(code)));
+        let tokens = parse_z80(code).unwrap();
         assert_eq!(tokens.len(), 1);
     }
 
     #[test]
     fn test_db() {
         let code = "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector";
-        let code = code;
+        
 
-        get_val(parse_single_token(span));
+        get_opcode(code);
 
         let code = "db Gfx1_bin_head, Gfx1_bin_track, Gfx1_bin_sector and %1111, Gfx1_bin_size";
-        let code = code;
-        get_val(parse_single_token(span));
+        
+        get_opcode(code);
     }
 
     #[test]
     fn rorg() {
         let code = "\tRORG 1\n\tREND";
-        let code = code;
-        let _tokens = get_val(parse_rorg(span));
+        
+        let _tokens = parse_z80(code).unwrap();;
 
         let code = "\tRORG 1\n\tdb 5\n\tREND";
-        let code = code;
-        let _tokens = get_val(parse_rorg(span));
+        
+        let _tokens = parse_z80(code).unwrap();;
 
         let code = "\tRORG 1\n\tdb 5\n\tREND";
-        let code = code;
-        let _tokens = get_val(parse_rorg(span));
+        
+        let _tokens = parse_z80(code).unwrap();;
     }
 
     #[test]
     fn ld() {
         let code = "LD HL, 0";
-        let code = code;
-        let _tokens = get_val(parse_single_token(span));
+        
+        let _tokens = get_opcode(code);
 
         let code = "LD HL, label";
-        let code = code;
-        let _tokens = get_val(parse_single_token(span));
+        
+        let _tokens = get_opcode(code);
 
         let code = "LD HL, label_with_underscore";
-        let code = code;
-        let _tokens = get_val(parse_single_token(span));
+        
+        let _tokens = get_opcode(code);
 
         let code = "\tld hl, label_with_underscore";
-        let code = code;
+        
         let _tokens = parse_z80(code).unwrap();
 
         let code = "\n\tld hl, label_with_underscore";
-        let code = code;
+        
         let _tokens = parse_z80(code).unwrap();
 
         let code = "ld i,a";
-        let code = code;
-        let _tokens = parse_single_token(span);
+        
+        let _tokens = get_opcode(code);
     }
 
     #[test]
@@ -1414,10 +1407,10 @@ INC_H equ opcode(inc h)
     #[test]
     fn real_world_source_failures() {
         let code = "demosystem_binary_start";
-        get_val(parse_label(false)(span));
+        parse_z80(code).unwrap();;
 
         let code = "ld hl, demosystem_binary_start";
-        get_val(parse_single_token(span));
+        get_opcode(code);
 
         let code = "\tprint \"TODO -- Set the real address (in c7 space)\"\n\tld hl, demosystem_binary_start\n\tld de, 0xDEAD\n\tld bc, demosystem_binary_stop - demosystem_binary_start\n";
         parse_z80(code).unwrap();
@@ -1460,14 +1453,14 @@ endif
     fn r#macro() {
         let code = "macro MYMACRO
         endm";
-        get_val(parse_macro(span));
+        parse_z80(code);
 
         let code = "    macro DEMOSYSTEM_SELECT_MAIN_BANKS_EXCEPT_SCREEN
         ld bc, 0x7fc1
         out (c), c
         ld (go_back_main_memory_from_extra_memory+1), bc
     endm";
-        get_val(parse_macro(span));
+        parse_z80(code);
 
         let code = "macro MYMACRO
         endm";
