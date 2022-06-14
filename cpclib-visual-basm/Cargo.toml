@@ -15,6 +15,9 @@ independent = true
 klask = "1.0.0"
 cpclib-asm = { version = "0.6.0", features = ["basm"] }
 
+[build-dependencies]
+static_vcruntime = "2.0"
+
 [[bin]]
 name = "visual-basm"
 test = false
