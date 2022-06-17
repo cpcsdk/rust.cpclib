@@ -4510,6 +4510,7 @@ version = "0.2.0"
 dependencies = [
  "cpclib-asm",
  "klask",
+ "static_vcruntime",
 ]
 
 [[package]]
