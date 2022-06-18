@@ -15,6 +15,10 @@ pub trait ListingElement: Debug + Sized {
     type TestKind: TestKindElement;
     type Expr: ExprElement + Debug + Eq + Clone;
 
+    fn is_equ(&self) -> bool;
+    fn equ_symbol(&self) -> &str;
+    fn equ_value(&self) -> &crate::Expr; // TODO Make a located version of Equ to return a located version of the expression
+
     fn is_warning(&self) -> bool;
     fn warning_token(&self) -> &Self;
     fn warning_message(&self) -> &str;

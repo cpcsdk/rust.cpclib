@@ -1083,6 +1083,26 @@ impl ListingElement for LocatedToken {
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
 
+
+    fn is_equ(&self) -> bool {
+        match self {
+            Self::Standard{token, ..} => token.is_equ(),
+            _ => false
+        }
+    }
+    fn equ_symbol(&self) -> &str {
+        match self {
+            Self::Standard{token, ..} => token.equ_symbol(),
+            _ => unreachable!()
+        }        
+    }
+    fn equ_value(&self) -> &crate::Expr  {
+        match self {
+            Self::Standard{token, ..} => token.equ_value(),
+            _ => unreachable!()
+        }        
+    }
+
     fn is_warning(&self) -> bool {
         match self {
             Self::WarningWrapper(..) => true,

@@ -13,10 +13,16 @@ use crate::LocatedToken;
 /// State to limit the parsing abilities depending on the parsing context
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParsingState {
+    /// Parse of a standard Z80 code
     Standard,
+    /// Parse of the content of a function
     FunctionLimited,
+    /// Parse of the content of a struct
     StructLimited,
-    GeneratedLimited
+    /// Forbid directives
+    GeneratedLimited, // TODO rename
+    /// Parse of a symbols file
+    SymbolsLimited
 }
 
 pub trait ParsingStateVerified {
@@ -43,7 +49,13 @@ impl ParsingStateVerified for LocatedToken {
                     _ => false
                 }
             }
-            ParsingState::StructLimited => todo!()
+            ParsingState::StructLimited => todo!(),
+            ParsingState::SymbolsLimited => {
+                match self {
+                    LocatedToken::Standard { token, span: _span } => token.is_accepted(state),
+                    _ => false,
+                }
+            }
         }
     }
 }
@@ -74,7 +86,16 @@ impl ParsingStateVerified for Token {
                     _ => false
                 }
             }
-            ParsingState::StructLimited => todo!()
+            ParsingState::StructLimited => todo!(),
+
+            ParsingState::SymbolsLimited => {
+                match self {
+                    Token::Equ(..) | Token::Let(..) | Token::Comment(_) => {
+                        true
+                    },
+                    _ => false
+                }
+            }
         }
     }
 }

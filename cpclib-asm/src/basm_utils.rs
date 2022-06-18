@@ -51,6 +51,9 @@ pub enum BasmError {
         msg: String
     },
 
+    InvalidSymbolFile { msg: String },
+
+
     InvalidArgument(String)
 }
 
@@ -70,6 +73,11 @@ impl Display for BasmError {
             BasmError::ListingGeneration { msg } => {
                 write!(f, "Error when generating the symbol table: {}", msg)
             }
+
+            BasmError::InvalidSymbolFile { msg } => {
+                write!(f, "Error when reading the symbol table: {}", msg)
+            }
+
             BasmError::InvalidArgument(msg) => {
                 write!(f, "Invalid argument: {}", msg)
             }
@@ -175,11 +183,44 @@ pub fn assemble<'arg>(
 
     // TODO add symbols if any
     if let Some(files) = matches.values_of("LOAD_SYMBOLS") {
-        for file in files {
-            if !Path::new(file).is_file() {
+        for path in files {
+            let file = Path::new(path);
+            if !file.is_file() {
                 return Err(BasmError::NotAValidFile {
-                    file: file.to_owned()
+                    file: path.to_owned()
                 });
+            }
+
+            let content = crate::assembler::file::read_source(file, &parse_options)?;
+            let builder = ParserContextBuilder::default()
+                            .set_state(ParsingState::SymbolsLimited);
+            let listing = parse_z80_with_context_builder(&content, builder)?;
+            for token in listing.iter() {
+                if token.is_equ() {
+                    let symbol = token.equ_symbol();
+                    let value = token.equ_value().eval()
+                        .map_err(|e| {
+                            let span = token.possible_span().unwrap();
+                            let span = token.possible_span().unwrap();
+                            let e: AssemblerError = e.into();
+                            e.locate(span.clone())
+                        })
+                        .map_err(|e| BasmError::InvalidSymbolFile { msg : e.to_string()})?;
+                        ;
+
+
+                    dbg!(&symbol, &value);
+
+                    assemble_options
+                        .symbols_mut()
+                        .assign_symbol_to_value(symbol, value)
+                        .map_err(|e| {
+                            let span = token.possible_span().unwrap();
+                            let e: AssemblerError = e.into();
+                            e.locate(span.clone())
+                        })
+                        .map_err(|e| BasmError::InvalidSymbolFile { msg : e.to_string()})?;
+                }
             }
         }
     }
