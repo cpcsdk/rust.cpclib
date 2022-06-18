@@ -150,7 +150,8 @@ where
         implementation::expression::ExprEvaluationExt,
     ProcessedToken<'tokens, T>: FunctionBuilder
 {
-    let (_tok, env) = assembler::visit_tokens_all_passes_with_options(tokens, options)?;
+    let (_tok, env) = assembler::visit_tokens_all_passes_with_options(tokens, options)
+        .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
     Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
 }
 
@@ -166,7 +167,9 @@ pub fn assemble_to_amsdos_file(
     let tokens = parser::parse_z80_str(code)?;
     let options = EnvOptions::default();
 
-    let (_, env) = assembler::visit_tokens_all_passes_with_options(&tokens, options)?;
+    let (_, env) = assembler::visit_tokens_all_passes_with_options(&tokens, options)
+        .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
+
 
     Ok(AmsdosFile::binary_file_from_buffer(
         &amsdos_filename,

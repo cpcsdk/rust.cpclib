@@ -108,7 +108,8 @@ pub fn asm_assemble_snapshot(
             console::log_1(&"Assemble options".into());
 
             visit_tokens_all_passes_with_options(&listing, options)
-                .map_err(|e| {
+                .map_err(|(t_, env, e)| {
+                    let e = AssemblerError::AlreadyRenderedError(e.to_string());
                     console::log_1(&"ASM error".into());
                     JsAssemblerError::from(e)
                 })

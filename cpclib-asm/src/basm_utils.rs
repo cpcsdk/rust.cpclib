@@ -279,7 +279,10 @@ pub fn assemble<'arg>(
 
     let options = EnvOptions::new(parse_options, assemble_options);
     let (_tokens, mut env) = visit_tokens_all_passes_with_options(&listing, options)
-        .map_err(|e| BasmError::AssemblerError { error: e })?;
+        .map_err(|(t_, mut env, e)| {
+            env.handle_print(); // do the prints even if there is an assembling issue
+            BasmError::AssemblerError { error: AssemblerError::AlreadyRenderedError(e.to_string()) }
+        })?;
 
     if let Some(bar) = bar {
         Progress::progress().remove_bar_ok(&bar);

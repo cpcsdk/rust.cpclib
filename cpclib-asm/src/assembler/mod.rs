@@ -950,7 +950,7 @@ impl Env {
         }
     }
 
-    fn handle_print(&mut self) -> Result<(), AssemblerError> {
+    pub fn handle_print(&mut self) -> Result<(), AssemblerError> {
         let backup = self.ga_mmr;
 
         // ga values to properly switch the pages
@@ -2259,6 +2259,8 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
+/// 
+/*
 pub fn visit_tokens_all_passes<
     'token,
     T: 'token + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
@@ -2274,6 +2276,8 @@ where
     let options = EnvOptions::default();
     visit_tokens_all_passes_with_options(tokens, options).map(|r| r.1) // TODO really return both
 }
+
+*/
 
 impl Env {
     pub fn new(options: EnvOptions) -> Self {
@@ -2334,7 +2338,7 @@ impl Env {
 pub fn visit_tokens_all_passes_with_options<'token, T>(
     tokens: &'token [T],
     options: EnvOptions
-) -> Result<(Vec<ProcessedToken<'token, T>>, Env), AssemblerError>
+) -> Result<(Vec<ProcessedToken<'token, T>>, Env), (Vec<ProcessedToken<'token, T>>, Env, AssemblerError)>
 where
     T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
@@ -2353,7 +2357,10 @@ where
             break;
         }
 
-        processed_token::visit_processed_tokens(&mut tokens, &mut env)?;
+        let res = processed_token::visit_processed_tokens(&mut tokens, &mut env);
+        if let Err(e) = res {
+            return Err((tokens, env, e))
+        }
     }
 
     // Add an additional pass to build the listing (this way it is built only one time)
