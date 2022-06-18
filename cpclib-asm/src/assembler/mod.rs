@@ -568,12 +568,20 @@ impl Env {
         &self,
         exp: &E
     ) -> Result<ExprResult, AssemblerError> {
+        self.resolve_expr_may_fail_in_first_pass_with_default(exp, 0)
+    }
+
+    pub fn resolve_expr_may_fail_in_first_pass_with_default<E: ExprEvaluationExt, R: Into<ExprResult>>(
+        &self,
+        exp: &E,
+        r: R
+    ) -> Result<ExprResult, AssemblerError> {
         match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
                 if self.pass.is_first_pass() {
                     *self.can_skip_next_passes.write().unwrap() = false;
-                    Ok(0.into())
+                    Ok(r.into())
                 }
                 else {
                     Err(e)

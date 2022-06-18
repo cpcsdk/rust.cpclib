@@ -316,7 +316,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             if test.is_true_test() {
                 let exp = test.expr_unchecked();
                 // Expression must be true
-                let value = env.resolve_expr_must_never_fail(exp)?;
+                let value = env.resolve_expr_may_fail_in_first_pass_with_default(exp, false)?;
                 if value.bool()? {
                     selected_idx = Some(idx);
                     break;
@@ -325,7 +325,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             // Expression must be false
             else if test.is_false_test() {
                 let exp = test.expr_unchecked();
-                let value = env.resolve_expr_must_never_fail(exp)?;
+                let value = env.resolve_expr_may_fail_in_first_pass_with_default(exp, true)?;
                 if !value.bool()? {
                     selected_idx = Some(idx);
                     break;
