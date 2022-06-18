@@ -2271,7 +2271,7 @@ pub fn parse_buildsna(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError>
 }
 
 pub fn parse_run(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, exp) = expr(input)?;
+    let (input, exp) = cut(context("RUN expects an expression (e.g. RUN $)", expr))(input)?;
     let (input, ga) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
 
     Ok((input, Token::Run(exp, ga)))
