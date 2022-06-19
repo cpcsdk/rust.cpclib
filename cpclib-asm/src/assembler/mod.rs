@@ -859,8 +859,8 @@ impl Env {
     /// Handle the actions to do after assembling.
     /// ATM it is only the save of data for each page
     pub fn handle_post_actions(&mut self) -> Result<(), AssemblerError> {
-        self.handle_assert()?;
         self.handle_print()?;
+        self.handle_assert()?;
         self.handle_breakpoints()?;
         self.saved_files = Some(self.handle_file_save()?);
         Ok(())
