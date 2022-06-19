@@ -208,9 +208,6 @@ pub fn assemble<'arg>(
                         .map_err(|e| BasmError::InvalidSymbolFile { msg : e.to_string()})?;
                         ;
 
-
-                    dbg!(&symbol, &value);
-
                     assemble_options
                         .symbols_mut()
                         .assign_symbol_to_value(symbol, value)
@@ -289,7 +286,7 @@ pub fn assemble<'arg>(
     }
 
     env.handle_post_actions()
-        .map_err(|e| BasmError::AssemblerError { error: e })?;
+        .map_err(|e| BasmError::AssemblerError { error: AssemblerError::AlreadyRenderedError(e.to_string()) })?;
 
     if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
         if dest == "-" {
