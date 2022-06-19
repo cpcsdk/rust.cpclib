@@ -307,6 +307,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
     {
         let mut selected_idx = None;
         let mut request_additional_pass = false;
+        use cpclib_tokens::ExprResult;
+        let FLAG_FAILURE: ExprResult = "__BASM_INNER_TEST_FAILURE__".to_owned().into();
 
         for idx in 0..self.token.if_nb_tests() {
             let (test, _) = self.token.if_test(idx);
@@ -316,7 +318,10 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             if test.is_true_test() {
                 let exp = test.expr_unchecked();
                 // Expression must be true
-                let value = env.resolve_expr_may_fail_in_first_pass_with_default(exp, false)?;
+                let value = env.resolve_expr_may_fail_in_first_pass_with_default(exp, FLAG_FAILURE.clone())?;
+                if value == FLAG_FAILURE{ // no code is executed if the test cannot be done
+                    return Ok(None);
+                }
                 if value.bool()? {
                     selected_idx = Some(idx);
                     break;
@@ -325,7 +330,10 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             // Expression must be false
             else if test.is_false_test() {
                 let exp = test.expr_unchecked();
-                let value = env.resolve_expr_may_fail_in_first_pass_with_default(exp, true)?;
+                let value = env.resolve_expr_may_fail_in_first_pass_with_default(exp, FLAG_FAILURE.clone())?;
+                if value == FLAG_FAILURE { // no code is executed if the test cannot be done
+                    return Ok(None);
+                }
                 if !value.bool()? {
                     selected_idx = Some(idx);
                     break;

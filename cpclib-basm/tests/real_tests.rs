@@ -9,7 +9,6 @@ use pretty_assertions::assert_eq;
 use regex::Regex;
 use test_generator::test_resources;
 
-const BUILD_BASM: bool = true;
 
 fn command_for_generated_test(
     fname: &str,

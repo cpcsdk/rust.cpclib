@@ -33,8 +33,18 @@
 	assert memory(0x8000) == 9
 	assert memory(0xc000) == 13
 
+	save "good_bankset_0_0.o", 0x0000, 4
+	save "good_bankset_0_1.o", 0x4000, 4
+	save "good_bankset_0_2.o", 0x8000, 4
+	save "good_bankset_0_3.o", 0xc000, 4
+
 	BANKSET 1
 	assert memory(0x0000) == 10
 	assert memory(0x4000) == 50
 	assert memory(0x8000) == 90
 	assert memory(0xc000) == 130
+
+	save "good_bankset_1_0.o", 0x0000, 4
+	save "good_bankset_1_1.o", 0x4000, 4
+	save "good_bankset_1_2.o", 0x8000, 4
+	save "good_bankset_1_3.o", 0xc000, 4

@@ -1047,8 +1047,11 @@ impl Env {
 
         // save from snapshot
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
+            eprintln!("ACTIVEPAGE. {:x}", &activepage);
+            eprintln!("PAGE. {:x}", &page);
+
             self.ga_mmr = *page;
-            let mut saved = self.pages_info_sna[activepage].execute_save(self)?;
+            let mut saved = dbg!(&self.pages_info_sna[activepage]).execute_save(self)?;
             saved_files.append(&mut saved);
         }
 
@@ -1143,6 +1146,7 @@ impl Env {
     /// TODO check that the implementation is still correct with snapshot inclusion
     /// BUG  does not take into account extra bank configuration
     pub fn memory(&self, start: u16, size: u16) -> Vec<u8> {
+        dbg!(self.ga_mmr);
         let mut mem = Vec::new();
         for pos in start..(start + size) {
             let address = self.logical_to_physical_address(pos as _);
