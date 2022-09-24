@@ -1,5 +1,5 @@
-#![feature(register_attr)]
-#![register_attr(get)]
+//#![feature(register_attr)]
+//#![register_attr(get)]
 
 /// Concerns all stuff related to Amsdos disc format
 pub mod amsdos;

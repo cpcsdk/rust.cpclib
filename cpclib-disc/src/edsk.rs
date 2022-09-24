@@ -817,11 +817,11 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Getters, Debug, Default, PartialEq, Clone)]
 #[allow(missing_docs)]
 #[allow(unused)]
 pub struct Sector {
-    #[get]
+    #[getset(get)]
     pub(crate) sector_information_bloc: SectorInformation,
     /// Some DSK seem to have a vector with not the right size. In tFor this reason, it is better to not give access to it directly
     pub(crate) values: Vec<u8>
