@@ -17,6 +17,8 @@ fn command_for_generated_test(
     let args_parser = build_args_parser();
     let args =
         args_parser.get_matches_from(&["basm", "-I", "tests/asm/", "-i", "-o", output, fname]);
+
+    
     process(&args)
 }
 

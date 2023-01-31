@@ -9,7 +9,10 @@ rustflags = [
 linker = '/usr/bin/clang'
 
 [target.x86_64-pc-windows-msvc]
-rustflags = ['-Zshare-generics=y']
+rustflags = [
+    '-Zshare-generics=y',
+    "-C", "link-arg=/STACK:8000000"
+]
 linker = 'rust-lld.exe'
 
 [target.x86_64-apple-darwin]
@@ -19,6 +22,7 @@ rustflags = [
     '-Zshare-generics=y',
     '-Csplit-debuginfo=unpacked',
 ]
+
 [profile.dev]
 opt-level = 0
 debug = 2
