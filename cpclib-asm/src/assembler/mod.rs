@@ -3197,7 +3197,7 @@ impl Env {
         // generate the bytes
         visit_processed_tokens(code, self).map_err(|e| {
             let e = if let AssemblerError::RelocatedError {
-                error: Box::new(AssemblerError::UnknownSymbol { closest: _, symbol }),
+                error: box AssemblerError::UnknownSymbol { closest: _, symbol },
                 span
             } = &e
             {
