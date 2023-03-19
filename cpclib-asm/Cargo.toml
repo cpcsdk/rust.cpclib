@@ -67,12 +67,6 @@ basm = ["cpclib-common/cmdline"] #only usefull for the basm crate
 colored_errors = []
 
 
-[profile.release]
-#strip = true
-lto = true
-codegen-units = 1
-opt-level = 3
-debug = 1
 
 [rust]
 debuginfo-level = 1

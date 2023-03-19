@@ -33,13 +33,6 @@ static_vcruntime = "2.0"
 name = "basm_benchs"
 harness = false
 
-[profile.release]
-#strip = true
-lto = true
-codegen-units = 1
-opt-level = 3
-debug = true
-
 [rust]
 debuginfo-level = 1
 
