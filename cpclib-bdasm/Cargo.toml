@@ -4,6 +4,8 @@ version = "0.6.0"
 edition = "2021"
 description = "Z80 disassembler. Still contains some bugs."
 license = "MIT"
+repository = "https://github.com/cpcsdk/rust.cpclib"
+
 
 [package.metadata.workspaces]
 independent = true

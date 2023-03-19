@@ -4,6 +4,8 @@ version = "0.6.0"
 edition = "2021"
 license = "MIT"
 description = "Image manipulation library for amstrad cpc"
+repository = "https://github.com/cpcsdk/rust.cpclib"
+
 
 [package.metadata.workspaces]
 independent = true
