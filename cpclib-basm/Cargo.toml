@@ -33,9 +33,6 @@ static_vcruntime = "2.0"
 name = "basm_benchs"
 harness = false
 
-[rust]
-debuginfo-level = 1
-
 
 [[bin]]
 name = "basm"

@@ -2608,8 +2608,9 @@ dependencies = [
 
 [[package]]
 name = "minus"
-version = "5.0.5"
-source = "git+https://github.com/arijit79/minus.git?branch=use-parking_lot#c6baf7a822df28fe36d91f6eb5e2c569ace95336"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42daccbac7c5073266098c00ef53c0c303c299d3a642744bd18268e86dbd1e90"
 dependencies = [
  "crossbeam-channel",
  "crossbeam-utils",
