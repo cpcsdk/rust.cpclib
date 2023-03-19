@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-common"
-version = "0.6.0"
+version = "0.6.1-alpha.1"
 edition = "2021"
 description = "common libraries used in cpclib"
 repository = "https://github.com/cpcsdk/rust.cpclib"

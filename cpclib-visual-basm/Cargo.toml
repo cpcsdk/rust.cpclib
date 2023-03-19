@@ -1,6 +1,6 @@
 [package]
 name = "visual-basm"
-version = "0.2.0"
+version = "0.2.1-alpha.1"
 edition = "2021"
 description = "Visual z80 assembler relying on cpclib-asm"
 repository = "https://github.com/cpcsdk/rust.cpclib"

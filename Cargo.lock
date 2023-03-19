@@ -344,6 +344,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "chardet"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a48563284b67c003ba0fb7243c87fab68885e1532c605704228a80238512e31"
+
+[[package]]
 name = "chardetng"
 version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -617,20 +623,54 @@ dependencies = [
 [[package]]
 name = "cpclib"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "260edfd1ee0d5daa9fd38c3f9212ba92b5770fe1a7179c33fcad0099256b5165"
 dependencies = [
  "anyhow",
  "arrayref",
  "built",
  "cfg-if 1.0.0",
- "cpclib-asm",
- "cpclib-basic",
- "cpclib-common",
- "cpclib-disc",
- "cpclib-image",
- "cpclib-macros",
- "cpclib-sna",
- "cpclib-xfer",
- "cpclib-z80emu",
+ "cpclib-asm 0.6.0",
+ "cpclib-basic 0.6.0",
+ "cpclib-common 0.6.0",
+ "cpclib-disc 0.6.0",
+ "cpclib-image 0.6.0",
+ "cpclib-macros 0.6.0",
+ "cpclib-sna 0.6.0",
+ "cpclib-xfer 0.6.0",
+ "cpclib-z80emu 0.6.0",
+ "curl",
+ "custom_error",
+ "dbg",
+ "delegate",
+ "either",
+ "failure",
+ "getset",
+ "matches",
+ "paste",
+ "path-absolutize",
+ "reqwest",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
+name = "cpclib"
+version = "0.6.1-alpha.1"
+dependencies = [
+ "anyhow",
+ "arrayref",
+ "built",
+ "cfg-if 1.0.0",
+ "cpclib-asm 0.6.0",
+ "cpclib-basic 0.6.0",
+ "cpclib-common 0.6.0",
+ "cpclib-disc 0.6.0",
+ "cpclib-image 0.6.0",
+ "cpclib-macros 0.6.0",
+ "cpclib-sna 0.6.0",
+ "cpclib-xfer 0.6.0",
+ "cpclib-z80emu 0.6.0",
  "curl",
  "custom_error",
  "dbg",
@@ -652,6 +692,43 @@ dependencies = [
 [[package]]
 name = "cpclib-asm"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e0789c30352ce096949a110939b0be0eed91fa61b832937047a8d29329d5906"
+dependencies = [
+ "arrayref",
+ "assert_matches",
+ "built",
+ "cc",
+ "cfg-if 1.0.0",
+ "chardet",
+ "codespan-reporting",
+ "cpclib-basic 0.6.0",
+ "cpclib-common 0.6.0",
+ "cpclib-disc 0.6.0",
+ "cpclib-image 0.6.0",
+ "cpclib-sna 0.6.0",
+ "cpclib-tokens 0.6.0",
+ "custom_error",
+ "delegate",
+ "either",
+ "encoding",
+ "failure",
+ "getset",
+ "globset",
+ "lazy_static",
+ "libc",
+ "matches",
+ "ouroboros",
+ "paste",
+ "regex",
+ "serde",
+ "substring",
+ "velcro",
+]
+
+[[package]]
+name = "cpclib-asm"
+version = "0.6.1-alpha.1"
 dependencies = [
  "arrayref",
  "assert_matches",
@@ -660,13 +737,13 @@ dependencies = [
  "cfg-if 1.0.0",
  "chardetng",
  "codespan-reporting",
- "cpclib-basic",
- "cpclib-common",
- "cpclib-disc",
- "cpclib-image",
- "cpclib-sna",
- "cpclib-tokens",
- "cpclib-xfer",
+ "cpclib-basic 0.6.0",
+ "cpclib-common 0.6.0",
+ "cpclib-disc 0.6.0",
+ "cpclib-image 0.6.0",
+ "cpclib-sna 0.6.0",
+ "cpclib-tokens 0.6.0",
+ "cpclib-xfer 0.6.0",
  "crc",
  "custom_error",
  "delegate",
@@ -693,13 +770,35 @@ dependencies = [
 [[package]]
 name = "cpclib-basic"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75fd8882793ea45efa34bc3ccbe445512bafd761ae784b063e0c968ef7d3b4e5"
 dependencies = [
  "arrayref",
  "built",
  "cfg-if 1.0.0",
- "cpclib-common",
- "cpclib-disc",
- "cpclib-sna",
+ "cpclib-common 0.6.0",
+ "cpclib-disc 0.6.0",
+ "cpclib-sna 0.6.0",
+ "custom_error",
+ "either",
+ "failure",
+ "getset",
+ "matches",
+ "num_enum",
+ "paste",
+ "serde",
+]
+
+[[package]]
+name = "cpclib-basic"
+version = "0.6.1-alpha.1"
+dependencies = [
+ "arrayref",
+ "built",
+ "cfg-if 1.0.0",
+ "cpclib-common 0.6.0",
+ "cpclib-disc 0.6.0",
+ "cpclib-sna 0.6.0",
  "custom_error",
  "either",
  "failure",
@@ -712,11 +811,11 @@ dependencies = [
 
 [[package]]
 name = "cpclib-basm"
-version = "0.6.0"
+version = "0.6.1-alpha.1"
 dependencies = [
  "built",
- "cpclib-asm",
- "cpclib-common",
+ "cpclib-asm 0.6.0",
+ "cpclib-common 0.6.0",
  "criterion",
  "globset",
  "pretty_assertions",
@@ -730,18 +829,43 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bdasm"
-version = "0.6.0"
+version = "0.6.1-alpha.1"
 dependencies = [
  "built",
  "clap 3.2.23",
- "cpclib-asm",
- "cpclib-disc",
+ "cpclib-asm 0.6.0",
+ "cpclib-disc 0.6.0",
  "time",
 ]
 
 [[package]]
 name = "cpclib-common"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e34c3a5f440cd5113f2ea98c3fa5b9053123ac3a410616f56f2fb7745b6c9cfd"
+dependencies = [
+ "bitfield",
+ "bitflags",
+ "bitsets",
+ "bitvec",
+ "clap 3.2.23",
+ "itertools",
+ "lazy_static",
+ "nom",
+ "nom_locate",
+ "num",
+ "num-bigint",
+ "rayon",
+ "semver",
+ "smallvec",
+ "smol_str",
+ "strsim 0.10.0",
+ "time",
+]
+
+[[package]]
+name = "cpclib-common"
+version = "0.6.1-alpha.1"
 dependencies = [
  "bitfield",
  "bitflags",
@@ -766,12 +890,34 @@ dependencies = [
 [[package]]
 name = "cpclib-disc"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31febd2de438d4a1b823a01f0465d1f08351adbe6b4fdaefdf912c117cc8b1db"
 dependencies = [
  "arrayref",
  "built",
  "cfg-if 1.0.0",
- "cpclib-common",
- "cpclib-tokens",
+ "cpclib-common 0.6.0",
+ "cpclib-tokens 0.6.0",
+ "custom_error",
+ "delegate",
+ "either",
+ "failure",
+ "getset",
+ "log",
+ "matches",
+ "serde",
+ "simplelog",
+]
+
+[[package]]
+name = "cpclib-disc"
+version = "0.6.1-alpha.1"
+dependencies = [
+ "arrayref",
+ "built",
+ "cfg-if 1.0.0",
+ "cpclib-common 0.6.0",
+ "cpclib-tokens 0.6.0",
  "custom_error",
  "delegate",
  "either",
@@ -786,11 +932,27 @@ dependencies = [
 [[package]]
 name = "cpclib-image"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e361fb697373108f56c9948c541ada501aa5a35585acc63bc27c639d11ff516"
 dependencies = [
  "anyhow",
  "as-slice",
  "contracts",
- "cpclib-common",
+ "cpclib-common 0.6.0",
+ "gif",
+ "gif-dispose",
+ "image",
+ "serde",
+]
+
+[[package]]
+name = "cpclib-image"
+version = "0.6.1-alpha.1"
+dependencies = [
+ "anyhow",
+ "as-slice",
+ "contracts",
+ "cpclib-common 0.6.0",
  "gif",
  "gif-dispose",
  "image",
@@ -799,11 +961,11 @@ dependencies = [
 
 [[package]]
 name = "cpclib-imgconverter"
-version = "0.6.0"
+version = "0.6.1-alpha.1"
 dependencies = [
  "anyhow",
  "built",
- "cpclib",
+ "cpclib 0.6.0",
  "crossbeam-channel",
  "exitcode",
  "lz4",
@@ -814,9 +976,22 @@ dependencies = [
 [[package]]
 name = "cpclib-macros"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4c550f3e27663e60d1ad67fae36580ab44307e941e0edf09c19358bc10f0f4c"
 dependencies = [
- "cpclib-asm",
- "cpclib-common",
+ "cpclib-asm 0.6.0",
+ "cpclib-common 0.6.0",
+ "proc-macro2 1.0.52",
+ "quote 1.0.26",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "cpclib-macros"
+version = "0.6.1-alpha.1"
+dependencies = [
+ "cpclib-asm 0.6.0",
+ "cpclib-common 0.6.0",
  "proc-macro2 1.0.52",
  "quote 1.0.26",
  "syn 1.0.109",
@@ -825,10 +1000,25 @@ dependencies = [
 [[package]]
 name = "cpclib-sna"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4293007eedf6924f10653aefde12199c3206ba8ca4982118835f1851368c727"
 dependencies = [
  "built",
  "cfg-if 1.0.0",
- "cpclib-common",
+ "cpclib-common 0.6.0",
+ "delegate",
+ "matches",
+ "num_enum",
+ "serde",
+]
+
+[[package]]
+name = "cpclib-sna"
+version = "0.6.1-alpha.1"
+dependencies = [
+ "built",
+ "cfg-if 1.0.0",
+ "cpclib-common 0.6.0",
  "delegate",
  "matches",
  "minus",
@@ -842,16 +1032,37 @@ dependencies = [
 [[package]]
 name = "cpclib-tokens"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08b942ac0bdd807d0d80dd30d8b6cc18967655d171207f7acddc10d2c6c3fbbb"
 dependencies = [
  "built",
  "cfg-if 1.0.0",
- "cpclib-common",
- "cpclib-sna",
+ "cpclib-common 0.6.0",
+ "cpclib-sna 0.6.0",
  "delegate",
  "either",
  "evalexpr",
  "matches",
- "ordered-float",
+ "ordered-float 2.10.0",
+ "paste",
+ "regex",
+ "remain",
+ "serde",
+]
+
+[[package]]
+name = "cpclib-tokens"
+version = "0.6.1-alpha.1"
+dependencies = [
+ "built",
+ "cfg-if 1.0.0",
+ "cpclib-common 0.6.0",
+ "cpclib-sna 0.6.0",
+ "delegate",
+ "either",
+ "evalexpr",
+ "matches",
+ "ordered-float 3.4.0",
  "paste",
  "regex",
  "remain",
@@ -860,12 +1071,12 @@ dependencies = [
 
 [[package]]
 name = "cpclib-wasm"
-version = "0.2.0"
+version = "0.2.1-alpha.1"
 dependencies = [
  "console_error_panic_hook",
- "cpclib-asm",
- "cpclib-basic",
- "cpclib-sna",
+ "cpclib-asm 0.6.0",
+ "cpclib-basic 0.6.0",
+ "cpclib-sna 0.6.0",
  "js-sys",
  "wasm-bindgen",
  "wasm-bindgen-test",
@@ -876,13 +1087,38 @@ dependencies = [
 [[package]]
 name = "cpclib-xfer"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f24b7d24b8baf1dddb2dbf2b2d0cb3214d8bea30979bd39e6fd49e3eade189c"
 dependencies = [
  "arrayref",
  "built",
  "cfg-if 1.0.0",
- "cpclib-common",
- "cpclib-disc",
- "cpclib-sna",
+ "cpclib-common 0.6.0",
+ "cpclib-disc 0.6.0",
+ "cpclib-sna 0.6.0",
+ "curl",
+ "custom_error",
+ "delegate",
+ "either",
+ "failure",
+ "getset",
+ "matches",
+ "path-absolutize",
+ "reqwest",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
+name = "cpclib-xfer"
+version = "0.6.1-alpha.1"
+dependencies = [
+ "arrayref",
+ "built",
+ "cfg-if 1.0.0",
+ "cpclib-common 0.6.0",
+ "cpclib-disc 0.6.0",
+ "cpclib-sna 0.6.0",
  "curl",
  "custom_error",
  "delegate",
@@ -898,16 +1134,16 @@ dependencies = [
 
 [[package]]
 name = "cpclib-xfertool"
-version = "0.6.0"
+version = "0.6.1-alpha.1"
 dependencies = [
  "anyhow",
  "arrayref",
  "built",
  "cfg-if 1.0.0",
- "cpclib-common",
- "cpclib-disc",
- "cpclib-sna",
- "cpclib-xfer",
+ "cpclib-common 0.6.0",
+ "cpclib-disc 0.6.0",
+ "cpclib-sna 0.6.0",
+ "cpclib-xfer 0.6.0",
  "crossbeam-channel",
  "curl",
  "custom_error",
@@ -934,11 +1170,27 @@ dependencies = [
 [[package]]
 name = "cpclib-z80emu"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e13bb0e66f2c72d6ec6722ec917a0140b234ef18ea8ae24de41044fc4f65b580"
 dependencies = [
  "cfg-if 1.0.0",
- "cpclib-asm",
- "cpclib-common",
- "cpclib-sna",
+ "cpclib-asm 0.6.0",
+ "cpclib-common 0.6.0",
+ "cpclib-sna 0.6.0",
+ "delegate",
+ "either",
+ "failure",
+ "paste",
+]
+
+[[package]]
+name = "cpclib-z80emu"
+version = "0.6.1-alpha.1"
+dependencies = [
+ "cfg-if 1.0.0",
+ "cpclib-asm 0.6.0",
+ "cpclib-common 0.6.0",
+ "cpclib-sna 0.6.0",
  "delegate",
  "either",
  "failure",
@@ -1463,6 +1715,70 @@ name = "encode_unicode"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
+
+[[package]]
+name = "encoding"
+version = "0.2.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b0d943856b990d12d3b55b359144ff341533e516d94098b1d3fc1ac666d36ec"
+dependencies = [
+ "encoding-index-japanese",
+ "encoding-index-korean",
+ "encoding-index-simpchinese",
+ "encoding-index-singlebyte",
+ "encoding-index-tradchinese",
+]
+
+[[package]]
+name = "encoding-index-japanese"
+version = "1.20141219.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04e8b2ff42e9a05335dbf8b5c6f7567e5591d0d916ccef4e0b1710d32a0d0c91"
+dependencies = [
+ "encoding_index_tests",
+]
+
+[[package]]
+name = "encoding-index-korean"
+version = "1.20141219.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dc33fb8e6bcba213fe2f14275f0963fd16f0a02c878e3095ecfdf5bee529d81"
+dependencies = [
+ "encoding_index_tests",
+]
+
+[[package]]
+name = "encoding-index-simpchinese"
+version = "1.20141219.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d87a7194909b9118fc707194baa434a4e3b0fb6a5a757c73c3adb07aa25031f7"
+dependencies = [
+ "encoding_index_tests",
+]
+
+[[package]]
+name = "encoding-index-singlebyte"
+version = "1.20141219.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3351d5acffb224af9ca265f435b859c7c01537c0849754d3db3fdf2bfe2ae84a"
+dependencies = [
+ "encoding_index_tests",
+]
+
+[[package]]
+name = "encoding-index-tradchinese"
+version = "1.20141219.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd0e20d5688ce3cab59eb3ef3a2083a5c77bf496cb798dc6fcdb75f323890c18"
+dependencies = [
+ "encoding_index_tests",
+]
+
+[[package]]
+name = "encoding_index_tests"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a246d82be1c9d791c5dfde9a2bd045fc3cbba3fa2b11ad558f27d01712f00569"
 
 [[package]]
 name = "encoding_rs"
@@ -3164,6 +3480,15 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
+version = "2.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "ordered-float"
 version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d84eb1409416d254e4a9c8fa56cc24701755025b458f0fcd8e59e1f5f40c23bf"
@@ -4642,9 +4967,9 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "visual-basm"
-version = "0.2.0"
+version = "0.2.1-alpha.1"
 dependencies = [
- "cpclib-asm",
+ "cpclib-asm 0.6.0",
  "klask",
  "static_vcruntime",
 ]
