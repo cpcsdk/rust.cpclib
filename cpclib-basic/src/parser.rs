@@ -45,13 +45,14 @@ pub fn parse_basic_line(input: &str) -> BasicLineResult {
         || Vec::new(),
         |mut acc: Vec<_>, (mut item, next)| {
             dbg!(&item);
+            dbg!(&next);
             acc.append(&mut item);
             if !next.is_empty() {
                 let char = next.chars().next().unwrap();
                 match char {
                     ':' => acc.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon)),
                     '\n' => {}
-                    _ => panic!("{} unhandled", char)
+                    _ => panic!("char '{}' is unhandled", char)
                 }
             }
             acc
