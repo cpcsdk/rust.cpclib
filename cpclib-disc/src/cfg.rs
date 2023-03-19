@@ -67,7 +67,7 @@ impl FromStr for DiscConfig {
     /// Generates the configuration from a &str. Panic in case of failure.
     /// The format corresponds to cpctools format from Ramlaid/Mortel.
     fn from_str(config: &str) -> Result<Self, Self::Err> {
-        match parse_config(config.into()) {
+        match parse_config(config) {
             Ok((next, res)) => {
                 if next.trim().is_empty() {
                     Ok(res)
@@ -380,19 +380,19 @@ fn list_of_values(input: &str) -> IResult<&str, Vec<u16>> {
 }
 
 fn from_hex(input: &str) -> Result<u16, std::num::ParseIntError> {
-    u16::from_str_radix(&input, 16)
+    u16::from_str_radix(input, 16)
 }
 
 fn from_dec(input: &str) -> Result<u16, std::num::ParseIntError> {
-    u16::from_str_radix(&input, 10)
+    u16::from_str_radix(input, 10)
 }
 
 fn is_hex_digit(c: char) -> bool {
-    c.is_digit(16)
+    c.is_ascii_hexdigit()
 }
 
 fn is_dec_digit(c: char) -> bool {
-    c.is_digit(10)
+    c.is_ascii_digit()
 }
 
 fn hex(input: &str) -> IResult<&str, u16> {
@@ -460,7 +460,7 @@ fn track_group_head(input: &str) -> IResult<&str, TrackGroup> {
         input,
         TrackGroup {
             tracks: tracks.iter().map(|v| *v as u8).collect::<Vec<u8>>(),
-            head: head,
+            head,
             sector_size,
             gap3: gap3 as u8,
             sector_id: sector_id.iter().map(|&v| v as u8).collect::<Vec<_>>(),
@@ -480,7 +480,7 @@ pub fn parse_config(input: &str) -> IResult<&str, DiscConfig> {
 
     let (input, track_groups) = fold_many1(
         preceded(many0(empty_line), track_group_head),
-        || Vec::new(),
+        Vec::new,
         |mut acc: Vec<_>, item| {
             acc.push(item);
             acc
@@ -503,40 +503,40 @@ mod tests {
 
     #[test]
     fn parse_decimal() {
-        let res = dec("10 ".into());
+        let res = dec("10 ");
         assert!(res.is_ok());
 
-        let res = dec("10".into());
+        let res = dec("10");
         assert!(res.is_ok());
     }
 
     #[test]
     fn parse_hexadecimal() {
-        let res = hex("10 ".into());
+        let res = hex("10 ");
         assert!(res.is_err());
 
-        let res = hex("0x10 ".into());
+        let res = hex("0x10 ");
         assert!(res.is_ok());
     }
 
     #[test]
     fn parse_value() {
-        let res = number("0x10 ".into());
+        let res = number("0x10 ");
         assert!(res.is_ok());
 
-        let res = number("10 ".into());
+        let res = number("10 ");
         assert!(res.is_ok());
     }
 
     #[test]
     fn parse_list_value() {
-        let res = list_of_values("0x10 ".into());
+        let res = list_of_values("0x10 ");
         assert!(res.is_ok());
         let (_next, res) = res.unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0], 0x10);
 
-        let res = list_of_values("10,11 ".into());
+        let res = list_of_values("10,11 ");
         assert!(res.is_ok());
         let (_next, res) = res.unwrap();
         assert_eq!(res.len(), 2);
@@ -546,7 +546,7 @@ mod tests {
 
     #[test]
     fn test_value_of_key() {
-        let res = value_of_key("NbTrack")("NbTrack = 80".into());
+        let res = value_of_key("NbTrack")("NbTrack = 80");
         println!("{:?}", &res);
         assert!(res.is_ok());
     }

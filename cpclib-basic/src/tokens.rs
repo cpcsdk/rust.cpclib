@@ -551,13 +551,13 @@ impl fmt::Display for BasicToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BasicToken::SimpleToken(ref tok) => {
-                write!(f, "{}", tok.to_string())?;
+                write!(f, "{}", tok)?;
             }
             BasicToken::PrefixedToken(ref tok) => {
-                write!(f, "{}", tok.to_string())?;
+                write!(f, "{}", tok)?;
             }
             BasicToken::Comment(ref tok, ref comment) => {
-                write!(f, "{}", tok.to_string())?;
+                write!(f, "{}", tok)?;
                 write!(f, "{},", String::from_utf8(comment.to_vec()).unwrap())?;
             }
             BasicToken::Constant(ref kind, ref constant) => {
@@ -607,7 +607,7 @@ impl BasicToken {
 
             BasicToken::Comment(ref comment_type, ref comment) => {
                 let mut data = vec![comment_type.value()];
-                data.extend_from_slice(&comment);
+                data.extend_from_slice(comment);
                 data
             }
 

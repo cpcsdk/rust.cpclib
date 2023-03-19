@@ -142,7 +142,7 @@ impl Transformation {
 
                 // Modify the image
                 let mut res = matrix.clone();
-                (0..*amount).into_iter().for_each(|_| {
+                (0..*amount).for_each(|_| {
                     res.add_line(position, &line);
                 });
                 res
@@ -164,7 +164,7 @@ impl Transformation {
                 let position = position.absolute_position(matrix.width() as _).unwrap();
 
                 let mut res = matrix.clone();
-                (0..*amount).into_iter().for_each(|_| {
+                (0..*amount).for_each(|_| {
                     res.add_column(position, &column);
                 });
 
@@ -202,18 +202,13 @@ impl Transformation {
 
 /// Container of transformations
 #[derive(Clone, Debug)]
+#[derive(Default)]
 pub struct TransformationsList {
     /// list of transformations
     transformations: Vec<Transformation>
 }
 
-impl Default for TransformationsList {
-    fn default() -> Self {
-        Self {
-            transformations: Vec::new()
-        }
-    }
-}
+
 
 #[allow(missing_docs)]
 impl TransformationsList {
@@ -796,7 +791,7 @@ impl TileHorizontalCapture {
             Self::AlwaysFromRightToLeft => unimplemented!(),
             Self::StartFromRightAndFlipAtTheEndOfLine => unimplemented!(),
             Self::StartFromLeftAndFlipAtTheEndOfLine => {
-                Box::new(StartFromLeftAndFlipAtTheEndOfLine::default())
+                Box::<StartFromLeftAndFlipAtTheEndOfLine>::default()
             }
         }
     }
@@ -828,6 +823,7 @@ impl TileHorizontalCapture {
 /// 7 100 => 4
 #[derive(Debug, Copy, Clone)]
 #[allow(missing_docs)]
+#[derive(Default)]
 pub struct GrayCodeLineCounter {
     char_line: usize,
     pos_in_char: u8 // in gray code space
@@ -885,14 +881,7 @@ impl LineCounter for StandardLineCounter {
     }
 }
 
-impl Default for GrayCodeLineCounter {
-    fn default() -> Self {
-        Self {
-            char_line: 0,
-            pos_in_char: 0
-        }
-    }
-}
+
 #[allow(missing_docs)]
 impl GrayCodeLineCounter {
     pub const GRAYCODE_INDEX_TO_SCREEN_INDEX: [u8; 8] = [0, 1, 3, 2, 6, 7, 5, 4];
@@ -1184,9 +1173,9 @@ impl<'a> ImageConverter<'a> {
 
                     Ok(Output::GrayCodedSprite {
                         data: new_data,
-                        palette: palette.clone(),
-                        bytes_width: bytes_width,
-                        height: height
+                        palette,
+                        bytes_width,
+                        height
                     })
                 }
                 _ => unreachable!()
@@ -1213,7 +1202,7 @@ impl<'a> ImageConverter<'a> {
 
                     for j in 0..height {
                         let mut current_line =
-                            (&data[j * bytes_width..(j + 1) * bytes_width]).to_vec();
+                            data[j * bytes_width..(j + 1) * bytes_width].to_vec();
 
                         if j % 2 == 1 {
                             current_line.reverse();
@@ -1247,7 +1236,7 @@ impl<'a> ImageConverter<'a> {
             transformations: TransformationsList::default()
         };
 
-        converter.apply_sprite_conversion(&sprite)
+        converter.apply_sprite_conversion(sprite)
     }
 
     /// Load the initial image
@@ -1278,7 +1267,7 @@ impl<'a> ImageConverter<'a> {
                 ref output_dimension,
                 ref display_address
             } => {
-                self.build_memory_blocks(sprite, output_dimension.clone(), display_address.clone())
+                self.build_memory_blocks(sprite, *output_dimension, *display_address)
             }
             OutputFormat::CPCSplittingMemory(ref _vec) => unimplemented!(),
             OutputFormat::TileEncoded {
@@ -1349,8 +1338,7 @@ impl<'a> ImageConverter<'a> {
                 "{} lines expected on a tileset of {} lines.",
                 tile_height as usize * nb_rows,
                 sprite.height()
-            )
-            .into());
+            ));
         }
         if (sprite.bytes_width() as usize) < tile_width as usize * nb_columns {
             return Err(anyhow::anyhow!(
@@ -1465,7 +1453,7 @@ impl<'a> ImageConverter<'a> {
         // loop over the chars vertically
         for char_y in 0..dim
             .nb_char_lines()
-            .min((sprite.height() as f32 / 8 as f32).ceil() as u8)
+            .min((sprite.height() as f32 / 8_f32).ceil() as u8)
         {
             let char_y = char_y as usize;
 

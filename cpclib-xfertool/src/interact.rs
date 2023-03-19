@@ -42,7 +42,7 @@ impl<'a> Completer for XferInteractorHelper<'a> {
 
         // Retreive the command in order to filter the autocompletion
         let command = line.trim().split(' ').next().map(str::to_lowercase);
-        let command = command.as_ref().map(String::as_str);
+        let command = command.as_deref();
         // and get its position
         let start = {
             let mut idx = 0;
@@ -64,7 +64,7 @@ impl<'a> Completer for XferInteractorHelper<'a> {
 
         // Ensure local completion is only done for launch (at the moment)
         match command {
-            Some("launch") | Some("put") => complete.extend(local.1),
+            Some("launch" | "put") => complete.extend(local.1),
             _ => {}
         }
 
@@ -111,7 +111,7 @@ impl<'a> XferInteractorHelper<'a> {
         XferInteractorHelper {
             completer: FilenameCompleter::new(),
             hinter: HistoryHinter {},
-            xfer: xfer,
+            xfer,
             commands: vec![
                 "rm", "del", "delete", "era", "cd", "exit", "launch", "ls", "put", "pwd", "reset",
                 "reboot",
@@ -131,9 +131,9 @@ impl<'a> XferInteractorHelper<'a> {
         let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
         for file in self.xfer.current_folder_content().unwrap().files() {
             let fname1 = file.fname();
-            let fname2 = ("./".to_owned() + &fname1);
+            let fname2 = ("./".to_owned() + fname1);
 
-            for &fname in [fname1, &fname2].iter() {
+            for &fname in &[fname1, &fname2] {
                 if fname.starts_with(word) {
                     entries.push(Pair {
                         display: fname.into(),
@@ -158,11 +158,11 @@ impl<'a> XferInteractorHelper<'a> {
 
         let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
         // TODO check if it is the very first word
-        for command in self.commands.iter() {
+        for command in &self.commands {
             if command.starts_with(word) {
                 entries.push(Pair {
-                    display: command.to_string(),
-                    replacement: command.to_string()
+                    display: (*command).to_string(),
+                    replacement: (*command).to_string()
                 })
             }
         }
@@ -193,7 +193,7 @@ impl<'a> XferInteractor<'a> {
     pub fn treat_line(&mut self, line: &str) {
         let parse = parse_command(line);
         if let Ok((_, command)) = parse {
-            println!("{:?}", command);
+            println!("{command:?}");
 
             match command {
                 XferCommand::Help => {
@@ -220,10 +220,10 @@ ls                  List the files in the current M4 directory.
                 XferCommand::Pwd => {
                     match self.xfer.current_working_directory() {
                         Ok(pwd) => {
-                            println!("{}", pwd);
+                            println!("{pwd}");
                         }
                         Err(e) => {
-                            eprintln!("{}", e);
+                            eprintln!("{e}");
                         }
                     }
                 }
@@ -256,13 +256,12 @@ ls                  List the files in the current M4 directory.
                 XferCommand::Cd(path) => {
                     let path = match path {
                         None => "/",
-                        Some(ref path) => &path
+                        Some(ref path) => path
                     };
 
                     let res = self.xfer.cd(path);
                     if res.is_err() {
                         eprintln!("{}", res.err().unwrap());
-                        return;
                     }
                     else {
                         self.cwd = self.xfer.current_working_directory().unwrap()
@@ -273,36 +272,33 @@ ls                  List the files in the current M4 directory.
                     let res = self.xfer.rm(path);
                     if res.is_err() {
                         eprintln!("{}", res.err().unwrap());
-                        return;
                     }
                 }
 
                 XferCommand::Put(arg1) => {
                     let path = std::path::Path::new(&arg1);
                     if !path.exists() {
-                        eprintln!("{} does not exists", arg1);
+                        eprintln!("{arg1} does not exists");
                         return;
                     }
 
                     let destination = self.cwd.clone();
 
                     // Put the file
-                    let res = self.xfer.upload(&path, &destination, None);
+                    let res = self.xfer.upload(path, &destination, None);
                     if res.is_err() {
                         eprintln!("{}", res.err().unwrap());
-                        return;
                     }
                 }
 
                 XferCommand::LaunchHost(path) => {
                     if !std::path::Path::new(&path).exists() {
-                        eprintln!("{} not found.", path)
+                        eprintln!("{path} not found.")
                     }
                     else {
                         let res = self.xfer.upload_and_run(path, None);
                         if res.is_err() {
                             eprintln!("{}", res.err().unwrap());
-                            return;
                         }
                     }
                 }
@@ -319,7 +315,6 @@ ls                  List the files in the current M4 directory.
                     let res = self.xfer.run(&path);
                     if res.is_err() {
                         eprintln!("{}", res.err().unwrap());
-                        return;
                     }
                 }
 
@@ -344,7 +339,7 @@ ls                  List the files in the current M4 directory.
     pub fn start(xfer: &'a CpcXfer) {
         let cwd = xfer.current_working_directory().unwrap();
         let mut interactor = XferInteractor {
-            xfer: xfer,
+            xfer,
             cwd,
             exit: false
         };
@@ -388,7 +383,7 @@ ls                  List the files in the current M4 directory.
                 }
                 Err(ReadlineError::Eof) => break,
                 Err(err) => {
-                    println!("Error: {:?}", err);
+                    println!("Error: {err:?}");
                     break;
                 }
             }

@@ -18,19 +18,19 @@ use std::path::Path;
 use std::str::FromStr;
 
 use cpclib_common::clap::{Arg, Command};
-use cpclib_sna::*;
+use cpclib_sna::{Snapshot, SnapshotFlag, cli};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
 /// Convert a string to its unsigned 32 bits representation (to access to extra memory)
-pub fn string_to_nb(source: &str) -> u32 {
-    let error = format!("Unable to read the value: {}", source);
+#[must_use] pub fn string_to_nb(source: &str) -> u32 {
+    let error = format!("Unable to read the value: {source}");
     if source.starts_with("0x") {
         u32::from_str_radix(&source[2..], 16).expect(&error)
     }
-    else if source.starts_with("%") {
+    else if source.starts_with('%') {
         u32::from_str_radix(&source[1..], 2).expect(&error)
     }
     else {
@@ -119,7 +119,7 @@ fn main() {
                                 .short('v')
                                 .long("version")
                                 .number_of_values(1)
-                                .possible_values(&["1", "2", "3"])
+                                .possible_values(["1", "2", "3"])
                                 .help("Version of the saved snapshot.")
                                 .default_value("3")
                            )
@@ -161,7 +161,7 @@ fn main() {
 
     if matches.is_present("cli") {
         let fname = matches.value_of("inSnapshot").unwrap();
-        cli::cli(&fname, sna);
+        cli::cli(fname, sna);
         return;
     }
 
@@ -227,8 +227,7 @@ fn main() {
             sna.set_value(token, value as u16).unwrap();
 
             sna.log(format!(
-                "Token {:?} set at value {} (0x{:x})",
-                token, value, value
+                "Token {token:?} set at value {value} (0x{value:x})"
             ));
         }
     }
@@ -241,6 +240,6 @@ fn main() {
         .unwrap()
         .try_into()
         .unwrap();
-    sna.save(&fname, version)
+    sna.save(fname, version)
         .expect("Unable to save the snapshot");
 }

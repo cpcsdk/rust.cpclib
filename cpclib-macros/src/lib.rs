@@ -26,12 +26,10 @@ impl Parse for AssemblyMacroInput {
             input.parse::<kw::fname>()?;
             input.parse::<syn::Token![:]>()?;
             let fname = (input.parse::<syn::LitStr>()?).value();
-            let content = std::fs::read_to_string(&fname).or_else(|e| {
-                Err(syn::Error::new(
+            let content = std::fs::read_to_string(&fname).map_err(|e| syn::Error::new(
                     proc_macro2::Span::call_site(),
-                    format!("Unable to load {}.\n{}", fname, e.to_string())
-                ))
-            })?;
+                    format!("Unable to load {}.\n{}", fname, e)
+                ))?;
 
             Ok(AssemblyMacroInput { code: content })
         }
@@ -86,8 +84,8 @@ pub fn assemble(tokens: TokenStream) -> TokenStream {
             match listing.to_bytes() {
                 Ok(ref bytes) => {
                     let mut tokens = proc_macro2::TokenStream::default();
-                    proc_macro2::Literal::byte_string(&bytes).to_tokens(&mut tokens);
-                    return tokens.into();
+                    proc_macro2::Literal::byte_string(bytes).to_tokens(&mut tokens);
+                    tokens.into()
                 }
 
                 Err(e) => {

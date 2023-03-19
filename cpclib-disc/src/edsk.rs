@@ -54,19 +54,19 @@ impl From<u8> for Head {
 }
 
 #[allow(missing_docs)]
-impl Into<u8> for Head {
-    fn into(self) -> u8 {
-        match self {
-            Self::A | Self::Unspecified => 0,
-            Self::B => 1
+impl From<Head> for u8 {
+    fn from(val: Head) -> Self {
+        match val {
+            Head::A | Head::Unspecified => 0,
+            Head::B => 1
         }
     }
 }
 
 #[allow(missing_docs)]
-impl Into<u8> for &Head {
-    fn into(self) -> u8 {
-        match self {
+impl From<&Head> for u8 {
+    fn from(val: &Head) -> Self {
+        match val {
             Head::A | &Head::Unspecified => 0,
             Head::B => 1
         }
@@ -180,7 +180,7 @@ impl DiscInformation {
         assert_eq!(buffer.len(), 256);
 
         // DEBUG mode XXX To remove
-        let from_buffer = Self::from_buffer(&buffer);
+        let from_buffer = Self::from_buffer(buffer);
         assert_eq!(self, &from_buffer);
     }
 
@@ -565,13 +565,13 @@ impl From<u8> for DataRate {
 }
 
 #[allow(missing_docs)]
-impl Into<u8> for DataRate {
-    fn into(self) -> u8 {
-        match self {
-            Self::Unknown => 0,
-            Self::SingleOrDoubleDensity => 1,
-            Self::HighDensity => 2,
-            Self::ExtendedDensity => 3
+impl From<DataRate> for u8 {
+    fn from(val: DataRate) -> Self {
+        match val {
+            DataRate::Unknown => 0,
+            DataRate::SingleOrDoubleDensity => 1,
+            DataRate::HighDensity => 2,
+            DataRate::ExtendedDensity => 3
         }
     }
 }
@@ -604,12 +604,12 @@ impl From<u8> for RecordingMode {
 }
 
 #[allow(missing_docs)]
-impl Into<u8> for RecordingMode {
-    fn into(self) -> u8 {
-        match self {
-            Self::Unknown => 0,
-            Self::FM => 1,
-            Self::MFM => 2
+impl From<RecordingMode> for u8 {
+    fn from(val: RecordingMode) -> Self {
+        match val {
+            RecordingMode::Unknown => 0,
+            RecordingMode::FM => 1,
+            RecordingMode::MFM => 2
         }
     }
 }
@@ -996,7 +996,7 @@ impl ExtendedDsk {
 
     /// Add the file where it is possible with respect to amsdos format
     pub fn add_amsdos_file(&mut self, _file: &AmsdosFile) -> Result<(), AmsdosError> {
-        eprintln!("{}: ExtedendDsk::add_amsdos_file not implemented. need to do it (but in the amsdos.rs file", file!());
+        eprintln!("ile!(: ExtedendDsk::add_amsdos_file not implemented. need to do it (but in the amsdos.rs file");
         Ok(())
     }
 
@@ -1045,7 +1045,7 @@ impl ExtendedDsk {
         }
 
         // Search the next track
-        let next_track = self.track_list.next_track(&current_track)?;
+        let next_track = self.track_list.next_track(current_track)?;
 
         Some((
             *next_track.head_number(), // XXX  logical

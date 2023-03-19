@@ -730,8 +730,8 @@ impl Expr {
     pub fn to_simplified_string(&self) -> String {
         let exp = self.to_string();
         let exp = exp.trim();
-        let exp = exp.strip_prefix('(').unwrap_or_else(|| exp);
-        let exp = exp.strip_suffix(')').unwrap_or_else(|| exp);
+        let exp = exp.strip_prefix('(').unwrap_or(exp);
+        let exp = exp.strip_suffix(')').unwrap_or(exp);
         exp.to_owned()
     }
 }
@@ -854,7 +854,7 @@ impl Expr {
 
     pub fn do_apply_macro_labels_modification(s: &mut std::string::String, seed: usize) {
         assert!(!s.is_empty());
-        if s.starts_with("@") {
+        if s.starts_with('@') {
             let mut new = format!("__macro__{}__{}", seed, s);
             std::mem::swap(&mut new, s);
         }
@@ -1025,7 +1025,7 @@ impl ExprResult {
             ExprResult::Float(f) => Ok(f.into_inner()),
             ExprResult::Value(i) => Ok(*i as f64),
             ExprResult::Char(i) => Ok(*i as f64),
-            ExprResult::Bool(b) => Ok(if *b { 1 as f64 } else { 0 as f64 }),
+            ExprResult::Bool(b) => Ok(if *b { 1_f64 } else { 0 as f64 }),
             _ => {
                 Err(ExpressionTypeError(format!(
                     "Try to convert {} as a float",
@@ -1040,7 +1040,7 @@ impl ExprResult {
             ExprResult::Char(u) => Ok(*u as char),
             ExprResult::Float(f) => Ok(f.into_inner() as u8 as char),
             ExprResult::Value(v) => Ok(*v as u8 as char),
-            ExprResult::Bool(b) => Ok(if *b { 'T'.into() } else { 'F'.into() }),
+            ExprResult::Bool(b) => Ok(if *b { 'T' } else { 'F' }),
             _ => {
                 Err(ExpressionTypeError(format!(
                     "Try to convert {} as a char",
@@ -1127,7 +1127,6 @@ impl ExprResult {
 
     pub fn matrix_col(&self, x: usize) -> ExprResult {
         let l = (0..self.matrix_height())
-            .into_iter()
             .map(|row| self.matrix_rows()[row].list_get(x))
             .cloned()
             .collect_vec();
@@ -1155,7 +1154,7 @@ impl ExprResult {
                         cols[col_idx].push(col_val.clone())
                     }
                 }
-                let cols = cols.into_iter().map(|v| ExprResult::List(v)).collect_vec();
+                let cols = cols.into_iter().map(ExprResult::List).collect_vec();
                 ExprResult::Matrix {
                     content: cols,
                     width: *height,
@@ -1168,7 +1167,7 @@ impl ExprResult {
 
     pub fn matrix_cols(&self) -> Vec<ExprResult> {
         let t = self.matrix_transpose();
-        t.matrix_rows().into_iter().cloned().collect_vec()
+        t.matrix_rows().iter().cloned().collect_vec()
     }
 }
 
@@ -1176,7 +1175,7 @@ impl ExprResult {
     pub fn floor(&self) -> Result<Self, ExpressionTypeError> {
         match self {
             ExprResult::Float(f) => Ok(f.floor().into()),
-            ExprResult::Value(v) => Ok(v.clone().into()),
+            ExprResult::Value(v) => Ok((*v).into()),
             _ => {
                 Err(ExpressionTypeError(format!(
                     "Try to apply floor to {}",
@@ -1189,7 +1188,7 @@ impl ExprResult {
     pub fn ceil(&self) -> Result<Self, ExpressionTypeError> {
         match self {
             ExprResult::Float(f) => Ok(f.ceil().into()),
-            ExprResult::Value(v) => Ok(v.clone().into()),
+            ExprResult::Value(v) => Ok((*v).into()),
             _ => {
                 Err(ExpressionTypeError(format!(
                     "Try to apply ceil to {}",
@@ -1260,7 +1259,7 @@ impl ExprResult {
     pub fn binary_not(&self) -> Result<Self, ExpressionTypeError> {
         match self {
             ExprResult::Float(_) => {
-                return Err(ExpressionTypeError(
+                Err(ExpressionTypeError(
                     "Float are not compatible with ~ operator".to_owned()
                 ))
             }

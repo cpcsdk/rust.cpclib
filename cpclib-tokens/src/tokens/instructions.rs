@@ -630,18 +630,18 @@ impl Clone for Token {
         match self {
             Token::Align(a, b) => Token::Align(a.clone(), b.clone()),
             Token::Assert(a, b) => Token::Assert(a.clone(), b.clone()),
-            Token::Assign(a, b, c) => Token::Assign(a.clone(), b.clone(), c.clone()),
+            Token::Assign(a, b, c) => Token::Assign(a.clone(), b.clone(), *c),
             Token::Bank(b) => Token::Bank(b.clone()),
             Token::Bankset(b) => Token::Bankset(b.clone()),
             Token::Basic(a, b, c) => Token::Basic(a.clone(), b.clone(), c.clone()),
             Token::Break => Token::Break,
             Token::Breakpoint(a) => Token::Breakpoint(a.clone()),
             Token::BuildCpr => Token::BuildCpr,
-            Token::BuildSna(a) => Token::BuildSna(a.clone()),
+            Token::BuildSna(a) => Token::BuildSna(*a),
             Token::Charset(a) => Token::Charset(a.clone()),
             Token::Comment(c) => Token::Comment(c.clone()),
-            Token::CrunchedBinary(a, b) => Token::CrunchedBinary(a.clone(), b.clone()),
-            Token::CrunchedSection(a, b) => Token::CrunchedSection(a.clone(), b.clone()),
+            Token::CrunchedBinary(a, b) => Token::CrunchedBinary(*a, b.clone()),
+            Token::CrunchedSection(a, b) => Token::CrunchedSection(*a, b.clone()),
             Token::Defb(l) => Token::Defb(l.clone()),
             Token::Defs(l) => Token::Defs(l.clone()),
             Token::Defw(l) => Token::Defw(l.clone()),
@@ -664,11 +664,11 @@ impl Clone for Token {
                     offset: offset.clone(),
                     length: length.clone(),
                     extended_offset: extended_offset.clone(),
-                    off: off.clone(),
-                    transformation: transformation.clone()
+                    off: *off,
+                    transformation: *transformation
                 }
             }
-            Token::Include(a, b, c) => Token::Include(a.clone(), b.clone(), c.clone()),
+            Token::Include(a, b, c) => Token::Include(a.clone(), b.clone(), *c),
             Token::Iterate(a, b, c) => Token::Iterate(a.clone(), b.clone(), c.clone()),
             Token::Label(a) => Token::Label(a.clone()),
             Token::Let(a, b) => Token::Let(a.clone(), b.clone()),
@@ -683,7 +683,7 @@ impl Clone for Token {
             Token::NoExport(a) => Token::NoExport(a.clone()),
             Token::NoList => Token::NoList,
             Token::OpCode(mne, arg1, arg2, arg3) => {
-                Self::OpCode(mne.clone(), arg1.clone(), arg2.clone(), arg3.clone())
+                Self::OpCode(*mne, arg1.clone(), arg2.clone(), *arg3)
             }
             Token::Org(a, b) => Token::Org(a.clone(), b.clone()),
             Token::Pause => Token::Pause,
@@ -707,7 +707,7 @@ impl Clone for Token {
                     filename: filename.clone(),
                     address: address.clone(),
                     size: size.clone(),
-                    save_type: save_type.clone(),
+                    save_type: *save_type,
                     dsk_filename: dsk_filename.clone(),
                     side: side.clone()
                 }
@@ -717,7 +717,7 @@ impl Clone for Token {
             Token::SetCrtc(c) => Token::SetCrtc(c.clone()),
             Token::SetN(a, b, c) => Token::SetN(a.clone(), b.clone(), c.clone()),
             Token::SnaInit(a) => Token::SnaInit(a.clone()),
-            Token::SnaSet(a, b) => Token::SnaSet(a.clone(), b.clone()),
+            Token::SnaSet(a, b) => Token::SnaSet(*a, b.clone()),
             Token::StableTicker(a) => Token::StableTicker(a.clone()),
             Token::Str(a) => Token::Str(a.clone()),
             Token::Struct(a, b) => Token::Struct(a.clone(), b.clone()),
@@ -797,7 +797,7 @@ impl fmt::Display for Token {
                  => write!(f, "BREAKPOINT {}", expr.to_simplified_string()),
 
             Token::Comment(ref string)
-                 => write!(f, " ; {}", string.replace("\n","\n;")),
+                 => write!(f, " ; {}", string.replace('\n',"\n;")),
  
                  Token::Defb(ref exprs)
                  => write!(f, "DB {}", expr_list_to_string(exprs)),
@@ -806,7 +806,7 @@ impl fmt::Display for Token {
                     .map(|p| {
                         match &p.1 {
                             Some(ref v) => format!("{}, {}", p.0.to_simplified_string(), v.to_simplified_string()),
-                            None => format!("{}", p.0.to_simplified_string())
+                            None => p.0.to_simplified_string()
                         }
                     })
                     .join(", ")
@@ -931,7 +931,7 @@ impl fmt::Display for Token {
                 if start.is_some() {
                     write!(f, ", {}", start.as_ref().unwrap())?;
                 }
-                writeln!(f, "")?;
+                writeln!(f)?;
 
                 for token in code.iter() {
                     writeln!(f, "\t{}", token)?;

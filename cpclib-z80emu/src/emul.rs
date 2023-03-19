@@ -121,10 +121,10 @@ impl Z80 {
 
             Mnemonic::Inc => {
                 match arg1 {
-                    Some(&DataAccess::Register8(ref _reg)) => {
+                    Some(DataAccess::Register8(_reg)) => {
                         self.get_register_8_mut(arg1.unwrap()).inc()
                     }
-                    Some(&DataAccess::Register16(ref _reg)) => {
+                    Some(DataAccess::Register16(_reg)) => {
                         self.get_register_16_mut(arg1.unwrap()).inc()
                     }
                     _ => unreachable!()
@@ -133,10 +133,10 @@ impl Z80 {
 
             Mnemonic::Dec => {
                 match arg1 {
-                    Some(&DataAccess::Register8(ref _reg)) => {
+                    Some(DataAccess::Register8(_reg)) => {
                         self.get_register_8_mut(arg1.unwrap()).dec()
                     }
-                    Some(&DataAccess::Register16(ref _reg)) => {
+                    Some(DataAccess::Register16(_reg)) => {
                         self.get_register_16_mut(arg1.unwrap()).dec()
                     }
                     _ => unreachable!()
@@ -241,13 +241,13 @@ impl Z80 {
                     }
 
                     // Load in reg16
-                    (Some(&DataAccess::Register16(ref _reg16)), Some(_)) => {
+                    (Some(DataAccess::Register16(_reg16)), Some(_)) => {
                         let val = self.get_value(arg2.unwrap()).unwrap();
                         self.get_register_16_mut(arg1.unwrap()).set(val);
                     }
 
                     // Write in memory
-                    (Some(&DataAccess::MemoryRegister16(ref _reg)), Some(_)) => {
+                    (Some(DataAccess::MemoryRegister16(_reg)), Some(_)) => {
                         let address = self.get_value(arg1.unwrap()).unwrap();
                         let value = self.get_value(arg2.unwrap()).unwrap();
                         self.write_memory_byte(address, value as _);

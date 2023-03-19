@@ -53,7 +53,7 @@ impl PhysicalAddress {
             0x8000..0xC000 => 2,
             0xC000.. => 3
         };
-        let is_4000 = address >= 0x4000 && address < 0x8000;
+        let is_4000 = (0x4000..0x8000).contains(&address);
         let is_c000 = address >= 0xC000;
 
         let (page, bank) = if (mmr & 0b100) != 0 {
@@ -124,20 +124,20 @@ impl PhysicalAddress {
 
     pub fn ga_bank(&self) -> u16 {
         let low = if self.page() == 0 {
-            0b11_000_0_00
+            0b1100_0000
         }
         else {
-            0b11_000_1_00 + ((self.page() - 1) << 3) + self.bank
+            0b1100_0100 + ((self.page() - 1) << 3) + self.bank
         } as u16;
         low + 0x7F00
     }
 
     pub fn ga_page(&self) -> u16 {
         let low = if self.page() == 0 {
-            0b11_000_0_00
+            0b1100_0000
         }
         else {
-            0b11_000_0_10 + ((self.page() - 1) << 3)
+            0b1100_0010 + ((self.page() - 1) << 3)
         } as u16;
         low + 0x7F00
     }
@@ -567,18 +567,16 @@ impl<'t> Iterator for ModuleSymbolTableIterator<'t> {
     fn next(&mut self) -> Option<Self::Item> {
         let current = self.current.next();
         if current.is_some() {
-            return current;
+            current
+        }
+        else if let Some(next) = self.others.pop() {
+            let current = next.current.iter();
+            self.others.extend(next.children.values());
+            self.current = current;
+            self.current.next()
         }
         else {
-            if let Some(next) = self.others.pop() {
-                let current = next.current.iter();
-                self.others.extend(next.children.values());
-                self.current = current;
-                return self.current.next();
-            }
-            else {
-                return None;
-            }
+            None
         }
     }
 }
@@ -636,8 +634,8 @@ impl SymbolsTable {
     ) -> Result<(), SymbolError> {
         let label = symbol.into();
 
-        if !label.value().starts_with(".") && !label.value().starts_with("@") {
-            if label.value().contains(".") {
+        if !label.value().starts_with('.') && !label.value().starts_with('@') {
+            if label.value().contains('.') {
                 return Err(SymbolError::WrongSymbol(label));
             }
             self.current_global_label = self.extend_local_and_patterns_for_symbol(label)?;
@@ -711,7 +709,7 @@ impl SymbolsTable {
         }
 
         // handle the hidden labels from repeats
-        if symbol.starts_with("@") {
+        if symbol.starts_with('@') {
             match self.seed_stack.last() {
                 Some(seed) => {
                     // we need to rewrite the symbol name to make it unique
@@ -772,7 +770,7 @@ impl SymbolsTable {
     fn split_namespaces(symbol: &Symbol) -> Vec<Symbol> {
         symbol
             .value()
-            .split(":")
+            .split(':')
             .map(|s| s.to_owned())
             .map(|s| s.into())
             .collect_vec()
@@ -795,10 +793,8 @@ impl SymbolsTableTrait for SymbolsTable {
     fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
         Ok(self
             .value(symbol)?
-            .map(|v| v.integer())
-            .filter(|v| v.is_some())
-            .map(|v| v.unwrap())
-            .or_else(|| {
+            .and_then(|v| v.integer())
+            .or({
                 if self.dummy {
                     Some(1i32)
                 }
@@ -848,7 +844,7 @@ impl SymbolsTableTrait for SymbolsTable {
             .value(symbol.into())?
             .map(|v| v.counter())
             .map(|v| v.unwrap())
-            .or_else(|| {
+            .or({
                 if self.dummy {
                     Some(1i32)
                 }
@@ -950,13 +946,11 @@ impl SymbolsTable {
         if candidates.len() == 1 {
             Ok(candidates[0].clone())
         }
+        else if self.map.contains_key(&candidates[0]) {
+            Ok(candidates[0].clone())
+        }
         else {
-            if self.map.contains_key(&candidates[0]) {
-                Ok(candidates[0].clone())
-            }
-            else {
-                Ok(candidates[1].clone())
-            }
+            Ok(candidates[1].clone())
         }
     }
 
@@ -1043,7 +1037,7 @@ impl SymbolsTable {
         key: S
     ) -> Result<Option<u16>, SymbolError> {
         let key = key.into();
-        let addr = self.address_value(key.clone())?;
+        let addr = self.address_value(key)?;
         Ok(addr.map(|v| {
             match prefix {
                 LabelPrefix::Bank => v.bank() as u16,
@@ -1077,7 +1071,7 @@ impl SymbolsTable {
     pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbols = self.get_potential_candidates(symbol);
-        Ok(symbols.iter().any(|symbol| self.map.contains_key(&symbol)))
+        Ok(symbols.iter().any(|symbol| self.map.contains_key(symbol)))
     }
 
     /// Check if the symbol table contains the expected symbol, added during the current pass
@@ -1089,7 +1083,7 @@ impl SymbolsTable {
         let symbols = self.get_potential_candidates(symbol);
         Ok(symbols
             .iter()
-            .any(|symbol| self.current_pass_map.contains_key(&symbol)))
+            .any(|symbol| self.current_pass_map.contains_key(symbol)))
     }
 
     /// Returns the closest Value

@@ -95,7 +95,7 @@ pub mod mode2 {
         let mut res = Vec::new();
         for idx in 0..(pens.len() / 8) {
             res.push(pens_to_byte(
-                pens[idx * 8 + 0],
+                pens[idx * 8],
                 pens[idx * 8 + 1],
                 pens[idx * 8 + 2],
                 pens[idx * 8 + 3],
@@ -528,7 +528,7 @@ pub mod mode0 {
         let mut table = [0; 256];
 
         // Generate the table
-        for (idx, byte) in (0..=255).into_iter().enumerate() {
+        for (idx, byte) in (0..=255).enumerate() {
             let [pen0, pen1] = byte_to_pens(byte);
             table[idx] = pens_to_byte(pen_to_mask(pen0), pen_to_mask(pen1))
         }

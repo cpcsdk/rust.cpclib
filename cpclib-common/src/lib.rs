@@ -20,9 +20,9 @@ pub use {
 };
 
 /// Read a valuepub
-pub fn parse_value<'src, T>(
-    input: LocatedSpan<&'src str, T>
-) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
+pub fn parse_value<T>(
+    input: LocatedSpan<&str, T>
+) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&str, T>>>
 where T: Clone {
     alt((dec_number, hex_number, bin_number))(input)
 }
@@ -35,7 +35,7 @@ pub fn dec_number<'src, T>(
 where T: Clone {
     let (input, digits) = terminated(
         verify(is_a("0123456789_"), |s: &LocatedSpan<&'src str, T>| {
-            !s.starts_with("_")
+            !s.starts_with('_')
         }),
         not(alpha1)
     )(input)?;
@@ -49,9 +49,9 @@ where T: Clone {
 }
 
 #[inline]
-pub fn hex_number<'src, T>(
-    input: LocatedSpan<&'src str, T>
-) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
+pub fn hex_number<T>(
+    input: LocatedSpan<&str, T>
+) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&str, T>>>
 where T: Clone {
     alt((hex_number1, hex_number2))(input)
 }
@@ -66,7 +66,7 @@ where T: Clone {
         alt((tag_no_case("0x"), tag("#"), tag("$"), tag("&"))),
         verify(
             is_a("0123456789abcdefABCDEF_"),
-            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
+            |s: &LocatedSpan<&'src str, T>| !s.starts_with('_')
         )
     )(input)?;
     let number = digits
@@ -86,7 +86,7 @@ where T: Clone {
     let (input, digits) = terminated(
         verify(
             is_a("0123456789abcdefABCDEF_"),
-            |s: &LocatedSpan<&'src str, T>| !s.starts_with("_")
+            |s: &LocatedSpan<&'src str, T>| !s.starts_with('_')
         ),
         terminated(is_a("hH"), not(alpha1))
     )(input)?;
@@ -107,7 +107,7 @@ where T: Clone {
     let (input, digits) = preceded(
         alt((tag("0b"), tag("%"))),
         verify(is_a("01_"), |s: &LocatedSpan<&'src str, T>| {
-            !s.starts_with("_")
+            !s.starts_with('_')
         })
     )(input)?;
     let number = digits

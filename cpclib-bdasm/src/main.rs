@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::Read;
 
-use clap;
+
 use clap::{Arg, Command};
 use cpclib_asm::preamble::*;
 use cpclib_disc::amsdos::AmsdosHeader;
@@ -113,7 +113,7 @@ fn main() {
             .values_of("DATA_BLOC")
             .unwrap()
             .map(|bloc| {
-                let split = bloc.split("-").collect::<Vec<_>>();
+                let split = bloc.split('-').collect::<Vec<_>>();
                 let start = usize::from_str_radix(split[0], 16).unwrap();
                 let length = match usize::from_str_radix(split[1], 10) {
                     Ok(l) => Some(l),
@@ -165,7 +165,7 @@ fn main() {
     }
     else {
         // no blocs
-        cpclib_asm::disass::disassemble(&input_bytes)
+        cpclib_asm::disass::disassemble(input_bytes)
     };
 
     // add origin if any
@@ -173,10 +173,8 @@ fn main() {
         let origin = u16::from_str_radix(address, 16).unwrap();
         listing.insert(0, org(origin));
     }
-    else {
-        if let Some(origin) = amsdos_load {
-            listing.insert(0, org(origin));
-        }
+    else if let Some(origin) = amsdos_load {
+        listing.insert(0, org(origin));
     }
 
     // add labels

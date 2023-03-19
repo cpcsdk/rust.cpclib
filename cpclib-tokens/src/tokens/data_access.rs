@@ -227,7 +227,7 @@ impl DataAccess {
         match self {
             DataAccess::IndexRegister16(ref reg) => Some(*reg),
             DataAccess::MemoryIndexRegister16(ref reg) => Some(*reg),
-            &DataAccess::IndexRegister16WithIndex(ref reg, _) => Some(*reg),
+            DataAccess::IndexRegister16WithIndex(reg, _) => Some(*reg),
             _ => None
         }
     }
@@ -257,7 +257,7 @@ impl DataAccess {
 
     pub fn get_expression(&self) -> Option<&Expr> {
         match self {
-            DataAccess::Expression(ref exp) => Some(&exp),
+            DataAccess::Expression(ref exp) => Some(exp),
             _ => None
         }
     }

@@ -19,12 +19,12 @@ use std::io::{Read, Write};
 /// Catalog tool manipulator.
 use cpclib_common::clap::{Arg, Command};
 use cpclib_common::num::Num;
-use cpclib_disc::amsdos::*;
+use cpclib_disc::amsdos::{AmsdosEntries, AmsdosManager, BlocIdx};
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
-use simplelog::*;
+use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 
-pub fn to_number<T>(repr: &str) -> T
+#[must_use] pub fn to_number<T>(repr: &str) -> T
 where
     T: Num,
     <T as cpclib_common::num::Num>::FromStrRadixErr: std::fmt::Debug
@@ -130,11 +130,7 @@ fn main() -> std::io::Result<()> {
 							.requires("ENTRY")
 							.validator(|v|{
 								v.parse::<u8>() // between 0 and 255
-								.map_err(|e|{e.to_string()})
-								.and_then(
-									|_nb|
-									Ok(())
-								)
+								.map_err(|e|{e.to_string()}).map(|_nb| ())
 							})
 					)
 					.arg(
@@ -202,7 +198,7 @@ fn main() -> std::io::Result<()> {
                 .all(|t| t);
 
             if is_present && !contains_control_chars {
-                print!("{}. {}", idx, fname);
+                print!("{idx}. {fname}");
                 if is_hidden {
                     print!(" [hidden]");
                 }
@@ -214,10 +210,10 @@ fn main() -> std::io::Result<()> {
                 println!();
             }
             else if is_present && contains_control_chars && listall {
-                println!("{}. => CONTROL CHARS <=", idx);
+                println!("{idx}. => CONTROL CHARS <=");
             }
             else if !is_present {
-                println!("{}. => EMPTY SLOT <=", idx);
+                println!("{idx}. => EMPTY SLOT <=");
             }
         }
     }

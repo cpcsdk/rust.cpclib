@@ -208,8 +208,8 @@ impl AmsdosFileName {
 
     pub fn is_valid_char(char: u8) -> bool {
         // (char >= 'a' as u8 && char <= 'z' as u8) ||
-        (char >= b'A' && char <= b'Z')
-            || (char >= b'0' && char <= b'9')
+        char.is_ascii_uppercase()
+            || char.is_ascii_digit()
             || char == b'!'
             || char == b'"'
             || char == b'#'
@@ -367,8 +367,10 @@ impl std::fmt::Debug for AmsdosFileType {
 }
 /// Encode the index of a bloc
 #[derive(Debug, Copy, Clone, Ord, Eq)]
+#[derive(Default)]
 pub enum BlocIdx {
     /// The block is not used
+    #[default]
     Empty,
     /// The block is deleted
     Deleted, // TODO find a real name
@@ -376,11 +378,7 @@ pub enum BlocIdx {
     Index(std::num::NonZeroU8)
 }
 
-impl Default for BlocIdx {
-    fn default() -> Self {
-        BlocIdx::Empty
-    }
-}
+
 
 impl From<u8> for BlocIdx {
     fn from(val: u8) -> Self {
@@ -511,7 +509,7 @@ impl AmsdosEntry {
         Self {
             idx,
             file_name: AmsdosFileName::from_entry_format(array_ref!(buffer, 0, 12)),
-            read_only: buffer[1 + 8 + 0].bit(7),
+            read_only: buffer[1 + 8].bit(7),
             system: buffer[1 + 8 + 1].bit(7),
             num_page: buffer[12],
             page_size: buffer[15],
@@ -823,20 +821,12 @@ impl AmsdosEntries {
 
     /// Return the index of the entry
     pub fn entry_index(&self, entry: &AmsdosEntry) -> Option<usize> {
-        for idx in 0..self.entries.len() {
-            if &self.entries[idx] == entry {
-                return Some(idx);
-            }
-        }
-        None
+        (0..self.entries.len()).find(|&idx| &self.entries[idx] == entry)
     }
 
     /// Return the track that contains the entry
     pub fn track(&self, entry: &AmsdosEntry) -> Option<u8> {
-        match self.entry_index(entry) {
-            Some(idx) => Some((4 * idx / 64) as u8),
-            None => None
-        }
+        self.entry_index(entry).map(|idx| (4 * idx / 64) as u8)
     }
 
     pub fn sector(&self, entry: &AmsdosEntry) -> Option<u8> {
@@ -1269,7 +1259,7 @@ impl AmsdosManager {
         // TODO set this knowledge in edsk
         let (sector2_id, track2) = {
             if sector_pos > 8 {
-                (0 + min_sector, track + 1)
+                (min_sector, track + 1)
             }
             else {
                 (sector_pos + 1 + min_sector, track)

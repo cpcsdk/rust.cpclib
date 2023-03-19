@@ -157,7 +157,7 @@ impl BasicProgram {
 
     /// Create the program from a code to parse
     pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, BasicError> {
-        let input = code.as_ref().into();
+        let input = code.as_ref();
         match parse_basic_program(input) {
             Ok((res, prog)) => {
                 if res.trim().is_empty() {

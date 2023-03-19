@@ -421,7 +421,7 @@ impl MyToTokens for Expr {
                 if *val < 0 {
                     inside.append(Punct::new('-', Spacing::Joint));
                 }
-                inside.append(Literal::u32_unsuffixed(val.abs() as u32));
+                inside.append(Literal::u32_unsuffixed(val.unsigned_abs()));
                 tokens.append(Group::new(Delimiter::Parenthesis, inside));
             }
 

@@ -21,7 +21,7 @@ type BasicLineResult<'src> = IResult<&'src str, BasicLine, VerboseError<&'src st
 pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram, VerboseError<&str>> {
     let (input, lines) = fold_many0(
         parse_basic_line,
-        || Vec::new(),
+        Vec::new,
         |mut acc: Vec<_>, item| {
             acc.push(item);
             acc
@@ -42,7 +42,7 @@ pub fn parse_basic_line(input: &str) -> BasicLineResult {
     // get the tokens
     let (input, tokens) = fold_many0(
         pair(parse_instruction, alt((eof, line_ending, tag(":")))),
-        || Vec::new(),
+        Vec::new,
         |mut acc: Vec<_>, (mut item, next)| {
             dbg!(&item);
             dbg!(&next);
@@ -185,7 +185,7 @@ pub fn parse_quoted_string(input: &str) -> BasicSeveralTokensResult {
     let (input, start) = parse_quote(input)?;
     let (input, mut content) = fold_many0(
         alt((parse_char, parse_space)),
-        || Vec::new(),
+        Vec::new,
         |mut acc, new| {
             acc.push(new);
             acc
@@ -292,7 +292,7 @@ pub fn parse_float_variable(input: &str) -> BasicSeveralTokensResult {
     let (input, name) = pair(parse_base_variable_name, opt(char('!')))(input)?;
 
     let mut tokens = name.0;
-    if let Some(_) = name.1 {
+    if name.1.is_some() {
         tokens.push(BasicToken::SimpleToken('!'.into()));
     }
 
@@ -359,8 +359,8 @@ pub fn parse_print_stream_expression(input: &str) -> BasicSeveralTokensResult {
         }
     ))(input)?;
 
-    for mut other in &mut next {
-        first.append(&mut other);
+    for other in &mut next {
+        first.append(other);
     }
 
     Ok((input, first))
@@ -614,11 +614,11 @@ fn parse_any_string_function<'code>(
         res.push(code);
         res.append(&mut space_a);
         res.push(BasicToken::SimpleToken(
-            BasicTokenNoPrefix::from(open).into()
+            BasicTokenNoPrefix::from(open)
         ));
         res.append(&mut expr);
         res.push(BasicToken::SimpleToken(
-            BasicTokenNoPrefix::from(close).into()
+            BasicTokenNoPrefix::from(close)
         ));
 
         Ok((input, res))
@@ -707,7 +707,7 @@ fn parse_any_numeric_function<'code>(
             char('('),
             cut(context(
                 "Wrong parameter",
-                parse_numeric_expression(constraint.clone())
+                parse_numeric_expression(constraint)
             )),
             cut(context("Missing ')'", char(')')))
         ))(input)?;
@@ -716,11 +716,11 @@ fn parse_any_numeric_function<'code>(
         res.push(code);
         res.append(&mut space_a);
         res.push(BasicToken::SimpleToken(
-            BasicTokenNoPrefix::from(open).into()
+            BasicTokenNoPrefix::from(open)
         ));
         res.append(&mut expr);
         res.push(BasicToken::SimpleToken(
-            BasicTokenNoPrefix::from(close).into()
+            BasicTokenNoPrefix::from(close)
         ));
 
         Ok((input, res))
@@ -892,7 +892,7 @@ pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8; 5], BasicError> {
     {
         // generate the exponent
         exp += 128;
-        if exp < 0 || exp > 255 {
+        if !(0..=255).contains(&exp) {
             return Err(BasicError::ExponentOverflow);
         }
         else {
@@ -1054,7 +1054,7 @@ mod test {
         assert!(dbg!(parse_floating_point("67.98")).is_ok());
         assert!(dbg!(parse_floating_point("-67.98")).is_ok());
 
-        match hex_u16_inner("1234".into()) {
+        match hex_u16_inner("1234") {
             Ok((res, value)) => {
                 println!("{:?}", &res);
                 println!("{:x}", &value);
@@ -1065,7 +1065,7 @@ mod test {
             }
         }
 
-        match parse_hexadecimal_value_16bits("&1234".into()) {
+        match parse_hexadecimal_value_16bits("&1234") {
             Ok((res, value)) => {
                 println!("{:?}", &res);
                 println!("{:?}", &value);
@@ -1084,7 +1084,7 @@ mod test {
     }
 
     fn check_line_tokenisation(code: &str) -> BasicLine {
-        let res = parse_basic_line(code.into());
+        let res = parse_basic_line(code);
         match res {
             Ok((res, line)) => {
                 println!("{:?}", &line);
@@ -1099,7 +1099,7 @@ mod test {
     }
 
     fn check_token_tokenisation(code: &str) {
-        let res = parse_instruction(code.into());
+        let res = parse_instruction(code);
         match res {
             Ok((res, line)) => {
                 println!("{} => {:?}", code, &line);
@@ -1127,7 +1127,7 @@ mod test {
     }
 
     fn check_expression(code: &str) {
-        let res = parse_numeric_expression(NumericExpressionConstraint::None)(code.into());
+        let res = parse_numeric_expression(NumericExpressionConstraint::None)(code);
         match res {
             Ok((res, line)) => {
                 println!("{} => {:?}", code, &line);

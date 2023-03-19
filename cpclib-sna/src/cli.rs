@@ -33,7 +33,6 @@ fn mem_to_string(sna: &Snapshot, from: Option<u32>, amount: Option<u32>) -> Stri
     let amount = amount.unwrap_or_else(|| sna.memory.len() as u32 - from);
 
     (from..(from + amount))
-        .into_iter()
         .map(move |addr| sna.get_byte(addr))
         .chunks(DATA_WIDTH)
         .into_iter()
@@ -49,7 +48,7 @@ fn mem_to_string(sna: &Snapshot, from: Option<u32>, amount: Option<u32>) -> Stri
                 .map(|byte| {
                     char::from_u32(*byte as u32)
                         .map(|c| {
-                            if c < ' ' || c > '~' {
+                            if !(' '..='~').contains(&c) {
                                 '.'
                             }
                             else {
@@ -126,21 +125,21 @@ impl Command {
     }
 }
 
-fn parse_number<'src>(
-    input: Source<'src>
-) -> IResult<Source<'src>, u32, VerboseError<Source<'src>>> {
+fn parse_number(
+    input: Source<'_>
+) -> IResult<Source<'_>, u32, VerboseError<Source<'_>>> {
     alt((hex_number, bin_number, dec_number))(input)
 }
 
-fn parse_line<'src>(
-    input: Source<'src>
-) -> IResult<Source<'src>, Command, VerboseError<Source<'src>>> {
+fn parse_line(
+    input: Source<'_>
+) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     alt((parse_memory, parse_disassemble, parse_help, parse_load2))(input)
 }
 
-fn parse_memory<'src>(
-    input: Source<'src>
-) -> IResult<Source<'src>, Command, VerboseError<Source<'src>>> {
+fn parse_memory(
+    input: Source<'_>
+) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(
         tuple((
             alt((tag_no_case("MEMORY"), tag_no_case("MEM"))),
@@ -151,9 +150,9 @@ fn parse_memory<'src>(
     )(input)
 }
 
-fn parse_disassemble<'src>(
-    input: Source<'src>
-) -> IResult<Source<'src>, Command, VerboseError<Source<'src>>> {
+fn parse_disassemble(
+    input: Source<'_>
+) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(
         tuple((
             alt((tag_no_case("DISASSEMBLE"), tag_no_case("DISASS"))),
@@ -164,15 +163,15 @@ fn parse_disassemble<'src>(
     )(input)
 }
 
-fn parse_help<'src>(
-    input: Source<'src>
-) -> IResult<Source<'src>, Command, VerboseError<Source<'src>>> {
+fn parse_help(
+    input: Source<'_>
+) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(tag_no_case("HELP"), |_| Command::Help)(input)
 }
 
-fn parse_load2<'src>(
-    input: Source<'src>
-) -> IResult<Source<'src>, Command, VerboseError<Source<'src>>> {
+fn parse_load2(
+    input: Source<'_>
+) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(
         preceded(
             tuple((tag_no_case("LOAD2"), space1)),
@@ -217,7 +216,7 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
                 let src = Source::new(line.as_str());
                 match parse_line(src) {
                     Ok((_input, cmd)) => cmd.handle(&mut sna, &mut sna2),
-                    Err(e) => eprintln!("Wrong command. {}", e.to_string())
+                    Err(e) => eprintln!("Wrong command. {}", e)
                 }
             }
             Err(ReadlineError::Interrupted) => break,

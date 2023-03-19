@@ -99,7 +99,7 @@ impl MemoryChunk {
             res.extend(data);
             assert_eq!(res.len(), data.len());
             res.resize(0x100000, 0);
-            return Self::from(code, res);
+            Self::from(code, res)
         }
         else {
             let mut previous = None;

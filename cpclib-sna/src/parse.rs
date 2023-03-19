@@ -14,9 +14,9 @@ use separated_list1 as separated_nonempty_list;
 
 use crate::flags::{FlagValue, SnapshotFlag};
 
-pub fn parse_flag<'src, T>(
-    input: LocatedSpan<&'src str, T>
-) -> IResult<LocatedSpan<&'src str, T>, SnapshotFlag, VerboseError<LocatedSpan<&'src str, T>>>
+pub fn parse_flag<T>(
+    input: LocatedSpan<&str, T>
+) -> IResult<LocatedSpan<&str, T>, SnapshotFlag, VerboseError<LocatedSpan<&str, T>>>
 where T: Clone {
     let (input, word) =
         is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:")(input)?;
@@ -32,9 +32,9 @@ where T: Clone {
     }
 }
 
-pub fn parse_flag_value<'src, T>(
-    input: LocatedSpan<&'src str, T>
-) -> IResult<LocatedSpan<&'src str, T>, FlagValue, VerboseError<LocatedSpan<&'src str, T>>>
+pub fn parse_flag_value<T>(
+    input: LocatedSpan<&str, T>
+) -> IResult<LocatedSpan<&str, T>, FlagValue, VerboseError<LocatedSpan<&str, T>>>
 where T: Clone {
     alt((
         map(parse_value, |val| {

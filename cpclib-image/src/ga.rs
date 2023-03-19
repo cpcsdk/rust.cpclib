@@ -398,15 +398,15 @@ impl Ink {
     }
 }
 
-impl Into<u8> for Ink {
-    fn into(self) -> u8 {
-        (&self).into()
+impl From<Ink> for u8 {
+    fn from(val: Ink) -> Self {
+        (&val).into()
     }
 }
 
-impl Into<u8> for &Ink {
-    fn into(self) -> u8 {
-        self.gate_array()
+impl From<&Ink> for u8 {
+    fn from(val: &Ink) -> Self {
+        val.gate_array()
     }
 }
 
@@ -451,8 +451,7 @@ impl From<String> for Ink {
     fn from(item: String) -> Self {
         match item
             .to_uppercase()
-            .replace(" ", "")
-            .replace("_", "")
+            .replace([' ', '_'], "")
             .as_str()
         {
             "BLACK" => Self { value: 0 },
@@ -650,7 +649,7 @@ impl Clone for Palette {
     fn clone(&self) -> Self {
         let mut map: HashMap<Pen, Ink> = HashMap::new();
         for (pen, ink) in &self.values {
-            map.insert(pen.clone(), *ink);
+            map.insert(*pen, *ink);
         }
 
         Self { values: map }
@@ -880,7 +879,7 @@ impl Palette {
 
     /// Returns all the set pens (without the border)
     pub fn pens_with_border(&self) -> Vec<Pen> {
-        self.values.iter().map(|(p, _)| *p).collect::<Vec<Pen>>()
+        self.values.keys().copied().collect::<Vec<Pen>>()
     }
 
     /// Returns all the set pens (without the border)
@@ -960,18 +959,18 @@ impl Palette {
         let ink2 = self.get(&PENS[2]);
         let ink3 = self.get(&PENS[3]);
 
-        p.set(PENS[4], ink3.clone());
-        p.set(PENS[5], ink0.clone());
-        p.set(PENS[6], ink0.clone());
-        p.set(PENS[7], ink0.clone());
-        p.set(PENS[8], ink1.clone());
-        p.set(PENS[9], ink3.clone());
-        p.set(PENS[10], ink1.clone());
-        p.set(PENS[11], ink1.clone());
-        p.set(PENS[12], ink2.clone());
-        p.set(PENS[13], ink2.clone());
-        p.set(PENS[14], ink3.clone());
-        p.set(PENS[15], ink2.clone());
+        p.set(PENS[4], *ink3);
+        p.set(PENS[5], *ink0);
+        p.set(PENS[6], *ink0);
+        p.set(PENS[7], *ink0);
+        p.set(PENS[8], *ink1);
+        p.set(PENS[9], *ink3);
+        p.set(PENS[10], *ink1);
+        p.set(PENS[11], *ink1);
+        p.set(PENS[12], *ink2);
+        p.set(PENS[13], *ink2);
+        p.set(PENS[14], *ink3);
+        p.set(PENS[15], *ink2);
 
         p
     }
@@ -1046,9 +1045,9 @@ impl Into<Vec<u8>> for &Palette {
     }
 }
 
-impl Into<Vec<u8>> for Palette {
-    fn into(self) -> Vec<u8> {
-        (&self).into()
+impl From<Palette> for Vec<u8> {
+    fn from(val: Palette) -> Self {
+        (&val).into()
     }
 }
 

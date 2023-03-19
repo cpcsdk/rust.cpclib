@@ -298,7 +298,7 @@ impl Snapshot {
                 sna.memory.memory().len(),
                 sna.memory_size_header() as usize * 1024
             );
-            buffer.write_all(&sna.memory.memory())?;
+            buffer.write_all(sna.memory.memory())?;
         }
         // println!("Memory header: {}", sna.memory_size_header());
 
@@ -331,7 +331,7 @@ impl Snapshot {
             }
 
             2 => {
-                self.header[offset + 0] = (value % 256) as u8;
+                self.header[offset] = (value % 256) as u8;
                 self.header[offset + 1] = (value / 256) as u8;
                 Ok(())
             }

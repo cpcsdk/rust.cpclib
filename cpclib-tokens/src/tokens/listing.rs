@@ -100,7 +100,7 @@ pub trait ListingElement: Debug + Sized {
     fn include_once(&self) -> bool;
     fn include_is_standard_include(&self) -> bool {
         self.is_include() && 
-        !self.include_fname().contains("{") && // no expansion
+        !self.include_fname().contains('{') && // no expansion
         !self.include_once()
     }
 

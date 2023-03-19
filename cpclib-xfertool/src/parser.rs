@@ -1,14 +1,14 @@
 use std::str;
 
 use cpclib_common::nom;
-use nom::branch::*;
-use nom::bytes::complete::*;
-use nom::character::complete::*;
+use nom::branch::alt;
+use nom::bytes::complete::{tag_no_case, take_till};
+use nom::character::complete::{space0, space1};
 use nom::character::is_space;
-use nom::combinator::*;
+use nom::combinator::{map, rest, value};
 use nom::multi::*;
-use nom::sequence::*;
-use nom::*;
+use nom::sequence::{preceded, tuple};
+use nom::IResult;
 
 #[derive(Debug, Clone)]
 pub(crate) enum XferCommand {
@@ -83,7 +83,7 @@ fn put(input: &str) -> IResult<&str, XferCommand> {
     map(
         preceded(
             tuple((tag_no_case("put"), space1)),
-            take_till(|c: char| c.is_whitespace())
+            take_till(char::is_whitespace)
         ),
         |path: &str| XferCommand::Put(path.to_string())
     )(input)
@@ -102,7 +102,7 @@ fn rm(input: &str) -> IResult<&str, XferCommand> {
                 )),
                 space1
             )),
-            take_till(|c: char| c.is_whitespace())
+            take_till(char::is_whitespace)
         ),
         |path: &str| XferCommand::Era(path.to_string())
     )(input)

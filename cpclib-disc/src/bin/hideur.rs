@@ -18,12 +18,12 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use cpclib_common::clap;
-use cpclib_disc::amsdos::*;
+use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName, AmsdosFileType, AmsdosManager};
 
 /// Convert a string to its unsigned 32 bits representation (to access to extra memory)
 /// TODO share implementation
-pub fn string_to_nb(source: &str) -> u32 {
-    let error = format!("Unable to read the value: {}", source);
+#[must_use] pub fn string_to_nb(source: &str) -> u32 {
+    let error = format!("Unable to read the value: {source}");
     if source.starts_with("0x") {
         u32::from_str_radix(&source[2..], 16).expect(&error)
     }
@@ -64,7 +64,7 @@ fn main() -> std::io::Result<()> {
                 .required_unless_present("INFO")
                 .help("File type")
                 .ignore_case(true)
-                .possible_values(&["0", "1", "2", "Basic", "Protected", "Binary"])
+                .possible_values(["0", "1", "2", "Basic", "Protected", "Binary"])
                 .takes_value(true)
         )
         .arg(
@@ -102,14 +102,14 @@ fn main() -> std::io::Result<()> {
         let (filename, extension) = {
             let parts = complete_filename.split('.').collect::<Vec<_>>();
             let (filename, extension) = match parts.len() {
-                1 => (parts[0].to_owned(), "".to_owned()),
+                1 => (parts[0].to_owned(), String::new()),
                 2 => (parts[0].to_owned(), parts[1].to_owned()),
                 _n => {
                     eprintln!(
                         "[Warning] Filename contains several `.`. They have been all removed."
                     );
                     (
-                        parts[..parts.len() - 1].join("_").to_owned(),
+                        parts[..parts.len() - 1].join("_"),
                         parts[parts.len() - 1].to_owned()
                     )
                 }
@@ -143,7 +143,7 @@ fn main() -> std::io::Result<()> {
         let amsfile = AmsdosFile::from_buffer(&content);
         let header = amsfile.header();
         if header.is_checksum_valid() {
-            println!("{:?}", header);
+            println!("{header:?}");
         }
         else {
             eprintln!("This is not an Amsdos file");
@@ -171,12 +171,12 @@ fn main() -> std::io::Result<()> {
         let header = match ftype {
             AmsdosFileType::Binary => {
                 let exec = string_to_nb(
-                    &matches
+                    matches
                         .value_of("EXEC")
                         .expect("The execution address is expected for a binary target")
                 ) as u16;
                 let load = string_to_nb(
-                    &matches
+                    matches
                         .value_of("LOAD")
                         .expect("The load address is expected for a binary target")
                 ) as u16;

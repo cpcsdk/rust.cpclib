@@ -18,7 +18,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use cpclib_common::clap::{Arg, ArgGroup, Command};
-use cpclib_disc::amsdos::*;
+use cpclib_disc::amsdos::{AmsdosFile, AmsdosManager};
 use cpclib_disc::edsk::ExtendedDsk;
 use custom_error::custom_error;
 
@@ -56,7 +56,7 @@ fn main() -> Result<(), DskManagerError> {
                                     .short('f')
                                     .long("format")
                                     .takes_value(true)
-                                    .possible_values(&["data", "data42"])
+                                    .possible_values(["data", "data42"])
                             )
                             .group(
                                 ArgGroup::new("command")
@@ -177,7 +177,7 @@ fn main() -> Result<(), DskManagerError> {
     // Manipulate the catalog of a disc
     if let Some(sub) = matches.subcommand_matches("catalog") {
         let mut dsk = ExtendedDsk::open(dsk_fname)
-            .unwrap_or_else(|_| panic!("Unable to open the file {}", dsk_fname));
+            .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
         eprintln!("WIP - We assume head 0 is chosen");
 
         // Import the catalog from one file in one existing disc
@@ -237,14 +237,14 @@ fn main() -> Result<(), DskManagerError> {
             // TODO manage files instead of entries
             println!("Dsk {} -- {} files", dsk_fname, entries.len());
             for entry in &entries {
-                println!("{}", entry.to_string());
+                println!("{}", entry);
             }
         } else {
             panic!("Error - missing argument");
         }
     }
     else if let Some(sub) = matches.subcommand_matches("put") {
-        use cpclib_tokens::*;
+        use cpclib_tokens::{ExprElement, Listing, builder};
 
         // Add files in a sectorial way
         let mut track = u8::from_str(sub.value_of("TRACK").unwrap()).expect("Wrong track format");
@@ -253,7 +253,7 @@ fn main() -> Result<(), DskManagerError> {
         let _export = sub.value_of("Z80_EXPORT").unwrap();
 
         let mut dsk = ExtendedDsk::open(dsk_fname)
-            .unwrap_or_else(|_| panic!("Unable to open the file {}", dsk_fname));
+            .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
 
         let mut listing = Listing::new();
         for file in sub.values_of("FILES").unwrap() {
@@ -264,14 +264,14 @@ fn main() -> Result<(), DskManagerError> {
 
             let next_position = dsk
                 .add_file_sequentially(head, track, sector, &content)
-                .unwrap_or_else(|_| panic!("Unable to add {}", file));
+                .unwrap_or_else(|_| panic!("Unable to add {file}"));
 
             let base_label = Path::new(file)
                 .file_name()
                 .unwrap()
                 .to_str()
                 .unwrap()
-                .replace(".", "_");
+                .replace('.', "_");
             listing.add(builder::equ(format!("{}_head", &base_label), head));
             listing.add(builder::equ(format!("{}_track", &base_label), track));
             listing.add(builder::equ(format!("{}_sector", &base_label), sector));
@@ -286,7 +286,7 @@ fn main() -> Result<(), DskManagerError> {
 
         // Get the input dsk
         let dsk = ExtendedDsk::open(dsk_fname)
-            .unwrap_or_else(|_| panic!("Unable to open the file {}", dsk_fname));
+            .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
         let mut manager = AmsdosManager::new_from_disc(dsk, 0);
 
         // Get the common parameters
@@ -297,14 +297,12 @@ fn main() -> Result<(), DskManagerError> {
         for fname in sub.values_of("INPUT_FILES").unwrap() {
             let ams_file = match AmsdosFile::open_valid(fname) {
                 Ok(ams_file) => {
-                    if !ams_file.amsdos_filename().unwrap().is_valid() {
-                        panic!("Invalid amsdos filename ! {:?}", ams_file.amsdos_filename());
-                    }
+                    assert!(ams_file.amsdos_filename().unwrap().is_valid(), "Invalid amsdos filename ! {:?}", ams_file.amsdos_filename());
                     println!("{:?} added", ams_file.amsdos_filename());
                     ams_file
                 }
                 Err(e) => {
-                    panic!("Unable to load {}: {:?}", fname, e);
+                    panic!("Unable to load {fname}: {e:?}");
                 }
             };
 

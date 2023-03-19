@@ -69,7 +69,7 @@ pub enum ConversionRule {
 fn get_unique_colors(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> HashSet<im::Rgb<u8>> {
     let mut set = HashSet::new();
     for pixel in img.pixels() {
-        set.insert(pixel.clone());
+        set.insert(*pixel);
     }
     set
 }
@@ -535,7 +535,7 @@ impl ColorMatrix {
     }
 
     /// Generate an iterator on the pixels
-    pub fn inks<'a>(&'a self) -> Inks<'a> {
+    pub fn inks(&self) -> Inks<'_> {
         Inks {
             image: self,
             x: 0,
@@ -589,9 +589,9 @@ impl From<Vec<ColorMatrix>> for ColorMatrixList {
     }
 }
 
-impl Into<Vec<ColorMatrix>> for &ColorMatrixList {
-    fn into(self) -> Vec<ColorMatrix> {
-        self.0.clone()
+impl From<&ColorMatrixList> for Vec<ColorMatrix> {
+    fn from(val: &ColorMatrixList) -> Self {
+        val.0.clone()
     }
 }
 
@@ -658,7 +658,7 @@ impl ColorMatrixList {
 
         let mut matrix_list = ColorMatrixList(Vec::new());
         while let Some(frame) = decoder.read_next_frame()? {
-            screen.blit_frame(&frame)?;
+            screen.blit_frame(frame)?;
 
             let content = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::from_raw(
                 screen.pixels.width() as u32,
@@ -667,8 +667,7 @@ impl ColorMatrixList {
                     .pixels
                     .buf()
                     .iter()
-                    .map(|pix| [pix.r, pix.g, pix.b].to_vec())
-                    .flatten()
+                    .flat_map(|pix| [pix.r, pix.g, pix.b].to_vec())
                     .collect::<Vec<u8>>()
             )
             .unwrap();
@@ -688,9 +687,7 @@ impl ColorMatrixList {
         strategy: ColorConversionStrategy
     ) -> Result<(), anyhow::Error> {
         self.0
-            .iter_mut()
-            .map(|matrix| matrix.reduce_colors_with(inks, strategy))
-            .collect()
+            .iter_mut().try_for_each(|matrix| matrix.reduce_colors_with(inks, strategy))
     }
 
     /// Number of frames in the animation
@@ -958,8 +955,7 @@ impl Sprite {
     pub fn get_byte_safe(&self, x: usize, y: usize) -> Option<u8> {
         self.data
             .get(y)
-            .and_then(|v| v.get(x))
-            .and_then(|v| Some(*v))
+            .and_then(|v| v.get(x)).copied()
     }
 
     /// Returns the line of interest
@@ -1072,7 +1068,7 @@ impl MultiModeSprite {
 
             // First 4 inks are strictly the same
             for i in 0..4 {
-                p.set(i, p_orig.get(i.into()).clone());
+                p.set(i, *p_orig.get(i.into()));
             }
 
             // The others depends on the bits kept in mode 0 or mode 4
@@ -1086,7 +1082,7 @@ impl MultiModeSprite {
             // Fill inks depending on the lut
             for (src, dsts) in &lut {
                 dsts.iter().for_each(|dst| {
-                    p.set(*dst, p_orig.get((*src).into()).clone());
+                    p.set(*dst, *p_orig.get((*src).into()));
                 });
             }
 

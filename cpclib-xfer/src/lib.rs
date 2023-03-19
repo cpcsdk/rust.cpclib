@@ -77,11 +77,11 @@ impl From<&str> for M4FilesList {
         while idx < lines.len() {
             // check if current line is ok
             if lines[idx].match_indices(';').count() >= 2 && lines[lines.len() - 1] == "K" {
-                idx = idx + 1; // we can assume it is a standard file even if it may not be one
+                idx += 1; // we can assume it is a standard file even if it may not be one
             }
             else if lines[idx].ends_with(",0,0") {
                 // we can assume it is a directory
-                idx = idx + 1;
+                idx += 1;
             }
             else {
                 // we can consider it is a mistake because of cat art
@@ -144,7 +144,7 @@ impl CpcXfer {
     /// Make a simple query
     fn simple_query(&self, query: &[(&str, &str)]) -> reqwest::Result<reqwest::blocking::Response> {
         reqwest::blocking::Client::new()
-            .get(&self.uri("config.cgi"))
+            .get(self.uri("config.cgi"))
             .query(query)
             .header("User-Agent", "User-Agent: cpcxfer")
             .send()
@@ -254,19 +254,14 @@ impl CpcXfer {
             .prefix("xfer")
             .suffix(".sna")
             .rand_bytes(4)
-            .tempfile()
-            .or_else(|e| {
-                Err(XferError::InternalError {
+            .tempfile().map_err(|e| XferError::InternalError {
                     reason: e.to_string()
-                })
-            })?;
+                })?;
         let temp_path = file.into_temp_path();
 
-        sna.save(&temp_path, SnapshotVersion::V2).or_else(|e| {
-            Err(XferError::InternalError {
+        sna.save(&temp_path, SnapshotVersion::V2).map_err(|e| XferError::InternalError {
                 reason: format!("Unable to save the snapshot. {}", e)
-            })
-        })?;
+            })?;
         self.upload_and_run(&temp_path, None)?;
 
         // sleep a bit to be sure the file is not deleted BEFORE sending it to CPC

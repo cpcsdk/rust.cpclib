@@ -13,7 +13,7 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation)]
 
-use cpclib_asm::basm_utils::*;
+use cpclib_asm::basm_utils::{build_args_parser, process};
 use cpclib_common::lazy_static;
 
 pub mod built_info {
@@ -39,16 +39,16 @@ fn main() {
     match process(&matches) {
         Ok((env, warnings)) => {
             for warning in warnings {
-                eprintln!("{}", warning);
+                eprintln!("{warning}");
             }
 
             let report = env.report(&start);
-            println!("{}", report);
+            println!("{report}");
 
             std::process::exit(0);
         }
         Err(e) => {
-            eprintln!("Error while assembling.\n{}", e);
+            eprintln!("Error while assembling.\n{e}");
             std::process::exit(-1);
         }
     }

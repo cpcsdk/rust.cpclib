@@ -88,7 +88,7 @@ fn main() -> anyhow::Result<()> {
                         Ok(())
                     }
                     else {
-                        Err(format!("{} does not exists", fname))
+                        Err(format!("{fname} does not exists"))
                     }
                 })
                 .required(true)
@@ -118,7 +118,7 @@ fn main() -> anyhow::Result<()> {
                         Ok(())
                     }
                     else {
-                        Err(format!("{} does not exists", fname))
+                        Err(format!("{fname} does not exists"))
                     }
                 })
                 .required(true)
@@ -161,7 +161,7 @@ fn main() -> anyhow::Result<()> {
         Some(cpcaddr) => cpcaddr.to_string(),
         None => {
             match env::var("CPCIP") {
-                Ok(cpcaddr) => cpcaddr.to_string(),
+                Ok(cpcaddr) => cpcaddr,
                 Err(_) => {
                     panic!(
                 "You should provide the CPCADDR argument or set the CPCIP environmeent variable"
@@ -196,18 +196,13 @@ fn main() -> anyhow::Result<()> {
                 notify::Config::default()
             )?;
 
-            watcher.watch(&std::path::Path::new(&fname), RecursiveMode::NonRecursive)?;
+            watcher.watch(std::path::Path::new(&fname), RecursiveMode::NonRecursive)?;
 
             for res in rx {
                 match res {
                     Ok(notify::event::Event {
-                        kind: notify::event::EventKind::Modify(_),
-                        ..
-                    })
-                    | Ok(notify::event::Event {
-                        kind: notify::event::EventKind::Create(_),
-                        ..
-                    }) => {
+kind: notify::event::EventKind::Modify(_) |
+    notify::event::EventKind::Create(_), .. }) => {
                         send_and_run_file(&xfer, &fname, true);
                     }
                     _ => {}
@@ -222,12 +217,12 @@ fn main() -> anyhow::Result<()> {
     else if let Some(_ls_opt) = matches.subcommand_matches("--ls") {
         let content = xfer.current_folder_content()?;
         for file in content.files() {
-            println!("{:?}", file);
+            println!("{file:?}");
         }
     }
     else if let Some(_pwd_opt) = matches.subcommand_matches("--pwd") {
         let cwd = xfer.current_working_directory()?;
-        println!("{}", cwd);
+        println!("{cwd}");
     }
     else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
         xfer.cd(cd_opt.value_of("directory").unwrap())
