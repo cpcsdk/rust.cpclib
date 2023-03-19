@@ -656,7 +656,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "anyhow",
  "arrayref",
@@ -728,7 +728,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-asm"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "arrayref",
  "assert_matches",
@@ -791,7 +791,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-basic"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "arrayref",
  "built",
@@ -811,7 +811,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-basm"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "built",
  "cpclib-asm 0.6.0",
@@ -829,7 +829,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bdasm"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "built",
  "clap 3.2.23",
@@ -865,7 +865,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-common"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "bitfield",
  "bitflags",
@@ -911,7 +911,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-disc"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "arrayref",
  "built",
@@ -947,7 +947,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-image"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "anyhow",
  "as-slice",
@@ -961,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-imgconverter"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "anyhow",
  "built",
@@ -988,7 +988,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-macros"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "cpclib-asm 0.6.0",
  "cpclib-common 0.6.0",
@@ -1014,7 +1014,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-sna"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "built",
  "cfg-if 1.0.0",
@@ -1052,7 +1052,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-tokens"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "built",
  "cfg-if 1.0.0",
@@ -1071,7 +1071,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-wasm"
-version = "0.2.1-alpha.1"
+version = "0.2.1-alpha.2"
 dependencies = [
  "console_error_panic_hook",
  "cpclib-asm 0.6.0",
@@ -1111,7 +1111,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-xfer"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "arrayref",
  "built",
@@ -1134,7 +1134,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-xfertool"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "anyhow",
  "arrayref",
@@ -1185,7 +1185,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-z80emu"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 dependencies = [
  "cfg-if 1.0.0",
  "cpclib-asm 0.6.0",
@@ -4967,7 +4967,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "visual-basm"
-version = "0.2.1-alpha.1"
+version = "0.2.1-alpha.2"
 dependencies = [
  "cpclib-asm 0.6.0",
  "klask",

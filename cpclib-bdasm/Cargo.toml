@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-bdasm"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 edition = "2021"
 description = "Z80 disassembler. Still contains some bugs."
 license = "MIT"

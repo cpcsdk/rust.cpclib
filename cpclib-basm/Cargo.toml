@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-basm"
-version = "0.6.1-alpha.1"
+version = "0.6.1-alpha.2"
 edition = "2021"
 description = "z80 assembler relying on cpclib-asm"
 repository = "https://github.com/cpcsdk/rust.cpclib"
