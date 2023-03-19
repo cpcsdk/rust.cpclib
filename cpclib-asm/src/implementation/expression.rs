@@ -79,9 +79,9 @@ impl<'a, E:ExprEvaluationExt> ExprEvaluationExt for UnaryFunctionWrapper<'a,E> {
             UnaryFunction::Memory => {
                 if arg < 0.into() || arg > 0xFFFF.into() {
                     return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                        box AssemblerError::AssemblingError {
+                        Box::new(AssemblerError::AssemblingError {
                             msg: format!("Impossible to read memory address {}", arg)
-                        }
+                        })
                     )));
                 }
                 else {
@@ -166,17 +166,17 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
 
                     ExprResult::List(_) => {
                         Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                            box AssemblerError::AssemblingError {
+                            Box::new(AssemblerError::AssemblingError {
                                 msg: format!("pow cannot be applied to a list")
-                            }
+                            })
                         )))
                     },
 
                     _ => {
                         Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                            box AssemblerError::AssemblingError {
+                            Box::new(AssemblerError::AssemblingError {
                                 msg: format!("pow cannot be applied to a string")
-                            }
+                            })
                         )))
                     }
                 }
@@ -232,18 +232,18 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                 }
                 (Err(a), Ok(_b)) => {
                     Err(AssemblerError::ExpressionError(ExpressionError::LeftError(
-                        oper, box a
+                        oper, Box::new(a)
                     )))
                 }
 
                 (Ok(_a), Err(b)) => {
                     Err(AssemblerError::ExpressionError(
-                        ExpressionError::RightError(oper, box b)
+                        ExpressionError::RightError(oper, Box::new(b))
                     ))
                 }
                 (Err(a), Err(b)) => {
                     Err(AssemblerError::ExpressionError(
-                        ExpressionError::LeftAndRightError(oper, box a, box b)
+                        ExpressionError::LeftAndRightError(oper, Box::new(a), Box::new(b))
                     ))
                 }
             }
@@ -338,7 +338,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                         0 => Err(
                             AssemblerError::ExpressionError(
                                 ExpressionError::OwnError(
-                                    box AssemblerError::AssemblingError{msg:format!("{} is assembled with 0 bytes", token)}
+                                    Box::new(AssemblerError::AssemblingError{msg:format!("{} is assembled with 0 bytes", token)})
                                 )
                             )
                         ),
@@ -347,7 +347,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                         val => Err(
                             AssemblerError::ExpressionError(
                                 ExpressionError::OwnError(
-                                    box AssemblerError::AssemblingError{msg:format!("{} is assembled with {} bytes", token, val)}
+                                    Box::new(AssemblerError::AssemblingError{msg:format!("{} is assembled with {} bytes", token, val)})
                                 )
                             )
                         )

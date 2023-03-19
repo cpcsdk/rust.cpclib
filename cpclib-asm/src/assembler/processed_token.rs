@@ -570,10 +570,10 @@ where
         }))
     }
     else if token.is_warning() {
-        Some(ProcessedTokenState::Warning(box build_processed_token(
+        Some(ProcessedTokenState::Warning(Box::new(build_processed_token(
             token.warning_token(),
             env
-        )))
+        ))))
     }
     else if token.is_while() {
         Some(ProcessedTokenState::While(SimpleListingState {
@@ -1143,9 +1143,9 @@ where
 
                     Some(ProcessedTokenState::Warning(box token)) => {
                         let warning = AssemblerError::RelocatedWarning {
-                            warning: box AssemblerError::AssemblingError {
+                            warning: Box::new(AssemblerError::AssemblingError {
                                 msg: self.token.warning_message().to_owned()
-                            },
+                            }),
                             span: self.token.possible_span().unwrap().clone()
                         };
                         let warning = AssemblerError::AlreadyRenderedError(warning.to_string());

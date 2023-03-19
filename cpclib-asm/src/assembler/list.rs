@@ -54,9 +54,9 @@ pub fn list_set(
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a list", list)
-                }
+                })
             )))
         }
     }
@@ -84,9 +84,9 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, crate::As
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a list", list)
-                }
+                })
             )))
         }
     }
@@ -128,9 +128,9 @@ pub fn list_sublist(
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a list", list)
-                }
+                })
             )))
         }
     }
@@ -142,9 +142,9 @@ pub fn list_len(list: &ExprResult) -> Result<ExprResult, crate::AssemblerError> 
         ExprResult::String(s) => Ok(s.len().into()),
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a list", list)
-                }
+                })
             )))
         }
     }
@@ -158,9 +158,9 @@ pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, crate
         }
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a list", list)
-                }
+                })
             )))
         }
     }
@@ -174,9 +174,9 @@ pub fn list_sort(list: ExprResult) -> Result<ExprResult, crate::AssemblerError> 
         }
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a list", list)
-                }
+                })
             )))
         }
     }
@@ -197,9 +197,9 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
         }
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a list", list)
-                }
+                })
             )))
         }
     }
@@ -227,9 +227,9 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("string_from_list must take a list as an argument")
-                }
+                })
             )))
         }
     }
@@ -278,9 +278,9 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("string_push called with wrong types")
-                }
+                })
             )))
         }
     }

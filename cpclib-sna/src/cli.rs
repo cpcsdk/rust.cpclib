@@ -111,7 +111,8 @@ impl Command {
                     write!(output, "{}", mem);
                 }
 
-                minus::page_all(output.clone()).unwrap();
+                minus::page_all(output).unwrap();
+                dbg!("exit pager");
             }
 
             Command::Disassemble(..) => todo!(),

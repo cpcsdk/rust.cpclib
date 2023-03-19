@@ -1692,7 +1692,7 @@ pub fn parse_write_direct_memory(
         Ok((
             input,
             LocatedToken::WarningWrapper(
-                box token,
+                Box::new(token),
                 "Prefer BANK or PAGE directives to write direct -1, -1, XX".to_owned()
             )
         ))
@@ -2373,7 +2373,7 @@ pub fn parse_ld_fake(
         let token = token.locate(input_start.clone(), size);
 
         let warning = LocatedToken::WarningWrapper(
-            box token,
+            Box::new(token),
             "This is a fake instruction assembled using several opcodes".into()
         );
 

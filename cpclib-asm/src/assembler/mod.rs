@@ -2820,9 +2820,9 @@ impl Env {
         if self.symbols().contains_symbol(counter_name)? {
             return Err(AssemblerError::RepeatIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(
-                    box AssemblerError::AssemblingError {
+                    Box::new(AssemblerError::AssemblingError {
                         msg: format!("Counter {} already exists", counter_name)
-                    }
+                    })
                 ))
                 .into(),
                 span: span.cloned(),
@@ -3017,9 +3017,9 @@ impl Env {
         if self.symbols().contains_symbol(&counter_name)? {
             return Err(AssemblerError::ForIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(
-                    box AssemblerError::AssemblingError {
+                    Box::new(AssemblerError::AssemblingError {
                         msg: format!("Counter {} already exists", &counter_name)
-                    }
+                    })
                 ))
                 .into(),
                 span: span.cloned()
@@ -3038,9 +3038,9 @@ impl Env {
         if step == zero {
             return Err(AssemblerError::ForIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(
-                    box AssemblerError::AssemblingError {
+                    Box::new(AssemblerError::AssemblingError {
                         msg: format!("Infinite loop")
-                    }
+                    })
                 ))
                 .into(),
                 span: span.cloned()
@@ -3050,9 +3050,9 @@ impl Env {
         if step < zero {
             return Err(AssemblerError::ForIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(
-                    box AssemblerError::AssemblingError {
+                    Box::new(AssemblerError::AssemblingError {
                         msg: format!("Negative step is not yet handled")
-                    }
+                    })
                 ))
                 .into(),
                 span: span.cloned()
@@ -3132,9 +3132,9 @@ impl Env {
             if self.symbols().contains_symbol(counter_name)? {
                 return Err(AssemblerError::RepeatIssue {
                     error: AssemblerError::ExpressionError(ExpressionError::OwnError(
-                        box AssemblerError::AssemblingError {
+                        Box::new(AssemblerError::AssemblingError {
                             msg: format!("Counter {} already exists", counter_name)
-                        }
+                        })
                     ))
                     .into(),
                     span: span.cloned(),
@@ -3197,7 +3197,7 @@ impl Env {
         // generate the bytes
         visit_processed_tokens(code, self).map_err(|e| {
             let e = if let AssemblerError::RelocatedError {
-                error: box AssemblerError::UnknownSymbol { closest: _, symbol },
+                error: Box::new(AssemblerError::UnknownSymbol { closest: _, symbol }),
                 span
             } = &e
             {
@@ -3205,10 +3205,10 @@ impl Env {
                 if let Some(counter_name) = counter_name {
                     if counter_name == &format!("{{{}}}", symbol) {
                         AssemblerError::RelocatedError {
-                            error: box AssemblerError::UnknownSymbol {
+                            error: Box::new(AssemblerError::UnknownSymbol {
                                 closest: Some(counter_name.into()),
                                 symbol: symbol.clone()
-                            },
+                            }),
                             span: span.clone()
                         }
                     }
@@ -3335,7 +3335,7 @@ fn visit_assign(
     env: &mut Env
 ) -> Result<(), AssemblerError> {
     let value = if let Some(op) = op {
-        let new_exp = Expr::BinaryOperation(*op, box Expr::Label(label.into()), box exp.clone());
+        let new_exp = Expr::BinaryOperation(*op, Box::new(Expr::Label(label.into())), Box::new(exp.clone()));
         env.resolve_expr_must_never_fail(&new_exp)?
     }
     else {

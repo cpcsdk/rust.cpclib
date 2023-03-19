@@ -67,13 +67,13 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
         if r#macro.nb_args() != args.len() {
             Err(AssemblerError::MacroError {
                 name: r#macro.name().into(),
-                root: box AssemblerError::AssemblingError {
+                root: Box::new(AssemblerError::AssemblingError {
                     msg: format!(
                         "{} arguments provided, but {} expected.",
                         args.len(),
                         r#macro.nb_args()
                     )
-                }
+                })
             })
         }
         else {
@@ -132,13 +132,13 @@ impl<'s, 'a, P: MacroParamElement> StructWithArgs<'s, 'a, P> {
         if r#struct.nb_args() < args.len() {
             Err(AssemblerError::MacroError {
                 name: r#struct.name().into(),
-                root: box AssemblerError::AssemblingError {
+                root: Box::new(AssemblerError::AssemblingError {
                     msg: format!(
                         "{} arguments provided, but at most {} expected.",
                         args.len(),
                         r#struct.nb_args()
                     )
-                }
+                })
             })
         }
         else {

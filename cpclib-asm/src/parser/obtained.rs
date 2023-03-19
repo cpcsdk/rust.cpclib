@@ -518,7 +518,7 @@ impl LocatedMacroParam {
             LocatedMacroParam::Empty => MacroParam::Single("".to_string()),
             LocatedMacroParam::Single(text) => MacroParam::Single(text.fragment().to_string()),
             LocatedMacroParam::List(params) => {
-                MacroParam::List(params.iter().map(|p| box p.to_macro_param()).collect_vec())
+                MacroParam::List(params.iter().map(|p| Box::new(p.to_macro_param()).collect_vec()))
             }
         }
     }
@@ -1581,7 +1581,7 @@ impl ListingElement for LocatedToken {
     fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_> {
         match self {
             Self::Switch(_, cases, ..) => {
-                box cases.iter().map(|c| (&c.0, c.1.deref().as_slice(), c.2))
+                Box::new( cases.iter().map(|c| (&c.0, c.1.deref().as_slice(), c.2)))
             }
             _ => unreachable!()
         }
@@ -1874,14 +1874,14 @@ impl LocatedListing {
                         Err(Err::Error(Z80ParserError::from_inner_error(
                             input_code,
                             inner_listing.clone(),
-                            box e.clone()
+                            Box::new(e.clone())
                         )))
                     }
                     Err::Failure(e) => {
                         Err(Err::Failure(Z80ParserError::from_inner_error(
                             input_code,
                             inner_listing.clone(),
-                            box e.clone()
+                            Box::new(e.clone())
                         )))
                     }
                     Err::Incomplete(e) => Err(Err::Incomplete(*e))

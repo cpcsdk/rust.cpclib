@@ -156,7 +156,7 @@ where
         for token in inner.iter_mut() {
             token
                 .visited(&mut env)
-                .map_err(|e| AssemblerError::FunctionError(self.name.clone(), box e))?;
+                .map_err(|e| AssemblerError::FunctionError(self.name.clone(), Box::new(e)))?;
 
             if env.return_value.is_some() {
                 let extra_print = &env.active_page_info().print_commands()
@@ -607,9 +607,9 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
         ExprResult::String(code) => code,
         _ => {
             return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: "Wrong type".to_owned()
-                }
+                })
             )));
         }
     };

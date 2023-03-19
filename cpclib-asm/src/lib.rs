@@ -3,7 +3,6 @@
 #![feature(exact_size_is_empty)]
 #![feature(exclusive_range_pattern)]
 #![feature(let_chains)]
-#![feature(box_syntax)]
 #![feature(box_patterns)]
 #![feature(box_into_inner)]
 #![feature(string_extend_from_within)]
