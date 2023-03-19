@@ -200,7 +200,7 @@ pub fn assemble<'arg>(
                     let symbol = token.equ_symbol();
                     let value = token.equ_value().eval()
                         .map_err(|e| {
-                            let span = token.possible_span().unwrap();
+                            let _span = token.possible_span().unwrap();
                             let span = token.possible_span().unwrap();
                             let e: AssemblerError = e.into();
                             e.locate(span.clone())
@@ -276,7 +276,7 @@ pub fn assemble<'arg>(
 
     let options = EnvOptions::new(parse_options, assemble_options);
     let (_tokens, mut env) = visit_tokens_all_passes_with_options(&listing, options)
-        .map_err(|(t_, mut env, e)| {
+        .map_err(|(_t_, mut env, e)| {
             env.handle_print(); // do the prints even if there is an assembling issue
             BasmError::AssemblerError { error: AssemblerError::AlreadyRenderedError(e.to_string()) }
         })?;

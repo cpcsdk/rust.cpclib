@@ -81,7 +81,7 @@ impl BasicLine {
     pub fn forced_length(&self) -> u16 {
         match self.forced_length {
             Some(val) => val,
-            None => (self.real_length() + 2 + 2 + 1)
+            None => self.real_length() + 2 + 2 + 1
         }
     }
 

@@ -27,7 +27,7 @@ impl ListingElement for Token {
 
     fn equ_value(&self) -> &Expr {
         match self {
-            Token::Equ(label_, value, ..) => value,
+            Token::Equ(_label_, value, ..) => value,
             _ => unreachable!()
         }
     }

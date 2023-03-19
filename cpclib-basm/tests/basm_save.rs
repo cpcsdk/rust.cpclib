@@ -8,7 +8,7 @@ fn bankset_check_save() {
     let args = args_parser.get_matches_from(&["basm", "-I", "tests/asm/", "good_bankset.asm"]);
     let (env, _) = process(&args).expect("Unable to assemble the file");
 
-    let mut sna = env.sna();
+    let sna = env.sna();
     let mem = sna.memory_dump();
 
     static data_0_0: [u8; 4] = [1, 2, 3, 4];
