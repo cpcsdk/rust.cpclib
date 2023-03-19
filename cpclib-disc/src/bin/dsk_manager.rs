@@ -244,7 +244,7 @@ fn main() -> Result<(), DskManagerError> {
         }
     }
     else if let Some(sub) = matches.subcommand_matches("put") {
-        use cpclib_tokens::{ExprElement, Listing, builder};
+        use cpclib_tokens::{Listing, builder};
 
         // Add files in a sectorial way
         let mut track = u8::from_str(sub.value_of("TRACK").unwrap()).expect("Wrong track format");
