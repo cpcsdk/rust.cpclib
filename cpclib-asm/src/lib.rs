@@ -169,7 +169,6 @@ pub fn assemble_to_amsdos_file(
     let (_, env) = assembler::visit_tokens_all_passes_with_options(&tokens, options)
         .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
 
-
     Ok(AmsdosFile::binary_file_from_buffer(
         &amsdos_filename,
         env.loading_address().unwrap() as u16,

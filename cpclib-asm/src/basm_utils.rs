@@ -51,8 +51,9 @@ pub enum BasmError {
         msg: String
     },
 
-    InvalidSymbolFile { msg: String },
-
+    InvalidSymbolFile {
+        msg: String
+    },
 
     InvalidArgument(String)
 }
@@ -192,21 +193,21 @@ pub fn assemble<'arg>(
             }
 
             let content = crate::assembler::file::read_source(file, &parse_options)?;
-            let builder = ParserContextBuilder::default()
-                            .set_state(ParsingState::SymbolsLimited);
+            let builder = ParserContextBuilder::default().set_state(ParsingState::SymbolsLimited);
             let listing = parse_z80_with_context_builder(&content, builder)?;
             for token in listing.iter() {
                 if token.is_equ() {
                     let symbol = token.equ_symbol();
-                    let value = token.equ_value().eval()
+                    let value = token
+                        .equ_value()
+                        .eval()
                         .map_err(|e| {
                             let _span = token.possible_span().unwrap();
                             let span = token.possible_span().unwrap();
                             let e: AssemblerError = e.into();
                             e.locate(span.clone())
                         })
-                        .map_err(|e| BasmError::InvalidSymbolFile { msg : e.to_string()})?;
-                        ;
+                        .map_err(|e| BasmError::InvalidSymbolFile { msg: e.to_string() })?;
 
                     assemble_options
                         .symbols_mut()
@@ -216,7 +217,7 @@ pub fn assemble<'arg>(
                             let e: AssemblerError = e.into();
                             e.locate(span.clone())
                         })
-                        .map_err(|e| BasmError::InvalidSymbolFile { msg : e.to_string()})?;
+                        .map_err(|e| BasmError::InvalidSymbolFile { msg: e.to_string() })?;
                 }
             }
         }
@@ -275,18 +276,23 @@ pub fn assemble<'arg>(
     };
 
     let options = EnvOptions::new(parse_options, assemble_options);
-    let (_tokens, mut env) = visit_tokens_all_passes_with_options(&listing, options)
-        .map_err(|(_t_, mut env, e)| {
+    let (_tokens, mut env) =
+        visit_tokens_all_passes_with_options(&listing, options).map_err(|(_t_, mut env, e)| {
             env.handle_print(); // do the prints even if there is an assembling issue
-            BasmError::AssemblerError { error: AssemblerError::AlreadyRenderedError(e.to_string()) }
+            BasmError::AssemblerError {
+                error: AssemblerError::AlreadyRenderedError(e.to_string())
+            }
         })?;
 
     if let Some(bar) = bar {
         Progress::progress().remove_bar_ok(&bar);
     }
 
-    env.handle_post_actions()
-        .map_err(|e| BasmError::AssemblerError { error: AssemblerError::AlreadyRenderedError(e.to_string()) })?;
+    env.handle_post_actions().map_err(|e| {
+        BasmError::AssemblerError {
+            error: AssemblerError::AlreadyRenderedError(e.to_string())
+        }
+    })?;
 
     if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
         if dest == "-" {

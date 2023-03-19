@@ -571,7 +571,10 @@ impl Env {
         self.resolve_expr_may_fail_in_first_pass_with_default(exp, 0)
     }
 
-    pub fn resolve_expr_may_fail_in_first_pass_with_default<E: ExprEvaluationExt, R: Into<ExprResult>>(
+    pub fn resolve_expr_may_fail_in_first_pass_with_default<
+        E: ExprEvaluationExt,
+        R: Into<ExprResult>
+    >(
         &self,
         exp: &E,
         r: R
@@ -2271,25 +2274,22 @@ impl Env {
     }
 }
 /// Visit the tokens during several passes without providing a specific symbol table.
-/// 
-/*
-pub fn visit_tokens_all_passes<
-    'token,
-    T: 'token + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
->(
-    tokens: &'token [T]
-) -> Result<Env, AssemblerError>
-where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
-    <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
-        ExprEvaluationExt,
-    ProcessedToken<'token, T>: FunctionBuilder
-{
-    let options = EnvOptions::default();
-    visit_tokens_all_passes_with_options(tokens, options).map(|r| r.1) // TODO really return both
-}
-
-*/
+// pub fn visit_tokens_all_passes<
+// 'token,
+// T: 'token + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
+// >(
+// tokens: &'token [T]
+// ) -> Result<Env, AssemblerError>
+// where
+// <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+// <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
+// ExprEvaluationExt,
+// ProcessedToken<'token, T>: FunctionBuilder
+// {
+// let options = EnvOptions::default();
+// visit_tokens_all_passes_with_options(tokens, options).map(|r| r.1) // TODO really return both
+// }
+//
 
 impl Env {
     pub fn new(options: EnvOptions) -> Self {
@@ -2350,7 +2350,10 @@ impl Env {
 pub fn visit_tokens_all_passes_with_options<'token, T>(
     tokens: &'token [T],
     options: EnvOptions
-) -> Result<(Vec<ProcessedToken<'token, T>>, Env), (Vec<ProcessedToken<'token, T>>, Env, AssemblerError)>
+) -> Result<
+    (Vec<ProcessedToken<'token, T>>, Env),
+    (Vec<ProcessedToken<'token, T>>, Env, AssemblerError)
+>
 where
     T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
@@ -2371,7 +2374,7 @@ where
 
         let res = processed_token::visit_processed_tokens(&mut tokens, &mut env);
         if let Err(e) = res {
-            return Err((tokens, env, e))
+            return Err((tokens, env, e));
         }
     }
 
@@ -2819,11 +2822,11 @@ impl Env {
         let counter_name = counter_name.as_str();
         if self.symbols().contains_symbol(counter_name)? {
             return Err(AssemblerError::RepeatIssue {
-                error: AssemblerError::ExpressionError(ExpressionError::OwnError(
-                    Box::new(AssemblerError::AssemblingError {
+                error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+                    AssemblerError::AssemblingError {
                         msg: format!("Counter {} already exists", counter_name)
-                    })
-                ))
+                    }
+                )))
                 .into(),
                 span: span.cloned(),
                 repetition: 0
@@ -3016,11 +3019,11 @@ impl Env {
         let counter_name = format!("{{{}}}", label);
         if self.symbols().contains_symbol(&counter_name)? {
             return Err(AssemblerError::ForIssue {
-                error: AssemblerError::ExpressionError(ExpressionError::OwnError(
-                    Box::new(AssemblerError::AssemblingError {
+                error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+                    AssemblerError::AssemblingError {
                         msg: format!("Counter {} already exists", &counter_name)
-                    })
-                ))
+                    }
+                )))
                 .into(),
                 span: span.cloned()
             });
@@ -3037,11 +3040,11 @@ impl Env {
 
         if step == zero {
             return Err(AssemblerError::ForIssue {
-                error: AssemblerError::ExpressionError(ExpressionError::OwnError(
-                    Box::new(AssemblerError::AssemblingError {
+                error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+                    AssemblerError::AssemblingError {
                         msg: format!("Infinite loop")
-                    })
-                ))
+                    }
+                )))
                 .into(),
                 span: span.cloned()
             });
@@ -3049,11 +3052,11 @@ impl Env {
 
         if step < zero {
             return Err(AssemblerError::ForIssue {
-                error: AssemblerError::ExpressionError(ExpressionError::OwnError(
-                    Box::new(AssemblerError::AssemblingError {
+                error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+                    AssemblerError::AssemblingError {
                         msg: format!("Negative step is not yet handled")
-                    })
-                ))
+                    }
+                )))
                 .into(),
                 span: span.cloned()
             });
@@ -3131,11 +3134,11 @@ impl Env {
         if let Some(counter_name) = counter_name {
             if self.symbols().contains_symbol(counter_name)? {
                 return Err(AssemblerError::RepeatIssue {
-                    error: AssemblerError::ExpressionError(ExpressionError::OwnError(
-                        Box::new(AssemblerError::AssemblingError {
+                    error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+                        AssemblerError::AssemblingError {
                             msg: format!("Counter {} already exists", counter_name)
-                        })
-                    ))
+                        }
+                    )))
                     .into(),
                     span: span.cloned(),
                     repetition: 0
@@ -3335,7 +3338,11 @@ fn visit_assign(
     env: &mut Env
 ) -> Result<(), AssemblerError> {
     let value = if let Some(op) = op {
-        let new_exp = Expr::BinaryOperation(*op, Box::new(Expr::Label(label.into())), Box::new(exp.clone()));
+        let new_exp = Expr::BinaryOperation(
+            *op,
+            Box::new(Expr::Label(label.into())),
+            Box::new(exp.clone())
+        );
         env.resolve_expr_must_never_fail(&new_exp)?
     }
     else {

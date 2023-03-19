@@ -53,7 +53,7 @@ impl ParsingStateVerified for LocatedToken {
             ParsingState::SymbolsLimited => {
                 match self {
                     LocatedToken::Standard { token, span: _span } => token.is_accepted(state),
-                    _ => false,
+                    _ => false
                 }
             }
         }
@@ -90,9 +90,7 @@ impl ParsingStateVerified for Token {
 
             ParsingState::SymbolsLimited => {
                 match self {
-                    Token::Equ(..) | Token::Let(..) | Token::Comment(_) => {
-                        true
-                    },
+                    Token::Equ(..) | Token::Let(..) | Token::Comment(_) => true,
                     _ => false
                 }
             }

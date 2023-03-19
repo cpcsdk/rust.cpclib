@@ -455,8 +455,12 @@ impl LocatedExpr {
             LocatedExpr::List(l, _) => Expr::List(l.iter().map(|e| e.to_expr()).collect_vec()),
             LocatedExpr::PrefixedLabel(p, l, _) => Expr::PrefixedLabel(*p, l.into()),
             LocatedExpr::Paren(box p, _) => Expr::Paren(Box::new(p.to_expr())),
-            LocatedExpr::UnaryFunction(f, box e, _) => Expr::UnaryFunction(*f, Box::new(e.to_expr())),
-            LocatedExpr::UnaryOperation(o, box e, _) => Expr::UnaryOperation(*o, Box::new(e.to_expr())),
+            LocatedExpr::UnaryFunction(f, box e, _) => {
+                Expr::UnaryFunction(*f, Box::new(e.to_expr()))
+            }
+            LocatedExpr::UnaryOperation(o, box e, _) => {
+                Expr::UnaryOperation(*o, Box::new(e.to_expr()))
+            }
             LocatedExpr::UnaryTokenOperation(o, box t, _) => {
                 Expr::UnaryTokenOperation(*o, Box::new(t.to_token().into_owned()))
             }
@@ -519,10 +523,12 @@ impl LocatedMacroParam {
             LocatedMacroParam::Single(text) => MacroParam::Single(text.fragment().to_string()),
             LocatedMacroParam::List(params) => {
                 MacroParam::List(
-                    params.iter()
+                    params
+                        .iter()
                         .map(|p| p.to_macro_param())
                         .map(|p| Box::new(p))
-                        .collect_vec())
+                        .collect_vec()
+                )
             }
         }
     }
@@ -1087,24 +1093,25 @@ impl ListingElement for LocatedToken {
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
 
-
     fn is_equ(&self) -> bool {
         match self {
-            Self::Standard{token, ..} => token.is_equ(),
+            Self::Standard { token, .. } => token.is_equ(),
             _ => false
         }
     }
+
     fn equ_symbol(&self) -> &str {
         match self {
-            Self::Standard{token, ..} => token.equ_symbol(),
+            Self::Standard { token, .. } => token.equ_symbol(),
             _ => unreachable!()
-        }        
+        }
     }
-    fn equ_value(&self) -> &crate::Expr  {
+
+    fn equ_value(&self) -> &crate::Expr {
         match self {
-            Self::Standard{token, ..} => token.equ_value(),
+            Self::Standard { token, .. } => token.equ_value(),
             _ => unreachable!()
-        }        
+        }
     }
 
     fn is_warning(&self) -> bool {
@@ -1585,7 +1592,7 @@ impl ListingElement for LocatedToken {
     fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_> {
         match self {
             Self::Switch(_, cases, ..) => {
-                Box::new( cases.iter().map(|c| (&c.0, c.1.deref().as_slice(), c.2)))
+                Box::new(cases.iter().map(|c| (&c.0, c.1.deref().as_slice(), c.2)))
             }
             _ => unreachable!()
         }

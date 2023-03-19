@@ -70,10 +70,7 @@ impl ListingExt for Listing {
     fn to_bytes_with_options(&self, options: EnvOptions) -> Result<Vec<u8>, AssemblerError> {
         let (_, env) =
             crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), options)
-                .map_err(|(_, _, e)| {
-                    AssemblerError::AlreadyRenderedError(e.to_string())
-                })
-            ?;
+                .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
         Ok(env.produced_bytes())
     }
 
