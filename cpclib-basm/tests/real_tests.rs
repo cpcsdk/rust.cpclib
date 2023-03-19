@@ -9,7 +9,6 @@ use pretty_assertions::assert_eq;
 use regex::Regex;
 use test_generator::test_resources;
 
-
 fn command_for_generated_test(
     fname: &str,
     output: &str
@@ -18,7 +17,6 @@ fn command_for_generated_test(
     let args =
         args_parser.get_matches_from(&["basm", "-I", "tests/asm/", "-i", "-o", output, fname]);
 
-    
     process(&args)
 }
 

@@ -17,19 +17,20 @@ impl ListingElement for Token {
             _ => false
         }
     }
+
     fn equ_symbol(&self) -> &str {
         match self {
             Token::Equ(label, ..) => label.as_str(),
             _ => unreachable!()
-        }        
+        }
     }
-    fn equ_value(&self) -> &Expr  {
+
+    fn equ_value(&self) -> &Expr {
         match self {
             Token::Equ(label_, value, ..) => value,
             _ => unreachable!()
-        }        
+        }
     }
-
 
     fn is_warning(&self) -> bool {
         false

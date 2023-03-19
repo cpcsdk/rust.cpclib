@@ -37,14 +37,13 @@ impl From<u16> for PhysicalAddress {
 
 impl PhysicalAddress {
     pub fn new(address: u16, mmr: u8) -> Self {
-        if mmr == 0xc1 {
+        if mmr == 0xC1 {
             return PhysicalAddress {
                 page: 1,
-                bank: (address/0x4000) as u8,
-                address: address%0x4000
+                bank: (address / 0x4000) as u8,
+                address: address % 0x4000
             };
         }
-
 
         let possible_page = ((mmr >> 3) & 0b111) + 1;
         let possible_bank = mmr & 0b11;
