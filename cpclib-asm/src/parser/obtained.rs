@@ -454,17 +454,17 @@ impl LocatedExpr {
             LocatedExpr::Label(l) => Expr::Label(l.into()),
             LocatedExpr::List(l, _) => Expr::List(l.iter().map(|e| e.to_expr()).collect_vec()),
             LocatedExpr::PrefixedLabel(p, l, _) => Expr::PrefixedLabel(*p, l.into()),
-            LocatedExpr::Paren(box p, _) => Expr::Paren(box p.to_expr()),
-            LocatedExpr::UnaryFunction(f, box e, _) => Expr::UnaryFunction(*f, box e.to_expr()),
-            LocatedExpr::UnaryOperation(o, box e, _) => Expr::UnaryOperation(*o, box e.to_expr()),
+            LocatedExpr::Paren(box p, _) => Expr::Paren(Box::new(p.to_expr())),
+            LocatedExpr::UnaryFunction(f, box e, _) => Expr::UnaryFunction(*f, Box::new(e.to_expr())),
+            LocatedExpr::UnaryOperation(o, box e, _) => Expr::UnaryOperation(*o, Box::new(e.to_expr())),
             LocatedExpr::UnaryTokenOperation(o, box t, _) => {
-                Expr::UnaryTokenOperation(*o, box t.to_token().into_owned())
+                Expr::UnaryTokenOperation(*o, Box::new(t.to_token().into_owned()))
             }
             LocatedExpr::BinaryFunction(f, box e1, box e2, _) => {
-                Expr::BinaryFunction(*f, box e1.to_expr(), box e2.to_expr())
+                Expr::BinaryFunction(*f, Box::new(e1.to_expr()), Box::new(e2.to_expr()))
             }
             LocatedExpr::BinaryOperation(o, box e1, box e2, _) => {
-                Expr::BinaryOperation(*o, box e1.to_expr(), box e2.to_expr())
+                Expr::BinaryOperation(*o, Box::new(e1.to_expr()), Box::new(e2.to_expr()))
             }
             LocatedExpr::AnyFunction(n, a, _) => {
                 Expr::AnyFunction(n.into(), a.iter().map(|e| e.to_expr()).collect_vec())
@@ -518,7 +518,11 @@ impl LocatedMacroParam {
             LocatedMacroParam::Empty => MacroParam::Single("".to_string()),
             LocatedMacroParam::Single(text) => MacroParam::Single(text.fragment().to_string()),
             LocatedMacroParam::List(params) => {
-                MacroParam::List(params.iter().map(|p| Box::new(p.to_macro_param()).collect_vec()))
+                MacroParam::List(
+                    params.iter()
+                        .map(|p| p.to_macro_param())
+                        .map(|p| Box::new(p))
+                        .collect_vec())
             }
         }
     }

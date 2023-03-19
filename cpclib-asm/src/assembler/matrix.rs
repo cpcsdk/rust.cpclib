@@ -26,10 +26,10 @@ pub fn matrix_col(matrix: &ExprResult, x: usize) -> Result<ExprResult, crate::As
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a matrix", matrix)
                 }
-            )))
+            ))))
         }
     }
 }
@@ -60,20 +60,20 @@ pub fn matrix_set_col(
                 }
                 _ => {
                     Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                        box AssemblerError::AssemblingError {
+                        Box::new(AssemblerError::AssemblingError {
                             msg: format!("{} is not a list", matrix)
                         }
-                    )))
+                    ))))
                 }
             }
         }
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a matrix", matrix)
                 }
-            )))
+            ))))
         }
     }
 }
@@ -92,10 +92,10 @@ pub fn matrix_row(matrix: &ExprResult, y: usize) -> Result<ExprResult, crate::As
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a matrix", matrix)
                 }
-            )))
+            ))))
         }
     }
 }
@@ -130,20 +130,20 @@ pub fn matrix_set_row(
                 }
                 _ => {
                     Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                        box AssemblerError::AssemblingError {
+                        Box::new(AssemblerError::AssemblingError {
                             msg: format!("{} is not a list", matrix)
                         }
-                    )))
+                    ))))
                 }
             }
         }
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a matrix", matrix)
                 }
-            )))
+            ))))
         }
     }
 }
@@ -172,10 +172,10 @@ pub fn matrix_set(
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a matrix", matrix)
                 }
-            )))
+            ))))
         }
     }
 }
@@ -202,10 +202,10 @@ pub fn matrix_get(
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a matrix", matrix)
                 }
-            )))
+            ))))
         }
     }
 }
@@ -215,10 +215,10 @@ pub fn matrix_width(matrix: &ExprResult) -> Result<ExprResult, crate::AssemblerE
         ExprResult::Matrix { width, .. } => Ok((*width as i32).into()),
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a matrix", matrix)
                 }
-            )))
+            ))))
         }
     }
 }
@@ -228,10 +228,10 @@ pub fn matrix_height(matrix: &ExprResult) -> Result<ExprResult, crate::Assembler
         ExprResult::Matrix { height, .. } => Ok((*height as i32).into()),
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                box AssemblerError::AssemblingError {
+                Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a matrix", matrix)
                 }
-            )))
+            ))))
         }
     }
 }

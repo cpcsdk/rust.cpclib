@@ -480,7 +480,7 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
     let (listing, options) = parse(matches)?;
     let env = assemble(matches, &listing, options).map_err(move |error| {
         BasmError::ErrorWithListing {
-            error: box error,
+            error: Box::new(error),
             listing
         }
     })?;

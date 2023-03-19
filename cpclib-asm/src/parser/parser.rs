@@ -2732,7 +2732,7 @@ pub fn parse_macro_or_struct_call(
         if allowed_to_return_a_label && nothing_after {
             let token = LocatedToken::Label(name.clone());
             let msg = format!("Ambiguous code. Use (void) for macro with no args, (default) for struct with default parameters; avoid labels that do not start at beginning of a line. {} is considered to be a label, not a macro.", name);
-            let warning = LocatedToken::WarningWrapper(box token, msg);
+            let warning = LocatedToken::WarningWrapper(Box::new(token), msg);
             return Ok((input, warning));
         }
 
