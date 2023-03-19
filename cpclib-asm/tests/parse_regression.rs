@@ -4,8 +4,7 @@ use cpclib_asm::parser::ParserContext;
 use cpclib_asm::preamble::*;
 
 fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
-    let mut ctx = Box::new(ParserContext::default());
-    ctx.source = Some(code);
+    let mut ctx = Box::new(ParserContextBuilder::default().build(code));
     ctx.context_name = Some("TEST".into());
     let span = Z80Span::new_extra(code, ctx.deref());
     (ctx, span)

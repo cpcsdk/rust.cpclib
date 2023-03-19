@@ -181,13 +181,6 @@ pub fn assemble_to_amsdos_file(
 mod test_super {
     use super::*;
 
-    lazy_static::lazy_static! {
-        static ref CTX: ParserContext = Default::default();
-    }
-
-    fn ctx() -> &'static ParserContext {
-        &CTX
-    }
 
     #[test]
     fn simple_test_assemble() {
@@ -198,7 +191,7 @@ mod test_super {
 		";
 
         let bytes =
-            assemble(code, ctx()).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
+            assemble(code).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
         assert_eq!(bytes.len(), 4);
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
@@ -212,7 +205,7 @@ mod test_super {
 		";
 
         let bytes =
-            assemble(code, ctx()).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
+            assemble(code).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
 
@@ -223,17 +216,15 @@ mod test_super {
 Truc
 		";
 
-        let ctx = ParserContext {
-            ..Default::default()
-        };
-
         let options = AssemblingOptions::new_case_sensitive();
-        println!("{:?}", assemble_with_options(code, &options, &ctx));
-        assert!(assemble_with_options(code, &options, &ctx).is_err());
+        let options = EnvOptions::from(options);
+        println!("{:?}", assemble_with_options(code, options.clone()));
+        assert!(assemble_with_options(code, options).is_err());
 
         let options = AssemblingOptions::new_case_insensitive();
-        println!("{:?}", assemble_with_options(code, &options, &ctx));
-        assert!(assemble_with_options(code, &options, &ctx).is_ok());
+        let options = EnvOptions::from(options);
+        println!("{:?}", assemble_with_options(code, options.clone()));
+        assert!(assemble_with_options(code, options).is_ok());
     }
 
     #[test]
@@ -311,8 +302,9 @@ Truc
     }
 
     fn code_test(code: &'static str) {
-        let options = AssemblingOptions::new_case_insensitive();
-        let res = assemble_with_options(code, &options, ctx());
+        let asm_options = AssemblingOptions::new_case_insensitive();
+        let env_options = EnvOptions::new(ParserOptions::default(), asm_options);
+        let res = assemble_with_options(code, env_options);
         res.unwrap();
     }
 

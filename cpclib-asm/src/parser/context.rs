@@ -184,6 +184,7 @@ impl ParserContextBuilder {
         self
     }
 
+    /// Build a ParserContext for the given source code
     pub fn build(self, code: &str) -> ParserContext {
         ParserContext {
             options: self.options,

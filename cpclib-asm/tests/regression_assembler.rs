@@ -6,21 +6,7 @@ use cpclib_asm::preamble::{
     ParserContext, Z80Span
 };
 
-lazy_static::lazy_static! {
-    static ref CTX: ParserContext = Default::default();
-}
 
-fn ctx() -> &'static ParserContext {
-    &CTX
-}
-
-fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
-    let mut ctx = Box::new(ParserContext::default());
-    ctx.source = Some(code);
-    ctx.context_name = Some("TEST".into());
-    let span = Z80Span::new_extra(code, ctx.deref());
-    (ctx, span)
-}
 
 #[test]
 pub fn assemble_vsync_test() {
@@ -36,7 +22,7 @@ finish
 	jr $
 	";
 
-    let binary = assemble(code, ctx()).unwrap();
+    let binary = assemble(code).unwrap();
 
     assert_eq!(
         &binary,
@@ -70,7 +56,7 @@ pub fn macro_local_labels() {
 	";
 
     // just check that it assemble
-    let binary = assemble(code, ctx()).unwrap();
+    let binary = assemble(code).unwrap();
     assert!(binary.len() != 0);
 }
 
@@ -97,7 +83,7 @@ my_triangle1: triangle
 	";
 
     // just check that it assemble
-    let binary = assemble(code, ctx()).unwrap();
+    let binary = assemble(code).unwrap();
     assert_eq!(binary.len(), 3 * 3);
     assert_eq!(&binary, &[4, 5, 6, 4, 5, 6, 4, 5, 6,])
 }
@@ -122,7 +108,7 @@ my_triangle1: triangle [2, 3, 4], [10, 20, 30], [100, 200, 255]
 	";
 
     // just check that it assemble
-    let binary = assemble(code, ctx()).unwrap();
+    let binary = assemble(code).unwrap();
     assert_eq!(binary.len(), 3 * 3);
     assert_eq!(&binary, &[2, 3, 4, 10, 20, 30, 100, 200, 255])
 }
@@ -147,7 +133,7 @@ my_triangle1: triangle [11, 12, 13],, [1, 2, 3]
 	";
 
     // just check that it assemble
-    let binary = assemble(code, ctx()).unwrap();
+    let binary = assemble(code).unwrap();
     assert_eq!(binary.len(), 3 * 3);
     assert_eq!(&binary, &[11, 12, 13, 4, 5, 8, 1, 2, 3,])
 }
@@ -181,7 +167,7 @@ my_shape: shape
 ";
 
     // just check that it assemble
-    let binary = assemble(code, ctx()).unwrap();
+    let binary = assemble(code).unwrap();
     assert_eq!(
         &binary,
         &[1, 2, 3, 4, 5, 8, 9, 5, 6, 1, 2, 3, 4, 5, 8, 9, 5, 6,]
@@ -216,7 +202,7 @@ my_shape: shape	, [ [1,2,3], [1,2,3], [1,2,3] ]
 ";
 
     // just check that it assemble
-    let binary = assemble(code, ctx()).unwrap();
+    let binary = assemble(code).unwrap();
     assert_eq!(binary.len(), 3 * 3 * 2);
     assert_eq!(
         &binary,
@@ -336,18 +322,14 @@ BD = B_ + D_
         LZCLOSE
 ";
 
-    let bin = dbg!(assemble(code, ctx()));
+    let bin = dbg!(assemble(code));
     assert!(bin.is_ok());
 }
 
 #[test]
 fn label_colon_equ() {
     let code = "PLY_AKY_OPCODE_OR_A: equ #b7";
-    let (ctx, span) = ctx_and_span(code);
-
-    assert!(dbg!(parse_z80_line_label_aware_directive(span.clone())).is_ok());
-
-    assert!(dbg!(parse_z80_line_complete(span)).is_ok());
+    assert!(dbg!(assemble(code)).is_ok());
 }
 
 #[test]
@@ -357,9 +339,7 @@ fn lzclose() {
 			defs 100
 	INNER_STOP
 		LZCLOSE";
-    let (ctx, span) = ctx_and_span(code);
 
-    assert!(dbg!(parse_crunched_section(span.clone())).is_ok());
+    assert!(dbg!(assemble(code)).is_ok());
 
-    assert!(dbg!(parse_z80_line_complete(span)).is_ok());
 }

@@ -2117,6 +2117,7 @@ mod test {
 
             return; // the following code is deactivated as several instructions can be assembled with several bytecodes
                     // check if it is possible to assemble it
+        /*            
             let mut env = Env::default();
             if let Token::OpCode(mnemonic, arg1, arg2, arg3) = &obtained.listing()[0] {
                 // relative addresses are not properly managed
@@ -2135,6 +2136,7 @@ mod test {
                 println!("ERROR, this is not a Token {:?}", obtained);
                 assert!(false);
             }
+            */
         }
     }
 }

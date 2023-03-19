@@ -1226,20 +1226,22 @@ where
 #[cfg(test)]
 mod test_super {
     use super::*;
-    use crate::preamble::{parse_include, Z80Span};
+    use crate::preamble::{Z80Span};
+    use crate::parse_directive;
 
     #[test]
     fn test_located_include() {
+        use crate::ParserContext;
+        use crate::ParserContextBuilder;
+        use crate::parse_z80;
+
         let src = "include \"toto\"";
-        let mut ctx = ParserContext::default();
-        ctx.source = Some(src);
 
-        let span = Z80Span::new_extra(src, &ctx);
-
-        let token = parse_include(span).unwrap().1;
+        let tokens = parse_z80(src).unwrap();
+        let token = &tokens[0];
         let env = Env::default();
 
-        let processed = build_processed_token(&token, &env);
+        let processed = build_processed_token(token, &env);
         assert!(matches!(
             processed.state,
             Some(ProcessedTokenState::Include(..))
