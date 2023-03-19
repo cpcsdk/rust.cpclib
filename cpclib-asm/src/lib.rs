@@ -420,7 +420,7 @@ label2
         let code = "    RUN 0x50, 0xc0";
         code_test(code);
 
-        let code = "    if {bank}$ == 0
+        let code = r"    if {bank}$ == 0
             RUN 0x50, 0xc0
         endif
         ";

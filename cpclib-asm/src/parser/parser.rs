@@ -4004,7 +4004,7 @@ pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80P
         value(LabelPrefix::Page, tag_no_case("{page}")),
         value(LabelPrefix::Pageset, tag_no_case("{pageset}"))
     ))(input)?;
-    let (input, label) = preceded(space0, alt((parse_label(false), tag("$"), tag("$$"))))(input)?;
+    let (input, label) = preceded(space0, alt((parse_label(false), tag("$$"), tag("$"))))(input)?;
 
     let span = input_start.take(input_start.input_len() - input.input_len());
     Ok((input, LocatedExpr::PrefixedLabel(prefix, label, span)))
