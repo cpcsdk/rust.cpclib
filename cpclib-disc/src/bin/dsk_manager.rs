@@ -17,7 +17,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 
-use cpclib_common::clap::{Arg, ArgGroup, Command};
+use cpclib_common::clap::{Arg, ArgGroup, ArgAction, Command};
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosManager};
 use cpclib_disc::edsk::ExtendedDsk;
 use custom_error::custom_error;
@@ -48,21 +48,18 @@ fn main() -> Result<(), DskManagerError> {
                                     .help("Provide a file that describes the format of the disc")
                                     .long("description")
                                     .short('d')
-                                    .takes_value(true)
                             )
                             .arg(
                                 Arg::new("FORMAT_NAME")
                                     .help("Provide the name of a format that can be used")
                                     .short('f')
                                     .long("format")
-                                    .takes_value(true)
-                                    .possible_values(["data", "data42"])
+                                    .value_parser(["data", "data42"])
                             )
                             .group(
                                 ArgGroup::new("command")
                                     .arg("FORMAT_FILE")
                                     .arg("FORMAT_NAME")
-                                    .required(true)
                             )
                        )
                        .subcommand(
@@ -73,25 +70,27 @@ fn main() -> Result<(), DskManagerError> {
                                 .help("Import an existing catalog in the dsk. All entries are thus erased")
                                 .long("import")
                                 .short('i')
-                                .takes_value(true)
                            )
                            .arg(
                                Arg::new("EXPORT")
                                 .help("Export the catalog in a specific file")
                                 .long("export")
                                 .short('e')
-                                .takes_value(true)
                            )
                            .arg(
                                Arg::new("LIST")
                                .help("Display the catalog on screen")
                                .long("list")
                                .short('l')
+                        .action(ArgAction::SetTrue)
+
                            )
                            .arg(
                                Arg::new("CATART")
                                .help("[unimplemented] Display the catart version")
                                .long("--catart")
+                        .action(ArgAction::SetTrue)
+
                            )
                            .group(
                                ArgGroup::new("command")
@@ -108,8 +107,7 @@ fn main() -> Result<(), DskManagerError> {
                            .arg(
                                Arg::new("INPUT_FILES")
                                 .help("The files to add. They MUST have a header")
-                                .takes_value(true)
-                                .multiple_occurrences(true)
+                                .action(ArgAction::Append)
                                 .required(true)
                             )
                             .arg(
@@ -117,17 +115,23 @@ fn main() -> Result<(), DskManagerError> {
                                 .help("Indicates if the files are system files")
                                 .long("system")
                                 .short('s')
+                        .action(ArgAction::SetTrue)
+
                             )
                             .arg(
                                 Arg::new("READ_ONLY")
                                 .help("Indicates if the files are read only")
                                 .long("read_only")
                                 .short('r')
+                        .action(ArgAction::SetTrue)
+
                             )
                             .arg(
                                 Arg::new("AS_AMSDOS")
                                 .help("[unimplemented] Uses the same strategy as amsdos when adding a file: add .???, delete .BAK, rename other as .BAK, rename .??? with real extension")
                                 .long("secure")
+                        .action(ArgAction::SetTrue)
+
                             )
                        )
                        .subcommand(
@@ -137,42 +141,37 @@ fn main() -> Result<(), DskManagerError> {
                                Arg::new("TRACK")
                                 .help("The track of interest")
                                 .short('a')
-                                .takes_value(true)
                                 .required(true)
                            )
                            .arg(
                                Arg::new("SECTOR")
                                 .help("The sector of interest")
                                 .short('o')
-                                .takes_value(true)
                                 .required(true)
                            )
                            .arg(
                                Arg::new("SIDE")
                                 .help("The head of interest")
                                 .short('p')
-                                .takes_value(true)
                                 .required(true)
                            )
                            .arg(
                                Arg::new("Z80_EXPORT")
                                .help("The path to the z80 files that will contains all the import information")
                                 .short('z')
-                                .takes_value(true)
                                 .required(false)
                            )
                            .arg(
                                Arg::new("FILES")
                                .help("The ordered list of files to import in the dsk")
-                                .takes_value(true)
-                                .multiple_occurrences(true)
+                               .action(ArgAction::Append)
                                 .required(true)
                                 .last(true)
                            )
                        );
     let matches = app.get_matches();
 
-    let dsk_fname = matches.value_of("DSK_FILE").unwrap();
+    let dsk_fname = matches.get_one::<String>("DSK_FILE").unwrap();
 
     // Manipulate the catalog of a disc
     if let Some(sub) = matches.subcommand_matches("catalog") {
@@ -181,7 +180,7 @@ fn main() -> Result<(), DskManagerError> {
         eprintln!("WIP - We assume head 0 is chosen");
 
         // Import the catalog from one file in one existing disc
-        if let Some(fname) = sub.value_of("IMPORT") {
+        if let Some(fname) = sub.get_one::<String>("IMPORT") {
             let mut f = File::open(fname)?;
             let mut bytes = Vec::new();
             let size = f.read_to_end(&mut bytes)?;
@@ -223,14 +222,14 @@ fn main() -> Result<(), DskManagerError> {
         // override the disc
         }
         // Export the catalog of an existing disc in a file
-        else if let Some(fname) = sub.value_of("EXPORT") {
+        else if let Some(fname) = sub.get_one::<String>("EXPORT") {
             eprintln!("WIP - We assume the format of the Track 0 is similar to Amsdos one");
 
             let manager = AmsdosManager::new_from_disc(dsk, 0);
             let bytes = manager.catalog().as_bytes();
             let mut f = File::create(fname)?;
             f.write_all(&bytes)?;
-        } else if sub.is_present("LIST") {
+        } else if sub.contains_id("LIST") {
             let manager = AmsdosManager::new_from_disc(dsk, 0);
             let catalog = manager.catalog();
             let entries = catalog.visible_entries().collect::<Vec<_>>();
@@ -247,16 +246,16 @@ fn main() -> Result<(), DskManagerError> {
         use cpclib_tokens::{Listing, builder};
 
         // Add files in a sectorial way
-        let mut track = u8::from_str(sub.value_of("TRACK").unwrap()).expect("Wrong track format");
-        let mut sector = u8::from_str(sub.value_of("SECTOR").unwrap()).expect("Wrong track format");
-        let mut head = u8::from_str(sub.value_of("SIDE").unwrap()).expect("Wrong track format");
-        let _export = sub.value_of("Z80_EXPORT").unwrap();
+        let mut track = u8::from_str(sub.get_one::<String>("TRACK").unwrap()).expect("Wrong track format");
+        let mut sector = u8::from_str(sub.get_one::<String>("SECTOR").unwrap()).expect("Wrong track format");
+        let mut head = u8::from_str(sub.get_one::<String>("SIDE").unwrap()).expect("Wrong track format");
+        let _export = sub.get_one::<String>("Z80_EXPORT").unwrap();
 
         let mut dsk = ExtendedDsk::open(dsk_fname)
             .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
 
         let mut listing = Listing::new();
-        for file in sub.values_of("FILES").unwrap() {
+        for file in sub.get_many::<String>("FILES").unwrap() {
             // get the file
             let mut f = File::open(file)?;
             let mut content = Vec::new();
@@ -290,11 +289,11 @@ fn main() -> Result<(), DskManagerError> {
         let mut manager = AmsdosManager::new_from_disc(dsk, 0);
 
         // Get the common parameters
-        let is_system = sub.is_present("SYSTEM");
-        let is_read_only = sub.is_present("READ_ONLY");
+        let is_system = sub.contains_id("SYSTEM");
+        let is_read_only = sub.contains_id("READ_ONLY");
 
         // loop over all the files to add them
-        for fname in sub.values_of("INPUT_FILES").unwrap() {
+        for fname in sub.get_many::<String>("INPUT_FILES").unwrap() {
             let ams_file = match AmsdosFile::open_valid(fname) {
                 Ok(ams_file) => {
                     assert!(ams_file.amsdos_filename().unwrap().is_valid(), "Invalid amsdos filename ! {:?}", ams_file.amsdos_filename());
@@ -319,11 +318,11 @@ fn main() -> Result<(), DskManagerError> {
         use cpclib_disc::cfg::DiscConfig;
 
         // Retrieve the format description
-        let cfg = if let Some(desc_fname) = sub.value_of("FORMAT_FILE") {
+        let cfg = if let Some(desc_fname) = sub.get_one::<String>("FORMAT_FILE") {
             cpclib_disc::cfg::DiscConfig::new(desc_fname)?
         }
-        else if let Some(desc) = sub.value_of("FORMAT_NAME") {
-            match desc {
+        else if let Some(desc) = sub.get_one::<String>("FORMAT_NAME") {
+            match desc.as_str() {
                 "data42" => DiscConfig::single_head_data42_format(),
                 "data" => DiscConfig::single_head_data_format(),
                 _ => unreachable!()

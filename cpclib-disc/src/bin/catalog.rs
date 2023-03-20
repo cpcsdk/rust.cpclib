@@ -17,7 +17,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 /// Catalog tool manipulator.
-use cpclib_common::clap::{Arg, Command};
+use cpclib_common::clap::{Arg, Command, ArgAction, value_parser};
 use cpclib_common::num::Num;
 use cpclib_disc::amsdos::{AmsdosEntries, AmsdosManager, BlocIdx};
 use cpclib_disc::edsk::{ExtendedDsk, Head};
@@ -64,17 +64,18 @@ fn main() -> std::io::Result<()> {
 						.help("List the content of the catalog ONLY for files having no control chars")
 						.long("list")
 						.short('l')
+                        .action(ArgAction::SetTrue)
 					)
 					.arg(
 						Arg::new("LISTALL")
 						.help("List the content of the catalog EVEN for files having no control chars")
 						.long("listall")
 						.short('a')
+                        .action(ArgAction::SetTrue)
 					)
 					.arg(
 						Arg::new("INPUT_FILE")
 						.help("Input/Output file that contains the entries of the catalog (a binary file or a dsk)")
-						.takes_value(true)
 						.required(true)
 						.long("input")
 						.short('i')
@@ -82,61 +83,50 @@ fn main() -> std::io::Result<()> {
 					.arg(
 						Arg::new("ENTRY")
 						.help("Selects the entry to modify")
-						.takes_value(true)
 						.long("entry")
-						.validator(|v|{
-							v.parse::<u8>()
-							.map_err(|e|{e.to_string()})
-							.and_then(
-								|nb|
-								if nb <= 63 {
-									Ok(())
-								}
-								else {
-									Err("The entry must be a number between 0 and 63".to_owned())
-								}
-							)
-						})
+                        .value_parser(value_parser!(u8).range(..=63))
 					)
 					.arg(
 						Arg::new("SETREADONLY")
 							.help("Set the selected entry readonly")
 							.long("readonly")
 							.requires("ENTRY")
+                        .action(ArgAction::SetTrue)
 					)
 					.arg(
 						Arg::new("SETSYSTEM")
 							.help("Set the selected entry hidden")
 							.long("system")
 							.requires("ENTRY")
+                        .action(ArgAction::SetTrue)
+
 					)
 					.arg(
 						Arg::new("UNSETREADONLY")
 							.help("Set the selected entry read and write")
 							.long("noreadonly")
 							.requires("ENTRY")
+                        .action(ArgAction::SetTrue)
+
 					)
 					.arg(
 						Arg::new("UNSETSYSTEM")
 							.help("Set the selected entry visible")
 							.long("nosystem")
 							.requires("ENTRY")
+                        .action(ArgAction::SetTrue)
+
 					)
 					.arg(
 						Arg::new("USER")
 							.help("Set the user value")
 							.long("user")
-							.takes_value(true)
 							.requires("ENTRY")
-							.validator(|v|{
-								v.parse::<u8>() // between 0 and 255
-								.map_err(|e|{e.to_string()}).map(|_nb| ())
-							})
+							.value_parser(value_parser!(u8))
 					)
 					.arg(
 						Arg::new("FILENAME")
 							.help("Set the filename of the entry")
-							.takes_value(true)
 							.long("filename")
 							.requires("ENTRY")
 					)
@@ -144,26 +134,24 @@ fn main() -> std::io::Result<()> {
 						Arg::new("BLOCS")
 							.help("Set the blocs to load (and update the number of blocs accordingly to that)")
 							.long("blocs")
-							.takes_value(true)
 							.requires("ENTRY")
-							.max_values(16)
+							.value_parser(value_parser!(u8))
+							.num_args(..=16)
 					)
 					.arg(
 						Arg::new("NUMPAGE")
 						.help("Set the page number")
 						.long("numpage")
-						.takes_value(true)
 					)
 					.arg(
 						Arg::new("SIZE")
 						.help("Force the size of the entry")
 						.long("size")
-						.takes_value(true)
 					)
 					.get_matches();
 
     // Retrieve the current entries ...
-    let catalog_fname = matches.value_of("INPUT_FILE").unwrap();
+    let catalog_fname = matches.get_one::<String>("INPUT_FILE").unwrap();
     let mut catalog_content: AmsdosEntries = {
         let mut content = Vec::new();
 
@@ -183,10 +171,10 @@ fn main() -> std::io::Result<()> {
     };
 
     // ... and manipulate them
-    if matches.is_present("LIST") || matches.is_present("LISTALL") {
-        let listall = matches.is_present("LISTALL");
+    if matches.contains_id("LIST") || matches.contains_id("LISTALL") {
+        let listall = matches.contains_id("LISTALL");
         for (idx, entry) in catalog_content.all_entries().enumerate() {
-            let is_present = !entry.is_erased();
+            let contains_id = !entry.is_erased();
             let is_hidden = entry.is_system();
             let is_read_only = entry.is_read_only();
 
@@ -197,7 +185,7 @@ fn main() -> std::io::Result<()> {
                 .map(|c| c.is_ascii_graphic())
                 .all(|t| t);
 
-            if is_present && !contains_control_chars {
+            if contains_id && !contains_control_chars {
                 print!("{idx}. {fname}");
                 if is_hidden {
                     print!(" [hidden]");
@@ -209,56 +197,55 @@ fn main() -> std::io::Result<()> {
                 print!(" {}Kb {:?}", entry.used_space(), entry.used_blocs());
                 println!();
             }
-            else if is_present && contains_control_chars && listall {
+            else if contains_id && contains_control_chars && listall {
                 println!("{idx}. => CONTROL CHARS <=");
             }
-            else if !is_present {
+            else if !contains_id {
                 println!("{idx}. => EMPTY SLOT <=");
             }
         }
     }
 
-    if let Some(idx) = matches.value_of("ENTRY") {
+    if let Some(idx) = matches.get_one::<String>("ENTRY") {
         let idx = idx.parse::<u8>().unwrap();
         info!("Manipulate entry {}", idx);
 
         let entry = catalog_content.get_entry_mut(idx as _);
 
-        if matches.is_present("SETREADONLY") {
+        if matches.contains_id("SETREADONLY") {
             entry.set_read_only();
         }
-        if matches.is_present("SETSYSTEM") {
+        if matches.contains_id("SETSYSTEM") {
             entry.set_system();
         }
-        if matches.is_present("UNSETREADONLY") {
+        if matches.contains_id("UNSETREADONLY") {
             entry.unset_read_only();
         }
-        if matches.is_present("UNSETSYSTEM") {
+        if matches.contains_id("UNSETSYSTEM") {
             entry.unset_system();
         }
 
-        if let Some(user) = matches.value_of("USER") {
-            let user = to_number::<u8>(user);
-            entry.set_user(user);
+        if let Some(user) = matches.get_one::<u8>("USER") {
+            entry.set_user(*user);
         }
 
-        if let Some(filename) = matches.value_of("FILENAME") {
+        if let Some(filename) = matches.get_one::<String>("FILENAME") {
             entry.set_filename(filename);
         }
 
-        if let Some(blocs) = matches.values_of("BLOCS") {
+        if let Some(blocs) = matches.get_many::<u8>("BLOCS") {
             let blocs = blocs
-                .map(|bloc| BlocIdx::from(to_number::<u8>(bloc)))
+                .map(|bloc| BlocIdx::from(*bloc))
                 .collect::<Vec<BlocIdx>>();
             entry.set_blocs(&blocs);
         }
 
-        if let Some(numpage) = matches.value_of("NUMPAGE") {
+        if let Some(numpage) = matches.get_one::<String>("NUMPAGE") {
             entry.set_num_page(to_number::<u8>(numpage));
         }
 
         // XXX It is important ot keep it AFTER the blocs as it override their value
-        if let Some(size) = matches.value_of("SIZE") {
+        if let Some(size) = matches.get_one::<String>("SIZE") {
             let size = to_number::<u8>(size);
             entry.set_page_size(size);
         }

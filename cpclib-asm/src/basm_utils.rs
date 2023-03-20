@@ -5,7 +5,8 @@ use std::io::Write;
 use std::path::Path;
 
 use cpclib_common::clap;
-use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, Command, PossibleValue, ValueHint};
+use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, ArgAction, Command, ValueHint};
+use cpclib_common::clap::builder::{PossibleValuesParser, PossibleValue};
 use cpclib_common::itertools::Itertools;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 use cpclib_xfer::CpcXfer;
@@ -102,13 +103,13 @@ pub fn parse<'arg>(
     matches: &'arg ArgMatches
 ) -> Result<(LocatedListing, ParserOptions), BasmError> {
     let inline_fname = "<inline code>";
-    let filename = matches.value_of("INPUT").unwrap_or(inline_fname);
+    let filename = matches.get_one::<String>("INPUT").map(AsRef::as_ref).unwrap_or(inline_fname);
 
-    let show_progress = matches.is_present("PROGRESS");
+    let show_progress = matches.get_flag("PROGRESS");
 
     // prepare the context for the included directories
     let mut options = ParserOptions::default();
-    options.set_dotted_directives(matches.is_present("DOTTED_DIRECTIVES"));
+    options.set_dotted_directives(matches.get_flag("DOTTED_DIRECTIVES"));
     options.show_progress = show_progress;
 
     match std::env::current_dir() {
@@ -118,7 +119,7 @@ pub fn parse<'arg>(
         Err(_) => todo!()
     }
     options.add_search_path_from_file(&filename); // we ignore the potential error
-    if let Some(directories) = matches.values_of("INCLUDE_DIRECTORIES") {
+    if let Some(directories) = matches.get_many::<String>("INCLUDE_DIRECTORIES") {
         for directory in directories {
             if !Path::new(directory).is_dir() {
                 return Err(BasmError::NotAValidDirectory {
@@ -132,7 +133,7 @@ pub fn parse<'arg>(
     let mut builder = options.clone().context_builder();
 
     // get the source code if any
-    let code = if matches.is_present("INPUT") {
+    let code = if matches.contains_id("INPUT") {
         builder = builder.set_current_filename(&filename);
         let filename = get_filename(filename, &options, None)?;
         let content = fs::read(filename.clone()).map_err(|e| {
@@ -142,7 +143,7 @@ pub fn parse<'arg>(
         })?;
         handle_source_encoding(filename.to_str().unwrap(), &content)?
     }
-    else if let Some(code) = matches.value_of("INLINE") {
+    else if let Some(code) = matches.get_one::<String>("INLINE") {
         builder = builder.set_context_name("INLINED CODE");
         format!(" {}", code)
     }
@@ -177,13 +178,13 @@ pub fn assemble<'arg>(
     listing: &LocatedListing,
     parse_options: ParserOptions
 ) -> Result<Env, BasmError> {
-    let show_progress = matches.is_present("PROGRESS");
+    let show_progress = matches.get_flag("PROGRESS");
 
     let mut assemble_options = AssemblingOptions::default();
-    assemble_options.set_case_sensitive(!matches.is_present("CASE_INSENSITIVE"));
+    assemble_options.set_case_sensitive(!matches.get_flag("CASE_INSENSITIVE"));
 
     // TODO add symbols if any
-    if let Some(files) = matches.values_of("LOAD_SYMBOLS") {
+    if let Some(files) = matches.get_many::<String>("LOAD_SYMBOLS") {
         for path in files {
             let file = Path::new(path);
             if !file.is_file() {
@@ -224,12 +225,12 @@ pub fn assemble<'arg>(
     }
 
     // Get the variables definition
-    if let Some(definitions) = matches.values_of("DEFINE_SYMBOL") {
+    if let Some(definitions) = matches.get_many::<String>("DEFINE_SYMBOL") {
         for definition in definitions {
             let (symbol, value) = {
                 match definition.split_once("=") {
                     Some((symbol, value)) => (symbol, value),
-                    None => (definition, "1")
+                    None => (definition.as_str(), "1")
                 }
             };
 
@@ -251,7 +252,7 @@ pub fn assemble<'arg>(
         }
     }
 
-    if let Some(dest) = matches.value_of("LISTING_OUTPUT") {
+    if let Some(dest) = matches.get_one::<String>("LISTING_OUTPUT") {
         if dest == "-" {
             assemble_options.write_listing_output(std::io::stdout());
         }
@@ -294,7 +295,7 @@ pub fn assemble<'arg>(
         }
     })?;
 
-    if let Some(dest) = matches.value_of("SYMBOLS_OUTPUT") {
+    if let Some(dest) = matches.get_one::<String>("SYMBOLS_OUTPUT") {
         if dest == "-" {
             env.generate_symbols_output(&mut std::io::stdout())
         }
@@ -320,20 +321,20 @@ pub fn assemble<'arg>(
 /// Save the provided result
 /// TODO manage the various save options and delegate them with save commands
 pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
-    let show_progress = matches.is_present("PROGRESS");
+    let show_progress = matches.get_flag("PROGRESS");
 
-    if matches.is_present("SNAPSHOT")
-        && !matches.is_present("TO_M4")
-        && !matches.is_present("OUTPUT")
+    if matches.get_flag("SNAPSHOT")
+        && !matches.contains_id("TO_M4")
+        && !matches.contains_id("OUTPUT")
     {
         return Err(BasmError::InvalidArgument(
             "You have not provided an output file name".to_owned()
         ));
     }
 
-    if matches.is_present("SNAPSHOT") && matches.is_present("OUTPUT") {
+    if matches.get_flag("SNAPSHOT") && matches.contains_id("OUTPUT") {
         // Get the appropriate filename
-        let pc_filename = matches.value_of("OUTPUT").unwrap();
+        let pc_filename = matches.get_one::<String>("OUTPUT").unwrap();
 
         env.save_sna(pc_filename.clone()).map_err(|e| {
             BasmError::Io {
@@ -342,7 +343,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             }
         })?;
 
-        match matches.value_of("TO_M4") {
+        match matches.get_one::<String>("TO_M4") {
             Some(m4) => {
                 let bar = if show_progress {
                     Some(Progress::progress().add_bar("Send to M4"))
@@ -362,9 +363,9 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             None => {}
         }
     }
-    else if matches.is_present("TO_M4") && !matches.is_present("OUTPUT") {
+    else if matches.contains_id("TO_M4") && !matches.contains_id("OUTPUT") {
         let sna = env.sna();
-        let m4 = matches.value_of("TO_M4").unwrap();
+        let m4 = matches.get_one::<String>("TO_M4").unwrap();
 
         let bar = if show_progress {
             Some(Progress::progress().add_bar("Send to M4"))
@@ -381,11 +382,11 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             Progress::progress().remove_bar_ok(&bar);
         }
     }
-    else if matches.is_present("OUTPUT") || matches.is_present("DB_LIST") {
+    else if matches.contains_id("OUTPUT") || matches.contains_id("DB_LIST") {
         // Collect the produced bytes
         let binary = env.produced_bytes();
 
-        if matches.is_present("DB_LIST") {
+        if matches.get_flag("DB_LIST") {
             let bytes = env.produced_bytes();
             if !bytes.is_empty() {
                 let listing = Listing::from(bytes.as_ref());
@@ -393,23 +394,23 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             }
         }
         else {
-            let pc_filename = matches.value_of("OUTPUT").unwrap();
-            if pc_filename.to_lowercase().ends_with(".sna") && !matches.is_present("SNAPSHOT") {
+            let pc_filename = matches.get_one::<String>("OUTPUT").unwrap();
+            if pc_filename.to_lowercase().ends_with(".sna") && !matches.get_flag("SNAPSHOT") {
                 eprintln!(
                     "[WARNING] You are saving a file with .sna extension without using --sna flag"
                 );
             }
-            let amsdos_filename = AmsdosFileName::try_from(pc_filename);
+            let amsdos_filename = AmsdosFileName::try_from(pc_filename.as_ref());
 
             // Raise an error if the filename is not compatible with the header
-            if matches.is_present("HEADER") && amsdos_filename.is_err() {
+            if matches.get_flag("HEADER") && amsdos_filename.is_err() {
                 return Err(BasmError::InvalidAmsdosFilename {
                     filename: pc_filename.to_string()
                 });
             }
 
             // Compute the headers if needed
-            let header = if matches.is_present("BINARY_HEADER") {
+            let header = if matches.get_flag("BINARY_HEADER") {
                 AmsdosManager::compute_binary_header(
                     &amsdos_filename.unwrap(),
                     env.loading_address().unwrap(),
@@ -419,7 +420,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 .as_bytes()
                 .to_vec()
             }
-            else if matches.is_present("BASIC_HEADER") {
+            else if matches.get_flag("BASIC_HEADER") {
                 AmsdosManager::compute_basic_header(&amsdos_filename.unwrap(), &binary)
                     .as_bytes()
                     .to_vec()
@@ -458,7 +459,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 /// Launch the assembling of everythin
 pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     // Handle the display of embedded files list
-    if matches.is_present("LIST_EMBEDDED") {
+    if matches.get_flag("LIST_EMBEDDED") {
         use crate::embedded::EmbeddedFiles;
         for fname in EmbeddedFiles::iter() {
             println!("{}", fname)
@@ -467,7 +468,7 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
     }
 
     // Handle the display of a specific embedded file
-    if let Some(fname) = matches.value_of("VIEW_EMBEDDED") {
+    if let Some(fname) = matches.get_one::<String>("VIEW_EMBEDDED") {
         use crate::embedded::EmbeddedFiles;
 
         match EmbeddedFiles::get(fname) {
@@ -495,7 +496,7 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
     // warnings.extend_from_slice(env.warnings());
     let warnings = env.warnings().to_vec();
 
-    if matches.is_present("WERROR") && !warnings.is_empty() {
+    if matches.get_flag("WERROR") && !warnings.is_empty() {
         const KEPT: usize = 10;
 
         if warnings.len() > KEPT {
@@ -519,28 +520,26 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
 
 lazy_static::lazy_static! {
     static ref EMBEDDED_FILES_NAME: Vec<String> = EmbeddedFiles::iter().map(|s|s.into_owned()).collect_vec();
-    static ref EMBEDDED_FILES: Vec<PossibleValue<'static>>  = EMBEDDED_FILES_NAME.iter()
+    static ref EMBEDDED_FILES: Vec<PossibleValue>  = EMBEDDED_FILES_NAME.iter()
         .map(|s| PossibleValue::from(s.as_str()))
         .collect_vec();
 
 }
 
 /// Generated the clap Commands
-pub fn build_args_parser() -> clap::Command<'static> {
+pub fn build_args_parser() -> clap::Command {
     Command::new("basm")
 					.author("Krusty/Benediction")
 					.about("Benediction ASM -- z80 assembler that mainly targets Amstrad CPC")
-                    .after_help("Work In Progress")
+                    .after_help("Still a Work In Progress assembler")
                     .arg(
                         Arg::new("INLINE")
                             .help("Z80 code is provided inline")
                             .long("inline")
-                            .takes_value(true)
                     )
                     .arg(
 						Arg::new("INPUT")
 							.help("Input file to read.")
-							.takes_value(true)
                             .value_hint(ValueHint::FilePath)
                     )
 
@@ -549,35 +548,35 @@ pub fn build_args_parser() -> clap::Command<'static> {
 							.help("Filename of the output.")
 							.short('o')
 							.long("output")
-							.takes_value(true)
                             .value_hint(ValueHint::FilePath)
 					)
 					.arg(
                         Arg::new("DB_LIST")
                         .help("Write a db list on screen (usefull to get the value of an opcode)")
                         .long("db")
+                        .action(ArgAction::SetTrue)
                     )
                     .arg(Arg::new("LISTING_OUTPUT")
                         .help("Filename of the listing output.")
                         .long("lst")
-                        .takes_value(true)
                         .value_hint(ValueHint::FilePath)
                     )
                     .arg(Arg::new("SYMBOLS_OUTPUT")
                         .help("Filename of the output symbols file.")
-                        .long("sym")
-                        .takes_value(true)
+                        .long("sym")                      
                         .value_hint(ValueHint::FilePath)
                     )
                     .group(
                         ArgGroup::new("ANY_OUTPUT")
                             .args(&["DB_LIST", "OUTPUT"])
+                            .required(true)
                     )
 					.arg(
 						Arg::new("BASIC_HEADER")
 							.help("Request a Basic header (the very first instruction has to be the LOCOMOTIVE directive.")
 							.long("basic")
 							.alias("basicheader")
+                            .action(ArgAction::SetTrue)
 					)
 					.arg(
 						Arg::new("BINARY_HEADER")
@@ -585,83 +584,82 @@ pub fn build_args_parser() -> clap::Command<'static> {
 							.long("binary")
 							.alias("header")
 							.alias("binaryheader")
+                            .action(ArgAction::SetTrue)
                     )
                     .arg(
                         Arg::new("SNAPSHOT")
                             .help("Generate a snapshot")
                             .long("snapshot")
                             .alias("sna")
+                            .action(ArgAction::SetTrue)
                     )
 					.arg(
 						Arg::new("CASE_INSENSITIVE")
 							.help("Configure the assembler to be case insensitive.")
 							.long("case-insensitive")
-							.short('i') 
+							.short('i')
+                            .action(ArgAction::SetTrue)
 					)
                     .arg(
                         Arg::new("DOTTED_DIRECTIVES")
                             .help("Expect directives to by prefixed with a dot")
                             .long("directives-prefixed-by-dot")
                             .short('d')
+                            .action(ArgAction::SetTrue)
                     )
                     .arg(
                         Arg::new("INCLUDE_DIRECTORIES")
-                            .help("Provide additional directories used to search files.")
+                            .help("Provide additional directories used to search files")
                             .long("include")
                             .short('I')
-                            .takes_value(true)
-                            .multiple_occurrences(true)
+                            .action(ArgAction::Append)
                             .number_of_values(1)
                             .value_hint(ValueHint::DirPath)
                     )
                     .arg(
                         Arg::new("DEFINE_SYMBOL")
-                            .help("Provide a symbol with its value (default set to 1")
+                            .help("Provide a symbol with its value (default set to 1)")
                             .long("define")
                             .short('D')
-                            .takes_value(true)
-                            .multiple_occurrences(true)
+                            .action(ArgAction::Append)
                             .number_of_values(1)
                     )
                     .arg(
                         Arg::new("TO_M4")
                             .help("Provide the IP address of the M4")
                             .long("m4")
-                            .takes_value(true)
-                            .multiple_occurrences(false)
-                            .number_of_values(1)
                     )
                     .arg(
                         Arg::new("LOAD_SYMBOLS")
                             .help("Load symbols from the given file")
                             .short('l')
-                            .takes_value(true)
-                            .multiple_occurrences(true)
+                            .action(ArgAction::Append)
                             .number_of_values(1)
                     )
                     .arg(
                         Arg::new("WERROR")
                         .help("Warning are considered to be errors")
                         .long("Werror")
-                        .takes_value(false)
+                        .action(ArgAction::SetTrue)
                     )
                     .arg(
                         Arg::new("PROGRESS")
                         .help("Show a progress bar.")
                         .long("progress")
+                        .action(ArgAction::SetTrue)
                     )
                     .arg(
                         Arg::new("LIST_EMBEDDED")
                         .help("List the embedded files")
                         .long("list-embedded")
+                        .action(ArgAction::SetTrue)
                     )
                     .arg(
                         Arg::new("VIEW_EMBEDDED")
                         .help("Display one specific embedded file")
                         .long("view-embedded")
-                        .takes_value(true)
                         .number_of_values(1)
-                        .possible_values(EMBEDDED_FILES.iter().cloned())
+                        .value_parser(PossibleValuesParser::new(EMBEDDED_FILES.iter().cloned()))
                     )
 					.group( // only one type of header can be provided
 						ArgGroup::new("HEADER")

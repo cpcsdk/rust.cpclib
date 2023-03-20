@@ -12,8 +12,8 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 independent = true
 
 [dependencies]
-cpclib-sna = "0.6.0"
-cpclib-common = "0.6.0"
+cpclib-sna = "0.6.1-alpha.2"
+cpclib-common = "0.6.1-alpha.2"
 
 
 cfg-if = "1.0.0"

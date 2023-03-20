@@ -18,6 +18,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use cpclib_common::clap;
+use clap::value_parser;
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName, AmsdosFileType, AmsdosManager};
 
 /// Convert a string to its unsigned 32 bits representation (to access to extra memory)
@@ -46,7 +47,6 @@ fn main() -> std::io::Result<()> {
                 .long("output")
                 .required_unless_present("INFO")
                 .help("Output file to generate")
-                .takes_value(true)
         )
         .arg(
             clap::Arg::new("USER")
@@ -54,7 +54,8 @@ fn main() -> std::io::Result<()> {
                 .long("user")
                 .conflicts_with("INFO")
                 .help("User where to put the file")
-                .takes_value(true)
+				.value_parser(value_parser!(u8))
+
         )
         .arg(
             clap::Arg::new("TYPE")
@@ -64,8 +65,7 @@ fn main() -> std::io::Result<()> {
                 .required_unless_present("INFO")
                 .help("File type")
                 .ignore_case(true)
-                .possible_values(["0", "1", "2", "Basic", "Protected", "Binary"])
-                .takes_value(true)
+                .value_parser(["0", "1", "2", "Basic", "Protected", "Binary"])
         )
         .arg(
             clap::Arg::new("EXEC")
@@ -73,7 +73,6 @@ fn main() -> std::io::Result<()> {
                 .long("execution")
                 .conflicts_with("INFO")
                 .help("Execution address")
-                .takes_value(true)
         )
         .arg(
             clap::Arg::new("LOAD")
@@ -81,12 +80,11 @@ fn main() -> std::io::Result<()> {
                 .long("load")
                 .conflicts_with("INFO")
                 .help("Loading address")
-                .takes_value(true)
         )
         .get_matches();
 
     // Read the input file
-    let complete_filename = matches.value_of("INPUT").unwrap();
+    let complete_filename = matches.get_one::<String>("INPUT").unwrap();
 
     let content = {
         let input = complete_filename;
@@ -98,7 +96,7 @@ fn main() -> std::io::Result<()> {
 
     // Get filename and extension
     let filename = {
-        let user = matches.value_of("USER").map_or(0, string_to_nb) as u8;
+        let user = matches.get_one::<u8>("USER").cloned().unwrap_or(0);
         let (filename, extension) = {
             let parts = complete_filename.split('.').collect::<Vec<_>>();
             let (filename, extension) = match parts.len() {
@@ -138,7 +136,7 @@ fn main() -> std::io::Result<()> {
             .expect("Invalid file definition")
     };
 
-    if matches.is_present("INFO") {
+    if matches.contains_id("INFO") {
         // In this branch we display information about the header
         let amsfile = AmsdosFile::from_buffer(&content);
         let header = amsfile.header();
@@ -155,7 +153,7 @@ fn main() -> std::io::Result<()> {
         // Get the type of file
         let ftype = {
             match matches
-                .value_of("TYPE")
+                .get_one::<String>("TYPE")
                 .unwrap()
                 .to_ascii_lowercase()
                 .as_ref()
@@ -172,12 +170,12 @@ fn main() -> std::io::Result<()> {
             AmsdosFileType::Binary => {
                 let exec = string_to_nb(
                     matches
-                        .value_of("EXEC")
+                        .get_one::<String>("EXEC")
                         .expect("The execution address is expected for a binary target")
                 ) as u16;
                 let load = string_to_nb(
                     matches
-                        .value_of("LOAD")
+                        .get_one::<String>("LOAD")
                         .expect("The load address is expected for a binary target")
                 ) as u16;
 
@@ -188,7 +186,7 @@ fn main() -> std::io::Result<()> {
         };
 
         // Write the final file
-        let mut f = File::create(matches.value_of("OUTPUT").unwrap())?;
+        let mut f = File::create(matches.get_one::<String>("OUTPUT").unwrap())?;
         f.write_all(header.as_bytes())?;
         f.write_all(&content)?;
     }

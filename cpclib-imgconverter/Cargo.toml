@@ -12,7 +12,7 @@ independent = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cpclib = { version = "0.6.0", features = ["cmdline"] }
+cpclib = { version = "0.6.1-alpha.2", features = ["cmdline"] }
 
 lz4 = "1.23.3"
 notify = "5.0.0-pre.15"

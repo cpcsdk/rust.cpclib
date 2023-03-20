@@ -11,7 +11,7 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 independent = true
 
 [dependencies]
-cpclib-common = "0.6.0"
+cpclib-common = "0.6.1-alpha.2"
 
 cfg-if = "1.0.0"
 delegate  = "0.6.2"

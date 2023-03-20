@@ -12,8 +12,8 @@ repository = "https://github.com/cpcsdk/rust.cpclib"
 independent = true
 
 [dependencies]
-cpclib-tokens = "0.6.0"
-cpclib-common = "0.6.0"
+cpclib-tokens = "0.6.1-alpha.2"
+cpclib-common = "0.6.1-alpha.2"
 
 
 arrayref= "0.3.6"

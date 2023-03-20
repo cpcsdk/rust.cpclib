@@ -31,7 +31,7 @@ strsim = "0.10.0"
 
 time = { version = "0.3.9", optional = true }
 semver = { version = "1.0.9", optional = true }
-clap = { version = "3.1.18", optional = true }
+clap = { version = "4.1.11", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rayon = "1.5.3"

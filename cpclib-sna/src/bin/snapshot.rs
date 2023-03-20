@@ -17,7 +17,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use cpclib_common::clap::{Arg, Command};
+use cpclib_common::clap::{Arg, Command, ArgAction};
 use cpclib_sna::{Snapshot, SnapshotFlag, cli};
 
 pub mod built_info {
@@ -48,23 +48,27 @@ fn main() {
     );
     let matches = Command::new("createSnapshot")
                           .version(built_info::PKG_VERSION)
+                          .disable_version_flag(true)
                           .author("Krusty/Benediction")
                           .about("Amstrad CPC snapshot manipulation")
-                          .before_help(&desc_before[..])
+                          .before_help(desc_before)
                           .after_help("This tool tries to be similar than Ramlaid's one")
                           .arg(Arg::new("info")
                                .help("Display informations on the loaded snapshot")
                                .long("info")
                                .requires("inSnapshot")
+                               .action(ArgAction::SetTrue)
                            )
                            .arg(Arg::new("cli")
                                .help("Run the CLI interface for an interactive manipulation of snapshot")
                                .long("cli")
                                .requires("inSnapshot")
+                               .action(ArgAction::SetTrue)
                            )
                           .arg(Arg::new("debug")
                             .help("Display debugging information while manipulating the snapshot")
                             .long("debug")
+                            .action(ArgAction::SetTrue)
                           )
                           .arg(Arg::new("OUTPUT")
                                .help("Sets the output file to generate")
@@ -75,7 +79,6 @@ fn main() {
                                .last(true)
                                .required(true))
                           .arg(Arg::new("inSnapshot")
-                               .takes_value(true)
                                .short('i')
                                .long("inSnapshot")
                                .value_name("INFILE")
@@ -83,53 +86,50 @@ fn main() {
                                .help("Load <INFILE> snapshot file")
                                )
                           .arg(Arg::new("load")
-                               .takes_value(true)
                                .short('l')
                                .long("load")
-                               .multiple_occurrences(true)
+                               .action(ArgAction::Append)
                                .number_of_values(2)
                                .help("Specify a file to include. -l fname address"))
                           .arg(Arg::new("getToken")
-                               .takes_value(true)
                                .short('g')
                                .long("getToken")
-                               .multiple_occurrences(true)
+                               .action(ArgAction::Append)
                                .number_of_values(1)
                                .help("Display the value of a snapshot token")
                                .requires("inSnapshot")
                            )
                           .arg(Arg::new("setToken")
-                               .takes_value(true)
                                .short('s')
                                .long("setToken")
-                               .multiple_occurrences(true)
+                               .action(ArgAction::Append)
                                .number_of_values(2)
                                .help("Set snapshot token <$1> to value <$2>\nUse <$1>:<val> to set array value\n\t\tex '-s CRTC_REG:6 20' : Set CRTC register 6 to 20"))
                           .arg(Arg::new("putData")
-                               .takes_value(true)
                                .short('p')
                                .long("putData")
-                               .multiple_occurrences(true)
+                               .action(ArgAction::Append)
                                .number_of_values(2)
                                .help("Put <$2> byte at <$1> address in snapshot memory")
 
                             )
                           .arg(Arg::new("version")
-                                .takes_value(true)
                                 .short('v')
                                 .long("version")
                                 .number_of_values(1)
-                                .possible_values(["1", "2", "3"])
+                                .value_parser(["1", "2", "3"])
                                 .help("Version of the saved snapshot.")
                                 .default_value("3")
                            )
                           .arg(Arg::new("flags")
                                 .help("List the flags and exit")
-                               .long("flags"))
+                               .long("flags")
+                               .action(ArgAction::SetTrue)
+                        )
                           .get_matches();
 
     // Display all tokens
-    if matches.is_present("flags") {
+    if matches.contains_id("flags") {
         for flag in SnapshotFlag::enumerate().iter() {
             println!(
                 "{:?} / {:?} bytes.{}",
@@ -142,8 +142,8 @@ fn main() {
     }
 
     // Load a snapshot or generate an empty one
-    let mut sna = if matches.is_present("inSnapshot") {
-        let fname = matches.value_of("inSnapshot").unwrap();
+    let mut sna = if matches.contains_id("inSnapshot") {
+        let fname = matches.get_one::<String>("inSnapshot").unwrap();
         let path = Path::new(&fname);
         Snapshot::load(path).expect("Error while loading the snapshot")
     }
@@ -152,22 +152,22 @@ fn main() {
     };
 
     // Activate the debug mode
-    sna.debug = matches.is_present("debug");
+    sna.debug = matches.contains_id("debug");
 
-    if matches.is_present("info") {
+    if matches.contains_id("info") {
         sna.print_info();
         return;
     }
 
-    if matches.is_present("cli") {
-        let fname = matches.value_of("inSnapshot").unwrap();
+    if matches.contains_id("cli") {
+        let fname = matches.get_one::<String>("inSnapshot").unwrap();
         cli::cli(fname, sna);
         return;
     }
 
     // Manage the files insertion
-    if matches.is_present("load") {
-        let loads = matches.values_of("load").unwrap().collect::<Vec<_>>();
+    if matches.contains_id("load") {
+        let loads = matches.get_many::<String>("load").unwrap().collect::<Vec<_>>();
         for i in 0..(loads.len() / 2) {
             let fname = loads[i * 2 + 0];
             let place = loads[i * 2 + 1];
@@ -189,8 +189,8 @@ fn main() {
     }
 
     // Patch memory
-    if matches.is_present("putData") {
-        let data = matches.values_of("putData").unwrap().collect::<Vec<_>>();
+    if matches.contains_id("putData") {
+        let data = matches.get_many::<String>("putData").unwrap().collect::<Vec<_>>();
 
         for i in 0..(data.len() / 2) {
             let address = string_to_nb(data[i * 2 + 0]);
@@ -202,8 +202,8 @@ fn main() {
     }
 
     // Read the tokens
-    if matches.is_present("getToken") {
-        for token in matches.values_of("getToken").unwrap() {
+    if matches.contains_id("getToken") {
+        for token in matches.get_many::<String>("getToken").unwrap() {
             let token = SnapshotFlag::from_str(token).unwrap();
             println!("{:?} => {}", &token, sna.get_value(&token));
         }
@@ -211,8 +211,8 @@ fn main() {
     }
 
     // Set the tokens
-    if matches.is_present("setToken") {
-        let loads = matches.values_of("setToken").unwrap().collect::<Vec<_>>();
+    if matches.contains_id("setToken") {
+        let loads = matches.get_many::<String>("setToken").unwrap().collect::<Vec<_>>();
         for i in 0..(loads.len() / 2) {
             // Read the parameters from the command line
             let token = dbg!(loads[i * 2 + 0]);
@@ -232,9 +232,9 @@ fn main() {
         }
     }
 
-    let fname = matches.value_of("OUTPUT").unwrap();
+    let fname = matches.get_one::<String>("OUTPUT").unwrap();
     let version = matches
-        .value_of("version")
+        .get_one::<String>("version")
         .unwrap()
         .parse::<u8>()
         .unwrap()

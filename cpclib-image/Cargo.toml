@@ -13,7 +13,7 @@ independent = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cpclib-common = "0.6.0"
+cpclib-common = "0.6.1-alpha.2"
 image = "0.24.2"
 anyhow = "1.0.57"
 gif = "0.11.3"

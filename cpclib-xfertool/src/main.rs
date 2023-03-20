@@ -19,7 +19,7 @@ use std::env;
 use std::path::Path;
 use std::time::Duration;
 
-use cpclib_common::clap::{self, Command};
+use cpclib_common::clap::{self, Command,ArgAction};
 use crossbeam_channel::unbounded;
 use hotwatch::{Event, Hotwatch};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -83,8 +83,8 @@ fn main() -> anyhow::Result<()> {
             .arg(
                 clap::Arg::new("fname")
                 .help("Filename to send to the CPC")
-                .validator(|fname| {
-                    if Path::new(&fname).exists() {
+                .value_parser(|fname: &str| {
+                    if Path::new(fname).exists() {
                         Ok(())
                     }
                     else {
@@ -107,14 +107,13 @@ fn main() -> anyhow::Result<()> {
                     .help("Watch the file and resend it on the M4 if modified (so xfer does not end when started with this option).")
                     .short('w')
                     .long("watch")
-                    .multiple_occurrences(false)
-                    .takes_value(false)
+                    .action(ArgAction::SetTrue)
             )
             .arg(
                 clap::Arg::new("fname")
                 .help("Filename to send and execute. Can be an executable (Amsdos header expected) or a snapshot V2")
-                .validator(|fname| {
-                    if Path::new(&fname).exists() {
+                .value_parser(|fname: &str| {
+                    if Path::new(fname).exists() {
                         Ok(())
                     }
                     else {
@@ -157,7 +156,7 @@ fn main() -> anyhow::Result<()> {
         .get_matches();
 
     // Retreivethe hostname from the args or from the environment
-    let hostname: String = match matches.value_of("CPCADDR") {
+    let hostname: String = match matches.get_one::<String>("CPCADDR") {
         Some(cpcaddr) => cpcaddr.to_string(),
         None => {
             match env::var("CPCIP") {
@@ -173,23 +172,23 @@ fn main() -> anyhow::Result<()> {
 
     let xfer = xfer::CpcXfer::new(hostname);
 
-    if matches.is_present("-r") {
+    if matches.contains_id("-r") {
         xfer.reset_m4()?;
     }
-    else if matches.is_present("-s") {
+    else if matches.contains_id("-s") {
         xfer.reset_cpc()?;
     }
     else if let Some(p_opt) = matches.subcommand_matches("-p") {
-        let fname: String = p_opt.value_of("fname").unwrap().to_string();
+        let fname: String = p_opt.get_one::<String>("fname").unwrap().to_string();
         send_and_run_file(&xfer, &fname, false);
     }
     else if let Some(y_opt) = matches.subcommand_matches("-y") {
-        let fname: String = y_opt.value_of("fname").unwrap().to_string();
+        let fname: String = y_opt.get_one::<String>("fname").unwrap().to_string();
 
         // Simple file sending
         send_and_run_file(&xfer, &fname, true);
 
-        if y_opt.is_present("WATCH") {
+        if y_opt.contains_id("WATCH") {
             let (tx, rx) = std::sync::mpsc::channel();
             let mut watcher = RecommendedWatcher::new(
                 move |res| tx.send(res).unwrap(),
@@ -211,7 +210,7 @@ kind: notify::event::EventKind::Modify(_) |
         }
     }
     else if let Some(x_opt) = matches.subcommand_matches("-x") {
-        let fname = x_opt.value_of("fname").unwrap();
+        let fname = x_opt.get_one::<String>("fname").unwrap();
         xfer.run(fname)?; // .expect("Unable to launch file on CPC.");
     }
     else if let Some(_ls_opt) = matches.subcommand_matches("--ls") {
@@ -225,7 +224,7 @@ kind: notify::event::EventKind::Modify(_) |
         println!("{cwd}");
     }
     else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
-        xfer.cd(cd_opt.value_of("directory").unwrap())
+        xfer.cd(cd_opt.get_one::<String>("directory").unwrap())
             .expect("Unable to move in the requested folder.");
     }
     else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
