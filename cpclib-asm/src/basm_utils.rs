@@ -382,7 +382,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             Progress::progress().remove_bar_ok(&bar);
         }
     }
-    else if matches.contains_id("OUTPUT") || matches.contains_id("DB_LIST") {
+    else if matches.contains_id("OUTPUT") || matches.get_flag("DB_LIST") {
         // Collect the produced bytes
         let binary = env.produced_bytes();
 
@@ -394,6 +394,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             }
         }
         else {
+            debug_assert!(matches.contains_id("OUTPUT"));
             let pc_filename = matches.get_one::<String>("OUTPUT").unwrap();
             if pc_filename.to_lowercase().ends_with(".sna") && !matches.get_flag("SNAPSHOT") {
                 eprintln!(
@@ -403,7 +404,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             let amsdos_filename = AmsdosFileName::try_from(pc_filename.as_ref());
 
             // Raise an error if the filename is not compatible with the header
-            if matches.get_flag("HEADER") && amsdos_filename.is_err() {
+            if (matches.get_flag("BINARY_HEADER") || matches.get_flag("BASIC_HEADER")) && amsdos_filename.is_err() {
                 return Err(BasmError::InvalidAmsdosFilename {
                     filename: pc_filename.to_string()
                 });
@@ -569,7 +570,7 @@ pub fn build_args_parser() -> clap::Command {
                     .group(
                         ArgGroup::new("ANY_OUTPUT")
                             .args(&["DB_LIST", "OUTPUT"])
-                            .required(true)
+                            .required(false)
                     )
 					.arg(
 						Arg::new("BASIC_HEADER")
