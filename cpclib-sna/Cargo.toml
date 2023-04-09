@@ -16,22 +16,21 @@ independent = true
 [dependencies]
 cpclib-common = "0.6.1-alpha.2"
 
-cfg-if = "1.0.0"
-delegate  = "0.6.2"
-matches = "0.1.9"
-#minus = {git="https://github.com/arijit79/minus.git", branch="use-parking_lot", features=["static_output"]}
-minus = {version="5.2.0", features=["static_output"]}
-serde = { version = "1.0.137", features = ["derive"] }
-num_enum = "0.5.7"
+cfg-if.workspace = true
+delegate.workspace = true
+matches.workspace = true
+minus.workspace = true
+serde.workspace = true
+num_enum.workspace = true
 
-rustyline = { version ="9.1.2", optional = true}
+rustyline = { workspace = true, optional = true}
 
 [dev-dependencies]
-tempfile = "3.3.0"
-similar-asserts = "1.2.0"
+tempfile.workspace = true
+similar-asserts.workspace = true
 
 [build-dependencies]
-built = { version = "0.5.1", features = ["chrono"] }
+built.workspace = true
 
 [features]
 default = ["snapshot"]

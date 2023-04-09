@@ -25,39 +25,38 @@ cpclib-image = "0.6.1-alpha.2"
 cpclib-xfer = "0.6.1-alpha.2"
 
 
-#humantime = "2.1.0"
-#memchr = "2.4.0"
-#phf = {version="0.9.0", features=["macros"]} // unable to use as I whish
-arrayref= "0.3.6"
-cfg-if = "1.0.0"
-codespan-reporting = "0.11.1"
-crc = "3.0.0"
-custom_error = "1.9.2"
-delegate = "0.6.2"
-either = "1.6.1"
-failure = "0.1.8"
-getset = "0.1.2"
-globset = "0.4.8"
-indicatif = "0.17.1"
-lazy_static = "1.4.0"
-libc = "0.2.126"
-matches = "0.1.9"
-hashbag = "0.1.5"
-ouroboros = "0.15.0"
-paste = "1.0.7"
-regex = "1.5.6"
-rust-embed = { version = "6.4.0", features = ["compression"] }
-serde = { version = "1.0.137", features = ["derive"] }
-substring = "1.4.5"
-velcro = "0.5.3"
-assert_matches = "1.5.0"
-tempfile = "3.3.0"
-chardetng = "0.1.17"
-smartstring = "1.0.1"
+arrayref.workspace = true
+cfg-if.workspace = true
+codespan-reporting.workspace = true
+crc.workspace = true
+custom_error.workspace = true
+delegate.workspace = true
+either.workspace = true
+failure.workspace = true
+getset.workspace = true
+globset.workspace = true
+indicatif.workspace = true
+lazy_static.workspace = true
+libc.workspace = true
+matches.workspace = true
+hashbag.workspace = true
+ouroboros.workspace = true
+paste.workspace = true
+regex.workspace = true
+rust-embed = { workspace = true, features = ["compression"] }
+serde = { workspace = true, features = ["derive"] }
+substring.workspace = true
+velcro.workspace = true
+assert_matches.workspace = true
+tempfile.workspace = true
+chardetng.workspace = true
+smartstring.workspace = true
+
+
 
 [build-dependencies]
-built = { version = "0.5.1", features = ["chrono"] }
-cc = "1.0.73"
+built.workspace = true
+cc.workspace = true
 
 #[lib]
 #crate-type = ["cdylib", "dylib"]
