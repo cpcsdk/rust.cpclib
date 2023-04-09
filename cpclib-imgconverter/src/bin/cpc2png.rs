@@ -1,4 +1,4 @@
-use cpclib::common::clap::{self, Arg, Command};
+use cpclib::common::clap::{self, Arg, Command, value_parser, ArgAction};
 use cpclib::common::itertools::Itertools;
 use cpclib::image::image::ColorMatrix;
 use cpclib::image::pixels;
@@ -14,12 +14,13 @@ fn main() {
                 .help("Screen mode of the image to convert.")
                 .value_name("MODE")
                 .default_value("0")
-                .possible_values(&["0", "1", "2"])
+                .value_parser(["0", "1", "2"])
         )
         .arg(
             Arg::new("MODE0RATIO")
                 .long("mode0ratio")
                 .help("Horizontally double the pixels")
+                .action(ArgAction::SetTrue)
         )
         .subcommand(
             Command::new("SPRITE")
@@ -28,21 +29,20 @@ fn main() {
                 .arg(
                     Arg::new("WIDTH")
                         .long("width")
-                        .takes_value(true)
                         .required(true)
                         .help("Width of the sprite in pixels")
                 )
         )
-        .arg(Arg::new("INPUT").takes_value(true).required(true))
-        .arg(Arg::new("OUTPUT").takes_value(true).required(true)));
+        .arg(Arg::new("INPUT").required(true))
+        .arg(Arg::new("OUTPUT").required(true)));
 
     let matches = cmd.get_matches();
     let palette = dbg!(get_requested_palette(&matches).unwrap_or_default());
-    let input_fname = matches.value_of("INPUT").unwrap();
-    let output_fname = matches.value_of("OUTPUT").unwrap();
-    let mode = matches.value_of("MODE").unwrap().parse().unwrap();
+    let input_fname = matches.get_one::<String>("INPUT").unwrap();
+    let output_fname = matches.get_one::<String>("OUTPUT").unwrap();
+    let mode = matches.get_one::<String>("MODE").unwrap().parse().unwrap();
 
-    let mode0ratio = matches.is_present("MODE0RATIO");
+    let mode0ratio = matches.contains_id("MODE0RATIO");
     // read the data file
     let data = std::fs::read(input_fname).expect("Unable to read input file");
 
@@ -55,7 +55,7 @@ fn main() {
     };
 
     let mut matrix: ColorMatrix = if let Some(sprite) = matches.subcommand_matches("SPRITE") {
-        let width: usize = sprite.value_of("WIDTH").unwrap().parse().unwrap();
+        let width: usize = sprite.get_one::<String>("WIDTH").unwrap().parse().unwrap();
         let width = match mode {
             0 => width / 2,
             1 => width / 4,

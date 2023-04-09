@@ -19,7 +19,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow;
-use clap::{Arg, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command, value_parser};
+use clap::builder::NonEmptyStringValueParser;
 use cpclib::assembler::preamble::*;
 use cpclib::common::clap;
 use cpclib::disc::amsdos::*;
@@ -42,7 +43,6 @@ macro_rules! export_palette {
             Arg::new("EXPORT_PALETTE")
                 .long("palette")
                 .short('p')
-                .takes_value(true)
                 .required(false)
                 .help("Name of the binary file that contains the palette (Gate Array format)"),
         )
@@ -50,21 +50,18 @@ macro_rules! export_palette {
             Arg::new("EXPORT_INKS")
             .long("inks")
             .short('i')
-            .takes_value(true)
             .required(false)
             .help("Name of the binary file that contains the ink numbers (usefull for system based color change)")
         )
         .arg(
             Arg::new("EXPORT_PALETTE_FADEOUT")
                 .long("palette_fadeout")
-                .takes_value(true)
                 .required(false)
                 .help("Name of the file that will contain all the steps for a fade out transition (Gate Array format)")
         )
         .arg(
             Arg::new("EXPORT_INK_FADEOUT")
                 .long("ink_fadeout")
-                .takes_value(true)
                 .required(false)
                 .help("Name of the file that will contain all the steps for a fade out transition")
         )
@@ -73,13 +70,13 @@ macro_rules! export_palette {
 
 macro_rules! do_export_palette {
     ($arg: expr, $palette: ident) => {
-        if let Some(palette_fname) = $arg.value_of("EXPORT_PALETTE") {
+        if let Some(palette_fname) = $arg.get_one::<String>("EXPORT_PALETTE") {
             let mut file = File::create(palette_fname).expect("Unable to create the palette file");
             let p: Vec<u8> = $palette.into();
             file.write_all(&p).unwrap();
         }
 
-        if let Some(fade_fname) = $arg.value_of("EXPORT_PALETTE_FADEOUT") {
+        if let Some(fade_fname) = $arg.get_one::<String>("EXPORT_PALETTE_FADEOUT") {
             let palettes = $palette.rgb_fadout();
             let bytes = palettes.iter().fold(Vec::<u8>::default(), |mut acc, x| {
                 acc.extend(&x.to_gate_array_with_default(0.into()));
@@ -92,7 +89,7 @@ macro_rules! do_export_palette {
             file.write_all(&bytes).unwrap();
         }
 
-        if let Some(palette_fname) = $arg.value_of("EXPORT_INKS") {
+        if let Some(palette_fname) = $arg.get_one::<String>("EXPORT_INKS") {
             let mut file = File::create(palette_fname).expect("Unable to create the inks file");
             let inks = $palette
                 .inks()
@@ -102,7 +99,7 @@ macro_rules! do_export_palette {
             file.write_all(&inks).unwrap();
         }
 
-        if let Some(fade_fname) = $arg.value_of("EXPORT_INK_FADEOUT") {
+        if let Some(fade_fname) = $arg.get_one::<String>("EXPORT_INK_FADEOUT") {
             let palettes = $palette.rgb_fadout();
             let bytes = palettes
                 .iter()
@@ -297,7 +294,7 @@ fn parse_int(repr: &str) -> usize {
 #[allow(clippy::if_same_then_else)] // false positive
 fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
-        match sprite_matches.value_of("FORMAT").unwrap() {
+        match sprite_matches.get_one::<String>("FORMAT").unwrap().as_ref() {
             "linear" => OutputFormat::LinearEncodedSprite,
             "graycoded" => OutputFormat::GrayCodedSprite,
             "zigzag+graycoded" => OutputFormat::ZigZagGrayCodedSprite,
@@ -308,13 +305,13 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         OutputFormat::TileEncoded {
             tile_width: TileWidthCapture::NbBytes(parse_int(
                 tile_matches
-                    .value_of("WIDTH")
+                    .get_one::<String>("WIDTH")
                     .expect("--width argument missing")
             )),
 
             tile_height: TileHeightCapture::NbLines(parse_int(
                 tile_matches
-                    .value_of("HEIGHT")
+                    .get_one::<String>("HEIGHT")
                     .expect("--height argument missing")
             )),
 
@@ -322,13 +319,13 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
             vertical_movement: TileVerticalCapture::AlwaysFromTopToBottom,
 
             grid_width: tile_matches
-                .value_of("HORIZ_COUNT")
+                .get_one::<String>("HORIZ_COUNT")
                 .map(|v| parse_int(v))
                 .map(|v| GridWidthCapture::TilesInRow(v))
                 .unwrap_or(GridWidthCapture::FullWidth),
 
             grid_height: tile_matches
-                .value_of("VERT_COUNT")
+                .get_one::<String>("VERT_COUNT")
                 .map(|v| parse_int(v))
                 .map(|v| GridHeightCapture::TilesInColumn(v))
                 .unwrap_or(GridHeightCapture::FullHeight)
@@ -336,13 +333,13 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     }
     else {
         // Standard case
-        if matches.is_present("OVERSCAN") {
+        if matches.contains_id("OVERSCAN") {
             OutputFormat::CPCMemory {
                 output_dimension: CPCScreenDimension::overscan(),
                 display_address: DisplayCRTCAddress::new_overscan_from_page(2)
             }
         }
-        else if matches.is_present("FULLSCREEN") {
+        else if matches.contains_id("FULLSCREEN") {
             OutputFormat::CPCMemory {
                 output_dimension: CPCScreenDimension::overscan(),
                 display_address: DisplayCRTCAddress::new_overscan_from_page(2)
@@ -362,46 +359,46 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
 fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
-    let input_file = matches.value_of("SOURCE").unwrap();
-    let output_mode = matches.value_of("MODE").unwrap().parse::<u8>().unwrap();
+    let input_file = matches.get_one::<String>("SOURCE").unwrap();
+    let output_mode = matches.get_one::<String>("MODE").unwrap().parse::<u8>().unwrap();
     let mut transformations = TransformationsList::default();
 
     let palette = get_requested_palette(matches);
 
-    if matches.is_present("SKIP_ODD_PIXELS") {
+    if matches.contains_id("SKIP_ODD_PIXELS") {
         transformations = transformations.skip_odd_pixels();
     }
-    if matches.is_present("PIXEL_COLUMN_START") {
+    if matches.contains_id("PIXEL_COLUMN_START") {
         transformations = transformations.column_start(
             matches
-                .value_of("PIXEL_COLUMN_START")
+                .get_one::<String>("PIXEL_COLUMN_START")
                 .unwrap()
                 .parse::<u16>()
                 .unwrap()
         )
     }
-    if matches.is_present("PIXEL_LINE_START") {
+    if matches.contains_id("PIXEL_LINE_START") {
         transformations = transformations.line_start(
             matches
-                .value_of("PIXEL_LINE_START")
+                .get_one::<String>("PIXEL_LINE_START")
                 .unwrap()
                 .parse::<u16>()
                 .unwrap()
         )
     }
-    if matches.is_present("PIXEL_COLUMNS_KEPT") {
+    if matches.contains_id("PIXEL_COLUMNS_KEPT") {
         transformations = transformations.columns_kept(
             matches
-                .value_of("PIXEL_COLUMNS_KEPT")
+                .get_one::<String>("PIXEL_COLUMNS_KEPT")
                 .unwrap()
                 .parse::<u16>()
                 .unwrap()
         )
     }
-    if matches.is_present("PIXEL_LINES_KEPT") {
+    if matches.contains_id("PIXEL_LINES_KEPT") {
         transformations = transformations.lines_kept(
             matches
-                .value_of("PIXEL_LINES_KEPT")
+                .get_one::<String>("PIXEL_LINES_KEPT")
                 .unwrap()
                 .parse::<u16>()
                 .unwrap()
@@ -452,15 +449,15 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 do_export_palette!(sub_sprite, palette);
 
                 // Save the binary data of the sprite
-                let sprite_fname = sub_sprite.value_of("SPRITE_FNAME").unwrap();
+                let sprite_fname = sub_sprite.get_one::<String>("SPRITE_FNAME").unwrap();
                 let mut file =
                     File::create(sprite_fname).expect("Unable to create the sprite file");
                 file.write_all(&data).unwrap();
 
                 // Save the binary data of the palette if any
                 sub_sprite
-                    .value_of("CONFIGURATION")
-                    .and_then(|conf_fname: &str| {
+                    .get_one::<String>("CONFIGURATION")
+                    .and_then(|conf_fname: &String| {
                         let mut file = File::create(conf_fname)
                             .expect("Unable to create the configuration file");
                         let fname = std::path::Path::new(conf_fname)
@@ -491,7 +488,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 // Save the binary data of the tiles
                 let tile_fname = Path::new(
                     sub_tile
-                        .value_of("SPRITE_FNAME")
+                        .get_one::<String>("SPRITE_FNAME")
                         .expect("Missing tileset name")
                 );
                 let base = tile_fname
@@ -512,11 +509,11 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         }
     }
     else if let Some(sub_scr) = sub_scr {
-        let fname = dbg!(sub_scr.value_of("SCR").unwrap());
+        let fname = dbg!(sub_scr.get_one::<String>("SCR").unwrap());
 
         match &conversion {
             Output::CPCMemoryStandard(scr, palette) => {
-                let scr = if sub_scr.is_present("COMPRESSED") {
+                let scr = if sub_scr.contains_id("COMPRESSED") {
                     ocp::compress(&scr)
                 }
                 else {
@@ -529,7 +526,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
             }
 
             Output::CPCMemoryOverscan(scr1, scr2, palette) => {
-                if sub_scr.is_present("COMPRESSED") {
+                if sub_scr.contains_id("COMPRESSED") {
                     unimplemented!();
                 }
 
@@ -562,7 +559,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                     "test.bin"
                 }
                 else {
-                    sub_exec.as_ref().unwrap().value_of("FILENAME").unwrap()
+                    sub_exec.as_ref().unwrap().get_one::<String>("FILENAME").unwrap()
                 }
             };
 
@@ -587,7 +584,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 manager.add_file(&file, false, false).unwrap();
                 manager
                     .dsk()
-                    .save(sub_dsk.unwrap().value_of("DSK").unwrap())
+                    .save(sub_dsk.unwrap().get_one::<String>("DSK").unwrap())
                     .unwrap();
             }
         }
@@ -635,7 +632,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
             }
 
             if let Some(sub_sna) = sub_sna {
-                let sna_fname = sub_sna.value_of("SNA").unwrap();
+                let sna_fname = sub_sna.get_one::<String>("SNA").unwrap();
                 sna.save(sna_fname, sna::SnapshotVersion::V2)
                     .expect("Unable to save the snapshot");
             }
@@ -650,7 +647,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                     sna.write(f.as_file_mut(), cpclib::sna::SnapshotVersion::V2)
                         .expect("Unable to write the sna in the temporary file");
 
-                    let xfer = CpcXfer::new(sub_m4.value_of("CPCM4").unwrap());
+                    let xfer = CpcXfer::new(sub_m4.get_one::<String>("CPCM4").unwrap());
 
                     let tmp_file_name = f.path().to_str().unwrap();
                     xfer.upload_and_run(tmp_file_name, None)
@@ -678,21 +675,20 @@ fn main() -> anyhow::Result<()> {
                     .version("0.1.2")
                     .author("Krusty/Benediction")
                     .about("Simple CPC image conversion tool")
-                    .before_help(&desc_before[..])
+                    .before_help(desc_before)
                     .arg(
                         Arg::new("help")
                         .long("help")
                     )
                     .arg(
                         Arg::new("SOURCE")
-                            .takes_value(true)
                             .help("Filename to convert")
 //                            .last(true)
                             .required(true)
-                            .forbid_empty_values(true)
-                            .validator(|source| {
-                              if Path::new(&source).exists() {
-                                  Ok(())
+                            .value_parser(|source: &str| {
+                              let p = std::path::PathBuf::from(source);
+                              if p.exists() {
+                                  Ok(p)
                               }
                               else {
                                   Err(format!("{} does not exists!", source))
@@ -704,12 +700,11 @@ fn main() -> anyhow::Result<()> {
                             .about("Generate a snapshot with the converted image.")
                             .arg(
                                 Arg::new("SNA")
-                                    .takes_value(true)
                                     .help("snapshot filename to generate")
                                     .required(true)
-                                    .validator(|sna| {
+                                    .value_parser(|sna: &str| {
                                         if sna.to_lowercase().ends_with("sna") {
-                                            Ok(())
+                                            Ok(sna.to_owned())
                                         }
                                         else {
                                             Err(format!("{} has not a snapshot extension.", sna))
@@ -723,12 +718,11 @@ fn main() -> anyhow::Result<()> {
                         .about("Generate a DSK with an executable of the converted image.")
                         .arg(
                             Arg::new("DSK")
-                            .takes_value(true)
                             .help("dsk filename to generate")
                             .required(true)
-                            .validator(|dsk|{
+                            .value_parser(|dsk: &str|{
                                 if dsk.to_lowercase().ends_with("dsk") {
-                                    Ok(())
+                                    Ok(dsk.to_owned())
                                 }
                                 else {
                                     Err(format!("{} has not a dsk extention.", dsk))
@@ -742,7 +736,6 @@ fn main() -> anyhow::Result<()> {
                         .about("Generate an OCP SCR file")
                         .arg(
                             Arg::new("SCR")
-                                .takes_value(true)
                                 .help("SCR file to generate")
                                 .required(true)
                         )
@@ -760,11 +753,10 @@ fn main() -> anyhow::Result<()> {
                         .about("Generate a binary file to manually copy in a DSK or M4 folder.")
                         .arg(
                             Arg::new("FILENAME")
-                            .takes_value(true)
                             .help("executable to generate")
                             .required(true)
-                            .validator(|fname|{
-                                let fname = std::path::Path::new(&fname);
+                            .value_parser(|fname: &str|{
+                                let fname = std::path::PathBuf::from(fname);
                                 if let Some(ext) = fname.extension() {
                                     let ext = ext.to_os_string().into_string().unwrap();
                                     if ext.len() > 3 {
@@ -779,7 +771,7 @@ fn main() -> anyhow::Result<()> {
                                     }
                                 }
 
-                                Ok(())
+                                Ok(fname)
                             })
                         )
                     )
@@ -791,7 +783,6 @@ fn main() -> anyhow::Result<()> {
                             Arg::new("CONFIGURATION")
                             .long("configuration")
                             .short('c')
-                            .takes_value(true)
                             .required(false)
                             .help("Name of the assembly file that contains the size of the sprite")
                         )
@@ -801,12 +792,11 @@ fn main() -> anyhow::Result<()> {
                             .short('f')
                             .required(true)
                             .default_value("linear")
-                            .possible_values(&["linear", "graycoded", "zigzag+graycoded"])
+                            .value_parser(["linear", "graycoded", "zigzag+graycoded"])
                         )
 
                         .arg(
                             Arg::new("SPRITE_FNAME")
-                            .takes_value(true)
                             .help("Filename to generate")
                             .required(true)
                         )
@@ -819,7 +809,6 @@ fn main() -> anyhow::Result<()> {
                                 Arg::new("EXPORT_PALETTE")
                                 .long("palette")
                                 .short('p')
-                                .takes_value(true)
                                 .required(false)
                                 .help("Name of the binary file that contains the palette")
                             )
@@ -827,7 +816,6 @@ fn main() -> anyhow::Result<()> {
                                 Arg::new("WIDTH")
                                 .long("width")
                                 .short('w')
-                                .takes_value(true)
                                 .required(true)
                                 .help("Width (in bytes) of a tile")
                             )
@@ -835,21 +823,18 @@ fn main() -> anyhow::Result<()> {
                                 Arg::new("HEIGHT")
                                 .long("height")
                                 .short('h')
-                                .takes_value(true)
                                 .required(true)
                                 .help("Height (in lines) of a tile")
                             )
                             .arg(
                                 Arg::new("HORIZ_COUNT")
                                 .long("horiz_count")
-                                .takes_value(true)
                                 .required(false)
                                 .help("Horizontal number of tiles to extract. Extra tiles are ignored")
                             )
                             .arg(
                                 Arg::new("VERT_COUNT")
                                 .long("vert_count")
-                                .takes_value(true)
                                 .required(false)
                                 .help("Vertical number of tiles to extract. Extra tiles are ignored")
                             )
@@ -857,7 +842,6 @@ fn main() -> anyhow::Result<()> {
                                 Arg::new("CONFIGURATION")
                                 .long("configuration")
                                 .short('c')
-                                .takes_value(true)
                                 .required(false)
                                 .help("Name of the assembly file that contains the size of the sprite")
                             )
@@ -872,7 +856,6 @@ fn main() -> anyhow::Result<()> {
                                 Arg::new("SPRITE_FNAME")
                                 .short('o')
                                 .long("output")
-                                .takes_value(true)
                                 .help("Filename to generate. Will be postfixed by the number")
                                 .required(true)
                             )
@@ -886,7 +869,7 @@ fn main() -> anyhow::Result<()> {
                             .help("Screen mode of the image to convert.")
                             .value_name("MODE")
                             .default_value("0")
-                            .possible_values(&["0", "1", "2"])
+                            .value_parser(["0", "1", "2"])
                     )
                     .arg(
                         Arg::new("FULLSCREEN")
@@ -917,28 +900,24 @@ fn main() -> anyhow::Result<()> {
                         .long("columnstart")
                         .required(false)
                         .help("Number of pixel columns to skip on the left.")
-                        .takes_value(true)
                     )
                     .arg(
                         Arg::new("PIXEL_COLUMNS_KEPT")
                         .long("columnskept")
                         .required(false)
                         .help("Number of pixel columns to keep.")
-                        .takes_value(true)
                     )
                     .arg(
                         Arg::new("PIXEL_LINE_START")
                         .long("linestart")
                         .required(false)
                         .help("Number of pixel lines to skip.")
-                        .takes_value(true)
                     )
                     .arg(
                         Arg::new("PIXEL_LINES_KEPT")
                         .long("lineskept")
                         .required(false)
                         .help("Number of pixel lines to keep.")
-                        .takes_value(true)
                     )
                 );
 
@@ -948,13 +927,11 @@ fn main() -> anyhow::Result<()> {
                         .about("Directly send the code on the M4 through a snapshot")
                         .arg(
                             Arg::new("CPCM4")
-                                .takes_value(true)
                             .help("Address of the M4")
                             .required(true)
                         )
                         .arg(
                             Arg::new("WATCH")
-                            .takes_value(false)
                             .help("Monitor the source file modification and restart the conversion and transfer automatically. Picture must ALWAYS be valid.")
                             .long("watch")
 
@@ -967,7 +944,7 @@ fn main() -> anyhow::Result<()> {
 
     let matches = args.clone().get_matches();
 
-    if matches.is_present("help") {
+    if matches.contains_id("help") {
         args.print_long_help();
     }
 
@@ -986,12 +963,12 @@ fn main() -> anyhow::Result<()> {
     convert(&matches).expect("Unable to make the conversion");
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
-        if cfg!(feature = "xferlib") && sub_m4.is_present("WATCH") {
+        if cfg!(feature = "xferlib") && sub_m4.contains_id("WATCH") {
             let (tx, rx) = std::sync::mpsc::channel();
             let mut watcher: RecommendedWatcher =
                 RecommendedWatcher::new(move |res| tx.send(res).unwrap(), notify::Config::default())?;
             watcher.watch(
-                &std::path::Path::new(matches.value_of("SOURCE").unwrap()),
+                &std::path::Path::new(matches.get_one::<String>("SOURCE").unwrap()),
                 RecursiveMode::NonRecursive
             )?;
 
