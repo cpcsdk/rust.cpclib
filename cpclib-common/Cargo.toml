@@ -1,10 +1,13 @@
 [package]
 name = "cpclib-common"
 version = "0.6.1-alpha.2"
-edition = "2021"
 description = "common libraries used in cpclib"
-repository = "https://github.com/cpcsdk/rust.cpclib"
-license = "MIT"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [package.metadata.workspaces]
 independent = true

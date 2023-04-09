@@ -19,6 +19,15 @@ members = [
     "cpclib-wasm"
 ]
 
+[workspace.package]
+authors = ["Romain Giot <giot.romain@gmail.com>"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/cpcsdk/rust.cpclib"
+homepage = "https://github.com/cpcsdk/rust.cpclib"
+
+
+
 [patch.crates-io]
 cpclib = {path = "./cpclib/"}
 cpclib-asm = {path = "./cpclib-asm/"}

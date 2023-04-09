@@ -2,15 +2,16 @@
 
 name = "cpclib"
 version = "0.6.1-alpha.2"
-authors = ["Romain Giot <giot.romain@gmail.com>"]
-edition = "2021"
-license = "MIT"
 description = "Set of tools and libraries to ease demomaking on the Amstrad CPC platform. WIP"
-
-repository = "https://github.com/cpcsdk/rust.cpclib"
-readme = "Readme.mkd"
 keywords = ["amstrad", "demo", "z80", "dsk" ,"sna"]
 categories = ["command-line-utilities", "development-tools", "emulators"]
+readme = "Readme.mkd"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [package.metadata.workspaces]
 independent = true

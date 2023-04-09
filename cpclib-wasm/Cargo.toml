@@ -1,11 +1,13 @@
 [package]
 name = "cpclib-wasm"
 version = "0.2.1-alpha.2"
-authors = ["Romain Giot <giot.romain@gmail.com>"]
-edition = "2021"
 description = "webasm tools for cpclib"
-repository = "https://github.com/cpcsdk/rust.cpclib"
-license = "MIT"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [package.metadata.workspaces]
 independent = true

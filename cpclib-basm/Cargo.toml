@@ -1,12 +1,14 @@
 [package]
 name = "cpclib-basm"
 version = "0.6.1-alpha.2"
-edition = "2021"
 description = "z80 assembler relying on cpclib-asm"
-repository = "https://github.com/cpcsdk/rust.cpclib"
-license = "MIT"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
 
 [package.metadata.workspaces]
 independent = true
