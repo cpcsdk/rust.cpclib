@@ -1,6 +1,6 @@
 use cpclib_asm::assembler::visit_tokens_all_passes_with_options;
-use cpclib_asm::preamble::{parse_z80_with_context_builder, ParserContext};
-use cpclib_asm::AssemblingOptions;
+use cpclib_asm::preamble::{parse_z80_with_context_builder};
+
 use cpclib_sna::Snapshot;
 
 fn build_sna(code: &str) -> Snapshot {
