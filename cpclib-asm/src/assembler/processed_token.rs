@@ -606,15 +606,14 @@ where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
     #[cfg(not(target_arch = "wasm32"))]
-    let iter = tokens.par_iter();
+    let mut iter = tokens.par_iter();
     #[cfg(target_arch = "wasm32")]
-    let iter = tokens.iter();
+    let mut iter = tokens.iter();
 
     let options = env.options().parse_options();
 
     // get filename of files that will be read in parallal
-    let include_fnames = tokens
-        .par_iter()
+    let include_fnames = iter
         .filter(|t| t.include_is_standard_include())
         .map(|t| get_filename(t.include_fname(), options, Some(env)))
         .filter(|f| f.is_ok())
@@ -628,6 +627,10 @@ where
     }
 
     // the files will be read here
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut iter = tokens.par_iter();
+    #[cfg(target_arch = "wasm32")]
+    let mut iter = tokens.iter();
     iter.map(|t| build_processed_token(t, env))
         .collect::<Vec<_>>()
 }

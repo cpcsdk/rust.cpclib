@@ -20,7 +20,7 @@ cpclib-tokens = "0.6.1-alpha.2"
 cpclib-disc = "0.6.1-alpha.2"
 cpclib-common = "0.6.1-alpha.2"
 cpclib-image = "0.6.1-alpha.2"
-cpclib-xfer = "0.6.1-alpha.2"
+cpclib-xfer = {version="0.6.1-alpha.2", optional=true}
 
 
 #humantime = "2.1.0"
@@ -63,7 +63,7 @@ cc = "1.0.73"
 
 [features]
 default = ["colored_errors"]
-basm = ["cpclib-common/cmdline"] #only usefull for the basm crate
+basm = ["cpclib-common/cmdline", "cpclib-xfer"] #only usefull for the basm crate
 colored_errors = []
 
 

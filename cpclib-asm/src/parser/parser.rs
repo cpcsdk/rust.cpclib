@@ -15,7 +15,7 @@ use cpclib_common::nom::sequence::*;
 #[allow(missing_docs)]
 use cpclib_common::nom::*;
 use cpclib_common::nom_locate::LocatedSpan;
-use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{bin_number, dec_number, hex_number, lazy_static};
 use cpclib_sna::parse::{parse_flag, parse_flag_value};
@@ -23,6 +23,10 @@ use cpclib_sna::{FlagValue, SnapshotVersion};
 use cpclib_tokens::ListingElement;
 use crc::*;
 use either::Either;
+
+
+#[cfg(not(target_arch = "wasm32"))]
+use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use super::context::*;
 use super::obtained::*;
@@ -3927,9 +3931,14 @@ fn impossible_names(dotted_directive: bool) -> &'static [&'static str] {
 
 #[inline]
 fn allowed_label(name: &str, dotted_directive: bool) -> bool {
-    !impossible_names(dotted_directive)
-        .par_iter()
-        .any(|&content| content == name)
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut iter = impossible_names(dotted_directive)
+                .par_iter();
+    #[cfg(target_arch = "wasm32")]
+    let mut iter = impossible_names(dotted_directive)
+                .iter();
+
+    !iter.any(|&content| content == name)
 }
 
 pub fn parse_end_directive(input: Z80Span) -> IResult<Z80Span, String, Z80ParserError> {

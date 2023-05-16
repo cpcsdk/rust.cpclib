@@ -17,7 +17,7 @@ cfg-if = "1.0.0"
 delegate  = "0.6.2"
 matches = "0.1.9"
 #minus = {git="https://github.com/arijit79/minus.git", branch="use-parking_lot", features=["static_output"]}
-minus = {version="5.2.0", features=["static_output"]}
+minus = {version="5.2.0", features=["static_output"], optional = true}
 serde = { version = "1.0.137", features = ["derive"] }
 num_enum = "0.5.7"
 
@@ -31,8 +31,8 @@ similar-asserts = "1.2.0"
 built = { version = "0.5.1", features = ["chrono"] }
 
 [features]
-default = ["snapshot"]
-snapshot = ["cpclib-common/cmdline", "rustyline"]
+default = []
+snapshot = ["cpclib-common/cmdline", "rustyline", "minus"]
 
 
 [[bin]]
