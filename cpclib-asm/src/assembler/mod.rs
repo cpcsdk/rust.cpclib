@@ -43,6 +43,7 @@ use crate::assembler::processed_token::visit_processed_tokens;
 use crate::delayed_command::*;
 use crate::page_info::PageInformation;
 use crate::preamble::*;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::progress::Progress;
 use crate::report::Report;
 use crate::save_command::*;
@@ -108,8 +109,14 @@ impl EnvOptions {
         &self.assemble
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn show_progress(&self) -> bool {
         self.parse.show_progress
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn show_progress(&self) -> bool {
+        false
     }
 }
 
@@ -864,6 +871,7 @@ impl Env {
             }
             self.symbols.new_pass();
 
+            #[cfg(not(target_arch = "wasm32"))]
             Progress::progress().new_pass();
         }
     }
@@ -1055,6 +1063,7 @@ impl Env {
             .map(|b| b.1.nb_files_to_save() as u64)
             .sum::<u64>() as u64;
 
+        #[cfg(not(target_arch = "wasm32"))]
         Progress::progress().create_save_bar(nb_files_to_save);
 
         // save from snapshot
@@ -1080,7 +1089,8 @@ impl Env {
         for s in &mut saved {
             saved_files.append(s);
         }
-
+        
+        #[cfg(not(target_arch = "wasm32"))]
         if self.options().show_progress() {
             Progress::progress().finish_save();
         }
