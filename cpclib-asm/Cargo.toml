@@ -22,7 +22,7 @@ cpclib-tokens = "0.6.1-alpha.2"
 cpclib-disc = "0.6.1-alpha.2"
 cpclib-common = "0.6.1-alpha.2"
 cpclib-image = "0.6.1-alpha.2"
-cpclib-xfer = "0.6.1-alpha.2"
+cpclib-xfer = {version="0.6.1-alpha.2", optional=true}
 
 
 arrayref.workspace = true
@@ -64,7 +64,7 @@ cc.workspace = true
 
 [features]
 default = ["colored_errors"]
-basm = ["cpclib-common/cmdline"] #only usefull for the basm crate
+basm = ["cpclib-common/cmdline", "cpclib-xfer"] #only usefull for the basm crate
 colored_errors = []
 
 

@@ -19,11 +19,11 @@ cpclib-common = "0.6.1-alpha.2"
 cfg-if.workspace = true
 delegate.workspace = true
 matches.workspace = true
-minus.workspace = true
 serde.workspace = true
 num_enum.workspace = true
 
 rustyline = { workspace = true, optional = true}
+minus = {workspace=true, optional = true}
 
 [dev-dependencies]
 tempfile.workspace = true
@@ -33,8 +33,8 @@ similar-asserts.workspace = true
 built.workspace = true
 
 [features]
-default = ["snapshot"]
-snapshot = ["cpclib-common/cmdline", "rustyline"]
+default = []
+snapshot = ["cpclib-common/cmdline", "rustyline", "minus"]
 
 
 [[bin]]

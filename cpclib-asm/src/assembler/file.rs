@@ -94,6 +94,7 @@ pub fn read_source<P: AsRef<Path>>(
 }
 
 // Never fail
+#[cfg(not(target_arch = "wasm32"))]
 pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
     let mut decoder = chardetng::EncodingDetector::new();
     decoder.feed(content, true);
@@ -103,4 +104,10 @@ pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, As
     let content = content.into_owned();
 
     Ok(content)
+}
+
+
+#[cfg(target_arch = "wasm32")]
+pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
+   todo!()
 }
