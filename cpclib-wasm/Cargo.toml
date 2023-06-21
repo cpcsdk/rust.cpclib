@@ -9,6 +9,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+
 [package.metadata.workspaces]
 independent = true
 
@@ -55,9 +56,5 @@ features = [
 [dev-dependencies]
 wasm-bindgen-test = "0.3.30"
 
-[profile.release]
-debug = true
-# Tell `rustc` to optimize for small code size.
-#opt-level = "s"
 
 

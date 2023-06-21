@@ -19,6 +19,8 @@ members = [
     "cpclib-wasm"
 ]
 
+resolver = "2"
+
 [workspace.package]
 authors = ["Romain Giot <giot.romain@gmail.com>"]
 edition = "2021"

@@ -66,9 +66,3 @@ cc.workspace = true
 default = ["colored_errors"]
 basm = ["cpclib-common/cmdline", "cpclib-xfer"] #only usefull for the basm crate
 colored_errors = []
-
-
-
-[rust]
-debuginfo-level = 1
-
