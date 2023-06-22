@@ -41,8 +41,8 @@ built = { version = "0.5.2", features = ["chrono"] }
 cc = "1.0.79"
 cfg-if = "1.0.0"
 chardetng = {version = "0.1.17", features = ["multithreading"]}
+encoding_rs = { version = "0.8.29", default-features = false , features=["alloc"]}
 clap = "4.3.5"
-claui = "0.2.0"
 codespan-reporting = "0.11.1"
 contracts = "0.6.3"
 crc = "3.0.1"

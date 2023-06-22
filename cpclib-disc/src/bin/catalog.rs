@@ -27,7 +27,7 @@ use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 #[must_use] pub fn to_number<T>(repr: &str) -> T
 where
     T: Num,
-    <T as cpclib_common::num::Num>::FromStrRadixErr: std::fmt::Debug
+    T::FromStrRadixErr: std::fmt::Debug
 {
     dbg!(repr);
     let repr = repr.trim();

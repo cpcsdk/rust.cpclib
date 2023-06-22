@@ -24,7 +24,7 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
 
     // Create the empty tracks -- to be filled in the next loop
     for (head, track_idx) in cfg.track_idx_iterator() {
-        let mut track = edsk.track_list.add_empty_track();
+        let track = edsk.track_list.add_empty_track();
         track.track_number = track_idx;
 
         track.head_number = match *head {
