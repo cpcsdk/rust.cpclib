@@ -17,11 +17,11 @@ independent = true
 [dependencies]
 cpclib-asm = "0.6.1-alpha.2"
 cpclib-disc = "0.6.1-alpha.2"
-clap = "3.1.18"
-time = "0.3.9"
+clap = "3.2.25"
+time = "0.3.22"
 
 [build-dependencies]
-built = { version = "0.5.1", features = ["chrono"] }
+built = { version = "0.5.2", features = ["chrono"] }
 
 [[bin]]
 name = "bdasm"
