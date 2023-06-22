@@ -5,6 +5,7 @@
 extern crate wasm_bindgen_test;
 use std::println;
 
+use cpclib_asm::preamble::EnvOptions;
 use cpclib_sna::SnapshotFlag;
 use cpclib_wasm::*;
 use wasm_bindgen_test::*;
@@ -80,7 +81,7 @@ fn basic_parse_success_two_lines() {
 // this test is a copy past of generate_loop4000.rs
 fn manually_generated_snapshot() {
     use cpclib_asm::assembler::visit_tokens_all_passes_with_options;
-    use cpclib_asm::preamble::{parse_z80_str_with_context, ParserContext};
+    use cpclib_asm::preamble::{parse_z80_with_context_builder, ParserContextBuilder};
     use cpclib_asm::AssemblingOptions;
     use cpclib_sna::{Snapshot, SnapshotFlag};
 
@@ -90,10 +91,10 @@ fn manually_generated_snapshot() {
 		jp $
 	";
 
-    let mut ctx = ParserContext::default();
-    let mut options = AssemblingOptions::default();
-    let listing = parse_z80_str_with_context(asm, ctx).expect("Unable to parse z80 code");
-    let (_, env) = visit_tokens_all_passes_with_options(&listing, &options, listing.ctx())
+    let mut ctx = ParserContextBuilder::default();
+    let mut options: EnvOptions = AssemblingOptions::default().into();
+    let listing = parse_z80_with_context_builder(asm, ctx).expect("Unable to parse z80 code");
+    let (_, env) = visit_tokens_all_passes_with_options(&listing, options)
         .expect("Unable to assemble z80 code");
     let sna = env.sna().clone();
     assert_eq!(
