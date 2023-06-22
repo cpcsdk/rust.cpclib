@@ -40,7 +40,7 @@ bitvec = "1.0.0"
 built = { version = "0.5.1", features = ["chrono"] }
 cc = "1.0.73"
 cfg-if = "1.0.0"
-chardetng = "0.1.17"
+chardetng = {version = "0.1.17", features = ["multithreading"]}
 clap = "4.1.11"
 claui = "0.2.0"
 codespan-reporting = "0.11.1"
