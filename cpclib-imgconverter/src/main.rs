@@ -19,8 +19,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow;
-use clap::{Arg, ArgMatches, Command, value_parser};
 use clap::builder::NonEmptyStringValueParser;
+use clap::{value_parser, Arg, ArgMatches, Command};
 use cpclib::assembler::preamble::*;
 use cpclib::common::clap;
 use cpclib::disc::amsdos::*;
@@ -360,7 +360,11 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
 #[allow(clippy::cast_possible_truncation)]
 fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     let input_file = matches.get_one::<String>("SOURCE").unwrap();
-    let output_mode = matches.get_one::<String>("MODE").unwrap().parse::<u8>().unwrap();
+    let output_mode = matches
+        .get_one::<String>("MODE")
+        .unwrap()
+        .parse::<u8>()
+        .unwrap();
     let mut transformations = TransformationsList::default();
 
     let palette = get_requested_palette(matches);
@@ -559,7 +563,11 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                     "test.bin"
                 }
                 else {
-                    sub_exec.as_ref().unwrap().get_one::<String>("FILENAME").unwrap()
+                    sub_exec
+                        .as_ref()
+                        .unwrap()
+                        .get_one::<String>("FILENAME")
+                        .unwrap()
                 }
             };
 
@@ -965,8 +973,10 @@ fn main() -> anyhow::Result<()> {
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
         if cfg!(feature = "xferlib") && sub_m4.contains_id("WATCH") {
             let (tx, rx) = std::sync::mpsc::channel();
-            let mut watcher: RecommendedWatcher =
-                RecommendedWatcher::new(move |res| tx.send(res).unwrap(), notify::Config::default())?;
+            let mut watcher: RecommendedWatcher = RecommendedWatcher::new(
+                move |res| tx.send(res).unwrap(),
+                notify::Config::default()
+            )?;
             watcher.watch(
                 &std::path::Path::new(matches.get_one::<String>("SOURCE").unwrap()),
                 RecursiveMode::NonRecursive

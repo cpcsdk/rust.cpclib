@@ -1,9 +1,4 @@
-
-
 use cpclib_asm::assemble;
-
-
-
 
 #[test]
 pub fn assemble_vsync_test() {
@@ -338,5 +333,4 @@ fn lzclose() {
 		LZCLOSE";
 
     assert!(dbg!(assemble(code)).is_ok());
-
 }

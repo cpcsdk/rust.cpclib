@@ -106,8 +106,7 @@ pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, As
     Ok(content)
 }
 
-
 #[cfg(target_arch = "wasm32")]
 pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
-   todo!()
+    todo!()
 }

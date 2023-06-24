@@ -17,13 +17,14 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use cpclib_common::clap;
 use clap::value_parser;
+use cpclib_common::clap;
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName, AmsdosFileType, AmsdosManager};
 
 /// Convert a string to its unsigned 32 bits representation (to access to extra memory)
 /// TODO share implementation
-#[must_use] pub fn string_to_nb(source: &str) -> u32 {
+#[must_use]
+pub fn string_to_nb(source: &str) -> u32 {
     let error = format!("Unable to read the value: {source}");
     if source.starts_with("0x") {
         u32::from_str_radix(&source[2..], 16).expect(&error)
@@ -54,8 +55,7 @@ fn main() -> std::io::Result<()> {
                 .long("user")
                 .conflicts_with("INFO")
                 .help("User where to put the file")
-				.value_parser(value_parser!(u8))
-
+                .value_parser(value_parser!(u8))
         )
         .arg(
             clap::Arg::new("TYPE")

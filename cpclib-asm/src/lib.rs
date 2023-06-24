@@ -181,7 +181,6 @@ pub fn assemble_to_amsdos_file(
 mod test_super {
     use super::*;
 
-
     #[test]
     fn simple_test_assemble() {
         let code = "
@@ -190,8 +189,7 @@ mod test_super {
 		db 3, 4
 		";
 
-        let bytes =
-            assemble(code).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
+        let bytes = assemble(code).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
         assert_eq!(bytes.len(), 4);
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
@@ -204,8 +202,7 @@ mod test_super {
 		db 3, 4
 		";
 
-        let bytes =
-            assemble(code).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
+        let bytes = assemble(code).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
 

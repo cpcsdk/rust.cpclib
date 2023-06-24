@@ -17,7 +17,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 
-use cpclib_common::clap::{Arg, ArgGroup, ArgAction, Command};
+use cpclib_common::clap::{Arg, ArgAction, ArgGroup, Command};
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosManager};
 use cpclib_disc::edsk::ExtendedDsk;
 use custom_error::custom_error;
@@ -243,12 +243,15 @@ fn main() -> Result<(), DskManagerError> {
         }
     }
     else if let Some(sub) = matches.subcommand_matches("put") {
-        use cpclib_tokens::{Listing, builder};
+        use cpclib_tokens::{builder, Listing};
 
         // Add files in a sectorial way
-        let mut track = u8::from_str(sub.get_one::<String>("TRACK").unwrap()).expect("Wrong track format");
-        let mut sector = u8::from_str(sub.get_one::<String>("SECTOR").unwrap()).expect("Wrong track format");
-        let mut head = u8::from_str(sub.get_one::<String>("SIDE").unwrap()).expect("Wrong track format");
+        let mut track =
+            u8::from_str(sub.get_one::<String>("TRACK").unwrap()).expect("Wrong track format");
+        let mut sector =
+            u8::from_str(sub.get_one::<String>("SECTOR").unwrap()).expect("Wrong track format");
+        let mut head =
+            u8::from_str(sub.get_one::<String>("SIDE").unwrap()).expect("Wrong track format");
         let _export = sub.get_one::<String>("Z80_EXPORT").unwrap();
 
         let mut dsk = ExtendedDsk::open(dsk_fname)
@@ -296,7 +299,11 @@ fn main() -> Result<(), DskManagerError> {
         for fname in sub.get_many::<String>("INPUT_FILES").unwrap() {
             let ams_file = match AmsdosFile::open_valid(fname) {
                 Ok(ams_file) => {
-                    assert!(ams_file.amsdos_filename().unwrap().is_valid(), "Invalid amsdos filename ! {:?}", ams_file.amsdos_filename());
+                    assert!(
+                        ams_file.amsdos_filename().unwrap().is_valid(),
+                        "Invalid amsdos filename ! {:?}",
+                        ams_file.amsdos_filename()
+                    );
                     println!("{:?} added", ams_file.amsdos_filename());
                     ams_file
                 }

@@ -19,14 +19,10 @@ type BasicLineResult<'src> = IResult<&'src str, BasicLine, VerboseError<&'src st
 
 /// Parse complete basic program"],
 pub fn parse_basic_program(input: &str) -> IResult<&str, BasicProgram, VerboseError<&str>> {
-    let (input, lines) = fold_many0(
-        parse_basic_line,
-        Vec::new,
-        |mut acc: Vec<_>, item| {
-            acc.push(item);
-            acc
-        }
-    )(input)?;
+    let (input, lines) = fold_many0(parse_basic_line, Vec::new, |mut acc: Vec<_>, item| {
+        acc.push(item);
+        acc
+    })(input)?;
 
     dbg!(Ok((input, BasicProgram::new(lines))))
 }
@@ -183,14 +179,11 @@ pub fn parse_canal(input: &str) -> BasicSeveralTokensResult {
 
 pub fn parse_quoted_string(input: &str) -> BasicSeveralTokensResult {
     let (input, start) = parse_quote(input)?;
-    let (input, mut content) = fold_many0(
-        alt((parse_char, parse_space)),
-        Vec::new,
-        |mut acc, new| {
+    let (input, mut content) =
+        fold_many0(alt((parse_char, parse_space)), Vec::new, |mut acc, new| {
             acc.push(new);
             acc
-        }
-    )(input)?;
+        })(input)?;
     let (input, stop) = cut(context("Unclosed string", parse_quote))(input)?;
 
     let mut res = vec![start];
@@ -613,13 +606,9 @@ fn parse_any_string_function<'code>(
         let mut res = Vec::new();
         res.push(code);
         res.append(&mut space_a);
-        res.push(BasicToken::SimpleToken(
-            BasicTokenNoPrefix::from(open)
-        ));
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open)));
         res.append(&mut expr);
-        res.push(BasicToken::SimpleToken(
-            BasicTokenNoPrefix::from(close)
-        ));
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
 
         Ok((input, res))
     }
@@ -715,13 +704,9 @@ fn parse_any_numeric_function<'code>(
         let mut res = Vec::new();
         res.push(code);
         res.append(&mut space_a);
-        res.push(BasicToken::SimpleToken(
-            BasicTokenNoPrefix::from(open)
-        ));
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open)));
         res.append(&mut expr);
-        res.push(BasicToken::SimpleToken(
-            BasicTokenNoPrefix::from(close)
-        ));
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
 
         Ok((input, res))
     }

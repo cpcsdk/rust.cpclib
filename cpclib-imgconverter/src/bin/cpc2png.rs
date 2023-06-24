@@ -1,4 +1,4 @@
-use cpclib::common::clap::{self, Arg, Command, value_parser, ArgAction};
+use cpclib::common::clap::{self, value_parser, Arg, ArgAction, Command};
 use cpclib::common::itertools::Itertools;
 use cpclib::image::image::ColorMatrix;
 use cpclib::image::pixels;

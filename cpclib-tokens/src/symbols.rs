@@ -791,17 +791,14 @@ impl SymbolsTableTrait for SymbolsTable {
     }
 
     fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
-        Ok(self
-            .value(symbol)?
-            .and_then(|v| v.integer())
-            .or({
-                if self.dummy {
-                    Some(1i32)
-                }
-                else {
-                    None
-                }
-            }))
+        Ok(self.value(symbol)?.and_then(|v| v.integer()).or({
+            if self.dummy {
+                Some(1i32)
+            }
+            else {
+                None
+            }
+        }))
     }
 
     fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(

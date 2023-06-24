@@ -1068,8 +1068,8 @@ impl Env {
 
         // save from snapshot
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
-          //  eprintln!("ACTIVEPAGE. {:x}", &activepage);
-          //  eprintln!("PAGE. {:x}", &page);
+            //  eprintln!("ACTIVEPAGE. {:x}", &activepage);
+            //  eprintln!("PAGE. {:x}", &page);
 
             self.ga_mmr = *page;
             let mut saved = self.pages_info_sna[activepage].execute_save(self)?;
@@ -1089,7 +1089,7 @@ impl Env {
         for s in &mut saved {
             saved_files.append(s);
         }
-        
+
         #[cfg(not(target_arch = "wasm32"))]
         if self.options().show_progress() {
             Progress::progress().finish_save();
@@ -1168,7 +1168,7 @@ impl Env {
     /// TODO check that the implementation is still correct with snapshot inclusion
     /// BUG  does not take into account extra bank configuration
     pub fn memory(&self, start: u16, size: u16) -> Vec<u8> {
-   //     dbg!(self.ga_mmr);
+        //     dbg!(self.ga_mmr);
         let mut mem = Vec::new();
         for pos in start..(start + size) {
             let address = self.logical_to_physical_address(pos as _);
@@ -6060,6 +6060,4 @@ mod test {
         let bytes = env.memory(0x100, 4);
         assert_eq!(bytes, vec![0xFD, 0xCB, 0x2, 0xA7]);
     }
-
-
 }

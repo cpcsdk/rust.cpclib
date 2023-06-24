@@ -687,7 +687,8 @@ impl ColorMatrixList {
         strategy: ColorConversionStrategy
     ) -> Result<(), anyhow::Error> {
         self.0
-            .iter_mut().try_for_each(|matrix| matrix.reduce_colors_with(inks, strategy))
+            .iter_mut()
+            .try_for_each(|matrix| matrix.reduce_colors_with(inks, strategy))
     }
 
     /// Number of frames in the animation
@@ -953,9 +954,7 @@ impl Sprite {
 
     /// Returns the byte at the right position if exists
     pub fn get_byte_safe(&self, x: usize, y: usize) -> Option<u8> {
-        self.data
-            .get(y)
-            .and_then(|v| v.get(x)).copied()
+        self.data.get(y).and_then(|v| v.get(x)).copied()
     }
 
     /// Returns the line of interest

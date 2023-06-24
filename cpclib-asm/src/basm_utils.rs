@@ -5,8 +5,8 @@ use std::io::Write;
 use std::path::Path;
 
 use cpclib_common::clap;
-use cpclib_common::clap::{Arg, ArgGroup, ArgMatches, ArgAction, Command, ValueHint};
-use cpclib_common::clap::builder::{PossibleValuesParser, PossibleValue};
+use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
+use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
 use cpclib_common::itertools::Itertools;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 use cpclib_xfer::CpcXfer;
@@ -103,7 +103,10 @@ pub fn parse<'arg>(
     matches: &'arg ArgMatches
 ) -> Result<(LocatedListing, ParserOptions), BasmError> {
     let inline_fname = "<inline code>";
-    let filename = matches.get_one::<String>("INPUT").map(AsRef::as_ref).unwrap_or(inline_fname);
+    let filename = matches
+        .get_one::<String>("INPUT")
+        .map(AsRef::as_ref)
+        .unwrap_or(inline_fname);
 
     let show_progress = matches.get_flag("PROGRESS");
 
@@ -404,7 +407,9 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             let amsdos_filename = AmsdosFileName::try_from(pc_filename.as_ref());
 
             // Raise an error if the filename is not compatible with the header
-            if (matches.get_flag("BINARY_HEADER") || matches.get_flag("BASIC_HEADER")) && amsdos_filename.is_err() {
+            if (matches.get_flag("BINARY_HEADER") || matches.get_flag("BASIC_HEADER"))
+                && amsdos_filename.is_err()
+            {
                 return Err(BasmError::InvalidAmsdosFilename {
                     filename: pc_filename.to_string()
                 });

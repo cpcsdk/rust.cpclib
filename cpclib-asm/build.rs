@@ -1,8 +1,6 @@
 use std::env;
 use std::path::Path;
 
-
-
 fn build() {
     let src = env::var("CARGO_MANIFEST_DIR").unwrap();
     let dst = Path::new(&env::var("OUT_DIR").unwrap()).join("built.rs");

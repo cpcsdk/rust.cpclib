@@ -449,11 +449,7 @@ impl From<u8> for Ink {
 
 impl From<String> for Ink {
     fn from(item: String) -> Self {
-        match item
-            .to_uppercase()
-            .replace([' ', '_'], "")
-            .as_str()
-        {
+        match item.to_uppercase().replace([' ', '_'], "").as_str() {
             "BLACK" => Self { value: 0 },
             "BLUE" => Self { value: 1 },
             "BRIGHTBLUE" => Self { value: 2 },

@@ -17,14 +17,15 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 /// Catalog tool manipulator.
-use cpclib_common::clap::{Arg, Command, ArgAction, value_parser};
+use cpclib_common::clap::{value_parser, Arg, ArgAction, Command};
 use cpclib_common::num::Num;
 use cpclib_disc::amsdos::{AmsdosEntries, AmsdosManager, BlocIdx};
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
 use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 
-#[must_use] pub fn to_number<T>(repr: &str) -> T
+#[must_use]
+pub fn to_number<T>(repr: &str) -> T
 where
     T: Num,
     T::FromStrRadixErr: std::fmt::Debug

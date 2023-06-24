@@ -15,7 +15,8 @@ use cpclib_common::nom::sequence::*;
 #[allow(missing_docs)]
 use cpclib_common::nom::*;
 use cpclib_common::nom_locate::LocatedSpan;
-
+#[cfg(not(target_arch = "wasm32"))]
+use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{bin_number, dec_number, hex_number, lazy_static};
 use cpclib_sna::parse::{parse_flag, parse_flag_value};
@@ -23,10 +24,6 @@ use cpclib_sna::{FlagValue, SnapshotVersion};
 use cpclib_tokens::ListingElement;
 use crc::*;
 use either::Either;
-
-
-#[cfg(not(target_arch = "wasm32"))]
-use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use super::context::*;
 use super::obtained::*;
@@ -3932,11 +3929,9 @@ fn impossible_names(dotted_directive: bool) -> &'static [&'static str] {
 #[inline]
 fn allowed_label(name: &str, dotted_directive: bool) -> bool {
     #[cfg(not(target_arch = "wasm32"))]
-    let mut iter = impossible_names(dotted_directive)
-                .par_iter();
+    let mut iter = impossible_names(dotted_directive).par_iter();
     #[cfg(target_arch = "wasm32")]
-    let mut iter = impossible_names(dotted_directive)
-                .iter();
+    let mut iter = impossible_names(dotted_directive).iter();
 
     !iter.any(|&content| content == name)
 }
@@ -4815,9 +4810,7 @@ mod test {
         .replace("\u{C2}\u{A0}", " ");
         let code = unsafe { &*(code.as_str() as *const str) as &'static str };
         let (_ctx, span) = ctx_and_span(code);
-        let res = std::dbg!(parse_z80_str(
-            span
-        ));
+        let res = std::dbg!(parse_z80_str(span));
         assert!(res.is_ok(), "{:?}", &res);
         let res = res.unwrap();
         assert_eq!(res.0.len(), 0, "{:?}", &res);

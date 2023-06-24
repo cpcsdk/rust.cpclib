@@ -48,11 +48,7 @@ impl<'env> Display for Report<'env> {
             f,
             "Assembled in {} pass{} and {}.",
             self.nb_passes,
-            if self.nb_passes > 1 {
-                "es"
-            } else {
-                ""
-            },
+            if self.nb_passes > 1 { "es" } else { "" },
             if duration >= 60. {
                 format!("{:.2}min", duration / 60.)
             }

@@ -201,14 +201,11 @@ impl Transformation {
 }
 
 /// Container of transformations
-#[derive(Clone, Debug)]
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub struct TransformationsList {
     /// list of transformations
     transformations: Vec<Transformation>
 }
-
-
 
 #[allow(missing_docs)]
 impl TransformationsList {
@@ -881,7 +878,6 @@ impl LineCounter for StandardLineCounter {
     }
 }
 
-
 #[allow(missing_docs)]
 impl GrayCodeLineCounter {
     pub const GRAYCODE_INDEX_TO_SCREEN_INDEX: [u8; 8] = [0, 1, 3, 2, 6, 7, 5, 4];
@@ -1266,9 +1262,7 @@ impl<'a> ImageConverter<'a> {
             OutputFormat::CPCMemory {
                 ref output_dimension,
                 ref display_address
-            } => {
-                self.build_memory_blocks(sprite, *output_dimension, *display_address)
-            }
+            } => self.build_memory_blocks(sprite, *output_dimension, *display_address),
             OutputFormat::CPCSplittingMemory(ref _vec) => unimplemented!(),
             OutputFormat::TileEncoded {
                 tile_width,

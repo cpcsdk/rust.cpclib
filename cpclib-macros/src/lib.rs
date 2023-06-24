@@ -26,10 +26,12 @@ impl Parse for AssemblyMacroInput {
             input.parse::<kw::fname>()?;
             input.parse::<syn::Token![:]>()?;
             let fname = (input.parse::<syn::LitStr>()?).value();
-            let content = std::fs::read_to_string(&fname).map_err(|e| syn::Error::new(
+            let content = std::fs::read_to_string(&fname).map_err(|e| {
+                syn::Error::new(
                     proc_macro2::Span::call_site(),
                     format!("Unable to load {}.\n{}", fname, e)
-                ))?;
+                )
+            })?;
 
             Ok(AssemblyMacroInput { code: content })
         }

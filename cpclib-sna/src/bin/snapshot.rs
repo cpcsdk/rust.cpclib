@@ -17,15 +17,16 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use cpclib_common::clap::{Arg, Command, ArgAction};
-use cpclib_sna::{Snapshot, SnapshotFlag, cli};
+use cpclib_common::clap::{Arg, ArgAction, Command};
+use cpclib_sna::{cli, Snapshot, SnapshotFlag};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
 /// Convert a string to its unsigned 32 bits representation (to access to extra memory)
-#[must_use] pub fn string_to_nb(source: &str) -> u32 {
+#[must_use]
+pub fn string_to_nb(source: &str) -> u32 {
     let error = format!("Unable to read the value: {source}");
     if source.starts_with("0x") {
         u32::from_str_radix(&source[2..], 16).expect(&error)
@@ -167,7 +168,10 @@ fn main() {
 
     // Manage the files insertion
     if matches.contains_id("load") {
-        let loads = matches.get_many::<String>("load").unwrap().collect::<Vec<_>>();
+        let loads = matches
+            .get_many::<String>("load")
+            .unwrap()
+            .collect::<Vec<_>>();
         for i in 0..(loads.len() / 2) {
             let fname = loads[i * 2 + 0];
             let place = loads[i * 2 + 1];
@@ -190,7 +194,10 @@ fn main() {
 
     // Patch memory
     if matches.contains_id("putData") {
-        let data = matches.get_many::<String>("putData").unwrap().collect::<Vec<_>>();
+        let data = matches
+            .get_many::<String>("putData")
+            .unwrap()
+            .collect::<Vec<_>>();
 
         for i in 0..(data.len() / 2) {
             let address = string_to_nb(data[i * 2 + 0]);
@@ -212,7 +219,10 @@ fn main() {
 
     // Set the tokens
     if matches.contains_id("setToken") {
-        let loads = matches.get_many::<String>("setToken").unwrap().collect::<Vec<_>>();
+        let loads = matches
+            .get_many::<String>("setToken")
+            .unwrap()
+            .collect::<Vec<_>>();
         for i in 0..(loads.len() / 2) {
             // Read the parameters from the command line
             let token = dbg!(loads[i * 2 + 0]);

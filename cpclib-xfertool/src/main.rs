@@ -19,7 +19,7 @@ use std::env;
 use std::path::Path;
 use std::time::Duration;
 
-use cpclib_common::clap::{self, Command,ArgAction};
+use cpclib_common::clap::{self, ArgAction, Command};
 use crossbeam_channel::unbounded;
 use hotwatch::{Event, Hotwatch};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -200,8 +200,10 @@ fn main() -> anyhow::Result<()> {
             for res in rx {
                 match res {
                     Ok(notify::event::Event {
-kind: notify::event::EventKind::Modify(_) |
-    notify::event::EventKind::Create(_), .. }) => {
+                        kind:
+                            notify::event::EventKind::Modify(_) | notify::event::EventKind::Create(_),
+                        ..
+                    }) => {
                         send_and_run_file(&xfer, &fname, true);
                     }
                     _ => {}

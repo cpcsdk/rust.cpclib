@@ -366,8 +366,7 @@ impl std::fmt::Debug for AmsdosFileType {
     }
 }
 /// Encode the index of a bloc
-#[derive(Debug, Copy, Clone, Ord, Eq)]
-#[derive(Default)]
+#[derive(Debug, Copy, Clone, Ord, Eq, Default)]
 pub enum BlocIdx {
     /// The block is not used
     #[default]
@@ -377,8 +376,6 @@ pub enum BlocIdx {
     /// Index of a real bloc
     Index(std::num::NonZeroU8)
 }
-
-
 
 impl From<u8> for BlocIdx {
     fn from(val: u8) -> Self {

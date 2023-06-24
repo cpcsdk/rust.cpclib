@@ -125,21 +125,15 @@ impl Command {
     }
 }
 
-fn parse_number(
-    input: Source<'_>
-) -> IResult<Source<'_>, u32, VerboseError<Source<'_>>> {
+fn parse_number(input: Source<'_>) -> IResult<Source<'_>, u32, VerboseError<Source<'_>>> {
     alt((hex_number, bin_number, dec_number))(input)
 }
 
-fn parse_line(
-    input: Source<'_>
-) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
+fn parse_line(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     alt((parse_memory, parse_disassemble, parse_help, parse_load2))(input)
 }
 
-fn parse_memory(
-    input: Source<'_>
-) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
+fn parse_memory(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(
         tuple((
             alt((tag_no_case("MEMORY"), tag_no_case("MEM"))),
@@ -150,9 +144,7 @@ fn parse_memory(
     )(input)
 }
 
-fn parse_disassemble(
-    input: Source<'_>
-) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
+fn parse_disassemble(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(
         tuple((
             alt((tag_no_case("DISASSEMBLE"), tag_no_case("DISASS"))),
@@ -163,15 +155,11 @@ fn parse_disassemble(
     )(input)
 }
 
-fn parse_help(
-    input: Source<'_>
-) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
+fn parse_help(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(tag_no_case("HELP"), |_| Command::Help)(input)
 }
 
-fn parse_load2(
-    input: Source<'_>
-) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
+fn parse_load2(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(
         preceded(
             tuple((tag_no_case("LOAD2"), space1)),

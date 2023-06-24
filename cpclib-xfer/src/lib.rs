@@ -254,14 +254,19 @@ impl CpcXfer {
             .prefix("xfer")
             .suffix(".sna")
             .rand_bytes(4)
-            .tempfile().map_err(|e| XferError::InternalError {
+            .tempfile()
+            .map_err(|e| {
+                XferError::InternalError {
                     reason: e.to_string()
-                })?;
+                }
+            })?;
         let temp_path = file.into_temp_path();
 
-        sna.save(&temp_path, SnapshotVersion::V2).map_err(|e| XferError::InternalError {
+        sna.save(&temp_path, SnapshotVersion::V2).map_err(|e| {
+            XferError::InternalError {
                 reason: format!("Unable to save the snapshot. {}", e)
-            })?;
+            }
+        })?;
         self.upload_and_run(&temp_path, None)?;
 
         // sleep a bit to be sure the file is not deleted BEFORE sending it to CPC
