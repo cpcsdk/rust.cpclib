@@ -3929,7 +3929,7 @@ fn impossible_names(dotted_directive: bool) -> &'static [&'static str] {
 #[inline]
 fn allowed_label(name: &str, dotted_directive: bool) -> bool {
     #[cfg(not(target_arch = "wasm32"))]
-    let mut iter = impossible_names(dotted_directive).par_iter();
+    let iter = impossible_names(dotted_directive).par_iter();
     #[cfg(target_arch = "wasm32")]
     let mut iter = impossible_names(dotted_directive).iter();
 

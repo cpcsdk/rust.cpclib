@@ -606,7 +606,7 @@ where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
     #[cfg(not(target_arch = "wasm32"))]
-    let mut iter = tokens.par_iter();
+    let iter = tokens.par_iter();
     #[cfg(target_arch = "wasm32")]
     let mut iter = tokens.iter();
 
@@ -628,7 +628,7 @@ where
 
     // the files will be read here
     #[cfg(not(target_arch = "wasm32"))]
-    let mut iter = tokens.par_iter();
+    let iter = tokens.par_iter();
     #[cfg(target_arch = "wasm32")]
     let mut iter = tokens.iter();
     iter.map(|t| build_processed_token(t, env))
