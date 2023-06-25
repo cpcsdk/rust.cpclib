@@ -373,6 +373,7 @@ pub struct Env {
     /// Memory configuration is controlled by the underlying snapshot.
     /// It will ease the generation of snapshots but may complexify the generation of files
     sna: cpclib_sna::Snapshot,
+    // TODO remove it as it is store within the sna
     sna_version: cpclib_sna::SnapshotVersion,
 
     /// List of banks (temporary memory)
@@ -863,7 +864,7 @@ impl Env {
             self.macro_seed = 0;
             self.charset_encoding.reset();
             // self.sna = Default::default(); // We finally keep the snapshot for the memory function
-            self.sna_version = cpclib_sna::SnapshotVersion::V3;
+            // self.sna_version = cpclib_sna::SnapshotVersion::V3; // why changing it ?
 
             self.can_skip_next_passes = true.into();
             if can_change_request {
@@ -2314,6 +2315,12 @@ impl Env {
     pub fn new(options: EnvOptions) -> Self {
         let mut env = Env::default();
         env.options = options;
+
+        // prefill the snapshot representation with something else than the default
+        if let Some(sna) =  env.options.assemble_options().snapshot_model() {
+            env.sna = sna.clone();
+            env.sna_version = env.sna.version();
+        }
 
         env.symbols = SymbolsTableCaseDependent::new(
             env.options().symbols().clone(),

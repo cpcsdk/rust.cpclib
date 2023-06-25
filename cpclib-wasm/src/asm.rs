@@ -1,5 +1,6 @@
 use cpclib_asm::error::AssemblerError;
 use cpclib_asm::preamble::*;
+use cpclib_sna::Snapshot;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -13,11 +14,11 @@ pub struct AsmParserConfig {
 }
 
 #[wasm_bindgen]
-pub fn asm_create_parser_config(title: &str) -> AsmParserConfig {
+pub fn asm_create_parser_config(file_name: &str) -> AsmParserConfig {
     AsmParserConfig {
         dotted_directive: false,
         case_sensitive: true,
-        file_name: title.to_owned()
+        file_name: file_name.to_owned()
     }
 }
 
@@ -42,8 +43,23 @@ impl Into<AssemblingOptions> for &AsmParserConfig {
     fn into(self) -> AssemblingOptions {
         let mut options = AssemblingOptions::default();
         options.set_case_sensitive(self.case_sensitive);
+        options.set_snapshot_model(Snapshot::new_6128_v2().expect("Unable to create a snapshot"));
         // TODO add specific symbols to recognize the wasm way of life
         options
+    }
+}
+
+impl Into<EnvOptions> for &AsmParserConfig {
+    fn into(self) -> EnvOptions {
+        let mut assemble_options : AssemblingOptions = self.into();
+        assemble_options
+            .symbols_mut()
+            .assign_symbol_to_value(Symbol::from("__CPC_PLAYGROUND__"), Value::from(true))
+            .unwrap();
+
+        let parse_options: ParserOptions = self.into();
+        
+        EnvOptions::new(parse_options, assemble_options)
     }
 }
 
@@ -95,16 +111,8 @@ pub fn asm_assemble_snapshot(
         .and_then(|JsAsmListing { listing }| {
             console::log_1(&"Parse OK".into());
 
-            let mut assemble_options = AssemblingOptions::default();
-            assemble_options.set_case_sensitive(conf.case_sensitive);
-            assemble_options
-                .symbols_mut()
-                .assign_symbol_to_value(Symbol::from("__CPC_PLAYGROUND__"), Value::from(true))
-                .unwrap();
-
-            let parse_options = conf.into();
-            let options = EnvOptions::new(parse_options, assemble_options);
-
+            
+            let options : EnvOptions = conf.into();
             console::log_1(&"Assemble options".into());
 
             visit_tokens_all_passes_with_options(&listing, options)

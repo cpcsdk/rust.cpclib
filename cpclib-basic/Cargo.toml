@@ -35,9 +35,8 @@ paste.workspace = true
 [build-dependencies]
 built.workspace = true
 
-
-
-
+[features]
+basic = []
 
 [[bin]]
 name = "locomotive"

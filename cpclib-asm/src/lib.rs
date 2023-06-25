@@ -37,6 +37,7 @@ use std::io::Write;
 use std::sync::{Arc, RwLock};
 
 use cpclib_disc::amsdos::*;
+use cpclib_sna::Snapshot;
 use preamble::function::FunctionBuilder;
 use preamble::processed_token::ProcessedToken;
 use preamble::*;
@@ -50,7 +51,9 @@ pub struct AssemblingOptions {
     case_sensitive: bool,
     /// Contains some symbols that could be used during assembling
     symbols: cpclib_tokens::symbols::SymbolsTable,
-    output_builder: Option<Arc<RwLock<ListingOutput>>>
+    output_builder: Option<Arc<RwLock<ListingOutput>>>,
+    /// The snapshot may be prefiled with a dedicated snapshot
+    snapshot_model: Option<Snapshot>
 }
 
 impl Default for AssemblingOptions {
@@ -58,7 +61,8 @@ impl Default for AssemblingOptions {
         Self {
             case_sensitive: true,
             symbols: cpclib_tokens::symbols::SymbolsTable::default(),
-            output_builder: None
+            output_builder: None,
+            snapshot_model: None
         }
     }
 }
@@ -88,6 +92,12 @@ impl AssemblingOptions {
         self
     }
 
+    pub fn set_snapshot_model(&mut self, mut sna: Snapshot) -> &mut Self {
+        sna.unwrap_memory_chunks();
+        self.snapshot_model = Some(sna);
+        self
+    }
+
     /// Specify a symbol table to copy
     pub fn set_symbols(&mut self, val: &cpclib_tokens::symbols::SymbolsTable) -> &mut Self {
         self.symbols = val.clone();
@@ -104,6 +114,10 @@ impl AssemblingOptions {
 
     pub fn case_sensitive(&self) -> bool {
         self.case_sensitive
+    }
+
+    pub fn snapshot_model(&self) -> Option<&Snapshot> {
+        self.snapshot_model.as_ref()
     }
 
     pub fn write_listing_output<W: 'static + Write + Send + Sync>(
