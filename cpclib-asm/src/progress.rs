@@ -2,8 +2,11 @@ use core::time::Duration;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use cpclib_common::itertools::Itertools;
+
+#[cfg(not(target_arch = "wasm32"))]
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
+#[cfg(not(target_arch = "wasm32"))]
 lazy_static::lazy_static! {
     static ref PROGRESS: Arc<Mutex<Progress>> = Arc::new(Mutex::new(Progress::new()));
 }
@@ -12,6 +15,7 @@ const REFRESH_RATE: Duration = Duration::from_millis(250);
 const PROGRESS_STYLE: &'static str = "{prefix:.bold.dim>8}  [{bar}] {pos:>3}/{len:3} {wide_msg}";
 const PASS_STYLE: &'static str = "{prefix:.bold.dim>8}  [{bar}] ";
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct Progress {
     multi: MultiProgress,
     parse: CountedProgress,
@@ -20,6 +24,10 @@ pub struct Progress {
     pass: Option<(usize, ProgressBar)>
 }
 
+#[cfg(target_arch = "wasm32")]
+pub struct Progress;
+
+#[cfg(not(target_arch = "wasm32"))]
 struct CountedProgress {
     bar: Option<ProgressBar>,
     current_items: hashbag::HashBag<String>,
@@ -34,6 +42,7 @@ pub fn normalize(path: &std::path::Path) -> &str {
     path.file_name().unwrap().to_str().unwrap()
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl CountedProgress {
     pub fn new(kind: &'static str, index: usize, freeze_amount: bool) -> Self {
         let cp = CountedProgress {
@@ -48,6 +57,7 @@ impl CountedProgress {
         cp
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn add_item(&mut self, item: &str, multi: &MultiProgress) {
         if !self.freeze_amount {
             self.nb_expected += 1;
@@ -121,6 +131,7 @@ impl CountedProgress {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn new_spinner() -> ProgressBar {
     let bar = ProgressBar::new_spinner();
 
@@ -143,6 +154,40 @@ fn new_spinner() -> ProgressBar {
     bar
 }
 
+#[cfg(target_arch = "wasm32")]
+impl Progress {
+    pub fn progress() -> Progress {
+        Progress
+    }
+
+    pub fn add_load(&mut self, ident: &str) {
+    }
+    pub fn remove_load(&mut self, ident: &str) {
+    }
+
+    pub fn add_save(&mut self, ident: &str) {
+    }
+
+    pub fn remove_save(&mut self, ident: &str) {
+    }
+
+    pub fn add_parse(&mut self, ident: &str) {
+    }
+
+    pub fn remove_parse(&mut self, ident: &str) {
+    }
+
+    pub fn add_parses<'a>(&mut self, items: impl Iterator<Item = &'a str>) {
+    }
+
+    pub fn add_visited_to_pass(&mut self, amount: u64) {
+    }
+    pub fn add_expected_to_pass(&mut self, amount: u64) {
+    }
+
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl Progress {
     pub fn progress() -> MutexGuard<'static, Progress> {
         PROGRESS.lock().unwrap()

@@ -22,6 +22,8 @@ matches.workspace = true
 serde.workspace = true
 num_enum.workspace = true
 
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rustyline = { workspace = true, optional = true}
 minus = {workspace=true, optional = true}
 

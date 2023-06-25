@@ -12,7 +12,8 @@ module.exports = {
   plugins: [
     new WasmPackPlugin({
       crateDirectory: path.resolve(__dirname, '..'),
-      extraArgs: '--no-typescript',
+      extraArgs: '--no-typescript --target bundler',
+      outDir: 'www/pkg'
     }),
 
     new CopyWebpackPlugin({

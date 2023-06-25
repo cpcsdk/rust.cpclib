@@ -1,7 +1,7 @@
 RUSTFLAGS=
 
 build:
-	wasm-pack  build --target web
+	wasm-pack  build --target web  --out-dir www/pkg
 	cd www; npm install
 
 run:

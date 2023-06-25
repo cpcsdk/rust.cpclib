@@ -8,6 +8,7 @@ use super::embedded::EmbeddedFiles;
 use super::Env;
 use crate::error::AssemblerError;
 use crate::preamble::ParserOptions;
+
 use crate::progress::Progress;
 
 type Fname<'a, 'b> = either::Either<&'a Path, (&'a str, &'b Env)>;

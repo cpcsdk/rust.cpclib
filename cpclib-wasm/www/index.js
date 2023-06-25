@@ -5,7 +5,7 @@ const EMU_URL = "emu/tiny8bit/cpc-ui.html";
 
 var urlToRevoke = null;
 
-import('../pkg')
+import('./pkg')
   .then((cpcasm) => {
 
 	init();
