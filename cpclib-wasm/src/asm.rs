@@ -58,7 +58,7 @@ impl Into<EnvOptions> for &AsmParserConfig {
             .unwrap();
 
         let parse_options: ParserOptions = self.into();
-        
+
         EnvOptions::new(parse_options, assemble_options)
     }
 }
@@ -92,7 +92,7 @@ impl From<AssemblerError> for JsAssemblerError {
 impl JsAssemblerError {
     #[wasm_bindgen(getter)]
     pub fn msg(&self) -> String {
-        self.errors.to_owned()
+        self.errors.clone()
     }
 }
 
@@ -119,6 +119,7 @@ pub fn asm_assemble_snapshot(
                 .map_err(|(_t_, _env, e)| {
                     let e = AssemblerError::AlreadyRenderedError(e.to_string());
                     console::log_1(&"ASM error".into());
+                    console::log_1(&e.to_string().into());
                     JsAssemblerError::from(e)
                 })
                 .map(|(_, env)| {

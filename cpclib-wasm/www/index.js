@@ -214,6 +214,8 @@ import('./pkg')
 					break;
 			}
 
+			clear_error();
+
 			return sna;
 		} catch (error) {
 			show_error(error);
@@ -223,10 +225,15 @@ import('./pkg')
 	}
 
 	function show_error(e) {
-		console.error(e);
 		window.document.getElementById("error")
 			.innerText = e.msg;
 	}
+
+	function clear_error() {
+		window.document.getElementById("error")
+			.innerText = ""
+	}
+
 
 	/**
 	 * Returns the code typed by the user
