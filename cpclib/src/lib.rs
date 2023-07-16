@@ -46,12 +46,10 @@
 #[cfg(any(feature = "xferlib", feature = "xfer"))]
 pub use cpclib_xfer as xfer;
 pub use {
-    cpclib_asm as assembler, cpclib_basic as basic, cpclib_common as common, cpclib_disc as disc,
+    cpclib_asm as asm, cpclib_basic as basic, cpclib_common as common, cpclib_disc as disc,
     cpclib_image as image, cpclib_sna as sna, cpclib_z80emu as z80emu
 };
 
-/// ???
-pub mod asm;
 
 pub use cpclib_image::ga::{Ink, Palette, Pen};
 
@@ -59,34 +57,4 @@ pub use cpclib_image::ga::{Ink, Palette, Pen};
 // Some reexports
 pub use crate::disc::edsk::ExtendedDsk;
 
-/// `util` namespace contain various utility functions that could be used by any module and are not specific to the project.
-pub mod util {
-    /// Convert a string to its unsigned 32 bits representation (to access to extra memory)
-    pub fn string_to_nb(source: &str) -> u32 {
-        let error = format!("Unable to read the value: {}", source);
-        if source.starts_with("0x") {
-            u32::from_str_radix(&source[2..], 16).expect(&error)
-        }
-        else {
-            source.parse::<u32>().expect(&error)
-        }
-    }
-}
 
-#[cfg(test)]
-mod test {
-    #[test]
-    fn test_wait() {
-        use cpclib_asm::preamble::*;
-        use cpclib_z80emu::execute_dummy_listing;
-
-        // This test cannot run. The time must be obtained by emulating the code
-        // TODO add emulation
-        assert_eq!(
-            20,
-            execute_dummy_listing(&routines::wait(20))
-                .unwrap()
-                .duration()
-        );
-    }
-}
