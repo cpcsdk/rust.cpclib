@@ -579,7 +579,7 @@ pub fn build_args_parser() -> clap::Command {
                     )
 					.arg(
 						Arg::new("BASIC_HEADER")
-							.help("Request a Basic header (the very first instruction has to be the LOCOMOTIVE directive.")
+							.help("Request a Basic header (the very first instruction has to be the LOCOMOTIVE directive).")
 							.long("basic")
 							.alias("basicheader")
                             .action(ArgAction::SetTrue)
