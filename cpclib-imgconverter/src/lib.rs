@@ -1,30 +1,21 @@
-
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-
 use anyhow::{self, Error};
-
 use clap::{value_parser, Arg, ArgMatches, Command};
-use cpclib::asm::{assemble_to_amsdos_file, assemble};
 use cpclib::asm::preamble::defb_elements;
+use cpclib::asm::{assemble, assemble_to_amsdos_file};
 use cpclib::common::clap;
 use cpclib::disc::amsdos::*;
-
-use cpclib::image::ga::Palette;
 use cpclib::image::convert::*;
+use cpclib::image::ga::Palette;
 use cpclib::image::ocp;
 use cpclib::sna;
 use cpclib::sna::*;
-
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
-
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-
-
-
 
 #[macro_export]
 macro_rules! specify_palette {
@@ -196,7 +187,6 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Option<Palette> {
     }
 }
 
-
 macro_rules! export_palette {
     ($e: expr) => {
         $e.arg(
@@ -227,8 +217,6 @@ macro_rules! export_palette {
         )
     };
 }
-
-
 
 macro_rules! do_export_palette {
     ($arg: expr, $palette: ident) => {
@@ -275,8 +263,6 @@ macro_rules! do_export_palette {
         }
     };
 }
-
-
 
 /// Compress data using lz4 algorithm.
 /// Should be decompressed on client side.
@@ -749,7 +735,6 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 file.save_in_folder(folder)?;
             }
             else {
-                
                 let cfg = cpclib::disc::cfg::DiscConfig::single_head_data_format();
                 let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
                 let mut manager = AmsdosManager::new_from_disc(dsk, 0);
@@ -833,7 +818,6 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
 }
 
 pub fn build_args_parser() -> clap::Command {
-
     let args = specify_palette!(Command::new("CPC image conversion tool")
                     .version("0.1.2")
                     .author("Krusty/Benediction")
@@ -1107,9 +1091,7 @@ pub fn build_args_parser() -> clap::Command {
     args
 }
 
-
 pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
-    
     if matches.contains_id("help") {
         args.print_long_help();
     }
@@ -1151,7 +1133,10 @@ pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
                         ..
                     }) => {
                         if let Err(e) = convert(&matches) {
-                            return Err(Error::msg(format!("[ERROR] Unable to convert the image {}", e)));
+                            return Err(Error::msg(format!(
+                                "[ERROR] Unable to convert the image {}",
+                                e
+                            )));
                         }
                     }
                     _ => {}

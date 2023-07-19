@@ -27,11 +27,7 @@ fn main() -> anyhow::Result<()> {
         built_info::BUILT_TIME_UTC
     );
 
-
-    let args = build_args_parser()
-        .before_help(desc_before);
-
-
+    let args = build_args_parser().before_help(desc_before);
 
     let matches = args.clone().get_matches();
     process(&matches, args);

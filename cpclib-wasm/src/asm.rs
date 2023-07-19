@@ -51,7 +51,7 @@ impl Into<AssemblingOptions> for &AsmParserConfig {
 
 impl Into<EnvOptions> for &AsmParserConfig {
     fn into(self) -> EnvOptions {
-        let mut assemble_options : AssemblingOptions = self.into();
+        let mut assemble_options: AssemblingOptions = self.into();
         assemble_options
             .symbols_mut()
             .assign_symbol_to_value(Symbol::from("__CPC_PLAYGROUND__"), Value::from(true))
@@ -111,8 +111,7 @@ pub fn asm_assemble_snapshot(
         .and_then(|JsAsmListing { listing }| {
             console::log_1(&"Parse OK".into());
 
-            
-            let options : EnvOptions = conf.into();
+            let options: EnvOptions = conf.into();
             console::log_1(&"Assemble options".into());
 
             visit_tokens_all_passes_with_options(&listing, options)

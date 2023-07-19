@@ -1,8 +1,8 @@
 use std::process::Command;
 
 use cpclib_asm::assembler::Env;
-use cpclib_basm::{build_args_parser, process, BasmError};
 use cpclib_asm::error::AssemblerError;
+use cpclib_basm::{build_args_parser, process, BasmError};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
 use pretty_assertions::assert_eq;

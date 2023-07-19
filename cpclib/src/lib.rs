@@ -42,6 +42,7 @@
 
 #![recursion_limit = "512"]
 
+pub use cpclib_image::ga::{Ink, Palette, Pen};
 /// CPC Wifi extension related stuff. Useable
 #[cfg(any(feature = "xferlib", feature = "xfer"))]
 pub use cpclib_xfer as xfer;
@@ -50,11 +51,6 @@ pub use {
     cpclib_image as image, cpclib_sna as sna, cpclib_z80emu as z80emu
 };
 
-
-pub use cpclib_image::ga::{Ink, Palette, Pen};
-
 /// Disk (edsk) manipulation. WIP
 // Some reexports
 pub use crate::disc::edsk::ExtendedDsk;
-
-
