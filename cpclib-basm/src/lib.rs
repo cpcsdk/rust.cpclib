@@ -18,6 +18,11 @@ use cpclib_xfer::CpcXfer;
 
 use crate::embedded::EmbeddedFiles;
 
+pub mod built_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
+
 #[derive(Debug)]
 pub enum BasmError {
     //#[fail(display = "IO error: {}", io)]
@@ -538,6 +543,7 @@ lazy_static::lazy_static! {
 pub fn build_args_parser() -> clap::Command {
     Command::new("basm")
 					.author("Krusty/Benediction")
+                    .version(built_info::PKG_VERSION)
 					.about("Benediction ASM -- z80 assembler that mainly targets Amstrad CPC")
                     .after_help("Still a Work In Progress assembler")
                     .arg(

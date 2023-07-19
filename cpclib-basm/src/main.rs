@@ -13,12 +13,9 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation)]
 
-use cpclib_basm::{build_args_parser, process};
+use cpclib_basm::{build_args_parser, process, built_info};
 use cpclib_common::lazy_static;
 
-pub mod built_info {
-    include!(concat!(env!("OUT_DIR"), "/built.rs"));
-}
 
 lazy_static::lazy_static! {
 static ref DESC_BEFORE: String = format!(
@@ -30,7 +27,6 @@ static ref DESC_BEFORE: String = format!(
 
 fn main() {
     let matches = build_args_parser()
-        .version(built_info::PKG_VERSION)
         .before_help(DESC_BEFORE.as_str())
         .get_matches();
 

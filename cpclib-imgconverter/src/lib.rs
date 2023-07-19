@@ -17,6 +17,12 @@ use cpclib::sna::*;
 use cpclib::xfer::CpcXfer;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
+
+pub mod built_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
+
 #[macro_export]
 macro_rules! specify_palette {
     ($e: expr) => {
@@ -819,13 +825,9 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
 
 pub fn build_args_parser() -> clap::Command {
     let args = specify_palette!(Command::new("CPC image conversion tool")
-                    .version("0.1.2")
+                    .version(built_info::PKG_VERSION)
                     .author("Krusty/Benediction")
                     .about("Simple CPC image conversion tool")
-                    .arg(
-                        Arg::new("help")
-                        .long("help")
-                    )
                     .arg(
                         Arg::new("SOURCE")
                             .help("Filename to convert")

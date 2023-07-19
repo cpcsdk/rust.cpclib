@@ -15,10 +15,7 @@
 
 use anyhow;
 use cpclib_imgconverter::{build_args_parser, process};
-
-pub mod built_info {
-    include!(concat!(env!("OUT_DIR"), "/built.rs"));
-}
+use cpclib_imgconverter::built_info;
 
 fn main() -> anyhow::Result<()> {
     let desc_before = format!(
@@ -30,7 +27,5 @@ fn main() -> anyhow::Result<()> {
     let args = build_args_parser().before_help(desc_before);
 
     let matches = args.clone().get_matches();
-    process(&matches, args);
-
-    Ok(())
+    process(&matches, args)
 }
