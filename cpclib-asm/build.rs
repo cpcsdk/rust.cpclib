@@ -12,39 +12,7 @@ fn build() {
     )
     .expect("Failed to acquire build-time information");
 
-    cc::Build::new()
-        .warnings(false)
-        .file("extra/apultra.c")
-        .opt_level(0)
-        .shared_flag(true)
-        .cargo_metadata(true)
-        .compile("apultra");
 
-    cc::Build::new()
-        .warnings(false)
-        .file("extra/exomizer.c")
-        .opt_level(0)
-        .shared_flag(true)
-        .cargo_metadata(true)
-        .compile("exomizer");
-
-    cc::Build::new()
-        .warnings(false)
-        .file("extra/zx0/compress.c")
-        .file("extra/zx0/memory.c")
-        .file("extra/zx0/optimize.c")
-        .opt_level(0)
-        .shared_flag(false)
-        .cargo_metadata(true)
-        .compile("zx0");
-
-    cc::Build::new()
-        .warnings(false)
-        .file("extra/lz4.c")
-        .opt_level(0)
-        .shared_flag(true)
-        .cargo_metadata(true)
-        .compile("lz4");
 }
 
 fn main() {

@@ -1,0 +1,24 @@
+[package]
+
+name = "cpclib-crunchers"
+version = "0.6.1-alpha.2"
+description = "crunchers that are used in cpc world"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[package.metadata.workspaces]
+independent = true
+
+[dependencies]
+libc.workspace = true
+
+[build-dependencies]
+built.workspace = true
+cc.workspace = true
+
+#[lib]
+#crate-type = ["cdylib", "dylib"]

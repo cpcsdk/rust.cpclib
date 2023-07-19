@@ -1024,6 +1024,7 @@ dependencies = [
  "codespan-reporting",
  "cpclib-basic",
  "cpclib-common",
+ "cpclib-crunchers",
  "cpclib-disc",
  "cpclib-image",
  "cpclib-sna",
@@ -1125,6 +1126,15 @@ dependencies = [
  "smol_str",
  "strsim",
  "time",
+]
+
+[[package]]
+name = "cpclib-crunchers"
+version = "0.6.1-alpha.2"
+dependencies = [
+ "built",
+ "cc",
+ "libc",
 ]
 
 [[package]]

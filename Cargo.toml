@@ -3,6 +3,7 @@ members = [
     "cpclib-asm",
     "cpclib-basic",
     "cpclib-common",
+    "cpclib-crunchers",
     "cpclib-disc",
     "cpclib-image",
     "cpclib-macros",
@@ -112,6 +113,7 @@ cpclib = {path = "./cpclib/"}
 cpclib-asm = {path = "./cpclib-asm/"}
 cpclib-basic = {path = "./cpclib-basic/"}
 cpclib-common = {path = "./cpclib-common/"}
+cpclib-crunchers = {path = "./cpclib-crunchers/"}
 cpclib-disc = {path = "./cpclib-disc/"}
 cpclib-image = {path = "./cpclib-image/"}
 cpclib-macros = {path = "./cpclib-macros/"}
