@@ -2,16 +2,16 @@
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::time::Duration;
+
 
 use anyhow::{self, Error};
-use clap::builder::NonEmptyStringValueParser;
+
 use clap::{value_parser, Arg, ArgMatches, Command};
 use cpclib::asm::{assemble_to_amsdos_file, assemble};
 use cpclib::asm::preamble::defb_elements;
 use cpclib::common::clap;
 use cpclib::disc::amsdos::*;
-use cpclib::disc::edsk::ExtendedDsk;
+
 use cpclib::image::ga::Palette;
 use cpclib::image::convert::*;
 use cpclib::image::ocp;
@@ -20,9 +20,9 @@ use cpclib::sna::*;
 
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
-use crossbeam_channel::unbounded;
+
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use tempfile::Builder;
+
 
 
 
@@ -717,7 +717,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                     standard_linked_code(output_mode, pal, memory)
                 }
 
-                Output::CPCMemoryOverscan(_memory1, _memory2, pal) => unimplemented!(),
+                Output::CPCMemoryOverscan(_memory1, _memory2, _pal) => unimplemented!(),
 
                 _ => unreachable!()
             };
@@ -749,7 +749,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 file.save_in_folder(folder)?;
             }
             else {
-                use cpclib::disc::cfg::DiscConfig;
+                
                 let cfg = cpclib::disc::cfg::DiscConfig::single_head_data_format();
                 let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
                 let mut manager = AmsdosManager::new_from_disc(dsk, 0);
@@ -808,7 +808,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 sna.save(sna_fname, sna::SnapshotVersion::V2)
                     .expect("Unable to save the snapshot");
             }
-            else if let Some(sub_m4) = sub_m4 {
+            else if let Some(_sub_m4) = sub_m4 {
                 #[cfg(feature = "xferlib")]
                 {
                     let mut f = Builder::new()
@@ -1083,7 +1083,7 @@ pub fn build_args_parser() -> clap::Command {
                     )
                 );
 
-    let mut args = if cfg!(feature = "xferlib") {
+    let args = if cfg!(feature = "xferlib") {
         args.subcommand(
                         Command::new("m4")
                         .about("Directly send the code on the M4 through a snapshot")
