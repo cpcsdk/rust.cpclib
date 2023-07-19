@@ -13,7 +13,7 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation)]
 
-use cpclib_asm::basm_utils::{build_args_parser, process};
+use cpclib_basm::{build_args_parser, process};
 use cpclib_common::lazy_static;
 
 pub mod built_info {

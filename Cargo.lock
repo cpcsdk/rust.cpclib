@@ -1028,7 +1028,6 @@ dependencies = [
  "cpclib-image",
  "cpclib-sna",
  "cpclib-tokens",
- "cpclib-xfer",
  "crc",
  "custom_error",
  "delegate",
@@ -1080,6 +1079,8 @@ dependencies = [
  "built",
  "cpclib-asm",
  "cpclib-common",
+ "cpclib-disc",
+ "cpclib-xfer",
  "criterion",
  "globset",
  "pretty_assertions",
@@ -5061,7 +5062,7 @@ name = "visual-basm"
 version = "0.2.1-alpha.2"
 dependencies = [
  "claui",
- "cpclib-asm",
+ "cpclib-basm",
  "eframe",
  "static_vcruntime",
 ]

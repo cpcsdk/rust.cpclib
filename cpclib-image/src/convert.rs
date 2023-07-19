@@ -1525,7 +1525,7 @@ impl<'a> ImageConverter<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::imageconverter::*;
+    use crate::convert::*;
 
     #[test]
     fn overscan_test() {

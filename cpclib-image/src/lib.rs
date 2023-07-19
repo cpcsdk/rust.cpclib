@@ -5,4 +5,4 @@ pub mod pixels;
 pub mod screen;
 
 /// PC to CPC image conversions. WIP
-pub mod imageconverter;
+pub mod convert;

@@ -27,7 +27,7 @@ pub mod error;
 
 mod crunchers;
 
-mod progress;
+pub mod progress;
 
 #[cfg(feature = "basm")]
 pub mod basm_utils;

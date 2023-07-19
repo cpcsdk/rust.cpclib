@@ -1,9 +1,13 @@
+#![feature(box_patterns)]
+
 use std::fmt::Display;
 use std::fs::{self, File};
 use std::io;
 use std::io::Write;
 use std::path::Path;
 
+use cpclib_asm::preamble::*;
+use cpclib_common::lazy_static;
 use cpclib_common::clap;
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
@@ -11,10 +15,9 @@ use cpclib_common::itertools::Itertools;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 use cpclib_xfer::CpcXfer;
 
-use crate::assembler::file::{get_filename, handle_source_encoding};
+use cpclib_asm::assembler::file::{get_filename, handle_source_encoding};
 use crate::embedded::EmbeddedFiles;
-use crate::preamble::*;
-use crate::progress::{normalize, Progress};
+use cpclib_asm::progress::{normalize, Progress};
 
 #[derive(Debug)]
 pub enum BasmError {
@@ -196,7 +199,7 @@ pub fn assemble<'arg>(
                 });
             }
 
-            let content = crate::assembler::file::read_source(file, &parse_options)?;
+            let content = file::read_source(file, &parse_options)?;
             let builder = ParserContextBuilder::default().set_state(ParsingState::SymbolsLimited);
             let listing = parse_z80_with_context_builder(&content, builder)?;
             for token in listing.iter() {
@@ -461,6 +464,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
     Ok(())
 }
+
 
 /// Launch the assembling of everythin
 pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {

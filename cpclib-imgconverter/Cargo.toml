@@ -17,22 +17,14 @@ independent = true
 [dependencies]
 cpclib = { version = "0.6.1-alpha.2", features = ["cmdline"] }
 
+
+anyhow.workspace = true
 lz4.workspace = true
 notify.workspace = true
 crossbeam-channel.workspace = true
 exitcode.workspace = true
 tempfile.workspace = true
-anyhow.workspace = true
+
 
 [build-dependencies]
 built.workspace = true
-
-
-[features]
-default = ["xferlib"]
-xferlib = ["cpclib/xferlib"]
-
-
-[[bin]]
-name = "imgconverter"
-path = "src/main.rs"

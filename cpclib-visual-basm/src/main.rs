@@ -1,4 +1,4 @@
-use cpclib_asm::basm_utils::*;
+use cpclib_basm::*;
 
 /// #[cfg(not(target_arch = "wasm32"))]
 fn main() {

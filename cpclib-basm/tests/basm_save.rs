@@ -1,4 +1,4 @@
-use cpclib_asm::basm_utils::*;
+use cpclib_basm::*;
 
 /// ! This test file has been created to track some wrong memory handling when saving data with banksets
 
