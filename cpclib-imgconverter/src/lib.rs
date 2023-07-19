@@ -272,14 +272,9 @@ macro_rules! do_export_palette {
 
 /// Compress data using lz4 algorithm.
 /// Should be decompressed on client side.
+/// TODO test: implementation has been modified without any testing...
 fn lz4_compress(bytes: &[u8]) -> Vec<u8> {
-    let mut res = Vec::new();
-    let mut encoder = lz4::EncoderBuilder::new().build(&mut res).unwrap();
-    let mut bytes = bytes.clone();
-
-    std::io::copy(&mut bytes, &mut encoder).unwrap();
-    encoder.finish();
-    res
+    cpclib::crunchers::lz4::compress(bytes)
 }
 
 fn palette_code(pal: &Palette) -> String {

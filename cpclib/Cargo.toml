@@ -20,7 +20,7 @@ independent = true
 
 cpclib-basic = "0.6.1-alpha.2"
 cpclib-sna = "0.6.1-alpha.2"
-
+cpclib-crunchers = "0.6.1-alpha.2"
 cpclib-asm = "0.6.1-alpha.2"
 cpclib-z80emu = "0.6.1-alpha.2"
 cpclib-xfer = "0.6.1-alpha.2"
