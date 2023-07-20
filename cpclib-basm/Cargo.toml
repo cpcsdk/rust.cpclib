@@ -16,7 +16,7 @@ independent = true
 [dependencies]
 cpclib-asm = "0.6.1-alpha.2"
 cpclib-common = "0.6.1-alpha.2"
-cpclib-xfer = "0.6.1-alpha.2"
+cpclib-xfer = {version="0.6.1-alpha.2", optional=true}
 cpclib-disc = "0.6.1-alpha.2"
 
 time = "0.3.22"
@@ -42,3 +42,8 @@ harness = false
 [[bin]]
 name = "basm"
 path = "src/main.rs"
+
+
+[features]
+default = ["xferlib"]
+xferlib = ["cpclib-xfer"]

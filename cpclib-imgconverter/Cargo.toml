@@ -27,3 +27,7 @@ tempfile.workspace = true
 
 [build-dependencies]
 built.workspace = true
+
+[features]
+default = ["xferlib"]
+xferlib = ["cpclib/xferlib"]

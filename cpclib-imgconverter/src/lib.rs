@@ -794,10 +794,10 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 sna.save(sna_fname, sna::SnapshotVersion::V2)
                     .expect("Unable to save the snapshot");
             }
-            else if let Some(_sub_m4) = sub_m4 {
+            else if let Some(sub_m4) = sub_m4 {
                 #[cfg(feature = "xferlib")]
                 {
-                    let mut f = Builder::new()
+                    let mut f = tempfile::Builder::new()
                         .suffix(".sna")
                         .tempfile()
                         .expect("Unable to create the temporary file");

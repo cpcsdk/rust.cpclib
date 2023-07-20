@@ -14,6 +14,8 @@ use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHi
 use cpclib_common::itertools::Itertools;
 use cpclib_common::{clap, lazy_static};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
+
+#[cfg(feature = "xferlib")]
 use cpclib_xfer::CpcXfer;
 
 use crate::embedded::EmbeddedFiles;
@@ -353,6 +355,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             }
         })?;
 
+        #[cfg(feature = "xferlib")]
         match matches.get_one::<String>("TO_M4") {
             Some(m4) => {
                 let bar = if show_progress {
@@ -373,7 +376,9 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             None => {}
         }
     }
-    else if matches.contains_id("TO_M4") && !matches.contains_id("OUTPUT") {
+    else if cfg!(feature = "xferlib") && matches.contains_id("TO_M4") && !matches.contains_id("OUTPUT") {
+        #[cfg(feature = "xferlib")]
+        {
         let sna = env.sna();
         let m4 = matches.get_one::<String>("TO_M4").unwrap();
 
@@ -390,6 +395,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
         if let Some(bar) = bar {
             Progress::progress().remove_bar_ok(&bar);
+        }
         }
     }
     else if matches.contains_id("OUTPUT") || matches.get_flag("DB_LIST") {
@@ -541,7 +547,7 @@ lazy_static::lazy_static! {
 
 /// Generated the clap Commands
 pub fn build_args_parser() -> clap::Command {
-    Command::new("basm")
+    let cmd = Command::new("basm")
 					.author("Krusty/Benediction")
                     .version(built_info::PKG_VERSION)
 					.about("Benediction ASM -- z80 assembler that mainly targets Amstrad CPC")
@@ -637,13 +643,20 @@ pub fn build_args_parser() -> clap::Command {
                             .short('D')
                             .action(ArgAction::Append)
                             .number_of_values(1)
-                    )
-                    .arg(
+                    );
+
+    let cmd = if cfg!(feature = "xferlib") {
+            cmd.arg(
                         Arg::new("TO_M4")
                             .help("Provide the IP address of the M4")
                             .long("m4")
                     )
-                    .arg(
+                } else {
+                    cmd
+                };
+
+
+                    cmd.arg(
                         Arg::new("LOAD_SYMBOLS")
                             .help("Load symbols from the given file")
                             .short('l')
