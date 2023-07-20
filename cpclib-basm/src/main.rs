@@ -13,9 +13,8 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation)]
 
-use cpclib_basm::{build_args_parser, process, built_info};
+use cpclib_basm::{build_args_parser, built_info, process};
 use cpclib_common::lazy_static;
-
 
 lazy_static::lazy_static! {
 static ref DESC_BEFORE: String = format!(

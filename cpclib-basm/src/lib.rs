@@ -14,7 +14,6 @@ use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHi
 use cpclib_common::itertools::Itertools;
 use cpclib_common::{clap, lazy_static};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
-
 #[cfg(feature = "xferlib")]
 use cpclib_xfer::CpcXfer;
 
@@ -23,7 +22,6 @@ use crate::embedded::EmbeddedFiles;
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
-
 
 #[derive(Debug)]
 pub enum BasmError {
@@ -376,26 +374,29 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             None => {}
         }
     }
-    else if cfg!(feature = "xferlib") && matches.contains_id("TO_M4") && !matches.contains_id("OUTPUT") {
+    else if cfg!(feature = "xferlib")
+        && matches.contains_id("TO_M4")
+        && !matches.contains_id("OUTPUT")
+    {
         #[cfg(feature = "xferlib")]
         {
-        let sna = env.sna();
-        let m4 = matches.get_one::<String>("TO_M4").unwrap();
+            let sna = env.sna();
+            let m4 = matches.get_one::<String>("TO_M4").unwrap();
 
-        let bar = if show_progress {
-            Some(Progress::progress().add_bar("Send to M4"))
-        }
-        else {
-            None
-        };
+            let bar = if show_progress {
+                Some(Progress::progress().add_bar("Send to M4"))
+            }
+            else {
+                None
+            };
 
-        let xfer = CpcXfer::new(m4);
-        xfer.upload_and_run_sna(sna)
-            .expect("An error occured while transfering the snapshot");
+            let xfer = CpcXfer::new(m4);
+            xfer.upload_and_run_sna(sna)
+                .expect("An error occured while transfering the snapshot");
 
-        if let Some(bar) = bar {
-            Progress::progress().remove_bar_ok(&bar);
-        }
+            if let Some(bar) = bar {
+                Progress::progress().remove_bar_ok(&bar);
+            }
         }
     }
     else if matches.contains_id("OUTPUT") || matches.get_flag("DB_LIST") {
@@ -646,59 +647,59 @@ pub fn build_args_parser() -> clap::Command {
                     );
 
     let cmd = if cfg!(feature = "xferlib") {
-            cmd.arg(
-                        Arg::new("TO_M4")
-                            .help("Provide the IP address of the M4")
-                            .long("m4")
-                    )
-                } else {
-                    cmd
-                };
+        cmd.arg(
+            Arg::new("TO_M4")
+                .help("Provide the IP address of the M4")
+                .long("m4")
+        )
+    }
+    else {
+        cmd
+    };
 
-
-                    cmd.arg(
-                        Arg::new("LOAD_SYMBOLS")
-                            .help("Load symbols from the given file")
-                            .short('l')
-                            .action(ArgAction::Append)
-                            .number_of_values(1)
-                    )
-                    .arg(
-                        Arg::new("WERROR")
-                        .help("Warning are considered to be errors")
-                        .long("Werror")
-                        .action(ArgAction::SetTrue)
-                    )
-                    .arg(
-                        Arg::new("PROGRESS")
-                        .help("Show a progress bar.")
-                        .long("progress")
-                        .action(ArgAction::SetTrue)
-                    )
-                    .arg(
-                        Arg::new("LIST_EMBEDDED")
-                        .help("List the embedded files")
-                        .long("list-embedded")
-                        .action(ArgAction::SetTrue)
-                    )
-                    .arg(
-                        Arg::new("VIEW_EMBEDDED")
-                        .help("Display one specific embedded file")
-                        .long("view-embedded")
-                        .number_of_values(1)
-                        .value_parser(PossibleValuesParser::new(EMBEDDED_FILES.iter().cloned()))
-                    )
-					.group( // only one type of header can be provided
-						ArgGroup::new("HEADER")
-							.args(&["BINARY_HEADER", "BASIC_HEADER"])
-                    )
-                    .group( // only one type of output can be provided
-                        ArgGroup::new("ARTEFACT_TYPE")
-                        .args(&["BINARY_HEADER", "BASIC_HEADER", "SNAPSHOT"])
-                    )
-                    .group(
-                        ArgGroup::new("ANY_INPUT")
-                            .args(&["INLINE", "INPUT", "LIST_EMBEDDED", "VIEW_EMBEDDED"])
-                            .required(true)
-                    )
+    cmd.arg(
+        Arg::new("LOAD_SYMBOLS")
+            .help("Load symbols from the given file")
+            .short('l')
+            .action(ArgAction::Append)
+            .number_of_values(1)
+    )
+    .arg(
+        Arg::new("WERROR")
+            .help("Warning are considered to be errors")
+            .long("Werror")
+            .action(ArgAction::SetTrue)
+    )
+    .arg(
+        Arg::new("PROGRESS")
+            .help("Show a progress bar.")
+            .long("progress")
+            .action(ArgAction::SetTrue)
+    )
+    .arg(
+        Arg::new("LIST_EMBEDDED")
+            .help("List the embedded files")
+            .long("list-embedded")
+            .action(ArgAction::SetTrue)
+    )
+    .arg(
+        Arg::new("VIEW_EMBEDDED")
+            .help("Display one specific embedded file")
+            .long("view-embedded")
+            .number_of_values(1)
+            .value_parser(PossibleValuesParser::new(EMBEDDED_FILES.iter().cloned()))
+    )
+    .group(
+        // only one type of header can be provided
+        ArgGroup::new("HEADER").args(&["BINARY_HEADER", "BASIC_HEADER"])
+    )
+    .group(
+        // only one type of output can be provided
+        ArgGroup::new("ARTEFACT_TYPE").args(&["BINARY_HEADER", "BASIC_HEADER", "SNAPSHOT"])
+    )
+    .group(
+        ArgGroup::new("ANY_INPUT")
+            .args(&["INLINE", "INPUT", "LIST_EMBEDDED", "VIEW_EMBEDDED"])
+            .required(true)
+    )
 }

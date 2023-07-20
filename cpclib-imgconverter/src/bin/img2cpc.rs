@@ -14,8 +14,7 @@
 #![allow(unused)]
 
 use anyhow;
-use cpclib_imgconverter::{build_args_parser, process};
-use cpclib_imgconverter::built_info;
+use cpclib_imgconverter::{build_args_parser, built_info, process};
 
 fn main() -> anyhow::Result<()> {
     let desc_before = format!(

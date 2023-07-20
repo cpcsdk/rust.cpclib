@@ -11,8 +11,6 @@ fn build() {
         &dst
     )
     .expect("Failed to acquire build-time information");
-
-
 }
 
 fn main() {

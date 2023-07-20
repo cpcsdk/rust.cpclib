@@ -17,11 +17,9 @@ use cpclib::sna::*;
 use cpclib::xfer::CpcXfer;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
-
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
-
 
 #[macro_export]
 macro_rules! specify_palette {
