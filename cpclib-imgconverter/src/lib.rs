@@ -931,7 +931,6 @@ pub fn build_args_parser() -> clap::Command {
                             Arg::new("FORMAT")
                             .long("format")
                             .short('f')
-                            .required(true)
                             .default_value("linear")
                             .value_parser(["linear", "graycoded", "zigzag+graycoded"])
                         )
@@ -1087,8 +1086,10 @@ pub fn build_args_parser() -> clap::Command {
 }
 
 pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
+
     if matches.contains_id("help") {
-        args.print_long_help();
+        args.print_long_help()?;
+        return Ok(());
     }
 
     if matches.subcommand_matches("m4").is_none()
