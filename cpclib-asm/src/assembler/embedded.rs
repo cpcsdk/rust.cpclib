@@ -4,3 +4,4 @@ use rust_embed::RustEmbed;
 #[folder = "assets/"]
 #[prefix = "inner://"]
 pub struct EmbeddedFiles;
+ 

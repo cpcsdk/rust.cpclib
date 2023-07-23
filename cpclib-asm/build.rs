@@ -14,6 +14,11 @@ fn build() {
 }
 
 fn main() {
+    build_deps::rerun_if_changed_paths("assets").unwrap();
+    build_deps::rerun_if_changed_paths("assets/**").unwrap();
+    build_deps::rerun_if_changed_paths("assets/*.*").unwrap();
+    build_deps::rerun_if_changed_paths("assets/**/*.*").unwrap();
+
     if !env::var("CARGO_CFG_TARGET_ARCH")
         .unwrap()
         .contains("wasm32")
