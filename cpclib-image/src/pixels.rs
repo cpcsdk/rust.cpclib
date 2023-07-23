@@ -236,6 +236,11 @@ pub mod mode1 {
 
     /// Convert the 4 pens in a row (from left to right)
     pub fn pens_to_byte(pen0: Pen, pen1: Pen, pen2: Pen, pen3: Pen) -> u8 {
+        assert!(pen0.number() < 4);
+        assert!(pen1.number() < 4);
+        assert!(pen2.number() < 4);
+        assert!(pen3.number() < 4);
+        
         pen_to_pixel_byte(pen0, PixelPosition::First)
             + pen_to_pixel_byte(pen1, PixelPosition::Second)
             + pen_to_pixel_byte(pen2, PixelPosition::Third)

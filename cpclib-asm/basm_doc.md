@@ -38,7 +38,7 @@ If it fails in properly recognizing macros or label, you can guide it by suffixi
 - list_get(LIST, INDEX)
 - list_set
 - list_len
-- list_sublist
+- `list_sublist(list, start, end)` -> list: Return a new list from start until end not included 
 - list_sort
 - list_argsort
 - list_push
@@ -56,7 +56,7 @@ If it fails in properly recognizing macros or label, you can guide it by suffixi
 - matrix_set_col
 - matrix_width
 - matrix_height
-- load
+- `load(fname) -> list of bytes`: return the bytes from the given file name
 
 ## User defined functions
 

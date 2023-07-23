@@ -1527,8 +1527,11 @@ impl ListingElement for LocatedToken {
     }
 
     fn function_definition_params(&self) -> SmallVec<[&str; 4]> {
+        
         match self {
-            Self::Function(_, params, ..) => params.iter().map(|v| v.as_str()).collect(),
+            Self::Function(name, params, ..) => {
+                params.iter().map(|v| v.as_str()).collect()
+            },
             _ => unreachable!()
         }
     }

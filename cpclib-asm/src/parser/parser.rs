@@ -621,7 +621,7 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Parse
                 // parse_label(false)
                 delimited(
                     my_space0,
-                    take_till(|c| c == '\n' || c == '\r' || c == ':' || c == ',' || c == ' '),
+                    take_till1(|c| c == '\n' || c == '\r' || c == ':' || c == ',' || c == ' '),
                     my_space0
                 )
             )
@@ -4388,6 +4388,7 @@ pub fn parse_any_function_call(input: Z80Span) -> IResult<Z80Span, LocatedExpr, 
         separated_list0(parse_comma, located_expr),
         tuple((my_space0, tag(")")))
     )(input)?;
+
 
     let span = input_start.take(input_start.input_len() - input.input_len());
     Ok((

@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{self, Error};
 use clap::{value_parser, Arg, ArgMatches, Command};
@@ -205,7 +205,7 @@ macro_rules! export_palette {
             .long("inks")
             .short('i')
             .required(false)
-            .help("Name of the binary file that contains the ink numbers (usefull for system based color change)")
+            .help("Name of the binary file that will contain the ink numbers (usefull for system based color change)")
         )
         .arg(
             Arg::new("EXPORT_PALETTE_FADEOUT")
@@ -508,7 +508,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
 fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
-    let input_file = matches.get_one::<String>("SOURCE").unwrap();
+    let input_file = matches.get_one::<PathBuf>("SOURCE").unwrap();
     let output_mode = matches
         .get_one::<String>("MODE")
         .unwrap()
@@ -937,6 +937,8 @@ pub fn build_args_parser() -> clap::Command {
 
                         .arg(
                             Arg::new("SPRITE_FNAME")
+                            .long("output")
+                            .short('o')
                             .help("Filename to generate")
                             .required(true)
                         )
@@ -1114,7 +1116,7 @@ pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
                 notify::Config::default()
             )?;
             watcher.watch(
-                &std::path::Path::new(matches.get_one::<String>("SOURCE").unwrap()),
+                &std::path::Path::new(matches.get_one::<PathBuf>("SOURCE").unwrap()),
                 RecursiveMode::NonRecursive
             )?;
 

@@ -129,6 +129,7 @@ where
         init_env: &Env,
         params: &[ExprResult]
     ) -> Result<ExprResult, AssemblerError> {
+
         if self.args.len() != params.len() {
             return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
                 self.name.clone(),

@@ -46,7 +46,7 @@
 		
 	ENDFUNCTION
 
-		FUNCTION name3 \
+	FUNCTION name3 \
 		 		arg1, \
 				arg2, \
 				arg3
@@ -54,3 +54,11 @@
 		return true
 		
 	ENDFUNCTION
+
+
+	FUNCTION noarg
+		print "Hello"
+		return 0
+	ENDFUNCTION
+
+	a = noarg()

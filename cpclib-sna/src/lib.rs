@@ -287,7 +287,7 @@ impl Snapshot {
         version: SnapshotVersion
     ) -> Result<(), std::io::Error> {
         // Convert the snapshot to ensure header is correct
-        let sna = self.fix_version(dbg!(version));
+        let sna = self.fix_version(version);
 
         // Write header
         buffer.write_all(&sna.header)?;
