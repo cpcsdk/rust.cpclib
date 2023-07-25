@@ -43,7 +43,7 @@ pub struct BndBuildApp {
 
     /// stdout redirection
     #[serde(skip)]
-    gag: gag::BufferRedirect,
+    gags: (gag::BufferRedirect, gag::BufferRedirect),
 
     #[serde(skip)]
     request_reload: bool,
@@ -64,7 +64,7 @@ impl Default for BndBuildApp {
             logs: String::default(),
             request_reload: false,
             job: None,
-            gag: gag::BufferRedirect::stdout().unwrap()
+            gags: (gag::BufferRedirect::stdout().unwrap(), gag::BufferRedirect::stderr().unwrap())
         }
     }
 }
@@ -376,6 +376,7 @@ impl eframe::App for BndBuildApp {
         }
 
         // Handle print
-        self.gag.read_to_string(&mut self.logs).unwrap();
+        self.gags.0.read_to_string(&mut self.logs).unwrap();
+        self.gags.1.read_to_string(&mut self.logs).unwrap();
     }
 }
