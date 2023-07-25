@@ -324,11 +324,9 @@ impl eframe::App for BndBuildApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-
         if self.job.is_some() {
             ctx.set_cursor_icon(egui::CursorIcon::Progress);
         }
-  
 
         self.update_menu(ctx, frame);
         self.update_inner(ctx, frame);
@@ -358,23 +356,23 @@ impl eframe::App for BndBuildApp {
         // Handle target
         if let Some(tgt) = self.requested_target.take() {
             if let Some(builder) = &self.builder_and_layers {
-                let builder : &'static BuilderAndCache = unsafe{std::mem::transmute(builder)}; // cheat on lifetime as we know if will live all the time
-                self.job = std::thread::spawn(||{
-                    builder
-                        .borrow_owner()
-                        .execute(tgt)
-                }).into();
+                let builder: &'static BuilderAndCache = unsafe { std::mem::transmute(builder) }; // cheat on lifetime as we know if will live all the time
+                self.job = std::thread::spawn(|| builder.borrow_owner().execute(tgt)).into();
             }
         }
 
-        // Handle task end 
-        if self.job.as_ref().map(|job| job.is_finished()).unwrap_or(false) {
+        // Handle task end
+        if self
+            .job
+            .as_ref()
+            .map(|job| job.is_finished())
+            .unwrap_or(false)
+        {
             let job = self.job.take().unwrap();
             if let Some(e) = job.join().unwrap().err() {
                 self.build_error = Some(e.to_string());
             }
             self.update_cache();
-
         }
 
         // Handle print
