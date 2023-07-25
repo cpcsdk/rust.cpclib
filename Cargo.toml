@@ -2,6 +2,7 @@
 members = [
     "cpclib-asm",
     "cpclib-basic",
+    "cpclib-bndbuild",
     "cpclib-common",
     "cpclib-crunchers",
     "cpclib-disc",
@@ -17,7 +18,8 @@ members = [
     "cpclib-basm", "cpclib-bdasm",
     "cpclib-imgconverter",
     "cpclib-visual-basm",
-    "cpclib-wasm"
+    "cpclib-visual-bndbuild",
+  #  "cpclib-wasm"
 ]
 
 resolver = "2"
@@ -111,6 +113,7 @@ velcro = "0.5.4"
 cpclib = {path = "./cpclib/"}
 cpclib-asm = {path = "./cpclib-asm/"}
 cpclib-basic = {path = "./cpclib-basic/"}
+cpclib-bndbuild = {path = "./cpclib-bndbuild/"}
 cpclib-common = {path = "./cpclib-common/"}
 cpclib-crunchers = {path = "./cpclib-crunchers/"}
 cpclib-disc = {path = "./cpclib-disc/"}
@@ -125,7 +128,7 @@ cpclib-wasm = {path="./cpclib-wasm"}
 cpclib-basm = {path = "./cpclib-basm/"}
 cpclib-bdasm = {path = "./cpclib-bdasm/"}
 cpclib-imgconverter = {path = "./cpclib-imgconverter/"}
-
+cpclib-visual-bndbuild = {path = "./cpclib-visual-bndbuild/"}
 #cpclib-xferfs = {path = "./cpclib-xferfs/"}
 
 [profile.dev]

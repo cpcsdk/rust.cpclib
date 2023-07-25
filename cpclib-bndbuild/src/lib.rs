@@ -1,9 +1,10 @@
-use deps::Graph;
+use deps::{Graph, Rule};
 use std::{
     io::{BufReader, Read},
     path::Path,
 };
 use thiserror::Error;
+use std::collections::HashSet;
 
 pub mod deps;
 pub mod executor;
@@ -98,5 +99,20 @@ impl BndBuilder {
     /// Execute the target after all its predecessors
     pub fn execute<P: AsRef<Path>>(&self, target: P) -> Result<(), BndBuilderError> {
         self.inner.borrow_dependent().execute(target)
+    }
+
+    pub fn get_layered_dependencies(&self) ->  Vec<HashSet<&Path>> {
+        self.inner.borrow_dependent()
+            .get_layered_dependencies()
+    }
+
+    pub fn get_rule(&self, tgt: &Path) -> Option<&Rule> {
+        self.inner.borrow_owner()
+            .rule(tgt)
+    }
+
+    pub fn rules(&self) -> &[Rule] {
+        self.inner.borrow_owner()
+            .rules()
     }
 }

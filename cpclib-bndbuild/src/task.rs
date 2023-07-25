@@ -1,6 +1,6 @@
 use serde::{de::Error, de::Visitor, Deserialize, Deserializer};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
     //#[serde(rename = "basm")]
     //    #[serde(deserialize_with = "deserialize_standard_task")]
@@ -99,7 +99,7 @@ impl Task {
     }
 }
 
-#[derive(Deserialize, Clone, PartialEq, Debug)]
+#[derive(Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
 pub struct StandardTask {
     args: String,
     ignore_error: bool,
