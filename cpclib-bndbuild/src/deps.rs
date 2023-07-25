@@ -220,6 +220,14 @@ struct ExecutionState {
 impl<'r> Graph<'r> {
     pub fn get_layered_dependencies(&self) -> Vec<HashSet<&Path>> {
         let mut res = self.g.get_forward_dependency_topological_layers();
+        let orphans = self.tracked.iter() // get the nodes that are not in the graph because they have no dependencies
+            .filter(|rule| rule.dependencies.is_empty())
+            .flat_map(|r| &r.targets)
+            .map(|p| p.as_path())
+            .collect::<HashSet<&Path>>();
+        if !orphans.is_empty() {
+            res.push(orphans);
+        }
         res.reverse();
         res
     }
