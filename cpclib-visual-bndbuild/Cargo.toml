@@ -1,0 +1,21 @@
+[package]
+name = "cpclib-visual-bndbuild"
+version = "0.1.0"
+resolver = "2"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+
+[dependencies]
+cpclib-bndbuild = "0.1.0"
+eframe = {version="0.21.0", features=["persistence"]}
+egui_file = "0.8.3"
+gag = "1.0.0"
+serde.workspace = true
+itertools.workspace = true
+env_logger = "0.10"
+self_cell = "1.0.1"
