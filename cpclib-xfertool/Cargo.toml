@@ -40,8 +40,9 @@ reqwest = {workspace = true, optional = false }
 
 time.workspace = true
 
-rustyline = {  workspace = true, optional = false }
-rustyline-derive = {  workspace = true, optional = false }
+rustyline = {  workspace = true, optional = true }
+rustyline-derive = {  workspace = true, optional = true }
+
 subprocess = {  workspace = true, optional = false }
 notify = { workspace = true, optional = false }
 crossbeam-channel = {  workspace = true, optional = false }
@@ -50,6 +51,11 @@ hotwatch = {  workspace = true, optional = false }
 
 term_grid = {  workspace = true, optional = false }
 termize = { workspace = true, optional = false }
+
+
+[features]
+default = ["interactive"]
+interactive = ["rustyline", "rustyline-derive"]
 
 [build-dependencies]
 built.workspace = true

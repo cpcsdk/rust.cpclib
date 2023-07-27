@@ -1138,6 +1138,7 @@ dependencies = [
  "cpclib-basm",
  "cpclib-common",
  "cpclib-imgconverter",
+ "cpclib-xfertool",
  "glob",
  "self_cell",
  "serde",

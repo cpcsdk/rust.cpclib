@@ -17,8 +17,9 @@ shlex = "1.1.0"
 topologic = "1.0.0"
 
 cpclib-common = {version = "0.6.1-alpha.2", features=["cmdline"]}
-cpclib-basm = { version = "0.6.1-alpha.2" }
-cpclib-imgconverter = { version = "0.6.1-alpha.2"}
+cpclib-basm = { version = "0.6.1-alpha.2", features=["xferlib"] }
+cpclib-imgconverter = { version = "0.6.1-alpha.2", features=["xferlib"]}
+cpclib-xfertool = {version="0.6.1-alpha.2", default-features=false}
 
 glob = "0.3.1"
 serde_yaml = "0.9.24"
@@ -30,10 +31,6 @@ anyhow = "1.0.72"
 
 [build-dependencies]
 built.workspace = true
-
-[features]
-default = ["xferlib"]
-xferlib = ["cpclib-basm/xferlib", "cpclib-imgconverter/xferlib"]
 
 [[bin]]
 name = "bndbuild"

@@ -25,3 +25,7 @@
   dep: clean
   cmd: -rm dummy.sna 
   help: Remove the snapshot
+
+- tgt: m4
+  dep: build
+  cmd: xfer 192.168.1.26 -y dummy.sna

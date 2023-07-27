@@ -2,18 +2,11 @@ use serde::{de::Error, de::Visitor, Deserialize, Deserializer};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
-    //#[serde(rename = "basm")]
-    //    #[serde(deserialize_with = "deserialize_standard_task")]
     Basm(StandardTask),
-    //#[serde(rename = "rm")]
-    //    #[serde(deserialize_with = "deserialize_standard_task")]
     Rm(StandardTask),
-    //#[serde(rename = "echo")]
-    //    #[serde(deserialize_with = "deserialize_standard_task")]
     Echo(StandardTask),
-    //#[serde(rename = "imgconverter")]
-    //    #[serde(deserialize_with = "deserialize_standard_task")]
     ImgConverter(StandardTask),
+    Xfer(StandardTask)
 }
 
 impl<'de> Deserialize<'de> for Task {
@@ -45,6 +38,7 @@ impl<'de> Deserialize<'de> for Task {
                     "echo" | "print" => Ok(Task::Echo(std)),
                     "rm" | "del" => Ok(Task::Rm(std)),
                     "img2cpc" | "imgconverter" => Ok(Task::ImgConverter(std)),
+                    "xfer" | "cpcwifi" | "m4" => Ok(Task::Xfer(std)),
                     _ => Err(Error::custom(format!("{code} is invalid"))),
                 }
             }
@@ -77,13 +71,13 @@ impl Task {
 
     pub fn args(&self) -> &str {
         match self {
-            Task::Basm(t) | Task::Rm(t) | Task::Echo(t) | Task::ImgConverter(t) => &t.args,
+            Task::Basm(t) | Task::Rm(t) | Task::Echo(t) | Task::ImgConverter(t) | Task::Xfer(t)=> &t.args,
         }
     }
 
     pub fn ignore_errors(&self) -> bool {
         match self {
-            Task::Basm(t) | Task::Rm(t) | Task::Echo(t) | Task::ImgConverter(t) => t.ignore_error,
+            Task::Basm(t) | Task::Rm(t) | Task::Echo(t) | Task::ImgConverter(t) | Task::Xfer(t)=> t.ignore_error,
         }
     }
 
@@ -92,6 +86,7 @@ impl Task {
             Task::Basm(ref mut t)
             | Task::Rm(ref mut t)
             | Task::Echo(ref mut t)
+            | Task::Xfer(ref mut t)
             | Task::ImgConverter(ref mut t) => t.ignore_error = ignore,
         }
 

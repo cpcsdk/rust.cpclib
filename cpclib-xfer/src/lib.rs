@@ -327,7 +327,7 @@ impl CpcXfer {
         let content =
             std::str::from_utf8(&dst).expect("Unable to create an UTF8 string for M4 content");
 
-        Ok(M4FilesList::from(content))
+        Ok(M4FilesList::from(content)) // TODO use try-from
     }
 
     /// Change the current directory
@@ -391,4 +391,43 @@ impl CpcXfer {
         easy.perform()?;
         Ok(())
     }
+}
+
+
+/// Send and run the file on the CPC.
+/// Snapshot V3 are downgraded to the V2 version
+pub fn send_and_run_file<P: AsRef<Path>>(xfer: &CpcXfer, fname: P, run: bool) -> Result<(), XferError> {
+    let mut done = false;
+    let fname = fname.as_ref();
+    // Snapshot needs to be converted in V2 format and handled differently
+    if let Some(extension) = fname.extension() {
+        let extension = extension.to_str().unwrap().to_ascii_lowercase();
+        if extension == "sna" {
+            let sna = sna::Snapshot::load(fname).expect("Error while loading snapshot");
+            if sna.version_header() == 3 {
+                eprintln!("Need to downgrade SNA version. TODO check if it is sill necessary (I think not)");
+                let sna_fname = fname
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap();
+                sna.save(sna_fname, sna::SnapshotVersion::V2).unwrap();
+                xfer.upload_and_run(sna_fname, None)
+                    .expect("Unable to launch SNA");
+                done = true;
+            }
+        }
+    }
+    if !done {
+        if run {
+            xfer.upload_and_run(fname, None)?;
+             //   .expect("Unable to launch file");
+        }
+        else {
+            xfer.upload(fname, "/", None)?;
+            //    .expect("Unable to put the file");
+        }
+    };
+
+    Ok(())
 }

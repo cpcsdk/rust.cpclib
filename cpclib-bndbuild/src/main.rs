@@ -4,6 +4,7 @@ use cpclib_bndbuild::{
 };
 
 use cpclib_common::clap::*;
+use cpclib_bndbuild::executor::*;
 
 fn main() {
     match inner_main() {
@@ -27,7 +28,7 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .long("help")
                 .short('h')
                 .value_name("CMD")
-                .value_parser(["img2cpc", "basm", "rm", "bndbuild"])
+                .value_parser(["img2cpc", "basm", "rm", "bndbuild", "xfer"])
                 .default_missing_value_os("bndbuild")
                 .default_value("bndbuild")
                 .num_args(0..=1)
@@ -64,13 +65,16 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 cmd.clone().print_long_help().unwrap();
             }
             "basm" => {
-                BasmRunner::default().print_help();
+                BASM_RUNNER.print_help();
             }
             "img2cpc" => {
-                ImgConverterRunner::default().print_help();
+                IMGCONV_RUNNER.print_help();
             }
             "rm" => {
-                RmRunner::default().print_help();
+                RM_RUNNER.print_help();
+            }
+            "xfer" => {
+                XFER_RUNNER.print_help();
             }
             _ => unimplemented!(),
         };
@@ -80,14 +84,17 @@ fn inner_main() -> Result<(), BndBuilderError> {
 
     if matches.get_flag("version") {
         println!(
-            "{}{}{}",
+            "{}\n{}\n{}\n{}",
             cmd.clone().render_long_version(),
-            BasmRunner::default()
+            BASM_RUNNER
                 .get_clap_command()
                 .render_long_version(),
-            ImgConverterRunner::default()
+            IMGCONV_RUNNER
                 .get_clap_command()
                 .render_long_version(),
+            XFER_RUNNER
+                .get_clap_command()
+                .render_long_version()
         );
         return Ok(());
     }
