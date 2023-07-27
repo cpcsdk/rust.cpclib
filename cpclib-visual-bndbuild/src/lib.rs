@@ -11,18 +11,25 @@ use eframe::epaint::ahash::HashMap;
 use eframe::epaint::Color32;
 use egui_file::{self, FileDialog};
 use itertools::Itertools;
-use crate::egui::TextEdit;
-use crate::egui::Button;
-use crate::egui::Modifiers;
-use crate::egui::Key;
-use crate::egui::KeyboardShortcut;
 
+use crate::egui::{Button, Key, KeyboardShortcut, Modifiers, TextEdit};
 
-static CTRL_O: KeyboardShortcut =  KeyboardShortcut{modifiers: Modifiers::COMMAND, key: Key::O};
-static CTRL_S: KeyboardShortcut =  KeyboardShortcut{modifiers: Modifiers::COMMAND, key: Key::S};
-static CTRL_Q: KeyboardShortcut =  KeyboardShortcut{modifiers: Modifiers::COMMAND, key: Key::Q};
-static CTRL_R: KeyboardShortcut =  KeyboardShortcut{modifiers: Modifiers::COMMAND, key: Key::R};
-
+static CTRL_O: KeyboardShortcut = KeyboardShortcut {
+    modifiers: Modifiers::COMMAND,
+    key: Key::O
+};
+static CTRL_S: KeyboardShortcut = KeyboardShortcut {
+    modifiers: Modifiers::COMMAND,
+    key: Key::S
+};
+static CTRL_Q: KeyboardShortcut = KeyboardShortcut {
+    modifiers: Modifiers::COMMAND,
+    key: Key::Q
+};
+static CTRL_R: KeyboardShortcut = KeyboardShortcut {
+    modifiers: Modifiers::COMMAND,
+    key: Key::R
+};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -91,7 +98,10 @@ impl Default for BndBuildApp {
             request_reload: false,
             request_save: false,
             job: None,
-            gags: (gag::BufferRedirect::stdout().unwrap(), gag::BufferRedirect::stderr().unwrap())
+            gags: (
+                gag::BufferRedirect::stdout().unwrap(),
+                gag::BufferRedirect::stderr().unwrap()
+            )
         }
     }
 }
@@ -222,9 +232,10 @@ impl BndBuildApp {
 
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-
-                    if ui.add(Button::new("Open").shortcut_text(ctx.format_shortcut(&CTRL_O))).clicked() ||
-                        ui.input_mut(|i| i.consume_shortcut(&CTRL_O))
+                    if ui
+                        .add(Button::new("Open").shortcut_text(ctx.format_shortcut(&CTRL_O)))
+                        .clicked()
+                        || ui.input_mut(|i| i.consume_shortcut(&CTRL_O))
                     {
                         let mut dialog = egui_file::FileDialog::open_file(self.filename.clone());
                         dialog.open();
@@ -234,20 +245,29 @@ impl BndBuildApp {
                     };
 
                     if self.filename.is_some() {
-                        if ui.add(Button::new("Save").shortcut_text(ctx.format_shortcut(&CTRL_S))).clicked() ||
-                        ui.input_mut(|i| i.consume_shortcut(&CTRL_S)){
+                        if ui
+                            .add(Button::new("Save").shortcut_text(ctx.format_shortcut(&CTRL_S)))
+                            .clicked()
+                            || ui.input_mut(|i| i.consume_shortcut(&CTRL_S))
+                        {
                             self.request_save = true;
                             ui.close_menu();
                         }
-                        if ui.add(Button::new("Reload").shortcut_text(ctx.format_shortcut(&CTRL_R))).clicked() ||
-                        ui.input_mut(|i| i.consume_shortcut(&CTRL_R)){
+                        if ui
+                            .add(Button::new("Reload").shortcut_text(ctx.format_shortcut(&CTRL_R)))
+                            .clicked()
+                            || ui.input_mut(|i| i.consume_shortcut(&CTRL_R))
+                        {
                             self.request_reload = true;
                             ui.close_menu();
                         }
                     }
 
-                    if ui.add(Button::new("Quit").shortcut_text(ctx.format_shortcut(&CTRL_Q))).clicked() ||
-                    ui.input_mut(|i| i.consume_shortcut(&CTRL_Q)){
+                    if ui
+                        .add(Button::new("Quit").shortcut_text(ctx.format_shortcut(&CTRL_Q)))
+                        .clicked()
+                        || ui.input_mut(|i| i.consume_shortcut(&CTRL_Q))
+                    {
                         frame.close();
                     }
                 });
@@ -289,10 +309,11 @@ impl BndBuildApp {
         ui.vertical_centered(|ui| {
             if self.is_dirty {
                 ui.heading("Definition *");
-            } else {
+            }
+            else {
                 ui.heading("Definition");
             }
-            if let Some(mut code) = self.file_content.as_mut() {
+            if let Some(code) = self.file_content.as_mut() {
                 let editor = TextEdit::multiline(code)
                     .code_editor()
                     .hint_text("Expect the yaml rules to build the project.")
@@ -307,7 +328,6 @@ impl BndBuildApp {
                             self.is_dirty = true;
                         }
                     });
-
             }
         });
     }
@@ -372,7 +392,7 @@ impl BndBuildApp {
             };
 
             ui.columns(2, |columns| {
-                columns[0].vertical(|ui|{
+                columns[0].vertical(|ui| {
                     self.update_targets(ctx, ui);
                     self.update_code(ctx, ui);
                 });
@@ -427,7 +447,8 @@ impl eframe::App for BndBuildApp {
 
             if let Some(e) = r.err() {
                 self.file_error = e.to_string().into();
-            } else {
+            }
+            else {
                 self.is_dirty = false;
                 self.update_cache();
             }

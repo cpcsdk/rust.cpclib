@@ -18,7 +18,9 @@
   help: Convert the BMP file and generate the necessary data to build it
 
 - tgt: clean
-  cmd: -rm *.o *.bin *.lst
+  cmd: 
+   - -rm *.o *.bin *.lst
+   - -rm dummy_logo_conf.asm
   help: Remove all needed generated files
 
 - tgt: distclean
@@ -29,3 +31,14 @@
 - tgt: m4
   dep: build
   cmd: xfer 192.168.1.26 -y dummy.sna
+  help: Send the generated snapshot to the M4 card corresponding to the given IP address
+
+- tgt: wincpcec
+  dep: build
+  cmd: extern .\tools\cpcec\CPCEC.EXE ..\..\dummy_logo.sna
+  help: Launch CPCEC.EXE as an external process (all other commands are embedded in bndbuild). Sadly it does not work :(
+
+- tgt: winape
+  dep: build
+  cmd: extern .\tools\winape\WinApe.exe /SN:../../dummy.sna
+  help: Launch Winape as an external process (all other commands are embedded in bndbuild). Sadly it does not work :(

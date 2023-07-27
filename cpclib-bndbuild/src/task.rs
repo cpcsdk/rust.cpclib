@@ -6,7 +6,8 @@ pub enum Task {
     Rm(StandardTask),
     Echo(StandardTask),
     ImgConverter(StandardTask),
-    Xfer(StandardTask)
+    Xfer(StandardTask),
+    Extern(StandardTask)
 }
 
 impl<'de> Deserialize<'de> for Task {
@@ -39,6 +40,7 @@ impl<'de> Deserialize<'de> for Task {
                     "rm" | "del" => Ok(Task::Rm(std)),
                     "img2cpc" | "imgconverter" => Ok(Task::ImgConverter(std)),
                     "xfer" | "cpcwifi" | "m4" => Ok(Task::Xfer(std)),
+                    "extern" => Ok(Task::Extern(std)),
                     _ => Err(Error::custom(format!("{code} is invalid"))),
                 }
             }
@@ -71,13 +73,15 @@ impl Task {
 
     pub fn args(&self) -> &str {
         match self {
-            Task::Basm(t) | Task::Rm(t) | Task::Echo(t) | Task::ImgConverter(t) | Task::Xfer(t)=> &t.args,
+            Task::Basm(t) | Task::Rm(t) | Task::Echo(t) | Task::ImgConverter(t) | 
+            Task::Xfer(t) | Task::Extern(t) => &t.args,
         }
     }
 
     pub fn ignore_errors(&self) -> bool {
         match self {
-            Task::Basm(t) | Task::Rm(t) | Task::Echo(t) | Task::ImgConverter(t) | Task::Xfer(t)=> t.ignore_error,
+            Task::Basm(t) | Task::Rm(t) | Task::Echo(t) | Task::ImgConverter(t) |
+             Task::Xfer(t)  | Task::Extern(t) => t.ignore_error,
         }
     }
 
@@ -87,7 +91,8 @@ impl Task {
             | Task::Rm(ref mut t)
             | Task::Echo(ref mut t)
             | Task::Xfer(ref mut t)
-            | Task::ImgConverter(ref mut t) => t.ignore_error = ignore,
+            | Task::ImgConverter(ref mut t)
+            | Task::Extern(ref mut t) => t.ignore_error = ignore,
         }
 
         self

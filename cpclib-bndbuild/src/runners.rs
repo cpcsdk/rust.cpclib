@@ -38,7 +38,7 @@ pub trait Runner {
     /// Run the task and return true if successfull
     fn run(&self, arguments: &str) -> Result<(), String> {
         println!("\t$ {} {}", self.get_command(), arguments);
-        let args = get_all_args(arguments);
+        let args = get_all_args(&arguments.replace(r"\", r"\\"));
         self.inner_run(&args)
     }
 
@@ -56,6 +56,44 @@ pub trait RunnerWithClap: Runner {
             .disable_help_flag(true)
             .print_long_help()
             .unwrap();
+    }
+}
+
+#[derive(Default)]
+pub struct ExternRunner {}
+impl ExternRunner {
+
+}
+impl Runner for ExternRunner {
+    fn inner_run(&self, itr: &[String]) -> Result<(), String> {
+        let app = std::fs::canonicalize(&itr[0])
+            .map_err(|e| format!("Wrong executable {}.{}", &itr[0], e.to_string()))?;
+
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("Unable to get the current working directory {}.", e.to_string()))?;
+        let cwd = std::fs::canonicalize(cwd)
+            .map_err(|e| format!("Unable to get the current working directory {}.", e.to_string()))?;
+
+
+        let mut cmd = std::process::Command::new(app);
+        cmd.current_dir(cwd);
+        for arg in &itr[1..] {
+            cmd.arg(dbg!(arg));
+        }
+        let mut handle = cmd.spawn()
+            .map_err(|e| format!("Error while launching {}. {}", &itr[0], e.to_string()))?;
+
+        let status = handle.wait()
+            .map_err(|e| format!("Error while executing {}. {}", &itr[0], e.to_string()))?;
+
+        if !status.success() {
+            return Err("Error while launching the command.".to_owned())
+        }
+        Ok(())
+    }
+
+    fn get_command(&self) -> &str {
+        "extern"
     }
 }
 
