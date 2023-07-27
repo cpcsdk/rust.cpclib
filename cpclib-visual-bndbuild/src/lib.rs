@@ -17,6 +17,7 @@ use itertools::Itertools;
 pub struct BndBuildApp {
     /// The provided filename by the user
     filename: Option<std::path::PathBuf>,
+
     #[serde(skip)] // need to be rebuild at loading
     /// The corresponding builder
     builder_and_layers: Option<BuilderAndCache>,
@@ -300,13 +301,8 @@ impl BndBuildApp {
 
     fn update_inner(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            if self.job.is_some() {
-                ui.set_enabled(false);
-            }
-
             if let Some(error) = &self.file_error {
                 ui.colored_label(Color32::RED, error);
-                return;
             };
 
             ui.columns(2, |columns| {
@@ -358,6 +354,7 @@ impl eframe::App for BndBuildApp {
             if let Some(builder) = &self.builder_and_layers {
                 let builder: &'static BuilderAndCache = unsafe { std::mem::transmute(builder) }; // cheat on lifetime as we know if will live all the time
                 self.job = std::thread::spawn(|| builder.borrow_owner().execute(tgt)).into();
+                self.logs.clear();
             }
         }
 
