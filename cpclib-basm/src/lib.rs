@@ -277,15 +277,6 @@ pub fn assemble<'arg>(
         }
     }
 
-    let bar = if show_progress {
-        //  Some(Progress::progress()
-        //       .add_bar("Assemble sources"))
-        None
-    }
-    else {
-        None
-    };
-
     let options = EnvOptions::new(parse_options, assemble_options);
     let (_tokens, mut env) =
         visit_tokens_all_passes_with_options(&listing, options).map_err(|(_t_, mut env, e)| {
@@ -294,10 +285,6 @@ pub fn assemble<'arg>(
                 error: AssemblerError::AlreadyRenderedError(e.to_string())
             }
         })?;
-
-    if let Some(bar) = bar {
-        Progress::progress().remove_bar_ok(&bar);
-    }
 
     env.handle_post_actions().map_err(|e| {
         BasmError::AssemblerError {
@@ -356,6 +343,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
         #[cfg(feature = "xferlib")]
         match matches.get_one::<String>("TO_M4") {
             Some(m4) => {
+                #[cfg(feature = "indicatif")]
                 let bar = if show_progress {
                     Some(Progress::progress().add_bar("Send to M4"))
                 }
@@ -367,6 +355,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 xfer.upload_and_run(pc_filename, None)
                     .expect("An error occured while transfering the snapshot");
 
+                #[cfg(feature = "indicatif")]
                 if let Some(bar) = bar {
                     Progress::progress().remove_bar_ok(&bar);
                 }
@@ -383,6 +372,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             let sna = env.sna();
             let m4 = matches.get_one::<String>("TO_M4").unwrap();
 
+            #[cfg(feature = "indicatif")]
             let bar = if show_progress {
                 Some(Progress::progress().add_bar("Send to M4"))
             }
@@ -394,6 +384,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             xfer.upload_and_run_sna(sna)
                 .expect("An error occured while transfering the snapshot");
 
+            #[cfg(feature = "indicatif")]
             if let Some(bar) = bar {
                 Progress::progress().remove_bar_ok(&bar);
             }

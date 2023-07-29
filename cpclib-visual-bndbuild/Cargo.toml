@@ -11,7 +11,7 @@ homepage.workspace = true
 
 
 [dependencies]
-cpclib-bndbuild = "0.1.0"
+cpclib-bndbuild = {version="0.1.0", default-features=false}
 eframe = {version="0.21.0", features=["persistence"]}
 egui_dock = {version="0.5.2"}
 

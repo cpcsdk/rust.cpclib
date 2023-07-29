@@ -11,7 +11,7 @@ use eframe::epaint::ahash::HashMap;
 use eframe::epaint::Color32;
 use egui_file::{self, FileDialog};
 use itertools::Itertools;
-
+use std::time::SystemTime;
 use crate::egui::{Button, Key, KeyboardShortcut, Modifiers, TextEdit};
 
 static CTRL_O: KeyboardShortcut = KeyboardShortcut {
@@ -79,6 +79,10 @@ pub struct BndBuildApp {
     #[serde(skip)]
     request_save: bool,
 
+    /// No need to update the output too often
+    #[serde(skip)]
+    last_tick: SystemTime,
+
     #[serde(skip)]
     job: Option<std::thread::JoinHandle<Result<(), cpclib_bndbuild::BndBuilderError>>>
 }
@@ -98,6 +102,7 @@ impl Default for BndBuildApp {
             request_reload: false,
             request_save: false,
             job: None,
+            last_tick: SystemTime::now(),
             gags: (
                 gag::BufferRedirect::stdout().unwrap(),
                 gag::BufferRedirect::stderr().unwrap()
@@ -298,11 +303,14 @@ impl BndBuildApp {
             .max_width(f32::INFINITY)
             //  .min_height(f32::INFINITY)
             //   .min_width(f32::INFINITY)
-            .stick_to_right(true)
+            .stick_to_right(false)
             .stick_to_bottom(true)
             .show(ui, |ui| {
                 ui.code(&self.logs);
-            });
+            })
+           // .scroll_to_me(Some(egui::Align::Max))
+            
+            ;
     }
 
     fn update_code(&mut self, _ctx: &egui::Context, ui: &mut eframe::egui::Ui) {
@@ -478,7 +486,12 @@ impl eframe::App for BndBuildApp {
         }
 
         // Handle print
+        const HZ:u128 = 1000/20;
+        if self.last_tick.elapsed().unwrap().as_millis() >= HZ {
         self.gags.0.read_to_string(&mut self.logs).unwrap();
         self.gags.1.read_to_string(&mut self.logs).unwrap();
+        self.last_tick = SystemTime::now();
+
+        }
     }
 }

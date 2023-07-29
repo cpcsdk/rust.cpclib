@@ -9,6 +9,8 @@
 #![recursion_limit = "256"]
 #![feature(map_try_insert)]
 #![feature(get_mut_unchecked)]
+#![feature(stmt_expr_attributes)]
+
 
 /// Implementation of various behvior for the tokens of cpclib_tokens
 pub mod implementation;

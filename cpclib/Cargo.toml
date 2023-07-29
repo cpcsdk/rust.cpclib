@@ -18,16 +18,16 @@ independent = true
 
 [dependencies]
 
-cpclib-basic = "0.6.1-alpha.2"
-cpclib-sna = "0.6.1-alpha.2"
-cpclib-crunchers = "0.6.1-alpha.2"
-cpclib-asm = "0.6.1-alpha.2"
-cpclib-z80emu = "0.6.1-alpha.2"
-cpclib-xfer = "0.6.1-alpha.2"
-cpclib-disc = "0.6.1-alpha.2"
-cpclib-macros = "0.6.1-alpha.2"
-cpclib-common = "0.6.1-alpha.2"
-cpclib-image = "0.6.1-alpha.2"
+cpclib-basic = {version="0.6.1-alpha.2", default-features=false}
+cpclib-sna = {version="0.6.1-alpha.2", default-features=false}
+cpclib-crunchers = {version="0.6.1-alpha.2", default-features=false}
+cpclib-asm = {version="0.6.1-alpha.2", default-features=false}
+cpclib-z80emu = {version="0.6.1-alpha.2", default-features=false}
+cpclib-xfer = {version="0.6.1-alpha.2", default-features=false}
+cpclib-disc = {version="0.6.1-alpha.2", default-features=false}
+cpclib-macros = {version="0.6.1-alpha.2", default-features=false}
+cpclib-common = {version="0.6.1-alpha.2", default-features=false}
+cpclib-image = {version="0.6.1-alpha.2", default-features=false}
 
 anyhow.workspace = true
 arrayref.workspace = true

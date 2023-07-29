@@ -47,9 +47,7 @@ tempfile.workspace = true
 chardetng.workspace = true
 encoding_rs.workspace = true
 smartstring.workspace = true
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-indicatif.workspace = true
+indicatif = {workspace = true, optional=true}
 
 
 
@@ -64,5 +62,6 @@ build-deps = "*"
 
 
 [features]
-default = ["colored_errors"]
+default = ["colored_errors", "indicatif"]
 colored_errors = []
+indicatif = ["dep:indicatif"]

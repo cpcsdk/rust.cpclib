@@ -14,10 +14,10 @@ homepage.workspace = true
 independent = true
 
 [dependencies]
-cpclib-asm = "0.6.1-alpha.2"
-cpclib-common = "0.6.1-alpha.2"
-cpclib-xfer = {version="0.6.1-alpha.2", optional=true}
-cpclib-disc = "0.6.1-alpha.2"
+cpclib-asm = {version="0.6.1-alpha.2", default-features=false}
+cpclib-common = {version="0.6.1-alpha.2", default-features=false}
+cpclib-xfer = {version="0.6.1-alpha.2", default-features=false, optional=true}
+cpclib-disc = {version="0.6.1-alpha.2", default-features=false}
 
 time = "0.3.22"
 
@@ -45,5 +45,7 @@ path = "src/main.rs"
 
 
 [features]
-default = ["xferlib"]
+default = ["xferlib", "indicatif", "colored_errors"]
 xferlib = ["cpclib-xfer"]
+indicatif = ["cpclib-asm/indicatif"]
+colored_errors = ["cpclib-asm/colored_errors"]

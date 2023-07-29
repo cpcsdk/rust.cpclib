@@ -1064,7 +1064,6 @@ impl Env {
             .map(|b| b.1.nb_files_to_save() as u64)
             .sum::<u64>() as u64;
 
-        #[cfg(not(target_arch = "wasm32"))]
         Progress::progress().create_save_bar(nb_files_to_save);
 
         // save from snapshot

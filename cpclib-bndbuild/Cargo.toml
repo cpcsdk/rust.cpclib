@@ -17,7 +17,8 @@ shlex = "1.1.0"
 topologic = "1.0.0"
 
 cpclib-common = {version = "0.6.1-alpha.2", features=["cmdline"]}
-cpclib-basm = { version = "0.6.1-alpha.2", features=["xferlib"] }
+cpclib-basm = { version = "0.6.1-alpha.2", default-features=false, features=["xferlib"] }
+cpclib-asm = { version = "0.6.1-alpha.2", default-features=false }
 cpclib-imgconverter = { version = "0.6.1-alpha.2", features=["xferlib"]}
 cpclib-xfertool = {version="0.6.1-alpha.2", default-features=false}
 
@@ -35,3 +36,7 @@ built.workspace = true
 [[bin]]
 name = "bndbuild"
 path = "src/main.rs"
+
+[features]
+default = []
+indicatif = ["cpclib-basm/indicatif"]
