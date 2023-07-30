@@ -240,7 +240,7 @@ pub mod mode1 {
         assert!(pen1.number() < 4);
         assert!(pen2.number() < 4);
         assert!(pen3.number() < 4);
-        
+
         pen_to_pixel_byte(pen0, PixelPosition::First)
             + pen_to_pixel_byte(pen1, PixelPosition::Second)
             + pen_to_pixel_byte(pen2, PixelPosition::Third)

@@ -3,6 +3,7 @@
 use std::io::Read;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use cpclib_bndbuild::deps::Rule;
 use cpclib_bndbuild::BndBuilder;
@@ -11,7 +12,7 @@ use eframe::epaint::ahash::HashMap;
 use eframe::epaint::Color32;
 use egui_file::{self, FileDialog};
 use itertools::Itertools;
-use std::time::SystemTime;
+
 use crate::egui::{Button, Key, KeyboardShortcut, Modifiers, TextEdit};
 
 static CTRL_O: KeyboardShortcut = KeyboardShortcut {
@@ -486,12 +487,11 @@ impl eframe::App for BndBuildApp {
         }
 
         // Handle print
-        const HZ:u128 = 1000/20;
+        const HZ: u128 = 1000 / 20;
         if self.last_tick.elapsed().unwrap().as_millis() >= HZ {
-        self.gags.0.read_to_string(&mut self.logs).unwrap();
-        self.gags.1.read_to_string(&mut self.logs).unwrap();
-        self.last_tick = SystemTime::now();
-
+            self.gags.0.read_to_string(&mut self.logs).unwrap();
+            self.gags.1.read_to_string(&mut self.logs).unwrap();
+            self.last_tick = SystemTime::now();
         }
     }
 }

@@ -393,10 +393,13 @@ impl CpcXfer {
     }
 }
 
-
 /// Send and run the file on the CPC.
 /// Snapshot V3 are downgraded to the V2 version
-pub fn send_and_run_file<P: AsRef<Path>>(xfer: &CpcXfer, fname: P, run: bool) -> Result<(), XferError> {
+pub fn send_and_run_file<P: AsRef<Path>>(
+    xfer: &CpcXfer,
+    fname: P,
+    run: bool
+) -> Result<(), XferError> {
     let mut done = false;
     let fname = fname.as_ref();
     // Snapshot needs to be converted in V2 format and handled differently
@@ -406,11 +409,7 @@ pub fn send_and_run_file<P: AsRef<Path>>(xfer: &CpcXfer, fname: P, run: bool) ->
             let sna = sna::Snapshot::load(fname).expect("Error while loading snapshot");
             if sna.version_header() == 3 {
                 eprintln!("Need to downgrade SNA version. TODO check if it is sill necessary (I think not)");
-                let sna_fname = fname
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap();
+                let sna_fname = fname.file_name().unwrap().to_str().unwrap();
                 sna.save(sna_fname, sna::SnapshotVersion::V2).unwrap();
                 xfer.upload_and_run(sna_fname, None)
                     .expect("Unable to launch SNA");
@@ -421,7 +420,7 @@ pub fn send_and_run_file<P: AsRef<Path>>(xfer: &CpcXfer, fname: P, run: bool) ->
     if !done {
         if run {
             xfer.upload_and_run(fname, None)?;
-             //   .expect("Unable to launch file");
+            //   .expect("Unable to launch file");
         }
         else {
             xfer.upload(fname, "/", None)?;

@@ -1,10 +1,7 @@
-use cpclib_bndbuild::{
-    runners::{RunnerWithClap},
-    BndBuilder, BndBuilderError,
-};
-
-use cpclib_common::clap::*;
 use cpclib_bndbuild::executor::*;
+use cpclib_bndbuild::runners::RunnerWithClap;
+use cpclib_bndbuild::{BndBuilder, BndBuilderError};
+use cpclib_common::clap::*;
 
 fn main() {
     match inner_main() {
@@ -32,14 +29,14 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .default_missing_value_os("bndbuild")
                 .default_value("bndbuild")
                 .num_args(0..=1)
-                .help("Show the help of the given subcommand CMD."),
+                .help("Show the help of the given subcommand CMD.")
         )
         .arg(
             Arg::new("version")
                 .long("version")
                 .short('V')
                 .help("Print version")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new("file")
@@ -48,13 +45,13 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .action(ArgAction::Set)
                 .value_name("FILE")
                 .default_value("bndbuild.yml")
-                .help("Provide the YAML file for the given project."),
+                .help("Provide the YAML file for the given project.")
         )
         .arg(
             Arg::new("target")
                 .action(ArgAction::Append)
                 .value_name("TARGET")
-                .help("Provide the target(s) to run."),
+                .help("Provide the target(s) to run.")
         );
 
     let matches = cmd.clone().get_matches();
@@ -76,7 +73,7 @@ fn inner_main() -> Result<(), BndBuilderError> {
             "xfer" => {
                 XFER_RUNNER.print_help();
             }
-            _ => unimplemented!(),
+            _ => unimplemented!()
         };
 
         return Ok(());
@@ -86,15 +83,9 @@ fn inner_main() -> Result<(), BndBuilderError> {
         println!(
             "{}\n{}\n{}\n{}",
             cmd.clone().render_long_version(),
-            BASM_RUNNER
-                .get_clap_command()
-                .render_long_version(),
-            IMGCONV_RUNNER
-                .get_clap_command()
-                .render_long_version(),
-            XFER_RUNNER
-                .get_clap_command()
-                .render_long_version()
+            BASM_RUNNER.get_clap_command().render_long_version(),
+            IMGCONV_RUNNER.get_clap_command().render_long_version(),
+            XFER_RUNNER.get_clap_command().render_long_version()
         );
         return Ok(());
     }
@@ -105,15 +96,17 @@ fn inner_main() -> Result<(), BndBuilderError> {
     let builder = BndBuilder::from_fname(fname)?;
     if !matches.contains_id("target") {
         if let Some(first) = builder.default_target() {
-            builder
-                .execute(first)
-                .map_err(|e| BndBuilderError::DefaultTargetError {
-                    source: Box::new(e),
-                })?;
-        } else {
+            builder.execute(first).map_err(|e| {
+                BndBuilderError::DefaultTargetError {
+                    source: Box::new(e)
+                }
+            })?;
+        }
+        else {
             return Err(BndBuilderError::NoTargets);
         }
-    } else {
+    }
+    else {
         for target in matches.get_many::<String>("target").unwrap() {
             builder.execute(target)?;
         }

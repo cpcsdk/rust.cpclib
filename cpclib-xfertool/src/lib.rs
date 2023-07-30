@@ -2,18 +2,15 @@
 pub mod interact;
 pub mod parser;
 
-use cpclib_xfer::send_and_run_file;
-use cpclib_common::clap;
-use cpclib_xfer::CpcXfer;
-use notify::RecommendedWatcher;
-use notify::RecursiveMode;
-use notify::Watcher;
-use crate::clap::Command;
-
-use crate::clap::ArgAction;
-use crate::clap::builder::PathBufValueParser;
-use cpclib_common::clap::builder::TypedValueParser;
 use std::path::PathBuf;
+
+use cpclib_common::clap;
+use cpclib_common::clap::builder::TypedValueParser;
+use cpclib_xfer::{send_and_run_file, CpcXfer};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+
+use crate::clap::builder::PathBufValueParser;
+use crate::clap::{ArgAction, Command};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -114,19 +111,16 @@ pub fn build_args_parser() -> clap::Command {
     );
 
     if cfg!(feature = "interactive") {
-    cmd.subcommand(
-        Command::new("--interactive")
-        .about("Start an interactive session")
-    )
-    }else {
+        cmd.subcommand(Command::new("--interactive").about("Start an interactive session"))
+    }
+    else {
         cmd
     }
-} 
-
+}
 
 pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
-      // Retreivethe hostname from the args or from the environment
-      let hostname: String = match matches.get_one::<String>("CPCADDR") {
+    // Retreivethe hostname from the args or from the environment
+    let hostname: String = match matches.get_one::<String>("CPCADDR") {
         Some(cpcaddr) => cpcaddr.to_string(),
         None => {
             match std::env::var("CPCIP") {
@@ -143,7 +137,7 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
     if let Some("-r") = matches.subcommand_name() {
         xfer.reset_m4()?;
     }
-    else if let Some("-s") =  matches.subcommand_name() {
+    else if let Some("-s") = matches.subcommand_name() {
         xfer.reset_cpc()?;
     }
     else if let Some(p_opt) = matches.subcommand_matches("-p") {
@@ -157,7 +151,9 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
         send_and_run_file(&xfer, &fname, true);
 
         if y_opt.get_flag("WATCH") {
-            println!("I will not stop and redo the operation when detecting a modification of the file");
+            println!(
+                "I will not stop and redo the operation when detecting a modification of the file"
+            );
             let (tx, rx) = std::sync::mpsc::channel();
             let mut watcher = RecommendedWatcher::new(
                 move |res| tx.send(res).unwrap(),

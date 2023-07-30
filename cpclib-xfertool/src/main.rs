@@ -12,19 +12,16 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
-
 use std::env;
 use std::path::Path;
 use std::time::Duration;
 
 use cpclib_common::clap::{self, ArgAction, Command};
+use cpclib_xfertool::{build_args_parser, built_info, process};
 use crossbeam_channel::unbounded;
 use hotwatch::{Event, Hotwatch};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use {anyhow, cpclib_disc as disc, cpclib_sna as sna, cpclib_xfer as xfer};
-use cpclib_xfertool::process;
-use cpclib_xfertool::build_args_parser;
-use cpclib_xfertool::built_info;
 
 fn main() -> anyhow::Result<()> {
     let desc_before = format!(
@@ -33,12 +30,7 @@ fn main() -> anyhow::Result<()> {
         built_info::BUILT_TIME_UTC
     );
 
-
-    let matches = build_args_parser()
-        .before_help(desc_before)
-        .get_matches();
+    let matches = build_args_parser().before_help(desc_before).get_matches();
 
     process(&matches)
-
-  
 }

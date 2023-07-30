@@ -1,10 +1,9 @@
-use deps::{Graph, Rule};
-use std::{
-    io::{BufReader, Read},
-    path::Path,
-};
-use thiserror::Error;
 use std::collections::HashSet;
+use std::io::{BufReader, Read};
+use std::path::Path;
+
+use deps::{Graph, Rule};
+use thiserror::Error;
 
 pub mod deps;
 pub mod executor;
@@ -21,12 +20,12 @@ pub enum BndBuilderError {
     #[error("Unable to access file {fname}: {error}.")]
     InputFileError {
         fname: String,
-        error: std::io::Error,
+        error: std::io::Error
     },
     #[error("Unable to setup working directory {fname}: {error}.")]
     WorkingDirectoryError {
         fname: String,
-        error: std::io::Error,
+        error: std::io::Error
     },
     #[error("Unable to deserialize rules {0}.")]
     ParseError(serde_yaml::Error),
@@ -37,7 +36,7 @@ pub enum BndBuilderError {
     #[error("Unable to build default target.\n{source}")]
     DefaultTargetError { source: Box<BndBuilderError> },
     #[error("The file does not contain a target.")]
-    NoTargets,
+    NoTargets
 }
 
 self_cell::self_cell! {
@@ -51,15 +50,17 @@ self_cell::self_cell! {
 }
 
 pub struct BndBuilder {
-    inner: BndBuilderInner,
+    inner: BndBuilderInner
 }
 
 impl BndBuilder {
     pub fn from_fname<P: AsRef<Path>>(fname: P) -> Result<Self, BndBuilderError> {
         let fname = fname.as_ref();
-        let file = std::fs::File::open(fname).map_err(|e| BndBuilderError::InputFileError {
-            fname: fname.display().to_string(),
-            error: e,
+        let file = std::fs::File::open(fname).map_err(|e| {
+            BndBuilderError::InputFileError {
+                fname: fname.display().to_string(),
+                error: e
+            }
         })?;
 
         let path = std::path::Path::new(fname).parent().unwrap();
@@ -71,14 +72,14 @@ impl BndBuilder {
 
     pub fn from_reader<P: AsRef<Path>>(
         mut rdr: impl Read,
-        working_directory: Option<P>,
+        working_directory: Option<P>
     ) -> Result<Self, BndBuilderError> {
         if let Some(working_directory) = working_directory {
             let working_directory = working_directory.as_ref();
             std::env::set_current_dir(working_directory).map_err(|e| {
                 BndBuilderError::WorkingDirectoryError {
                     fname: working_directory.display().to_string(),
-                    error: e,
+                    error: e
                 }
             })?;
         }
@@ -101,18 +102,15 @@ impl BndBuilder {
         self.inner.borrow_dependent().execute(target)
     }
 
-    pub fn get_layered_dependencies(&self) ->  Vec<HashSet<&Path>> {
-        self.inner.borrow_dependent()
-            .get_layered_dependencies()
+    pub fn get_layered_dependencies(&self) -> Vec<HashSet<&Path>> {
+        self.inner.borrow_dependent().get_layered_dependencies()
     }
 
     pub fn get_rule(&self, tgt: &Path) -> Option<&Rule> {
-        self.inner.borrow_owner()
-            .rule(tgt)
+        self.inner.borrow_owner().rule(tgt)
     }
 
     pub fn rules(&self) -> &[Rule] {
-        self.inner.borrow_owner()
-            .rules()
+        self.inner.borrow_owner().rules()
     }
 }

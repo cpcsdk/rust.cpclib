@@ -691,7 +691,7 @@ pub fn build_args_parser() -> clap::Command {
     .group(
         ArgGroup::new("ANY_INPUT")
             .args(&["INLINE", "INPUT", "LIST_EMBEDDED", "VIEW_EMBEDDED"])
-          //  .required(true)
+            //  .required(true)
             .conflicts_with("version")
     )
 }

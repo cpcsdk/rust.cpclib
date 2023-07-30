@@ -1,9 +1,7 @@
 /// Manage the standard tasks
 use cpclib_basm;
-use cpclib_common::{
-    clap::{self, Arg, ArgAction, Command},
-    itertools::Itertools,
-};
+use cpclib_common::clap::{self, Arg, ArgAction, Command};
+use cpclib_common::itertools::Itertools;
 use glob::glob;
 use shlex::split;
 
@@ -20,7 +18,7 @@ fn get_all_args(arguments: &str) -> Vec<String> {
                 for entry in entries {
                     match entry {
                         Ok(p) => res.push(p.display().to_string()),
-                        Err(e) => res.push(e.path().display().to_string()),
+                        Err(e) => res.push(e.path().display().to_string())
                     }
                     added += 1;
                 }
@@ -28,7 +26,7 @@ fn get_all_args(arguments: &str) -> Vec<String> {
                     res.push(p);
                 }
             }
-            Err(_) => res.push(p),
+            Err(_) => res.push(p)
         }
     }
     res
@@ -61,33 +59,40 @@ pub trait RunnerWithClap: Runner {
 
 #[derive(Default)]
 pub struct ExternRunner {}
-impl ExternRunner {
-
-}
+impl ExternRunner {}
 impl Runner for ExternRunner {
     fn inner_run(&self, itr: &[String]) -> Result<(), String> {
         let app = std::fs::canonicalize(&itr[0])
             .map_err(|e| format!("Wrong executable {}.{}", &itr[0], e.to_string()))?;
 
-        let cwd = std::env::current_dir()
-            .map_err(|e| format!("Unable to get the current working directory {}.", e.to_string()))?;
-        let cwd = std::fs::canonicalize(cwd)
-            .map_err(|e| format!("Unable to get the current working directory {}.", e.to_string()))?;
-
+        let cwd = std::env::current_dir().map_err(|e| {
+            format!(
+                "Unable to get the current working directory {}.",
+                e.to_string()
+            )
+        })?;
+        let cwd = std::fs::canonicalize(cwd).map_err(|e| {
+            format!(
+                "Unable to get the current working directory {}.",
+                e.to_string()
+            )
+        })?;
 
         let mut cmd = std::process::Command::new(app);
         cmd.current_dir(cwd);
         for arg in &itr[1..] {
             cmd.arg(dbg!(arg));
         }
-        let mut handle = cmd.spawn()
+        let mut handle = cmd
+            .spawn()
             .map_err(|e| format!("Error while launching {}. {}", &itr[0], e.to_string()))?;
 
-        let status = handle.wait()
+        let status = handle
+            .wait()
             .map_err(|e| format!("Error while executing {}. {}", &itr[0], e.to_string()))?;
 
         if !status.success() {
-            return Err("Error while launching the command.".to_owned())
+            return Err("Error while launching the command.".to_owned());
         }
         Ok(())
     }
@@ -113,7 +118,7 @@ impl RmRunner {
             .arg(
                 Arg::new("arguments")
                     .action(ArgAction::Append)
-                    .help("Files to delete."),
+                    .help("Files to delete.")
             )
             .print_long_help()
             .unwrap();
@@ -137,29 +142,28 @@ pub struct XferRunner {
     command: clap::Command
 }
 
-
 impl Default for XferRunner {
     fn default() -> Self {
         let command = cpclib_xfertool::build_args_parser();
         let command = command
-        .no_binary_name(true)
-        .disable_help_flag(true)
-        .disable_version_flag(true)
-        .arg(
-            Arg::new("version")
-                .long("version")
-                .short('V')
-                .help("Print version")
-                .action(ArgAction::SetTrue)
-        )   
-        .after_help(format!(
-            "{} {} embedded by {} {}",
-            cpclib_xfertool::built_info::PKG_NAME,
-            cpclib_xfertool::built_info::PKG_VERSION,
-            built_info::PKG_NAME,
-            built_info::PKG_VERSION
-        ));
-    Self { command }
+            .no_binary_name(true)
+            .disable_help_flag(true)
+            .disable_version_flag(true)
+            .arg(
+                Arg::new("version")
+                    .long("version")
+                    .short('V')
+                    .help("Print version")
+                    .action(ArgAction::SetTrue)
+            )
+            .after_help(format!(
+                "{} {} embedded by {} {}",
+                cpclib_xfertool::built_info::PKG_NAME,
+                cpclib_xfertool::built_info::PKG_VERSION,
+                built_info::PKG_NAME,
+                built_info::PKG_VERSION
+            ));
+        Self { command }
     }
 }
 
@@ -168,7 +172,6 @@ impl RunnerWithClap for XferRunner {
         &self.command
     }
 }
-
 
 impl Runner for XferRunner {
     fn inner_run(&self, itr: &[String]) -> Result<(), String> {
@@ -179,7 +182,6 @@ impl Runner for XferRunner {
             .clone()
             .try_get_matches_from(itr)
             .map_err(|e| e.to_string())?;
-
 
         if matches.get_flag("version") {
             println!("{}", self.get_clap_command().clone().render_version());
@@ -194,22 +196,19 @@ impl Runner for XferRunner {
     }
 }
 
-
 pub struct BasmRunner {
-    command: clap::Command,
+    command: clap::Command
 }
 
 impl Default for BasmRunner {
     fn default() -> Self {
         let command = cpclib_basm::build_args_parser();
-/* 
-        let mut command = command.group(
-            ArgGroup::new("ANY_INPUT")
-            .args(&["INLINE", "INPUT", "LIST_EMBEDDED", "VIEW_EMBEDDED"])
-            .required(true)
-            .conflicts_with("version")
-        );
-*/
+        // let mut command = command.group(
+        // ArgGroup::new("ANY_INPUT")
+        // .args(&["INLINE", "INPUT", "LIST_EMBEDDED", "VIEW_EMBEDDED"])
+        // .required(true)
+        // .conflicts_with("version")
+        // );
         let command = command
             .no_binary_name(true)
             .disable_help_flag(true)
@@ -221,7 +220,13 @@ impl Default for BasmRunner {
                     .help("Print version")
                     .action(ArgAction::SetTrue)
                     .exclusive(true) // does not seem to work
-                    .conflicts_with_all(["ANY_INPUT", "INLINE", "INPUT", "LIST_EMBEDDED", "VIEW_EMBEDDED"])
+                    .conflicts_with_all([
+                        "ANY_INPUT",
+                        "INLINE",
+                        "INPUT",
+                        "LIST_EMBEDDED",
+                        "VIEW_EMBEDDED"
+                    ])
             )
             .after_help(format!(
                 "{} {} embedded by {} {}",
@@ -248,12 +253,10 @@ impl Runner for BasmRunner {
             .try_get_matches_from(itr)
             .map_err(|e| e.to_string())?;
 
-
         if matches.get_flag("version") {
             println!("{}", self.get_clap_command().clone().render_version());
             return Ok(());
         }
-    
 
         let start = std::time::Instant::now();
 
@@ -268,7 +271,7 @@ impl Runner for BasmRunner {
 
                 Ok(())
             }
-            Err(e) => Err(format!("Error while assembling.\n{e}")),
+            Err(e) => Err(format!("Error while assembling.\n{e}"))
         }
     }
 
@@ -293,7 +296,7 @@ impl Runner for EchoRunner {
 }
 
 pub struct ImgConverterRunner {
-    command: Command,
+    command: Command
 }
 
 impl Default for ImgConverterRunner {
@@ -306,7 +309,7 @@ impl Default for ImgConverterRunner {
                 built_info::PKG_NAME,
                 built_info::PKG_VERSION
             ))
-          //  .disable_help_flag(true)
+            //  .disable_help_flag(true)
             .disable_version_flag(true)
             .arg(
                 Arg::new("version")
@@ -314,7 +317,7 @@ impl Default for ImgConverterRunner {
                     .short('V')
                     .help("Print version")
                     .action(ArgAction::SetTrue)
-                    .exclusive(true),
+                    .exclusive(true)
             )
             .no_binary_name(true);
         Self { command }
@@ -336,7 +339,6 @@ impl Runner for ImgConverterRunner {
             .clone()
             .try_get_matches_from(itr)
             .map_err(|e| dbg!(e.to_string()))?;
-
 
         if matches.get_flag("version") {
             println!("{}", self.get_clap_command().clone().render_version());

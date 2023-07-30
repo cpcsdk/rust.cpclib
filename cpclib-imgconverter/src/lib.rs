@@ -1088,7 +1088,6 @@ pub fn build_args_parser() -> clap::Command {
 }
 
 pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
-
     if matches.contains_id("help") {
         args.print_long_help()?;
         return Ok(());

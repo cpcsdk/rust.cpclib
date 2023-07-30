@@ -4,9 +4,7 @@ use cpclib_common::nom;
 use nom::branch::alt;
 use nom::bytes::complete::{tag_no_case, take_till};
 use nom::character::complete::{space0, space1};
-
 use nom::combinator::{map, rest, value};
-
 use nom::sequence::{preceded, tuple};
 use nom::IResult;
 

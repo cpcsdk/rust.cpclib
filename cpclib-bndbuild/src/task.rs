@@ -1,4 +1,5 @@
-use serde::{de::Error, de::Visitor, Deserialize, Deserializer};
+use serde::de::{Error, Visitor};
+use serde::{Deserialize, Deserializer};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
@@ -12,26 +13,23 @@ pub enum Task {
 
 impl<'de> Deserialize<'de> for Task {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
+    where D: Deserializer<'de> {
         struct Line;
         impl<'de> Visitor<'de> for Line {
             type Value = Task;
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
+            where E: serde::de::Error {
                 let (code, next) = v.split_once(" ").ok_or(Error::custom("Wrong format"))?;
                 let (code, ignore) = if code.starts_with("-") {
                     (&code[1..], true)
-                } else {
+                }
+                else {
                     (code, false)
                 };
                 let std = StandardTask {
                     args: next.to_owned(),
-                    ignore_error: ignore,
+                    ignore_error: ignore
                 };
 
                 match code {
@@ -41,7 +39,7 @@ impl<'de> Deserialize<'de> for Task {
                     "img2cpc" | "imgconverter" => Ok(Task::ImgConverter(std)),
                     "xfer" | "cpcwifi" | "m4" => Ok(Task::Xfer(std)),
                     "extern" => Ok(Task::Extern(std)),
-                    _ => Err(Error::custom(format!("{code} is invalid"))),
+                    _ => Err(Error::custom(format!("{code} is invalid")))
                 }
             }
 
@@ -73,15 +71,23 @@ impl Task {
 
     pub fn args(&self) -> &str {
         match self {
-            Task::Basm(t) | Task::Rm(t) | Task::Echo(t) | Task::ImgConverter(t) | 
-            Task::Xfer(t) | Task::Extern(t) => &t.args,
+            Task::Basm(t)
+            | Task::Rm(t)
+            | Task::Echo(t)
+            | Task::ImgConverter(t)
+            | Task::Xfer(t)
+            | Task::Extern(t) => &t.args
         }
     }
 
     pub fn ignore_errors(&self) -> bool {
         match self {
-            Task::Basm(t) | Task::Rm(t) | Task::Echo(t) | Task::ImgConverter(t) |
-             Task::Xfer(t)  | Task::Extern(t) => t.ignore_error,
+            Task::Basm(t)
+            | Task::Rm(t)
+            | Task::Echo(t)
+            | Task::ImgConverter(t)
+            | Task::Xfer(t)
+            | Task::Extern(t) => t.ignore_error
         }
     }
 
@@ -92,7 +98,7 @@ impl Task {
             | Task::Echo(ref mut t)
             | Task::Xfer(ref mut t)
             | Task::ImgConverter(ref mut t)
-            | Task::Extern(ref mut t) => t.ignore_error = ignore,
+            | Task::Extern(ref mut t) => t.ignore_error = ignore
         }
 
         self
@@ -102,23 +108,22 @@ impl Task {
 #[derive(Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
 pub struct StandardTask {
     args: String,
-    ignore_error: bool,
+    ignore_error: bool
 }
 
 impl StandardTask {
     pub fn new(args: &str) -> Self {
         Self {
             args: args.to_string(),
-            ignore_error: false,
+            ignore_error: false
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::task::StandardTask;
-
     use super::Task;
+    use crate::task::StandardTask;
 
     #[test]
     fn test_deserialize_task() {
