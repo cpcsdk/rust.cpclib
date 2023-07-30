@@ -1496,15 +1496,15 @@ dependencies = [
 
 [[package]]
 name = "crossterm"
-version = "0.22.1"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c85525306c4291d1b73ce93c8acf9c339f9b213aef6c1d85c3830cbf1c16325c"
+checksum = "a84cda67535339806297f1b331d6dd6320470d2a0fe65381e79ee9e156dd3d13"
 dependencies = [
  "bitflags 1.3.2",
  "crossterm_winapi",
  "libc",
- "mio 0.7.14",
- "parking_lot 0.11.2",
+ "mio 0.8.8",
+ "parking_lot 0.12.1",
  "signal-hook",
  "signal-hook-mio",
  "winapi 0.3.9",
@@ -2350,9 +2350,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "globset"
-version = "0.4.11"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1391ab1f92ffcc08911957149833e682aa3fe252b9f45f966d2ef972274c97df"
+checksum = "aca8bbd8e0707c1887a8bbb7e6b40e228f251ff5d62c8220a4a7a53c73aff006"
 dependencies = [
  "aho-corasick",
  "bstr 1.6.0",
@@ -3102,15 +3102,15 @@ dependencies = [
 
 [[package]]
 name = "minus"
-version = "5.3.1"
+version = "5.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "262d10ea2863abb8a350f90cca7f01a14018406631e00427e9dae5f8949c3d69"
+checksum = "0c3b2098701d3565543b4deca8290a10337dbc585e0e356ca46ffd1b6f7e0d6a"
 dependencies = [
  "crossbeam-channel",
  "crossterm",
  "once_cell",
  "parking_lot 0.12.1",
- "textwrap 0.13.4",
+ "textwrap 0.16.0",
  "thiserror",
 ]
 
@@ -3127,23 +3127,10 @@ dependencies = [
  "kernel32-sys",
  "libc",
  "log",
- "miow 0.2.2",
+ "miow",
  "net2",
  "slab",
  "winapi 0.2.8",
-]
-
-[[package]]
-name = "mio"
-version = "0.7.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8067b404fe97c70829f082dec8bcf4f71225d7eaea1d8645349cb76fa06205cc"
-dependencies = [
- "libc",
- "log",
- "miow 0.3.7",
- "ntapi",
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -3180,15 +3167,6 @@ dependencies = [
  "net2",
  "winapi 0.2.8",
  "ws2_32-sys",
-]
-
-[[package]]
-name = "miow"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
-dependencies = [
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -3379,15 +3357,6 @@ dependencies = [
  "mio 0.8.8",
  "walkdir",
  "windows-sys 0.45.0",
-]
-
-[[package]]
-name = "ntapi"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28774a7fd2fbb4f0babd8237ce554b73af68021b5f695a3cebd6c59bac0980f"
-dependencies = [
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -4454,9 +4423,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.174"
+version = "1.0.178"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b88756493a5bd5e5395d53baa70b194b05764ab85b59e43e4b8f4e1192fa9b1"
+checksum = "60363bdd39a7be0266a520dab25fdc9241d2f987b08a01e01f0ec6d06a981348"
 dependencies = [
  "serde_derive",
 ]
@@ -4473,9 +4442,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.174"
+version = "1.0.178"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e5c3a298c7f978e53536f95a63bdc4c4a64550582f31a0359a9afda6aede62e"
+checksum = "f28482318d6641454cb273da158647922d1be6b5a2fcc6165cd89ebdd7ed576b"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
@@ -4608,7 +4577,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29ad2e15f37ec9a6cc544097b78a1ec90001e9f71b81338ca39f430adaca99af"
 dependencies = [
  "libc",
- "mio 0.7.14",
+ "mio 0.8.8",
  "signal-hook",
 ]
 
@@ -4926,18 +4895,12 @@ dependencies = [
 
 [[package]]
 name = "textwrap"
-version = "0.13.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd05616119e612a8041ef58f2b578906cc2531a6069047ae092cfb86a325d835"
-dependencies = [
- "unicode-width",
-]
-
-[[package]]
-name = "textwrap"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "222a222a5bfe1bba4a77b45ec488a741b3cb8872e5e499451fd7d0129c9c7c3d"
+dependencies = [
+ "unicode-width",
+]
 
 [[package]]
 name = "thiserror"

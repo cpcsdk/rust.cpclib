@@ -14,11 +14,11 @@
 
 use std::fs::File;
 use std::io::{Read, Write};
-
+use std::path::PathBuf;
 use cpclib_basic::BasicProgram;
 /// ! Locomotive BASIC manipulation tool.
-use cpclib_common::clap;
 use cpclib_common::clap::*;
+use cpclib_common::clap;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 fn main() -> std::io::Result<()> {
@@ -28,28 +28,32 @@ fn main() -> std::io::Result<()> {
         .arg(
             Arg::new("BASIC_SOURCE")
                 .long("basic")
-                .short("b")
+                .short('b')
                 .help("Source file that contains the basic program")
-                .takes_value(true)
+                .action(ArgAction::Set)
+                .value_parser(clap::value_parser!(PathBuf))
                 .required(true)
         )
         .arg(
             Arg::new("HEADER")
                 .long("header")
-                .short("h")
+                .short('h')
                 .help("Add the Amsdos header to the generated file")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new("OUTPUT")
                 .help("Output file")
-                .takes_value(true)
-                .required(true)
+                .value_parser(clap::value_parser!(PathBuf))
+                .action(ArgAction::Set)
+
+       //         .required(true)
         )
         .get_matches();
 
     // Read the basic source file
     let basic_content: String = {
-        let mut f = File::open(matches.value_of("BASIC_SOURCE").unwrap())?;
+        let mut f = File::open(matches.get_one::<PathBuf>("BASIC_SOURCE").unwrap())?;
         let mut content = String::new();
         f.read_to_string(&mut content)?;
         content
@@ -64,13 +68,13 @@ fn main() -> std::io::Result<()> {
     // Bytes of the basic program
     let basic_bytes = basic_tokens.as_bytes();
 
-    if let Some(output) = matches.value_of("OUTPUT") {
+    if let Some(output) = matches.get_one::<PathBuf>("OUTPUT") {
         let mut f = File::create(output)?;
 
         // Add header if needed
-        if matches.is_present("HEADER") {
+        if matches.contains_id("HEADER") {
             let header = AmsdosManager::compute_basic_header(
-                &AmsdosFileName::from_slice(output.as_bytes()),
+                &AmsdosFileName::from_slice(output.display().to_string().as_bytes()),
                 &basic_bytes
             );
             f.write_all(header.as_bytes().as_ref())?;

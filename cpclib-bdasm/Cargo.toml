@@ -18,7 +18,7 @@ independent = true
 cpclib-asm = {version="0.6.1-alpha.2", default-features=false}
 cpclib-disc = {version="0.6.1-alpha.2", default-features=false}
 clap = "3.2.25"
-time = "0.3.22"
+time = "0.3.23"
 
 [build-dependencies]
 built = { version = "0.5.2", features = ["chrono"] }

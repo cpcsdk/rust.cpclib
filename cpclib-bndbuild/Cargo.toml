@@ -23,7 +23,7 @@ cpclib-imgconverter = { version = "0.6.1-alpha.2", features=["xferlib"]}
 cpclib-xfertool = {version="0.6.1-alpha.2", default-features=false}
 
 glob = "0.3.1"
-serde_yaml = "0.9.24"
+serde_yaml = "0.9.25"
 serde.workspace = true
 assert_cmd = "2.0.12"
 thiserror = "1.0"
