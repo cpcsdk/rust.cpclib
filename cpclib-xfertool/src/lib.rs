@@ -9,7 +9,7 @@ use notify::RecommendedWatcher;
 use notify::RecursiveMode;
 use notify::Watcher;
 use crate::clap::Command;
-use std::path::Path;
+
 use crate::clap::ArgAction;
 use crate::clap::builder::PathBufValueParser;
 use cpclib_common::clap::builder::TypedValueParser;

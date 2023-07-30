@@ -1,10 +1,12 @@
 use core::time::Duration;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::{SystemTime, UNIX_EPOCH};
+
 use cpclib_common::itertools::Itertools;
 
 #[cfg(feature = "indicatif")]
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
+
 
 lazy_static::lazy_static! {
     static ref PROGRESS: Arc<Mutex<Progress>> = Arc::new(Mutex::new(Progress::new()));
@@ -56,7 +58,7 @@ struct CountedProgress {
     prefix: &'static str,
     index: usize,
     freeze_amount: bool,
-    last_tick: SystemTime
+    last_tick: std::time::SystemTime
 }
 
 
@@ -159,7 +161,7 @@ impl CountedProgress {
             prefix: kind,
             index,
             freeze_amount,
-            last_tick: SystemTime::now()
+            last_tick: std::time::SystemTime::now()
         };
         cp
     }
@@ -202,7 +204,7 @@ impl CountedProgress {
 
             self.really_show();
 
-            self.last_tick = SystemTime::now();
+            self.last_tick = std::time::SystemTime::now();
 
         }
 

@@ -1,7 +1,7 @@
 /// Manage the standard tasks
 use cpclib_basm;
 use cpclib_common::{
-    clap::{self, Arg, ArgAction, Command, ArgGroup},
+    clap::{self, Arg, ArgAction, Command},
     itertools::Itertools,
 };
 use glob::glob;
@@ -172,7 +172,7 @@ impl RunnerWithClap for XferRunner {
 
 impl Runner for XferRunner {
     fn inner_run(&self, itr: &[String]) -> Result<(), String> {
-        let args = self.command.clone();
+        let _args = self.command.clone();
 
         let matches = self
             .command

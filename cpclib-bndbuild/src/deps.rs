@@ -185,7 +185,7 @@ impl Rules {
 
                 // link the target to the dependencies
                 for p2 in rule.dependencies.iter() {
-                    g.depend_on(p.clone(), p2).map_err(|_e| {
+                    g.depend_on(p, p2).map_err(|_e| {
                         BndBuilderError::DependencyError(format!(
                             "{} and {}",
                             p.display(),

@@ -188,7 +188,7 @@ pub fn assemble<'arg>(
     listing: &LocatedListing,
     parse_options: ParserOptions
 ) -> Result<Env, BasmError> {
-    let show_progress = matches.get_flag("PROGRESS");
+    let _show_progress = matches.get_flag("PROGRESS");
 
     let mut assemble_options = AssemblingOptions::default();
     assemble_options.set_case_sensitive(!matches.get_flag("CASE_INSENSITIVE"));

@@ -335,7 +335,7 @@ impl ParserOptions {
             // loop over all possibilities
             for search in &self.search_path {
                 assert!(std::path::Path::new(&search).is_dir());
-                let current_path = search.join(fname.clone());
+                let current_path = search.join(fname);
 
                 if current_path.is_file() {
                     return Ok(current_path);
@@ -399,7 +399,7 @@ impl Clone for ParserContext {
             current_filename: self.current_filename.clone(),
             context_name: self.context_name.clone(),
             state: self.state.clone(),
-            source: self.source.clone(),
+            source: self.source,
             options: self.options.clone()
         }
     }
@@ -426,7 +426,7 @@ impl ParserContext {
         Self {
             current_filename: self.current_filename.clone(),
             context_name: self.context_name.clone(),
-            source: self.source.clone(),
+            source: self.source,
             options: self.options.clone(),
             state
         }

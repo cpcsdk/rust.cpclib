@@ -4,9 +4,9 @@ use cpclib_common::nom;
 use nom::branch::alt;
 use nom::bytes::complete::{tag_no_case, take_till};
 use nom::character::complete::{space0, space1};
-use nom::character::is_space;
+
 use nom::combinator::{map, rest, value};
-use nom::multi::*;
+
 use nom::sequence::{preceded, tuple};
 use nom::IResult;
 
@@ -110,10 +110,10 @@ fn rm(input: &str) -> IResult<&str, XferCommand> {
 
 fn no_arg(input: &str) -> IResult<&str, XferCommand> {
     alt((
-        map(tag_no_case("pwd"), { |_| XferCommand::Pwd }),
-        map(tag_no_case("help"), { |_| XferCommand::Help }),
-        map(tag_no_case("reboot"), { |_| XferCommand::Reboot }),
-        map(tag_no_case("reset"), { |_| XferCommand::Reset }),
+        map(tag_no_case("pwd"), |_| XferCommand::Pwd),
+        map(tag_no_case("help"), |_| XferCommand::Help),
+        map(tag_no_case("reboot"), |_| XferCommand::Reboot),
+        map(tag_no_case("reset"), |_| XferCommand::Reset),
         map(alt((tag_no_case("exit"), tag_no_case("quit"))), {
             |_| XferCommand::Exit
         }),

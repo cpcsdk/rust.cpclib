@@ -3,8 +3,8 @@ use rustyline::completion::{extract_word, Completer, FilenameCompleter, Pair};
 use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
 use rustyline::hint::{Hinter, HistoryHinter};
-use rustyline::{Cmd, CompletionType, Config, Context, EditMode, Editor, KeyEvent};
-use rustyline_derive::{Helper, Highlighter, Hinter, Validator};
+use rustyline::{CompletionType, Config, Context, EditMode, Editor};
+use rustyline_derive::{Helper, Highlighter, Validator};
 use subprocess::Exec;
 use term_grid::{Direction, Filling, Grid, GridOptions};
 use {rustyline, termize};
@@ -124,14 +124,14 @@ impl<'a> XferInteractorHelper<'a> {
         &self,
         line: &str,
         pos: usize,
-        ctx: &Context<'_>
+        _ctx: &Context<'_>
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let mut entries: Vec<Pair> = Vec::new();
 
         let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
         for file in self.xfer.current_folder_content().unwrap().files() {
             let fname1 = file.fname();
-            let fname2 = ("./".to_owned() + fname1);
+            let fname2 = "./".to_owned() + fname1;
 
             for &fname in &[fname1, &fname2] {
                 if fname.starts_with(word) {
@@ -152,7 +152,7 @@ impl<'a> XferInteractorHelper<'a> {
         &self,
         line: &str,
         pos: usize,
-        ctx: &Context<'_>
+        _ctx: &Context<'_>
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let mut entries: Vec<Pair> = Vec::new();
 
@@ -243,7 +243,7 @@ ls                  List the files in the current M4 directory.
                         grid.add(file.fname().into());
                     }
 
-                    let grid_width = if let Some((w, h)) = termize::dimensions() {
+                    let grid_width = if let Some((w, _h)) = termize::dimensions() {
                         w
                     }
                     else {

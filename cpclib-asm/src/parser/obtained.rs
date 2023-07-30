@@ -1529,7 +1529,7 @@ impl ListingElement for LocatedToken {
     fn function_definition_params(&self) -> SmallVec<[&str; 4]> {
         
         match self {
-            Self::Function(name, params, ..) => {
+            Self::Function(_name, params, ..) => {
                 params.iter().map(|v| v.as_str()).collect()
             },
             _ => unreachable!()
@@ -1773,7 +1773,7 @@ impl LocatedListing {
                             cpclib_common::nom::Err::Incomplete(_) => {
                                 ParseResult::FailureComplete(AssemblerError::BugInParser {
                                     error: "Bug in the parser".to_owned(),
-                                    context: ctx.deref().clone()
+                                    context: ctx.clone()
                                 })
                             }
                         }
@@ -1880,7 +1880,7 @@ impl LocatedListing {
         .build();
         let inner_listing = Arc::new(inner_listing);
 
-        match inner_listing.borrow_parse_result().clone() {
+        match inner_listing.borrow_parse_result() {
             ParseResult::SuccessInner { next_span, .. } => Ok((next_span.clone(), inner_listing)),
             ParseResult::FailureInner(e) => {
                 match e {

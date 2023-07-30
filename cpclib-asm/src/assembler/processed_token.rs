@@ -463,7 +463,7 @@ where
     else if token.is_include() {
         let fname = token.include_fname();
         let options = env.options().parse_options();
-        match get_filename(fname.clone(), options, Some(env)) {
+        match get_filename(fname, options, Some(env)) {
             Ok(fname) => {
                 match read_source(fname.clone(), options) {
                     Ok(content) => {
@@ -746,7 +746,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
             let listing = match self.token.possible_span() {
                 Some(span) => {
                     use crate::ParserContextBuilder;
-                    let ctx_builder = ParserContextBuilder::from(span.extra.deref().clone())
+                    let ctx_builder = ParserContextBuilder::from(span.extra.clone())
                         .remove_filename()
                         .set_context_name(&format!(
                             "{}:{}:{} > {} {}:",
