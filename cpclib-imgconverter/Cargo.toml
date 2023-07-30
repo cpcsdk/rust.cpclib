@@ -15,7 +15,7 @@ independent = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cpclib = { version = "0.6.1-alpha.2", features = ["cmdline"] }
+cpclib = { workspace=true, features = ["cmdline"] }
 
 
 anyhow.workspace = true

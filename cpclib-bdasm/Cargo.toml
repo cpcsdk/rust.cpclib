@@ -15,8 +15,8 @@ independent = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cpclib-asm = {version="0.6.1-alpha.2", default-features=false}
-cpclib-disc = {version="0.6.1-alpha.2", default-features=false}
+cpclib-asm.workspace = true
+cpclib-disc.workspace = true
 clap = "3.2.25"
 time = "0.3.23"
 

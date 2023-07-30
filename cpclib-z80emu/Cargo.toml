@@ -14,9 +14,9 @@ homepage.workspace = true
 independent = true
 
 [dependencies]
-cpclib-asm = {version="0.6.1-alpha.2", default-features=false}
-cpclib-sna = {version="0.6.1-alpha.2", default-features=false}
-cpclib-common = {version="0.6.1-alpha.2", default-features=false}
+cpclib-asm.workspace = true
+cpclib-sna.workspace = true
+cpclib-common.workspace = true
 
 
 cfg-if.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-visual-bndbuild"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 resolver = "2"
 
 authors.workspace = true
@@ -11,7 +11,7 @@ homepage.workspace = true
 
 
 [dependencies]
-cpclib-bndbuild = {version="0.1.0", default-features=false}
+cpclib-bndbuild.workspace = true
 eframe = {workspace=true, features=["persistence"]}
 egui_file = "0.9"
 

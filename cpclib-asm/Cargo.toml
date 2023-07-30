@@ -13,13 +13,13 @@ homepage.workspace = true
 independent = true
 
 [dependencies]
-cpclib-basic = "0.6.1-alpha.2"
-cpclib-crunchers = "0.6.1-alpha.2"
-cpclib-sna = "0.6.1-alpha.2"
-cpclib-tokens = "0.6.1-alpha.2"
-cpclib-disc = "0.6.1-alpha.2"
-cpclib-common = "0.6.1-alpha.2"
-cpclib-image = "0.6.1-alpha.2"
+cpclib-basic.workspace = true
+cpclib-crunchers.workspace = true
+cpclib-sna.workspace = true
+cpclib-tokens.workspace = true
+cpclib-disc.workspace = true
+cpclib-common.workspace = true
+cpclib-image.workspace = true
 
 arrayref.workspace = true
 cfg-if.workspace = true

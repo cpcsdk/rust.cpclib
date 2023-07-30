@@ -14,7 +14,7 @@ homepage.workspace = true
 independent = true
 
 [dependencies]
-cpclib-common = {version="0.6.1-alpha.2", default-features=false}
+cpclib-common.workspace = true
 
 cfg-if.workspace = true
 delegate.workspace = true
