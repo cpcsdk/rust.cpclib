@@ -12,10 +12,9 @@ homepage.workspace = true
 
 [dependencies]
 cpclib-bndbuild = {version="0.1.0", default-features=false}
-eframe = {version="0.21.0", features=["persistence"]}
-egui_dock = {version="0.5.2"}
+eframe = {workspace=true, features=["persistence"]}
+egui_file = "0.9"
 
-egui_file = "0.8.3"
 gag = "1.0.0"
 serde.workspace = true
 itertools.workspace = true

@@ -16,8 +16,8 @@ independent = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 cpclib-basm = {version="0.6.1-alpha.2", default-features=false}
-eframe = "0.21"
-claui = "0.2.0"
+claui.workspace = true
+eframe.workspace = true
 
 [build-dependencies]
 static_vcruntime = "2.0"

@@ -108,6 +108,10 @@ term_grid = { version = "0.2.0"}
 termize = { version = "0.1.1"}
 time = "0.3.22"
 velcro = "0.5.4"
+claui = {git="https://github.com/rgiot/claui.git"}
+eframe = "0.22"
+egui = "0.22"
+
 
 [patch.crates-io]
 cpclib = {path = "./cpclib/"}
@@ -130,6 +134,8 @@ cpclib-bdasm = {path = "./cpclib-bdasm/"}
 cpclib-imgconverter = {path = "./cpclib-imgconverter/"}
 cpclib-visual-bndbuild = {path = "./cpclib-visual-bndbuild/"}
 #cpclib-xferfs = {path = "./cpclib-xferfs/"}
+
+
 
 [profile.dev]
 opt-level = 0
