@@ -1126,6 +1126,7 @@ impl<'a> ImageConverter<'a> {
             output
         };
 
+
         if let OutputFormat::LinearEncodedChuncky = output {
             let mut matrix = converter.load_color_matrix(input_file);
             matrix.double_horizontally();

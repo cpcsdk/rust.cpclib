@@ -164,14 +164,14 @@ pub mod mode1 {
     #[derive(Copy, Clone, Debug)]
     #[allow(missing_docs)]
     pub enum BitMapping {
-        FourthBit0 = 0,
-        ThirdBit0 = 1,
-        SecondBit0 = 2,
-        FirstBit0 = 3,
-        FourthBit1 = 4,
-        ThirdBit1 = 5,
-        SecondBit1 = 6,
-        FirstBit1 = 7
+        FourthBit1 = 0,
+        ThirdBit1 = 1,
+        SecondBit1 = 2,
+        FirstBit1 = 3,
+        FourthBit0 = 4,
+        ThirdBit0 = 5,
+        SecondBit0 = 6,
+        FirstBit0 = 7
     }
 
     /// Return the 4 pens encoded by this byte from left to right
@@ -200,7 +200,7 @@ pub mod mode1 {
     /// Convert the pen value to its byte representation at the proper place
     pub fn pen_to_pixel_byte(pen: Pen, pixel: PixelPosition) -> u8 {
         let pen = if pen.number() > 3 {
-            eprintln!("[MODE1] with pen {:?}", &pen);
+            eprintln!("[MODE1] with pen {:?} replaced by pen 0", &pen);
             Pen::from(0)
         }
         else {
@@ -228,10 +228,11 @@ pub mod mode1 {
         let byte_bit0: u8 = bits_position[0];
         let byte_bit1: u8 = bits_position[1];
 
-        let pen_bit0: u8 = pen.number() & (1 << 0);
+        let pen_bit0: u8 = (pen.number() & (1 << 0)) >> 0;
         let pen_bit1: u8 = (pen.number() & (1 << 1)) >> 1;
 
-        pen_bit1 * (1 << byte_bit1) + pen_bit0 * (1 << byte_bit0)
+        pen_bit1 * (1 << byte_bit1) 
+            + pen_bit0 * (1 << byte_bit0)
     }
 
     /// Convert the 4 pens in a row (from left to right)

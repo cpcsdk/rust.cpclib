@@ -4,6 +4,8 @@ use std::collections::HashSet;
 
 use anyhow::Context;
 use cpclib_common::itertools::Itertools;
+use cpclib_common::rayon::iter::IntoParallelRefIterator;
+use cpclib_common::rayon::iter::ParallelIterator;
 use {anyhow, image as im};
 
 use crate::ga::*;
@@ -132,7 +134,7 @@ fn merge_mode0_mode3(line1: &[u8], line2: &[u8]) -> Vec<u8> {
 
 // Convert inks to pens
 fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
-    inks.iter()
+    inks.par_iter()
         .map(|line| {
             line.iter()
                 .map(|ink| {
@@ -298,8 +300,8 @@ impl ColorMatrix {
     /// Returns the palette used (as soon as there is less than 16 inks)
     pub fn extract_palette(&self) -> Palette {
         let mut p = Palette::empty();
-        for (idx, color) in self.data.iter().flatten().unique().enumerate() {
-            if idx >= 16 {
+        for (idx, color) in self.data.iter().flatten().unique().sorted().enumerate() {
+            if idx >= 16 { // do we really want to fail ? maybe we can have special modes to handle there
                 panic!("[ERROR] your picture uses more than 16 different colors. Palette: {:?}. Wrong ink: {:?}", p, color);
             }
             p.set(Pen::from(idx as u8), *color);
