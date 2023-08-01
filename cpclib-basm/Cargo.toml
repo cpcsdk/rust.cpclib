@@ -25,13 +25,13 @@ time = "0.3.23"
 test-generator = "0.3.1"
 tempfile = "3.7.0"
 pretty_assertions = "1.4.0"
-criterion = "0.3.6"
+criterion = "0.5.1"
 globset = "0.4.12"
 regex = "1.9.1"
-serial_test = "0.6.0"
+serial_test = "2.0.0"
 
 [build-dependencies]
-built = { version = "0.5.2", features = ["chrono"] }
+built = { version = "0.6.1", features = ["chrono"] }
 static_vcruntime = "2.0"
 
 [[bench]]

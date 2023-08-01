@@ -209,10 +209,11 @@ impl BndBuildApp {
         }
     }
 
-    pub fn load(&mut self, path: PathBuf) {
-        match cpclib_bndbuild::BndBuilder::from_fname(path.clone()) {
+    pub fn load<P: AsRef<Path>>(&mut self, path: P) {
+        let path = path.as_ref();
+        match cpclib_bndbuild::BndBuilder::from_fname(path) {
             Ok(builder) => {
-                self.filename = path.into();
+                self.filename = Some(path.into());
                 self.file_content = std::fs::read_to_string(self.filename.as_ref().unwrap()).ok(); // read a second time, but the file exists
                 self.builder_and_layers = BuilderAndCache::from(builder).into()
             }
@@ -427,19 +428,29 @@ impl eframe::App for BndBuildApp {
         self.update_status(ctx, frame);
 
         // Handle file opening
-        if let Some(dialog) = &mut self.open_file_dialog {
+        let p = if let Some(dialog) = &mut self.open_file_dialog {
             if dialog.show(ctx).selected() {
                 if let Some(path) = dialog.path() {
                     if path.exists() {
-                        self.load(path);
+                        Some(path.to_owned())
                     }
                     else {
                         self.file_error =
                             format!("{} does not exists.", path.display().to_string()).into();
+                        None
                     }
+                } else {
+                    None
                 }
+            } else {
+                None
             }
-        }
+        } else {
+            None
+        };
+        if let Some(path) = p  {
+            self.load(path);
+        }           
 
         // Handle reload
         if self.request_reload {

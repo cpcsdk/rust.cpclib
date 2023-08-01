@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::path::Path;
 
+use cpclib_common::bitfield::BitRangeMut;
 use cpclib_common::bitfield::BitRange;
 use cpclib_common::itertools::Itertools;
 use image as im;

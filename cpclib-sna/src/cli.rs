@@ -94,8 +94,8 @@ impl Command {
             }
             Command::Memory(from, amount) => {
                 let mut output = Pager::new();
-                output.set_exit_strategy(ExitStrategy::PagerQuit);
-                output.set_prompt("MEM");
+                output.set_exit_strategy(ExitStrategy::PagerQuit).unwrap();
+                output.set_prompt("MEM").unwrap();
 
                 sna.unwrap_memory_chunks();
                 let mem = mem_to_string(sna, from, amount);
@@ -176,7 +176,7 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
     let mut sna2: Option<(String, Snapshot)> = None;
 
     // `()` can be used when no completer is required
-    let mut rl = Editor::<()>::new();
+    let mut rl = Editor::<(), _>::new().unwrap();
     if rl.load_history("snapshot.txt").is_err() {}
     loop {
         let fname1 = std::path::Path::new(fname)

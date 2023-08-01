@@ -1,29 +1,39 @@
 use std::fs::File;
 use std::io::Read;
 
-use clap::{Arg, Command};
+use std::path::PathBuf;
+use clap;
+use clap::{Arg, Command, ArgAction};
 use cpclib_asm::preamble::*;
 use cpclib_disc::amsdos::AmsdosHeader;
+
+use lazy_static;
+
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-fn main() {
-    let desc_before = format!(
+lazy_static::lazy_static! {
+    static ref DESC_BEFORE: String = format!(
         "Profile {} compiled: {}",
         built_info::PROFILE,
         built_info::BUILT_TIME_UTC
     );
+}
+
+fn main() {
+
     let matches = Command::new("bdasm")
 					.version(built_info::PKG_VERSION)
 					.author("Krusty/Benediction")
 					.about("Benediction disassembler")
-					.before_help(&desc_before[..])
+					.before_help(&DESC_BEFORE[..])
 					.arg(
 						Arg::new("INPUT")
 							.help("Input binary file to disassemble.")
-							.takes_value(true)
+							.action(ArgAction::Set)
+                            .value_parser(clap::value_parser!(PathBuf))
 							.required(true)
 					)
 					.arg(
@@ -31,7 +41,7 @@ fn main() {
 							.help("Disassembling origin (ATTENTION hexadecimal only)")
 							.short('o')
 							.long("origin")
-							.takes_value(true)
+							.action(ArgAction::Set)
 							.required(false)
 
 					)
@@ -40,37 +50,34 @@ fn main() {
 						.help("Relative position that contains data for a given size. Format: RELATIVE_START(in hexadecimal)-SIZE(in decimal)")
 						.short('d')
 						.long("data")
-						.takes_value(true)
-						.number_of_values(1)
-						.multiple_occurrences(true)
+                        .action(ArgAction::Append)
 					)
 					.arg(
 						Arg::new("LABEL")
 						.help("Set a label at the given address. Format LABEL:ADDRESS(in hexadecimal")
 						.short('l')
 						.long("label")
-						.takes_value(true)
-						.number_of_values(1)
-						.multiple_occurrences(true)
+						.action(ArgAction::Append)
 					)
                     .arg(
                         Arg::new("SKIP")
                         .help("Skip the first <SKIP> bytes")
                         .short('s')
                         .long("SKIP")
-                        .takes_value(true)
-                        .number_of_values(1)
+                        .action(ArgAction::Set)
+                        .value_parser(clap::value_parser!(usize))
                     )
                     .arg(
                         Arg::new("COMPRESS")
                         .help("Output a simple listing that only contains the opcodes")
                         .short('c')
                         .long("compressed")
+                        .action(ArgAction::SetTrue)
                     )
 					.get_matches();
 
     // Get the bytes to disassemble
-    let input_filename = matches.value_of("INPUT").unwrap();
+    let input_filename: &PathBuf = matches.get_one("INPUT").unwrap();
     let mut input_bytes = Vec::new();
     let mut file = File::open(input_filename).expect("Unable to open file");
     file.read_to_end(&mut input_bytes)
@@ -92,10 +99,9 @@ fn main() {
     };
 
     // check if first bytes need to be removed
-    let input_bytes = if let Some(skip) = matches.value_of("SKIP") {
-        let skip = skip.parse::<usize>().expect("Unable to convert SKIP value");
+    let input_bytes = if let Some(skip) = matches.get_one::<usize>("SKIP") {
         eprintln!("; Skip {} bytes", skip);
-        &input_bytes[skip..]
+        &input_bytes[*skip..]
     }
     else {
         input_bytes
@@ -106,10 +112,10 @@ fn main() {
 
     // Retreive the listing
     // TODO move that in its own function
-    let mut listing: Listing = if matches.is_present("DATA_BLOC") {
+    let mut listing: Listing = if matches.contains_id("DATA_BLOC") {
         // retreive the blocs and parse them
         let mut blocs = matches
-            .values_of("DATA_BLOC")
+            .get_many::<String>("DATA_BLOC")
             .unwrap()
             .map(|bloc| {
                 let split = bloc.split('-').collect::<Vec<_>>();
@@ -168,7 +174,7 @@ fn main() {
     };
 
     // add origin if any
-    if let Some(address) = matches.value_of("ORIGIN") {
+    if let Some(address) = matches.get_one::<String>("ORIGIN") {
         let origin = u16::from_str_radix(address, 16).unwrap();
         listing.insert(0, org(origin));
     }
@@ -177,7 +183,7 @@ fn main() {
     }
 
     // add labels
-    if let Some(labels) = matches.values_of("LABEL") {
+    if let Some(labels) = matches.get_many::<&String>("LABEL") {
         let mut labels = labels
             .map(|label| {
                 let split = label.split(':').collect::<Vec<_>>();
@@ -192,7 +198,7 @@ fn main() {
         listing.inject_labels(&labels);
     }
 
-    if matches.is_present("COMPRESS") {
+    if matches.contains_id("COMPRESS") {
         println!("{}", listing.to_string());
     }
     else {

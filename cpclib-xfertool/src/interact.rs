@@ -1,6 +1,5 @@
 use cpclib_xfer::CpcXfer;
 use rustyline::completion::{extract_word, Completer, FilenameCompleter, Pair};
-use rustyline::config::OutputStreamType;
 use rustyline::error::ReadlineError;
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::{CompletionType, Config, Context, EditMode, Editor};
@@ -83,9 +82,9 @@ const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
 cfg_if::cfg_if! {
     if #[cfg(unix)] {
         // rl_basic_word_break_characters, rl_completer_word_break_characters
-        const DEFAULT_BREAK_CHARS: [u8; 18] = [
-            b' ', b'\t', b'\n', b'"', b'\\', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&',
-            b'{', b'(', b'\0',
+        const DEFAULT_BREAK_CHARS: [char; 18] = [
+            ' ', '\t', '\n', '"', '\\', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&',
+            '{', '(', '\0',
         ];
         const ESCAPE_CHAR: Option<char> = Some('\\');
         // In double quotes, not all break_chars need to be escaped
@@ -93,14 +92,14 @@ cfg_if::cfg_if! {
         const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
     } else if #[cfg(windows)] {
         // Remove \ to make file completion works on windows
-        const DEFAULT_BREAK_CHARS: [u8; 17] = [
-            b' ', b'\t', b'\n', b'"', b'\'', b'`', b'@', b'$', b'>', b'<', b'=', b';', b'|', b'&', b'{',
-            b'(', b'\0',
+        const DEFAULT_BREAK_CHARS: [char; 17] = [
+            ' ', '\t', '\n', '"', '\'', '`', '@', '$', '>', '<', '=', ';', '|', '&', '{',
+            '(', '\0',
         ];
         const ESCAPE_CHAR: Option<char> = None;
         const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate: only '"' ?
     } else if #[cfg(target_arch = "wasm32")] {
-        const DEFAULT_BREAK_CHARS: [u8; 0] = [];
+        const DEFAULT_BREAK_CHARS: [char; 0] = [];
         const ESCAPE_CHAR: Option<char> = None;
         const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 0] = [];
     }
@@ -128,7 +127,7 @@ impl<'a> XferInteractorHelper<'a> {
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let mut entries: Vec<Pair> = Vec::new();
 
-        let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
+        let (start, word) = extract_word(line, pos, ESCAPE_CHAR, |c| DEFAULT_BREAK_CHARS.iter().any(|c2| *c2 == c));
         for file in self.xfer.current_folder_content().unwrap().files() {
             let fname1 = file.fname();
             let fname2 = "./".to_owned() + fname1;
@@ -156,7 +155,7 @@ impl<'a> XferInteractorHelper<'a> {
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let mut entries: Vec<Pair> = Vec::new();
 
-        let (start, word) = extract_word(line, pos, ESCAPE_CHAR, &DEFAULT_BREAK_CHARS);
+        let (start, word) = extract_word(line, pos, ESCAPE_CHAR, |c| DEFAULT_BREAK_CHARS.iter().any(|c2| *c2 == c));
         // TODO check if it is the very first word
         for command in &self.commands {
             if command.starts_with(word) {
@@ -304,7 +303,7 @@ ls                  List the files in the current M4 directory.
                 }
 
                 XferCommand::LaunchM4(path) => {
-                    /// Ensure the path is absolute (TODO check if this code is not also elswhere)
+                    // Ensure the path is absolute (TODO check if this code is not also elswhere)
                     let path = if !path.starts_with('/') {
                         self.cwd.clone() + &path
                     }
@@ -352,14 +351,14 @@ ls                  List the files in the current M4 directory.
 
         let config = Config::builder()
             .history_ignore_space(true)
-            .history_ignore_dups(true)
+            .history_ignore_dups(true).unwrap()
             .completion_type(CompletionType::List)
             .edit_mode(EditMode::Emacs)
-            .output_stream(OutputStreamType::Stdout)
+            //.output_stream(OutputStreamType::Stdout)
             .build();
         let h = XferInteractorHelper::new(self.xfer);
 
-        let mut rl = Editor::with_config(config);
+        let mut rl = Editor::with_config(config).unwrap();
         rl.set_helper(Some(h));
 
         if rl.load_history(history).is_err() {

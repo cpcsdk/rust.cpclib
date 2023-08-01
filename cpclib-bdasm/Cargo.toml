@@ -17,11 +17,12 @@ independent = true
 [dependencies]
 cpclib-asm.workspace = true
 cpclib-disc.workspace = true
-clap = "3.2.25"
+clap.workspace = true
+lazy_static.workspace = true
 time = "0.3.23"
 
 [build-dependencies]
-built = { version = "0.5.2", features = ["chrono"] }
+built = { version = "0.6.1", features = ["chrono"] }
 
 [[bin]]
 name = "bdasm"

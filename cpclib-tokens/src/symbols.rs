@@ -263,7 +263,7 @@ impl Macro {
     pub fn new(name: SmolStr, params: &[&str], code: String, source: Option<Source>) -> Self {
         Macro {
             name,
-            params: params.iter().map(|s| s.into()).collect(),
+            params: params.iter().map(|&s| SmolStr::from(s)).collect(),
             code,
             source
         }

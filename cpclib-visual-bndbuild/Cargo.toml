@@ -13,7 +13,7 @@ homepage.workspace = true
 [dependencies]
 cpclib-bndbuild.workspace = true
 eframe = {workspace=true, features=["persistence"]}
-egui_file = "0.9"
+egui_file = "0.10"
 
 gag = "1.0.0"
 serde.workspace = true

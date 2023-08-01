@@ -1081,7 +1081,7 @@ pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserEr
 
     let (input, _) = tuple((tag_no_case("ENDLOCOMOTIVE"), space0))(input)?;
 
-    let args = args.map(|v| v.iter().map(|l| SmolStr::from(l)).collect_vec());
+    let args = args.map(|v| v.iter().map(|l| SmolStr::from(l.as_str())).collect_vec());
 
     let size = basic_start.input_len() - input.input_len();
     Ok((
@@ -2585,7 +2585,7 @@ pub fn parse_export(
             separated_list0(parse_comma, parse_label(false))
         ))(input)?;
 
-        let labels = labels.iter().map(|l| SmolStr::from(l)).collect_vec(); // TODO really use LocatedToken
+        let labels = labels.iter().map(|l| SmolStr::from(l.as_str())).collect_vec(); // TODO really use LocatedToken
         if code == ExportKind::Export {
             Ok((input, Token::Export(labels)))
         }
@@ -3787,7 +3787,7 @@ fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
         parse_flag_value_inner
     ))(input)?;
 
-    let flagname = SmolStr::from(flagname);
+    let flagname = SmolStr::from(flagname.as_str());
 
     let (flagname, value) = if values.len() == 1 {
         (flagname, values[0].clone())

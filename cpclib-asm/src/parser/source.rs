@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use std::ops::{Deref, DerefMut};
+use cpclib_common::smol_str::SmolStr;
 
 use cpclib_common::nom::error::{ErrorKind, ParseError};
 use cpclib_common::nom::{
@@ -72,6 +73,19 @@ impl std::fmt::Debug for Z80Span {
         )
     }
 }
+
+impl Into<SmolStr> for &Z80Span {
+    fn into(self) -> SmolStr {
+        SmolStr::from(self.as_str())
+    }
+}
+
+impl Into<SmolStr> for Z80Span {
+    fn into(self) -> SmolStr {
+        SmolStr::from(self.as_str())
+    }
+}
+
 
 impl Into<Source> for &Z80Span {
     #[inline]
