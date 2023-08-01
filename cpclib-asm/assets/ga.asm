@@ -112,6 +112,39 @@ GA_BRIGHT_WHITE set GA_COL_26
 
 
 
+  ;;
+  ; Return the name if the color given the GA value
+  FUNCTION ga_to_name, ga_ink
+    SWITCH {ga_ink}
+      CASE GA_BLACK: return "BLACK"
+      CASE GA_BLUE: return "BLUE"
+      CASE GA_BRIGHT_BLUE: return "BRIGHT BLUE"
+      CASE GA_RED: return "RED"
+      CASE GA_MAGENTA: return "MAGENTA"
+      CASE GA_MAUVE: return "MAUVE"
+      CASE GA_BRIGHT_RED: return "BRIGHT RED"
+      CASE GA_PURPLE: return "PURPLE"
+      CASE GA_BRIGHT_MAGENTA: return "BRIGHT MAGENTA"
+      CASE GA_GREEN: return "GREEN"
+      CASE GA_CYAN: return "CYAN"
+      CASE GA_SKY_BLUE: return "SKY BLUE" 
+      CASE GA_YELLOW: return "YELLOW" 
+      CASE GA_WHITE: return "WHITE"
+      CASE GA_PASTEL_BLUE: return "PASTEL BLUE"
+      CASE GA_ORANGE: return "ORANGE"
+      CASE GA_PINK: return "PINK"
+      CASE GA_PASTEL_MAGENTA: return "PASTEL MAGENTA"
+      CASE GA_BRIGHT_GREEN: return "BRIGHT GREEN"
+      CASE GA_SEA_GREEN: return "SEA GREEN"
+      CASE GA_BRIGHT_CYAN: return "BRIGHT CYAN"
+      CASE GA_LIME: return "LIME"
+      CASE GA_PASTEL_GREEN: return "PASTEL GREEN" 
+      CASE GA_PASTEL_CYAN: return "PASTEL CYAN"
+      CASE GA_BRIGHT_YELLOW: return "BRIGHT YELLOW"
+      CASE GA_PASTEL_YELLOW : return "PASTEL YELLOW"
+      CASE GA_BRIGHT_WHITE: return "BRIGHT WHITE"
+    ENDSWITCH
+  ENDFUNCTION
 
 
   macro SET_MODE_0

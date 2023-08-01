@@ -41,4 +41,4 @@
 - tgt: winape
   dep: build
   cmd: extern .\tools\winape\WinApe.exe /SN:../../dummy.sna
-  help: Launch Winape as an external process (all other commands are embedded in bndbuild). Sadly it does not work :(
+  help: Launch Winape as an external process (all other commands are embedded in bndbuild). Hopefully it works !!

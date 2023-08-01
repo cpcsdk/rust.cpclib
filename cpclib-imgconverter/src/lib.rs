@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{self, Error};
-use clap::{value_parser, Arg, ArgMatches, Command};
+use clap::{value_parser, Arg, ArgMatches, Command, ArgAction};
 use cpclib::asm::preamble::defb_elements;
 use cpclib::asm::{assemble, assemble_to_amsdos_file};
 use cpclib::common::clap;
@@ -198,6 +198,8 @@ macro_rules! export_palette {
                 .long("palette")
                 .short('p')
                 .required(false)
+                .action(ArgAction::Set)
+                .value_parser(clap::value_parser!(PathBuf))
                 .help("Name of the binary file that contains the palette (Gate Array format)"),
         )
         .arg(
@@ -205,18 +207,24 @@ macro_rules! export_palette {
             .long("inks")
             .short('i')
             .required(false)
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(PathBuf))
             .help("Name of the binary file that will contain the ink numbers (usefull for system based color change)")
         )
         .arg(
             Arg::new("EXPORT_PALETTE_FADEOUT")
                 .long("palette_fadeout")
                 .required(false)
+                .action(ArgAction::Set)
+                .value_parser(clap::value_parser!(PathBuf))
                 .help("Name of the file that will contain all the steps for a fade out transition (Gate Array format)")
         )
         .arg(
             Arg::new("EXPORT_INK_FADEOUT")
                 .long("ink_fadeout")
                 .required(false)
+                .action(ArgAction::Set)
+                .value_parser(clap::value_parser!(PathBuf))
                 .help("Name of the file that will contain all the steps for a fade out transition")
         )
     };
@@ -224,13 +232,13 @@ macro_rules! export_palette {
 
 macro_rules! do_export_palette {
     ($arg: expr, $palette: ident) => {
-        if let Some(palette_fname) = $arg.get_one::<String>("EXPORT_PALETTE") {
+        if let Some(palette_fname) = $arg.get_one::<PathBuf>("EXPORT_PALETTE") {
             let mut file = File::create(palette_fname).expect("Unable to create the palette file");
             let p: Vec<u8> = $palette.into();
             file.write_all(&p).unwrap();
         }
 
-        if let Some(fade_fname) = $arg.get_one::<String>("EXPORT_PALETTE_FADEOUT") {
+        if let Some(fade_fname) = $arg.get_one::<PathBuf>("EXPORT_PALETTE_FADEOUT") {
             let palettes = $palette.rgb_fadout();
             let bytes = palettes.iter().fold(Vec::<u8>::default(), |mut acc, x| {
                 acc.extend(&x.to_gate_array_with_default(0.into()));
@@ -243,7 +251,7 @@ macro_rules! do_export_palette {
             file.write_all(&bytes).unwrap();
         }
 
-        if let Some(palette_fname) = $arg.get_one::<String>("EXPORT_INKS") {
+        if let Some(palette_fname) = $arg.get_one::<PathBuf>("EXPORT_INKS") {
             let mut file = File::create(palette_fname).expect("Unable to create the inks file");
             let inks = $palette
                 .inks()
@@ -253,7 +261,7 @@ macro_rules! do_export_palette {
             file.write_all(&inks).unwrap();
         }
 
-        if let Some(fade_fname) = $arg.get_one::<String>("EXPORT_INK_FADEOUT") {
+        if let Some(fade_fname) = $arg.get_one::<PathBuf>("EXPORT_INK_FADEOUT") {
             let palettes = $palette.rgb_fadout();
             let bytes = palettes
                 .iter()
@@ -575,6 +583,8 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         &output_format
     )?;
 
+    dbg!(&conversion);
+
     if sub_sprite.is_some() {
         // TODO share code with the tile branch
 
@@ -598,6 +608,8 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 height,
                 palette
             } => {
+
+                dbg!(&palette);
                 // Save the palette
                 do_export_palette!(sub_sprite, palette);
 

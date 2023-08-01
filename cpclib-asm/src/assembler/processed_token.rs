@@ -645,6 +645,11 @@ where
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
+    // Ignore if function has already returned (mainly a workaround for switch case)
+    if env.return_value.is_some() {
+        return Ok(())
+    }
+
     let options = env.options();
 
     if options.show_progress() {

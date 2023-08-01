@@ -360,20 +360,20 @@ impl BndBuildApp {
                             } else {
                                 txt
                             };
-                            let txt = if let Some(rule) = &rule {
+                            let color = if let Some(rule) = &rule {
                                 if *cache.up_to_date.get(rule).unwrap() {
-                                    txt.color(Color32::LIGHT_BLUE)
+                                    Color32::LIGHT_BLUE
                                 }
                                 else {
-                                    txt.color(Color32::LIGHT_RED)
+                                    Color32::LIGHT_RED
                                 }
                             }
                             else {
-                                txt.color(Color32::LIGHT_GREEN)
+                                Color32::LIGHT_GREEN
                             };
 
-                            let mut button = ui.button(txt);
-                            button = if let Some(rule) = rule {
+                            let button = ui.add(Button::new(txt).fill(color));
+                            let button = if let Some(rule) = rule {
                                 if let Some(help) = rule.help() {
                                     button.on_hover_text(help)
                                 }
