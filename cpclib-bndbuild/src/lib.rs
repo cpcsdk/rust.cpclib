@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::io::{BufReader, Read};
 use std::path::Path;
-
+use cpclib_common::itertools::Itertools;
 use deps::{Graph, Rule};
 use thiserror::Error;
 
@@ -106,11 +106,22 @@ impl BndBuilder {
         self.inner.borrow_dependent().get_layered_dependencies()
     }
 
+    pub fn get_layered_dependencies_for<'a, P: AsRef<Path>>(&'a self, p: &'a P) -> Vec<HashSet<&'a Path>> {
+        self.inner.borrow_dependent().get_layered_dependencies_for(p)
+    }
+
     pub fn get_rule(&self, tgt: &Path) -> Option<&Rule> {
         self.inner.borrow_owner().rule(tgt)
     }
 
     pub fn rules(&self) -> &[Rule] {
         self.inner.borrow_owner().rules()
+    }
+
+    pub fn targets<'a>(&'a self) -> Vec<&'a Path> {
+        self.rules().iter()
+            .map(|r| r.targets())
+            .flatten()
+            .collect_vec()
     }
 }

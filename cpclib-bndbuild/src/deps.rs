@@ -122,6 +122,12 @@ impl Rule {
     pub fn help(&self) -> Option<&str> {
         self.help.as_ref().map(|s| s.as_str())
     }
+
+    pub fn targets(&self) -> Vec<&Path> {
+        self.targets.iter()
+            .map(|t| t.as_ref())
+            .collect_vec()
+    }
 }
 
 #[derive(Deserialize)]

@@ -4,7 +4,7 @@ use std::io::Read;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-
+use std::collections::HashSet;
 use cpclib_bndbuild::deps::Rule;
 use cpclib_bndbuild::BndBuilder;
 use eframe::egui::{self, RichText};
@@ -69,6 +69,8 @@ pub struct BndBuildApp {
     /// Target to build requested by button
     #[serde(skip)]
     requested_target: Option<PathBuf>,
+    /// Target hovered to highlight dependencies
+    hovered_target: Option<PathBuf>,
 
     /// stdout redirection
     #[serde(skip)]
@@ -99,6 +101,7 @@ impl Default for BndBuildApp {
             build_error: None,
             open_file_dialog: None,
             requested_target: None,
+            hovered_target: None,
             logs: String::default(),
             request_reload: false,
             request_save: false,
@@ -116,6 +119,16 @@ impl Default for BndBuildApp {
 struct Layers<'builder>(Vec<Vec<&'builder Path>>);
 /// Cache up to date information to not recompute it 60 times per seconds
 struct UpToDate<'builder>(HashMap<&'builder Rule, bool>);
+/// Store the list of dependecies
+struct DependencyOf(HashMap<PathBuf, HashSet<PathBuf>>);
+
+impl Deref for DependencyOf {
+    type Target = HashMap<PathBuf, HashSet<PathBuf>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl<'builder> Deref for Layers<'builder> {
     type Target = Vec<Vec<&'builder Path>>;
@@ -135,7 +148,8 @@ impl<'builder> Deref for UpToDate<'builder> {
 
 struct BuilderCache<'builder> {
     layers: Layers<'builder>,
-    up_to_date: UpToDate<'builder>
+    up_to_date: UpToDate<'builder>,
+    depends_on: DependencyOf
 }
 
 impl<'builder> From<&'builder BndBuilder> for UpToDate<'builder> {
@@ -159,8 +173,30 @@ impl<'builder> From<&'builder BndBuilder> for Layers<'builder> {
                     vec.sort();
                     vec
                 })
+                .rev()
                 .collect_vec()
         )
+    }
+}
+
+
+impl<'builder> From<&'builder BndBuilder> for DependencyOf {
+    fn from(builder: &'builder BndBuilder) -> Self {
+
+        let mut dep_of : HashMap<PathBuf, HashSet<PathBuf>> = Default::default();
+        let targets:  Vec<&'builder Path>  = builder.targets();
+        for task in targets.iter() {
+            let deps = builder.get_layered_dependencies_for(task.into());
+            let deps = deps.into_iter().flatten();
+            for dep in deps {
+                //println!("{} highlight {}", dep.display(), task.display());
+                dep_of.entry(dep.to_path_buf())
+                    .or_default()
+                    .insert(task.to_path_buf());
+            }
+        }
+
+        DependencyOf(dep_of)
     }
 }
 
@@ -168,7 +204,8 @@ impl<'builder> From<&'builder BndBuilder> for BuilderCache<'builder> {
     fn from(builder: &'builder BndBuilder) -> Self {
         BuilderCache {
             layers: builder.into(),
-            up_to_date: builder.into()
+            up_to_date: builder.into(),
+            depends_on: builder.into()
         }
     }
 }
@@ -199,6 +236,7 @@ impl BndBuildApp {
             app.builder_and_layers = None;
             app.open_file_dialog = None;
             app.requested_target = None;
+            app.hovered_target = None;
             if let Some(fname) = &app.filename {
                 app.load(fname.clone());
             }
@@ -299,7 +337,7 @@ impl BndBuildApp {
             ui.label(txt);
         }
 
-        ui.heading("Output");
+        ui.heading("Output").on_hover_text("Read here the output of the launched commands");
         egui::ScrollArea::new([true, true])
             .max_height(f32::INFINITY)
             .max_width(f32::INFINITY)
@@ -318,10 +356,10 @@ impl BndBuildApp {
     fn update_code(&mut self, _ctx: &egui::Context, ui: &mut eframe::egui::Ui) {
         ui.vertical_centered(|ui| {
             if self.is_dirty {
-                ui.heading("Definition *");
+                ui.heading("Definition *").on_hover_text("Save to take into account the modification.");
             }
             else {
-                ui.heading("Definition");
+                ui.heading("Definition").on_hover_text("Edit the building rules here.");
             }
             if let Some(code) = self.file_content.as_mut() {
                 let editor = TextEdit::multiline(code)
@@ -345,9 +383,10 @@ impl BndBuildApp {
     fn update_targets(&mut self, _ctx: &egui::Context, ui: &mut eframe::egui::Ui) {
         if let Some(bnl) = &self.builder_and_layers {
             let default = bnl.borrow_owner().default_target();
+            let is_hovered = self.hovered_target.take(); // ensure nothing is hovered unless if a button is really hovered
 
             ui.vertical_centered(|ui| {
-                ui.heading("Tasks");
+                ui.heading("Tasks").on_hover_text("Click on the task of interest to execute it.");
                 let cache = bnl.borrow_dependent();
                 for layer in cache.layers.iter() {
                     ui.horizontal(|ui| {
@@ -355,11 +394,20 @@ impl BndBuildApp {
                             let rule = bnl.borrow_owner().get_rule(tgt);
 
                             let txt = RichText::new(tgt.display().to_string());
+                            // set in bold the default target to see it
                             let txt = if let Some(default) = &default && default == tgt {
-                                txt.strong()
+                                txt.strong().strong()
                             } else {
                                 txt
                             };
+                            // set underline the dependencies of the target
+                            let txt = if let Some(hovered_tgt) = &is_hovered && bnl.borrow_dependent().depends_on.get(&tgt.to_path_buf()).unwrap().contains(hovered_tgt) {
+                                txt.underline()
+                            } else {
+                                txt
+                            };
+
+                            // color depends on the kind of target
                             let color = if let Some(rule) = &rule {
                                 if *cache.up_to_date.get(rule).unwrap() {
                                     Color32::LIGHT_BLUE
@@ -372,6 +420,7 @@ impl BndBuildApp {
                                 Color32::LIGHT_GREEN
                             };
 
+                            // finally add the button
                             let button = ui.add(Button::new(txt).fill(color));
                             let button = if let Some(rule) = rule {
                                 if let Some(help) = rule.help() {
@@ -388,10 +437,15 @@ impl BndBuildApp {
                                 self.requested_target = Some(tgt.into());
                                 self.logs.clear();
                             }
+                            if button.hovered() {
+                                self.hovered_target = Some(tgt.into());
+                            }
                         }
                     });
                 }
             });
+
+
         }
     }
 
@@ -478,8 +532,9 @@ impl eframe::App for BndBuildApp {
         if let Some(tgt) = self.requested_target.take() {
             if let Some(builder) = &self.builder_and_layers {
                 let builder: &'static BuilderAndCache = unsafe { std::mem::transmute(builder) }; // cheat on lifetime as we know if will live all the time
-                self.job = std::thread::spawn(|| builder.borrow_owner().execute(tgt)).into();
                 self.logs.clear();
+                self.build_error.take();
+                self.job = std::thread::spawn(|| builder.borrow_owner().execute(tgt)).into();
             }
         }
 

@@ -9,7 +9,7 @@
 
 - tgt: dummy_logo.o dummy_logo_palette.bin
   dep: dummy_logo_exin.bmp
-  cmd: > 
+  cmd: >
     img2cpc dummy_logo_exin.bmp 
       --mode 1 sprite 
       -c dummy_logo_conf.asm 
@@ -18,14 +18,14 @@
   help: Convert the BMP file and generate the necessary data to build it
 
 - tgt: clean
-  cmd: 
-   - -rm *.o *.bin *.lst
-   - -rm dummy_logo_conf.asm
+  cmd:
+    - -rm *.o *.bin *.lst
+    - -rm dummy_logo_conf.asm
   help: Remove all needed generated files
 
 - tgt: distclean
   dep: clean
-  cmd: -rm dummy.sna 
+  cmd: -rm dummy.sna
   help: Remove the snapshot
 
 - tgt: m4

@@ -583,8 +583,6 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         &output_format
     )?;
 
-    dbg!(&conversion);
-
     if sub_sprite.is_some() {
         // TODO share code with the tile branch
 
@@ -609,7 +607,6 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 palette
             } => {
 
-                dbg!(&palette);
                 // Save the palette
                 do_export_palette!(sub_sprite, palette);
 

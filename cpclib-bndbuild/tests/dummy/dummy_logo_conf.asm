@@ -1,2 +1,0 @@
-dummy_logo_conf_WIDTH equ 96
-dummy_logo_conf_HEIGHT equ 42
