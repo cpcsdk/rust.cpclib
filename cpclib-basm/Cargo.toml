@@ -15,7 +15,7 @@ independent = true
 
 [dependencies]
 cpclib-asm.workspace = true
-cpclib-common.workspace = true
+cpclib-common =  {workspace = true, features=["cmdline"]}
 cpclib-xfer = {workspace=true, default-features=false, optional=true}
 cpclib-disc.workspace = true
 
