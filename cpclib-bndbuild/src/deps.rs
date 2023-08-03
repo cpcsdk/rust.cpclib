@@ -9,6 +9,7 @@ use lazy_regex::regex_captures;
 use crate::executor::execute;
 use crate::task::Task;
 use crate::BndBuilderError;
+use crate::expand_glob;
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Hash)]
 pub struct Rule {
@@ -79,19 +80,7 @@ where D: Deserializer<'de> {
 }
 
 
-fn expand_glob(p: &str) -> Vec<String> {
-    if let Some((_, start, middle, end)) = regex_captures!(r"^(.*)\{(.*)\}(.*)$", p) {
 
-        middle.split(",")
-            .map(|component| {
-                format!("{start}{component}{end}")
-            })
-            .collect_vec()
-
-    } else {
-        vec![p.to_owned()]
-    }
-}
 
 impl Rule {
     pub fn new<S: AsRef<str>, T: Into<Task> + Clone>(

@@ -4,6 +4,7 @@ use std::path::Path;
 use cpclib_common::itertools::Itertools;
 use deps::{Graph, Rule};
 use thiserror::Error;
+use lazy_regex::regex_captures;
 
 pub mod deps;
 pub mod executor;
@@ -13,6 +14,21 @@ pub mod task;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
+
+fn expand_glob(p: &str) -> Vec<String> {
+    if let Some((_, start, middle, end)) = regex_captures!(r"^(.*)\{(.*)\}(.*)$", p) {
+
+        middle.split(",")
+            .map(|component| {
+                format!("{start}{component}{end}")
+            })
+            .collect_vec()
+
+    } else {
+        vec![p.to_owned()]
+    }
 }
 
 #[derive(Error, Debug)]
