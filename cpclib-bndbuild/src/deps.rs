@@ -5,7 +5,7 @@ use cpclib_common::itertools::Itertools;
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer};
 use topologic::AcyclicDependencyGraph;
-
+use lazy_regex::regex_captures;
 use crate::executor::execute;
 use crate::task::Task;
 use crate::BndBuilderError;
@@ -37,7 +37,10 @@ fn deserialize_path_list<'de, D>(deserializer: D) -> Result<Vec<PathBuf>, D::Err
 where D: Deserializer<'de> {
     let s = String::deserialize(deserializer)?;
     let r = shlex::split(&s).or(Some(vec![])).unwrap();
-    let r = r.into_iter().map(|s| s.into()).collect_vec();
+    let r = r.into_iter().map(|s| expand_glob(s.as_ref()))
+    .flatten()
+    .map(|s| PathBuf::from(s))
+    .collect_vec();
 
     Ok(r)
 }
@@ -75,15 +78,38 @@ where D: Deserializer<'de> {
     deserializer.deserialize_any(SequenceOrList)
 }
 
+
+fn expand_glob(p: &str) -> Vec<String> {
+    if let Some((_, start, middle, end)) = regex_captures!(r"^(.*)\{(.*)\}(.*)$", p) {
+
+        middle.split(",")
+            .map(|component| {
+                format!("{start}{component}{end}")
+            })
+            .collect_vec()
+
+    } else {
+        vec![p.to_owned()]
+    }
+}
+
 impl Rule {
-    pub fn new<P: Into<PathBuf> + Copy, T: Into<Task> + Clone>(
-        targets: &[P],
-        dependencies: &[P],
+    pub fn new<S: AsRef<str>, T: Into<Task> + Clone>(
+        targets: &[S],
+        dependencies: &[S],
         commands: &[T]
     ) -> Self {
         Self {
-            targets: targets.into_iter().map(|t| (*t).into()).collect_vec(),
-            dependencies: dependencies.into_iter().map(|t| (*t).into()).collect_vec(),
+            targets: targets.into_iter()
+                .map(|s| expand_glob(s.as_ref()))
+                .flatten()
+                .map(|s| PathBuf::from(s))
+                .collect_vec(),
+            dependencies: dependencies.into_iter()
+            .map(|s| expand_glob(s.as_ref()))
+            .flatten()
+            .map(|s| PathBuf::from(s))
+            .collect_vec(),
             commands: commands
                 .into_iter()
                 .map(|t| (t.clone()).into())
@@ -350,7 +376,7 @@ impl<'r> Graph<'r> {
 #[cfg(test)]
 mod test {
     use super::Task;
-    use crate::deps::{Rule, Rules};
+    use crate::deps::{Rule, Rules, expand_glob};
 
     #[test]
     fn test_deserialize_rule1() {
@@ -400,5 +426,20 @@ commands: basm samourai.asm --progress --snapshot -o samourai.sna -Idata --sym s
         let rules: Rules = serde_yaml::from_str(yaml).unwrap();
 
         assert_eq!(rules.rules.len(), 2);
+    }
+
+
+    #[test]
+    fn test_glob_path() {
+        let fname = "samourai.{lst,sym}";
+        let result = expand_glob(fname);
+        eprintln!("{:?}", result);
+        assert_eq!(result.len(), 2);
+
+
+        let fname = "samourai.{lst,sym";
+        let result = expand_glob(fname);
+        eprintln!("{:?}", result);
+        assert_eq!(result.len(), 1);
     }
 }

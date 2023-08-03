@@ -15,6 +15,7 @@ homepage.workspace = true
 [dependencies]
 shlex = "1.1.0"
 topologic = "1.0.0"
+lazy-regex = "3.0.1"
 
 cpclib-common = {workspace=true, features=["cmdline"]}
 cpclib-basm = { workspace=true, default-features=false, features=["xferlib"] }
