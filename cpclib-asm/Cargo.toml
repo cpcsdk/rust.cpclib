@@ -38,7 +38,7 @@ hashbag.workspace = true
 ouroboros.workspace = true
 paste.workspace = true
 regex.workspace = true
-rust-embed = { workspace = true, features = ["compression"] }
+rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 serde = { workspace = true, features = ["derive"] }
 substring.workspace = true
 velcro.workspace = true
