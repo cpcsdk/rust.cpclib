@@ -1106,7 +1106,6 @@ dependencies = [
  "pretty_assertions",
  "regex",
  "serial_test",
- "static_vcruntime",
  "tempfile",
  "test-generator",
  "time",
@@ -1277,6 +1276,7 @@ dependencies = [
 name = "cpclib-visual-bndbuild"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "built",
  "cpclib-bndbuild",
  "eframe",
  "egui_file",
@@ -1285,6 +1285,7 @@ dependencies = [
  "itertools 0.11.0",
  "self_cell",
  "serde",
+ "static_vcruntime",
 ]
 
 [[package]]
@@ -5107,6 +5108,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "visual-basm"
 version = "0.2.1-alpha.2"
 dependencies = [
+ "built",
  "claui",
  "cpclib-basm",
  "eframe",

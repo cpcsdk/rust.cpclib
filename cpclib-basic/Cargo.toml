@@ -17,7 +17,7 @@ independent = true
 
 [dependencies]
 cpclib-disc.workspace = true
-cpclib-common.workspace = true
+cpclib-common = {workspace = true, features=["cmdline"]}
 cpclib-sna.workspace = true
 
 arrayref.workspace = true

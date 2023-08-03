@@ -17,7 +17,7 @@ independent = true
 cpclib-disc.workspace = true
 cpclib-sna.workspace = true
 cpclib-xfer.workspace = true
-cpclib-common.workspace = true
+cpclib-common = {workspace = true, features = ["cmdline"]}
 
 
 anyhow.workspace = true
