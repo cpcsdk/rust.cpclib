@@ -1,10 +1,11 @@
 #![feature(let_chains)]
 
+use std::collections::HashSet;
 use std::io::Read;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, Duration};
-use std::collections::HashSet;
+use std::time::{Duration, SystemTime};
+
 use cpclib_bndbuild::deps::Rule;
 use cpclib_bndbuild::BndBuilder;
 use eframe::egui::{self, RichText};
@@ -179,18 +180,17 @@ impl<'builder> From<&'builder BndBuilder> for Layers<'builder> {
     }
 }
 
-
 impl<'builder> From<&'builder BndBuilder> for DependencyOf {
     fn from(builder: &'builder BndBuilder) -> Self {
-
-        let mut dep_of : HashMap<PathBuf, HashSet<PathBuf>> = Default::default();
-        let targets:  Vec<&'builder Path>  = builder.targets();
+        let mut dep_of: HashMap<PathBuf, HashSet<PathBuf>> = Default::default();
+        let targets: Vec<&'builder Path> = builder.targets();
         for task in targets.iter() {
             let deps = builder.get_layered_dependencies_for(task.into());
             let deps = deps.into_iter().flatten();
             for dep in deps {
-                //println!("{} highlight {}", dep.display(), task.display());
-                dep_of.entry(dep.to_path_buf())
+                // println!("{} highlight {}", dep.display(), task.display());
+                dep_of
+                    .entry(dep.to_path_buf())
                     .or_default()
                     .insert(task.to_path_buf());
             }
@@ -337,7 +337,8 @@ impl BndBuildApp {
             ui.label(txt);
         }
 
-        ui.heading("Output").on_hover_text("Read here the output of the launched commands");
+        ui.heading("Output")
+            .on_hover_text("Read here the output of the launched commands");
         egui::ScrollArea::new([true, true])
             .max_height(f32::INFINITY)
             .max_width(f32::INFINITY)
@@ -356,10 +357,12 @@ impl BndBuildApp {
     fn update_code(&mut self, _ctx: &egui::Context, ui: &mut eframe::egui::Ui) {
         ui.vertical_centered(|ui| {
             if self.is_dirty {
-                ui.heading("Definition *").on_hover_text("Save to take into account the modification.");
+                ui.heading("Definition *")
+                    .on_hover_text("Save to take into account the modification.");
             }
             else {
-                ui.heading("Definition").on_hover_text("Edit the building rules here.");
+                ui.heading("Definition")
+                    .on_hover_text("Edit the building rules here.");
             }
             if let Some(code) = self.file_content.as_mut() {
                 let editor = TextEdit::multiline(code)
@@ -386,7 +389,8 @@ impl BndBuildApp {
             let is_hovered = self.hovered_target.take(); // ensure nothing is hovered unless if a button is really hovered
 
             ui.vertical_centered(|ui| {
-                ui.heading("Tasks").on_hover_text("Click on the task of interest to execute it.");
+                ui.heading("Tasks")
+                    .on_hover_text("Click on the task of interest to execute it.");
                 let cache = bnl.borrow_dependent();
                 for layer in cache.layers.iter() {
                     ui.horizontal(|ui| {
@@ -402,16 +406,20 @@ impl BndBuildApp {
                             };
                             // set underline the dependencies of the target
                             let txt = if let Some(hovered_tgt) = &is_hovered {
-                                if bnl.borrow_dependent().depends_on.get(&tgt.to_path_buf())
+                                if bnl
+                                    .borrow_dependent()
+                                    .depends_on
+                                    .get(&tgt.to_path_buf())
                                     .map(|item| item.contains(hovered_tgt))
-                                    .unwrap_or(false) {
-                                        txt.underline()
-                                    }
-                                    else {
-                                        txt
-                                    }
-
-                            } else {
+                                    .unwrap_or(false)
+                                {
+                                    txt.underline()
+                                }
+                                else {
+                                    txt
+                                }
+                            }
+                            else {
                                 txt
                             };
                             // color depends on the kind of target
@@ -451,8 +459,6 @@ impl BndBuildApp {
                     });
                 }
             });
-
-
         }
     }
 
@@ -472,7 +478,6 @@ impl BndBuildApp {
         });
     }
 }
-
 
 const REFRESH_DURATION: Duration = Duration::from_millis(100);
 
@@ -503,18 +508,21 @@ impl eframe::App for BndBuildApp {
                             format!("{} does not exists.", path.display().to_string()).into();
                         None
                     }
-                } else {
+                }
+                else {
                     None
                 }
-            } else {
+            }
+            else {
                 None
             }
-        } else {
+        }
+        else {
             None
         };
-        if let Some(path) = p  {
+        if let Some(path) = p {
             self.load(path);
-        }           
+        }
 
         // Handle reload
         if self.request_reload {
@@ -563,7 +571,8 @@ impl eframe::App for BndBuildApp {
             }
             self.update_cache();
             true
-        } else {
+        }
+        else {
             false
         };
 

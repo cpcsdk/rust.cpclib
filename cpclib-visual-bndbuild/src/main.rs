@@ -9,7 +9,7 @@ fn main() {
     native_options.vsync = false;
     native_options.hardware_acceleration = eframe::HardwareAcceleration::Off;
     native_options.renderer = eframe::Renderer::Wgpu;
-    
+
     eframe::run_native(
         "Visual BndBuild",
         native_options,
