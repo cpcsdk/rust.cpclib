@@ -401,12 +401,19 @@ impl BndBuildApp {
                                 txt
                             };
                             // set underline the dependencies of the target
-                            let txt = if let Some(hovered_tgt) = &is_hovered && bnl.borrow_dependent().depends_on.get(&tgt.to_path_buf()).unwrap().contains(hovered_tgt) {
-                                txt.underline()
+                            let txt = if let Some(hovered_tgt) = &is_hovered {
+                                if bnl.borrow_dependent().depends_on.get(&tgt.to_path_buf())
+                                    .map(|item| item.contains(hovered_tgt))
+                                    .unwrap_or(false) {
+                                        txt.underline()
+                                    }
+                                    else {
+                                        txt
+                                    }
+
                             } else {
                                 txt
                             };
-
                             // color depends on the kind of target
                             let color = if let Some(rule) = &rule {
                                 if *cache.up_to_date.get(rule).unwrap() {
