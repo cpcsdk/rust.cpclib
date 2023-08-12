@@ -3,7 +3,7 @@
 use std::io::Read;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{SystemTime, Duration};
 use std::collections::HashSet;
 use cpclib_bndbuild::deps::Rule;
 use cpclib_bndbuild::BndBuilder;
@@ -473,6 +473,9 @@ impl BndBuildApp {
     }
 }
 
+
+const REFRESH_DURATION: Duration = Duration::from_millis(100);
+
 impl eframe::App for BndBuildApp {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
@@ -533,6 +536,7 @@ impl eframe::App for BndBuildApp {
                 self.is_dirty = false;
                 self.update_cache();
             }
+            ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
         }
 
         // Handle target
@@ -543,10 +547,11 @@ impl eframe::App for BndBuildApp {
                 self.build_error.take();
                 self.job = std::thread::spawn(|| builder.borrow_owner().execute(tgt)).into();
             }
+            ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
         }
 
-        // Handle task end
-        if self
+        // Handle task termination
+        let force_repaint = if self
             .job
             .as_ref()
             .map(|job| job.is_finished())
@@ -557,14 +562,25 @@ impl eframe::App for BndBuildApp {
                 self.build_error = Some(e.to_string());
             }
             self.update_cache();
-        }
+            true
+        } else {
+            false
+        };
 
         // Handle print
         const HZ: u128 = 1000 / 20;
-        if self.last_tick.elapsed().unwrap().as_millis() >= HZ {
+        if force_repaint || self.last_tick.elapsed().unwrap().as_millis() >= HZ {
             self.gags.0.read_to_string(&mut self.logs).unwrap();
             self.gags.1.read_to_string(&mut self.logs).unwrap();
             self.last_tick = SystemTime::now();
+        }
+        if force_repaint {
+            ctx.request_repaint_after(REFRESH_DURATION);
+        }
+
+        // force refresh when there is a runnong task
+        if self.job.is_some() {
+            ctx.request_repaint_after(REFRESH_DURATION);
         }
     }
 }
