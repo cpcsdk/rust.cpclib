@@ -269,7 +269,6 @@ impl BndBuildApp {
                 self.file_error = Some(err.to_string());
             }
         }
-        self.logs.clear();
     }
 
     pub fn update_cache(&mut self) {
@@ -306,6 +305,7 @@ impl BndBuildApp {
                                 if ui.add(Button::new(fname.display().to_string()).wrap(false)).clicked() {
                                     self.load(fname);
                                     ui.close_menu();
+                                    self.logs.clear();
                                 }
                             }
                         });
@@ -371,8 +371,6 @@ impl BndBuildApp {
             .show(ui, |ui| {
                 ui.code(&self.logs);
             })
-           // .scroll_to_me(Some(egui::Align::Max))
-            
             ;
     }
 
@@ -545,12 +543,14 @@ impl eframe::App for BndBuildApp {
 
         if let Some(path) = p {
             self.load(path);
+            self.logs.clear();
             ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
         }
 
         // Handle reload
         if self.request_reload {
             self.request_reload = false;
+            self.logs.clear();
             self.load(self.filename.clone().unwrap());
             ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
         }
