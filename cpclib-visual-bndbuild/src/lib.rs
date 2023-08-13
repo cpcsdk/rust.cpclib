@@ -1,4 +1,7 @@
 #![feature(let_chains)]
+#![feature(const_trait_impl)]
+
+mod syntax;
 
 use std::collections::HashSet;
 use std::io::Read;
@@ -13,6 +16,7 @@ use eframe::epaint::ahash::HashMap;
 use eframe::epaint::Color32;
 use egui_file::{self, FileDialog};
 use itertools::Itertools;
+use syntax::syntax;
 
 use crate::egui::{Button, Key, KeyboardShortcut, Modifiers, TextEdit};
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
@@ -401,7 +405,7 @@ impl BndBuildApp {
                         .id_source("code editor")
                         .with_fontsize(14.0)
                         .with_theme(ColorTheme::GRUVBOX)
-//                        .with_syntax(Syntax::rust())
+                       .with_syntax(syntax())
                         .with_numlines(true)
                         .show(ui, code);
   //
