@@ -1,0 +1,12 @@
+- tgt: build
+  dep: generated_sprites/lara_idle_left_R1_10.bin
+  help: Request to build
+
+- tgt: generated_sprites/lara_idle_left_R1_10.bin
+  dep: rasm_sprites.asm # (fail atm) generated_sprites/*.asm
+  help: Build tons of files. too many to list them
+  cmd: basm --progress rasm_sprites.asm
+
+- tgt: clean
+  cmd: rm generated_sprites/lara_idle_left_R1_10.bin
+  
