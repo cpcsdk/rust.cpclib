@@ -659,7 +659,8 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                     .to_str()
                     .unwrap()
                     .to_owned();
-                let extension = tile_fname.extension().unwrap().to_str().unwrap();
+                let extension= tile_fname.extension().map(|s| s.to_str().unwrap_or(""))
+                .unwrap_or("");
                 for (i, data) in tile_set.iter().enumerate() {
                     let current_filename = format!("{}_{:03}.{}", base, i, extension);
                     let mut file = File::create(current_filename.clone())
@@ -954,26 +955,19 @@ pub fn build_args_parser() -> clap::Command {
                     ))
 
                     .subcommand(
-                        Command::new("tile")
+                        export_palette!(Command::new("tile")
                             .about("Generate a list of sprites")
-                            .arg(
-                                Arg::new("EXPORT_PALETTE")
-                                .long("palette")
-                                .short('p')
-                                .required(false)
-                                .help("Name of the binary file that contains the palette")
-                            )
                             .arg(
                                 Arg::new("WIDTH")
                                 .long("width")
-                                .short('w')
+                                .short('W')
                                 .required(true)
                                 .help("Width (in bytes) of a tile")
                             )
                             .arg(
                                 Arg::new("HEIGHT")
                                 .long("height")
-                                .short('h')
+                                .short('H')
                                 .required(true)
                                 .help("Height (in lines) of a tile")
                             )
@@ -1000,7 +994,7 @@ pub fn build_args_parser() -> clap::Command {
                                 Arg::new("FORMAT")
                                 .long("format")
                                 .short('f')
-                                .required(true)
+                                .value_parser(["linear", "graycoded", "zigzag+graycoded"])
                                 .default_value("linear")
                             )
                             .arg(
@@ -1011,7 +1005,7 @@ pub fn build_args_parser() -> clap::Command {
                                 .required(true)
                             )
 
-                    )
+                    ))
 
                     .arg(
                         Arg::new("MODE")

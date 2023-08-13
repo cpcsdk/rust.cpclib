@@ -83,7 +83,7 @@ pub struct BndBuildApp {
 
     /// stdout redirection
     #[serde(skip)]
-    gags: (gag::BufferRedirect, gag::BufferRedirect),
+    gags: /*(*/gag::BufferRedirect /*, gag::BufferRedirect)*/,
 
     #[serde(skip)]
     request_reload: bool,
@@ -120,10 +120,10 @@ impl Default for BndBuildApp {
             request_open: false,
             job: None,
             last_tick: SystemTime::now(),
-            gags: (
-                gag::BufferRedirect::stdout().unwrap(),
+            gags: /*(*/
+                gag::BufferRedirect::stdout().unwrap() /*,
                 gag::BufferRedirect::stderr().unwrap()
-            ),
+            )*/,
             recent_files: Vec::new()
         }
     }
@@ -636,9 +636,19 @@ impl eframe::App for BndBuildApp {
             .unwrap_or(false)
         {
             let job = self.job.take().unwrap();
-            if let Some(e) = job.join().unwrap().err() {
-                self.build_error = Some(e.to_string());
+            match job.join() {
+                Ok(res) => {
+                    if let Some(e) = res.err() {
+                        self.build_error = Some(e.to_string());
+                    }
+                },
+                Err(err) => {
+                   // self.build_error = Some(err. ().to_string());
+                   panic!("{:?}", err);
+                },
             }
+
+            
             self.update_cache();
             true
         }
@@ -649,8 +659,8 @@ impl eframe::App for BndBuildApp {
         // Handle print
         const HZ: u128 = 1000 / 20;
         if force_repaint || self.last_tick.elapsed().unwrap().as_millis() >= HZ {
-            self.gags.0.read_to_string(&mut self.logs).unwrap();
-            self.gags.1.read_to_string(&mut self.logs).unwrap();
+            self.gags/*.0*/.read_to_string(&mut self.logs).unwrap();
+   //         self.gags.1.read_to_string(&mut self.logs).unwrap();
             self.last_tick = SystemTime::now();
         }
         if force_repaint {
