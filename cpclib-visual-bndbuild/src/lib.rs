@@ -91,6 +91,9 @@ pub struct BndBuildApp {
     #[serde(skip)]
     request_save: bool,
 
+    #[serde(skip)]
+    request_open: bool,
+
     /// No need to update the output too often
     #[serde(skip)]
     last_tick: SystemTime,
@@ -114,6 +117,7 @@ impl Default for BndBuildApp {
             logs: String::default(),
             request_reload: false,
             request_save: false,
+            request_open: false,
             job: None,
             last_tick: SystemTime::now(),
             gags: (
@@ -303,12 +307,8 @@ impl BndBuildApp {
                     if ui
                         .add(Button::new("Open").shortcut_text(ctx.format_shortcut(&CTRL_O)))
                         .clicked()
-                        || ui.input_mut(|i| i.consume_shortcut(&CTRL_O))
                     {
-                        let mut dialog = egui_file::FileDialog::open_file(self.filename.clone());
-                        dialog.open();
-                        self.open_file_dialog = dialog.into();
-                        self.file_error = None;
+                        self.request_open = true;
                         ui.close_menu();
                     };
 
@@ -328,7 +328,6 @@ impl BndBuildApp {
                         if ui
                             .add(Button::new("Save").shortcut_text(ctx.format_shortcut(&CTRL_S)))
                             .clicked()
-                            || ui.input_mut(|i| i.consume_shortcut(&CTRL_S))
                         {
                             self.request_save = true;
                             ui.close_menu();
@@ -336,7 +335,6 @@ impl BndBuildApp {
                         if ui
                             .add(Button::new("Reload").shortcut_text(ctx.format_shortcut(&CTRL_R)))
                             .clicked()
-                            || ui.input_mut(|i| i.consume_shortcut(&CTRL_R))
                         {
                             self.request_reload = true;
                             ui.close_menu();
@@ -346,7 +344,6 @@ impl BndBuildApp {
                     if ui
                         .add(Button::new("Quit").shortcut_text(ctx.format_shortcut(&CTRL_Q)))
                         .clicked()
-                        || ui.input_mut(|i| i.consume_shortcut(&CTRL_Q))
                     {
                         frame.close();
                     }
@@ -355,7 +352,7 @@ impl BndBuildApp {
         });
     }
 
-    fn update_status(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update_status_and_shortcuts(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::bottom("bottom").show(ctx, |ui| {
             match &self.filename {
                 Some(fname) => ui.label(fname.display().to_string()),
@@ -363,6 +360,19 @@ impl BndBuildApp {
             };
 
             ui.separator();
+
+            if ui.input_mut(|i| i.consume_shortcut(&CTRL_Q) ) {
+                _frame.close();
+            }
+            if ui.input_mut(|i| i.consume_shortcut(&CTRL_R)) {
+                self.request_reload = true;
+            }
+            if ui.input_mut(|i| i.consume_shortcut(&CTRL_S)) {
+                self.request_save = true;
+            }
+            if ui.input_mut(|i| i.consume_shortcut(&CTRL_O)) {
+                self.request_open = true;
+            }
         });
     }
 
@@ -536,7 +546,19 @@ impl eframe::App for BndBuildApp {
 
         self.update_menu(ctx, frame);
         self.update_inner(ctx, frame);
-        self.update_status(ctx, frame);
+        self.update_status_and_shortcuts(ctx, frame);
+
+
+        // Handle file opening
+        if self.request_open {
+            let mut dialog = egui_file::FileDialog::open_file(self.filename.clone());
+            dialog.open();
+            self.open_file_dialog = dialog.into();
+            self.file_error = None;
+            self.request_open = false;
+        }
+
+
 
         // Handle file opening
         let p = if let Some(dialog) = &mut self.open_file_dialog {
