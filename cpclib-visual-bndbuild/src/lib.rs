@@ -14,12 +14,12 @@ use cpclib_bndbuild::BndBuilder;
 use eframe::egui::{self, RichText};
 use eframe::epaint::ahash::HashMap;
 use eframe::epaint::Color32;
+use egui_code_editor::{CodeEditor, ColorTheme};
 use egui_file::{self, FileDialog};
 use itertools::Itertools;
 use syntax::syntax;
 
-use crate::egui::{Button, Key, KeyboardShortcut, Modifiers, TextEdit};
-use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
+use crate::egui::{Button, Key, KeyboardShortcut, Modifiers};
 
 static CTRL_O: KeyboardShortcut = KeyboardShortcut {
     modifiers: Modifiers::COMMAND,
@@ -277,7 +277,6 @@ impl BndBuildApp {
                 self.file_content = std::fs::read_to_string(self.filename.as_ref().unwrap()).ok(); // read a second time, but the file exists
                 self.builder_and_layers = BuilderAndCache::from(builder).into();
 
-
                 if let Some(position) = self.recent_files.iter().position(|elem| elem == path) {
                     self.recent_files.remove(position);
                 }
@@ -290,8 +289,7 @@ impl BndBuildApp {
     }
 
     pub fn update_cache(&mut self) {
-        self.builder_and_layers.as_mut()
-            .map(|b| b.update());
+        self.builder_and_layers.as_mut().map(|b| b.update());
     }
 }
 
@@ -312,10 +310,13 @@ impl BndBuildApp {
                         ui.close_menu();
                     };
 
-                    if ! self.recent_files.is_empty() {
+                    if !self.recent_files.is_empty() {
                         ui.menu_button("Open Recent", |ui| {
                             for fname in self.recent_files.clone().iter().rev() {
-                                if ui.add(Button::new(fname.display().to_string()).wrap(false)).clicked() {
+                                if ui
+                                    .add(Button::new(fname.display().to_string()).wrap(false))
+                                    .clicked()
+                                {
                                     self.load(fname);
                                     ui.close_menu();
                                     self.logs.clear();
@@ -361,7 +362,7 @@ impl BndBuildApp {
 
             ui.separator();
 
-            if ui.input_mut(|i| i.consume_shortcut(&CTRL_Q) ) {
+            if ui.input_mut(|i| i.consume_shortcut(&CTRL_Q)) {
                 _frame.close();
             }
             if ui.input_mut(|i| i.consume_shortcut(&CTRL_R)) {
@@ -393,8 +394,7 @@ impl BndBuildApp {
             .stick_to_bottom(true)
             .show(ui, |ui| {
                 ui.monospace(&self.logs);
-            })
-            ;
+            });
     }
 
     fn update_code(&mut self, _ctx: &egui::Context, ui: &mut eframe::egui::Ui) {
@@ -408,28 +408,27 @@ impl BndBuildApp {
                     .on_hover_text("Edit the building rules here.");
             }
             if let Some(code) = self.file_content.as_mut() {
- //               let editor = TextEdit::multiline(code)
-  //                  .code_editor()
-   //                 .hint_text("Expect the yaml rules to build the project.")
-    //                .desired_width(f32::INFINITY);
+                //               let editor = TextEdit::multiline(code)
+                //                  .code_editor()
+                //                 .hint_text("Expect the yaml rules to build the project.")
+                //                .desired_width(f32::INFINITY);
 
                 egui::ScrollArea::new([true, true])
                     .max_height(f32::INFINITY)
                     .max_width(f32::INFINITY)
                     .show(ui, |ui| {
-                        //let output = editor.show(ui);
+                        // let output = editor.show(ui);
 
-                    let output = CodeEditor::default()
-                        .id_source("code editor")
-                        .with_fontsize(14.0)
-                        .with_theme(ColorTheme::GITHUB_LIGHT)
-                       .with_syntax(syntax())
-                        .with_numlines(true)
-                        .show(ui, code);
-  //
- //                       if output.response.changed() {
-  //                          self.is_dirty = true;
-   //                     }
+                        let _output = CodeEditor::default()
+                            .id_source("code editor")
+                            .with_fontsize(14.0)
+                            .with_theme(ColorTheme::GITHUB_LIGHT)
+                            .with_syntax(syntax())
+                            .with_numlines(true)
+                            .show(ui, code);
+                        //                       if output.response.changed() {
+                        //                          self.is_dirty = true;
+                        //                     }
                     });
             }
         });
@@ -548,7 +547,6 @@ impl eframe::App for BndBuildApp {
         self.update_inner(ctx, frame);
         self.update_status_and_shortcuts(ctx, frame);
 
-
         // Handle file opening
         if self.request_open {
             let mut dialog = egui_file::FileDialog::open_file(self.filename.clone());
@@ -558,10 +556,8 @@ impl eframe::App for BndBuildApp {
             self.request_open = false;
         }
 
-
-
         // Handle file opening
-        let p = if let Some(dialog) = &mut self.open_file_dialog {
+        let _p = if let Some(dialog) = &mut self.open_file_dialog {
             if dialog.show(ctx).selected() {
                 if let Some(path) = dialog.path() {
                     if path.exists() {
@@ -584,7 +580,6 @@ impl eframe::App for BndBuildApp {
         else {
             None
         };
-
 
         // Handle reload
         if self.request_reload {

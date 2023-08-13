@@ -11,7 +11,7 @@ pub fn syntax() -> Syntax {
         keywords: HashSet::from([
             "tgt",
             "target",
-    //        "build",
+            //        "build",
             "dep",
             "dependency",
             "requires",
