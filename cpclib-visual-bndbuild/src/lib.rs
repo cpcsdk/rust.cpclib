@@ -15,6 +15,7 @@ use egui_file::{self, FileDialog};
 use itertools::Itertools;
 
 use crate::egui::{Button, Key, KeyboardShortcut, Modifiers, TextEdit};
+use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
 
 static CTRL_O: KeyboardShortcut = KeyboardShortcut {
     modifiers: Modifiers::COMMAND,
@@ -385,19 +386,28 @@ impl BndBuildApp {
                     .on_hover_text("Edit the building rules here.");
             }
             if let Some(code) = self.file_content.as_mut() {
-                let editor = TextEdit::multiline(code)
-                    .code_editor()
-                    .hint_text("Expect the yaml rules to build the project.")
-                    .desired_width(f32::INFINITY);
+ //               let editor = TextEdit::multiline(code)
+  //                  .code_editor()
+   //                 .hint_text("Expect the yaml rules to build the project.")
+    //                .desired_width(f32::INFINITY);
 
                 egui::ScrollArea::new([true, true])
                     .max_height(f32::INFINITY)
                     .max_width(f32::INFINITY)
                     .show(ui, |ui| {
-                        let output = editor.show(ui);
-                        if output.response.changed() {
-                            self.is_dirty = true;
-                        }
+                        //let output = editor.show(ui);
+
+                    let output = CodeEditor::default()
+                        .id_source("code editor")
+                        .with_fontsize(14.0)
+                        .with_theme(ColorTheme::GRUVBOX)
+//                        .with_syntax(Syntax::rust())
+                        .with_numlines(true)
+                        .show(ui, code);
+  //
+ //                       if output.response.changed() {
+  //                          self.is_dirty = true;
+   //                     }
                     });
             }
         });
@@ -541,11 +551,6 @@ impl eframe::App for BndBuildApp {
             None
         };
 
-        if let Some(path) = p {
-            self.load(path);
-            self.logs.clear();
-            ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
-        }
 
         // Handle reload
         if self.request_reload {
