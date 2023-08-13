@@ -497,7 +497,7 @@ impl BndBuildApp {
                                 }
                             }
                             else {
-                                button.on_hover_text("Probably a leaf file")
+                                button.on_hover_text("Probably a leaf file (right click to open)")
                             };
                             if button.clicked() {
                                 self.requested_target = Some(tgt.into());
@@ -505,6 +505,14 @@ impl BndBuildApp {
                             }
                             if button.hovered() {
                                 self.hovered_target = Some(tgt.into());
+                            }
+                            if button.secondary_clicked() && tgt.exists() {
+                                match open::that(tgt) {
+                                    Ok(_) => {},
+                                    Err(e) => {
+                                        self.file_error = Some(e.to_string());
+                                    }
+                                }
                             }
                         }
                     });
