@@ -422,7 +422,7 @@ impl BndBuildApp {
                     let output = CodeEditor::default()
                         .id_source("code editor")
                         .with_fontsize(14.0)
-                        .with_theme(ColorTheme::GRUVBOX)
+                        .with_theme(ColorTheme::GITHUB_LIGHT)
                        .with_syntax(syntax())
                         .with_numlines(true)
                         .show(ui, code);
