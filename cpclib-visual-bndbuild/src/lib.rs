@@ -235,6 +235,15 @@ impl From<BndBuilder> for BuilderAndCache {
     }
 }
 
+impl BuilderAndCache {
+    pub fn update(&mut self) {
+        self.with_dependent_mut(|builder, prev_cache| {
+            let cache: BuilderCache = BuilderCache::from(builder);
+            *prev_cache = cache;
+        });
+    }
+}
+
 impl BndBuildApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         if let Some(storage) = cc.storage {
@@ -277,9 +286,8 @@ impl BndBuildApp {
     }
 
     pub fn update_cache(&mut self) {
-        // TODO reimplement it in a way that does not necessitate to reload the file
-        let path = self.filename.as_mut().unwrap().clone();
-        self.load(path);
+        self.builder_and_layers.as_mut()
+            .map(|b| b.update());
     }
 }
 
