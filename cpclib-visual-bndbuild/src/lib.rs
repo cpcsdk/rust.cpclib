@@ -341,6 +341,7 @@ impl BndBuildApp {
                             ui.close_menu();
                         }
                     }
+                    ui.separator();
 
                     if ui
                         .add(Button::new("Quit").shortcut_text(ctx.format_shortcut(&CTRL_Q)))
@@ -417,18 +418,18 @@ impl BndBuildApp {
                     .max_height(f32::INFINITY)
                     .max_width(f32::INFINITY)
                     .show(ui, |ui| {
-                        // let output = editor.show(ui);
 
-                        let _output = CodeEditor::default()
+                        let editor = CodeEditor::default()
                             .id_source("code editor")
                             .with_fontsize(14.0)
                             .with_theme(ColorTheme::GITHUB_LIGHT)
                             .with_syntax(syntax())
                             .with_numlines(true)
                             .show(ui, code);
-                        //                       if output.response.changed() {
-                        //                          self.is_dirty = true;
-                        //                     }
+
+                        if editor.changed() {
+                            self.is_dirty = true;
+                        }
                     });
             }
         });
@@ -609,6 +610,7 @@ impl eframe::App for BndBuildApp {
                 self.file_error = e.to_string().into();
             }
             else {
+                self.file_error = None;
                 self.is_dirty = false;
                 self.load(self.filename.clone().unwrap()); // reload is forced to parse the file
             }
