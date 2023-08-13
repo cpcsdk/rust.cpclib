@@ -10,15 +10,16 @@ pub fn syntax() -> Syntax {
         comment_multiline: [r"/*", r"*/"],
         keywords: HashSet::from([
             "tgt",
-            "target",
+            "target", "targets",
             //        "build",
             "dep",
-            "dependency",
+            "dependency", "dependencies",
             "requires",
             "cmd",
             "command",
             "launch",
-            "run"
+            "run",
+            "help"
         ]),
         types: HashSet::from([
             "basm",

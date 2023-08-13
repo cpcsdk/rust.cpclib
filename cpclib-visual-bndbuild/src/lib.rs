@@ -585,6 +585,7 @@ impl eframe::App for BndBuildApp {
         if self.request_reload {
             self.request_reload = false;
             self.logs.clear();
+            self.file_error.take();
             self.load(self.filename.clone().unwrap());
             ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
         }
@@ -601,7 +602,7 @@ impl eframe::App for BndBuildApp {
             }
             else {
                 self.is_dirty = false;
-                self.update_cache();
+                self.load(self.filename.clone().unwrap()); // reload is forced to parse the file
             }
             ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
         }

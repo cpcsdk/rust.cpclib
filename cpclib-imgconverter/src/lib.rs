@@ -526,7 +526,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
 
     let palette = get_requested_palette(matches);
 
-    if matches.contains_id("SKIP_ODD_PIXELS") {
+    if matches.get_flag("SKIP_ODD_PIXELS") {
         transformations = transformations.skip_odd_pixels();
     }
     if matches.contains_id("PIXEL_COLUMN_START") {
@@ -1045,6 +1045,7 @@ pub fn build_args_parser() -> clap::Command {
                             .long("skipoddpixels")
                             .short('s')
                             .help("Skip odd pixels when reading the image (usefull when the picture is mode 0 with duplicated pixels")
+                            .action(ArgAction::SetTrue)
                     )
                     .arg(
                         Arg::new("PIXEL_COLUMN_START")
