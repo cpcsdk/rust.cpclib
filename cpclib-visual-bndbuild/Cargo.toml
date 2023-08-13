@@ -14,7 +14,6 @@ homepage.workspace = true
 cpclib-bndbuild.workspace = true
 eframe = {workspace=true, features=["persistence", "wgpu"]}
 egui_file = "0.10"
-
 gag = "1.0.0"
 serde.workspace = true
 itertools.workspace = true

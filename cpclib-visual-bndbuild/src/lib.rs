@@ -39,6 +39,9 @@ pub struct BndBuildApp {
     /// The provided filename by the user
     filename: Option<std::path::PathBuf>,
 
+    /// Recently opened files
+    recent_files: Vec<std::path::PathBuf>,
+
     /// The content of the file loaded
     #[serde(skip)]
     file_content: Option<String>,
@@ -111,7 +114,8 @@ impl Default for BndBuildApp {
             gags: (
                 gag::BufferRedirect::stdout().unwrap(),
                 gag::BufferRedirect::stderr().unwrap()
-            )
+            ),
+            recent_files: Vec::new()
         }
     }
 }
@@ -253,12 +257,19 @@ impl BndBuildApp {
             Ok(builder) => {
                 self.filename = Some(path.into());
                 self.file_content = std::fs::read_to_string(self.filename.as_ref().unwrap()).ok(); // read a second time, but the file exists
-                self.builder_and_layers = BuilderAndCache::from(builder).into()
+                self.builder_and_layers = BuilderAndCache::from(builder).into();
+
+
+                if let Some(position) = self.recent_files.iter().position(|elem| elem == path) {
+                    self.recent_files.remove(position);
+                }
+                self.recent_files.push(path.to_path_buf());
             }
             Err(err) => {
                 self.file_error = Some(err.to_string());
             }
         }
+        self.logs.clear();
     }
 
     pub fn update_cache(&mut self) {
@@ -288,6 +299,17 @@ impl BndBuildApp {
                         self.file_error = None;
                         ui.close_menu();
                     };
+
+                    if ! self.recent_files.is_empty() {
+                        ui.menu_button("Open Recent", |ui| {
+                            for fname in self.recent_files.clone().iter().rev() {
+                                if ui.add(Button::new(fname.display().to_string()).wrap(false)).clicked() {
+                                    self.load(fname);
+                                    ui.close_menu();
+                                }
+                            }
+                        });
+                    }
 
                     if self.filename.is_some() {
                         if ui
@@ -520,14 +542,17 @@ impl eframe::App for BndBuildApp {
         else {
             None
         };
+
         if let Some(path) = p {
             self.load(path);
+            ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
         }
 
         // Handle reload
         if self.request_reload {
             self.request_reload = false;
             self.load(self.filename.clone().unwrap());
+            ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
         }
 
         if self.request_save {
