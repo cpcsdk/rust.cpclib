@@ -392,7 +392,7 @@ impl BndBuildApp {
             .stick_to_right(false)
             .stick_to_bottom(true)
             .show(ui, |ui| {
-                ui.code(&self.logs);
+                ui.monospace(&self.logs);
             })
             ;
     }
