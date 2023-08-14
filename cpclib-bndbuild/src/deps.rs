@@ -5,7 +5,7 @@ use cpclib_common::itertools::Itertools;
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer};
 use topologic::AcyclicDependencyGraph;
-use lazy_regex::regex_captures;
+
 use crate::executor::execute;
 use crate::task::Task;
 use crate::BndBuilderError;

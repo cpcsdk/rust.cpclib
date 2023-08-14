@@ -33,23 +33,23 @@ homepage = "https://github.com/cpcsdk/rust.cpclib"
 
 [workspace.dependencies]
 
-cpclib = {version="0.6.1-alpha.2", default-features=false}
-cpclib-asm = {version="0.6.1-alpha.2", default-features=false}
-cpclib-basic = {version="0.6.1-alpha.2", default-features=false}
-cpclib-basm = {version="0.6.1-alpha.2", default-features=false}
-cpclib-bndbuild = {version="0.1.0-alpha.1", default-features=false}
-cpclib-visual-bndbuild = {version="0.1.0-alpha.1", default-features=false}
-cpclib-common = {version="0.6.1-alpha.2", default-features=false}
-cpclib-crunchers = {version="0.6.1-alpha.2", default-features=false}
-cpclib-disc = {version="0.6.1-alpha.2", default-features=false}
-cpclib-image = {version="0.6.1-alpha.2", default-features=false}
-cpclib-imgconverter = {version="0.6.1-alpha.2", default-features=false}
-cpclib-macros = {version="0.6.1-alpha.2", default-features=false}
-cpclib-sna = {version="0.6.1-alpha.2", default-features=false}
-cpclib-tokens = {version="0.6.1-alpha.2", default-features=false}
-cpclib-xfer = {version="0.6.1-alpha.2", default-features=false}
-cpclib-xfertool = {version="0.6.1-alpha.2", default-features=false}
-cpclib-z80emu = {version="0.6.1-alpha.2", default-features=false}
+cpclib = {version="0.7.0", default-features=false}
+cpclib-asm = {version="0.7.0", default-features=false}
+cpclib-basic = {version="0.7.0", default-features=false}
+cpclib-basm = {version="0.7.0", default-features=false}
+cpclib-bndbuild = {version="0.2.0", default-features=false}
+cpclib-visual-bndbuild = {version="0.2.0", default-features=false}
+cpclib-common = {version="0.7.0", default-features=false}
+cpclib-crunchers = {version="0.7.0", default-features=false}
+cpclib-disc = {version="0.7.0", default-features=false}
+cpclib-image = {version="0.7.0", default-features=false}
+cpclib-imgconverter = {version="0.7.0", default-features=false}
+cpclib-macros = {version="0.7.0", default-features=false}
+cpclib-sna = {version="0.7.0", default-features=false}
+cpclib-tokens = {version="0.7.0", default-features=false}
+cpclib-xfer = {version="0.7.0", default-features=false}
+cpclib-xfertool = {version="0.7.0", default-features=false}
+cpclib-z80emu = {version="0.7.0", default-features=false}
 
 
 

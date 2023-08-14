@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-imgconverter"
-version = "0.6.1-alpha.2"
+version = "0.7.0"
 description = "Image manipulation tool for amstrad CPC"
 
 authors.workspace = true

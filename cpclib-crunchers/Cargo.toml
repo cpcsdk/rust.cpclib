@@ -1,7 +1,7 @@
 [package]
 
 name = "cpclib-crunchers"
-version = "0.6.1-alpha.2"
+version = "0.7.0"
 description = "crunchers that are used in cpc world"
 
 authors.workspace = true
