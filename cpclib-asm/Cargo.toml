@@ -55,7 +55,7 @@ indicatif = {workspace = true, optional=true}
 [build-dependencies]
 built.workspace = true
 cc.workspace = true
-build-deps = "*"
+build-deps = "0.1.4"
 
 #[lib]
 #crate-type = ["cdylib", "dylib"]
