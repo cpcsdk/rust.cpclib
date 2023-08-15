@@ -3995,19 +3995,14 @@ pub fn parse_macro_name(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserEr
 
 pub fn prefixed_label_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
     let input_start = input.clone();
-
-    if &input_start[..0] != "{" {
-        return Err(Err::Error(Z80ParserError::from_error_kind(
-            input,
-            ErrorKind::Alt
-        )));
-    }
+    let (input, _) = space0(input_start.clone())?;
 
     let (input, prefix) = alt((
         value(LabelPrefix::Bank, tag_no_case("{bank}")),
         value(LabelPrefix::Page, tag_no_case("{page}")),
         value(LabelPrefix::Pageset, tag_no_case("{pageset}"))
     ))(input)?;
+
     let (input, label) = preceded(space0, alt((parse_label(false), tag("$$"), tag("$"))))(input)?;
 
     let span = input_start.take(input_start.input_len() - input.input_len());
