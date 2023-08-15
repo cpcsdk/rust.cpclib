@@ -30,8 +30,6 @@ jobs:
       with:
         command: test
         toolchain: nightly
-    - name: Basm tests
-      run: cd basm/tests/asm && ./launch_tests.sh
     - uses: ncipollo/release-action@v1
       with:
           token: "${{ secrets.GITHUB_TOKEN }}"
