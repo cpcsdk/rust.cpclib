@@ -1032,7 +1032,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-asm"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "arrayref",
  "assert_matches",

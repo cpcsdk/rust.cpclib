@@ -34,7 +34,7 @@ homepage = "https://github.com/cpcsdk/rust.cpclib"
 [workspace.dependencies]
 
 cpclib = {version="0.7.0",path="cpclib", default-features=false}
-cpclib-asm = {version="0.7.0",path="cpclib-asm", default-features=false}
+cpclib-asm = {version= "0.7.1",path="cpclib-asm", default-features=false}
 cpclib-basic = {version="0.7.0",path="cpclib-basic", default-features=false}
 cpclib-basm = {version="0.7.0",path="cpclib-basm", default-features=false}
 cpclib-bdasm = {version="0.7.0",path="cpclib-bdasm", default-features=false}
