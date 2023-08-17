@@ -118,6 +118,10 @@ impl BndBuilder {
         self.inner.borrow_dependent().execute(target)
     }
 
+    pub fn outdated<P: AsRef<Path>>(&self, target: P) -> Result<bool, BndBuilderError> {
+        self.inner.borrow_dependent().outdated(target, true)
+    }
+
     pub fn get_layered_dependencies(&self) -> Vec<HashSet<&Path>> {
         self.inner.borrow_dependent().get_layered_dependencies()
     }

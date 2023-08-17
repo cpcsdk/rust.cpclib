@@ -24,6 +24,7 @@ itertools.workspace = true
 env_logger = "0.10"
 self_cell = "1.0.1"
 open = "5.0.0"
+notify = "6.0.1"
 
 [build-dependencies]
 built = { version = "0.6.1", features = ["chrono"] }

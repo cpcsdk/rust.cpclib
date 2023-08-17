@@ -1285,6 +1285,7 @@ dependencies = [
  "env_logger",
  "gag",
  "itertools 0.11.0",
+ "notify",
  "open",
  "self_cell",
  "serde",

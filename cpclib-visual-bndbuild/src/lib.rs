@@ -47,6 +47,12 @@ pub struct BndBuildApp {
     /// Recently opened files
     recent_files: Vec<std::path::PathBuf>,
 
+    /// Watched target
+    #[serde(skip)]
+    watched: Option<std::path::PathBuf>,
+    #[serde(skip)]
+    watch_logs: String,
+
     /// The content of the file loaded
     #[serde(skip)]
     file_content: Option<String>,
@@ -119,12 +125,14 @@ impl Default for BndBuildApp {
             request_save: false,
             request_open: false,
             job: None,
+            watched: None,
             last_tick: SystemTime::now(),
             gags: (
                 gag::BufferRedirect::stdout().unwrap() ,
-                gag::BufferRedirect::stderr().unwrap()
+                gag::BufferRedirect::stderr().unwrap() // 
             ),
-            recent_files: Vec::new()
+            recent_files: Vec::new(),
+            watch_logs: Default::default(),
         }
     }
 }
@@ -507,14 +515,29 @@ impl BndBuildApp {
                             if button.hovered() {
                                 self.hovered_target = Some(tgt.into());
                             }
-                            if button.secondary_clicked() && tgt.exists() {
-                                match open::that(tgt) {
-                                    Ok(_) => {},
-                                    Err(e) => {
-                                        self.file_error = Some(e.to_string());
+                            button.context_menu(|ui|{
+                                if tgt.exists() && ui.button(&format!("Open {}", tgt.display())).clicked() {
+                                    match open::that(tgt) {
+                                        Ok(_) => {},
+                                        Err(e) => {
+                                            self.file_error = Some(e.to_string());
+                                        }
+                                    };
+                                    ui.close_menu();
+                                }
+
+                                if self.watched.is_some() {
+                                    if ui.button("Unwatch").clicked() {
+                                        self.watched.take();
+                                        ui.close_menu();
+                                    }
+                                } else {
+                                    if ui.button("Watch").clicked() {
+                                        self.watched = Some(tgt.to_path_buf());
+                                        ui.close_menu();
                                     }
                                 }
-                            }
+                            });
                         }
                     });
                 }
@@ -670,6 +693,20 @@ impl eframe::App for BndBuildApp {
         // force refresh when there is a runnong task
         if self.job.is_some() {
             ctx.request_repaint_after(REFRESH_DURATION);
+        } else {
+            // handle watch if needed
+            if let Some(watched) = self.watched.as_ref() {
+                if self.builder_and_layers.as_ref().map(|bnl| bnl.borrow_owner().outdated(watched).unwrap_or(false)).unwrap_or(false) {
+                    self.watch_logs.push_str(&format!("{} needs to be rebuilt", watched.display()));
+                    if self.requested_target.is_some() {
+                        self.watch_logs.push_str(&format!("Build delayed in favor of {}", self.requested_target.as_ref().unwrap().display()));
+                    } else {
+                        self.requested_target = Some(watched.to_owned());
+                    }
+                }
+            }
         }
+
+        // handle 
     }
 }

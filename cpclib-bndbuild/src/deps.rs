@@ -269,6 +269,27 @@ impl<'r> Graph<'r> {
         }
     }
 
+    pub fn outdated<P: AsRef<Path>>(&self, p: P, skip_rules_without_commands: bool) -> Result<bool, BndBuilderError> {
+        let dependences = self.get_layered_dependencies_for(&p);
+        let dependencies = dependences.into_iter()
+            .flatten()
+            .collect_vec();
+        let res = dependencies.into_iter()
+            .rev()
+            .any(|p| {
+                self.rule(p)
+                    .map(|r| (!skip_rules_without_commands || !r.commands().is_empty()) && !r.is_up_to_date())
+                    .unwrap_or(false) // ignore not existing rule. Should fail
+            });
+        Ok(res)
+    }
+
+    pub fn rule<P:AsRef<Path>>(&self, p: P) -> Option<&Rule> {
+        let p = p.as_ref();
+        self.node2tracked.get(p)
+            .map(|idx| self.tracked[*idx])
+    }
+
     pub fn execute<P: AsRef<Path>>(&self, p: P) -> Result<(), BndBuilderError> {
         let p = p.as_ref();
         println!("> Compute dependencies");
