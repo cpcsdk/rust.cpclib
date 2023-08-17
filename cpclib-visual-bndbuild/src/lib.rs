@@ -457,7 +457,13 @@ impl BndBuildApp {
                         for tgt in layer.iter() {
                             let rule = bnl.borrow_owner().get_rule(tgt);
 
-                            let txt = RichText::new(tgt.display().to_string());
+                            let txt = tgt.display().to_string();
+                            let txt = if let Some(watched) = self.watched.as_ref() && watched == tgt {
+                                format!("{txt} [watched]")
+                            } else {
+                                txt
+                            };
+                            let txt = RichText::new(txt);
                             // set in bold the default target to see it
                             let txt = if let Some(default) = &default && default == tgt {
                                 txt.strong().strong()
@@ -495,8 +501,11 @@ impl BndBuildApp {
                                 Color32::LIGHT_GREEN
                             };
 
+                            // Create the button
+                            let button = Button::new(txt).fill(color);
+
                             // finally add the button
-                            let button = ui.add(Button::new(txt).fill(color));
+                            let button = ui.add(button);
                             let button = if let Some(rule) = rule {
                                 if let Some(help) = rule.help() {
                                     button.on_hover_text(help)
@@ -516,7 +525,7 @@ impl BndBuildApp {
                                 self.hovered_target = Some(tgt.into());
                             }
                             button.context_menu(|ui|{
-                                if tgt.exists() && ui.button(&format!("Open {}", tgt.display())).clicked() {
+                                if tgt.exists() && ui.button(&format!("Open \"{}\"", tgt.display())).clicked() {
                                     match open::that(tgt) {
                                         Ok(_) => {},
                                         Err(e) => {
@@ -526,7 +535,7 @@ impl BndBuildApp {
                                     ui.close_menu();
                                 }
 
-                                if self.watched.is_some() {
+                                if let Some(watched) = self.watched.as_ref() && watched == tgt {
                                     if ui.button("Unwatch").clicked() {
                                         self.watched.take();
                                         ui.close_menu();
