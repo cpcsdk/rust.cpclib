@@ -2,9 +2,9 @@
   dep: dummy.sna
   help: Ask to build the snapshot file without explicitly giving its name
 
-- tgt: dummy.sna dummy.lst
+- tgt: dummy.sna dummy.lst dummy.sym
   dep: dummy_code.asm dummy_logo.o dummy_logo_palette.bin
-  cmd: basm dummy_code.asm --snapshot -o dummy.sna --lst dummy.lst
+  cmd: basm dummy_code.asm --snapshot -o dummy.sna --lst dummy.lst --sym dummy.sym --sym_kind winape
   help: Generate the snapshot file using basm
 
 - tgt: dummy_logo.o dummy_logo_palette.bin
@@ -40,5 +40,5 @@
 
 - tgt: winape
   dep: build
-  cmd: extern .\tools\winape\WinApe.exe /SN:../../dummy.sna
+  cmd: extern .\tools\winape\WinApe.exe /SYM:dummy.sym /SN:../../dummy.sna 
   help: Launch Winape as an external process (all other commands are embedded in bndbuild). Hopefully it works !!

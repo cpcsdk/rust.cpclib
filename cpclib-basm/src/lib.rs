@@ -5,9 +5,11 @@ use std::fs::{self, File};
 use std::io;
 use std::io::Write;
 use std::path::Path;
+use std::str::FromStr;
 
 use cpclib_asm::assembler::file::{get_filename, handle_source_encoding};
 use cpclib_asm::preamble::*;
+use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
 use cpclib_asm::progress::{normalize, Progress};
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
@@ -293,8 +295,10 @@ pub fn assemble<'arg>(
     })?;
 
     if let Some(dest) = matches.get_one::<String>("SYMBOLS_OUTPUT") {
+        let kind = matches.get_one::<String>("SYMBOLS_KIND").unwrap();
+        let kind = SymbolOutputFormat::from_str(kind).unwrap();
         if dest == "-" {
-            env.generate_symbols_output(&mut std::io::stdout())
+            env.generate_symbols_output(&mut std::io::stdout(), kind)
         }
         else {
             let mut f = File::create(dest).map_err(|e| {
@@ -303,7 +307,7 @@ pub fn assemble<'arg>(
                     ctx: format!("creating {}", dest)
                 }
             })?;
-            env.generate_symbols_output(&mut f)
+            env.generate_symbols_output(&mut f, kind)
         }
         .map_err(|err| {
             BasmError::ListingGeneration {
@@ -578,6 +582,12 @@ pub fn build_args_parser() -> clap::Command {
                         .long("sym")                      
                         .value_hint(ValueHint::FilePath)
                     )
+                    .arg(Arg::new("SYMBOLS_KIND")                        
+                        .help("Format of the output symbols file")
+                        .long("sym_kind")
+                        .value_parser(["winape", "basm"])
+                        .default_value("basm")
+                )
                     .group(
                         ArgGroup::new("ANY_OUTPUT")
                             .args(&["DB_LIST", "OUTPUT"])

@@ -38,7 +38,7 @@ use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
 use self::processed_token::ProcessedToken;
 use self::report::SavedFile;
-use self::symbols_output::SymbolOutputGenerator;
+use self::symbols_output::{SymbolOutputGenerator, SymbolOutputFormat};
 use crate::assembler::processed_token::visit_processed_tokens;
 use crate::delayed_command::*;
 use crate::page_info::PageInformation;
@@ -1514,8 +1514,8 @@ impl Env {
 #[allow(missing_docs)]
 impl Env {
     /// Write in w the list of symbols
-    pub fn generate_symbols_output<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
-        self.symbols_output.generate(w, self.symbols())
+    pub fn generate_symbols_output<W: Write>(&self, w: &mut W, fmt: SymbolOutputFormat) -> std::io::Result<()> {
+        self.symbols_output.generate(w, self.symbols(), fmt)
     }
 
     /// Visit all the tokens of the slice of tokens.

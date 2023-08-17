@@ -1,8 +1,87 @@
 use std::io::Write;
+use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait, Value};
 use cpclib_tokens::ExprResult;
+
+pub enum SymbolOutputFormat{
+    Basm,
+    Winape
+}
+
+impl SymbolOutputFormat {
+    pub fn format(&self, k: &Symbol, v: &Value) -> String {
+        match self {
+            SymbolOutputFormat::Basm => {
+                match v {
+                    Value::Address(a) => {
+                        format!("{} equ #{:04X}", k.value(), a.address())
+                    }
+                    Value::Expr(ExprResult::Value(i)) => {
+                        format!("{} equ #{:04X}", k.value(), i)
+                    }
+                    Value::Expr(ExprResult::Bool(b)) => {
+                        format!("{} equ {}", k.value(), *b)
+                    }
+                    Value::Expr(e @ ExprResult::Float(_f)) => {
+                        format!("{} equ #{:04X}", k.value(), e.int().unwrap())
+                    }
+                    Value::Expr(ExprResult::String(s)) => {
+                        format!("{} equ {}", k.value(), s)
+                    }
+                    Value::Expr(l @ ExprResult::List(_)) => {
+                        format!("{} equ {}", k.value(), l)
+                    }
+                    Value::Expr(m @ ExprResult::Matrix { .. }) => {
+                        format!("{} equ {}", k.value(), m)
+                    }
+    
+                    _ => unimplemented!("{:?}", v)
+                }
+            },
+            SymbolOutputFormat::Winape => {
+                match v {
+                    Value::Address(a) => {
+                        format!("{} #{:X}", k.value(), a.address())
+                    }
+                    Value::Expr(ExprResult::Value(i)) => {
+                        format!("{} #{:X}", k.value(), i)
+                    }
+                    Value::Expr(ExprResult::Bool(b)) => {
+                        format!("{} {}", k.value(), *b)
+                    }
+                    Value::Expr(e @ ExprResult::Float(_f)) => {
+                        format!("{} #{:X}", k.value(), e.int().unwrap())
+                    }
+                    Value::Expr(ExprResult::String(s)) => {
+                        "".to_owned() // ignored by winape
+                    }
+                    Value::Expr(l @ ExprResult::List(_)) => {
+                        "".to_owned() // ignored by winape
+                    }
+                    Value::Expr(m @ ExprResult::Matrix { .. }) => {
+                        "".to_owned() // ignored by winape
+                    }
+    
+                    _ => unimplemented!("{:?}", v)
+                }
+            },
+        }
+    }
+}
+
+impl FromStr for SymbolOutputFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "basm" => Ok(Self::Basm),
+            "winape" => Ok(Self::Winape),
+            _ => Err(format!("Wrong symbol format {s}"))
+        }
+    }
+}
 
 /// Manage the generation of the symbols output.
 /// Could be parametrize by some directives
@@ -32,7 +111,8 @@ impl SymbolOutputGenerator {
     pub fn generate<W: Write>(
         &self,
         w: &mut W,
-        symbs: &impl SymbolsTableTrait
+        symbs: &impl SymbolsTableTrait,
+        format: SymbolOutputFormat
     ) -> std::io::Result<()> {
         for (k, v) in symbs
             .expression_symbol()
@@ -40,31 +120,7 @@ impl SymbolOutputGenerator {
             .filter(|(s, _v)| self.keep_symbol(s))
             .sorted_by_key(|(s, _v)| s.to_string().to_ascii_lowercase())
         {
-            match v {
-                Value::Address(a) => {
-                    writeln!(w, "{} equ #{:04X}", k.value(), a.address())
-                }
-                Value::Expr(ExprResult::Value(i)) => {
-                    writeln!(w, "{} equ #{:04X}", k.value(), i)
-                }
-                Value::Expr(ExprResult::Bool(b)) => {
-                    writeln!(w, "{} equ {}", k.value(), *b)
-                }
-                Value::Expr(e @ ExprResult::Float(_f)) => {
-                    writeln!(w, "{} equ #{:04X}", k.value(), e.int().unwrap())
-                }
-                Value::Expr(ExprResult::String(s)) => {
-                    writeln!(w, "{} equ {}", k.value(), s)
-                }
-                Value::Expr(l @ ExprResult::List(_)) => {
-                    writeln!(w, "{} equ {}", k.value(), l)
-                }
-                Value::Expr(m @ ExprResult::Matrix { .. }) => {
-                    writeln!(w, "{} equ {}", k.value(), m)
-                }
-
-                _ => unimplemented!("{:?}", v)
-            }?;
+            writeln!(w, "{}", format.format(k, v))?;
         }
 
         Ok(())
