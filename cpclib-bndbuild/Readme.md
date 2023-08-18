@@ -40,6 +40,7 @@ Options:
 ## Example
 
 Here is an example to build a dummy Amstrad CPC project and execute on the real machine thanks to the m4.
+It is available in <tests/dummy>
 Successive calls to the build task do nothing as soon as no file has been modified.
 It is also possible to watch the dependencies of a given task to automatically build it when they are modified.
 This cannot be seen with the capture, but each time m4 command is launched, the project is send into the CPC machine (it takes several seconds however).
