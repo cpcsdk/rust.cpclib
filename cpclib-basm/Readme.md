@@ -5,7 +5,7 @@
 Benediction ASseMbler is a modern z80 assembler dedicated to Amstrad CPC plateform.
 It has been developed and used mainly for the demo [CRTC](https://www.pouet.net/prod.php?which=88554).
 
-No true documentation has been written yet...
+No true documentation has been written yet... But some little parts can be found [here](../cpclib-asm/basm_doc.md)
 What can be retained is that:
 - It's parser is definitevely slower than rasm ones, but speed remains still competitive
 - It contains all standard assembler directives (file inclusion, conditional assembling, variables, macros definition, loops, local labels)

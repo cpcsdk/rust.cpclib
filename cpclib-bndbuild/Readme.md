@@ -42,6 +42,7 @@ Options:
 Here is an example to build a dummy Amstrad CPC project and execute on the real machine thanks to the m4.
 Successive calls to the build task do nothing as soon as no file has been modified.
 It is also possible to watch the dependencies of a given task to automatically build it when they are modified.
+This cannot be seen with the capture, but each time m4 command is launched, the project is send into the CPC machine (it takes several seconds however).
 
 ![Animation](dummy.gif)
 
@@ -60,8 +61,8 @@ Each rule can have the following keys:
 
 The commands are either included by the application (so limited to cpclib commands and os agnostic) or accessible externally (no limitation, but os dependent).
 They are:
-- `basm` to launch basm assembler
-- `img2cpc` to make image conversion
+- `basm` to launch [basm assembler](../cpclib-basm)
+- `img2cpc` to make [image conversion](../cpclib-imgconverter)
 - `rm` to delete files
 - `xfer` to transfer to the CPC with the M4 card
 - `extern` to launch any command available on the machine
