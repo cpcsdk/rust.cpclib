@@ -103,6 +103,18 @@ impl Task {
 
         self
     }
+
+    // TODO deeply check the arguments of the commands because here we may be wrong ...
+    pub fn is_phony(&self) -> bool {
+        match self {
+            Task::Basm(_) => false, // wrong when displaying stuff
+            Task::Rm(_) => false,
+            Task::Echo(_) => true,
+            Task::Xfer(_) => true, // wrong when downloading files
+            Task::ImgConverter(_) => false,
+            Task::Extern(_) => false // wrong for winape
+        }
+    }
 }
 
 #[derive(Deserialize, Clone, PartialEq, Debug, Eq, Hash)]

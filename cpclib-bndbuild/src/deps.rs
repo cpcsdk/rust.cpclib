@@ -31,7 +31,10 @@ pub struct Rule {
     commands: Vec<Task>,
 
     /// Potential help for the user
-    help: Option<String>
+    help: Option<String>,
+
+    /// Explicit for extern commands
+    phony: Option<bool>
 }
 
 fn deserialize_path_list<'de, D>(deserializer: D) -> Result<Vec<PathBuf>, D::Error>
@@ -103,12 +106,29 @@ impl Rule {
                 .into_iter()
                 .map(|t| (t.clone()).into())
                 .collect_vec(),
-            help: None
+            help: None,
+            phony: None
         }
     }
 
     pub fn commands(&self) -> &[Task] {
         &self.commands
+    }
+
+    /// Phony commands do not generate files and need to be launched each time (except in watch sessions)
+    pub fn is_phony(&self) -> bool {
+        if let Some(phony) = self.phony.as_ref() {
+            return *phony;
+        }
+
+        if self.commands().is_empty() {
+            true
+        } else {
+            self.commands().iter()
+                .all(|c| c.is_phony())
+        }
+
+
     }
 
     pub fn is_up_to_date(&self) -> bool {
@@ -161,7 +181,8 @@ impl Rules {
     }
 
     /// Get the rule for this target (of course None is returned for leaf files)
-    pub fn rule(&self, tgt: &Path) -> Option<&Rule> {
+    pub fn rule<P: AsRef<Path>>(&self, tgt: P) -> Option<&Rule> {
+        let tgt = tgt.as_ref();
         self.rules
             .iter()
             .find(|r| r.targets.iter().any(|tgt2| tgt2 == tgt))
@@ -269,6 +290,8 @@ impl<'r> Graph<'r> {
         }
     }
 
+
+
     pub fn outdated<P: AsRef<Path>>(&self, p: P, skip_rules_without_commands: bool) -> Result<bool, BndBuilderError> {
         let dependences = self.get_layered_dependencies_for(&p);
         let dependencies = dependences.into_iter()
@@ -278,8 +301,17 @@ impl<'r> Graph<'r> {
             .rev()
             .any(|p| {
                 self.rule(p)
-                    .map(|r| (!skip_rules_without_commands || !r.commands().is_empty()) && !r.is_up_to_date())
-                    .unwrap_or(false) // ignore not existing rule. Should fail
+                    .map(|r| 
+                        if skip_rules_without_commands {
+                            if r.is_phony() {
+                                false
+                            } else {
+                                !r.is_up_to_date()
+                            }
+                        } else {
+                            !r.is_up_to_date()
+                        }
+                    ).unwrap_or(false) // ignore not existing rule. Should fail ?
             });
         Ok(res)
     }

@@ -130,7 +130,7 @@ impl BndBuilder {
         self.inner.borrow_dependent().get_layered_dependencies_for(p)
     }
 
-    pub fn get_rule(&self, tgt: &Path) -> Option<&Rule> {
+    pub fn get_rule<P: AsRef<Path>>(&self, tgt: P) -> Option<&Rule> {
         self.inner.borrow_owner().rule(tgt)
     }
 
