@@ -123,6 +123,8 @@ setup_crtc_values
     CRTC_SET CRTC_REG_HORIZONTAL_SYNC_POSITION, 50
     CRTC_SET CRTC_REG_VERTICAL_DISPLAYED, dummy_logo_conf_HEIGHT/8 +1
     ret 
+
+    ; rebuild expected
  
 ;;
 ; Here we use some macros and functiosn to handle the generation of the code

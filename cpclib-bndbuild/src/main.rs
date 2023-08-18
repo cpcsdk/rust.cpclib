@@ -2,6 +2,7 @@ use cpclib_bndbuild::executor::*;
 use cpclib_bndbuild::runners::RunnerWithClap;
 use cpclib_bndbuild::{BndBuilder, BndBuilderError};
 use cpclib_common::clap::*;
+use cpclib_bndbuild::built_info;
 
 fn main() {
     match inner_main() {
@@ -17,7 +18,7 @@ fn inner_main() -> Result<(), BndBuilderError> {
     let cmd = Command::new("bndbuilder")
         .about("Benediction CPC demo project builder")
         .author("Krusty/Benediction")
-        .version("0.01")
+        .version(built_info::PKG_VERSION)
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(
@@ -46,6 +47,13 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .value_name("FILE")
                 .default_value("bndbuild.yml")
                 .help("Provide the YAML file for the given project.")
+        )
+        .arg(
+            Arg::new("watch")
+            .short('w')
+            .long("watch")
+            .action(ArgAction::SetTrue)
+            .help("Watch the targets and permanently rebuild them when needed.")
         )
         .arg(
             Arg::new("target")
@@ -92,25 +100,53 @@ fn inner_main() -> Result<(), BndBuilderError> {
 
     // Get the file and read it
     let fname: &String = matches.get_one("file").unwrap();
-
     let builder = BndBuilder::from_fname(fname)?;
-    if !matches.contains_id("target") {
+
+    // Get the targets
+    let targets_provided = matches.contains_id("target");
+    let targets = if  !targets_provided {
         if let Some(first) = builder.default_target() {
-            builder.execute(first).map_err(|e| {
-                BndBuilderError::DefaultTargetError {
-                    source: Box::new(e)
-                }
-            })?;
+            vec![first]
         }
         else {
             return Err(BndBuilderError::NoTargets);
         }
     }
     else {
-        for target in matches.get_many::<String>("target").unwrap() {
-            builder.execute(target)?;
+        matches.get_many::<String>("target").unwrap()
+            .into_iter()
+            .map(|s| s.as_ref())
+            .collect::<Vec<&std::path::Path>>()
+    };
+
+    // Execute the targets
+    let mut first_loop = true;
+    let watch_requested = matches.get_flag("watch");
+    loop {
+        for tgt in targets.iter() {
+
+            if first_loop || builder.outdated(tgt).unwrap_or(false) {
+                builder.execute(tgt)
+                    .map_err(|e| if targets_provided {
+                        e
+                    } else {
+                        BndBuilderError::DefaultTargetError {
+                            source: Box::new(e)
+                        }
+                    })
+                ?;
+            }
+
         }
+
+        if !watch_requested {
+            break;
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(1000)); // sleep 1s before trying to build
+        first_loop = false;
     }
+
 
     Ok(())
 }
