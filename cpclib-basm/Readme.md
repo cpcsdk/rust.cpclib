@@ -13,6 +13,7 @@ What can be retained is that:
 
 Of course, there are still bugs due to the limited number of users ;) but it worked propelrly with my use cases
 
+Lots of examples are available in <tests/asm> folder.
 
 ## Help
 
