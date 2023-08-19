@@ -33,7 +33,7 @@ fn expand_glob(p: &str) -> Vec<String> {
         vec![p.to_owned()]
     };
 
-    let res = expended.into_iter()
+    expended.into_iter()
         .map(|p| {
             globmatch::Builder::new(p.as_str())
             .build("."/*std::env::current_dir().unwrap()*/)
@@ -49,9 +49,8 @@ fn expand_glob(p: &str) -> Vec<String> {
             .unwrap_or(vec![p])
         })
         .flatten()
-        .collect_vec();
+        .collect_vec()
 
-    dbg!(res)
 }
 
 #[derive(Error, Debug)]
