@@ -17,8 +17,11 @@ pub mod built_info {
 }
 
 
+/// Expand glob patterns
+/// {a,b} expension is always done even if file does not exists
+/// *.a is done only when file exists
 fn expand_glob(p: &str) -> Vec<String> {
-    if let Some((_, start, middle, end)) = regex_captures!(r"^(.*)\{(.*)\}(.*)$", p) {
+    let expended = if let Some((_, start, middle, end)) = regex_captures!(r"^(.*)\{(.*)\}(.*)$", p) {
 
         middle.split(",")
             .map(|component| {
@@ -28,7 +31,29 @@ fn expand_glob(p: &str) -> Vec<String> {
 
     } else {
         vec![p.to_owned()]
-    }
+    };
+
+    dbg!(&expended);
+
+    let res = expended.into_iter()
+        .map(|p| {
+            globmatch::Builder::new(p.as_str())
+            .build("."/*std::env::current_dir().unwrap()*/)
+            .map(|builder|{
+                builder.into_iter()
+                .map(|p2| match p2 {
+                    Ok(p) => p.display().to_string(),
+                    Err(e) => p.clone()
+                })
+                .collect_vec()
+            })
+            .map(|v| if v.is_empty(){vec![p.clone()]} else{v})
+            .unwrap_or(vec![p])
+        })
+        .flatten()
+        .collect_vec();
+
+    dbg!(res)
 }
 
 #[derive(Error, Debug)]

@@ -479,7 +479,8 @@ impl BndBuildApp {
                     .on_hover_text("Click on the task of interest to execute it.");
                 let cache = bnl.borrow_dependent();
                 for layer in cache.layers.iter() {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
+                     //   ui.set_max_width(ui.available_width()/2.0);
                         for tgt in layer.iter() {
                             let rule = bnl.borrow_owner().get_rule(tgt);
 
