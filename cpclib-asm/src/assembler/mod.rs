@@ -1126,6 +1126,17 @@ impl Env {
         }
     }
 
+    fn page_info_for_logical_address_mut(&mut self, address: u16) -> &mut PageInformation {
+        match &self.selected_bank {
+            Some(idx) => &mut self.banks[*idx].1, // TODO check if this code is valid
+            None => {
+                let active_page =
+                    self.logical_to_physical_address(address).page() as usize;
+                &mut self.pages_info_sna[active_page]
+            }
+        }       
+    }
+
     fn written_bytes(&mut self) -> &mut BitVec {
         match &self.selected_bank {
             Some(idx) => &mut self.banks[*idx].2,
@@ -1865,12 +1876,15 @@ impl Env {
             Some(exp) => {
                 // prefix provided, we explicitely want one configuration
                 let mmr = self.resolve_expr_must_never_fail(exp)?.int()?;
+
                 if mmr < 0xC0 || mmr > 0xC7 {
                     return Err(AssemblerError::MMRError { value: mmr });
                 }
 
                 let mmr = mmr as u8;
                 self.ga_mmr = mmr;
+
+                // we do not change the output address (there is no reason to do that)
             }
             None => {
                 // nothing provided, we write in a temporary area
@@ -3815,6 +3829,7 @@ pub fn assemble_opcode(
 }
 
 fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(), AssemblerError> {
+
     // org $ set org to the output address (cf. rasm)
     let code_adr = if address2.is_none() && address == &"$".into() {
         if env.start_address().is_none() {
@@ -3836,17 +3851,20 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
     };
 
     // TODO Check overlapping region
-    let page_info = env.active_page_info_mut();
-    page_info.logical_outputadr = output_adr as _;
-    page_info.logical_codeadr = code_adr as _;
-    page_info.fail_next_write_if_zero = false;
+    {
+        let page_info = env.page_info_for_logical_address_mut(output_adr as _);
+        page_info.logical_outputadr = output_adr as _;
+        page_info.logical_codeadr = code_adr as _;
+        page_info.fail_next_write_if_zero = false;
+    }
 
     // Specify start address at first use
-    env.active_page_info_mut().startadr = match env.start_address() {
+    env.page_info_for_logical_address_mut(output_adr as _).startadr = match env.start_address() {
         Some(val) => val.min(env.logical_output_address()),
         None => env.logical_output_address()
     }
     .into();
+
 
     env.output_address = output_adr as _;
     env.update_dollar();
@@ -3865,9 +3883,10 @@ fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(
             file: file!(),
             line: line!(),
             msg: format!(
-                "BUG in assembler:{}!= {}",
+                "BUG in assembler: 0x{:x}!=0x{:x} in pass {:?}",
                 env.logical_output_address(),
-                env.logical_output_address()
+                env.output_address,
+                env.pass
             )
         });
     }

@@ -80,7 +80,7 @@ impl<'a, E:ExprEvaluationExt> ExprEvaluationExt for UnaryFunctionWrapper<'a,E> {
                 if arg < 0.into() || arg > 0xFFFF.into() {
                     return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                         Box::new(AssemblerError::AssemblingError {
-                            msg: format!("Impossible to read memory address {}", arg)
+                            msg: format!("Impossible to read memory address 0x{:X}", arg)
                         })
                     )));
                 }

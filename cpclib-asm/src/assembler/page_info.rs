@@ -11,7 +11,7 @@ pub type ProtectedArea = std::ops::RangeInclusive<u16>;
 /// A stock CPC 6128 is composed of two pages
 #[derive(Debug, Clone)]
 pub struct PageInformation {
-    /// Start adr to use to write binary files. No use when working with snapshots.
+    /// Start adr to use to write binary files. Not use when working with snapshots.
     pub(crate) startadr: Option<u16>,
     /// maximum address reached when working with 64k data
     pub(crate) maxadr: u16,

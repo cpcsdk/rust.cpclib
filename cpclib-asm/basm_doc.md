@@ -92,6 +92,8 @@ On the code space ($), not physical space ($$)
 When used with no argument, a bank corresponds to a memory area outside of the snapshot. All things read&write in memory are thus uncorrelated to the snapshot.
 Sections do not apply in a bank.
 
+`BANK page` is similar to `WRITE DIRECT -1 -1 page`
+
 ## Labels related
 
 ## =
