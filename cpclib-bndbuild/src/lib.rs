@@ -33,8 +33,6 @@ fn expand_glob(p: &str) -> Vec<String> {
         vec![p.to_owned()]
     };
 
-    dbg!(&expended);
-
     let res = expended.into_iter()
         .map(|p| {
             globmatch::Builder::new(p.as_str())
