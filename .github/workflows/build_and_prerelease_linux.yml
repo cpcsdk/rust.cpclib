@@ -37,9 +37,8 @@ jobs:
           removeArtifacts: false
           prerelease: true
           draft: false
-          tag: latest
           name: "Development Build"
-          generateReleaseNotes: true
+          generateReleaseNotes: false
           artifacts: |
             target/release/basm,
             target/release/visual-basm,
