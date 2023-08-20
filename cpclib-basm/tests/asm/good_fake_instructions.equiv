@@ -1,6 +1,10 @@
-	org 0x1000
+	ld l, e : ld h, d
+	jp (hl)
+	jp (ix)
+	jp (iy)
+	push hl : push de : push bc
+	pop bc : pop de : pop hl
 
-	ld l, e
-	ld h, d
+
 
 	

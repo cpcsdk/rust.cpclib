@@ -1,3 +1,4 @@
+	; rasm inspired
 	macro LDIXREG register,dep
 		if {dep}<-128 || {dep}>127
 			push BC

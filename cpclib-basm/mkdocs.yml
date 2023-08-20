@@ -1,0 +1,25 @@
+nav:
+  - Home: 'index.md'
+  - Command line: 'cmdline.md'
+  - Syntax: 'syntax.md'
+  - Expressions: 'expressions.md'
+  - Directives: 'directives.md'
+site_name: "Benediction ASseMbler"
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.details
+  - admonition
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tabs
+plugins:
+  - search
+repo_url: https://github.com/cpcsdk/rust.cpclib
