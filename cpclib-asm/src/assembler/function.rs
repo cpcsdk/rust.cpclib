@@ -609,7 +609,7 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
         _ => {
             return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: "Wrong type".to_owned()
+                    msg: "Wrong type. String expected".to_owned()
                 })
             )));
         }

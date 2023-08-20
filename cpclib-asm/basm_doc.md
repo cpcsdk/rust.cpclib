@@ -25,6 +25,7 @@ If it fails in properly recognizing macros or label, you can guide it by suffixi
 
 ## Provided functions
 
+- `duration(instruction)` returns the number of nop of the instruction
 - mode0_byte_to_pen_at
 - mode1_byte_to_pen_at
 - mode2_byte_to_pen_at
@@ -191,7 +192,16 @@ Fname can be build with variables.
 
 ## Amstrad CPC related directives
 
-### TICKERSTART
+### TICKER
+
+Compute the execution duration of a block of code
+
+```
+TICKER START variable
+ instructions
+TICKER STOP
+```
+ <../cpclib-basm/tests/asm/good_timing.asm>
 
 ### WAITNOPS
 
