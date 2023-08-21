@@ -1072,7 +1072,7 @@ impl Env {
         if self.options.show_progress() {
             Progress::progress().create_save_bar(nb_files_to_save);
         }
-        
+
         // save from snapshot
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
             //  eprintln!("ACTIVEPAGE. {:x}", &activepage);
@@ -1097,8 +1097,8 @@ impl Env {
             saved_files.append(s);
         }
 
-        #[cfg(not(target_arch = "wasm32"))]
         if self.options().show_progress() {
+            #[cfg(not(target_arch = "wasm32"))]
             Progress::progress().finish_save();
         }
         // restor memory conf
