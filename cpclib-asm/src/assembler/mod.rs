@@ -674,10 +674,13 @@ impl Env {
                     Ok(())
                 }
              },
-            (false,  AssemblingPass::ListingPass) => Err(AssemblerError::IncoherentCode{msg: format!(
+            (false,  AssemblingPass::ListingPass) => {
+                panic!();
+                Err(AssemblerError::IncoherentCode{msg: format!(
                 "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
                 label, self.pass
-            )}),
+            )})
+            },
             (false, AssemblingPass::FirstPass) | (false, AssemblingPass::Uninitialized) => {
                 self.symbols_mut()
                     .set_symbol_to_value(label, value)?;
@@ -872,8 +875,10 @@ impl Env {
             }
             self.symbols.new_pass();
 
-            #[cfg(not(target_arch = "wasm32"))]
-            Progress::progress().new_pass();
+            if self.options.show_progress() {
+                #[cfg(not(target_arch = "wasm32"))]
+                Progress::progress().new_pass();
+            }
         }
     }
 
@@ -1064,8 +1069,10 @@ impl Env {
             .map(|b| b.1.nb_files_to_save() as u64)
             .sum::<u64>() as u64;
 
-        Progress::progress().create_save_bar(nb_files_to_save);
-
+        if self.options.show_progress() {
+            Progress::progress().create_save_bar(nb_files_to_save);
+        }
+        
         // save from snapshot
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
             //  eprintln!("ACTIVEPAGE. {:x}", &activepage);
@@ -3643,7 +3650,16 @@ pub fn visit_stableticker(
         StableTickerAction::Stop => {
             match env.stable_counters.release_last_counter() {
                 None => Err(AssemblerError::NoActiveCounter),
-                Some((label, count)) => env.add_symbol_to_symbol_table(&label, count)
+                Some((label, count)) => {
+                    if env.pass.is_listing_pass() {
+                        // force the injection of the value
+                        env.symbols_mut()
+                            .set_symbol_to_value(label, count)?;
+                        Ok(())
+                    } else {
+                        env.add_symbol_to_symbol_table(&label, count)
+                    }
+                }
             }
         }
     }

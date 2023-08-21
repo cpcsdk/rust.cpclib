@@ -475,7 +475,7 @@ where
                         match parse_z80_with_context_builder(content, ctx_builder) {
                             Ok(listing) => {
                                 // Filename has already been added
-                                if token.include_is_standard_include() {
+                                if token.include_is_standard_include() && options.show_progress {
                                     Progress::progress().remove_parse(progress::normalize(&fname));
                                 }
 
@@ -621,7 +621,7 @@ where
         .collect::<Vec<_>>();
 
     // inform the progress bar
-    if !include_fnames.is_empty() {
+    if !include_fnames.is_empty() && options.show_progress {
         // add all fnames in one time
         Progress::progress().add_parses(include_fnames.iter().map(|t| progress::normalize(t)));
     }
@@ -661,6 +661,7 @@ where
                 token.visited(env)?;
                 visited += 1;
             }
+
             Progress::progress().add_visited_to_pass(visited);
         }
     }

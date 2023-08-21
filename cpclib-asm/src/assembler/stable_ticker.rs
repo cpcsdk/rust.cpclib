@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use crate::error::AssemblerError;
 
 /// Manage the stack of stable counters.
-/// They are updated each time an opcode is visited
+/// They are updated each time an opcode is visited as well
 #[derive(Default, Clone)]
 pub struct StableTickerCounters {
     counters: Vec<(String, usize)>
