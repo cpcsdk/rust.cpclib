@@ -40,7 +40,7 @@ Options:
 ## Example
 
 Here is an example to build a dummy Amstrad CPC project and execute on the real machine thanks to the m4.
-It is available in <tests/dummy>
+It is available in [tests/dummy](https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/dummy) (the repository does not contains the external tools needed to properly build the project. It is straighforward to add them).
 Successive calls to the build task do nothing as soon as no file has been modified.
 It is also possible to watch the dependencies of a given task to automatically build it when they are modified.
 This cannot be seen with the capture, but each time m4 command is launched, the project is send into the CPC machine (it takes several seconds however).
