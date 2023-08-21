@@ -41,12 +41,14 @@ jobs:
           name: "Development Build"
           generateReleaseNotes: false
           artifacts: |
-            target/release/basm,
-            target/release/visual-basm,
-            target/release/bdasm,
-            target/release/catalog,
-            target/release/hideur,
-            target/release/imgconverter,
-            target/release/snapshot,
-            target/release/locomotive
+            target/x86_64-unknown-linux-gnu/release/basm,
+            target/x86_64-unknown-linux-gnu/release/bdasm,
+            target/x86_64-unknown-linux-gnu/release/bndbuild,
+            target/x86_64-unknown-linux-gnu/release/catalog,
+            target/x86_64-unknown-linux-gnu/release/cpc2img,
+            target/x86_64-unknown-linux-gnu/release/cpclib-visual-bndbuild,
+            target/x86_64-unknown-linux-gnu/release/visual-basm,
+            target/x86_64-unknown-linux-gnu/release/hideur,
+            target/x86_64-unknown-linux-gnu/release/imgconverter,
+            target/x86_64-unknown-linux-gnu/release/snapshot,
     
