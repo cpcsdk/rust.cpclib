@@ -22,5 +22,10 @@ There are more are less able to do:
 	* Only reset and run file have been coded at the moment
 	* In opposite to the original `xfer` tool, `cpclib` one is able to start snapshots V3 (there are simply converted as snapshot v2 on the fly)
  - create basic tokens from basic source (WIP)
+
+
+ Documentation is abaialbe at <https://cpcsdk.github.io/rust.cpclib/>
+ 
+
  
  
