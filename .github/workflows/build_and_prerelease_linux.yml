@@ -37,6 +37,7 @@ jobs:
           removeArtifacts: false
           prerelease: true
           draft: false
+          tag: latest
           name: "Development Build"
           generateReleaseNotes: false
           artifacts: |
