@@ -1,0 +1,28 @@
+nav:
+  - Home: 'index.md'
+  - 'BASM':
+    - BASM: 'basm/index.md'
+    - Command line: 'basm/cmdline.md'
+    - Syntax: 'basm/syntax.md'
+    - Directives: 'basm/directives.md'
+  - BNDBUILD:
+    - BNDBUILD: 'bndbuild/index.md'
+site_name: "Amstrad RUST cpcdemotools"
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.details
+  - admonition
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tabs
+plugins:
+  - search
+repo_url: https://github.com/cpcsdk/rust.cpclib
