@@ -180,6 +180,12 @@ Example:
 --8<-- "tests/asm/good_next.asm"
 ```
 
+### UNDEF
+
+Example:
+```z80
+--8<-- "tests/asm/good_undef.asm"
+```
 
 ## Data related
 

@@ -383,18 +383,18 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                     break;
                 }
             }
-            // Label must exist
+            // Label must exist at this specific moment
             else if test.is_label_exists_test() {
                 let label = test.label_unchecked();
-                if env.symbols().symbol_exist_in_current_pass(label)? {
+                if env.symbols().contains_symbol(label)? {
                     selected_idx = Some(idx);
                     break;
                 }
             }
-            // Label must not exist
+            // Label must not exist at this specific moment
             else {
                 let label = test.label_unchecked();
-                if !env.symbols().symbol_exist_in_current_pass(label)? {
+                if !env.symbols().contains_symbol(label)? {
                     selected_idx = Some(idx);
                     break;
                 }
