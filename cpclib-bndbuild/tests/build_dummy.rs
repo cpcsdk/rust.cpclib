@@ -32,9 +32,12 @@ fn test_build_dummy() {
 #[test]
 fn test_dummy_phony() {
     use cpclib_bndbuild::BndBuilder;
+    use cpclib_common::itertools::Itertools;
 
     let builder_fname = "tests/dummy/bndbuild.yml";
     let builder = BndBuilder::from_fname(builder_fname).unwrap();
+
+    println!("{:#?}", builder.rules().iter().map(|r| r.targets()).collect_vec());
 
     assert!(builder.get_rule("m4").unwrap().is_phony());
     assert!(dbg!(builder.get_rule("build").expect("build is missing")).is_phony());

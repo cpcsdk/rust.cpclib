@@ -40,7 +40,15 @@ fn expand_glob(p: &str) -> Vec<String> {
             .map(|builder|{
                 builder.into_iter()
                 .map(|p2| match p2 {
-                    Ok(p) => p.display().to_string(),
+                    Ok(p) => {
+                        let p = p.display().to_string();
+                        if p.starts_with(".\\") {
+                            p[2..].to_owned()
+                        }
+                        else {
+                            p
+                        }
+                    },
                     Err(e) => p.clone()
                 })
                 .collect_vec()
