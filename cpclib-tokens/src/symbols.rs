@@ -686,9 +686,6 @@ impl SymbolsTable {
                 Some(Value::Expr(e)) => e.to_string(),
                 Some(Value::Counter(e)) => e.to_string(),
                 _ => {
-                    dbg!(local_expr);
-                    dbg!(&self);
-
                     let tree = build_operator_tree(local_expr)
                         .expect("Expression should be valid here. There is a bug in the assembler");
 

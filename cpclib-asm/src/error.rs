@@ -544,8 +544,11 @@ impl AssemblerError {
             AssemblerError::UnknownSymbol { symbol, closest } => {
                 write!(
                     f,
-                    "Unknown symbol: {}. Closest one is: {:?}",
+                    "Unknown symbol: {}.{}",
                     symbol, closest
+                        .as_ref()
+                        .map(|v| format!(" Closest one is: `{v}`"))
+                        .unwrap_or_default()
                 )
             }
 
