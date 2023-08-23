@@ -3868,7 +3868,7 @@ pub fn parse_label(
             my_many0_nocollect(alt((
                 is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"),
                 tag("."),
-                recognize(delimited(char('{'), expr, char('}')))
+                recognize(delimited(char('{'), opt(expr), char('}')))
             )))
         )))(input)?;
 
