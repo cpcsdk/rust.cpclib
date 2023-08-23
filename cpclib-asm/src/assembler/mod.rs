@@ -50,6 +50,7 @@ use crate::save_command::*;
 use crate::section::Section;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, PhysicalAddress};
+use cpclib_common::smol_str::SmolStr;
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -1576,7 +1577,10 @@ impl Env {
                     || self.symbols().kind(label)? == "any"))
         {
             Err(AssemblerError::AlreadyDefinedSymbol {
-                symbol: label.into(),
+                symbol: self.symbols()
+                            .extend_local_and_patterns_for_symbol(label)
+                            .map(|s| std::convert::Into::<SmolStr>::into(s))
+                            .unwrap_or_else(|_| SmolStr::from(label)),
                 kind: self.symbols().kind(label)?.into()
             })
         }

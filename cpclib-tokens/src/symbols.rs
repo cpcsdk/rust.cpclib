@@ -454,6 +454,18 @@ impl From<&SmolStr> for Symbol {
     }
 }
 
+impl Into<SmolStr> for Symbol {
+    fn into(self) -> SmolStr {
+        self.0
+    }
+}
+
+impl Into<SmolStr> for &Symbol {
+    fn into(self) -> SmolStr {
+        self.0.clone()
+    }
+}
+
 impl Symbol {
     pub fn value(&self) -> &str {
         &self.0
@@ -684,7 +696,6 @@ impl SymbolsTable {
                     let mut context = HashMapContext::new();
                     for variable in tree.iter_variable_identifiers() {
                         let variable_value = dbg!(self.value(variable)?.ok_or_else(|| {
-                            panic!();
                             SymbolError::WrongSymbol(variable.into())
                         }))?;
                         context
@@ -1176,6 +1187,12 @@ impl SymbolsTableCaseDependent {
             pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<SmolStr>, SymbolError>;
             pub fn push_seed(&mut self, seed: usize);
             pub fn pop_seed(&mut self);
+
+    pub fn extend_local_and_patterns_for_symbol<S: Into<Symbol>>(
+        &self,
+        symbol: S
+    ) -> Result<Symbol, SymbolError>;
+
         }
     }
 
