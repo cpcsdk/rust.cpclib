@@ -2785,7 +2785,7 @@ pub fn parse_macro_or_struct_call(
             return Ok((input, warning));
         }
 
-        let (input, _) = pair(space0, not(parse_comment))(input)?;
+        let (input, _) = pair(my_space0, not(parse_comment))(input)?;
 
         let (input, args) = if alt((eof, tag("\n"), tag(":")))(input.clone()).is_ok() {
             (input, vec![])
