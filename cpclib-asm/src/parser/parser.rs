@@ -2991,7 +2991,8 @@ fn my_space1(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
             tuple((
                 space0,
                 tag("\\"), // do we keep it ?
-                opt(pair(space0, parse_comment)),
+                opt(space0),
+                opt(parse_comment),
                 line_ending,
                 space0
             )),
