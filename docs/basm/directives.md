@@ -332,6 +332,25 @@ Example of macro using raw arguments:
 
 ### STRUCT
 
+Description:
+Structures allow to defined data blocs with semantic.
+In practice, they replace bunches of `DEFB`, `DEFW` directives and enforce checks at assembling (you cannot add more data than expected or forget some).
+If a label is used before the use of a struct, it is necessary to postfix it by :.
+Otherwise the assembler thinks the label is a macro or structure call.
+
+Synopsis
+
+```
+STRUCT <name>
+<filed1> DB|DW|STR|<other struct> [<value>]
+...
+<filedn> DB|DW|<other struct> [<value>]
+ENDSTRUCT
+
+
+
+[<label>:] <name> <arg1>, ... , <argn>
+```
 
 Standard example:
 ```z80

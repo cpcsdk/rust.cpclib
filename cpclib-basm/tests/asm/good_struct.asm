@@ -1,16 +1,25 @@
 
 	struct color
-r db 0
-g db 0
-b db 0
+r db 1
+g db 2
+b db 3
 	endstruct
 
 	struct point
-x db 0
-y db 0
+x db 4
+y db 5
 	endstruct
 
+col0:	color (void)
+pt0:	point (void)
+
+col1:	color 'a', 'b', 'c'
+pt1:	point 'd', 'e'
+
 	struct colored_point
-col		color 1, 2, 3
-pt		point 1, 2
+col		color 10, 20, 30
+pt		point 10, 20
 	endstruct
+
+
+	colored_point (void)

@@ -525,6 +525,13 @@ impl ListingElement for Token {
             _ => false
         }
     }
+
+    fn data_exprs(&self) -> &[Self::Expr] {
+        match self {
+            Self::Defb(e) | Self::Defw(e) | Self::Str(e) => e,
+            _ => unreachable!()
+        }
+    }
 }
 
 /// Standard listing is a specific implementation

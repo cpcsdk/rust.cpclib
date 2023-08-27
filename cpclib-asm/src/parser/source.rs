@@ -345,6 +345,7 @@ impl Z80Span {
     pub fn context(&self) -> &ParserContext {
         &self.0.extra
     }
+
 }
 
 impl Z80Span {
@@ -357,6 +358,6 @@ impl Z80Span {
     // clone
     // }
     pub fn state(&self) -> &ParsingState {
-        &self.context().state
+        self.context().state()
     }
 }

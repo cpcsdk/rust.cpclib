@@ -166,7 +166,7 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
             .enumerate()
             .map(
                 |(_idx, current_information)| -> Result<String, AssemblerError> {
-                    let ((_name, token), provided_param) = {
+                    let ((name, token), provided_param) = {
                         match current_information {
                             EitherOrBoth::Both((name, token), provided_param) => {
                                 ((name, token), Some(provided_param))
@@ -178,8 +178,6 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
 
                     match token {
                         Token::Defb(c) | Token::Defw(c) => {
-                            assert_eq!(c.len(), 1);
-
                             let tok = if matches!(token, Token::Defb(_)) {
                                 "DB"
                             }
@@ -197,8 +195,18 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                                         elem
                                     }
                                 }
-                                None => c[0].to_string()
+                                None => {
+                                    if c.len() == 0 {
+                                        return Err(AssemblerError::AssemblingError {
+                                            msg: format!("A value is expected for {} (no default value is provided)", name)
+                                        })
+                                    } else {
+                                        c[0].to_string()
+                                    }
+                                }
                             };
+
+
                             Ok(format!(" {}{} {}", prefix, tok, elem))
                         }
 

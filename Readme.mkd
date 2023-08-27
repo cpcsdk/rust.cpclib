@@ -24,7 +24,7 @@ There are more are less able to do:
  - create basic tokens from basic source (WIP)
 
 
- Documentation is abaialbe at <https://cpcsdk.github.io/rust.cpclib/>
+ Documentation is available at <https://cpcsdk.github.io/rust.cpclib/>
  
 
  

@@ -570,7 +570,7 @@ where
 
 #[inline]
 fn inner_code(input: Z80Span) -> IResult<Z80Span, LocatedListing, Z80ParserError> {
-    inner_code_with_state(input.extra.state.clone())(input)
+    inner_code_with_state(input.extra.state().clone())(input)
 }
 
 /// Workaround because many0 is not used in the main root function
@@ -1831,7 +1831,7 @@ pub fn parse_assign(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 }
 
 pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let parsing_state = input.context().state.clone();
+    let parsing_state = input.context().state().clone();
 
     verify(alt((parse_token1, parse_token2)), move |t| {
         t.is_accepted(&parsing_state)
@@ -1989,14 +1989,51 @@ pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError
     ))
 }
 
+pub fn parse_struct_directive(input: Z80Span)  -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    alt((parse_struct_directive_inner, parse_macro_or_struct_call(false, true)))(input)
+}
+
+fn parse_struct_directive_inner(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    // XXX Sadly the state is stored within the context that cannot
+    //     by changed. So we can cannot really use parsing state sutf
+    
+    let input_start = input.clone();
+    let parsing_state = ParsingState::StructLimited;
+    let (input, directive) = verify(parse_directive_new(&parsing_state.clone()), move |d| d.is_accepted(&parsing_state))(input.clone())?;
+
+
+    // Only one argument is allowed
+    if (directive.is_db() || directive.is_dw()) && directive.data_exprs().len()>1 {
+        return Err(Err::Failure(
+            cpclib_common::nom::error::VerboseError::<Z80Span>::add_context(
+                input,
+                "0 or 1 arguments are expected",
+                cpclib_common::nom::error::ParseError::<Z80Span>::from_error_kind(
+                    input_start,
+                    ErrorKind::Many1
+                )
+            )
+            .into()
+        ));
+    }
+    Ok((input, directive))
+}
+
+
+
 /// Parse any directive
 pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let parsing_state = input.context().state.clone();
-    verify(parse_directive_new, move |d| d.is_accepted(&parsing_state))(input.clone())
+    let parsing_state = input.context().state().clone();
+    verify(parse_directive_new(&parsing_state.clone()), move |d| d.is_accepted(&parsing_state))(input.clone())
 }
 
 #[inline]
-pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+/// Here local_parsing_state only serves to adapt DB/DW/STR behavior in struct.
+/// Maybe it should be used to control the directives of interest BEFORE there parsing instead of after.
+/// No filtering is done
+pub fn parse_directive_new(local_parsing_state: &ParsingState) ->
+impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError>  + '_ {
+ move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let input_start = input.clone();
 
     // Get the first word that will drive the rest of parsing
@@ -2007,12 +2044,13 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
         smartstring::SmartString::from(word.as_str());
     upper_word.as_mut_str().make_ascii_uppercase();
 
+    let within_struct = local_parsing_state == &ParsingState::StructLimited;
     match upper_word.as_str() {
         "DB" | "DEFB" | "DM" | "DEFM" | "BYTE" | "TEXT" => {
-            parse_db_or_dw_or_str(input_start, 0)(rest)
+            parse_db_or_dw_or_str(input_start, DbDwStr::Db, within_struct)(rest)
         }
-        "WORD" | "DW" | "DEFW" => parse_db_or_dw_or_str(input_start, 1)(rest),
-        "STR" => parse_db_or_dw_or_str(input_start, 2)(rest),
+        "WORD" | "DW" | "DEFW" => parse_db_or_dw_or_str(input_start, DbDwStr::Dw, within_struct)(rest),
+        "STR" => parse_db_or_dw_or_str(input_start, DbDwStr::Str, within_struct)(rest),
 
         "INCBIN" | "BINCLUDE" => parse_incbin(input_start, BinaryTransformation::None)(rest),
         "INCEXO" => {
@@ -2098,6 +2136,7 @@ pub fn parse_directive_new(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
             Ok((input, token.locate(input_start, size)))
         }
     }
+}
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2595,29 +2634,38 @@ pub fn parse_export(
     }
 }
 
+#[derive(PartialEq)]
+pub enum DbDwStr {
+    Db,
+    Dw,
+    Str
+}
+
 #[inline]
 /// Parse DB DW directives
 pub fn parse_db_or_dw_or_str(
     input_start: Z80Span,
-    code: u8
+    code: DbDwStr,
+    empty_list_allowed: bool,
 ) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-        let (input, expr) = expr_list(input)?;
+        // STRUCT directive allows to have no arguments
+        let (input, expr) = if empty_list_allowed {
+            expr_list(input.clone())
+                .unwrap_or((input, Default::default()))
+        }
+        else {
+            expr_list(input)?
+        };
 
         let token_span = input_start.take(input_start.input_len() - input.input_len()); // TODO Use a real type that embeds strings in a Z80Span to avoid copying them
 
         Ok((
             input,
-            if code == 0 {
-                LocatedToken::Defb(expr, token_span)
-            }
-            else if code == 1 {
-                LocatedToken::Defw(expr, token_span)
-            }
-            else
-            // if code == 2
-            {
-                LocatedToken::Str(expr, token_span)
+            match code {
+                DbDwStr::Db => LocatedToken::Defb(expr, token_span),
+                DbDwStr::Dw => LocatedToken::Defw(expr, token_span),
+                DbDwStr::Str => LocatedToken::Str(expr, token_span),
             }
         ))
     }
@@ -3751,15 +3799,7 @@ fn parse_struct(
                     ),
                     cut(context(
                         "STRUCT: Invalid operation",
-                        verify(
-                            alt((parse_directive, parse_macro_or_struct_call(false, true))),
-                            |t| {
-                                true | t.is_call_macro_or_build_struct()
-                                    | t.is_db()
-                                    | t.is_dw()
-                                    | t.is_str()
-                            }
-                        )
+                        parse_struct_directive
                     ))
                 ),
                 my_many0_nocollect(alt((

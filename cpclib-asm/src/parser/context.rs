@@ -49,7 +49,16 @@ impl ParsingStateVerified for LocatedToken {
                     _ => false
                 }
             }
-            ParsingState::StructLimited => todo!(),
+            ParsingState::StructLimited => {
+                match self {
+                    LocatedToken::Standard { token, span: _span } => token.is_accepted(state),
+                    LocatedToken::Defb(..) |
+                    LocatedToken::Defw(..) |
+                    LocatedToken::Str(..) |
+                    LocatedToken::MacroCall(..) => true,
+                    _ => false
+                }
+            },
             ParsingState::SymbolsLimited => {
                 match self {
                     LocatedToken::Standard { token, span: _span } => token.is_accepted(state),
@@ -86,7 +95,15 @@ impl ParsingStateVerified for Token {
                     _ => false
                 }
             }
-            ParsingState::StructLimited => todo!(),
+            ParsingState::StructLimited => {
+                match self {
+                    Token::Defb(..) |
+                    Token::Defw(..) |
+                    Token::Str(..) |
+                    Token::MacroCall(..) => true,
+                    _ => false
+                }
+            }
 
             ParsingState::SymbolsLimited => {
                 match self {
@@ -370,7 +387,8 @@ impl ParserOptions {
 /// TODO add assembling flags
 #[derive(Debug)]
 pub struct ParserContext {
-    /// Limitation on the kind of intruction to parse
+    /// Limitation on the kind of intruction to parse.
+    /// The current state is at the end (it is modified when in a struct)
     pub state: ParsingState,
     /// Filename that is currently parsed
     pub current_filename: Option<PathBuf>,
@@ -428,7 +446,7 @@ impl ParserContext {
             context_name: self.context_name.clone(),
             source: self.source,
             options: self.options.clone(),
-            state
+            state: state
         }
     }
 }
@@ -468,6 +486,10 @@ impl ParserContext {
 
     pub fn options(&self) -> &ParserOptions {
         &self.options
+    }
+
+    pub fn state(&self) -> &ParsingState {
+        &self.state
     }
 }
 // pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {

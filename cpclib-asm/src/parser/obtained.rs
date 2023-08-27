@@ -1610,33 +1610,33 @@ impl ListingElement for LocatedToken {
 
     fn is_db(&self) -> bool {
         match self {
-            Self::Standard {
-                token: Token::Defb(..),
-                ..
-            } => true,
+            Self::Defb(..) => true,
             _ => false
         }
     }
 
     fn is_dw(&self) -> bool {
         match self {
-            Self::Standard {
-                token: Token::Defw(..),
-                ..
-            } => true,
+            Self::Defw(..)=> true,
             _ => false
         }
     }
 
     fn is_str(&self) -> bool {
         match self {
-            Self::Standard {
-                token: Token::Str(..),
-                ..
-            } => true,
+            Self::Str(..)=> true,
             _ => false
         }
     }
+
+    fn data_exprs(&self) -> &[Self::Expr] {
+        match self {
+            Self::Defb(e, ..) | Self::Defw(e, ..) | Self::Str(e, ..) => e,
+            _ => unreachable!()
+        }
+    }
+
+
 }
 
 pub type InnerLocatedListing = BaseListing<LocatedToken>;

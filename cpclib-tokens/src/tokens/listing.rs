@@ -115,6 +115,7 @@ pub trait ListingElement: Debug + Sized {
     fn is_db(&self) -> bool;
     fn is_dw(&self) -> bool;
     fn is_str(&self) -> bool;
+    fn data_exprs(&self) -> &[Self::Expr];
 }
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]
