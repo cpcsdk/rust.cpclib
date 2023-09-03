@@ -8,6 +8,7 @@ use cpclib_imgconverter::{self, get_requested_palette};
 fn main() {
     let cmd = cpclib_imgconverter::specify_palette!(clap::Command::new("cpc2png")
         .about("Generate PNG from CPC files")
+        .subcommand_required(true)
         .arg(
             Arg::new("MODE")
                 .short('m')
@@ -35,11 +36,22 @@ fn main() {
                         .help("Width of the sprite in pixels")
                 )
         )
+        .subcommand(
+            Command::new("SCREENCMD")
+                .about("Load from a 16kb screen data")
+                .name("screen")
+                .arg(
+                    Arg::new("WIDTH")
+                        .long("width")
+                        .default_value("80")
+                        .help("Width of the screen in bytes")
+                )
+        )
         .arg(Arg::new("INPUT").required(true))
         .arg(Arg::new("OUTPUT").required(true)));
 
-    let matches = dbg!(cmd.get_matches());
-    let palette = dbg!(get_requested_palette(&matches).unwrap_or_default());
+    let matches = cmd.get_matches();
+    let palette = get_requested_palette(&matches).unwrap_or_default();
     let input_fname = matches.get_one::<String>("INPUT").unwrap();
     let output_fname = matches.get_one::<String>("OUTPUT").unwrap();
     let mode = *matches.get_one::<i64>("MODE").unwrap() as u8;
@@ -61,8 +73,11 @@ fn main() {
         let width: usize = sprite.get_one::<String>("WIDTH").unwrap().parse().unwrap();
         ColorMatrix::from_sprite(data, width as _, mode, &palette)
     }
-    else {
-        ColorMatrix::from_screen(data, mode, &palette)
+    else if let Some(screen) = matches.subcommand_matches("screen") {
+        let width: usize = screen.get_one::<String>("WIDTH").unwrap().parse().unwrap();
+        ColorMatrix::from_screen(data, width as _, mode, &palette)
+    } else {
+        unreachable!()
     };
 
     if mode0ratio {

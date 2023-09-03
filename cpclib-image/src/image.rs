@@ -191,9 +191,14 @@ pub enum ColorConversionStrategy {
 }
 
 impl ColorMatrix {
-    pub fn from_screen(data: &[u8], mode: Mode, palette: &Palette) -> Self {
-        let bytes_width = 80;
-        let pixel_height = 200;
+    pub fn from_screen(data: &[u8], bytes_width: usize, mode: Mode, palette: &Palette) -> Self {
+        let pixel_height = {
+            let mut height = 0x4000 / bytes_width;
+            while height % 8 != 0 {
+                height -= 1;
+            }
+            height
+        };
 
         let pixel_width = mode.nb_pixels_for_bytes_width(bytes_width);
 
