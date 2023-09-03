@@ -54,13 +54,13 @@ impl SymbolOutputFormat {
                     Value::Expr(e @ ExprResult::Float(_f)) => {
                         format!("{} #{:X}", k.value(), e.int().unwrap())
                     }
-                    Value::Expr(ExprResult::String(s)) => {
+                    Value::Expr(ExprResult::String(_s)) => {
                         "".to_owned() // ignored by winape
                     }
-                    Value::Expr(l @ ExprResult::List(_)) => {
+                    Value::Expr(_l @ ExprResult::List(_)) => {
                         "".to_owned() // ignored by winape
                     }
-                    Value::Expr(m @ ExprResult::Matrix { .. }) => {
+                    Value::Expr(_m @ ExprResult::Matrix { .. }) => {
                         "".to_owned() // ignored by winape
                     }
     

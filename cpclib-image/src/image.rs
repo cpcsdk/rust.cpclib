@@ -200,7 +200,7 @@ impl ColorMatrix {
             height
         };
 
-        let pixel_width = mode.nb_pixels_for_bytes_width(bytes_width);
+        let _pixel_width = mode.nb_pixels_for_bytes_width(bytes_width);
 
         (0..pixel_height).map( |line| {
             let screen_address = 0xC000 + ((line/8) * bytes_width) + ((line%8)*0x800);
