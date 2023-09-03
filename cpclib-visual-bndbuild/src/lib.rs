@@ -92,7 +92,7 @@ pub struct BndBuildApp {
 
     /// stdout redirection
     #[serde(skip)]
-    gags: (gag::BufferRedirect , gag::BufferRedirect),
+    gags: (gag::BufferRedirect, gag::BufferRedirect),
 
     #[serde(skip)]
     request_reload: bool,
@@ -140,11 +140,11 @@ impl Default for BndBuildApp {
             watched: None,
             last_tick: SystemTime::now(),
             gags: (
-                gag::BufferRedirect::stdout().unwrap() ,
-                gag::BufferRedirect::stderr().unwrap() // 
+                gag::BufferRedirect::stdout().unwrap(),
+                gag::BufferRedirect::stderr().unwrap() //
             ),
             recent_files: Vec::new(),
-            watch_logs: Default::default(),
+            watch_logs: Default::default()
         }
     }
 }
@@ -322,12 +322,9 @@ impl BndBuildApp {
 
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    
-                    if ui
-                        .add(Button::new("New"))
-                        .clicked() {
-                            self.request_new = true;
-                        }
+                    if ui.add(Button::new("New")).clicked() {
+                        self.request_new = true;
+                    }
                     if ui
                         .add(Button::new("Open").shortcut_text(ctx.format_shortcut(&CTRL_O)))
                         .clicked()
@@ -351,13 +348,10 @@ impl BndBuildApp {
                         });
                     }
 
-                    if ui
-                        .add(Button::new("Save as"))
-                        .clicked()
-                        {
-                            self.request_save_as = true;
-                            ui.close_menu();
-                        }
+                    if ui.add(Button::new("Save as")).clicked() {
+                        self.request_save_as = true;
+                        ui.close_menu();
+                    }
 
                     if self.filename.is_some() {
                         if ui
@@ -452,7 +446,6 @@ impl BndBuildApp {
                     .max_height(f32::INFINITY)
                     .max_width(f32::INFINITY)
                     .show(ui, |ui| {
-
                         let editor = CodeEditor::default()
                             .id_source("code editor")
                             .with_fontsize(14.0)
@@ -618,8 +611,8 @@ impl eframe::App for BndBuildApp {
         // Handle new
         if self.request_new {
             if self.is_dirty {
-
-            } else {
+            }
+            else {
                 self.file_content = Some("".to_owned());
                 self.filename.take();
                 self.builder_and_layers.take();
@@ -729,14 +722,13 @@ impl eframe::App for BndBuildApp {
                     if let Some(e) = res.err() {
                         self.build_error = Some(e.to_string());
                     }
-                },
+                }
                 Err(err) => {
-                   // self.build_error = Some(err. ().to_string());
-                   panic!("{:?}", err);
-                },
+                    // self.build_error = Some(err. ().to_string());
+                    panic!("{:?}", err);
+                }
             }
 
-            
             self.update_cache();
             true
         }
@@ -758,20 +750,31 @@ impl eframe::App for BndBuildApp {
         // force refresh when there is a runnong task
         if self.job.is_some() {
             ctx.request_repaint_after(REFRESH_DURATION);
-        } else {
+        }
+        else {
             // handle watch if needed
             if let Some(watched) = self.watched.as_ref() {
-                if self.builder_and_layers.as_ref().map(|bnl| bnl.borrow_owner().outdated(watched).unwrap_or(false)).unwrap_or(false) {
-                    self.watch_logs.push_str(&format!("{} needs to be rebuilt", watched.display()));
+                if self
+                    .builder_and_layers
+                    .as_ref()
+                    .map(|bnl| bnl.borrow_owner().outdated(watched).unwrap_or(false))
+                    .unwrap_or(false)
+                {
+                    self.watch_logs
+                        .push_str(&format!("{} needs to be rebuilt", watched.display()));
                     if self.requested_target.is_some() {
-                        self.watch_logs.push_str(&format!("Build delayed in favor of {}", self.requested_target.as_ref().unwrap().display()));
-                    } else {
+                        self.watch_logs.push_str(&format!(
+                            "Build delayed in favor of {}",
+                            self.requested_target.as_ref().unwrap().display()
+                        ));
+                    }
+                    else {
                         self.requested_target = Some(watched.to_owned());
                     }
                 }
             }
         }
 
-        // handle 
+        // handle
     }
 }

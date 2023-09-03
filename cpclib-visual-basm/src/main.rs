@@ -19,5 +19,6 @@ fn main() {
                 eprintln!("{}", e);
             }
         }
-    }).unwrap();
+    })
+    .unwrap();
 }

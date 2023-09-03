@@ -8,8 +8,7 @@ use topologic::AcyclicDependencyGraph;
 
 use crate::executor::execute;
 use crate::task::Task;
-use crate::BndBuilderError;
-use crate::expand_glob;
+use crate::{expand_glob, BndBuilderError};
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Hash)]
 pub struct Rule {
@@ -41,10 +40,12 @@ fn deserialize_path_list<'de, D>(deserializer: D) -> Result<Vec<PathBuf>, D::Err
 where D: Deserializer<'de> {
     let s = String::deserialize(deserializer)?;
     let r = shlex::split(&s).or(Some(vec![])).unwrap();
-    let r = r.into_iter().map(|s| expand_glob(s.as_ref()))
-    .flatten()
-    .map(|s| PathBuf::from(s))
-    .collect_vec();
+    let r = r
+        .into_iter()
+        .map(|s| expand_glob(s.as_ref()))
+        .flatten()
+        .map(|s| PathBuf::from(s))
+        .collect_vec();
 
     Ok(r)
 }
@@ -82,9 +83,6 @@ where D: Deserializer<'de> {
     deserializer.deserialize_any(SequenceOrList)
 }
 
-
-
-
 impl Rule {
     pub fn new<S: AsRef<str>, T: Into<Task> + Clone>(
         targets: &[S],
@@ -92,16 +90,18 @@ impl Rule {
         commands: &[T]
     ) -> Self {
         Self {
-            targets: targets.into_iter()
+            targets: targets
+                .into_iter()
                 .map(|s| expand_glob(s.as_ref()))
                 .flatten()
                 .map(|s| PathBuf::from(s))
                 .collect_vec(),
-            dependencies: dependencies.into_iter()
-            .map(|s| expand_glob(s.as_ref()))
-            .flatten()
-            .map(|s| PathBuf::from(s))
-            .collect_vec(),
+            dependencies: dependencies
+                .into_iter()
+                .map(|s| expand_glob(s.as_ref()))
+                .flatten()
+                .map(|s| PathBuf::from(s))
+                .collect_vec(),
             commands: commands
                 .into_iter()
                 .map(|t| (t.clone()).into())
@@ -123,12 +123,10 @@ impl Rule {
 
         if self.commands().is_empty() {
             true
-        } else {
-            self.commands().iter()
-                .all(|c| c.is_phony())
         }
-
-
+        else {
+            self.commands().iter().all(|c| c.is_phony())
+        }
     }
 
     pub fn is_up_to_date(&self) -> bool {
@@ -159,9 +157,7 @@ impl Rule {
     }
 
     pub fn targets(&self) -> Vec<&Path> {
-        self.targets.iter()
-            .map(|t| t.as_ref())
-            .collect_vec()
+        self.targets.iter().map(|t| t.as_ref()).collect_vec()
     }
 }
 
@@ -290,36 +286,36 @@ impl<'r> Graph<'r> {
         }
     }
 
-
-
-    pub fn outdated<P: AsRef<Path>>(&self, p: P, skip_rules_without_commands: bool) -> Result<bool, BndBuilderError> {
+    pub fn outdated<P: AsRef<Path>>(
+        &self,
+        p: P,
+        skip_rules_without_commands: bool
+    ) -> Result<bool, BndBuilderError> {
         let dependences = self.get_layered_dependencies_for(&p);
-        let dependencies = dependences.into_iter()
-            .flatten()
-            .collect_vec();
-        let res = dependencies.into_iter()
-            .rev()
-            .any(|p| {
-                self.rule(p)
-                    .map(|r| 
-                        if skip_rules_without_commands {
-                            if r.is_phony() {
-                                false
-                            } else {
-                                !r.is_up_to_date()
-                            }
-                        } else {
+        let dependencies = dependences.into_iter().flatten().collect_vec();
+        let res = dependencies.into_iter().rev().any(|p| {
+            self.rule(p)
+                .map(|r| {
+                    if skip_rules_without_commands {
+                        if r.is_phony() {
+                            false
+                        }
+                        else {
                             !r.is_up_to_date()
                         }
-                    ).unwrap_or(false) // ignore not existing rule. Should fail ?
-            });
+                    }
+                    else {
+                        !r.is_up_to_date()
+                    }
+                })
+                .unwrap_or(false) // ignore not existing rule. Should fail ?
+        });
         Ok(res)
     }
 
-    pub fn rule<P:AsRef<Path>>(&self, p: P) -> Option<&Rule> {
+    pub fn rule<P: AsRef<Path>>(&self, p: P) -> Option<&Rule> {
         let p = p.as_ref();
-        self.node2tracked.get(p)
-            .map(|idx| self.tracked[*idx])
+        self.node2tracked.get(p).map(|idx| self.tracked[*idx])
     }
 
     pub fn execute<P: AsRef<Path>>(&self, p: P) -> Result<(), BndBuilderError> {
@@ -418,7 +414,7 @@ impl<'r> Graph<'r> {
 #[cfg(test)]
 mod test {
     use super::Task;
-    use crate::deps::{Rule, Rules, expand_glob};
+    use crate::deps::{expand_glob, Rule, Rules};
 
     #[test]
     fn test_deserialize_rule1() {
@@ -470,14 +466,12 @@ commands: basm samourai.asm --progress --snapshot -o samourai.sna -Idata --sym s
         assert_eq!(rules.rules.len(), 2);
     }
 
-
     #[test]
     fn test_glob_path() {
         let fname = "samourai.{lst,sym}";
         let result = expand_glob(fname);
         eprintln!("{:?}", result);
         assert_eq!(result.len(), 2);
-
 
         let fname = "samourai.{lst,sym";
         let result = expand_glob(fname);

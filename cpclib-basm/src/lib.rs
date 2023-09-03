@@ -8,8 +8,8 @@ use std::path::Path;
 use std::str::FromStr;
 
 use cpclib_asm::assembler::file::{get_filename, handle_source_encoding};
-use cpclib_asm::preamble::*;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
+use cpclib_asm::preamble::*;
 use cpclib_asm::progress::{normalize, Progress};
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};

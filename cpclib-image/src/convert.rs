@@ -4,8 +4,7 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::path::Path;
 
-use cpclib_common::bitfield::BitRangeMut;
-use cpclib_common::bitfield::BitRange;
+use cpclib_common::bitfield::{BitRange, BitRangeMut};
 use cpclib_common::itertools::Itertools;
 use image as im;
 
@@ -1125,7 +1124,6 @@ impl<'a> ImageConverter<'a> {
             transformations: transformations.clone(),
             output
         };
-
 
         if let OutputFormat::LinearEncodedChuncky = output {
             let mut matrix = converter.load_color_matrix(input_file);

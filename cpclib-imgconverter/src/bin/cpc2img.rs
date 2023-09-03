@@ -1,7 +1,6 @@
 use cpclib::common::clap::{self, value_parser, Arg, ArgAction, Command};
 use cpclib::common::itertools::Itertools;
-use cpclib::image::image::ColorMatrix;
-use cpclib::image::image::Mode;
+use cpclib::image::image::{ColorMatrix, Mode};
 use cpclib::image::pixels;
 use cpclib_imgconverter::{self, get_requested_palette};
 
@@ -76,7 +75,8 @@ fn main() {
     else if let Some(screen) = matches.subcommand_matches("screen") {
         let width: usize = screen.get_one::<String>("WIDTH").unwrap().parse().unwrap();
         ColorMatrix::from_screen(data, width as _, mode, &palette)
-    } else {
+    }
+    else {
         unreachable!()
     };
 

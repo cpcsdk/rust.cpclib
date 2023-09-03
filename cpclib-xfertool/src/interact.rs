@@ -127,7 +127,9 @@ impl<'a> XferInteractorHelper<'a> {
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let mut entries: Vec<Pair> = Vec::new();
 
-        let (start, word) = extract_word(line, pos, ESCAPE_CHAR, |c| DEFAULT_BREAK_CHARS.iter().any(|c2| *c2 == c));
+        let (start, word) = extract_word(line, pos, ESCAPE_CHAR, |c| {
+            DEFAULT_BREAK_CHARS.iter().any(|c2| *c2 == c)
+        });
         for file in self.xfer.current_folder_content().unwrap().files() {
             let fname1 = file.fname();
             let fname2 = "./".to_owned() + fname1;
@@ -155,7 +157,9 @@ impl<'a> XferInteractorHelper<'a> {
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let mut entries: Vec<Pair> = Vec::new();
 
-        let (start, word) = extract_word(line, pos, ESCAPE_CHAR, |c| DEFAULT_BREAK_CHARS.iter().any(|c2| *c2 == c));
+        let (start, word) = extract_word(line, pos, ESCAPE_CHAR, |c| {
+            DEFAULT_BREAK_CHARS.iter().any(|c2| *c2 == c)
+        });
         // TODO check if it is the very first word
         for command in &self.commands {
             if command.starts_with(word) {
@@ -351,7 +355,8 @@ ls                  List the files in the current M4 directory.
 
         let config = Config::builder()
             .history_ignore_space(true)
-            .history_ignore_dups(true).unwrap()
+            .history_ignore_dups(true)
+            .unwrap()
             .completion_type(CompletionType::List)
             .edit_mode(EditMode::Emacs)
             //.output_stream(OutputStreamType::Stdout)

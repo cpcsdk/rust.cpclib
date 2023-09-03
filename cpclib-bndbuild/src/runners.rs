@@ -4,9 +4,8 @@ use cpclib_common::clap::{self, Arg, ArgAction, Command};
 use cpclib_common::itertools::Itertools;
 use glob::glob;
 use shlex::split;
-use crate::expand_glob;
 
-use crate::built_info;
+use crate::{built_info, expand_glob};
 
 /// Get all args (split string as done in shell and apply glob matching)
 fn get_all_args(arguments: &str) -> Vec<String> {
@@ -129,26 +128,32 @@ impl Runner for RmRunner {
     fn inner_run(&self, itr: &[String]) -> Result<(), String> {
         let mut errors = String::new();
 
-        for fname in itr.into_iter()
+        for fname in itr
+            .into_iter()
             .map(|s| s.as_str())
-        //    .map(|s| glob(s).unwrap())
-           .map(expand_glob)
+            //    .map(|s| glob(s).unwrap())
+            .map(expand_glob)
             .flatten()
-        //    .map(|e| dbg!(e.unwrap())) 
-          {
+        //    .map(|e| dbg!(e.unwrap()))
+        {
             match std::fs::remove_file(&fname) {
                 Ok(_) => {
-                    println!("\t{} removed", fname/*.display()*/);
+                    println!("\t{} removed", fname /* .display() */);
                 }
                 Err(e) => {
-                    errors.push_str(&format!("Unable to remove {}:{}.\n", fname/* .display()*/, e.to_string()))
+                    errors.push_str(&format!(
+                        "Unable to remove {}:{}.\n",
+                        fname, // .display()
+                        e.to_string()
+                    ))
                 }
             };
         }
 
         if errors.is_empty() {
             Ok(())
-        } else {
+        }
+        else {
             Err(errors)
         }
     }

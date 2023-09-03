@@ -1,8 +1,7 @@
-
-use crate::image::Mode;
 use crate::ga::Pen;
+use crate::image::Mode;
 
-pub fn byte_to_pens(byte: u8, mode: Mode) -> Box<dyn Iterator<Item=Pen>> {
+pub fn byte_to_pens(byte: u8, mode: Mode) -> Box<dyn Iterator<Item = Pen>> {
     match mode {
         Mode::Zero => Box::new(mode0::byte_to_pens(byte).into_iter()),
         Mode::One => Box::new(mode1::byte_to_pens(byte).into_iter()),
@@ -10,8 +9,6 @@ pub fn byte_to_pens(byte: u8, mode: Mode) -> Box<dyn Iterator<Item=Pen>> {
         _ => unimplemented!()
     }
 }
-
-
 
 /// Mode 2 specific pixels managment functions
 pub mod mode2 {
@@ -246,8 +243,7 @@ pub mod mode1 {
         let pen_bit0: u8 = (pen.number() & (1 << 0)) >> 0;
         let pen_bit1: u8 = (pen.number() & (1 << 1)) >> 1;
 
-        pen_bit1 * (1 << byte_bit1) 
-            + pen_bit0 * (1 << byte_bit0)
+        pen_bit1 * (1 << byte_bit1) + pen_bit0 * (1 << byte_bit0)
     }
 
     /// Convert the 4 pens in a row (from left to right)

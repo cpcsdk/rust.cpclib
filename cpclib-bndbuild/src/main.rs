@@ -1,8 +1,7 @@
 use cpclib_bndbuild::executor::*;
 use cpclib_bndbuild::runners::RunnerWithClap;
-use cpclib_bndbuild::{BndBuilder, BndBuilderError};
+use cpclib_bndbuild::{built_info, BndBuilder, BndBuilderError};
 use cpclib_common::clap::*;
-use cpclib_bndbuild::built_info;
 
 fn main() {
     match inner_main() {
@@ -50,10 +49,10 @@ fn inner_main() -> Result<(), BndBuilderError> {
         )
         .arg(
             Arg::new("watch")
-            .short('w')
-            .long("watch")
-            .action(ArgAction::SetTrue)
-            .help("Watch the targets and permanently rebuild them when needed.")
+                .short('w')
+                .long("watch")
+                .action(ArgAction::SetTrue)
+                .help("Watch the targets and permanently rebuild them when needed.")
         )
         .arg(
             Arg::new("target")
@@ -104,7 +103,7 @@ fn inner_main() -> Result<(), BndBuilderError> {
 
     // Get the targets
     let targets_provided = matches.contains_id("target");
-    let targets = if  !targets_provided {
+    let targets = if !targets_provided {
         if let Some(first) = builder.default_target() {
             vec![first]
         }
@@ -113,7 +112,9 @@ fn inner_main() -> Result<(), BndBuilderError> {
         }
     }
     else {
-        matches.get_many::<String>("target").unwrap()
+        matches
+            .get_many::<String>("target")
+            .unwrap()
             .into_iter()
             .map(|s| s.as_ref())
             .collect::<Vec<&std::path::Path>>()
@@ -124,19 +125,18 @@ fn inner_main() -> Result<(), BndBuilderError> {
     let watch_requested = matches.get_flag("watch");
     loop {
         for tgt in targets.iter() {
-
             if first_loop || builder.outdated(tgt).unwrap_or(false) {
-                builder.execute(tgt)
-                    .map_err(|e| if targets_provided {
+                builder.execute(tgt).map_err(|e| {
+                    if targets_provided {
                         e
-                    } else {
+                    }
+                    else {
                         BndBuilderError::DefaultTargetError {
                             source: Box::new(e)
                         }
-                    })
-                ?;
+                    }
+                })?;
             }
-
         }
 
         if !watch_requested {
@@ -146,7 +146,6 @@ fn inner_main() -> Result<(), BndBuilderError> {
         std::thread::sleep(std::time::Duration::from_millis(1000)); // sleep 1s before trying to build
         first_loop = false;
     }
-
 
     Ok(())
 }

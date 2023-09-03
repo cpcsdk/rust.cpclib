@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 use std::io::{BufReader, Read};
 use std::path::Path;
+
 use cpclib_common::itertools::Itertools;
 use deps::{Graph, Rule};
-use thiserror::Error;
 use lazy_regex::regex_captures;
+use thiserror::Error;
 
 pub mod deps;
 pub mod executor;
@@ -16,49 +17,57 @@ pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-
 /// Expand glob patterns
 /// {a,b} expension is always done even if file does not exists
 /// *.a is done only when file exists
 fn expand_glob(p: &str) -> Vec<String> {
-    let expended = if let Some((_, start, middle, end)) = regex_captures!(r"^(.*)\{(.*)\}(.*)$", p) {
-
-        middle.split(",")
-            .map(|component| {
-                format!("{start}{component}{end}")
-            })
+    let expended = if let Some((_, start, middle, end)) = regex_captures!(r"^(.*)\{(.*)\}(.*)$", p)
+    {
+        middle
+            .split(",")
+            .map(|component| format!("{start}{component}{end}"))
             .collect_vec()
-
-    } else {
+    }
+    else {
         vec![p.to_owned()]
     };
 
-    expended.into_iter()
+    expended
+        .into_iter()
         .map(|p| {
             globmatch::Builder::new(p.as_str())
-            .build("."/*std::env::current_dir().unwrap()*/)
-            .map(|builder|{
-                builder.into_iter()
-                .map(|p2| match p2 {
-                    Ok(p) => {
-                        let p = p.display().to_string();
-                        if p.starts_with(".\\") {
-                            p[2..].to_owned()
-                        }
-                        else {
-                            p
-                        }
-                    },
-                    Err(_e) => p.clone()
+                .build("." /* std::env::current_dir().unwrap() */)
+                .map(|builder| {
+                    builder
+                        .into_iter()
+                        .map(|p2| {
+                            match p2 {
+                                Ok(p) => {
+                                    let p = p.display().to_string();
+                                    if p.starts_with(".\\") {
+                                        p[2..].to_owned()
+                                    }
+                                    else {
+                                        p
+                                    }
+                                }
+                                Err(_e) => p.clone()
+                            }
+                        })
+                        .collect_vec()
                 })
-                .collect_vec()
-            })
-            .map(|v| if v.is_empty(){vec![p.clone()]} else{v})
-            .unwrap_or(vec![p])
+                .map(|v| {
+                    if v.is_empty() {
+                        vec![p.clone()]
+                    }
+                    else {
+                        v
+                    }
+                })
+                .unwrap_or(vec![p])
         })
         .flatten()
         .collect_vec()
-
 }
 
 #[derive(Error, Debug)]
@@ -156,8 +165,13 @@ impl BndBuilder {
         self.inner.borrow_dependent().get_layered_dependencies()
     }
 
-    pub fn get_layered_dependencies_for<'a, P: AsRef<Path>>(&'a self, p: &'a P) -> Vec<HashSet<&'a Path>> {
-        self.inner.borrow_dependent().get_layered_dependencies_for(p)
+    pub fn get_layered_dependencies_for<'a, P: AsRef<Path>>(
+        &'a self,
+        p: &'a P
+    ) -> Vec<HashSet<&'a Path>> {
+        self.inner
+            .borrow_dependent()
+            .get_layered_dependencies_for(p)
     }
 
     pub fn get_rule<P: AsRef<Path>>(&self, tgt: P) -> Option<&Rule> {
@@ -169,7 +183,8 @@ impl BndBuilder {
     }
 
     pub fn targets<'a>(&'a self) -> Vec<&'a Path> {
-        self.rules().iter()
+        self.rules()
+            .iter()
             .map(|r| r.targets())
             .flatten()
             .collect_vec()

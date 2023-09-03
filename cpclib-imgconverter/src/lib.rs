@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{self, Error};
-use clap::{value_parser, Arg, ArgMatches, Command, ArgAction};
+use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use cpclib::asm::preamble::defb_elements;
 use cpclib::asm::{assemble, assemble_to_amsdos_file};
 use cpclib::common::clap;
@@ -606,7 +606,6 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 height,
                 palette
             } => {
-
                 // Save the palette
                 do_export_palette!(sub_sprite, palette);
 
@@ -659,8 +658,10 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                     .to_str()
                     .unwrap()
                     .to_owned();
-                let extension= tile_fname.extension().map(|s| s.to_str().unwrap_or(""))
-                .unwrap_or("");
+                let extension = tile_fname
+                    .extension()
+                    .map(|s| s.to_str().unwrap_or(""))
+                    .unwrap_or("");
                 for (i, data) in tile_set.iter().enumerate() {
                     let current_filename = format!("{}_{:03}.{}", base, i, extension);
                     let mut file = File::create(current_filename.clone())

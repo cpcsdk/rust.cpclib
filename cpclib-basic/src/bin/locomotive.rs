@@ -15,10 +15,11 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
+
 use cpclib_basic::BasicProgram;
+use cpclib_common::clap;
 /// ! Locomotive BASIC manipulation tool.
 use cpclib_common::clap::*;
-use cpclib_common::clap;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
 
 fn main() -> std::io::Result<()> {
@@ -45,9 +46,7 @@ fn main() -> std::io::Result<()> {
             Arg::new("OUTPUT")
                 .help("Output file")
                 .value_parser(clap::value_parser!(PathBuf))
-                .action(ArgAction::Set)
-
-       //         .required(true)
+                .action(ArgAction::Set) //         .required(true)
         )
         .get_matches();
 

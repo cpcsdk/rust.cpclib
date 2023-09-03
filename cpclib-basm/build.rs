@@ -2,7 +2,7 @@ use std::env;
 use std::path::Path;
 
 fn main() {
- //   static_vcruntime::metabuild();
+    //   static_vcruntime::metabuild();
 
     let src = env::var("CARGO_MANIFEST_DIR").unwrap();
     let dst = Path::new(&env::var("OUT_DIR").unwrap()).join("built.rs");

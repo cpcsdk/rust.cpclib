@@ -19,7 +19,7 @@ fn test_build_dummy() {
     // deps.execute(std::p)
 
     let builder_fname = "tests/dummy/bndbuild.yml";
-   // assert!(std::path::Path::new(builder_fname).exists());
+    // assert!(std::path::Path::new(builder_fname).exists());
 
     let mut cmd = Command::cargo_bin("bndbuild").unwrap();
     cmd.arg("-f").arg(&format!("{builder_fname}"));
@@ -27,7 +27,6 @@ fn test_build_dummy() {
 
     cmd.assert().success();
 }
-
 
 #[test]
 fn test_dummy_phony() {
@@ -37,7 +36,10 @@ fn test_dummy_phony() {
     let builder_fname = "tests/dummy/bndbuild.yml";
     let builder = BndBuilder::from_fname(builder_fname).unwrap();
 
-    println!("{:#?}", builder.rules().iter().map(|r| r.targets()).collect_vec());
+    println!(
+        "{:#?}",
+        builder.rules().iter().map(|r| r.targets()).collect_vec()
+    );
 
     assert!(builder.get_rule("m4").unwrap().is_phony());
     assert!(dbg!(builder.get_rule("build").expect("build is missing")).is_phony());
@@ -47,5 +49,4 @@ fn test_dummy_phony() {
     assert!(!builder.get_rule("clean").unwrap().is_phony());
     assert!(!builder.get_rule("dummy_logo.o").unwrap().is_phony());
     assert!(!builder.get_rule("dummy.sna").unwrap().is_phony());
-
 }

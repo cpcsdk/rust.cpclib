@@ -692,9 +692,9 @@ impl SymbolsTable {
                     // Fill the variable values to allow an evaluation
                     let mut context = HashMapContext::new();
                     for variable in tree.iter_variable_identifiers() {
-                        let variable_value = dbg!(self.value(variable)?.ok_or_else(|| {
-                            SymbolError::WrongSymbol(variable.into())
-                        }))?;
+                        let variable_value = dbg!(self
+                            .value(variable)?
+                            .ok_or_else(|| { SymbolError::WrongSymbol(variable.into()) }))?;
                         context
                             .set_value(variable.to_owned(), variable_value.clone().into())
                             .unwrap();

@@ -1,14 +1,11 @@
 use std::fs::File;
 use std::io::Read;
-
 use std::path::PathBuf;
-use clap;
-use clap::{Arg, Command, ArgAction};
+
+use clap::{Arg, ArgAction, Command};
 use cpclib_asm::preamble::*;
 use cpclib_disc::amsdos::AmsdosHeader;
-
-use lazy_static;
-
+use {clap, lazy_static};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -23,7 +20,6 @@ lazy_static::lazy_static! {
 }
 
 fn main() {
-
     let matches = Command::new("bdasm")
 					.version(built_info::PKG_VERSION)
 					.author("Krusty/Benediction")

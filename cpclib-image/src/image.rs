@@ -4,8 +4,7 @@ use std::collections::HashSet;
 
 use anyhow::Context;
 use cpclib_common::itertools::Itertools;
-use cpclib_common::rayon::iter::IntoParallelRefIterator;
-use cpclib_common::rayon::iter::ParallelIterator;
+use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use {anyhow, image as im};
 
 use crate::ga::*;
@@ -57,13 +56,14 @@ impl Mode {
     }
 
     pub fn nb_pixels_for_bytes_width(&self, width: usize) -> usize {
-        width*self.nb_pixels_per_byte()
+        width * self.nb_pixels_per_byte()
     }
 
     pub fn nb_bytes_for_pixels_width(self, width: usize) -> usize {
         let extra = if 0 != width % self.nb_pixels_per_byte() {
             1
-        } else {
+        }
+        else {
             0
         };
         width / self.nb_pixels_per_byte() + extra
@@ -202,28 +202,29 @@ impl ColorMatrix {
 
         let _pixel_width = mode.nb_pixels_for_bytes_width(bytes_width);
 
-        (0..pixel_height).map( |line| {
-            let screen_address = 0xC000 + ((line/8) * bytes_width) + ((line%8)*0x800);
-            let data_address = screen_address - 0xC000;
-            let line_bytes = &data[data_address..(data_address+bytes_width)];
-            line_bytes.iter()
-                .flat_map(|b| pixels::byte_to_pens(*b, mode))
-                .collect_vec()
-
-        })
-        .map(move |pens| {
-            // build lines of inks
-            pens.iter()
-                .map(|pen| palette.get(pen))
-                .cloned()
-                .collect_vec()
-        })
-        .collect_vec()
-        .into()
+        (0..pixel_height)
+            .map(|line| {
+                let screen_address = 0xC000 + ((line / 8) * bytes_width) + ((line % 8) * 0x800);
+                let data_address = screen_address - 0xC000;
+                let line_bytes = &data[data_address..(data_address + bytes_width)];
+                line_bytes
+                    .iter()
+                    .flat_map(|b| pixels::byte_to_pens(*b, mode))
+                    .collect_vec()
+            })
+            .map(move |pens| {
+                // build lines of inks
+                pens.iter()
+                    .map(|pen| palette.get(pen))
+                    .cloned()
+                    .collect_vec()
+            })
+            .collect_vec()
+            .into()
     }
 
     pub fn from_sprite(data: &[u8], pixels_width: u16, mode: Mode, palette: &Palette) -> Self {
-        let width = mode.nb_bytes_for_pixels_width(pixels_width as _); 
+        let width = mode.nb_bytes_for_pixels_width(pixels_width as _);
 
         // convert it
         data.chunks_exact(width)
@@ -369,7 +370,8 @@ impl ColorMatrix {
     pub fn extract_palette(&self) -> Palette {
         let mut p = Palette::empty();
         for (idx, color) in self.data.iter().flatten().unique().sorted().enumerate() {
-            if idx >= 16 { // do we really want to fail ? maybe we can have special modes to handle there
+            if idx >= 16 {
+                // do we really want to fail ? maybe we can have special modes to handle there
                 panic!("[ERROR] your picture uses more than 16 different colors. Palette: {:?}. Wrong ink: {:?}", p, color);
             }
             p.set(Pen::from(idx as u8), *color);
