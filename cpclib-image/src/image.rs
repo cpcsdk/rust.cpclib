@@ -39,7 +39,7 @@ impl From<u8> for Mode {
 #[allow(missing_docs)]
 impl Mode {
     /// Return the maximum number of colors for the current mode (without using rasters)
-    pub fn max_colors(self) -> usize {
+    pub fn max_colors(&self) -> usize {
         match self {
             Mode::Zero => 16,
             Mode::One | Mode::Three => 4,
@@ -48,12 +48,25 @@ impl Mode {
     }
 
     /// Return the number of pixels encode by one byte in the given mode
-    pub fn nb_pixels_per_byte(self) -> usize {
+    pub fn nb_pixels_per_byte(&self) -> usize {
         match self {
             Mode::Zero | Mode::Three => 2,
             Mode::One => 4,
             Mode::Two => 8
         }
+    }
+
+    pub fn nb_pixels_for_bytes_width(&self, width: usize) -> usize {
+        width*self.nb_pixels_per_byte()
+    }
+
+    pub fn nb_bytes_for_pixels_width(self, width: usize) -> usize {
+        let extra = if 0 != width % self.nb_pixels_per_byte() {
+            1
+        } else {
+            0
+        };
+        width / self.nb_pixels_per_byte() + extra
     }
 }
 
@@ -175,6 +188,56 @@ pub enum ColorConversionStrategy {
     ReplaceWrongColorByClosestInk,
     /// An error is generated
     Fail
+}
+
+impl ColorMatrix {
+    pub fn from_screen(data: &[u8], mode: Mode, palette: &Palette) -> Self {
+        let bytes_width = 80;
+        let pixel_height = 200;
+
+        let pixel_width = mode.nb_pixels_for_bytes_width(bytes_width);
+
+        (0..pixel_height).map( |line| {
+            let screen_address = 0xC000 + ((line/8) * bytes_width) + ((line%8)*0x800);
+            let data_address = screen_address - 0xC000;
+            let line_bytes = &data[data_address..(data_address+bytes_width)];
+            line_bytes.iter()
+                .flat_map(|b| pixels::byte_to_pens(*b, mode))
+                .collect_vec()
+
+        })
+        .map(move |pens| {
+            // build lines of inks
+            pens.iter()
+                .map(|pen| palette.get(pen))
+                .cloned()
+                .collect_vec()
+        })
+        .collect_vec()
+        .into()
+    }
+
+    pub fn from_sprite(data: &[u8], pixels_width: u16, mode: Mode, palette: &Palette) -> Self {
+        let width = mode.nb_bytes_for_pixels_width(pixels_width as _); 
+
+        // convert it
+        data.chunks_exact(width)
+            .map(|line| {
+                // build lines of pen
+                let line = line.iter();
+                line.flat_map(|b| pixels::byte_to_pens(*b, mode))
+                    .collect_vec()
+            })
+            .map(move |pens| {
+                // build lines of inks
+                pens.iter()
+                    .map(|pen| palette.get(pen))
+                    .cloned()
+                    .collect_vec()
+            })
+            .collect_vec()
+            .into()
+    }
 }
 
 #[allow(missing_docs)]

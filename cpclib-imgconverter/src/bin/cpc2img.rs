@@ -1,6 +1,7 @@
 use cpclib::common::clap::{self, value_parser, Arg, ArgAction, Command};
 use cpclib::common::itertools::Itertools;
 use cpclib::image::image::ColorMatrix;
+use cpclib::image::image::Mode;
 use cpclib::image::pixels;
 use cpclib_imgconverter::{self, get_requested_palette};
 
@@ -13,8 +14,9 @@ fn main() {
                 .long("mode")
                 .help("Screen mode of the image to convert.")
                 .value_name("MODE")
+                .value_parser(0..=2)
+                .action(clap::ArgAction::Set)
                 .default_value("0")
-                .value_parser(["0", "1", "2"])
         )
         .arg(
             Arg::new("MODE0RATIO")
@@ -23,7 +25,7 @@ fn main() {
                 .action(ArgAction::SetTrue)
         )
         .subcommand(
-            Command::new("SPRITE")
+            Command::new("SPRITECMD")
                 .about("Load from a linear sprite data")
                 .name("sprite")
                 .arg(
@@ -36,11 +38,12 @@ fn main() {
         .arg(Arg::new("INPUT").required(true))
         .arg(Arg::new("OUTPUT").required(true)));
 
-    let matches = cmd.get_matches();
+    let matches = dbg!(cmd.get_matches());
     let palette = dbg!(get_requested_palette(&matches).unwrap_or_default());
     let input_fname = matches.get_one::<String>("INPUT").unwrap();
     let output_fname = matches.get_one::<String>("OUTPUT").unwrap();
-    let mode = matches.get_one::<String>("MODE").unwrap().parse().unwrap();
+    let mode = *matches.get_one::<i64>("MODE").unwrap() as u8;
+    let mode = Mode::from(mode);
 
     let mode0ratio = matches.contains_id("MODE0RATIO");
     // read the data file
@@ -54,48 +57,12 @@ fn main() {
         &data
     };
 
-    let mut matrix: ColorMatrix = if let Some(sprite) = matches.subcommand_matches("SPRITE") {
+    let mut matrix: ColorMatrix = if let Some(sprite) = matches.subcommand_matches("sprite") {
         let width: usize = sprite.get_one::<String>("WIDTH").unwrap().parse().unwrap();
-        let width = match mode {
-            0 => width / 2,
-            1 => width / 4,
-            2 => width / 8,
-            _ => unreachable!()
-        };
-
-        // convert it
-        data.chunks_exact(width)
-            .map(|line| {
-                // build lines of pen
-                let line = line.iter();
-                match mode {
-                    0 => {
-                        line.flat_map(|b| pixels::mode0::byte_to_pens(*b).into_iter())
-                            .collect_vec()
-                    }
-                    1 => {
-                        line.flat_map(|b| pixels::mode1::byte_to_pens(*b).into_iter())
-                            .collect_vec()
-                    }
-                    2 => {
-                        line.flat_map(|b| pixels::mode2::byte_to_pens(*b))
-                            .collect_vec()
-                    }
-                    _ => unreachable!()
-                }
-            })
-            .map(move |pens| {
-                // build lines of inks
-                pens.iter()
-                    .map(|pen| palette.get(pen))
-                    .cloned()
-                    .collect_vec()
-            })
-            .collect_vec()
-            .into()
+        ColorMatrix::from_sprite(data, width as _, mode, &palette)
     }
     else {
-        unimplemented!()
+        ColorMatrix::from_screen(data, mode, &palette)
     };
 
     if mode0ratio {

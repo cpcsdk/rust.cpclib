@@ -1,3 +1,18 @@
+
+use crate::image::Mode;
+use crate::ga::Pen;
+
+pub fn byte_to_pens(byte: u8, mode: Mode) -> Box<dyn Iterator<Item=Pen>> {
+    match mode {
+        Mode::Zero => Box::new(mode0::byte_to_pens(byte).into_iter()),
+        Mode::One => Box::new(mode1::byte_to_pens(byte).into_iter()),
+        Mode::Two => Box::new(mode2::byte_to_pens(byte).into_iter()),
+        _ => unimplemented!()
+    }
+}
+
+
+
 /// Mode 2 specific pixels managment functions
 pub mod mode2 {
     use crate::ga::Pen;
