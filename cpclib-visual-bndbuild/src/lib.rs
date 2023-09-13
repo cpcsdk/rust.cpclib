@@ -630,7 +630,7 @@ impl eframe::App for BndBuildApp {
         }
 
         // Handle file opening
-        let _p = if let Some(dialog) = &mut self.open_file_dialog {
+        let p = if let Some(dialog) = self.open_file_dialog.as_mut() {
             if dialog.show(ctx).selected() {
                 if let Some(path) = dialog.path() {
                     if path.exists() {
@@ -653,6 +653,9 @@ impl eframe::App for BndBuildApp {
         else {
             None
         };
+        if let Some(p) = p {
+            self.load(p);
+        }
 
         // Handle reload
         if self.request_reload {
