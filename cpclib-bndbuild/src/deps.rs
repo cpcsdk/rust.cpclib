@@ -5,11 +5,11 @@ use cpclib_common::itertools::Itertools;
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer};
 use topologic::AcyclicDependencyGraph;
-use crate::constraints::Constraint;
+
+use crate::constraints::{deserialize_constraint, Constraint};
 use crate::executor::execute;
 use crate::task::Task;
 use crate::{expand_glob, BndBuilderError};
-use crate::constraints::deserialize_constraint;
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Hash)]
 pub struct Rule {
@@ -41,7 +41,6 @@ pub struct Rule {
     #[serde(default)]
     constraint: Option<Constraint>
 }
-
 
 fn deserialize_path_list<'de, D>(deserializer: D) -> Result<Vec<PathBuf>, D::Error>
 where D: Deserializer<'de> {
@@ -175,7 +174,8 @@ impl Rule {
     pub fn is_enabled(&self) -> bool {
         if let Some(constraint) = &self.constraint {
             constraint.corresponds()
-        } else {
+        }
+        else {
             true
         }
     }
@@ -214,12 +214,11 @@ impl Rules {
         let mut node2tracked_idx: BTreeMap<&Path, usize> = BTreeMap::new();
 
         for (idx, rule) in self.rules.iter().enumerate() {
-
             if !rule.is_enabled() {
                 continue;
             }
 
-            for  p in rule.targets.iter() {
+            for p in rule.targets.iter() {
                 let p: &Path = p.as_ref();
                 // link the rule to the target
                 if node2tracked_idx.contains_key(p) {
@@ -272,7 +271,8 @@ impl<'r> Graph<'r> {
         let mut res = self.g.get_forward_dependency_topological_layers();
         let orphans = self
             .tracked
-            .rules.iter() // get the nodes that are not in the graph because they have no dependencies
+            .rules
+            .iter() // get the nodes that are not in the graph because they have no dependencies
             .filter(|rule| rule.dependencies.is_empty())
             .flat_map(|r| &r.targets)
             .map(|p| p.as_path())
@@ -336,7 +336,9 @@ impl<'r> Graph<'r> {
 
     pub fn rule<P: AsRef<Path>>(&self, p: P) -> Option<&Rule> {
         let p = p.as_ref();
-        self.node2tracked.get(p).map(|idx| &self.tracked.rules[*idx])
+        self.node2tracked
+            .get(p)
+            .map(|idx| &self.tracked.rules[*idx])
     }
 
     pub fn execute<P: AsRef<Path>>(&self, p: P) -> Result<(), BndBuilderError> {
@@ -405,7 +407,6 @@ impl<'r> Graph<'r> {
             if !rule.is_enabled() {
                 return Err(BndBuilderError::DisabledTarget(p.display().to_string()));
             }
-
 
             let done = rule.is_up_to_date();
             if done {

@@ -7,12 +7,12 @@ use deps::{Graph, Rule};
 use lazy_regex::regex_captures;
 use thiserror::Error;
 
+pub mod constraints;
 pub mod deps;
 pub mod executor;
 pub mod parser;
 pub mod runners;
 pub mod task;
-pub mod constraints;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -108,7 +108,6 @@ self_cell::self_cell! {
         dependent: Graph,
     }
 }
-
 
 pub struct BndBuilder {
     inner: BndBuilderInner

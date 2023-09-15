@@ -113,10 +113,17 @@ fn inner_main() -> Result<(), BndBuilderError> {
     // Print list if asked
     if matches.get_flag("list") {
         for rule in builder.rules() {
-            println!("{}{}: {}",
-                if rule.is_enabled() {""} else {"[disabled] "},
-                rule.targets().iter().map(|f| f.display().to_string()).join(" "),
-                rule.dependencies().iter().map(|f| f.display().to_string()).join(" "),
+            println!(
+                "{}{}: {}",
+                if rule.is_enabled() { "" } else { "[disabled] " },
+                rule.targets()
+                    .iter()
+                    .map(|f| f.display().to_string())
+                    .join(" "),
+                rule.dependencies()
+                    .iter()
+                    .map(|f| f.display().to_string())
+                    .join(" "),
             );
             if let Some(help) = rule.help() {
                 println!("\t{}", help);
