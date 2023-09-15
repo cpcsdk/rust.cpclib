@@ -47,6 +47,6 @@ fn test_dummy_phony() {
 
     assert!(!builder.get_rule("distclean").unwrap().is_phony());
     assert!(!builder.get_rule("clean").unwrap().is_phony());
-    assert!(!builder.get_rule("dummy_logo.o").unwrap().is_phony());
-    assert!(!builder.get_rule("dummy.sna").unwrap().is_phony());
+    assert!(!builder.get_rule("./dummy_logo.o").unwrap().is_phony());
+    assert!(!builder.get_rule("./dummy.sna").unwrap().is_phony());
 }

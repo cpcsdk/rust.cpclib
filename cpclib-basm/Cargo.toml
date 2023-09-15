@@ -32,6 +32,7 @@ serial_test = "2.0.0"
 
 [build-dependencies]
 built = { version = "0.6.1", features = ["chrono"] }
+build-deps = "0.1.4"
 #static_vcruntime = "2.0"
 
 [[bench]]

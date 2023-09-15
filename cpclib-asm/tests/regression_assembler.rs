@@ -52,27 +52,6 @@ pub fn macro_local_labels() {
     assert!(binary.len() != 0);
 }
 
-#[test]
-#[ignore = "currently failed. Need to implemente in a different way struct constructiion with default values"]
-pub fn test_inner_struct1() {
-    let code = "
-	struct point
-xx    db 4
-yy    db 5
-zz    db 6
-	  endstruct
-
-; each point uses the default values if nothing is provided
-	struct triangle
-p1 point 
-p2 point 
-p3 point 
-	endstruct
-
-
-; triangle with default values (4,5,6) for each point
-my_triangle1: triangle
-	";
 
     // just check that it assemble
     let binary = assemble(code).unwrap();

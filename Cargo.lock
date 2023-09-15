@@ -1106,6 +1106,7 @@ dependencies = [
 name = "cpclib-basm"
 version = "0.7.0"
 dependencies = [
+ "build-deps",
  "built",
  "cpclib-asm",
  "cpclib-common",
@@ -1139,6 +1140,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "build-deps",
  "built",
  "cpclib-asm",
  "cpclib-basm",
@@ -1151,7 +1153,9 @@ dependencies = [
  "self_cell",
  "serde",
  "serde_yaml",
+ "serial_test",
  "shlex",
+ "test-generator",
  "thiserror",
  "topologic",
 ]
