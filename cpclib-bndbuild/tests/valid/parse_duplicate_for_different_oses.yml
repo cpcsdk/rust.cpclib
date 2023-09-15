@@ -1,0 +1,7 @@
+- tgt: do_something
+  cmd: echo do_something
+  constraint: Os(Linux)
+- tgt: do_something
+  cmd: echo do_something
+  constraint: Os(Windows)
+
