@@ -62,8 +62,12 @@ pub struct ExternRunner {}
 impl ExternRunner {}
 impl Runner for ExternRunner {
     fn inner_run(&self, itr: &[String]) -> Result<(), String> {
-        let app = std::fs::canonicalize(&itr[0])
-            .map_err(|e| format!("Wrong executable {}.{}", &itr[0], e.to_string()))?;
+        // WARNING
+        // Deactivated because if makes fail normal progam on Linux
+        // however, it was maybe mandatory for Windows
+        // let app = std::fs::canonicalize(&itr[0])
+        //     .map_err(|e| format!("Wrong executable {}.{}", &itr[0], e.to_string()))?;
+        let app = &itr[0];
 
         let cwd = std::env::current_dir().map_err(|e| {
             format!(
