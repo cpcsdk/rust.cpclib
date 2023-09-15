@@ -159,6 +159,10 @@ impl Rule {
     pub fn targets(&self) -> Vec<&Path> {
         self.targets.iter().map(|t| t.as_ref()).collect_vec()
     }
+
+    pub fn dependencies(&self) -> Vec<&Path> {
+        self.dependencies.iter().map(|t| t.as_ref()).collect_vec()
+    }
 }
 
 #[derive(Deserialize)]

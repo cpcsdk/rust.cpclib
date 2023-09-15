@@ -483,7 +483,7 @@ impl BndBuildApp {
                             } else {
                                 txt
                             };
-                            let txt = RichText::new(txt);
+                            let txt = RichText::new(txt).color(Color32::BLACK);
                             // set in bold the default target to see it
                             let txt = if let Some(default) = &default && default == tgt {
                                 txt.strong().strong()
@@ -600,6 +600,8 @@ impl eframe::App for BndBuildApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        catppuccin_egui::set_theme(&ctx, catppuccin_egui::MOCHA);
+        
         if self.job.is_some() {
             ctx.set_cursor_icon(egui::CursorIcon::Progress);
         }

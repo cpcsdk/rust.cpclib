@@ -2,6 +2,7 @@ use cpclib_bndbuild::executor::*;
 use cpclib_bndbuild::runners::RunnerWithClap;
 use cpclib_bndbuild::{built_info, BndBuilder, BndBuilderError};
 use cpclib_common::clap::*;
+use cpclib_common::itertools::Itertools;
 
 fn main() {
     match inner_main() {
@@ -55,10 +56,18 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .help("Watch the targets and permanently rebuild them when needed.")
         )
         .arg(
+            Arg::new("list")
+                .short('l')
+                .long("list")
+                .action(ArgAction::SetTrue)
+                .help("List the available targets")
+        )
+        .arg(
             Arg::new("target")
                 .action(ArgAction::Append)
                 .value_name("TARGET")
                 .help("Provide the target(s) to run.")
+                .conflicts_with("list")
         );
 
     let matches = cmd.clone().get_matches();
@@ -100,6 +109,21 @@ fn inner_main() -> Result<(), BndBuilderError> {
     // Get the file and read it
     let fname: &String = matches.get_one("file").unwrap();
     let builder = BndBuilder::from_fname(fname)?;
+
+
+    // Print list if asked
+    if matches.get_flag("list") {
+        for rule in builder.rules() {
+            println!("{}: {}",
+                rule.targets().iter().map(|f| f.display().to_string()).join(" "),
+                rule.dependencies().iter().map(|f| f.display().to_string()).join(" "),
+            );
+            if let Some(help) = rule.help() {
+                println!("\t{}", help);
+            }
+        }
+        return Ok(());
+    }
 
     // Get the targets
     let targets_provided = matches.contains_id("target");
