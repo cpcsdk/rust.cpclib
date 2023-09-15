@@ -12,6 +12,7 @@ pub mod executor;
 pub mod parser;
 pub mod runners;
 pub mod task;
+pub mod constraints;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -91,7 +92,11 @@ pub enum BndBuilderError {
     #[error("Unable to build default target.\n{source}")]
     DefaultTargetError { source: Box<BndBuilderError> },
     #[error("The file does not contain a target.")]
-    NoTargets
+    NoTargets,
+    #[error("The target {0} is disabled.")]
+    DisabledTarget(String),
+    #[error("Target {0} is not buildable.")]
+    UnknownTarget(String)
 }
 
 self_cell::self_cell! {
@@ -103,6 +108,7 @@ self_cell::self_cell! {
         dependent: Graph,
     }
 }
+
 
 pub struct BndBuilder {
     inner: BndBuilderInner

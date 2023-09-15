@@ -110,11 +110,11 @@ fn inner_main() -> Result<(), BndBuilderError> {
     let fname: &String = matches.get_one("file").unwrap();
     let builder = BndBuilder::from_fname(fname)?;
 
-
     // Print list if asked
     if matches.get_flag("list") {
         for rule in builder.rules() {
-            println!("{}: {}",
+            println!("{}{}: {}",
+                if rule.is_enabled() {""} else {"[disabled] "},
                 rule.targets().iter().map(|f| f.display().to_string()).join(" "),
                 rule.dependencies().iter().map(|f| f.display().to_string()).join(" "),
             );
