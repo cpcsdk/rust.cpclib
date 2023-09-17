@@ -46,6 +46,95 @@ fn test_roudoudou_generated_code() {
     std::fs::remove_dir("generated_sprites");
 }
 
+
+
+
+#[test_resources("cpclib-basm/tests/asm/warning_*.asm")]
+fn expect_warning_but_success(real_fname: &str) {
+
+    let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
+
+    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_fname = output_file.path().as_os_str().to_str().unwrap();
+
+    let listing_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
+
+    let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
+        .expect("Unable to read_source");
+
+    lazy_static::lazy_static! {
+        static ref RE1: Regex = Regex::new(r";.*$").unwrap();
+        static ref RE2: Regex = Regex::new(r":\s*:").unwrap();
+    }
+
+    let mut content = content
+        .split("\n")
+        .map(|l| RE1.replace(&l, "").replace('\r', ""))
+        .join(":");
+    dbg!(&content);
+    while RE2.is_match(&content) {
+        content = RE2.replace_all(&content, ":").to_string();
+    }
+    dbg!(&content);
+
+    let content = if content.chars().next().unwrap() == ':' {
+        &content[1..]
+    }
+    else {
+        &content[..]
+    };
+    dbg!(&content);
+
+    let content = if let Some(':') = content.chars().last() {
+        &content[..content.len() - 1]
+    }
+    else {
+        content
+    };
+
+    dbg!(&content);
+
+    let content = content.replace("\\:", "");
+
+    dbg!(&content);
+
+    if !content.is_empty() {
+        let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+        let input_fname = input_file.path().as_os_str().to_str().unwrap();
+        std::fs::write(input_fname, content).unwrap();
+
+        let res = Command::new("../target/debug/basm")
+            .args([
+                "-I",
+                "tests/asm/",
+                "-i",
+                input_fname,
+                "-o",
+                output_fname,
+                "--lst",
+                listing_fname
+            ])
+            .output()
+            .expect("Unable to launch basm");
+
+        if !res.status.success() {
+            panic!(
+                "Failure to assemble {}.\n{}",
+                fname,
+                String::from_utf8_lossy(&res.stderr)
+            );
+        }
+
+        let stderr = std::str::from_utf8(&res.stderr).unwrap();
+        if !stderr.contains("warning: ") {
+            panic!("No warning have been generated");
+        }
+    }
+}
+
+
+
 #[test_resources("cpclib-basm/tests/asm/good_*.asm")]
 fn expect_one_line_success(real_fname: &str) {
     if real_fname.contains("basic") // basic cannot be inlined 
