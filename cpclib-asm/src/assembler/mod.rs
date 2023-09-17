@@ -3446,12 +3446,12 @@ impl Env {
             if let Some(new_size) = new_size {
 
                 if let Some(new_span) = new_span {
-                    if let AssemblerError::RelocatedWarning {warning: box  AssemblerWarning::OverrideMemory(prev_addr, ref mut prev_size), ref mut span} = &mut self.warnings[previous_warning_idx] {
+                    if let AssemblerError::RelocatedWarning {warning: box  AssemblerWarning::OverrideMemory(_prev_addr, ref mut prev_size), ref mut span} = &mut self.warnings[previous_warning_idx] {
                         *prev_size = new_size;
                         *span = new_span;
                     }
                 } else {
-                    if let AssemblerWarning::OverrideMemory(prev_addr, ref mut prev_size) = &mut self.warnings[previous_warning_idx] {
+                    if let AssemblerWarning::OverrideMemory(_prev_addr, ref mut prev_size) = &mut self.warnings[previous_warning_idx] {
                         *prev_size = new_size;
                     }
                 }
