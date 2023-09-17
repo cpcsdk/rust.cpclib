@@ -46,12 +46,8 @@ fn test_roudoudou_generated_code() {
     std::fs::remove_dir("generated_sprites");
 }
 
-
-
-
 #[test_resources("cpclib-basm/tests/asm/warning_*.asm")]
 fn expect_warning_but_success(real_fname: &str) {
-
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
@@ -132,8 +128,6 @@ fn expect_warning_but_success(real_fname: &str) {
         }
     }
 }
-
-
 
 #[test_resources("cpclib-basm/tests/asm/good_*.asm")]
 fn expect_one_line_success(real_fname: &str) {
