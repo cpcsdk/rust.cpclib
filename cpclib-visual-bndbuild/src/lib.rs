@@ -454,7 +454,7 @@ impl BndBuildApp {
                             .with_numlines(true)
                             .show(ui, code);
 
-                        if editor.changed() {
+                        if editor.response.changed() {
                             self.is_dirty = true;
                         }
                     });
