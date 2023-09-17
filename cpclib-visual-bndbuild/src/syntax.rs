@@ -21,7 +21,8 @@ pub fn syntax() -> Syntax {
             "command",
             "launch",
             "run",
-            "help"
+            "help",
+            "constraint"
         ]),
         types: HashSet::from([
             "basm",
@@ -35,7 +36,9 @@ pub fn syntax() -> Syntax {
             "xfer",
             "cpcwifi",
             "m4",
-            "extern"
+            "extern",
+            "Os",
+            "Linux", "Windows", "MacOsx"
         ]),
         special: HashSet::from([":", "-"])
     }

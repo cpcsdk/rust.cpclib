@@ -3383,7 +3383,6 @@ impl Env {
         let mut current_warning_idx = 1; // index to the last warning to treat
         let mut previous_warning_idx = 0; // index to the previous warning treated (diff with current_warning_idx can be higher than 1 when there are several consecutive warnings for OverrideMemory)
 
-
         while current_warning_idx < self.warnings.len() {
             // Check if we need to fuse successive override memory warnings
             let (new_size, new_span) = match (&self.warnings[previous_warning_idx], &self.warnings[current_warning_idx]) {
