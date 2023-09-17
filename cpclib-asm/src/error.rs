@@ -863,19 +863,28 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
 }
 
 pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
+
     let filename = build_filename(span);
     let source = span.extra.complete_source();
 
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);
 
-    let sample_range = std::ops::Range {
-        start: span.location_offset(),
-        end: guess_error_end(
+    // TODO do it in a cleaner way. Here it is an ugly path !!!
+    let end = if title.starts_with("Override ") {
+        // XXX Handle the case of memory overriding that can use lots of instructions
+        span.chars().count() +  span.location_offset() + 1
+    } else {
+        guess_error_end(
             source_files.get(file).unwrap().source(),
             span.location_offset(),
             JP_WRONG_PARAM // fake value
         )
+    };
+
+    let sample_range = std::ops::Range {
+        start: span.location_offset(),
+        end: end
     };
 
     let diagnostic = Diagnostic::new(severity)
@@ -918,6 +927,8 @@ fn build_simple_error_message_with_notes(
     notes: Vec<String>,
     span: &Z80Span
 ) -> String {
+
+    
     let filename = build_filename(span);
     let source = span.extra.complete_source();
 

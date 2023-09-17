@@ -1277,7 +1277,7 @@ impl Env {
         let already_used = *self.written_bytes().get(abstract_address as usize).unwrap();
 
         let r#override = if already_used {
-            let r#override = AssemblerError::OverrideMemory(physical_address.clone(), 1);
+            let r#override = AssemblerWarning::OverrideMemory(physical_address.clone(), 1);
             if self.allow_memory_override() {
                 self.warnings.push(r#override);
                 true
@@ -2428,6 +2428,8 @@ where
         }
     }
 
+
+
     // Add an additional pass to build the listing (this way it is built only one time)
     if env.options().assemble_options().output_builder.is_some() {
         env.pass = AssemblingPass::ListingPass;
@@ -2436,6 +2438,9 @@ where
             .map_err(|e| eprintln!("{}", e))
             .expect("No error can arise in listing output mode; there is a bug somewhere");
     }
+
+
+    env.cleanup_warnings();
 
     if let Some(trigger) = env.output_trigger.as_mut() {
         trigger.finish()
@@ -2578,9 +2583,13 @@ pub fn visit_located_token(
                 span: span.clone()
             };
         }
-        *warning = AssemblerError::AssemblingError {
-            msg: (*warning).to_string()
-        }
+        // TODO check why it has been done this way
+        //      maybe source code is not retrained and there are random crashes ?
+        //     anyway I comment it now because it breaks warning merge
+    //    
+    //    *warning = AssemblerError::AssemblingError {
+    //        msg: (*warning).to_string()
+    //    }
     }
 
     env.move_delayed_commands_of_functions();
@@ -3362,6 +3371,111 @@ impl Env {
 
     pub fn macro_seed(&self) -> usize {
         self.macro_seed
+    }
+}
+
+
+/// Warnings related code
+impl Env {
+
+    pub fn cleanup_warnings(&mut self) {
+        // Filter the warnings to merge overriding
+        let mut current_warning_idx = 1; // index to the last warning to treat
+        let mut previous_warning_idx = 0; // index to the previous warning treated (diff with current_warning_idx can be higher than 1 when there are several consecutive warnings for OverrideMemory)
+
+
+        while current_warning_idx < self.warnings.len() {
+            // Check if we need to fuse successive override memory warnings
+            let (new_size, new_span) = match (&self.warnings[previous_warning_idx], &self.warnings[current_warning_idx]) {
+
+                // we fuse two consecutive override memory warnings
+                (
+                    AssemblerWarning::OverrideMemory(prev_addr, prev_size),
+                    AssemblerWarning::OverrideMemory(curr_addr, curr_size),
+                ) => {
+                    if (prev_addr.offset_in_cpc() + *prev_size as u32)  == curr_addr.offset_in_cpc() {
+                        (Some(*prev_size + *curr_size), None)
+                    } else {
+                        (None, None)
+                    }
+                },
+
+                (
+                    AssemblerError::RelocatedWarning {warning: box AssemblerWarning::OverrideMemory(prev_addr, prev_size), span:prev_span},
+                    AssemblerError::RelocatedWarning {warning: box AssemblerWarning::OverrideMemory(curr_addr, curr_size),
+                    span: curr_span}
+                ) => {
+                    if prev_addr.offset_in_cpc() + *prev_size as u32  == curr_addr.offset_in_cpc() {
+
+                        let new_size = *prev_size + *curr_size;
+
+                        let start_str = prev_span.fragment();
+                        let end_str = curr_span.fragment();
+                        let start_str = start_str.as_bytes();
+                        let end_str = end_str.as_bytes();
+
+                        let start_ptr = &start_str[0] as *const u8;
+                        let end_last_ptr = &end_str[end_str.len()-1] as *const u8;
+                        assert!(end_last_ptr > start_ptr);
+                        let txt = unsafe { 
+                            let slice = std::slice::from_raw_parts(start_ptr, end_last_ptr.offset_from(start_ptr) as _);
+                            std::str::from_utf8(slice).unwrap()
+                         };
+
+                        let new_span = unsafe { 
+                            use cpclib_common::LocatedSpan;
+                            Z80Span(LocatedSpan::new_from_raw_offset(
+                                prev_span.location_offset(),
+                                prev_span.location_line(),
+                                txt,
+                                prev_span.0.extra
+                            ))
+                        };
+
+                        (Some(new_size), Some(new_span))
+                    } else {
+                        (None, None)
+                    }
+                },
+
+                _ => {/* nothing to do ATM */
+                    (None, None)
+                }
+            };
+
+            if let Some(new_size) = new_size {
+
+                if let Some(new_span) = new_span {
+                    if let AssemblerError::RelocatedWarning {warning: box  AssemblerWarning::OverrideMemory(prev_addr, ref mut prev_size), ref mut span} = &mut self.warnings[previous_warning_idx] {
+                        *prev_size = new_size;
+                        *span = new_span;
+                    }
+                } else {
+                    if let AssemblerWarning::OverrideMemory(prev_addr, ref mut prev_size) = &mut self.warnings[previous_warning_idx] {
+                        *prev_size = new_size;
+                    }
+                }
+
+            } else {
+                previous_warning_idx += 1;
+                if previous_warning_idx != current_warning_idx {
+                    self.warnings.swap(previous_warning_idx, current_warning_idx);
+                }
+            }
+
+            current_warning_idx += 1;
+        }
+        // change the length  of the vector to remove all eated ones
+        self.warnings.truncate(previous_warning_idx+1);
+
+
+        // transform the warnings as strings
+        self.warnings.iter_mut()
+            .for_each(|w| *w = AssemblerWarning::AssemblingError {
+                        msg: (*w).to_string()
+            } );
+
+
     }
 }
 
