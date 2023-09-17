@@ -19,7 +19,7 @@ members = [
     "cpclib-imgconverter",
     "cpclib-visual-basm",
     "cpclib-visual-bndbuild",
-  #  "cpclib-wasm"
+    "cpclib-wasm"
 ]
 
 resolver = "2"

@@ -4,6 +4,8 @@ use std::collections::HashSet;
 
 use anyhow::Context;
 use cpclib_common::itertools::Itertools;
+
+#[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use {anyhow, image as im};
 
@@ -147,8 +149,13 @@ fn merge_mode0_mode3(line1: &[u8], line2: &[u8]) -> Vec<u8> {
 
 // Convert inks to pens
 fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
-    inks.par_iter()
-        .map(|line| {
+    #[cfg(not(target_arch = "wasm32"))]
+    let iter = inks.par_iter();
+    #[cfg(target_arch = "wasm32")]
+    let mut iter = inks.iter();
+
+
+    iter.map(|line| {
             line.iter()
                 .map(|ink| {
                     p.get_pen_for_ink(*ink).unwrap_or_else(|| {

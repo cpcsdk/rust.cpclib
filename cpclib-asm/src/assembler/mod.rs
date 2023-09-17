@@ -1071,7 +1071,8 @@ impl Env {
             .sum::<u64>() as u64;
 
         if self.options.show_progress() {
-            Progress::progress().create_save_bar(nb_files_to_save);
+                #[cfg(not(target_arch = "wasm32"))]
+                Progress::progress().create_save_bar(nb_files_to_save);
         }
 
         // save from snapshot
