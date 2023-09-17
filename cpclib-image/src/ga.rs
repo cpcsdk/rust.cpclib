@@ -443,6 +443,7 @@ impl From<im::Rgb<u8>> for Ink {
 
 impl From<u8> for Ink {
     fn from(item: u8) -> Self {
+        assert!(item<32);
         Self { value: item }
     }
 }
@@ -706,18 +707,24 @@ where
 macro_rules! palette {
     ( $( $x:expr ),* ) => {
         {
-            extern crate cpclib as cpc;
+            use cpclib_image as cpc;
             use cpc::ga;
+            use cpc::ga::Ink;
+            use cpc::ga::Pen;
+
             let mut palette = ga::Palette::default();
             let mut idx = 0;
+
             $(
-                palette.set(&Pen::from(idx), Ink::from($x));
+                let pen = Pen::from(idx);
+                let ink = Ink::from($x);
+                palette.set(pen, ink);
                 idx += 1;
             )*
 
             // Ensure the other inks are black
             for i in idx..15 {
-                palette.set(&Pen::from(i), Ink::from(0));
+                palette.set(Pen::from(i), Ink::from(0));
             }
             palette
         }
