@@ -1,1 +1,0 @@
-	ld hl, 3 : ld hl, a

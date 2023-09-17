@@ -1,2 +1,0 @@
-	; Missing destination
-	call
