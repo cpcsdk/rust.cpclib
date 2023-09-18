@@ -8,7 +8,7 @@ use std::fmt::{self};
 use cpclib_common::nom::error::convert_error;
 use cpclib_common::nom::{self};
 use cpclib_sna::Snapshot;
-use failure::Fail;
+use thiserror::Error;
 use parser::parse_basic_program;
 use tokens::BasicToken;
 
@@ -21,14 +21,14 @@ pub enum BasicProgramLineIdx {
     Number(u16)
 }
 
-#[derive(Debug, Fail, PartialEq, Eq, Clone)]
+#[derive(Debug, Error, PartialEq, Eq, Clone)]
 #[allow(missing_docs)]
 pub enum BasicError {
-    #[fail(display = "Line does not exist: {:?}", idx)]
+    #[error("Line does not exist: {:?}", idx)]
     UnknownLine { idx: BasicProgramLineIdx },
-    #[fail(display = "{}", msg)]
+    #[error( "{}", msg)]
     ParseError { msg: String },
-    #[fail(display = "Exponent Overflow")]
+    #[error("Exponent Overflow")]
     ExponentOverflow
 }
 

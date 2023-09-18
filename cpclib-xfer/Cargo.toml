@@ -23,7 +23,6 @@ cfg-if.workspace = true
 custom_error.workspace = true
 delegate.workspace = true
 either.workspace = true
-failure.workspace = true
 getset.workspace = true
 matches.workspace = true
 #memchr.workspace = true

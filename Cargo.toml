@@ -98,7 +98,6 @@ delegate  = "0.10.0"
 either = "1.9.0"
 evalexpr = "11.0.1"
 exitcode = "1.1.2"
-failure = "0.1.8"
 getset = "0.1.2"
 gif = "0.12.0"
 gif-dispose = "4.0.0"
@@ -152,7 +151,7 @@ velcro = "0.5.4"
 claui = {git="https://github.com/rgiot/claui.git"}
 eframe = "0.22"
 egui = "0.22"
-
+thiserror = "1.0"
 
 [patch.crates-io]
 cpclib = {path = "./cpclib/"}

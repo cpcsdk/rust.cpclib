@@ -37,7 +37,6 @@ custom_error.workspace = true
 dbg.workspace = true
 delegate.workspace = true
 either.workspace = true
-failure.workspace = true
 getset.workspace = true
 log = { workspace = true, optional = true }
 matches.workspace = true

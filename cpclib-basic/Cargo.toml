@@ -24,13 +24,13 @@ arrayref.workspace = true
 cfg-if.workspace = true
 custom_error.workspace = true
 either.workspace = true
-failure.workspace = true
 getset.workspace = true
 matches.workspace = true
 #memchr.workspace = true
 serde.workspace = true
 num_enum.workspace = true
 paste.workspace = true
+thiserror.workspace = true
 
 [build-dependencies]
 built.workspace = true

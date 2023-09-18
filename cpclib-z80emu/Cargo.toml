@@ -22,5 +22,4 @@ cpclib-common.workspace = true
 cfg-if.workspace = true
 delegate.workspace = true
 either.workspace = true
-failure.workspace = true
 paste.workspace = true
