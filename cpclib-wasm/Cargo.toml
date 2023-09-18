@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-wasm"
-version = "0.2.1-alpha.2"
+version = "0.2.1"
 description = "webasm tools for cpclib"
 
 authors.workspace = true

@@ -1,7 +1,7 @@
 [package]
 
 name = "cpclib-xfertool"
-version = "0.7.0"
+version = "0.7.1"
 description = "cpclib tool related to xfer"
 
 authors.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-image"
-version = "0.7.0"
+version = "0.7.1"
 description = "Image manipulation library for amstrad cpc"
 
 authors.workspace = true
