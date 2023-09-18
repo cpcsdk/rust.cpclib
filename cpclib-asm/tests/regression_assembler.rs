@@ -53,12 +53,6 @@ pub fn macro_local_labels() {
 }
 
 
-    // just check that it assemble
-    let binary = assemble(code).unwrap();
-    assert_eq!(binary.len(), 3 * 3);
-    assert_eq!(&binary, &[4, 5, 6, 4, 5, 6, 4, 5, 6,])
-}
-
 #[test]
 pub fn test_inner_struct2() {
     let code = "
