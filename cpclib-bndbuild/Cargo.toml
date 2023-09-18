@@ -16,9 +16,9 @@ homepage.workspace = true
 exclude = ["examples", "tests/dummy"]
 
 [dependencies]
-shlex = "1.1.0"
+shlex = "1.2.0"
 topologic = "1.0.0"
-lazy-regex = "3.0.1"
+lazy-regex = "3.0.2"
 
 cpclib-common = {workspace=true, features=["cmdline"]}
 cpclib-basm = { workspace=true, default-features=false, features=["xferlib"] }
@@ -33,7 +33,7 @@ serde.workspace = true
 assert_cmd = "2.0.12"
 thiserror = "1.0"
 self_cell = "1.0.1"
-anyhow = "1.0.72"
+anyhow = "1.0.75"
 
 [build-dependencies]
 built.workspace = true

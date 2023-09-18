@@ -19,15 +19,15 @@ cpclib-common =  {workspace = true, features=["cmdline"]}
 cpclib-xfer = {workspace=true, default-features=false, optional=true}
 cpclib-disc.workspace = true
 
-time = "0.3.23"
+time = "0.3.28"
 
 [dev-dependencies]
 test-generator = "0.3.1"
-tempfile = "3.7.0"
+tempfile = "3.8.0"
 pretty_assertions = "1.4.0"
 criterion = "0.5.1"
-globset = "0.4.12"
-regex = "1.9.1"
+globset = "0.4.13"
+regex = "1.9.5"
 serial_test = "2.0.0"
 
 [build-dependencies]
