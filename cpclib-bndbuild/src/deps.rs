@@ -50,10 +50,16 @@ where D: Deserializer<'de> {
         .into_iter()
         .map(|s| expand_glob(s.as_ref()))
         .flatten()
+        .map(|s| if s.starts_with(r"./") || s.starts_with(r".\") {
+            s[2..].to_owned()
+        }
+        else {
+            s
+        })
         .map(|s| PathBuf::from(s))
         .collect_vec();
 
-    Ok(r)
+    Ok(dbg!(r))
 }
 
 fn deserialize_task_list<'de, D>(deserializer: D) -> Result<Vec<Task>, D::Error>
@@ -179,6 +185,7 @@ impl Rule {
             true
         }
     }
+
 }
 
 #[derive(Deserialize)]
@@ -199,6 +206,20 @@ impl Rules {
     /// Get the rule for this target (of course None is returned for leaf files)
     pub fn rule<P: AsRef<Path>>(&self, tgt: P) -> Option<&Rule> {
         let tgt = tgt.as_ref();
+
+        dbg!(tgt);
+
+        // remove current dir path if any
+        let tgt = if tgt.starts_with(r"./") {
+            tgt.strip_prefix(r"./").unwrap()
+        } else if dbg!(tgt.to_str().unwrap().starts_with(r".\")) {
+            Path::new(&tgt.to_str().unwrap()[2..])
+        }else {
+            tgt
+        };
+
+        dbg!(&tgt);
+
         self.rules
             .iter()
             .find(|r| r.targets.iter().any(|tgt2| tgt2 == tgt))
