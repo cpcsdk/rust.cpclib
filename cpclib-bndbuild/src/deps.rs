@@ -59,7 +59,7 @@ where D: Deserializer<'de> {
         .map(|s| PathBuf::from(s))
         .collect_vec();
 
-    Ok(dbg!(r))
+    Ok(r)
 }
 
 fn deserialize_task_list<'de, D>(deserializer: D) -> Result<Vec<Task>, D::Error>
@@ -207,8 +207,6 @@ impl Rules {
     pub fn rule<P: AsRef<Path>>(&self, tgt: P) -> Option<&Rule> {
         let tgt = tgt.as_ref();
 
-        dbg!(tgt);
-
         // remove current dir path if any
         let tgt = if tgt.starts_with(r"./") {
             tgt.strip_prefix(r"./").unwrap()
@@ -217,8 +215,6 @@ impl Rules {
         }else {
             tgt
         };
-
-        dbg!(&tgt);
 
         self.rules
             .iter()
