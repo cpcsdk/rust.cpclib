@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-bndbuild"
-version = "0.2.1"
+version = "0.2.2"
 resolver = "2"
 description = "Amstrad CPC project builder. Biased towards basm, but can still work with any tool"
 

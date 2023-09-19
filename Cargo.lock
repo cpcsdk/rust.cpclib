@@ -1138,7 +1138,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bndbuild"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1255,7 +1255,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-sna"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "built",
  "cfg-if",
