@@ -136,6 +136,7 @@ impl BndBuilder {
     ) -> Result<Self, BndBuilderError> {
         if let Some(working_directory) = working_directory {
             let working_directory = working_directory.as_ref();
+            println!("> Set working directory to: {}", working_directory.display());
             std::env::set_current_dir(working_directory).map_err(|e| {
                 BndBuilderError::WorkingDirectoryError {
                     fname: working_directory.display().to_string(),
