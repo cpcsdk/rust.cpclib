@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::symbols::PhysicalAddress;
-use cpclib_tokens::{ExprResult, Token};
+use cpclib_tokens::{ExprResult, Token, ListingElement};
 
 use crate::preamble::{LocatedToken, MayHaveSpan};
 /// Generate an output listing.
@@ -142,7 +142,7 @@ impl ListingOutput {
             return;
         }
 
-     //   dbg!(token);
+       // dbg!(token);
 
         let fname_handling = self.manage_fname(token);
 
@@ -166,7 +166,7 @@ impl ListingOutput {
         */
 
         /* !self.token_is_on_same_line(token)*/ 
-        if true {
+        if !token.is_comment() {
 /* 
             if specific_content.is_some() && fname_handling.is_some() {
                 writeln!(self.writer, "{}", fname_handling.take().unwrap()).unwrap();

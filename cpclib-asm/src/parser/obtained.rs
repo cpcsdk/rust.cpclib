@@ -1662,6 +1662,13 @@ impl ListingElement for LocatedToken {
             _ => false
         }
     }
+
+    fn is_comment(&self) -> bool {
+        match self {
+            Self::Standard { token: Token::Comment(..), .. } => true,
+            _ => false
+        }
+    }
 }
 
 pub type InnerLocatedListing = BaseListing<LocatedToken>;

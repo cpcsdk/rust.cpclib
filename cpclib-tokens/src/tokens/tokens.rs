@@ -542,6 +542,13 @@ impl ListingElement for Token {
             _ => false
         }
     }
+
+    fn is_comment(&self) -> bool {
+        match self {
+            Self::Comment(..) => true,
+            _ => false
+        }
+    }
 }
 
 /// Standard listing is a specific implementation

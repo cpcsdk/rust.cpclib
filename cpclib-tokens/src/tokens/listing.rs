@@ -15,10 +15,13 @@ pub trait ListingElement: Debug + Sized {
     type TestKind: TestKindElement;
     type Expr: ExprElement + Debug + Eq + Clone;
 
+
+
     fn defer_listing_output(&self) -> bool {
        false // self.is_equ() | self.is_set()
     }
 
+    fn is_comment(&self) -> bool;
     fn is_set(&self) -> bool;
 
     fn is_equ(&self) -> bool;
