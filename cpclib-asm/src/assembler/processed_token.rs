@@ -104,7 +104,6 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 struct FunctionDefinitionState(Option<Arc<Function>>);
 
 #[derive(PartialEq, Eq, Clone, Debug)]
-
 struct SwitchState<'token, T: Visited + ListingElement + Debug + Sync> {
     cases: Vec<SimpleListingState<'token, T>>,
     default: Option<SimpleListingState<'token, T>>
@@ -605,25 +604,28 @@ pub fn build_processed_tokens_list<
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
-    #[cfg(not(target_arch = "wasm32"))]
-    let iter = tokens.par_iter();
-    #[cfg(target_arch = "wasm32")]
-    let mut iter = tokens.iter();
+
 
     let options = env.options().parse_options();
+        if options.show_progress {
+        #[cfg(not(target_arch = "wasm32"))]
+        let iter = tokens.par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let mut iter = tokens.iter();
 
-    // get filename of files that will be read in parallal
-    let include_fnames = iter
-        .filter(|t| t.include_is_standard_include())
-        .map(|t| get_filename(t.include_fname(), options, Some(env)))
-        .filter(|f| f.is_ok())
-        .map(|f| f.unwrap())
-        .collect::<Vec<_>>();
+        // get filename of files that will be read in parallel
+        let include_fnames = iter
+            .filter(|t| t.include_is_standard_include())
+            .map(|t| get_filename(t.include_fname(), options, Some(env)))
+            .filter(|f| f.is_ok())
+            .map(|f| f.unwrap()).collect::<Vec::<_>>();
+        let include_fnames = include_fnames.iter()
+            .map(|t| progress::normalize(&t));
+            
 
-    // inform the progress bar
-    if !include_fnames.is_empty() && options.show_progress {
-        // add all fnames in one time
-        Progress::progress().add_parses(include_fnames.iter().map(|t| progress::normalize(t)));
+        // inform the progress bar
+            // add all fnames in one time
+        Progress::progress().add_parses(include_fnames);
     }
 
     // the files will be read here

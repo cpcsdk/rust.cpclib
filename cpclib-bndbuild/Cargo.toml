@@ -51,3 +51,6 @@ path = "src/main.rs"
 [features]
 default = []
 indicatif = ["cpclib-basm/indicatif"]
+
+[profile.release]
+debug = 1

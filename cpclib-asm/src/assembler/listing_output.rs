@@ -186,7 +186,7 @@ impl ListingOutput {
 
         // TODO manage missing end of files/blocks if needed
 
-        // draw all line
+        // draw all lines
         let mut idx = 0;
         loop {
             let current_inner_line = line_representation.next();
@@ -207,7 +207,7 @@ impl ListingOutput {
             let offset = self.current_physical_address.offset_in_cpc();
             let phys_addr_representation =
                 if current_inner_line.is_none() || offset == self.current_first_address {
-                    "     ".to_owned()
+                    "      ".to_owned()
                 }
                 else {
                     format!("{:05X}{}", offset, self.current_address_kind)
