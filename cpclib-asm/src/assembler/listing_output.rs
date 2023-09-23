@@ -135,7 +135,10 @@ impl ListingOutput {
         let fname_handling = self.manage_fname(token);
 
         if !self.token_is_on_same_line(token) {
+            // handle previous line
             self.process_current_line(); // request a display
+
+            // handle the new line
 
             // replace the objects of interest
             self.current_source = Some(token.context().source);
@@ -148,7 +151,16 @@ impl ListingOutput {
             self.current_physical_address = physical_address;
             self.current_address_kind = AddressKind::None;
             self.manage_fname(token);
+        } else {
+            // update the line
+            self.current_line_group =
+            Some((token.span().location_line(), Self::extract_code(token)));
         }
+
+        match token {
+            _ => {}
+        }
+
 
         self.current_line_bytes.extend_from_slice(bytes);
         self.current_address_kind = if self.current_address_kind == AddressKind::None {
@@ -186,7 +198,7 @@ impl ListingOutput {
 
         // TODO manage missing end of files/blocks if needed
 
-        // draw all lines
+        // draw all lines that correspond to the instructions to output
         let mut idx = 0;
         loop {
             let current_inner_line = line_representation.next();
@@ -222,10 +234,7 @@ impl ListingOutput {
 
             writeln!(
                 self.writer,
-                "{} {} {} {:bytes_width$} {} ",
-                line_nb_representation,
-                loc_representation,
-                phys_addr_representation,
+                "{loc_representation} {phys_addr_representation} {:bytes_width$} {line_nb_representation} {} ",
                 current_inner_data.unwrap_or(&"".to_owned()),
                 current_inner_line.unwrap_or(""),
                 bytes_width = self.bytes_per_line() * 3
