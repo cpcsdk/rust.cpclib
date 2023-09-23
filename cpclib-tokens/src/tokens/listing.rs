@@ -16,8 +16,10 @@ pub trait ListingElement: Debug + Sized {
     type Expr: ExprElement + Debug + Eq + Clone;
 
     fn defer_listing_output(&self) -> bool {
-        self.is_equ()
+       false // self.is_equ() | self.is_set()
     }
+
+    fn is_set(&self) -> bool;
 
     fn is_equ(&self) -> bool;
     fn equ_symbol(&self) -> &str;

@@ -10,6 +10,13 @@ use cpclib_tokens::{ExprResult, Token};
 use crate::preamble::{LocatedToken, MayHaveSpan};
 /// Generate an output listing.
 /// Can be useful to detect issues
+/// 
+
+pub enum TokenKind{
+    Standard,
+    Label(String),
+    Set(String)
+}
 pub struct ListingOutput {
     /// Writer that will contains the listing/
     /// The listing is produced line by line and not token per token
@@ -28,7 +35,9 @@ pub struct ListingOutput {
     current_first_address: u32,
     current_address_kind: AddressKind,
     current_physical_address: PhysicalAddress,
-    crunched_section_counter: usize
+    crunched_section_counter: usize,
+    current_token_kind: TokenKind
+
 }
 #[derive(PartialEq)]
 pub enum AddressKind {
@@ -72,7 +81,8 @@ impl ListingOutput {
             current_first_address: 0,
             current_address_kind: AddressKind::None,
             crunched_section_counter: 0,
-            current_physical_address: PhysicalAddress::new(0, 0)
+            current_physical_address: PhysicalAddress::new(0, 0),
+            current_token_kind: TokenKind::Standard
         }
     }
 
@@ -132,27 +142,38 @@ impl ListingOutput {
             return;
         }
 
+     //   dbg!(token);
+
         let fname_handling = self.manage_fname(token);
 
         // Handle specific tokens with a specific behavior
-        let specific_content = match token {
+        /*match token {
             LocatedToken::Label(l) => {
                 self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
 
                 Some(format!("{:04X} {:05X} {l}", self.current_first_address, self.current_physical_address.offset_in_cpc()))
             },
 
-            LocatedToken::Equ{label, ..} => {
+            LocatedToken::Equ{label, ..} |
+            LocatedToken::Assign { label,..}
+            => {
                 self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
                 Some(format!("{:04X} {} {label}", self.current_first_address, "-----"))
             }
 
             _ => None
         };
+        */
 
-        if specific_content.is_some() || !self.token_is_on_same_line(token) {
+        /* !self.token_is_on_same_line(token)*/ 
+        if true {
+/* 
+            if specific_content.is_some() && fname_handling.is_some() {
+                writeln!(self.writer, "{}", fname_handling.take().unwrap()).unwrap();
+            }
+*/
             // handle previous line
-            self.process_current_line(specific_content); // request a display
+            self.process_current_line(); // request a display
 
             // handle the new line
 
@@ -173,8 +194,6 @@ impl ListingOutput {
         }
 
 
-
-
         self.current_line_bytes.extend_from_slice(bytes);
         self.current_address_kind = if self.current_address_kind == AddressKind::None {
             address_kind
@@ -189,9 +208,31 @@ impl ListingOutput {
         if let Some(line) = fname_handling {
             writeln!(self.writer, "{}", line).unwrap();
         }
+
+        self.current_token_kind = match token {
+            LocatedToken::Label(l) => {
+                TokenKind::Label(l.to_string())
+            },
+            LocatedToken::Equ{label, ..} |
+            LocatedToken::Assign { label,..}
+            => TokenKind::Set(label.to_string()),
+            _ => TokenKind::Standard
+        };
+
     }
 
-    pub fn process_current_line(&mut self, specific_content: Option<String>) {
+    pub fn process_current_line(&mut self) {
+
+        let specific_content = match &self.current_token_kind {
+            TokenKind::Standard => None,
+            TokenKind::Label(l) => {
+                Some(format!("{:04X} {:05X} {l}", self.current_first_address, self.current_physical_address.offset_in_cpc()))
+            },
+            TokenKind::Set(label) => {
+                Some(format!("{:04X} {} {label}", self.current_first_address, "-----"))
+            },
+        };
+
         // retrieve the line
         let (line_number, line) = match &self.current_line_group {
             Some((idx, line)) => (idx, line),
@@ -283,7 +324,7 @@ impl ListingOutput {
     }
 
     pub fn finish(&mut self) {
-        self.process_current_line(None)
+        self.process_current_line()
     }
 
     /// Print filename if needed
@@ -361,6 +402,7 @@ impl ListingOutputTrigger {
         physical_address: PhysicalAddress
     ) {
 
+        // Retreive the previous token and handle it
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(
                 unsafe { &**token },

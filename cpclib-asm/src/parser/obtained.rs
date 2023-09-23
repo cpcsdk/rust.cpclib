@@ -1656,7 +1656,12 @@ impl ListingElement for LocatedToken {
         }
     }
 
-
+    fn is_set(&self) -> bool {
+        match self {
+            Self::Assign{..} => true,
+            _ => false
+        }
+    }
 }
 
 pub type InnerLocatedListing = BaseListing<LocatedToken>;

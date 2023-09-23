@@ -535,6 +535,13 @@ impl ListingElement for Token {
             _ => unreachable!()
         }
     }
+
+    fn is_set(&self) -> bool {
+        match self {
+            Self::Assign(..) => true,
+            _ => false
+        }
+    }
 }
 
 /// Standard listing is a specific implementation
