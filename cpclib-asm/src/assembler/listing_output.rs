@@ -234,9 +234,9 @@ impl ListingOutput {
 
             writeln!(
                 self.writer,
-                "{loc_representation} {phys_addr_representation} {:bytes_width$} {line_nb_representation} {} ",
+                "{loc_representation} {phys_addr_representation} {:bytes_width$} {line_nb_representation} {}",
                 current_inner_data.unwrap_or(&"".to_owned()),
-                current_inner_line.unwrap_or(""),
+                current_inner_line.map(|line| line.trim_right()).unwrap_or(""),
                 bytes_width = self.bytes_per_line() * 3
             )
             .unwrap();
