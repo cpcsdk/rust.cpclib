@@ -120,7 +120,7 @@ impl ListingOutput {
     }
 
     /// Add a token for the current line
-    pub fn add_token(
+    fn add_token(
         &mut self,
         token: &LocatedToken,
         bytes: &[u8],
@@ -158,6 +158,10 @@ impl ListingOutput {
         }
 
         match token {
+            LocatedToken::Label(l) => {
+                writeln!(self.writer, "{:04X} {:05X} {l}", self.current_first_address, self.current_physical_address.offset_in_cpc()).unwrap()
+            }
+
             _ => {}
         }
 
@@ -328,6 +332,8 @@ impl ListingOutputTrigger {
         kind: AddressKind,
         physical_address: PhysicalAddress
     ) {
+        dbg!("new_token");
+
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(
                 unsafe { &**token },
@@ -339,6 +345,8 @@ impl ListingOutputTrigger {
         }
 
         self.token.replace(new.clone()); // TODO remove that clone that is memory/time eager
+
+        // TODO double check if these lines are current. I doubt it is the case when having severl instructions per line
         self.bytes.clear();
         self.start = code;
         self.physical_address = physical_address;
@@ -367,6 +375,7 @@ impl ListingOutputTrigger {
     }
 
     pub fn finish(&mut self) {
+        dbg!("finish");
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(
                 unsafe { &**token },

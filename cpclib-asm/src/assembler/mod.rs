@@ -2478,7 +2478,8 @@ pub fn visit_located_token(
     // cheat on the lifetime of tokens
     let outer_token = unsafe { (outer_token as *const LocatedToken).as_ref().unwrap() };
 
-    env.handle_output_trigger(outer_token);
+    // XXX Maybe we have to uncomment it if some tokens are not included within the listing
+    //env.handle_output_trigger(outer_token);
 
     let span = outer_token.span();
     match outer_token {

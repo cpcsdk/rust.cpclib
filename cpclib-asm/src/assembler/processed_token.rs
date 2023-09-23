@@ -798,6 +798,7 @@ where
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
         let possible_span = self.possible_span().cloned();
         let mut really_does_the_job = move || {
+
             // handle the listing
             // will crash on non located tokens stuff
             {
