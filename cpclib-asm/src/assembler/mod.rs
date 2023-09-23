@@ -1832,11 +1832,11 @@ impl Env {
         Ok(())
     }
 
-    fn visit_next_and_co(
+    fn visit_next_and_co<E: ExprElement + ExprEvaluationExt> (
         &mut self,
         destination: &str,
         source: &str,
-        delta: Option<&Expr>,
+        delta: Option<&E>,
         can_override: bool
     ) -> Result<(), AssemblerError> {
         if !can_override && self.symbols.contains_symbol(destination)? && self.pass.is_first_pass()
@@ -2534,6 +2534,22 @@ pub fn visit_located_token(
                 }
             }
         }
+        LocatedToken::Assign{label, expr, op, span} => {
+            env.visit_assign(label, expr, op.as_ref())
+            .map_err(|e| e.locate(span.clone()))
+        }
+        LocatedToken::Equ{label, expr, span} => {
+                env.visit_equ(label, expr)
+                .map_err(|e| e.locate(span.clone()))
+        }
+        LocatedToken::SetN{label, source, expr, span } => {
+            env.visit_next_and_co(label, source, expr.as_ref(), true)
+            .map_err(|e| e.locate(span.clone()))
+        }
+        LocatedToken::Next{label, source, expr, span} => {
+            env.visit_next_and_co(label, source, expr.as_ref(), false)
+            .map_err(|e| e.locate(span.clone()))
+        }
 
         LocatedToken::Label(label) => {
             env.visit_label(label.as_str())
@@ -2681,8 +2697,8 @@ fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::MultiPop(ref regs) => env.visit_multi_pops(regs),
         Token::NoExport(ref labels) => env.visit_noexport(labels.as_slice()),
         Token::Export(ref labels) => env.visit_export(labels.as_slice()),
-        Token::Equ(ref label, ref exp) => visit_equ(label, exp, env),
-        Token::Assign(ref label, ref exp, op) => visit_assign(label, exp, op.as_ref(), env),
+        Token::Equ(ref label, ref exp) => env.visit_equ(label, exp),
+        Token::Assign(ref label, ref exp, op) => env.visit_assign(label, exp, op.as_ref()),
         Token::Pause => {
             env.visit_pause(None);
             Ok(())
@@ -3480,47 +3496,52 @@ impl Env {
     }
 }
 
-fn visit_equ(label: &str, exp: &Expr, env: &mut Env) -> Result<(), AssemblerError> {
-    if env.symbols().contains_symbol(label)? && env.pass.is_first_pass() {
+impl Env {
+fn visit_equ<E: ExprEvaluationExt + ExprElement + Debug>(&mut self, label: &str, exp: &E) -> Result<(), AssemblerError> {
+    if self.symbols().contains_symbol(label)? && self.pass.is_first_pass() {
         Err(AssemblerError::AlreadyDefinedSymbol {
             symbol: label.into(),
-            kind: env.symbols().kind(label)?.into()
+            kind: self.symbols().kind(label)?.into()
         })
     }
     else {
-        let value = env.resolve_expr_may_fail_in_first_pass(exp)?;
-        env.output_trigger
+        let value = self.resolve_expr_may_fail_in_first_pass(exp)?;
+        self.output_trigger
             .as_mut()
             .map(|o| o.replace_code_address(value.clone()));
-        env.add_symbol_to_symbol_table(label, value)
+        self.add_symbol_to_symbol_table(label, value)
     }
 }
 
-fn visit_assign(
+
+
+fn visit_assign<'e, E: ExprEvaluationExt + ExprElement + Clone>(
+    &mut self,
     label: &str,
-    exp: &Expr,
+    exp: &E,
     op: Option<&BinaryOperation>,
-    env: &mut Env
-) -> Result<(), AssemblerError> {
+) -> Result<(), AssemblerError> 
+{
     let value = if let Some(op) = op {
         let new_exp = Expr::BinaryOperation(
             *op,
             Box::new(Expr::Label(label.into())),
-            Box::new(exp.clone())
+            Box::new(exp.to_expr().into_owned())
         );
-        env.resolve_expr_must_never_fail(&new_exp)?
+        self.resolve_expr_must_never_fail(&new_exp)?
     }
     else {
-        env.resolve_expr_may_fail_in_first_pass(exp)?
+        self.resolve_expr_may_fail_in_first_pass(exp)?
     };
 
-    env.output_trigger
+    self.output_trigger
         .as_mut()
         .map(|o| o.replace_code_address(value.clone()));
 
-    env.symbols_mut().assign_symbol_to_value(label, value)?;
+    self.symbols_mut().assign_symbol_to_value(label, value)?;
 
     Ok(())
+}
 }
 
 fn visit_defs(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {

@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, Sub};
@@ -48,6 +48,19 @@ pub enum Expr {
 
     /// Random value
     Rnd
+}
+
+
+impl Into<Cow<'_, Expr>> for Expr {
+    fn into(self) -> Cow<'static, Expr> {
+        Cow::Owned(self)
+    }
+}
+
+impl<'e> Into<Cow<'e, Expr>> for &'e Expr {
+    fn into(self) -> Cow<'e, Expr> {
+        Cow::Borrowed(self)
+    }
 }
 
 /// All methods are unchecked
@@ -117,6 +130,9 @@ pub trait ExprElement: Sized {
 
     fn is_context_independant(&self) -> bool;
     fn fix_relative_value(&mut self);
+
+    fn to_expr(&self) -> Cow<Expr>;
+
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -422,6 +438,10 @@ convert_number_to_expr!(i32 i16 i8 u8 u16 u32 usize);
 impl ExprElement for Expr {
     type ResultExpr = Expr;
     type Token = Token;
+
+    fn to_expr(&self) -> Cow<Expr> {
+        Cow::Borrowed(&self)
+    }
 
     fn is_negated(&self) -> bool {
         match self {

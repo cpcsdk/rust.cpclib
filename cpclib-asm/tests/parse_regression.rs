@@ -49,10 +49,10 @@ fn test_regression1() {
 #[test]
 fn expr_negative_regression() {
     let (_ctx_, span) = ctx_and_span("18");
-    assert_eq!(expr2(span).unwrap().1.to_expr(), Expr::Value(18));
+    assert_eq!(expr2(span).unwrap().1.to_expr().into_owned(), Expr::Value(18));
 
     let (_ctx_, span) = ctx_and_span("-18");
-    assert_eq!(expr2(span).unwrap().1.to_expr(), Expr::Value(-18));
+    assert_eq!(expr2(span).unwrap().1.to_expr().into_owned(), Expr::Value(-18));
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn db_negative_regression() {
     assert_eq!(listing.len(), 1);
     match &listing[0] {
         LocatedToken::Defb(v, _) => {
-            assert_eq!(v[0].to_expr(), Expr::Value(18))
+            assert_eq!(v[0].to_expr().into_owned(), Expr::Value(18))
         }
         _ => panic!()
     }
@@ -72,7 +72,7 @@ fn db_negative_regression() {
     assert_eq!(listing.len(), 1);
     match &listing[0] {
         LocatedToken::Defb(v, _) => {
-            assert_eq!(v[0].to_expr(), Expr::Value(-18))
+            assert_eq!(v[0].to_expr().into_owned(), Expr::Value(-18))
         }
         _ => panic!()
     }

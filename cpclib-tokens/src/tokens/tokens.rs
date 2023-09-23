@@ -11,6 +11,9 @@ impl ListingElement for Token {
     type MacroParam = MacroParam;
     type TestKind = TestKind;
 
+
+ 
+
     fn is_equ(&self) -> bool {
         match self {
             Token::Equ(..) => true,
@@ -25,7 +28,7 @@ impl ListingElement for Token {
         }
     }
 
-    fn equ_value(&self) -> &Expr {
+    fn equ_value(&self) -> &Self::Expr {
         match self {
             Token::Equ(_label_, value, ..) => value,
             _ => unreachable!()

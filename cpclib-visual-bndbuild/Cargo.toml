@@ -12,6 +12,8 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[package.metadata.workspaces]
+independent = true
 
 [dependencies]
 cpclib-bndbuild.workspace = true

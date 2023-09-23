@@ -39,7 +39,6 @@ cpclib-basic = {version="0.7.1",path="cpclib-basic", default-features=false}
 cpclib-basm = {version="0.7.1",path="cpclib-basm", default-features=false}
 cpclib-bdasm = {version="0.7.1",path="cpclib-bdasm", default-features=false}
 cpclib-bndbuild = {version="=0.2.2",path="cpclib-bndbuild", default-features=false}
-cpclib-visual-bndbuild = {version="0.2.1",path="cpclib-visual-bndbuild", default-features=false}
 cpclib-common = {version="0.7.1",path="cpclib-common", default-features=false}
 cpclib-crunchers = {version="0.7.1",path="cpclib-crunchers", default-features=false}
 cpclib-disc = {version="0.7.1",path="cpclib-disc", default-features=false}
@@ -48,6 +47,7 @@ cpclib-imgconverter = {version="0.7.1",path="cpclib-imgconverter", default-featu
 cpclib-macros = {version="0.7.1",path="cpclib-macros", default-features=false}
 cpclib-sna = {version="=0.7.2",path="cpclib-sna", default-features=false}
 cpclib-tokens = {version="0.7.1",path="cpclib-tokens", default-features=false}
+cpclib-visual-bndbuild = {version="0.2.1",path="cpclib-visual-bndbuild", default-features=false}
 cpclib-xfer = {version="0.7.1",path="cpclib-xfer", default-features=false}
 cpclib-xfertool = {version="0.7.1",path="cpclib-xfertool", default-features=false}
 cpclib-z80emu = {version="0.7.1",path="cpclib-z80emu", default-features=false}
@@ -154,26 +154,26 @@ egui = "0.22"
 thiserror = "1.0"
 
 [patch.crates-io]
+#cpclib-xferfs = {path = "./cpclib-xferfs/"}
 cpclib = {path = "./cpclib/"}
 cpclib-asm = {path = "./cpclib-asm/"}
 cpclib-basic = {path = "./cpclib-basic/"}
+cpclib-basm = {path = "./cpclib-basm/"}
+cpclib-bdasm = {path = "./cpclib-bdasm/"}
 cpclib-bndbuild = {path = "./cpclib-bndbuild/"}
 cpclib-common = {path = "./cpclib-common/"}
 cpclib-crunchers = {path = "./cpclib-crunchers/"}
 cpclib-disc = {path = "./cpclib-disc/"}
 cpclib-image = {path = "./cpclib-image/"}
+cpclib-imgconverter = {path = "./cpclib-imgconverter/"}
 cpclib-macros = {path = "./cpclib-macros/"}
 cpclib-sna = {path = "./cpclib-sna/"}#
 cpclib-tokens = {path = "./cpclib-tokens/"}
+cpclib-visual-bndbuild = {path = "./cpclib-visual-bndbuild/"}
+cpclib-wasm = {path="./cpclib-wasm"}
 cpclib-xfer = {path = "./cpclib-xfer/"}
 cpclib-xfertool = {path = "./cpclib-xfertool/"}
 cpclib-z80emu = {path = "./cpclib-z80emu/"}
-cpclib-wasm = {path="./cpclib-wasm"}
-cpclib-basm = {path = "./cpclib-basm/"}
-cpclib-bdasm = {path = "./cpclib-bdasm/"}
-cpclib-imgconverter = {path = "./cpclib-imgconverter/"}
-cpclib-visual-bndbuild = {path = "./cpclib-visual-bndbuild/"}
-#cpclib-xferfs = {path = "./cpclib-xferfs/"}
 
 
 

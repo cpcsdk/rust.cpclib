@@ -1500,7 +1500,7 @@ pub fn parse_z80_line_label_aware_directive(
 
     let (input, expr_arg) = match &label_modifier {
         LabelModifier::Equ | LabelModifier::Equal(..) | LabelModifier::Set => {
-            cut(context("Value error", map(expr, |e| Some(e))))(input)?
+            cut(context("Value error", map(located_expr, |e| Some(e))))(input)?
         }
         _ => (input, None)
     };
@@ -1517,29 +1517,31 @@ pub fn parse_z80_line_label_aware_directive(
 
     // optional expression to control the displacement
     let (input, additional_arg) = match &label_modifier {
-        LabelModifier::Next | LabelModifier::SetN => opt(preceded(parse_comma, expr))(input)?,
+        LabelModifier::Next | LabelModifier::SetN => opt(preceded(parse_comma, located_expr))(input)?,
         _ => (input, None)
     };
 
     // opt!(char!(':')) >>
+    let size = before_label.input_len() - input.input_len();
+    let span = before_label.take(size);
 
     // Build the needed token for the label of interest
-    let token = match label_modifier {
-        LabelModifier::Equ => Token::Equ(label.into(), expr_arg.unwrap()),
-        LabelModifier::Equal(op) => Token::Assign(label.into(), expr_arg.unwrap(), op),
-        LabelModifier::Set => Token::Assign(label.into(), expr_arg.unwrap(), None),
+    let token : LocatedToken = match label_modifier {
+        LabelModifier::Equ => 
+            LocatedToken::Equ{label, expr: expr_arg.unwrap(), span: before_label.take(size)},
+        LabelModifier::Equal(op) => LocatedToken::Assign{label, expr:expr_arg.unwrap(), op, span},
+        LabelModifier::Set => LocatedToken::Assign{label, expr: expr_arg.unwrap(), op:None, span},
         LabelModifier::SetN => {
-            Token::SetN(label.into(), source_label.unwrap().into(), additional_arg)
+            LocatedToken::SetN{label, source: source_label.unwrap(), expr: additional_arg, span}
         }
         LabelModifier::Next => {
-            Token::Next(label.into(), source_label.unwrap().into(), additional_arg)
+            LocatedToken::Next{label, source: source_label.unwrap(), expr: additional_arg, span}
         }
     };
 
     // add it to the list
-    let size = before_label.input_len() - input.input_len();
 
-    Ok((input, token.locate(before_label, size)))
+    Ok((input, token))
 }
 pub fn parse_fname(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
     parse_string(input)
@@ -4323,7 +4325,7 @@ pub fn expr2(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
 }
 
 fn expr(input: Z80Span) -> IResult<Z80Span, Expr, Z80ParserError> {
-    map(located_expr, |e| e.to_expr())(input)
+    map(located_expr, |e| e.to_expr().into_owned())(input)
 }
 
 /// TODO replace ALL expr parse by a located version

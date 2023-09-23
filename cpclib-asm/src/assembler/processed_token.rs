@@ -799,9 +799,11 @@ where
         let possible_span = self.possible_span().cloned();
         let mut really_does_the_job = move || {
 
-            // handle the listing
-            // will crash on non located tokens stuff
+            let deferred = self.token.defer_listing_output();
+            if !deferred
             {
+
+               // dbg!(&self.token, deferred);
                 let outer_token = unsafe {
                     (self.token as *const T as *const LocatedToken)
                         .as_ref()
@@ -1185,6 +1187,16 @@ where
             }?;
 
             env.update_dollar();
+            if deferred
+            {
+                let outer_token = unsafe {
+                    (self.token as *const T as *const LocatedToken)
+                        .as_ref()
+                        .unwrap()
+                };
+
+                env.handle_output_trigger(outer_token);
+            }
             Ok(res)
         };
 

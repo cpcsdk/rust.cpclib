@@ -41,6 +41,8 @@ pub enum LocatedExpr {
     Char(char, Z80Span),
     Bool(bool, Z80Span),
 
+
+
     String(Z80Span),
     Label(Z80Span),
 
@@ -73,6 +75,43 @@ impl ExprElement for LocatedExpr {
     type ResultExpr = Expr;
     type Token = LocatedToken;
 
+    fn to_expr(&self) -> Cow<Expr> {
+        let expr = match self {
+            LocatedExpr::RelativeDelta(d, _) => Expr::RelativeDelta(*d),
+            LocatedExpr::Value(v, _) => Expr::Value(*v),
+            LocatedExpr::Float(f, _) => Expr::Float(*f),
+            LocatedExpr::Char(c, _) => Expr::Char(*c),
+            LocatedExpr::Bool(b, _) => Expr::Bool(*b),
+            LocatedExpr::String(s) => Expr::String(s.into()),
+            LocatedExpr::Label(l) => Expr::Label(l.into()),
+            LocatedExpr::List(l, _) => Expr::List(l.iter().map(|e| e.to_expr().into_owned()).collect_vec()),
+            LocatedExpr::PrefixedLabel(p, l, _) => Expr::PrefixedLabel(*p, l.into()),
+            LocatedExpr::Paren(box p, _) => Expr::Paren(Box::new(p.to_expr().into_owned())),
+            LocatedExpr::UnaryFunction(f, box e, _) => {
+                Expr::UnaryFunction(*f, Box::new(e.to_expr().into_owned()))
+            }
+            LocatedExpr::UnaryOperation(o, box e, _) => {
+                Expr::UnaryOperation(*o, Box::new(e.to_expr().into_owned()))
+            }
+            LocatedExpr::UnaryTokenOperation(o, box t, _) => {
+                Expr::UnaryTokenOperation(*o, Box::new(t.to_token().into_owned()))
+            }
+            LocatedExpr::BinaryFunction(f, box e1, box e2, _) => {
+                Expr::BinaryFunction(*f, Box::new(e1.to_expr().into_owned()), Box::new(e2.to_expr().into_owned()))
+            }
+            LocatedExpr::BinaryOperation(o, box e1, box e2, _) => {
+                Expr::BinaryOperation(*o, Box::new(e1.to_expr().into_owned()), Box::new(e2.to_expr().into_owned()))
+            }
+            LocatedExpr::AnyFunction(n, a, _) => {
+                Expr::AnyFunction(n.into(), a.iter().map(|e| e.to_expr().into_owned()).collect_vec())
+            }
+            LocatedExpr::Rnd(_) => Expr::Rnd
+        };
+
+        Cow::Owned(expr)
+    }
+
+
     fn is_negated(&self) -> bool {
         match self {
             Self::UnaryOperation(UnaryOperation::Neg, ..) => true,
@@ -95,13 +134,13 @@ impl ExprElement for LocatedExpr {
     }
 
     fn neg(&self) -> Self::ResultExpr {
-        Expr::UnaryOperation(UnaryOperation::Neg, Box::new(self.to_expr()))
+        Expr::UnaryOperation(UnaryOperation::Neg, Box::new(self.to_expr().into_owned()))
     }
 
     fn add<E: Into<Expr>>(&self, v: E) -> Self::ResultExpr {
         Self::ResultExpr::BinaryOperation(
             BinaryOperation::Add,
-            Box::new(self.to_expr()),
+            Box::new(self.to_expr().into_owned()),
             v.into().into()
         )
     }
@@ -442,40 +481,7 @@ impl LocatedExpr {
         }
     }
 
-    /// Build a expr representation of the expression
-    pub fn to_expr(&self) -> Expr {
-        match self {
-            LocatedExpr::RelativeDelta(d, _) => Expr::RelativeDelta(*d),
-            LocatedExpr::Value(v, _) => Expr::Value(*v),
-            LocatedExpr::Float(f, _) => Expr::Float(*f),
-            LocatedExpr::Char(c, _) => Expr::Char(*c),
-            LocatedExpr::Bool(b, _) => Expr::Bool(*b),
-            LocatedExpr::String(s) => Expr::String(s.into()),
-            LocatedExpr::Label(l) => Expr::Label(l.into()),
-            LocatedExpr::List(l, _) => Expr::List(l.iter().map(|e| e.to_expr()).collect_vec()),
-            LocatedExpr::PrefixedLabel(p, l, _) => Expr::PrefixedLabel(*p, l.into()),
-            LocatedExpr::Paren(box p, _) => Expr::Paren(Box::new(p.to_expr())),
-            LocatedExpr::UnaryFunction(f, box e, _) => {
-                Expr::UnaryFunction(*f, Box::new(e.to_expr()))
-            }
-            LocatedExpr::UnaryOperation(o, box e, _) => {
-                Expr::UnaryOperation(*o, Box::new(e.to_expr()))
-            }
-            LocatedExpr::UnaryTokenOperation(o, box t, _) => {
-                Expr::UnaryTokenOperation(*o, Box::new(t.to_token().into_owned()))
-            }
-            LocatedExpr::BinaryFunction(f, box e1, box e2, _) => {
-                Expr::BinaryFunction(*f, Box::new(e1.to_expr()), Box::new(e2.to_expr()))
-            }
-            LocatedExpr::BinaryOperation(o, box e1, box e2, _) => {
-                Expr::BinaryOperation(*o, Box::new(e1.to_expr()), Box::new(e2.to_expr()))
-            }
-            LocatedExpr::AnyFunction(n, a, _) => {
-                Expr::AnyFunction(n.into(), a.iter().map(|e| e.to_expr()).collect_vec())
-            }
-            LocatedExpr::Rnd(_) => Expr::Rnd
-        }
-    }
+    
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -567,8 +573,8 @@ pub enum LocatedTestKind {
 impl LocatedTestKind {
     pub fn to_test_kind(&self) -> TestKind {
         match self {
-            LocatedTestKind::True(e) => TestKind::True(e.to_expr().clone()),
-            LocatedTestKind::False(e) => TestKind::False(e.to_expr().clone()),
+            LocatedTestKind::True(e) => TestKind::True(e.to_expr().into_owned()),
+            LocatedTestKind::False(e) => TestKind::False(e.to_expr().into_owned()),
             LocatedTestKind::LabelExists(l) => TestKind::LabelExists(l.into()),
             LocatedTestKind::LabelDoesNotExist(l) => TestKind::LabelDoesNotExist(l.into()),
             LocatedTestKind::LabelUsed(l) => TestKind::LabelUsed(l.into()),
@@ -638,6 +644,11 @@ pub enum LocatedToken {
     Defw(Vec<LocatedExpr>, Z80Span),
     CrunchedSection(CrunchType, LocatedListing, Z80Span),
     Str(Vec<LocatedExpr>, Z80Span),
+
+    Assign{label: Z80Span, expr: LocatedExpr, op: Option<BinaryOperation>, span: Z80Span},
+    Equ{label: Z80Span, expr: LocatedExpr, span: Z80Span},
+    SetN{label: Z80Span, source: Z80Span, expr: Option<LocatedExpr>, span: Z80Span},
+    Next{label: Z80Span, source: Z80Span, expr: Option<LocatedExpr>, span: Z80Span},
 
     For {
         label: Z80Span,
@@ -765,9 +776,14 @@ impl MayHaveSpan for LocatedToken {
             | LocatedToken::Defb(_, span)
             | LocatedToken::Defw(_, span)
             | LocatedToken::Str(_, span)
-            | LocatedToken::Include(_, _, _, span) => span,
-            LocatedToken::Incbin { span, .. } => span,
-            LocatedToken::WarningWrapper(token, _) => token.span()
+            | LocatedToken::Include(_, _, _, span)
+            | LocatedToken::Incbin { span, .. } 
+            | LocatedToken::Assign {  span, .. } 
+            | LocatedToken::Equ { span, .. } 
+            | LocatedToken::SetN { span, .. } 
+            | LocatedToken::Next { span, .. }  => span,
+             LocatedToken::WarningWrapper(token, _) => token.span()
+
         }
     }
 }
@@ -876,27 +892,27 @@ impl LocatedToken {
             }
             LocatedToken::Repeat(e, l, s, start, _span) => {
                 Cow::Owned(Token::Repeat(
-                    e.to_expr(),
+                    e.to_expr().into_owned(),
                     l.as_listing(),
                     s.as_ref().map(|s| s.into()),
-                    start.as_ref().map(|e| e.to_expr())
+                    start.as_ref().map(|e| e.to_expr().into_owned())
                 ))
             }
             LocatedToken::RepeatUntil(e, l, _span) => {
-                Cow::Owned(Token::RepeatUntil(e.to_expr(), l.as_listing()))
+                Cow::Owned(Token::RepeatUntil(e.to_expr().into_owned(), l.as_listing()))
             }
-            LocatedToken::Rorg(e, l, _span) => Cow::Owned(Token::Rorg(e.to_expr(), l.as_listing())),
+            LocatedToken::Rorg(e, l, _span) => Cow::Owned(Token::Rorg(e.to_expr().into_owned(), l.as_listing())),
             LocatedToken::Switch(v, c, d, _span) => {
                 Cow::Owned(Token::Switch(
-                    v.to_expr(),
+                    v.to_expr().into_owned(),
                     c.iter()
-                        .map(|(e, l, b)| (e.to_expr(), l.as_listing(), b.clone()))
+                        .map(|(e, l, b)| (e.to_expr().into_owned(), l.as_listing(), b.clone()))
                         .collect_vec(),
                     d.as_ref().map(|d| d.as_listing())
                 ))
             }
             LocatedToken::While(e, l, _span) => {
-                Cow::Owned(Token::While(e.to_expr(), l.as_listing()))
+                Cow::Owned(Token::While(e.to_expr().into_owned(), l.as_listing()))
             }
             LocatedToken::Iterate(_name, _values, _code, _span) => {
                 todo!()
@@ -912,9 +928,9 @@ impl LocatedToken {
             } => {
                 Cow::Owned(Token::For {
                     label: label.into(),
-                    start: start.to_expr(),
-                    stop: stop.to_expr(),
-                    step: step.as_ref().map(|e| e.to_expr()),
+                    start: start.to_expr().into_owned(),
+                    stop: stop.to_expr().into_owned(),
+                    step: step.as_ref().map(|e| e.to_expr().into_owned()),
                     listing: listing.as_listing()
                 })
             }
@@ -935,13 +951,13 @@ impl LocatedToken {
                 ))
             }
             LocatedToken::Defb(exprs, _) => {
-                Cow::Owned(Token::Defb(exprs.iter().map(|e| e.to_expr()).collect_vec()))
+                Cow::Owned(Token::Defb(exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()))
             }
             LocatedToken::Defw(exprs, _) => {
-                Cow::Owned(Token::Defw(exprs.iter().map(|e| e.to_expr()).collect_vec()))
+                Cow::Owned(Token::Defw(exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()))
             }
             LocatedToken::Str(exprs, _) => {
-                Cow::Owned(Token::Str(exprs.iter().map(|e| e.to_expr()).collect_vec()))
+                Cow::Owned(Token::Str(exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()))
             }
 
             LocatedToken::Include(..) => todo!(),
@@ -967,7 +983,11 @@ impl LocatedToken {
                 ))
             }
             LocatedToken::Confined(..) => todo!(),
-            LocatedToken::WarningWrapper(..) => todo!()
+            LocatedToken::WarningWrapper(..) => todo!(),
+            LocatedToken::Assign { label, expr, op, span } => todo!(),
+            LocatedToken::Equ { label, expr, span } => todo!(),
+            LocatedToken::SetN { label, source, expr, span } => todo!(),
+            LocatedToken::Next { label, source, expr, span } => todo!(),
         }
     }
 
@@ -1095,21 +1115,21 @@ impl ListingElement for LocatedToken {
 
     fn is_equ(&self) -> bool {
         match self {
-            Self::Standard { token, .. } => token.is_equ(),
+            Self::Equ { ..} => true,
             _ => false
         }
     }
 
     fn equ_symbol(&self) -> &str {
         match self {
-            Self::Standard { token, .. } => token.equ_symbol(),
+            Self::Equ { label, ..} => label.as_str(),
             _ => unreachable!()
         }
     }
 
-    fn equ_value(&self) -> &crate::Expr {
+    fn equ_value(&self) -> &Self::Expr {
         match self {
-            Self::Standard { token, .. } => token.equ_value(),
+            Self::Equ {  expr, ..} => expr,
             _ => unreachable!()
         }
     }
