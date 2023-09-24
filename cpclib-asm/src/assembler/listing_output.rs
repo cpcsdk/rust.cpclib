@@ -46,7 +46,8 @@ pub struct ListingOutput {
     current_physical_address: PhysicalAddress,
     crunched_section_counter: usize,
     current_token_kind: TokenKind,
-    deferred_for_line: Vec<String>
+    deferred_for_line: Vec<String>,
+    counter_update: Vec<String>
 }
 #[derive(PartialEq)]
 pub enum AddressKind {
@@ -92,7 +93,8 @@ impl ListingOutput {
             crunched_section_counter: 0,
             current_physical_address: PhysicalAddress::new(0, 0),
             current_token_kind: TokenKind::Hidden,
-            deferred_for_line: Default::default()
+            deferred_for_line: Default::default(),
+            counter_update: Vec::new()
         }
     }
 
@@ -257,6 +259,11 @@ impl ListingOutput {
     }
 
     pub fn process_current_line(&mut self) {
+
+
+
+
+
         // retrieve the line
         let (line_number, line) = match &self.current_line_group {
             Some((idx, line)) => (idx, line),
@@ -328,8 +335,15 @@ impl ListingOutput {
                 format!("{:4}", line_number + idx)
             };
 
+
+            
+
+
             // missing instruction must be added manually using TokenKind
             if !self.current_line_bytes.is_empty() || self.current_token_kind.is_displayable() {
+
+
+                
                 writeln!(
                     self.writer,
                     "{loc_representation} {phys_addr_representation} {:bytes_width$} {line_nb_representation} {}",
@@ -338,15 +352,27 @@ impl ListingOutput {
                     bytes_width = self.bytes_per_line() * 3
                 )
                 .unwrap();
+
+
             }
 
             idx += 1;
+        }
+
+
+        if !self.current_line_bytes.is_empty() || self.current_token_kind.is_displayable() {
+            for counter in self.counter_update.iter() {
+                self.writer.write(format!("{}\n", counter).as_bytes()).unwrap();
+            }
+            self.counter_update.clear();
         }
 
         // cleanup all the fields of the current line
         self.current_line_group = None;
         self.current_source = None;
         self.current_line_bytes.clear();
+
+
     }
 
     pub fn finish(&mut self) {
@@ -507,13 +533,19 @@ impl ListingOutputTrigger {
         self.builder.write().unwrap().leave_crunched_section();
     }
 
-    pub fn repeat_iteration(&mut self, counter: &str, value: &ExprResult) {
-        let value = Self::result_to_address(value);
-        if let Some(value) = value {
-            let line = format!("{value:04X} ????? {counter}\n");
-            self.builder.write().unwrap()
-                .writer.write(line.as_bytes()).unwrap();
-        }
+    pub fn repeat_iteration(&mut self, counter: &str, value: Option<&ExprResult>) {
+        let line = if let Some(value) = value {
+            let value = Self::result_to_address(value);
+            if let Some(value) = value {
+                format!("{value:04X} ????? {counter}")
+            } else {
+                format!("???? ????? {counter}")
+            }
+        } else {
+            format!("???? ???? {counter}")
+        };
 
+        self.builder.write().unwrap()
+            .counter_update.push(line);
     }
 }

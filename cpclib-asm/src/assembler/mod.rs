@@ -3347,8 +3347,16 @@ impl Env {
             self.symbols_mut()
                 .set_symbol_to_value(counter_name, counter_value.clone().unwrap())?;
 
-            self.output_trigger.as_mut()
-                .map(|trigger| trigger.repeat_iteration(counter_name, &counter_value.clone().unwrap()));
+            if self.pass.is_listing_pass() {
+                self.output_trigger.as_mut()
+                    .map(|trigger| trigger.repeat_iteration(counter_name, counter_value.as_ref()));
+            }
+        } else {
+
+            if self.pass.is_listing_pass() {
+                self.output_trigger.as_mut()
+                    .map(|trigger| trigger.repeat_iteration("<new iteration>", counter_value.as_ref()));
+            }            
         }
 
         // generate the bytes
