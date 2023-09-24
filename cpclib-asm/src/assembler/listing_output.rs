@@ -247,6 +247,7 @@ impl ListingOutput {
             LocatedToken::MacroCall(..) 
             | LocatedToken::Org { ..} 
             | LocatedToken::Comment(..)
+            | LocatedToken::Include(..)
             => TokenKind::Displayable,
             _ => TokenKind::Hidden
         };
