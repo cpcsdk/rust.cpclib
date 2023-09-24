@@ -226,6 +226,99 @@ impl MemoryChunk {
     }
 }
 
+
+#[derive(Clone, Debug)]
+pub struct AceSymbolChunk {
+    data: SnapshotChunkData,
+}
+
+impl AceSymbolChunk {
+    delegate! {
+        to self.data {
+            pub fn code(&self) -> &[u8; 4];
+            pub fn size(&self) -> usize;
+            pub fn size_as_array(&self) -> [u8; 4];
+            pub fn data(&self) -> &[u8];
+            fn add_bytes(&mut self, data: &[u8]);
+        }        
+    }
+
+    pub fn new() -> Self {
+        Self {
+            data: SnapshotChunkData { 
+                code: [b'S', b'Y', b'M', b'B'] , 
+                data: vec![0u8; 4usize]
+            }
+        }
+    }
+
+
+    pub fn from(code: [u8; 4], content: Vec<u8>) -> Self {
+        assert_eq!(code[0], b'S');
+        assert_eq!(code[1], b'Y');
+        assert_eq!(code[2], b'M');
+        assert_eq!(code[3], b'B');
+
+        Self {
+            data: SnapshotChunkData {
+                code,
+                data: content,
+            },
+
+        }
+    }
+
+    /// Add a symbol in the chunk. Warning it is cropped to a length of 255
+    pub fn add_symbol(&mut self, name: &str, address: u16) {
+        // Build the payload for the current symbol 
+        let len = name.len().min(255);
+        let mut bytes : Vec<u8> = vec![0;1+len+6+2];
+
+        bytes[0] = len as u8;
+        for (idx, b) in name[..len].as_bytes().into_iter().enumerate() {
+            bytes[idx+1] = *b;
+        }
+        let high = ((address & 0xff00) >> 8) as u8;
+        let low = (address & 0x00ff) as u8;
+
+        bytes[name.len()+1+6+0] = high;
+        bytes[name.len()+1+6+1] = low;
+
+        // add the payload
+        self.add_bytes(&bytes);
+
+        // update chunk size
+        let payload_size = self.size() - 4;
+        self.data.data[0] = (payload_size&0xFF) as u8;
+        self.data.data[1] = ((payload_size>>8)&0xFF) as u8;
+        self.data.data[2] = ((payload_size>>16)&0xFF) as u8;
+        self.data.data[3] = ((payload_size>>24)&0xFF) as u8;
+
+    }
+
+    pub fn get_symbols(&self) -> Vec<(&str, u16)> {
+        let mut res = Vec::new();
+
+        let mut idx = 4;
+        while idx < self.size() {
+            let count = self.data()[idx] as usize; idx += 1;
+            let name = &self.data()[idx..(idx+count)]; idx += count;
+            let name = std::str::from_utf8(name).unwrap();
+            idx += 6;
+            let low = self.data()[idx] as u16; idx += 1;
+            let high = self.data()[idx] as u16; idx += 1;
+            let address = low + 256*high;
+
+            res.push((name, address));
+        }
+
+        res
+    }
+
+
+}
+
+
 #[derive(Clone, Debug)]
 pub struct WinapeBreakPointChunk {
     data: SnapshotChunkData
@@ -234,11 +327,11 @@ pub struct WinapeBreakPointChunk {
 impl WinapeBreakPointChunk {
     delegate! {
         to self.data {
-        pub fn code(&self) -> &[u8; 4];
-        pub fn size(&self) -> usize;
+            pub fn code(&self) -> &[u8; 4];
+            pub fn size(&self) -> usize;
             pub fn size_as_array(&self) -> [u8; 4];
             pub fn data(&self) -> &[u8];
-            pub fn add_bytes(&mut self, data: &[u8]);
+            fn add_bytes(&mut self, data: &[u8]);
 
         }
     }
@@ -307,6 +400,7 @@ impl UnknownChunk {
 #[derive(Clone, Debug)]
 /// Represents any kind of chunks in order to manipulate them easily based on their semantic
 pub enum SnapshotChunk {
+    AceSymbol(AceSymbolChunk),
     /// The chunk is a memory chunk
     Memory(MemoryChunk),
     /// The chunk is a breakpoint chunk for winape emulator
@@ -345,6 +439,7 @@ impl SnapshotChunk {
     /// Provides the code of the chunk
     pub fn code(&self) -> &[u8; 4] {
         match self {
+            SnapshotChunk::AceSymbol(chunck) => chunck.code(),
             SnapshotChunk::Memory(chunk) => chunk.code(),
             SnapshotChunk::Unknown(chunk) => chunk.code(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.code()
@@ -353,6 +448,7 @@ impl SnapshotChunk {
 
     pub fn size(&self) -> usize {
         match self {
+            SnapshotChunk::AceSymbol(chunk) => chunk.size(),
             SnapshotChunk::Memory(chunk) => chunk.size(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.size(),
             SnapshotChunk::Unknown(chunk) => chunk.size()
@@ -361,6 +457,7 @@ impl SnapshotChunk {
 
     pub fn size_as_array(&self) -> [u8; 4] {
         match self {
+            SnapshotChunk::AceSymbol(chunk) => chunk.size_as_array(),
             SnapshotChunk::Memory(chunk) => chunk.size_as_array(),
             SnapshotChunk::WinapeBreakPoint(ref chunk) => chunk.size_as_array(),
             SnapshotChunk::Unknown(chunk) => chunk.size_as_array()
@@ -369,10 +466,18 @@ impl SnapshotChunk {
 
     pub fn data(&self) -> &[u8] {
         match self {
+            SnapshotChunk::AceSymbol(chunk) => chunk.data(),
             SnapshotChunk::Memory(chunk) => chunk.data(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.data(),
             SnapshotChunk::Unknown(chunk) => chunk.data()
         }
+    }
+}
+
+
+impl From<AceSymbolChunk> for SnapshotChunk {
+    fn from(chunk: AceSymbolChunk) -> Self {
+        SnapshotChunk::AceSymbol(chunk)
     }
 }
 

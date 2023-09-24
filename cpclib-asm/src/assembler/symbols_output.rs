@@ -2,6 +2,7 @@ use std::io::Write;
 use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
+use cpclib_sna::AceSymbolChunk;
 use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait, Value};
 use cpclib_tokens::ExprResult;
 
@@ -107,6 +108,54 @@ impl Default for SymbolOutputGenerator {
 }
 
 impl SymbolOutputGenerator {
+
+    pub fn build_ace_snapshot_chunk(&self, symbs: &impl SymbolsTableTrait) -> AceSymbolChunk {
+        let mut chunk = AceSymbolChunk::new();
+        for (k, v) in symbs
+        .expression_symbol()
+        .iter()
+        .filter(|(s, _v)| self.keep_symbol(s))
+        .sorted_by_key(|(s, _v)| s.to_string().to_ascii_lowercase()) {
+
+            // Get the symbol
+           let k = k.value();
+
+           // get a possible value when using u16
+           let v = match v {
+                Value::Address(a) => {
+                    Some(a.address())
+                }
+                Value::Expr(ExprResult::Value(i)) => {
+                     Some(*i as u16)
+                }
+                Value::Expr(ExprResult::Bool(b)) => {
+                    Some(*b as u16)
+                }
+                Value::Expr(e @ ExprResult::Float(_f)) => {
+                    None
+                }
+                Value::Expr(ExprResult::String(s)) => {
+                    None
+                }
+                Value::Expr(l @ ExprResult::List(_)) => {
+                   None
+                }
+                Value::Expr(m @ ExprResult::Matrix { .. }) => {
+                    None
+                }
+
+                _ => None
+            };
+
+            // store if we have a representation
+            if let Some(v) = v {
+                chunk.add_symbol(&k.to_string(), v)
+            }
+        }
+        chunk
+    }
+
+
     /// Generate the symbol table in w
     pub fn generate<W: Write>(
         &self,

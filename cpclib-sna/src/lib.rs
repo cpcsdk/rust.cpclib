@@ -546,7 +546,8 @@ impl Snapshot {
         };
         let chunk = match code {
             [b'M', b'E', b'M', _] => MemoryChunk::from(code, content).into(), //
-            // ['B', 'R', 'K', 'S'] => BreakpointChunk::from(content),
+            [b'B', b'R', b'K', b'S'] => WinapeBreakPointChunk::from(code, content).into(),
+            [b'S', b'Y', b'M', b'B'] => AceSymbolChunk::from(code, content).into(),
             // ['D', 'S', 'C', _] => InsertedDiscChunk::from(code, content)
             // ['C', 'P', 'C', '+'] => CPCPlusChunk::from(content)
             _ => UnknownChunk::from(code, content).into()

@@ -889,12 +889,21 @@ impl Env {
         self.handle_print()?;
         self.handle_assert()?;
         self.handle_breakpoints()?;
+        self.handle_sna_symbols()?;
         self.saved_files = Some(self.handle_file_save()?);
         Ok(())
     }
 
+    // Add the symbols in the snapshot
+    fn handle_sna_symbols(&mut self) -> Result<(), AssemblerError> {
+        let ace_chunk = self.symbols_output.build_ace_snapshot_chunk(self.symbols());
+        self.sna.add_chunk(ace_chunk);
+
+        Ok(())
+    }
+
     /// We handle breakpoint ONLY for the pages stored in the snapshot
-    /// as they are stored inside a chunck of the snapshot:
+    /// as they are stored inside a chunk of the snapshot:
     /// If one day another export is coded, we could export the others too.
     fn handle_breakpoints(&mut self) -> Result<(), AssemblerError> {
         let mut winape_raw = Vec::new();
