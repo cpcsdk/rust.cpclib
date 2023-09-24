@@ -14,7 +14,9 @@ use crate::preamble::{LocatedToken, MayHaveSpan};
 pub enum TokenKind {
     Standard,
     Label(String),
-    Set(String)
+    Set(String),
+    MacroCall, MacroDefine(String),
+    Include
 }
 pub struct ListingOutput {
     /// Writer that will contains the listing/
@@ -113,12 +115,15 @@ impl ListingOutput {
 
     fn extract_code(token: &LocatedToken) -> String {
         match token {
-            LocatedToken::Standard {
-                token: Token::Macro(..),
-                span
-            } => {
+            LocatedToken::Macro{span, ..} => {
                 // 		self.need_to_cut = true;
                 span.fragment().to_string()
+            }
+            LocatedToken::Standard {
+                token: Token::Macro(..),
+                ..
+            } => {
+                unreachable!()
             }
 
             _ => {
@@ -147,25 +152,6 @@ impl ListingOutput {
 
         let fname_handling = self.manage_fname(token);
 
-        // Handle specific tokens with a specific behavior
-        // match token {
-        // LocatedToken::Label(l) => {
-        // self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
-        //
-        // Some(format!("{:04X} {:05X} {l}", self.current_first_address, self.current_physical_address.offset_in_cpc()))
-        // },
-        //
-        // LocatedToken::Equ{label, ..} |
-        // LocatedToken::Assign { label,..}
-        // => {
-        // self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
-        // Some(format!("{:04X} {} {label}", self.current_first_address, "-----"))
-        // }
-        //
-        // _ => None
-        // };
-
-
                         // Check if the current line has to drawn in a different way
             let specific_content = match &self.current_token_kind {
                 TokenKind::Standard => None,
@@ -181,6 +167,12 @@ impl ListingOutput {
                         "{:04X} {} {label}",
                         self.current_first_address, "-----"
                     ))
+                }
+                TokenKind::MacroCall | TokenKind::Include  => {
+                    Some("".to_owned())
+                },
+                TokenKind::MacroDefine(name) => {
+                    Some(format!("           {name}"))
                 }
             };
     
@@ -243,6 +235,8 @@ impl ListingOutput {
             LocatedToken::Equ { label, .. } | LocatedToken::Assign { label, .. } => {
                 TokenKind::Set(label.to_string())
             }
+            LocatedToken::MacroCall(..) => TokenKind::MacroCall,
+            LocatedToken::Macro { name, .. } => TokenKind::MacroDefine(name.to_string()),
             _ => TokenKind::Standard
         };
     }
@@ -271,15 +265,17 @@ impl ListingOutput {
         // TODO add the line representation ?
         for specific_content in self.deferred_for_line.iter() {
             let lines = line.split("\n");
-            let line = lines.last().unwrap();
-            writeln!(
-                self.writer,
-                "{:37}{:4} {}",
-                specific_content,
-                line_number + delta as u32 - 1,
-                line
-            )
-            .unwrap();
+            let lines_count = lines.clone().count(); // line number corresponds to the VERY LAST line and not the FIRST one
+            for (line_delta, line) in lines.into_iter().enumerate() {
+                writeln!(
+                    self.writer,
+                    "{:37}{:4} {}",
+                    if line_delta == 0 {specific_content} else {""},
+                    line_number + delta as u32  + line_delta as u32 - lines_count as u32,
+                    line
+                )
+                .unwrap();
+            }
         }
         self.deferred_for_line.clear();
 
@@ -317,7 +313,7 @@ impl ListingOutput {
                 format!("{:4}", line_number + idx)
             };
 
-            if !self.current_line_bytes.is_empty() {
+            if true /* !self.current_line_bytes.is_empty()*/ {
                 writeln!(
                     self.writer,
                     "{loc_representation} {phys_addr_representation} {:bytes_width$} {line_nb_representation} {}",

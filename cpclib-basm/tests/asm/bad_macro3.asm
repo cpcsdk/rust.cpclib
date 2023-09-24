@@ -9,7 +9,7 @@ VAR1 = 3
 	macro stuff
 VAR2 = VAR1*3
 
-		if VAR2 == 9
+		if VAR3 == 9 ; Fail here as VAR3 does not exsts
 			db VAR1, VAR2
 		else
 			db VAR2, VAR1
@@ -17,9 +17,9 @@ VAR2 = VAR1*3
 	endm
 
 
-	stuff
+	stuff (void)
 
 VAR1 = 4
 
-	stuff
+	stuff (void)
 
