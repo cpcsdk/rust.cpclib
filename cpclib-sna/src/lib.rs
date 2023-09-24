@@ -1,5 +1,8 @@
+#![feature(slice_take)]
+
 use std::fs::File;
 use std::io::prelude::*;
+use std::ops::Deref;
 use std::path::Path;
 
 use cpclib_common::bitsets;
@@ -308,7 +311,7 @@ impl Snapshot {
                 "Add chunk: {}",
                 chunk.code().iter().map(|c| *c as char).collect::<String>()
             );
-            buffer.write_all(chunk.code())?;
+            buffer.write_all(chunk.code().deref())?;
             buffer.write_all(&chunk.size_as_array())?;
             buffer.write_all(chunk.data())?;
         }
@@ -566,6 +569,13 @@ impl Snapshot {
 
     pub fn add_chunk<C: Into<SnapshotChunk>>(&mut self, c: C) {
         self.chunks.push(c.into());
+    }
+
+    pub fn get_chunk<C: Into<Code>>(&self, code: C) -> Option<&SnapshotChunk> {
+        let code = code.into();
+        self.chunks().iter()
+            .find(|chunk| chunk.code() == &code)
+
     }
 }
 

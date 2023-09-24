@@ -1,17 +1,44 @@
+use std::ops::Deref;
+
 use delegate::delegate;
+
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Code([u8; 4]);
+
+impl Deref for Code {
+    type Target = [u8;4];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<[u8;4]> for Code {
+    fn from(value: [u8;4]) -> Self {
+        Code(value)
+    }
+}
+
+impl From<&str> for Code {
+    fn from(value: &str) -> Self {
+        let code = value.as_bytes().take(..4).unwrap();
+        Code([code[0], code[1], code[2], code[3]])
+    }
+}
 
 #[derive(Clone, Debug)]
 /// Raw chunk data.
 pub struct SnapshotChunkData {
     /// Identifier of the chunk
-    code: [u8; 4],
+    code: Code,
     /// Content of the chunk
     data: Vec<u8>
 }
 
 #[allow(missing_docs)]
 impl SnapshotChunkData {
-    pub fn code(&self) -> &[u8; 4] {
+    pub fn code(&self) -> &Code {
         &(self.code)
     }
 
@@ -51,7 +78,7 @@ pub struct MemoryChunk {
 impl MemoryChunk {
     delegate! {
         to self.data {
-        pub fn code(&self) -> &[u8; 4];
+        pub fn code(&self) -> &Code;
             pub fn size(&self) -> usize;
             pub fn size_as_array(&self) -> [u8; 4];
             pub fn data(&self) -> &[u8];
@@ -69,7 +96,8 @@ impl MemoryChunk {
     /// Create a memory chunk.
     /// `code` identify with memory block is concerned
     /// `data` contains the crunched version of the code
-    pub fn from(code: [u8; 4], data: Vec<u8>) -> Self {
+    pub fn from<C: Into<Code>>(code:C, data: Vec<u8>) -> Self {
+        let code = code.into();
         assert!(code[0] == b'M');
         assert!(code[1] == b'E');
         assert!(code[2] == b'M');
@@ -235,7 +263,7 @@ pub struct AceSymbolChunk {
 impl AceSymbolChunk {
     delegate! {
         to self.data {
-            pub fn code(&self) -> &[u8; 4];
+            pub fn code(&self) -> &Code;
             pub fn size(&self) -> usize;
             pub fn size_as_array(&self) -> [u8; 4];
             pub fn data(&self) -> &[u8];
@@ -246,14 +274,15 @@ impl AceSymbolChunk {
     pub fn new() -> Self {
         Self {
             data: SnapshotChunkData { 
-                code: [b'S', b'Y', b'M', b'B'] , 
+                code: "SYMB".into() , 
                 data: vec![0u8; 4usize]
             }
         }
     }
 
 
-    pub fn from(code: [u8; 4], content: Vec<u8>) -> Self {
+    pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
+        let code = code.into();
         assert_eq!(code[0], b'S');
         assert_eq!(code[1], b'Y');
         assert_eq!(code[2], b'M');
@@ -327,7 +356,7 @@ pub struct WinapeBreakPointChunk {
 impl WinapeBreakPointChunk {
     delegate! {
         to self.data {
-            pub fn code(&self) -> &[u8; 4];
+            pub fn code(&self) -> &Code;
             pub fn size(&self) -> usize;
             pub fn size_as_array(&self) -> [u8; 4];
             pub fn data(&self) -> &[u8];
@@ -336,7 +365,8 @@ impl WinapeBreakPointChunk {
         }
     }
 
-    pub fn from(code: [u8; 4], content: Vec<u8>) -> Self {
+    pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
+        let code = code.into();
         assert_eq!(code[0], b'B');
         assert_eq!(code[1], b'R');
         assert_eq!(code[2], b'K');
@@ -370,7 +400,7 @@ pub struct UnknownChunk {
 impl UnknownChunk {
     delegate! {
         to self.data {
-        pub fn code(&self) -> &[u8; 4];
+        pub fn code(&self) -> &Code;
             pub fn size(&self) -> usize;
             pub fn size_as_array(&self) -> [u8; 4];
             pub fn data(&self) -> &[u8];
@@ -378,7 +408,8 @@ impl UnknownChunk {
     }
 
     /// Generate the chunk from raw data
-    pub fn from(code: [u8; 4], data: Vec<u8>) -> Self {
+    pub fn from<C: Into<Code>>(code: C, data: Vec<u8>) -> Self {
+        let code = code.into();
         Self {
             data: SnapshotChunkData { code, data }
         }
@@ -436,8 +467,15 @@ impl SnapshotChunk {
         }
     }
 
+    pub fn ace_symbol_chunk(&self) -> Option<&AceSymbolChunk> {
+        match self {
+            SnapshotChunk::AceSymbol(ref sym) => Some(sym),
+            _ => None
+        }
+    }
+
     /// Provides the code of the chunk
-    pub fn code(&self) -> &[u8; 4] {
+    pub fn code(&self) -> &Code {
         match self {
             SnapshotChunk::AceSymbol(chunck) => chunck.code(),
             SnapshotChunk::Memory(chunk) => chunk.code(),

@@ -130,7 +130,7 @@ fn main() {
                           .get_matches();
 
     // Display all tokens
-    if matches.contains_id("flags") {
+    if matches.get_flag("flags") {
         for flag in SnapshotFlag::enumerate().iter() {
             println!(
                 "{:?} / {:?} bytes.{}",
@@ -155,12 +155,12 @@ fn main() {
     // Activate the debug mode
     sna.debug = matches.contains_id("debug");
 
-    if matches.contains_id("info") {
+    if matches.get_flag("info") {
         sna.print_info();
         return;
     }
 
-    if matches.contains_id("cli") {
+    if matches.get_flag("cli") {
         let fname = matches.get_one::<String>("inSnapshot").unwrap();
         cli::cli(fname, sna);
         return;
