@@ -5,14 +5,13 @@ use std::sync::{Arc, RwLock};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::symbols::PhysicalAddress;
-use cpclib_tokens::{ExprResult, Token, ListingElement};
+use cpclib_tokens::{ExprResult, ListingElement, Token};
 
 use crate::preamble::{LocatedToken, MayHaveSpan};
 /// Generate an output listing.
 /// Can be useful to detect issues
-/// 
 
-pub enum TokenKind{
+pub enum TokenKind {
     Standard,
     Label(String),
     Set(String)
@@ -36,8 +35,8 @@ pub struct ListingOutput {
     current_address_kind: AddressKind,
     current_physical_address: PhysicalAddress,
     crunched_section_counter: usize,
-    current_token_kind: TokenKind
-
+    current_token_kind: TokenKind,
+    deferred_for_line: Vec<String>
 }
 #[derive(PartialEq)]
 pub enum AddressKind {
@@ -82,7 +81,8 @@ impl ListingOutput {
             current_address_kind: AddressKind::None,
             crunched_section_counter: 0,
             current_physical_address: PhysicalAddress::new(0, 0),
-            current_token_kind: TokenKind::Standard
+            current_token_kind: TokenKind::Standard,
+            deferred_for_line: Default::default()
         }
     }
 
@@ -142,56 +142,85 @@ impl ListingOutput {
             return;
         }
 
-       // dbg!(token);
+
+        // dbg!(token);
 
         let fname_handling = self.manage_fname(token);
 
         // Handle specific tokens with a specific behavior
-        /*match token {
-            LocatedToken::Label(l) => {
-                self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
+        // match token {
+        // LocatedToken::Label(l) => {
+        // self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
+        //
+        // Some(format!("{:04X} {:05X} {l}", self.current_first_address, self.current_physical_address.offset_in_cpc()))
+        // },
+        //
+        // LocatedToken::Equ{label, ..} |
+        // LocatedToken::Assign { label,..}
+        // => {
+        // self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
+        // Some(format!("{:04X} {} {label}", self.current_first_address, "-----"))
+        // }
+        //
+        // _ => None
+        // };
 
-                Some(format!("{:04X} {:05X} {l}", self.current_first_address, self.current_physical_address.offset_in_cpc()))
-            },
 
-            LocatedToken::Equ{label, ..} |
-            LocatedToken::Assign { label,..}
-            => {
-                self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
-                Some(format!("{:04X} {} {label}", self.current_first_address, "-----"))
+                        // Check if the current line has to drawn in a different way
+            let specific_content = match &self.current_token_kind {
+                TokenKind::Standard => None,
+                TokenKind::Label(l) => {
+                    Some(format!(
+                        "{:04X} {:05X} {l}",
+                        self.current_first_address,
+                        self.current_physical_address.offset_in_cpc()
+                    ))
+                }
+                TokenKind::Set(label) => {
+                    Some(format!(
+                        "{:04X} {} {label}",
+                        self.current_first_address, "-----"
+                    ))
+                }
+            };
+    
+            // if so, defer its output
+            if let Some(specific_content) = &specific_content {
+                self.deferred_for_line.push(specific_content.clone());
             }
 
-            _ => None
-        };
-        */
+         {
+            // !self.token_is_on_same_line(token)
+            if true {
+                // if specific_content.is_some() && fname_handling.is_some() {
+                // writeln!(self.writer, "{}", fname_handling.take().unwrap()).unwrap();
+                // }
+                // handle previous line
+                if !self.token_is_on_same_line(token){
+                    self.process_current_line(); // request a display
+                }
 
-        /* !self.token_is_on_same_line(token)*/ 
-        if !token.is_comment() {
-/* 
-            if specific_content.is_some() && fname_handling.is_some() {
-                writeln!(self.writer, "{}", fname_handling.take().unwrap()).unwrap();
+                // handle the new line
+
+                // replace the objects of interest
+                self.current_source = Some(token.context().source);
+
+                // TODO manage differently for macros and so on
+                // let current_line = current_line.split("\n").next().unwrap_or(current_line);
+                self.current_line_group =
+                    Some((token.span().location_line(), Self::extract_code(token)));
+                self.current_first_address = address;
+                self.current_physical_address = physical_address;
+                self.current_address_kind = AddressKind::None;
+                self.manage_fname(token);
             }
-*/
-            // handle previous line
-            self.process_current_line(); // request a display
-
-            // handle the new line
-
-            // replace the objects of interest
-            self.current_source = Some(token.context().source);
-
-            // TODO manage differently for macros and so on
-            // let current_line = current_line.split("\n").next().unwrap_or(current_line);
-            self.current_line_group =
-                Some((token.span().location_line(), Self::extract_code(token)));
-            self.current_first_address = address;
-            self.current_physical_address = physical_address;
-            self.current_address_kind = AddressKind::None;
-            self.manage_fname(token);
-        } else {
-            // update the line
-            self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
+            else {
+                // update the line
+                self.current_line_group =
+                    Some((token.span().location_line(), Self::extract_code(token)));
+            }
         }
+
 
 
         self.current_line_bytes.extend_from_slice(bytes);
@@ -210,29 +239,15 @@ impl ListingOutput {
         }
 
         self.current_token_kind = match token {
-            LocatedToken::Label(l) => {
-                TokenKind::Label(l.to_string())
-            },
-            LocatedToken::Equ{label, ..} |
-            LocatedToken::Assign { label,..}
-            => TokenKind::Set(label.to_string()),
+            LocatedToken::Label(l) => TokenKind::Label(l.to_string()),
+            LocatedToken::Equ { label, .. } | LocatedToken::Assign { label, .. } => {
+                TokenKind::Set(label.to_string())
+            }
             _ => TokenKind::Standard
         };
-
     }
 
     pub fn process_current_line(&mut self) {
-
-        let specific_content = match &self.current_token_kind {
-            TokenKind::Standard => None,
-            TokenKind::Label(l) => {
-                Some(format!("{:04X} {:05X} {l}", self.current_first_address, self.current_physical_address.offset_in_cpc()))
-            },
-            TokenKind::Set(label) => {
-                Some(format!("{:04X} {} {label}", self.current_first_address, "-----"))
-            },
-        };
-
         // retrieve the line
         let (line_number, line) = match &self.current_line_group {
             Some((idx, line)) => (idx, line),
@@ -251,6 +266,22 @@ impl ListingOutput {
         let mut data_representation = data_representation.iter();
 
         // TODO manage missing end of files/blocks if needed
+
+        let delta = line_representation.clone().count();
+        // TODO add the line representation ?
+        for specific_content in self.deferred_for_line.iter() {
+            let lines = line.split("\n");
+            let line = lines.last().unwrap();
+            writeln!(
+                self.writer,
+                "{:37}{:4} {}",
+                specific_content,
+                line_number + delta as u32 - 1,
+                line
+            )
+            .unwrap();
+        }
+        self.deferred_for_line.clear();
 
         // draw all lines that correspond to the instructions to output
         let mut idx = 0;
@@ -286,8 +317,7 @@ impl ListingOutput {
                 format!("{:4}", line_number + idx)
             };
 
-
-            if specific_content.is_none() || !self.current_line_bytes.is_empty() {
+            if !self.current_line_bytes.is_empty() {
                 writeln!(
                     self.writer,
                     "{loc_representation} {phys_addr_representation} {:bytes_width$} {line_nb_representation} {}",
@@ -301,22 +331,6 @@ impl ListingOutput {
             idx += 1;
         }
 
-        // TODO add the line representation ?
-        if let Some(specific_content) = specific_content {
-            let lines = line.split("\n");
-            let delta = line_representation.count();
-            let line = lines.last().unwrap();
-            writeln!(
-                self.writer,
-                "{:37}{:4} {}",
-                specific_content,
-                line_number + delta as u32,
-                line
-
-            )
-            .unwrap();
-        }
-
         // cleanup all the fields of the current line
         self.current_line_group = None;
         self.current_source = None;
@@ -324,7 +338,10 @@ impl ListingOutput {
     }
 
     pub fn finish(&mut self) {
-        self.process_current_line()
+        self.process_current_line();
+        if !self.deferred_for_line.is_empty() {
+            panic!()
+        }
     }
 
     /// Print filename if needed
@@ -401,7 +418,6 @@ impl ListingOutputTrigger {
         kind: AddressKind,
         physical_address: PhysicalAddress
     ) {
-
         // Retreive the previous token and handle it
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(
@@ -437,7 +453,6 @@ impl ListingOutputTrigger {
                 content: _
             } => self.start = (width + height) as _
         };
-
     }
 
     pub fn replace_physical_address(&mut self, address: PhysicalAddress) {
