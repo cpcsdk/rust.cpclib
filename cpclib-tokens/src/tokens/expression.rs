@@ -69,7 +69,7 @@ pub trait ExprElement: Sized {
     type Token: ListingElement;
 
     fn is_label_value(&self, label: &str) -> bool {
-        return self.is_string() && self.string() == label
+        return self.is_label() && self.label() == label
     }
 
     fn is_negated(&self) -> bool;

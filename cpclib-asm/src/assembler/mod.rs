@@ -1497,8 +1497,10 @@ impl Env {
 /// Visit directives
 impl Env {
 
-    fn visit_org<E: ExprElement + ExprEvaluationExt >(&mut self, address: &E, address2: Option<&E>) -> Result<(), AssemblerError> {
+    fn visit_org<E: ExprElement + ExprEvaluationExt + Debug>(&mut self, address: &E, address2: Option<&E>) -> Result<(), AssemblerError> {
 
+        dbg!(address);
+        dbg!(address2);
         // org $ set org to the output address (cf. rasm)
         let code_adr = if address2.is_none() && address.is_label_value("$") {
             if self.start_address().is_none() {

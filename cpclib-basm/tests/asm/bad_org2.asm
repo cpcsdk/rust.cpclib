@@ -1,1 +1,1 @@
- org $ ; shou7ld not be usable as org has never been used
+ org $ ; should not be usable as org has never been used
