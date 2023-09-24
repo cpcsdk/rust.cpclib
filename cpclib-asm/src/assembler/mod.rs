@@ -1494,7 +1494,76 @@ impl Env {
     }
 }
 
+/// Visit directives
 impl Env {
+
+    fn visit_org<E: ExprElement + ExprEvaluationExt >(&mut self, address: &E, address2: Option<&E>) -> Result<(), AssemblerError> {
+
+        // org $ set org to the output address (cf. rasm)
+        let code_adr = if address2.is_none() && address.is_label_value("$") {
+            if self.start_address().is_none() {
+                return Err(AssemblerError::InvalidArgument {
+                    msg: "ORG: $ cannot be used now".into()
+                });
+            }
+            self.logical_output_address() as i32
+        }
+        else {
+            self.resolve_expr_must_never_fail(address)?.int()?
+        };
+    
+        let output_adr = if address2.is_some() {
+            self.resolve_expr_must_never_fail(address2.unwrap())?.int()?
+        }
+        else {
+            code_adr.clone()
+        };
+    
+        // TODO Check overlapping region
+        {
+            let page_info = self.page_info_for_logical_address_mut(output_adr as _);
+            page_info.logical_outputadr = output_adr as _;
+            page_info.logical_codeadr = code_adr as _;
+            page_info.fail_next_write_if_zero = false;
+        }
+    
+        // Specify start address at first use
+        self.page_info_for_logical_address_mut(output_adr as _).startadr = match self.start_address() {
+            Some(val) => val.min(self.logical_output_address()),
+            None => self.logical_output_address()
+        }
+        .into();
+    
+    
+        self.output_address = output_adr as _;
+        self.update_dollar();
+    
+        // update the erroneous information for the listing
+        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+            let output_adr = self.logical_to_physical_address(output_adr as _);
+            let trigger = self.output_trigger.as_mut().unwrap();
+    
+            trigger.replace_code_address(code_adr.into());
+            trigger.replace_physical_address(output_adr);
+        }
+    
+        if self.logical_output_address() != self.output_address {
+            return Err(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
+                msg: format!(
+                    "BUG in assembler: 0x{:x}!=0x{:x} in pass {:?}",
+                    self.logical_output_address(),
+                    self.output_address,
+                    self.pass
+                )
+            });
+        }
+        Ok(())
+    }
+
+
+
     fn visit_breakpoint(
         &mut self,
         exp: Option<&Expr>,
@@ -2534,6 +2603,11 @@ pub fn visit_located_token(
                 }
             }
         }
+        LocatedToken::Comment(..) => Ok(()),
+        LocatedToken::Org { val1, val2, span } => {
+            env.visit_org(val1, val2.as_ref())
+            .map_err(|e| e.locate(span.clone()))
+        }
         LocatedToken::Assign{label, expr, op, span} => {
             env.visit_assign(label, expr, op.as_ref())
             .map_err(|e| e.locate(span.clone()))
@@ -2632,7 +2706,7 @@ fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         Token::Bank(ref exp) => env.visit_bank(exp.as_ref()),
         Token::Bankset(ref v) => env.visit_bankset(v),
         Token::Breakpoint(ref exp) => env.visit_breakpoint(exp.as_ref(), None),
-        Token::Org(ref address, ref address2) => visit_org(address, address2.as_ref(), env),
+        Token::Org(ref address, ref address2) => env.visit_org(address, address2.as_ref()),
         Token::Defb(l) => visit_db_or_dw_or_str(DbLikeKind::Defb, l.as_ref(), env),
         Token::Defw(l) => visit_db_or_dw_or_str(DbLikeKind::Defw, l.as_ref(), env),
         Token::Str(l) => visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), env),
@@ -3984,70 +4058,7 @@ pub fn assemble_opcode(
     }
 }
 
-fn visit_org(address: &Expr, address2: Option<&Expr>, env: &mut Env) -> Result<(), AssemblerError> {
 
-    // org $ set org to the output address (cf. rasm)
-    let code_adr = if address2.is_none() && address == &"$".into() {
-        if env.start_address().is_none() {
-            return Err(AssemblerError::InvalidArgument {
-                msg: "ORG: $ cannot be used now".into()
-            });
-        }
-        env.logical_output_address() as i32
-    }
-    else {
-        env.resolve_expr_must_never_fail(address)?.int()?
-    };
-
-    let output_adr = if address2.is_some() {
-        env.resolve_expr_must_never_fail(address2.unwrap())?.int()?
-    }
-    else {
-        code_adr.clone()
-    };
-
-    // TODO Check overlapping region
-    {
-        let page_info = env.page_info_for_logical_address_mut(output_adr as _);
-        page_info.logical_outputadr = output_adr as _;
-        page_info.logical_codeadr = code_adr as _;
-        page_info.fail_next_write_if_zero = false;
-    }
-
-    // Specify start address at first use
-    env.page_info_for_logical_address_mut(output_adr as _).startadr = match env.start_address() {
-        Some(val) => val.min(env.logical_output_address()),
-        None => env.logical_output_address()
-    }
-    .into();
-
-
-    env.output_address = output_adr as _;
-    env.update_dollar();
-
-    // update the erroneous information for the listing
-    if env.pass.is_listing_pass() && env.output_trigger.is_some() {
-        let output_adr = env.logical_to_physical_address(output_adr as _);
-        let trigger = env.output_trigger.as_mut().unwrap();
-
-        trigger.replace_code_address(code_adr.into());
-        trigger.replace_physical_address(output_adr);
-    }
-
-    if env.logical_output_address() != env.output_address {
-        return Err(AssemblerError::BugInAssembler {
-            file: file!(),
-            line: line!(),
-            msg: format!(
-                "BUG in assembler: 0x{:x}!=0x{:x} in pass {:?}",
-                env.logical_output_address(),
-                env.output_address,
-                env.pass
-            )
-        });
-    }
-    Ok(())
-}
 
 fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, AssemblerError> {
     let bytes: &[u8] = match mnemonic {

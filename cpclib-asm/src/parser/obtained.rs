@@ -639,6 +639,8 @@ pub enum LocatedToken {
         /// The span that correspond to the token
         span: Z80Span
     },
+    Comment(Z80Span),
+    Org{val1: LocatedExpr, val2: Option<LocatedExpr>, span: Z80Span},
     Confined(LocatedListing, Z80Span),
     Defb(Vec<LocatedExpr>, Z80Span),
     Defw(Vec<LocatedExpr>, Z80Span),
@@ -757,6 +759,8 @@ impl MayHaveSpan for LocatedToken {
     fn span(&self) -> &Z80Span {
         match self {
             LocatedToken::Standard { span, .. }
+            | LocatedToken::Comment(span)
+            | LocatedToken::Org { span , ..}
             | LocatedToken::Confined(_, span)
             | LocatedToken::CrunchedSection(_, _, span)
             | LocatedToken::For { span, .. }
@@ -872,6 +876,12 @@ impl LocatedToken {
     pub fn to_token(&self) -> Cow<Token> {
         match self {
             LocatedToken::Standard { token, .. } => Cow::Borrowed(token),
+            LocatedToken::Comment(cmt) => Cow::Owned(Token::Comment(cmt.to_string())),
+            LocatedToken::Org { val1, val2, span } => {
+                Cow::Owned(Token::Org(
+                    val1.to_expr().into_owned(), 
+                    val2.as_ref().map(|val2| val2.to_expr().into_owned())))
+            }
             LocatedToken::CrunchedSection(c, l, _span) => {
                 Cow::Owned(Token::CrunchedSection(*c, l.as_listing()))
             }

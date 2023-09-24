@@ -11,12 +11,20 @@ use crate::preamble::{LocatedToken, MayHaveSpan};
 /// Generate an output listing.
 /// Can be useful to detect issues
 
+
+#[derive(PartialEq)]
 pub enum TokenKind {
-    Standard,
+    Hidden,
     Label(String),
     Set(String),
     MacroCall, MacroDefine(String),
-    Include
+    Displayable
+}
+
+impl TokenKind {
+    fn is_displayable(&self) -> bool {
+        self == & TokenKind::Displayable
+    }
 }
 pub struct ListingOutput {
     /// Writer that will contains the listing/
@@ -83,7 +91,7 @@ impl ListingOutput {
             current_address_kind: AddressKind::None,
             crunched_section_counter: 0,
             current_physical_address: PhysicalAddress::new(0, 0),
-            current_token_kind: TokenKind::Standard,
+            current_token_kind: TokenKind::Hidden,
             deferred_for_line: Default::default()
         }
     }
@@ -154,7 +162,7 @@ impl ListingOutput {
 
                         // Check if the current line has to drawn in a different way
             let specific_content = match &self.current_token_kind {
-                TokenKind::Standard => None,
+                TokenKind::Hidden => None,
                 TokenKind::Label(l) => {
                     Some(format!(
                         "{:04X} {:05X} {l}",
@@ -165,14 +173,14 @@ impl ListingOutput {
                 TokenKind::Set(label) => {
                     Some(format!(
                         "{:04X} {} {label}",
-                        self.current_first_address, "-----"
+                        self.current_first_address, "?????"
                     ))
                 }
-                TokenKind::MacroCall | TokenKind::Include  => {
-                    Some("".to_owned())
+                TokenKind::MacroCall | TokenKind::Displayable  => {
+                    None
                 },
                 TokenKind::MacroDefine(name) => {
-                    Some(format!("           {name}"))
+                    Some(format!("MACRO      {name}"))
                 }
             };
     
@@ -235,9 +243,12 @@ impl ListingOutput {
             LocatedToken::Equ { label, .. } | LocatedToken::Assign { label, .. } => {
                 TokenKind::Set(label.to_string())
             }
-            LocatedToken::MacroCall(..) => TokenKind::MacroCall,
             LocatedToken::Macro { name, .. } => TokenKind::MacroDefine(name.to_string()),
-            _ => TokenKind::Standard
+            LocatedToken::MacroCall(..) 
+            | LocatedToken::Org { ..} 
+            | LocatedToken::Comment(..)
+            => TokenKind::Displayable,
+            _ => TokenKind::Hidden
         };
     }
 
@@ -313,7 +324,8 @@ impl ListingOutput {
                 format!("{:4}", line_number + idx)
             };
 
-            if true /* !self.current_line_bytes.is_empty()*/ {
+            // missing instruction must be added manually using TokenKind
+            if !self.current_line_bytes.is_empty() || self.current_token_kind.is_displayable() {
                 writeln!(
                     self.writer,
                     "{loc_representation} {phys_addr_representation} {:bytes_width$} {line_nb_representation} {}",

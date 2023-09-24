@@ -1153,6 +1153,7 @@ pub fn parse_empty_line(input: Z80Span) -> IResult<Z80Span, Option<LocatedToken>
     let (input, comment) = delimited(space0, opt(parse_comment), space0)(input)?;
     let (input, _) = alt((line_ending, eof))(input)?;
 
+    /*
     let res = if comment.is_some() {
         let size = before_comment.input_len() - input.input_len();
         Some(comment.unwrap().locate(before_comment, size))
@@ -1160,8 +1161,8 @@ pub fn parse_empty_line(input: Z80Span) -> IResult<Z80Span, Option<LocatedToken>
     else {
         None
     };
-
-    Ok((input, res))
+*/
+    Ok((input, comment))
 }
 
 #[inline]
@@ -1343,10 +1344,12 @@ pub fn parse_z80_line_complete(
         let (input, comment) = opt(parse_comment)(input)?;
         let (input, _) = space0(input)?;
 
+        /*
         if let Some(comment) = comment {
             let size = before_comment.input_len() - input.input_len();
             r#in.push(comment.locate(before_comment, size));
         }
+        */
 
         let (input, _) = cut(context(
             "Line ending expected",
@@ -2048,6 +2051,8 @@ impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError>  + '_ {
 
     let within_struct = local_parsing_state == &ParsingState::StructLimited;
     match upper_word.as_str() {
+        "ORG" => parse_org(rest),
+
         "DB" | "DEFB" | "DM" | "DEFM" | "BYTE" | "TEXT" => {
             parse_db_or_dw_or_str(input_start, DbDwStr::Db, within_struct)(rest)
         }
@@ -2105,7 +2110,6 @@ impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError>  + '_ {
                 "NOLIST" => Ok((rest, Token::NoList)),
                 "NOP" => parse_nop(rest),
 
-                "ORG" => parse_org(rest),
 
                 "PAUSE" => Ok((rest, Token::Pause)),
                 "PRINT" => parse_print(rest),
@@ -3680,11 +3684,13 @@ pub fn parse_expr(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError
 }
 
 /// Parse standard org directive
-pub fn parse_org(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, val1) = cut(context("Invalid argument", expr))(input)?;
-    let (input, val2) = opt(preceded(parse_comma, expr))(input)?;
+pub fn parse_org(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    let input_start = input.clone();
+    let (input, val1) = cut(context("Invalid argument", located_expr))(input)?;
+    let (input, val2) = opt(preceded(parse_comma, located_expr))(input)?;
 
-    Ok((input, Token::Org(val1, val2)))
+    let span = input_start.take(input_start.input_len() - input.input_len());
+    Ok((input, LocatedToken::Org{val1, val2, span}))
 }
 
 /// Parse defs instruction. TODO add optional parameters
@@ -3851,10 +3857,10 @@ fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 }
 
 /// Parse a comment that start by `;` and ends at the end of the line.
-pub fn parse_comment(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_comment(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     map(
         preceded(alt((tag(";"), tag("//"))), take_till(|ch| ch == '\n')),
-        |string: Z80Span| Token::Comment(string.to_string())
+        |string: Z80Span| LocatedToken::Comment(string)
     )(input)
 }
 
