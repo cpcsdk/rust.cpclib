@@ -123,7 +123,8 @@ impl ListingOutput {
 
     fn extract_code(token: &LocatedToken) -> String {
         match token {
-            LocatedToken::Macro{span, ..} => {
+            LocatedToken::Macro{span, ..} 
+            | LocatedToken::Repeat(_, _, _, _, span) => {
                 // 		self.need_to_cut = true;
                 span.fragment().to_string()
             }
@@ -133,6 +134,7 @@ impl ListingOutput {
             } => {
                 unreachable!()
             }
+            
 
             _ => {
                 // 			self.need_to_cut = false;
@@ -248,6 +250,7 @@ impl ListingOutput {
             | LocatedToken::Org { ..} 
             | LocatedToken::Comment(..)
             | LocatedToken::Include(..)
+            | LocatedToken::Repeat(..)
             => TokenKind::Displayable,
             _ => TokenKind::Hidden
         };
@@ -448,20 +451,27 @@ impl ListingOutputTrigger {
 
     /// Override the address value by the expression result
     /// BUGGY when it is not a number ...
-    pub fn replace_code_address(&mut self, address: ExprResult) {
+    pub fn replace_code_address(&mut self, address: &ExprResult) {
+        Self::result_to_address(address)
+            .map(|a| self.start = a);
+    }
+
+
+    /// Applies the conversion when possible
+    fn result_to_address(address: &ExprResult) -> Option<u32> {
         match address {
-            ExprResult::Float(_f) => {}
-            ExprResult::Value(v) => self.start = v as _,
-            ExprResult::Char(v) => self.start = v as _,
-            ExprResult::Bool(b) => self.start = if b { 1 } else { 0 },
-            ExprResult::String(s) => self.start = s.len() as _,
-            ExprResult::List(l) => self.start = l.len() as _,
+            ExprResult::Float(_f) => None,
+            ExprResult::Value(v) => Some(*v as _),
+            ExprResult::Char(v) => Some(*v as _),
+            ExprResult::Bool(b) => Some(if *b { 1 } else { 0 }),
+            ExprResult::String(s) => Some(s.len() as _),
+            ExprResult::List(l) => Some(l.len() as _),
             ExprResult::Matrix {
                 width,
                 height,
                 content: _
-            } => self.start = (width + height) as _
-        };
+            } => Some((*width * *height) as _)
+        }
     }
 
     pub fn replace_physical_address(&mut self, address: PhysicalAddress) {
@@ -495,5 +505,15 @@ impl ListingOutputTrigger {
 
     pub fn leave_crunched_section(&mut self) {
         self.builder.write().unwrap().leave_crunched_section();
+    }
+
+    pub fn repeat_iteration(&mut self, counter: &str, value: &ExprResult) {
+        let value = Self::result_to_address(value);
+        if let Some(value) = value {
+            let line = format!("{value:04X} ????? {counter}\n");
+            self.builder.write().unwrap()
+                .writer.write(line.as_bytes()).unwrap();
+        }
+
     }
 }

@@ -1543,7 +1543,7 @@ impl Env {
             let output_adr = self.logical_to_physical_address(output_adr as _);
             let trigger = self.output_trigger.as_mut().unwrap();
     
-            trigger.replace_code_address(code_adr.into());
+            trigger.replace_code_address(&code_adr.into());
             trigger.replace_physical_address(output_adr);
         }
     
@@ -1868,7 +1868,7 @@ impl Env {
         self.update_dollar();
         self.output_trigger
             .as_mut()
-            .map(|o| o.replace_code_address(code_adr.into()));
+            .map(|o| o.replace_code_address(&code_adr.into()));
         Ok(())
     }
 
@@ -1928,7 +1928,7 @@ impl Env {
         }
         self.output_trigger
             .as_mut()
-            .map(|o| o.replace_code_address(value.clone()));
+            .map(|o| o.replace_code_address(&value));
 
         // increase next one
         let delta = match delta {
@@ -3076,7 +3076,7 @@ impl Env {
 
         self.output_trigger
             .as_mut()
-            .map(|o| o.replace_code_address(value.into()));
+            .map(|o| o.replace_code_address(&value.into()));
 
         // execute the listing
         self.nested_rorg += 1; // used to disable page functionalities
@@ -3346,6 +3346,9 @@ impl Env {
         if let Some(counter_name) = counter_name {
             self.symbols_mut()
                 .set_symbol_to_value(counter_name, counter_value.clone().unwrap())?;
+
+            self.output_trigger.as_mut()
+                .map(|trigger| trigger.repeat_iteration(counter_name, &counter_value.clone().unwrap()));
         }
 
         // generate the bytes
@@ -3433,7 +3436,7 @@ impl Env {
 
         self.output_trigger
             .as_mut()
-            .map(|o| o.replace_code_address(address.into()));
+            .map(|o| o.replace_code_address(&address.into()));
 
         if self.run_options.is_some() {
             return Err(AssemblerError::RunAlreadySpecified);
@@ -3582,7 +3585,7 @@ fn visit_equ<E: ExprEvaluationExt + ExprElement + Debug>(&mut self, label: &str,
         let value = self.resolve_expr_may_fail_in_first_pass(exp)?;
         self.output_trigger
             .as_mut()
-            .map(|o| o.replace_code_address(value.clone()));
+            .map(|o| o.replace_code_address(&value));
         self.add_symbol_to_symbol_table(label, value)
     }
 }
@@ -3610,7 +3613,7 @@ fn visit_assign<'e, E: ExprEvaluationExt + ExprElement + Clone>(
 
     self.output_trigger
         .as_mut()
-        .map(|o| o.replace_code_address(value.clone()));
+        .map(|o| o.replace_code_address(&value));
 
     self.symbols_mut().assign_symbol_to_value(label, value)?;
 
