@@ -1508,8 +1508,6 @@ impl Env {
 
     fn visit_org<E: ExprElement + ExprEvaluationExt + Debug>(&mut self, address: &E, address2: Option<&E>) -> Result<(), AssemblerError> {
 
-        dbg!(address);
-        dbg!(address2);
         // org $ set org to the output address (cf. rasm)
         let code_adr = if address2.is_none() && address.is_label_value("$") {
             if self.start_address().is_none() {
@@ -2203,21 +2201,9 @@ impl Env {
                 msg: format!("Error while loading snapshot. {}", e)
             }
         })?;
-        dbg!(self.sna.memory_size_header());
-        dbg!(self
-            .sna
-            .chunks()
-            .iter()
-            .map(|c| String::from_utf8_lossy(c.code()))
-            .collect_vec());
+
         self.sna.unwrap_memory_chunks();
-        dbg!(self.sna.memory_size_header());
-        dbg!(self
-            .sna
-            .chunks()
-            .iter()
-            .map(|c| String::from_utf8_lossy(c.code()))
-            .collect_vec());
+
         Ok(())
     }
 
