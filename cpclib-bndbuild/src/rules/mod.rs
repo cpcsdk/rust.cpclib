@@ -1,20 +1,16 @@
+pub mod graph;
 pub mod rule;
 pub mod rules;
-pub mod graph;
 
+pub use graph::*;
 pub use rule::*;
 pub use rules::*;
-pub use graph::*;
-
-
-
-
-
 
 #[cfg(test)]
 mod test {
-    use crate::{rules::{Rule, Rules}, task::Task, expand_glob};
-
+    use crate::expand_glob;
+    use crate::rules::{Rule, Rules};
+    use crate::task::Task;
 
     #[test]
     fn test_deserialize_rule1() {

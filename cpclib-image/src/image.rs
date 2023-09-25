@@ -4,7 +4,6 @@ use std::collections::HashSet;
 
 use anyhow::Context;
 use cpclib_common::itertools::Itertools;
-
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use {anyhow, image as im};
@@ -154,20 +153,19 @@ fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
     #[cfg(target_arch = "wasm32")]
     let mut iter = inks.iter();
 
-
     iter.map(|line| {
-            line.iter()
-                .map(|ink| {
-                    p.get_pen_for_ink(*ink).unwrap_or_else(|| {
-                        panic!(
-                            "Unable to find a correspondance for ink {:?} in given palette {:?}",
-                            ink, p
-                        )
-                    })
+        line.iter()
+            .map(|ink| {
+                p.get_pen_for_ink(*ink).unwrap_or_else(|| {
+                    panic!(
+                        "Unable to find a correspondance for ink {:?} in given palette {:?}",
+                        ink, p
+                    )
                 })
-                .collect::<Vec<Pen>>()
-        })
-        .collect::<Vec<_>>()
+            })
+            .collect::<Vec<Pen>>()
+    })
+    .collect::<Vec<_>>()
 }
 
 /// A ColorMatrix represents an image through a list of Inks.

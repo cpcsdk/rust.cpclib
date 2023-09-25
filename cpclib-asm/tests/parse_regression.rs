@@ -49,10 +49,16 @@ fn test_regression1() {
 #[test]
 fn expr_negative_regression() {
     let (_ctx_, span) = ctx_and_span("18");
-    assert_eq!(expr2(span).unwrap().1.to_expr().into_owned(), Expr::Value(18));
+    assert_eq!(
+        expr2(span).unwrap().1.to_expr().into_owned(),
+        Expr::Value(18)
+    );
 
     let (_ctx_, span) = ctx_and_span("-18");
-    assert_eq!(expr2(span).unwrap().1.to_expr().into_owned(), Expr::Value(-18));
+    assert_eq!(
+        expr2(span).unwrap().1.to_expr().into_owned(),
+        Expr::Value(-18)
+    );
 }
 
 #[test]

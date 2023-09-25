@@ -7,7 +7,7 @@ use std::path::Path;
 
 use cpclib_common::bitsets;
 use num_enum::TryFromPrimitive;
- 
+
 mod chunks;
 mod error;
 pub mod flags;
@@ -573,9 +573,7 @@ impl Snapshot {
 
     pub fn get_chunk<C: Into<Code>>(&self, code: C) -> Option<&SnapshotChunk> {
         let code = code.into();
-        self.chunks().iter()
-            .find(|chunk| chunk.code() == &code)
-
+        self.chunks().iter().find(|chunk| chunk.code() == &code)
     }
 }
 

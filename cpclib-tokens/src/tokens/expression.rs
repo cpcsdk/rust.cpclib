@@ -50,7 +50,6 @@ pub enum Expr {
     Rnd
 }
 
-
 impl Into<Cow<'_, Expr>> for Expr {
     fn into(self) -> Cow<'static, Expr> {
         Cow::Owned(self)
@@ -69,7 +68,7 @@ pub trait ExprElement: Sized {
     type Token: ListingElement;
 
     fn is_label_value(&self, label: &str) -> bool {
-        return self.is_label() && self.label() == label
+        return self.is_label() && self.label() == label;
     }
 
     fn is_negated(&self) -> bool;
@@ -136,7 +135,6 @@ pub trait ExprElement: Sized {
     fn fix_relative_value(&mut self);
 
     fn to_expr(&self) -> Cow<Expr>;
-
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

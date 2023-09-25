@@ -1,9 +1,7 @@
-use cpclib_common::clap::{Command, ArgAction, Arg, self};
+use cpclib_common::clap::{self, Arg, ArgAction, Command};
 
+use super::{Runner, RunnerWithClap};
 use crate::built_info;
-
-use super::{RunnerWithClap, Runner};
-
 
 pub struct BasmRunner {
     command: clap::Command
@@ -84,4 +82,3 @@ impl Runner for BasmRunner {
         "basm"
     }
 }
-

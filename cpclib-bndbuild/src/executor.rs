@@ -2,8 +2,15 @@ use std::ops::Deref;
 
 use cpclib_common::lazy_static::lazy_static;
 
-
-use crate::{task::Task, runners::{basm::BasmRunner, dsk::DskManagerRunner, rm::RmRunner, echo::EchoRunner, imgconverter::ImgConverterRunner, r#extern::ExternRunner, xfer::XferRunner, Runner}};
+use crate::runners::basm::BasmRunner;
+use crate::runners::dsk::DskManagerRunner;
+use crate::runners::echo::EchoRunner;
+use crate::runners::imgconverter::ImgConverterRunner;
+use crate::runners::r#extern::ExternRunner;
+use crate::runners::rm::RmRunner;
+use crate::runners::xfer::XferRunner;
+use crate::runners::Runner;
+use crate::task::Task;
 
 lazy_static! {
     pub static ref BASM_RUNNER: BasmRunner = BasmRunner::default();

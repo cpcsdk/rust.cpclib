@@ -1,7 +1,8 @@
 //#![feature(register_attr)]
 //#![register_attr(get)]
 
-use std::{fs::File, io::Write};
+use std::fs::File;
+use std::io::Write;
 
 use cpclib_common::clap::*;
 
@@ -14,18 +15,18 @@ pub mod cfg;
 /// EDSK File format
 pub mod edsk;
 
-use std::str::FromStr;
-use std::io::{Read};
+use std::io::Read;
 use std::path::Path;
+use std::str::FromStr;
+
+use custom_error::custom_error;
 
 use crate::amsdos::{AmsdosFile, AmsdosManager};
 use crate::edsk::ExtendedDsk;
-use custom_error::custom_error;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
-
 
 custom_error! {pub DskManagerError
     IOError{source: std::io::Error} = "IO error: {source}.",
@@ -33,8 +34,6 @@ custom_error! {pub DskManagerError
 }
 
 pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
-
-
     let dsk_fname = matches.get_one::<String>("DSK_FILE").unwrap();
 
     // Manipulate the catalog of a disc
@@ -215,7 +214,7 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
 }
 
 pub fn dsk_manager_build_arg_parser() -> Command {
-Command::new("dsk_manager")
+    Command::new("dsk_manager")
                        .about("Manipulate DSK files")
                        .author("Krusty/Benediction")
                        .after_help("Pale buggy copy of an old Ramlaid's tool")
@@ -354,4 +353,4 @@ Command::new("dsk_manager")
                                 .last(true)
                            )
                        )
-					}
+}

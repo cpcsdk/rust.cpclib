@@ -58,6 +58,7 @@ impl Task {
     pub fn new_dsk(args: &str) -> Self {
         Self::Dsk(StandardTask::new(args))
     }
+
     pub fn new_basm(args: &str) -> Self {
         Self::Basm(StandardTask::new(args))
     }
@@ -93,7 +94,7 @@ impl Task {
             | Task::Echo(t)
             | Task::ImgConverter(t)
             | Task::Xfer(t)
-            | Task::Extern(t) 
+            | Task::Extern(t)
             | Task::Dsk(t) => t.ignore_error
         }
     }
@@ -106,7 +107,7 @@ impl Task {
             | Task::Xfer(ref mut t)
             | Task::ImgConverter(ref mut t)
             | Task::Extern(ref mut t)
-            | Task::Dsk(ref mut t)  => t.ignore_error = ignore
+            | Task::Dsk(ref mut t) => t.ignore_error = ignore
         }
 
         self
@@ -121,7 +122,7 @@ impl Task {
             Task::Xfer(_) => true, // wrong when downloading files
             Task::ImgConverter(_) => false,
             Task::Extern(_) => false,
-            Task::Dsk(_) => false, // wrong for winape
+            Task::Dsk(_) => false // wrong for winape
         }
     }
 }

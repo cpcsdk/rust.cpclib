@@ -16,7 +16,6 @@ fn palette_from_strings() {
     ];
 }
 
-
 #[test]
 fn palette_from_str() {
     let palette = palette![
@@ -33,35 +32,24 @@ fn palette_from_str() {
     ];
 }
 
-
 #[test]
 fn palette_from_numbers() {
-    let palette = palette![
-        0,
-        1
-    ];
+    let palette = palette![0, 1];
 }
 
 #[test]
 fn palette_from_mixes() {
-    let palette = palette![
-        0,
-        "red"
-    ];
+    let palette = palette![0, "red"];
 }
 
 #[test]
 #[should_panic]
 fn palette_fail_number() {
-    let palette = palette![
-        32
-    ];
+    let palette = palette![32];
 }
 
 #[test]
 #[should_panic]
 fn palette_fail_str() {
-    let palette = palette![
-        "vert"
-    ];
+    let palette = palette!["vert"];
 }

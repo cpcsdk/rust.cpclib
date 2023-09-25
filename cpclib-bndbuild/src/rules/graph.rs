@@ -6,12 +6,11 @@ use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer};
 use topologic::AcyclicDependencyGraph;
 
+use super::{Rule, Rules};
 use crate::constraints::{deserialize_constraint, Constraint};
 use crate::executor::execute;
 use crate::task::Task;
 use crate::{expand_glob, BndBuilderError};
-
-use super::{Rules, Rule};
 
 #[derive(Clone)]
 pub struct Graph<'r> {

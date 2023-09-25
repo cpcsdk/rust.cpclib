@@ -3,16 +3,16 @@ use std::io::{BufReader, Read};
 use std::path::Path;
 
 use cpclib_common::itertools::Itertools;
-use rules::{Graph, Rule};
 use lazy_regex::regex_captures;
+use rules::{Graph, Rule};
 use thiserror::Error;
 
+pub mod builder;
 pub mod constraints;
-pub mod rules;
 pub mod executor;
+pub mod rules;
 pub mod runners;
 pub mod task;
-pub mod builder;
 
 pub use builder::*;
 

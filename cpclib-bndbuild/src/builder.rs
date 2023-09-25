@@ -1,9 +1,11 @@
-use std::{path::Path, io::{BufReader, Read}, collections::HashSet};
+use std::collections::HashSet;
+use std::io::{BufReader, Read};
+use std::path::Path;
 
 use cpclib_common::itertools::Itertools;
 
-use crate::{rules::{self, Graph, Rule}, BndBuilderError};
-
+use crate::rules::{self, Graph, Rule};
+use crate::BndBuilderError;
 
 self_cell::self_cell! {
     /// WARNING the BndBuilder changes the current working directory.
@@ -42,7 +44,10 @@ impl BndBuilder {
     ) -> Result<Self, BndBuilderError> {
         if let Some(working_directory) = working_directory {
             let working_directory = working_directory.as_ref();
-            println!("> Set working directory to: {}", working_directory.display());
+            println!(
+                "> Set working directory to: {}",
+                working_directory.display()
+            );
             std::env::set_current_dir(working_directory).map_err(|e| {
                 BndBuilderError::WorkingDirectoryError {
                     fname: working_directory.display().to_string(),

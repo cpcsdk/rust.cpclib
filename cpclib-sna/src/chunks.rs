@@ -2,20 +2,19 @@ use std::ops::Deref;
 
 use delegate::delegate;
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Code([u8; 4]);
 
 impl Deref for Code {
-    type Target = [u8;4];
+    type Target = [u8; 4];
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl From<[u8;4]> for Code {
-    fn from(value: [u8;4]) -> Self {
+impl From<[u8; 4]> for Code {
+    fn from(value: [u8; 4]) -> Self {
         Code(value)
     }
 }
@@ -96,7 +95,7 @@ impl MemoryChunk {
     /// Create a memory chunk.
     /// `code` identify with memory block is concerned
     /// `data` contains the crunched version of the code
-    pub fn from<C: Into<Code>>(code:C, data: Vec<u8>) -> Self {
+    pub fn from<C: Into<Code>>(code: C, data: Vec<u8>) -> Self {
         let code = code.into();
         assert!(code[0] == b'M');
         assert!(code[1] == b'E');
@@ -254,10 +253,9 @@ impl MemoryChunk {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct AceSymbolChunk {
-    data: SnapshotChunkData,
+    data: SnapshotChunkData
 }
 
 impl AceSymbolChunk {
@@ -268,18 +266,17 @@ impl AceSymbolChunk {
             pub fn size_as_array(&self) -> [u8; 4];
             pub fn data(&self) -> &[u8];
             fn add_bytes(&mut self, data: &[u8]);
-        }        
+        }
     }
 
     pub fn new() -> Self {
         Self {
-            data: SnapshotChunkData { 
-                code: "SYMB".into() , 
+            data: SnapshotChunkData {
+                code: "SYMB".into(),
                 data: vec![0u8; 4usize]
             }
         }
     }
-
 
     pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
@@ -291,38 +288,36 @@ impl AceSymbolChunk {
         Self {
             data: SnapshotChunkData {
                 code,
-                data: content,
-            },
-
+                data: content
+            }
         }
     }
 
     /// Add a symbol in the chunk. Warning it is cropped to a length of 255
     pub fn add_symbol(&mut self, name: &str, address: u16) {
-        // Build the payload for the current symbol 
+        // Build the payload for the current symbol
         let len = name.len().min(255);
-        let mut bytes : Vec<u8> = vec![0;1+len+6+2];
+        let mut bytes: Vec<u8> = vec![0; 1 + len + 6 + 2];
 
         bytes[0] = len as u8;
         for (idx, b) in name[..len].as_bytes().into_iter().enumerate() {
-            bytes[idx+1] = *b;
+            bytes[idx + 1] = *b;
         }
-        let high = ((address & 0xff00) >> 8) as u8;
-        let low = (address & 0x00ff) as u8;
+        let high = ((address & 0xFF00) >> 8) as u8;
+        let low = (address & 0x00FF) as u8;
 
-        bytes[name.len()+1+6+0] = high;
-        bytes[name.len()+1+6+1] = low;
+        bytes[name.len() + 1 + 6 + 0] = high;
+        bytes[name.len() + 1 + 6 + 1] = low;
 
         // add the payload
         self.add_bytes(&bytes);
 
         // update chunk size
         let payload_size = self.size() - 4;
-        self.data.data[0] = (payload_size&0xFF) as u8;
-        self.data.data[1] = ((payload_size>>8)&0xFF) as u8;
-        self.data.data[2] = ((payload_size>>16)&0xFF) as u8;
-        self.data.data[3] = ((payload_size>>24)&0xFF) as u8;
-
+        self.data.data[0] = (payload_size & 0xFF) as u8;
+        self.data.data[1] = ((payload_size >> 8) & 0xFF) as u8;
+        self.data.data[2] = ((payload_size >> 16) & 0xFF) as u8;
+        self.data.data[3] = ((payload_size >> 24) & 0xFF) as u8;
     }
 
     pub fn get_symbols(&self) -> Vec<(&str, u16)> {
@@ -330,23 +325,24 @@ impl AceSymbolChunk {
 
         let mut idx = 4;
         while idx < self.size() {
-            let count = self.data()[idx] as usize; idx += 1;
-            let name = &self.data()[idx..(idx+count)]; idx += count;
+            let count = self.data()[idx] as usize;
+            idx += 1;
+            let name = &self.data()[idx..(idx + count)];
+            idx += count;
             let name = std::str::from_utf8(name).unwrap();
             idx += 6;
-            let low = self.data()[idx] as u16; idx += 1;
-            let high = self.data()[idx] as u16; idx += 1;
-            let address = low + 256*high;
+            let low = self.data()[idx] as u16;
+            idx += 1;
+            let high = self.data()[idx] as u16;
+            idx += 1;
+            let address = low + 256 * high;
 
             res.push((name, address));
         }
 
         res
     }
-
-
 }
-
 
 #[derive(Clone, Debug)]
 pub struct WinapeBreakPointChunk {
@@ -511,7 +507,6 @@ impl SnapshotChunk {
         }
     }
 }
-
 
 impl From<AceSymbolChunk> for SnapshotChunk {
     fn from(chunk: AceSymbolChunk) -> Self {

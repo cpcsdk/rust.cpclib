@@ -11,8 +11,6 @@ use crate::executor::execute;
 use crate::task::Task;
 use crate::{expand_glob, BndBuilderError};
 
-
-
 fn deserialize_path_list<'de, D>(deserializer: D) -> Result<Vec<PathBuf>, D::Error>
 where D: Deserializer<'de> {
     let s = String::deserialize(deserializer)?;
@@ -21,18 +19,19 @@ where D: Deserializer<'de> {
         .into_iter()
         .map(|s| expand_glob(s.as_ref()))
         .flatten()
-        .map(|s| if s.starts_with(r"./") || s.starts_with(r".\") {
-            s[2..].to_owned()
-        }
-        else {
-            s
+        .map(|s| {
+            if s.starts_with(r"./") || s.starts_with(r".\") {
+                s[2..].to_owned()
+            }
+            else {
+                s
+            }
         })
         .map(|s| PathBuf::from(s))
         .collect_vec();
 
     Ok(r)
 }
-
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Hash)]
 pub struct Rule {
@@ -64,9 +63,6 @@ pub struct Rule {
     #[serde(default)]
     constraint: Option<Constraint>
 }
-
-
-
 
 fn deserialize_task_list<'de, D>(deserializer: D) -> Result<Vec<Task>, D::Error>
 where D: Deserializer<'de> {
@@ -175,16 +171,17 @@ impl Rule {
         self.help.as_ref().map(|s| s.as_str())
     }
 
-	pub fn target(&self, idx: usize) -> &Path {
-		&self.targets[idx]
-	}
+    pub fn target(&self, idx: usize) -> &Path {
+        &self.targets[idx]
+    }
+
     pub fn targets(&self) -> &[PathBuf] {
         &self.targets
     }
 
-	pub fn command(&self, idx: usize) -> &Task {
-		&self.commands[idx]
-	}
+    pub fn command(&self, idx: usize) -> &Task {
+        &self.commands[idx]
+    }
 
     pub fn dependencies(&self) -> &[PathBuf] {
         &self.dependencies
@@ -198,5 +195,4 @@ impl Rule {
             true
         }
     }
-
 }

@@ -122,8 +122,10 @@ impl Command {
                     .map(|chunk| chunk.ace_symbol_chunk().unwrap())
                     .map(|chunk| (chunk.get_symbols()))
                     //.flatten()
-                    .map(|v| v.into_iter().for_each(|(sym, addr)| println!("{sym} {addr:X}" )))
-                    ;
+                    .map(|v| {
+                        v.into_iter()
+                            .for_each(|(sym, addr)| println!("{sym} {addr:X}"))
+                    });
             }
 
             Command::Help => {
@@ -140,7 +142,13 @@ fn parse_number(input: Source<'_>) -> IResult<Source<'_>, u32, VerboseError<Sour
 }
 
 fn parse_line(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
-    alt((parse_memory, parse_disassemble, parse_help, parse_load2, parse_symbols))(input)
+    alt((
+        parse_memory,
+        parse_disassemble,
+        parse_help,
+        parse_load2,
+        parse_symbols
+    ))(input)
 }
 
 fn parse_memory(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
@@ -157,7 +165,11 @@ fn parse_memory(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<
 fn parse_disassemble(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(
         tuple((
-            alt((tag_no_case("DISASSEMBLE"), tag_no_case("DISASS"), tag_no_case("DIS"))),
+            alt((
+                tag_no_case("DISASSEMBLE"),
+                tag_no_case("DISASS"),
+                tag_no_case("DIS")
+            )),
             opt(preceded(space1, parse_number)),
             opt(preceded(space1, parse_number))
         )),
@@ -167,14 +179,14 @@ fn parse_disassemble(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseE
 
 fn parse_symbols(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(
-        tuple((
-            alt((tag_no_case("SYMBOLS"), tag_no_case("SYMB"), tag_no_case("S"))),
-        )),
+        tuple((alt((
+            tag_no_case("SYMBOLS"),
+            tag_no_case("SYMB"),
+            tag_no_case("S")
+        )),)),
         |v| Command::Symbols(None)
     )(input)
 }
-
-
 
 fn parse_help(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
     map(tag_no_case("HELP"), |_| Command::Help)(input)

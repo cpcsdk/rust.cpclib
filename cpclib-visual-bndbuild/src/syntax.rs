@@ -38,7 +38,9 @@ pub fn syntax() -> Syntax {
             "m4",
             "extern",
             "Os",
-            "Linux", "Windows", "MacOsx"
+            "Linux",
+            "Windows",
+            "MacOsx"
         ]),
         special: HashSet::from([":", "-"])
     }

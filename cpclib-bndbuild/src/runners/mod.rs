@@ -1,6 +1,6 @@
 /// Manage the standard tasks
 use cpclib_basm;
-use cpclib_common::clap::{self, Arg, ArgAction, Command, ArgMatches};
+use cpclib_common::clap::{self, Arg, ArgAction, ArgMatches, Command};
 use cpclib_common::itertools::Itertools;
 use cpclib_disc::dsk_manager_build_arg_parser;
 use glob::glob;
@@ -59,8 +59,7 @@ pub trait RunnerWithClap: Runner {
     fn get_clap_command(&self) -> &Command;
 
     fn get_matches(&self, itr: &[String]) -> Result<ArgMatches, String> {
-        self
-            .get_clap_command()
+        self.get_clap_command()
             .clone()
             .try_get_matches_from(itr)
             .map_err(|e| e.to_string())

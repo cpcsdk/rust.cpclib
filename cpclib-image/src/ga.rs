@@ -443,7 +443,7 @@ impl From<im::Rgb<u8>> for Ink {
 
 impl From<u8> for Ink {
     fn from(item: u8) -> Self {
-        assert!(item<32);
+        assert!(item < 32);
         Self { value: item }
     }
 }

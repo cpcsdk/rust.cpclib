@@ -1,9 +1,7 @@
-use cpclib_common::clap::{Command, Arg, ArgAction};
+use cpclib_common::clap::{Arg, ArgAction, Command};
 
+use super::{Runner, RunnerWithClap};
 use crate::built_info;
-
-use super::{RunnerWithClap, Runner};
-
 
 pub struct ImgConverterRunner {
     command: Command

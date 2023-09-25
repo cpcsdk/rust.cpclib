@@ -11,9 +11,6 @@ impl ListingElement for Token {
     type MacroParam = MacroParam;
     type TestKind = TestKind;
 
-
- 
-
     fn is_equ(&self) -> bool {
         match self {
             Token::Equ(..) => true,

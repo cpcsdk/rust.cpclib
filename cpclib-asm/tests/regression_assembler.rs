@@ -52,7 +52,6 @@ pub fn macro_local_labels() {
     assert!(binary.len() != 0);
 }
 
-
 #[test]
 pub fn test_inner_struct2() {
     let code = "

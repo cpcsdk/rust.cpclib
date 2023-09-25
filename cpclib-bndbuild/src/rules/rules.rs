@@ -6,12 +6,11 @@ use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer};
 use topologic::AcyclicDependencyGraph;
 
+use super::{Graph, Rule};
 use crate::constraints::{deserialize_constraint, Constraint};
 use crate::executor::execute;
 use crate::task::Task;
 use crate::{expand_glob, BndBuilderError};
-
-use super::{Graph, Rule};
 
 #[derive(Deserialize)]
 #[serde(transparent)]
@@ -28,9 +27,9 @@ impl Rules {
         &self.rules
     }
 
-	pub fn rule_at(&self, at: usize) -> &Rule {
-		&self.rules[at]
-	}
+    pub fn rule_at(&self, at: usize) -> &Rule {
+        &self.rules[at]
+    }
 
     /// Get the rule for this target (of course None is returned for leaf files)
     pub fn rule<P: AsRef<Path>>(&self, tgt: P) -> Option<&Rule> {
@@ -39,9 +38,11 @@ impl Rules {
         // remove current dir path if any
         let tgt = if tgt.starts_with(r"./") {
             tgt.strip_prefix(r"./").unwrap()
-        } else if tgt.to_str().unwrap().starts_with(r".\") {
+        }
+        else if tgt.to_str().unwrap().starts_with(r".\") {
             Path::new(&tgt.to_str().unwrap()[2..])
-        }else {
+        }
+        else {
             tgt
         };
 

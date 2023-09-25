@@ -1,9 +1,7 @@
-use cpclib_common::clap::{ArgAction, self, Arg};
-
-use crate::{expand_glob, built_info};
+use cpclib_common::clap::{self, Arg, ArgAction};
 
 use super::Runner;
-
+use crate::{built_info, expand_glob};
 
 #[derive(Default)]
 pub struct RmRunner {}
@@ -65,4 +63,3 @@ impl Runner for RmRunner {
         "rm"
     }
 }
-

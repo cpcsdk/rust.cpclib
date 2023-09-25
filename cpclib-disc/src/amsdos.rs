@@ -7,32 +7,32 @@ use std::path::Path;
 use arrayref::array_ref;
 use cpclib_common::bitfield::Bit;
 use delegate::delegate;
+use thiserror::Error;
 
 use crate::edsk::{ExtendedDsk, Head};
-use thiserror::Error;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum AmsdosError {
-    #[error( "No more entries available.")]
+    #[error("No more entries available.")]
     NoEntriesAvailable,
 
-    #[error( "No more blocs available.")]
+    #[error("No more blocs available.")]
     NoBlocAvailable,
 
-    #[error( "File larger than 64kb")]
+    #[error("File larger than 64kb")]
     FileLargerThan64Kb,
 
-    #[error( "Invalid header")]
+    #[error("Invalid header")]
     InvalidHeader,
 
-    #[error( "IO error")]
+    #[error("IO error")]
     IO(String),
 
-    #[error(  "Various error")]
+    #[error("Various error")]
     Various(String),
 
-    #[error( "File name error: {}", msg)]
+    #[error("File name error: {}", msg)]
     WrongFileName { msg: String }
 }
 
