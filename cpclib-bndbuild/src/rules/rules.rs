@@ -39,7 +39,7 @@ impl Rules {
         // remove current dir path if any
         let tgt = if tgt.starts_with(r"./") {
             tgt.strip_prefix(r"./").unwrap()
-        } else if dbg!(tgt.to_str().unwrap().starts_with(r".\")) {
+        } else if tgt.to_str().unwrap().starts_with(r".\") {
             Path::new(&tgt.to_str().unwrap()[2..])
         }else {
             tgt
