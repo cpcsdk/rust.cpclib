@@ -9,7 +9,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use cpclib_bndbuild::deps::Rule;
+use cpclib_bndbuild::rules::Rule;
 use cpclib_bndbuild::BndBuilder;
 use eframe::egui::{self, RichText};
 use eframe::epaint::ahash::HashMap;

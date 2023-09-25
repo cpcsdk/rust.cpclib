@@ -1,0 +1,20 @@
+- tgt: dsk
+  dep: hello.dsk
+
+
+- tgt: HELLO.BIN
+  dep: hello.asm
+  cmd: basm hello.asm --header -o HELLO.BIN
+
+- tgt: hello.dsk
+  dep: HELLO.BIN
+  cmd: 
+  - dsk hello.dsk format --format data
+  - dsk hello.dsk add HELLO.BIN
+
+- tgt: clean
+  cmd: -rm HELLO.BIN
+
+- tgt: distclean
+  dep: clean
+  cmd: -rm hello.dsk

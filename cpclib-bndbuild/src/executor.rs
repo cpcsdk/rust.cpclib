@@ -2,13 +2,12 @@ use std::ops::Deref;
 
 use cpclib_common::lazy_static::lazy_static;
 
-use crate::runners::{
-    BasmRunner, EchoRunner, ExternRunner, ImgConverterRunner, RmRunner, Runner, XferRunner
-};
-use crate::task::Task;
+
+use crate::{task::Task, runners::{basm::BasmRunner, dsk::DskManagerRunner, rm::RmRunner, echo::EchoRunner, imgconverter::ImgConverterRunner, r#extern::ExternRunner, xfer::XferRunner, Runner}};
 
 lazy_static! {
     pub static ref BASM_RUNNER: BasmRunner = BasmRunner::default();
+    pub static ref DSK_RUNNER: DskManagerRunner = DskManagerRunner::default();
     pub static ref RM_RUNNER: RmRunner = RmRunner::default();
     pub static ref ECHO_RUNNER: EchoRunner = EchoRunner::default();
     pub static ref IMGCONV_RUNNER: ImgConverterRunner = ImgConverterRunner::default();
@@ -23,7 +22,8 @@ pub fn execute(task: &Task) -> Result<(), String> {
         Task::Echo(_) => (ECHO_RUNNER.deref() as &dyn Runner, task.args()),
         Task::ImgConverter(_) => (IMGCONV_RUNNER.deref() as &dyn Runner, task.args()),
         Task::Xfer(_) => (XFER_RUNNER.deref() as &dyn Runner, task.args()),
-        Task::Extern(_) => (EXTERN_RUNNER.deref() as &dyn Runner, task.args())
+        Task::Extern(_) => (EXTERN_RUNNER.deref() as &dyn Runner, task.args()),
+        Task::Dsk(_) => (DSK_RUNNER.deref() as &dyn Runner, task.args())
     };
 
     runner.run(args).or_else(|e| {

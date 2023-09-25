@@ -514,7 +514,7 @@ impl TrackInformation {
         self.sector_information_list
             .sectors
             .iter()
-            .map(|info| dbg!(info.sector_information_bloc.data_length) as usize)
+            .map(|info| info.sector_information_bloc.data_length as usize)
             .sum()
     }
 
@@ -726,7 +726,6 @@ impl SectorInformationList {
             consummed_bytes += 8;
             list_info.push(sector);
         }
-        dbg!(&list_info);
 
         // Get the data
         consummed_bytes = 256 - 0x18; // Skip the unused bytes

@@ -8,6 +8,7 @@ pub enum Task {
     Echo(StandardTask),
     ImgConverter(StandardTask),
     Xfer(StandardTask),
+    Dsk(StandardTask),
     Extern(StandardTask)
 }
 
@@ -39,6 +40,7 @@ impl<'de> Deserialize<'de> for Task {
                     "img2cpc" | "imgconverter" => Ok(Task::ImgConverter(std)),
                     "xfer" | "cpcwifi" | "m4" => Ok(Task::Xfer(std)),
                     "extern" => Ok(Task::Extern(std)),
+                    "dsk" | "disc" => Ok(Task::Dsk(std)),
                     _ => Err(Error::custom(format!("{code} is invalid")))
                 }
             }
@@ -53,6 +55,9 @@ impl<'de> Deserialize<'de> for Task {
 }
 
 impl Task {
+    pub fn new_dsk(args: &str) -> Self {
+        Self::Dsk(StandardTask::new(args))
+    }
     pub fn new_basm(args: &str) -> Self {
         Self::Basm(StandardTask::new(args))
     }
@@ -76,7 +81,8 @@ impl Task {
             | Task::Echo(t)
             | Task::ImgConverter(t)
             | Task::Xfer(t)
-            | Task::Extern(t) => &t.args
+            | Task::Extern(t)
+            | Task::Dsk(t) => &t.args
         }
     }
 
@@ -87,7 +93,8 @@ impl Task {
             | Task::Echo(t)
             | Task::ImgConverter(t)
             | Task::Xfer(t)
-            | Task::Extern(t) => t.ignore_error
+            | Task::Extern(t) 
+            | Task::Dsk(t) => t.ignore_error
         }
     }
 
@@ -98,7 +105,8 @@ impl Task {
             | Task::Echo(ref mut t)
             | Task::Xfer(ref mut t)
             | Task::ImgConverter(ref mut t)
-            | Task::Extern(ref mut t) => t.ignore_error = ignore
+            | Task::Extern(ref mut t)
+            | Task::Dsk(ref mut t)  => t.ignore_error = ignore
         }
 
         self
@@ -112,7 +120,8 @@ impl Task {
             Task::Echo(_) => true,
             Task::Xfer(_) => true, // wrong when downloading files
             Task::ImgConverter(_) => false,
-            Task::Extern(_) => false // wrong for winape
+            Task::Extern(_) => false,
+            Task::Dsk(_) => false, // wrong for winape
         }
     }
 }
