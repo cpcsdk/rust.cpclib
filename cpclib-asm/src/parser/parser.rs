@@ -1149,7 +1149,7 @@ pub fn parse_flag_value_inner(input: Z80Span) -> IResult<Z80Span, FlagValue, Z80
 #[inline]
 pub fn parse_empty_line(input: Z80Span) -> IResult<Z80Span, Option<LocatedToken>, Z80ParserError> {
     // let (input, _) = opt(line_ending)(input)?;
-    let before_comment = input.clone();
+    let _before_comment = input.clone();
     let (input, comment) = delimited(space0, opt(parse_comment), space0)(input)?;
     let (input, _) = alt((line_ending, eof))(input)?;
 
@@ -1340,8 +1340,8 @@ pub fn parse_z80_line_complete(
 
         // get the possible comment
         let (input, _) = space0(input)?;
-        let before_comment = input.clone();
-        let (input, comment) = opt(parse_comment)(input)?;
+        let _before_comment = input.clone();
+        let (input, _comment) = opt(parse_comment)(input)?;
         let (input, _) = space0(input)?;
 
         /*

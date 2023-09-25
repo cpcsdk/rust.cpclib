@@ -877,7 +877,7 @@ impl LocatedToken {
         match self {
             LocatedToken::Standard { token, .. } => Cow::Borrowed(token),
             LocatedToken::Comment(cmt) => Cow::Owned(Token::Comment(cmt.to_string())),
-            LocatedToken::Org { val1, val2, span } => {
+            LocatedToken::Org { val1, val2, span: _ } => {
                 Cow::Owned(Token::Org(
                     val1.to_expr().into_owned(), 
                     val2.as_ref().map(|val2| val2.to_expr().into_owned())))
@@ -994,10 +994,10 @@ impl LocatedToken {
             }
             LocatedToken::Confined(..) => todo!(),
             LocatedToken::WarningWrapper(..) => todo!(),
-            LocatedToken::Assign { label, expr, op, span } => todo!(),
-            LocatedToken::Equ { label, expr, span } => todo!(),
-            LocatedToken::SetN { label, source, expr, span } => todo!(),
-            LocatedToken::Next { label, source, expr, span } => todo!(),
+            LocatedToken::Assign { label: _, expr: _, op: _, span: _ } => todo!(),
+            LocatedToken::Equ { label: _, expr: _, span: _ } => todo!(),
+            LocatedToken::SetN { label: _, source: _, expr: _, span: _ } => todo!(),
+            LocatedToken::Next { label: _, source: _, expr: _, span: _ } => todo!(),
         }
     }
 

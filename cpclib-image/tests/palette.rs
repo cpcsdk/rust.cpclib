@@ -2,7 +2,7 @@ use cpclib_image::palette;
 
 #[test]
 fn palette_from_strings() {
-    let palette = palette![
+    let _palette = palette![
         "black".to_owned(),
         "blue".to_owned(),
         "bright blue".to_owned(),
@@ -18,7 +18,7 @@ fn palette_from_strings() {
 
 #[test]
 fn palette_from_str() {
-    let palette = palette![
+    let _palette = palette![
         "black",
         "blue",
         "bright blue",
@@ -34,22 +34,22 @@ fn palette_from_str() {
 
 #[test]
 fn palette_from_numbers() {
-    let palette = palette![0, 1];
+    let _palette = palette![0, 1];
 }
 
 #[test]
 fn palette_from_mixes() {
-    let palette = palette![0, "red"];
+    let _palette = palette![0, "red"];
 }
 
 #[test]
 #[should_panic]
 fn palette_fail_number() {
-    let palette = palette![32];
+    let _palette = palette![32];
 }
 
 #[test]
 #[should_panic]
 fn palette_fail_str() {
-    let palette = palette!["vert"];
+    let _palette = palette!["vert"];
 }

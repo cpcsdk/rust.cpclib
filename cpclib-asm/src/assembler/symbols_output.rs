@@ -131,16 +131,16 @@ impl SymbolOutputGenerator {
                 Value::Expr(ExprResult::Bool(b)) => {
                     Some(*b as u16)
                 }
-                Value::Expr(e @ ExprResult::Float(_f)) => {
+                Value::Expr(_e @ ExprResult::Float(_f)) => {
                     None
                 }
-                Value::Expr(ExprResult::String(s)) => {
+                Value::Expr(ExprResult::String(_s)) => {
                     None
                 }
-                Value::Expr(l @ ExprResult::List(_)) => {
+                Value::Expr(_l @ ExprResult::List(_)) => {
                    None
                 }
-                Value::Expr(m @ ExprResult::Matrix { .. }) => {
+                Value::Expr(_m @ ExprResult::Matrix { .. }) => {
                     None
                 }
 
