@@ -19,7 +19,7 @@ cpclib-common =  {workspace = true, features=["cmdline"]}
 cpclib-xfer = {workspace=true, default-features=false, optional=true}
 cpclib-disc.workspace = true
 
-time = "0.3.28"
+time = "0.3.29"
 
 [dev-dependencies]
 test-generator = "0.3.1"
