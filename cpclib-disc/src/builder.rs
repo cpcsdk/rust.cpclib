@@ -3,7 +3,10 @@ use crate::edsk::{ExtendedDsk, Head};
 
 /// Generate an edsk from the given configuration
 pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
-    let mut edsk = ExtendedDsk::default();
+    let mut edsk = ExtendedDsk {
+        disc_information_bloc: Default::default(),
+        track_list: Default::default()
+    };
 
     // Feed the disc info table
     edsk.disc_information_bloc.creator_name = "RUST CPC - BND".to_string();

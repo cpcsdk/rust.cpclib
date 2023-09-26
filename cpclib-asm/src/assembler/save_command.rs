@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
-use cpclib_disc::edsk::ExtendedDsk;
+use cpclib_disc::edsk::{ExtendedDsk, Head};
 use cpclib_tokens::SaveType;
 
 use super::report::SavedFile;
@@ -96,14 +96,18 @@ impl SaveCommand {
             either::Right(amsdos_file) => {
                 if let Some(dsk_filename) = &self.dsk_filename {
                     let mut dsk = if std::path::Path::new(dsk_filename.as_str()).exists() {
+                        dbg!("Load file");
                         ExtendedDsk::open(dsk_filename)?
                     }
                     else {
+                        dbg!("Create new file");
                         ExtendedDsk::default()
                     };
 
-                    dsk.add_amsdos_file(&amsdos_file)?;
-
+                    let head = Head::A;
+                    let system = false;
+                    let read_only = false;
+                    dsk.add_amsdos_file(&amsdos_file, head, read_only, system)?;
                     dsk.save(dsk_filename)?;
                 }
                 else {

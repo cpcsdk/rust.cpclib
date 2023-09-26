@@ -23,7 +23,9 @@ LAST_ADDRESS
 
 
 	save "good_save_whole_inner.bin" ; Save binary without header
-	save "hello.bin", FIRST_ADDRESS, LAST_ADDRESS-FIRST_ADDRESS, AMSDOS ; Save binary with  header
+	save "hello.bin", FIRST_ADDRESS, LAST_ADDRESS-FIRST_ADDRESS, AMSDOS ; Save a binary with  header
+	save "hello.bin", FIRST_ADDRESS, LAST_ADDRESS-FIRST_ADDRESS, DSK, "hello.dsk" ; Save binary with  header INSIDE a dsk
+
 	save "good_save_txt.bin", txt.start, (txt.stop - txt.start) ; save text without header
 
 

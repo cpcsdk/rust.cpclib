@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::Write;
 
 use cpclib_common::clap::*;
+use edsk::Head;
 
 /// Concerns all stuff related to Amsdos disc format
 pub mod amsdos;
@@ -88,12 +89,12 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
         else if let Some(fname) = sub.get_one::<String>("EXPORT") {
             eprintln!("WIP - We assume the format of the Track 0 is similar to Amsdos one");
 
-            let manager = AmsdosManager::new_from_disc(dsk, 0);
+            let manager = AmsdosManager::new_from_disc(&mut dsk, 0);
             let bytes = manager.catalog().as_bytes();
             let mut f = File::create(fname)?;
             f.write_all(&bytes)?;
         } else if sub.contains_id("LIST") {
-            let manager = AmsdosManager::new_from_disc(dsk, 0);
+            let manager = AmsdosManager::new_from_disc(&mut dsk, 0);
             let catalog = manager.catalog();
             let entries = catalog.visible_entries().collect::<Vec<_>>();
             // TODO manage files instead of entries
@@ -150,13 +151,13 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
         // Add files in an Amsdos compatible disc
 
         // Get the input dsk
-        let dsk = ExtendedDsk::open(dsk_fname)
+        let mut dsk = ExtendedDsk::open(dsk_fname)
             .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
-        let mut manager = AmsdosManager::new_from_disc(dsk, 0);
 
         // Get the common parameters
         let is_system = sub.contains_id("SYSTEM");
         let is_read_only = sub.contains_id("READ_ONLY");
+        let head = Head::A;
 
         // loop over all the files to add them
         for fname in sub.get_many::<String>("INPUT_FILES").unwrap() {
@@ -174,14 +175,11 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
                     panic!("Unable to load {fname}: {e:?}");
                 }
             };
-
-            manager
-                .add_file(&ams_file, is_system, is_read_only)
-                .unwrap();
+            dsk.add_amsdos_file(&ams_file, head, is_system, is_read_only).unwrap();
         }
 
         // Save the dsk on disc
-        manager.dsk().save(dsk_fname)?;
+        dsk.save(dsk_fname)?;
     }
     else if let Some(sub) = matches.subcommand_matches("format") {
         // Manage the formating of a disc

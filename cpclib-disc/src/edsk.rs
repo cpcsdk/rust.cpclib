@@ -10,6 +10,7 @@ use cpclib_common::bitflags::bitflags;
 use cpclib_common::itertools::zip;
 use delegate::delegate;
 use getset::Getters;
+use crate::AmsdosManager;
 
 use crate::amsdos::{AmsdosError, AmsdosFile};
 
@@ -122,7 +123,10 @@ pub struct DiscInformation {
 impl DiscInformation {
     fn creator_name_as_bytes(&self) -> [u8; 14] {
         let mut data = [0; 14];
-        for (idx, byte) in self.creator_name.as_bytes()[0..14].iter().enumerate() {
+        for (idx, byte) in self.creator_name.as_bytes()
+            .iter()
+            .take(14)
+            .enumerate() {
             data[idx] = *byte;
         }
         data
@@ -952,11 +956,19 @@ impl TrackInformationList {
     }
 }
 
-#[derive(Default, PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 #[allow(missing_docs)]
 pub struct ExtendedDsk {
     pub(crate) disc_information_bloc: DiscInformation,
     pub(crate) track_list: TrackInformationList
+}
+
+impl Default for ExtendedDsk {
+    fn default() -> Self {
+        let cfg = crate::cfg::DiscConfig::single_head_data42_format();
+        let dsk = crate::builder::build_disc_from_cfg(&cfg);
+        dsk
+    }
 }
 
 #[allow(missing_docs)]
@@ -976,6 +988,7 @@ impl ExtendedDsk {
     }
 
     pub fn from_buffer(buffer: &[u8]) -> Self {
+        assert!(buffer.len()>=256);
         let disc_info = DiscInformation::from_buffer(&buffer[..256]);
 
         println!(
@@ -994,8 +1007,15 @@ impl ExtendedDsk {
     }
 
     /// Add the file where it is possible with respect to amsdos format
-    pub fn add_amsdos_file(&mut self, _file: &AmsdosFile) -> Result<(), AmsdosError> {
-        eprintln!("ile!(: ExtedendDsk::add_amsdos_file not implemented. need to do it (but in the amsdos.rs file");
+    pub fn add_amsdos_file<H: Into<Head>>(&mut self, file: &AmsdosFile, head: H, system: bool, read_only: bool) -> Result<(), AmsdosError> {
+        if ! file.amsdos_filename().unwrap().is_valid() {
+            return Err(AmsdosError::WrongFileName { msg: file.amsdos_filename().unwrap().filename() });
+        }
+
+        let mut manager = AmsdosManager::new_from_disc(self, head);
+        manager
+            .add_file(&file, system, read_only)?;
+
         Ok(())
     }
 

@@ -438,7 +438,14 @@ Example:
 
 ### SAVE, WRITE
 
-` SAVE <fname> [[[START], [SIZE]], AMSDOS|BASIC|DSK <dskfname> [side]|TAPE]` 
+- `SAVE "<fname>", [[[START], [SIZE]], AMSDOS|BASIC|TAPE]`
+- `SAVE "<fname>", START, SIZE, DSK, "<fname.dsk>" [, SIDE]`
+
+
+!!! Unimplemented
+
+    TAPE option is not coded.
+    Other options are not intensively tested
 
 
 Example:

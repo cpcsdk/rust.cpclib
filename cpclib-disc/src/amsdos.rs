@@ -988,22 +988,22 @@ struct BlocAccessInformation {
 /// Current implementatin only focus on DATA format
 #[allow(missing_docs)]
 #[derive(Debug)]
-pub struct AmsdosManager {
-    disc: ExtendedDsk,
+pub struct AmsdosManager<'dsk> {
+    disc: &'dsk mut ExtendedDsk,
     head: Head
 }
 
 #[allow(missing_docs)]
-impl AmsdosManager {
-    pub fn dsk(&self) -> &ExtendedDsk {
-        &self.disc
+impl<'dsk, 'mng: 'dsk> AmsdosManager<'dsk> {
+    pub fn dsk(&'mng self) -> &'dsk ExtendedDsk {
+        self.disc
     }
 
     pub fn dsk_mut(&mut self) -> &mut ExtendedDsk {
         &mut self.disc
     }
 
-    pub fn new_from_disc<S: Into<Head>>(disc: ExtendedDsk, head: S) -> Self {
+    pub fn new_from_disc<S: Into<Head>>(disc: &'dsk mut ExtendedDsk, head: S) -> Self {
         Self {
             disc,
             head: head.into()
