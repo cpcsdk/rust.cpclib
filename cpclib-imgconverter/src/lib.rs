@@ -8,10 +8,11 @@ use cpclib::asm::preamble::defb_elements;
 use cpclib::asm::{assemble, assemble_to_amsdos_file};
 use cpclib::common::clap;
 use cpclib::disc::amsdos::*;
+use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
 use cpclib::image::ga::Palette;
 use cpclib::image::ocp;
-use cpclib::sna;
+use cpclib::{sna, ExtendedDsk};
 use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
@@ -745,13 +746,23 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 file.save_in_folder(folder)?;
             }
             else {
-                let cfg = cpclib::disc::cfg::DiscConfig::single_head_data_format();
-                let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
-                let mut manager = AmsdosManager::new_from_disc(dsk, 0);
-                manager.add_file(&file, false, false).unwrap();
-                manager
-                    .dsk()
-                    .save(sub_dsk.unwrap().get_one::<String>("DSK").unwrap())
+                let fname = sub_dsk.unwrap().get_one::<String>("DSK").unwrap();
+                let p = std::path::Path::new(fname);
+
+                let mut dsk = {
+                    if p.exists() {
+                        ExtendedDsk::open(p).unwrap()
+                    } else {
+                        ExtendedDsk::default()
+                    }
+                };
+
+                let head = Head::A;
+                let system = false;
+                let read_only = false;
+
+                dsk.add_amsdos_file(&file, head, false, false).unwrap();
+                dsk.save(fname)
                     .unwrap();
             }
         }

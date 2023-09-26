@@ -529,7 +529,7 @@ impl TrackInformation {
             size
         }
         else {
-            let mut s = dbg!(size);
+            let mut s = size;
             // TODO implement an efficient version
             while s % 256 != 0 {
                 s += 1;

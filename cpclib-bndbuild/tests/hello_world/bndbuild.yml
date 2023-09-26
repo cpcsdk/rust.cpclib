@@ -1,20 +1,21 @@
 - tgt: dsk
-  dep: hello.dsk
+  dep: hello1.dsk hello2.dsk
+  help: In this example, we add files to a dsk directly from basm (hello1.dsk) or as a postprocessing (hello2.dsk)
 
 
-- tgt: HELLO.BIN
+- tgt: HELLO2.BIN hello1.dsk
   dep: hello.asm
-  cmd: basm hello.asm --header -o HELLO.BIN
+  cmd: basm hello.asm --header -o HELLO2.BIN
 
-- tgt: hello.dsk
-  dep: HELLO.BIN
+- tgt: hello2.dsk
+  dep: HELLO2.BIN
   cmd: 
-  - dsk hello.dsk format --format data
-  - dsk hello.dsk add HELLO.BIN
+  - dsk hello2.dsk format --format data
+  - dsk hello2.dsk add HELLO2.BIN
 
 - tgt: clean
-  cmd: -rm HELLO.BIN
+  cmd: -rm HELLO2.BIN
 
 - tgt: distclean
   dep: clean
-  cmd: -rm hello.dsk
+  cmd: -rm hello1.dsk hello2.dsk

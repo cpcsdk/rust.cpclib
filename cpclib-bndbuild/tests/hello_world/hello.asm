@@ -1,5 +1,6 @@
 	org 0x4000
 	run $
+FIRST_ADDRESS
 
 	ld hl, txt
 loop
@@ -16,3 +17,10 @@ loop
 txt
 	defb "Hello World!"
 	defb 0
+LAST_ADDRESS
+
+
+
+
+	save "hello1.bin", FIRST_ADDRESS, LAST_ADDRESS-FIRST_ADDRESS, DSK, "hello1.dsk"
+
