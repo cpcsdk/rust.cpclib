@@ -555,8 +555,8 @@ impl AssemblerError {
             AssemblerError::ExpressionTypeError(e) => write!(f, "{}", e),
 
             AssemblerError::EmptyBinaryFile(_) => todo!(),
-            AssemblerError::AmsdosError { error: _ } => {
-                todo!()
+            AssemblerError::AmsdosError { error: e} => {
+                write!(f, "AMSDOS error: {}", e)
             }
             AssemblerError::BugInAssembler { file, line, msg } => {
                 write!(f, "BUG in assembler {}:{} {}", file, line, msg)

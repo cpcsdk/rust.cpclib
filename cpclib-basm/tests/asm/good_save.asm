@@ -1,7 +1,7 @@
 
 	org 0x4000
 	run $
-
+FIRST_ADDRESS
 	ld hl, txt
 loop
 	ld a, (hl)
@@ -19,8 +19,11 @@ txt
 	defb "Hello World!"
 	defb 0
 .stop
+LAST_ADDRESS
+
 
 	save "good_save_whole_inner.bin" ; Save binary without header
+	save "hello.bin", FIRST_ADDRESS, LAST_ADDRESS-FIRST_ADDRESS, AMSDOS ; Save binary with  header
 	save "good_save_txt.bin", txt.start, (txt.stop - txt.start) ; save text without header
 
 
@@ -29,3 +32,4 @@ txt
 ; cmd line to put it in a dsk
 ;    dskmanager test.dsk format --format data42
 ;    dskmanager test.dsk add run.bin 
+

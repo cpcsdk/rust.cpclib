@@ -436,8 +436,15 @@ Example:
 ```
 
 
-### WRITE
+### SAVE, WRITE
 
+` SAVE <fname> [[[START], [SIZE]], AMSDOS|BASIC|DSK <dskfname> [side]|TAPE]` 
+
+
+Example:
+```z80
+--8<-- "cpclib-basm/tests/asm/good_save.asm"
+```
 
 ## Debug directives
 
