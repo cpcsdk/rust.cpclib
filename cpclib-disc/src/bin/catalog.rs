@@ -159,8 +159,8 @@ fn main() -> std::io::Result<()> {
         if catalog_fname.contains("dsk") {
             // Read a dsk file
             error!("Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results.");
-            let dsk = ExtendedDsk::open(catalog_fname).expect("unable to read the dsk file");
-            let manager = AmsdosManager::new_from_disc(dsk, Head::A);
+            let mut dsk = ExtendedDsk::open(catalog_fname).expect("unable to read the dsk file");
+            let manager = AmsdosManager::new_from_disc(&mut dsk, Head::A);
             manager.catalog()
         }
         else {
