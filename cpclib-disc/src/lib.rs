@@ -15,6 +15,8 @@ pub mod builder;
 pub mod cfg;
 /// EDSK File format
 pub mod edsk;
+/// HFE File format
+pub mod hfe;
 
 use std::io::Read;
 use std::path::Path;

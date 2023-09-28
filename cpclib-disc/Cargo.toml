@@ -19,6 +19,8 @@ cpclib-common.workspace = true
 
 
 arrayref.workspace = true
+camino.workspace = true
+enumn.workspace = true
 cfg-if.workspace = true
 custom_error.workspace = true
 delegate.workspace = true
@@ -29,8 +31,10 @@ matches.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 
+
 log = {workspace = true, optional = true }
 simplelog = { workspace = true, optional = true }
+
 
 [build-dependencies]
 built.workspace = true

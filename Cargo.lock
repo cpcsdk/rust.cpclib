@@ -685,6 +685,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "camino"
+version = "1.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c59e92b5a388f549b863a7bea62612c09f24c8393560709a54558a9abdfb3b9c"
+
+[[package]]
 name = "cargo-lock"
 version = "9.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1202,12 +1208,14 @@ version = "0.7.1"
 dependencies = [
  "arrayref",
  "built",
+ "camino",
  "cfg-if",
  "cpclib-common",
  "cpclib-tokens",
  "custom_error",
  "delegate",
  "either",
+ "enumn",
  "getset",
  "log",
  "matches",
