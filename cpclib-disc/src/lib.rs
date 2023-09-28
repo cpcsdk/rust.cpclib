@@ -177,7 +177,8 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
                     panic!("Unable to load {fname}: {e:?}");
                 }
             };
-            dsk.add_amsdos_file(&ams_file, head, is_system, is_read_only).unwrap();
+            dsk.add_amsdos_file(&ams_file, head, is_system, is_read_only)
+                .unwrap();
         }
 
         // Save the dsk on disc
