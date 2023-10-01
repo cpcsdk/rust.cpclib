@@ -25,12 +25,14 @@ use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use enumn::N;
 
+use crate::edsk::ExtendedDsk;
+
 #[derive(Debug)]
 struct PicFileFormatHeader {
     format_revision: u8,
     number_of_track: u8,
     number_of_side: u8,
-    track_encoding: u8,
+    track_encoding: TrackEncoding,
     bit_rate: u16,
     floppy_rpm: u16,
     floppy_interface: FloppyInterface,
@@ -104,7 +106,7 @@ impl PicFileFormatHeader {
         i += 1;
         let number_of_side = buffer[i];
         i += 1;
-        let track_encoding = buffer[i];
+        let track_encoding = TrackEncoding::n(buffer[i]).unwrap();
         i += 1;
         let bit_rate = buffer[i] as u16 + 256 * (buffer[i + 1] as u16);
         i += 2;
@@ -289,6 +291,40 @@ impl Hfe {
             offset_lut,
             tracks_data
         }
+    }
+}
+
+
+
+impl From<ExtendedDsk> for Hfe {
+    // huge inspiration from https://sourceforge.net/p/hxcfloppyemu/code/HEAD/tree/HxCFloppyEmulator/libhxcfe/trunk/sources/loaders/cpcdsk_loader/cpcdsk_loader.c#l129
+    fn from(dsk: ExtendedDsk) -> Self {
+
+        let nb_sector_per_track = 9;
+
+        let header = PicFileFormatHeader {
+            format_revision: 0,
+            number_of_track: dsk.nb_tracks_per_head(),
+            number_of_side: dsk.nb_heads(),
+            track_encoding: TrackEncoding::ISOIBM_MFM_ENCODING,
+            bit_rate: 250000,
+            floppy_rpm: 300,
+            floppy_interface: FloppyInterface::CPC_DD_FLOPPYMODE,
+            track_list_offset: 0x100,
+            write_allowed: 0xff,
+            single_step: Step::Double,
+            track0s0_altencoding: TrackAltEncoding::No,
+            track0s0_encoding: TrackEncoding::ISOIBM_MFM_ENCODING,
+            track0s1_altencoding: TrackAltEncoding::No,
+            track0s1_encoding: TrackEncoding::ISOIBM_MFM_ENCODING,
+        };
+
+        for t in 0..header.number_of_track {
+            for s in 0..header.number_of_side {
+                let track = dsk.get_track_information(s, t).unwrap();
+            }
+        }
+        todo!()
     }
 }
 
