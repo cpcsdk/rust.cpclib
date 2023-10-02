@@ -49,7 +49,7 @@ smartstring.workspace = true
 indicatif = {workspace = true, optional=true}
 
 
-
+rayon-cond = "0.3.0"
 
 [build-dependencies]
 built.workspace = true

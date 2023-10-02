@@ -5,6 +5,7 @@ use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
+use rayon_cond::CondIterator;
 
 use super::report::SavedFile;
 use super::save_command::SaveCommand;
@@ -205,6 +206,14 @@ impl DelayedCommands {
         self.save_commands.keys().cloned().collect_vec()
     }
 
+    /// can save in parallel if all commands can be saved in parallel (we are strict because we miss lots of parallelism)
+    pub fn can_save_in_parallel(&self) -> bool {
+        self.save_commands.values()
+            .all(|s| 
+                s.iter().all(|s| s.can_be_saved_in_parallel())
+            )
+    }
+
     pub fn add_failed_assert_command(&mut self, command: FailedAssertCommand) {
         self.failed_assert_commands.push(command);
     }
@@ -226,9 +235,9 @@ impl DelayedCommands {
 impl DelayedCommands {
     /// Execute the commands that correspond to the appropriate mmr configuration
     pub fn execute_save(&self, env: &Env, ga_mmr: u8) -> Result<Vec<SavedFile>, AssemblerError> {
-        // we cannot save commands anymore in parallel, becaus each save command can change mmr
+
         #[cfg(not(target_arch = "wasm32"))]
-        let iter = self.save_commands.par_iter();
+        let iter = CondIterator::new(&self.save_commands, self.can_save_in_parallel());
         #[cfg(target_arch = "wasm32")]
         let iter = self.save_commands.iter();
 

@@ -33,6 +33,7 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
+use rayon_cond::CondIterator;
 
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
@@ -1104,7 +1105,11 @@ impl Env {
         self.ga_mmr = 0xC0;
 
         #[cfg(not(target_arch = "wasm32"))]
-        let iter = self.banks.par_iter();
+        let iter = {
+            let can_save_in_parallel = self.banks.iter()
+                .all(|b| b.1.can_save_in_parallel());
+            CondIterator::new(&self.banks, can_save_in_parallel)
+        };
         #[cfg(target_arch = "wasm32")]
         let iter = self.banks.iter();
         let mut saved = iter

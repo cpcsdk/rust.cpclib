@@ -7,7 +7,7 @@ use std::path::Path;
 use std::string::ToString;
 
 use cpclib_common::bitflags::bitflags;
-use cpclib_common::itertools::zip;
+use cpclib_common::itertools::{zip, Itertools};
 use delegate::delegate;
 use getset::Getters;
 
@@ -1018,7 +1018,12 @@ impl ExtendedDsk {
         }
 
         let mut manager = AmsdosManager::new_from_disc(self, head);
+
+        eprint!("{:?}", manager.catalog().all_entries().collect_vec());
         manager.add_file(&file, system, read_only)?;
+        eprint!("{:?}", manager.catalog().all_entries().collect_vec());
+
+
 
         Ok(())
     }

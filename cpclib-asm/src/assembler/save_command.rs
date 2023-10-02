@@ -44,6 +44,10 @@ impl SaveCommand {
         self.ga_mmr
     }
 
+    pub fn can_be_saved_in_parallel(&self) -> bool {
+        (&self.dsk_filename).is_none()
+    }
+
     /// Really make the save - Prerequisit : the page is properly selected
     pub fn execute_on(&self, env: &Env) -> Result<SavedFile, AssemblerError> {
         assert_eq!(env.ga_mmr, self.ga_mmr);
