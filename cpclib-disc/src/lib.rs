@@ -17,6 +17,7 @@ pub mod cfg;
 pub mod edsk;
 /// HFE File format
 pub mod hfe;
+pub mod disc;
 
 use std::io::Read;
 use std::path::Path;

@@ -9,6 +9,7 @@ use cpclib_common::bitfield::Bit;
 use delegate::delegate;
 use thiserror::Error;
 
+use crate::disc::Disc;
 use crate::edsk::{ExtendedDsk, Head};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -988,22 +989,22 @@ struct BlocAccessInformation {
 /// Current implementatin only focus on DATA format
 #[allow(missing_docs)]
 #[derive(Debug)]
-pub struct AmsdosManager<'dsk> {
-    disc: &'dsk mut ExtendedDsk,
+pub struct AmsdosManager<'dsk, D: Disc> {
+    disc: &'dsk mut D,
     head: Head
 }
 
 #[allow(missing_docs)]
-impl<'dsk, 'mng: 'dsk> AmsdosManager<'dsk> {
-    pub fn dsk(&'mng self) -> &'dsk ExtendedDsk {
+impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManager<'dsk, D> {
+    pub fn dsk(&'mng self) -> &'dsk D {
         self.disc
     }
 
-    pub fn dsk_mut(&mut self) -> &mut ExtendedDsk {
+    pub fn dsk_mut(&mut self) -> &mut D {
         &mut self.disc
     }
 
-    pub fn new_from_disc<S: Into<Head>>(disc: &'dsk mut ExtendedDsk, head: S) -> Self {
+    pub fn new_from_disc<S: Into<Head>>(disc: &'dsk mut D, head: S) -> Self {
         Self {
             disc,
             head: head.into()
@@ -1022,7 +1023,7 @@ impl<'dsk, 'mng: 'dsk> AmsdosManager<'dsk> {
         let mut entries = Vec::new();
         let bytes = self
             .disc
-            .sectors_bytes(self.head, 0, DATA_FIRST_SECTOR_NUMBER, 4)
+            .consecutive_sectors_read_bytes(self.head, 0, DATA_FIRST_SECTOR_NUMBER, 4)
             .unwrap();
 
         for idx in 0..DIRECTORY_SIZE
@@ -1273,7 +1274,7 @@ impl<'dsk, 'mng: 'dsk> AmsdosManager<'dsk> {
 
     /// Write bloc content on disc. One bloc use 2 sectors
     /// Implementation is stolen to iDSK
-    pub fn update_bloc(&mut self, bloc_idx: BlocIdx, content: &[u8]) {
+    pub fn update_bloc(&mut self, bloc_idx: BlocIdx, content: &[u8]) -> Result<(), String> {
         assert!(bloc_idx.is_valid());
 
         // More tests are needed to check if it can work without that
@@ -1282,20 +1283,12 @@ impl<'dsk, 'mng: 'dsk> AmsdosManager<'dsk> {
         let access_info = self.bloc_access_information(bloc_idx);
 
         // Copy in first sector
-        let sector1 = self
-            .disc
-            .sector_mut(self.head, access_info.track1, access_info.sector1_id)
-            .unwrap();
-        sector1.set_values(&content[0..DATA_SECTOR_SIZE]).unwrap();
+        self.disc.sector_write_bytes(self.head, access_info.track1, access_info.sector1_id, &content[0..DATA_SECTOR_SIZE])?;
 
         // Copy in second sector
-        let sector2 = self
-            .disc
-            .sector_mut(self.head, access_info.track2, access_info.sector2_id)
-            .unwrap();
-        sector2
-            .set_values(&content[DATA_SECTOR_SIZE..2 * DATA_SECTOR_SIZE])
-            .unwrap();
+        self.disc
+            .sector_write_bytes(self.head, access_info.track2, access_info.sector2_id, &content[DATA_SECTOR_SIZE..2 * DATA_SECTOR_SIZE])?;
+        Ok(())
     }
 
     /// Read the content of the given bloc
@@ -1305,18 +1298,16 @@ impl<'dsk, 'mng: 'dsk> AmsdosManager<'dsk> {
 
         let sector1_data = self
             .disc
-            .sector(self.head, access_info.track1, access_info.sector1_id)
-            .unwrap()
-            .values();
+            .sector_read_bytes(self.head, access_info.track1, access_info.sector1_id)
+            .unwrap();
 
         let sector2_data = self
             .disc
-            .sector(self.head, access_info.track2, access_info.sector2_id)
-            .unwrap()
-            .values();
+            .sector_read_bytes(self.head, access_info.track2, access_info.sector2_id)
+            .unwrap();
 
-        let mut content = sector1_data.to_vec();
-        content.extend_from_slice(sector2_data);
+        let mut content = sector1_data;
+        content.extend(sector2_data);
 
         assert_eq!(content.len(), DATA_SECTOR_SIZE * 2);
 

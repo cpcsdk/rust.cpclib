@@ -24,307 +24,94 @@
 use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use enumn::N;
-
-use crate::edsk::ExtendedDsk;
-
-#[derive(Debug)]
-struct PicFileFormatHeader {
-    format_revision: u8,
-    number_of_track: u8,
-    number_of_side: u8,
-    track_encoding: TrackEncoding,
-    bit_rate: u16,
-    floppy_rpm: u16,
-    floppy_interface: FloppyInterface,
-    track_list_offset: u16,
-    write_allowed: u8,
-    single_step: Step,
-    track0s0_altencoding: TrackAltEncoding,
-    track0s0_encoding: TrackEncoding,
-    track0s1_altencoding: TrackAltEncoding,
-    track0s1_encoding: TrackEncoding
-}
-
-#[repr(u8)]
-#[derive(PartialEq, Debug, N)]
-enum FloppyInterface {
-    IBMPC_DD_FLOPPYMODE = 0x00,
-    IBMPC_HD_FLOPPYMODE = 0x01,
-    ATARIST_DD_FLOPPYMODE = 0x02,
-    ATARIST_HD_FLOPPYMODE = 0x03,
-    AMIGA_DD_FLOPPYMODE = 0x04,
-    AMIGA_HD_FLOPPYMODE = 0x05,
-    CPC_DD_FLOPPYMODE = 0x06,
-    GENERIC_SHUGGART_DD_FLOPPYMODE = 0x07,
-    IBMPC_ED_FLOPPYMODE = 0x08,
-    MSX2_DD_FLOPPYMODE = 0x09,
-    C64_DD_FLOPPYMODE = 0x0A,
-    EMU_SHUGART_FLOPPYMODE = 0x0B,
-    S950_DD_FLOPPYMODE = 0x0C,
-    S950_HD_FLOPPYMODE = 0x0D,
-    DISABLE_FLOPPYMODE = 0xFE
-}
-
-#[repr(u8)]
-#[derive(PartialEq, Debug, N)]
-enum TrackEncoding {
-    ISOIBM_MFM_ENCODING = 0x00,
-    AMIGA_MFM_ENCODING = 0x01,
-    ISOIBM_FM_ENCODING = 0x02,
-    EMU_FM_ENCODING = 0x03,
-    UNKNOWN_ENCODING = 0xFF
-}
-
-#[repr(u8)]
-#[derive(PartialEq, Debug, N)]
-enum Step {
-    Single = 0x00,
-    Double = 0xFF
-}
-
-#[repr(u8)]
-#[derive(PartialEq, Debug, N)]
-enum TrackAltEncoding {
-    Yes = 0x00,
-    No = 0xFF
-}
-
-impl PicFileFormatHeader {
-    pub fn from_buffer(buffer: &[u8]) -> Self {
-        assert_eq!(buffer.len(), 512);
-
-        assert_eq!(
-            String::from_utf8_lossy(&buffer[..8]).to_ascii_uppercase(),
-            "HXCPICFE".to_ascii_uppercase()
-        );
-
-        let mut i = 8;
-
-        let format_revision = buffer[i];
-        i += 1;
-        let number_of_track = buffer[i];
-        i += 1;
-        let number_of_side = buffer[i];
-        i += 1;
-        let track_encoding = TrackEncoding::n(buffer[i]).unwrap();
-        i += 1;
-        let bit_rate = buffer[i] as u16 + 256 * (buffer[i + 1] as u16);
-        i += 2;
-        let floppy_rpm = buffer[i] as u16 + 256 * (buffer[i + 1] as u16);
-        i += 2;
-        let floppy_interface = FloppyInterface::n(buffer[i]).unwrap();
-        i += 1;
-        i += 1; // dnu
-        let track_list_offset = buffer[i] as u16 + 256 * (buffer[i + 1] as u16);
-        i += 2;
-        let write_allowed = buffer[i];
-        i += 1;
-        let single_step = Step::n(buffer[i]).unwrap();
-        i += 1;
-        let track0s0_altencoding = TrackAltEncoding::n(buffer[i]).unwrap();
-        i += 1;
-        let track0s0_encoding = TrackEncoding::n(buffer[i]).unwrap();
-        i += 1;
-        let track0s1_altencoding = TrackAltEncoding::n(buffer[i]).unwrap();
-        i += 1;
-        let track0s1_encoding = TrackEncoding::n(buffer[i]).unwrap();
-        i += 1;
-
-        PicFileFormatHeader {
-            format_revision,
-            number_of_track,
-            number_of_side,
-            track_encoding,
-            bit_rate,
-            floppy_rpm,
-            floppy_interface,
-            track_list_offset,
-            write_allowed,
-            single_step,
-            track0s0_altencoding,
-            track0s0_encoding,
-            track0s1_altencoding,
-            track0s1_encoding
-        }
-    }
-}
-
-#[derive(Debug)]
-struct PicTrack {
-    offset: u16,
-    track_len: u16
-}
-
-impl PicTrack {
-    pub fn from_buffer(buffer: &[u8]) -> Self {
-        assert_eq!(buffer.len(), 4);
-
-        let mut i = 0;
-        let offset = buffer[i] as u16 + 256 * (buffer[i + 1] as u16);
-        i += 2;
-        let track_len = buffer[i] as u16 + 256 * (buffer[i + 1] as u16);
-        i += 2;
-
-        PicTrack { offset, track_len }
-    }
-
-    pub fn offset(&self) -> u16 {
-        self.offset
-    }
-
-    pub fn track_len(&self) -> u16 {
-        self.track_len
-    }
-
-    pub fn nb_blocs(&self) -> u16 {
-        let mut nb_blocs = self.track_len() / 512;
-        if self.track_len() % 512 != 0 {
-            nb_blocs += 1;
-        }
-        nb_blocs
-    }
-
-    pub fn track_allocated_space(&self) -> u16 {
-        self.nb_blocs() * 512
-    }
-}
-
-#[derive(Debug)]
-struct PicTrackList(Vec<PicTrack>);
-impl PicTrackList {
-    pub fn from_buffer(buffer: &[u8], nb_track: u8) -> Self {
-        assert_eq!(buffer.len(), 2 * 2 * (nb_track as usize));
-
-        let elems = (0..nb_track as usize)
-            .map(|i| PicTrack::from_buffer(&buffer[(i * 4)..((i + 1) * 4)]))
-            .collect_vec();
-        Self(elems)
-    }
-
-    pub fn list(&self) -> &[PicTrack] {
-        &self.0
-    }
-}
-
-#[derive(Debug)]
-struct TrackBlock {
-    side0: [u8; 256],
-    side1: [u8; 256]
-}
-
-impl TrackBlock {
-    pub fn from_buffer(buffer: &[u8]) -> Self {
-        assert_eq!(512, buffer.len());
-
-        let mut bloc = TrackBlock {
-            side0: [0; 256],
-            side1: [0; 256]
-        };
-
-        bloc.side0.clone_from_slice(&buffer[0..256]);
-        bloc.side1.clone_from_slice(&buffer[256..512]);
-
-        bloc
-    }
-}
-
-#[derive(Debug)]
-struct TrackData(Vec<TrackBlock>);
-impl TrackData {
-    pub fn from_buffer(buffer: &[u8], pt: &PicTrack) -> Self {
-        let elems = (0..pt.nb_blocs() as usize)
-            .map(|i| TrackBlock::from_buffer(&buffer[(i * 512)..((i + 1) * 512)]))
-            .collect_vec();
-        TrackData(elems)
-    }
-}
-
-#[derive(Debug)]
-struct TrackDataList(Vec<TrackData>);
-impl TrackDataList {
-    pub fn from_buffer(buffer: &[u8], list: &PicTrackList) -> Self {
-        let elems = list
-            .list()
-            .iter()
-            .map(|pt| {
-                let allocated_size = pt.track_allocated_space();
-                let offset = pt.offset();
-                TrackData::from_buffer(
-                    &buffer[offset as usize..(offset + allocated_size) as usize],
-                    &pt
-                )
-            })
-            .collect_vec();
-        TrackDataList(elems)
-    }
-}
+use hxcfe::{Hxcfe, Img};
+use hxcfe::TrackEncoding;
+use crate::{edsk::{ExtendedDsk, Head}, disc::Disc};
 
 #[derive(Debug)]
 pub struct Hfe {
-    header: PicFileFormatHeader,
-    offset_lut: PicTrackList,
-    tracks_data: TrackDataList
+    img: Img
 }
 
 impl Hfe {
-    pub fn open<P: AsRef<Utf8Path>>(fname: P) -> Self {
-        let p = fname.as_ref();
-        let buffer = std::fs::read(p).unwrap();
-        Self::from_buffer(&buffer)
-    }
-
-    pub fn from_buffer(buffer: &[u8]) -> Self {
-        let header = PicFileFormatHeader::from_buffer(&buffer[..512]);
-
-        let offset_buffer_len = (header.number_of_track as usize) * 4;
-        assert!(offset_buffer_len < 1024);
-        let offset_lut = PicTrackList::from_buffer(
-            &buffer[512..(512 + offset_buffer_len)],
-            header.number_of_track
-        );
-
-        let tracks_data =
-            TrackDataList::from_buffer(&buffer[512 + offset_buffer_len..], &offset_lut);
-
-        Self {
-            header,
-            offset_lut,
-            tracks_data
-        }
+    pub fn open<P: AsRef<Utf8Path>>(fname: P) -> Result<Self, String> {
+        let hxcfe = Hxcfe::get();
+        hxcfe.load(fname.as_ref())
+            .map(|img| Hfe{img})
     }
 }
 
+
+impl Disc for Hfe {
+    fn sector_read_bytes<S: Into<Head>>(
+		&self,
+		head: S,
+		track: u8,
+		sector_id: u8,
+	) -> Option<Vec<u8>> {
+        let hxcfe = Hxcfe::get();
+
+        let head: i32 = head.into().into();
+        assert!(head==0 || head==1);
+
+
+        let sector_access = self.img.sector_access().unwrap();
+        let cfg = sector_access.search_sector(head as _, track as _, sector_id as _, TrackEncoding::IsoIbmMfm)?;
+        let data = cfg.read().to_vec();
+
+        Some(data)
+    }
+
+    fn sector_write_bytes<S: Into<Head>>(
+		    &mut self,
+		    head: S,
+		    track: u8,
+		    sector_id: u8,
+		    bytes: &[u8]
+	    )  -> Result<(), String>  {
+            let head: i32 = head.into().into();
+            let encoding = TrackEncoding::IsoIbmMfm;
+            let sector_access = self.img.sector_access().unwrap();
+            let mut cfg = sector_access.search_sector(head as _, track as _, sector_id as _, encoding).ok_or_else(|| "sector not found".to_owned())?;
+            
+            cfg.write(encoding, bytes); // TODO handle error
+            Ok(())
+          
+    }
+
+    fn min_sector<S: Into<Head>>(&self, side: S)-> u8 {
+        let s = side.into();
+        let access = self.img.sector_access().unwrap();
+        let mut min_sector = std::i32::MAX;
+        for t in 0..(*self.img.floppydisk).floppyNumberOfTrack {
+            for s in 0..(*self.img.floppydisk).floppyNumberOfSide {
+                let mut rec_mode = 2;  // MFM
+                let sca = access.all_track_sectors(t,s,TrackEncoding::IsoIbmMfm);
+                let sca = match sca {
+                    Some(sca) => sca,
+                    None => {
+                        rec_mode = 1; // FM
+                        access.all_track_sectors(t,s,TrackEncoding::IsoIbmFm).unwrap()
+                    }
+                };
+
+                for k in 0..sca.nb_sectors() {
+                    
+                }
+
+            }
+
+       }
+
+       todo!()
+    }
+}
 
 
 impl From<ExtendedDsk> for Hfe {
     // huge inspiration from https://sourceforge.net/p/hxcfloppyemu/code/HEAD/tree/HxCFloppyEmulator/libhxcfe/trunk/sources/loaders/cpcdsk_loader/cpcdsk_loader.c#l129
     fn from(dsk: ExtendedDsk) -> Self {
-
-        let nb_sector_per_track = 9;
-
-        let header = PicFileFormatHeader {
-            format_revision: 0,
-            number_of_track: dsk.nb_tracks_per_head(),
-            number_of_side: dsk.nb_heads(),
-            track_encoding: TrackEncoding::ISOIBM_MFM_ENCODING,
-            bit_rate: 250000,
-            floppy_rpm: 300,
-            floppy_interface: FloppyInterface::CPC_DD_FLOPPYMODE,
-            track_list_offset: 0x100,
-            write_allowed: 0xff,
-            single_step: Step::Double,
-            track0s0_altencoding: TrackAltEncoding::No,
-            track0s0_encoding: TrackEncoding::ISOIBM_MFM_ENCODING,
-            track0s1_altencoding: TrackAltEncoding::No,
-            track0s1_encoding: TrackEncoding::ISOIBM_MFM_ENCODING,
-        };
-
-        for t in 0..header.number_of_track {
-            for s in 0..header.number_of_side {
-                let track = dsk.get_track_information(s, t).unwrap();
-            }
-        }
-        todo!()
+       todo!()
     }
 }
 

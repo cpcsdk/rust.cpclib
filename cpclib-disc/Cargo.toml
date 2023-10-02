@@ -26,6 +26,7 @@ custom_error.workspace = true
 delegate.workspace = true
 either.workspace = true
 getset.workspace = true
+hxcfe.workspace = true
 matches.workspace = true
 #memchr.workspace = true
 serde.workspace = true

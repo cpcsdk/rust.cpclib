@@ -13,6 +13,7 @@ use getset::Getters;
 
 use crate::amsdos::{AmsdosError, AmsdosFile};
 use crate::AmsdosManager;
+use crate::disc::Disc;
 
 /// Computes the sector size as expected by the FDC from a human readable sector size
 #[allow(clippy::cast_possible_truncation)]
@@ -41,6 +42,16 @@ pub enum Head {
     B,
     /// Side not specified for single sided discs. Should be deprecated in favor of A
     Unspecified
+}
+
+impl Into<i32> for Head {
+    fn into(self) -> i32 {
+        match self {
+            Head::A => 0,
+            Head::B => 1,
+            Head::Unspecified => 0,
+        }
+    }
 }
 
 #[allow(missing_docs)]
@@ -1170,26 +1181,6 @@ impl ExtendedDsk {
         }
     }
 
-    /// Return the concatenated values of several consecutive sectors
-    pub fn sectors_bytes<S: Into<Head>>(
-        &self,
-        head: S,
-        track: u8,
-        sector_id: u8,
-        nb_sectors: u8
-    ) -> Option<Vec<u8>> {
-        let mut res = Vec::new();
-        let head = head.into();
-
-        for count in 0..nb_sectors {
-            match self.sector(head, track, sector_id + count) {
-                None => return None,
-                Some(s) => res.extend(s.values.iter())
-            }
-        }
-
-        Some(res)
-    }
 
     /// Return all the bytes of the given track
     pub fn track_bytes<H: Into<Head>>(&self, head: H, track: u8) -> Option<Vec<u8>> {
@@ -1223,12 +1214,52 @@ impl ExtendedDsk {
         self.tracks().len()
     }
 
+
+}
+
+
+
+impl Disc for ExtendedDsk {
+
     /// Return the smallest sector id over all tracks
-    pub fn min_sector<S: Into<Head>>(&self, _size: &S) -> u8 {
+    fn min_sector<S: Into<Head>>(&self, _side: &S) -> u8 {
         self.tracks()
             .iter()
             .map(TrackInformation::min_sector)
             .min()
             .unwrap()
     }
+
+    fn sector_read_bytes<S: Into<Head>>(
+        &self,
+        head: S,
+        track: u8,
+        sector_id: u8,
+    ) -> Option<Vec<u8>> {
+            self.sector(head, track, sector_id)
+                .map(|s| s.values.clone())
+    }
+
+    fn sector_write_bytes<S: Into<Head>>(
+		    &mut self,
+		    head: S,
+		    track: u8,
+		    sector_id: u8,
+		    bytes: &[u8]
+	    ) -> Result<(), String>{
+    
+
+
+        let head = head.into();
+        let sector = self.sector_mut(head, track, sector_id)
+            .ok_or_else(|| format!("Head {:?} track {} sector {} missing", head, track, sector_id))?;
+        sector.set_values(bytes)?;
+
+
+        Ok(())
+    }
+
+
+
+
 }

@@ -155,7 +155,16 @@ eframe = "0.22"
 egui = "0.22"
 thiserror = "1.0"
 
+hxcfe = "0.1.0"
+hxcfe-sys = "0.1.0"
+
 [patch.crates-io]
+
+# TODO remove and use the real path when everythn will work
+hxcfe-sys = {path = "../hxc_rust/hxcfe-sys/"}
+hxcfe = {path = "../hxc_rust/hxcfe/"}
+hxcadaptor-sys = {path = "../hxc_rust/hxcadaptor-sys/"}
+
 #cpclib-xferfs = {path = "./cpclib-xferfs/"}
 cpclib = {path = "./cpclib/"}
 cpclib-asm = {path = "./cpclib-asm/"}
