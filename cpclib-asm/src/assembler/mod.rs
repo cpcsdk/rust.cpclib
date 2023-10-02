@@ -1090,8 +1090,8 @@ impl Env {
 
         // save from snapshot. cannot be done in parallel
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
-            eprintln!("ACTIVEPAGE. {:x}", &activepage);
-            eprintln!("PAGE. {:x}", &page);
+          //  eprintln!("ACTIVEPAGE. {:x}", &activepage);
+          //  eprintln!("PAGE. {:x}", &page);
 
             for mma in self.pages_info_sna[activepage].get_save_mmrs() {
                 self.ga_mmr  = mma;
@@ -2171,7 +2171,7 @@ impl Env {
         };
 
 
-        eprintln!("MMR at save=0x{:x}", self.ga_mmr);
+ //       eprintln!("MMR at save=0x{:x}", self.ga_mmr);
         let mmr = self.ga_mmr.clone();
 
         let page_info = self.active_page_info_mut();

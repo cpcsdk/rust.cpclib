@@ -65,7 +65,7 @@ impl SaveCommand {
         };
 
 
-        eprintln!("Save from 0x{:X} for a size 0x{:X}", &from, &size);
+  //      eprintln!("Save from 0x{:X} for a size 0x{:X}", &from, &size);
 
         let data = env.memory(from as _, size as _);
 
