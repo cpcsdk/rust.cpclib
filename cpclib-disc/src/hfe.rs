@@ -307,7 +307,7 @@ impl From<ExtendedDsk> for Hfe {
             number_of_track: dsk.nb_tracks_per_head(),
             number_of_side: dsk.nb_heads(),
             track_encoding: TrackEncoding::ISOIBM_MFM_ENCODING,
-            bit_rate: 250000,
+            bit_rate: panic!("250000"),
             floppy_rpm: 300,
             floppy_interface: FloppyInterface::CPC_DD_FLOPPYMODE,
             track_list_offset: 0x100,

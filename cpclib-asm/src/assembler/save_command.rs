@@ -10,13 +10,15 @@ use crate::error::AssemblerError;
 use crate::progress::{self, Progress};
 
 /// Save command information
+/// RMR is already properly set up when executing the instruction
 #[derive(Debug, Clone)]
 pub struct SaveCommand {
     from: Option<i32>,
     size: Option<i32>,
     filename: std::path::PathBuf,
     save_type: Option<SaveType>,
-    dsk_filename: Option<String>
+    dsk_filename: Option<String>,
+    ga_mmr: u8
 }
 
 impl SaveCommand {
@@ -25,19 +27,26 @@ impl SaveCommand {
         size: Option<i32>,
         filename: String,
         save_type: Option<SaveType>,
-        dsk_filename: Option<String>
+        dsk_filename: Option<String>,
+        ga_mmr: u8
     ) -> Self {
         SaveCommand {
             from,
             size,
             filename: filename.into(),
             save_type,
-            dsk_filename
+            dsk_filename,
+            ga_mmr
         }
+    }
+
+    pub fn ga_mmr(&self) -> u8 {
+        self.ga_mmr
     }
 
     /// Really make the save - Prerequisit : the page is properly selected
     pub fn execute_on(&self, env: &Env) -> Result<SavedFile, AssemblerError> {
+        assert_eq!(env.ga_mmr, self.ga_mmr);
         if env.options().show_progress() {
             Progress::progress().add_save(progress::normalize(&self.filename));
         }
@@ -54,6 +63,9 @@ impl SaveCommand {
                 (stop - from as u16) as _
             }
         };
+
+
+        eprintln!("Save from 0x{:X} for a size 0x{:X}", &from, &size);
 
         let data = env.memory(from as _, size as _);
 
