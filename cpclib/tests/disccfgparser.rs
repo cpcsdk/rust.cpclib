@@ -1,10 +1,12 @@
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
-
+use cpclib::disc::disc::Disc;
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+
+    use cpclib_disc::hfe::Hfe;
 
     const DOUBLE_SIDED: &str = "NbTrack = 80
 NbHead = 2
@@ -223,7 +225,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
     fn dsk_to_cfg() {
         let cfg = cpclib::disc::cfg::DiscConfig::from_str(SINGLE_SIDED).unwrap();
 
-        let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
+        let dsk = cpclib::disc::builder::build_edsk_from_cfg(&cfg);
         let cfg2: cpclib::disc::cfg::DiscConfig = (&dsk).into();
 
         assert_eq!(cfg.explode(), cfg2.explode());
@@ -254,7 +256,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
                         .expect(&format!("Unable to get information for {:?}", idx));
                     println!("{:?}", idx);
                 }
-                let edsk = cpclib::disc::builder::build_disc_from_cfg(&res);
+                let edsk = cpclib::disc::builder::build_edsk_from_cfg(&res);
                 let generated = edsk.to_cfg();
 
                 // Verify if we have the same content of tracks ids
@@ -286,7 +288,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
     }
 
     #[test]
-    fn arkos_disc() {
+    fn arkos_dsk() {
         let cfg =
             cpclib::disc::cfg::DiscConfig::from_str(include_str!("dsk/CreateDoubleSided_3_5i.cfg"))
                 .unwrap();
@@ -318,10 +320,48 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
             println!("{:?}", idx);
         }
 
-        let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
+        let dsk = cpclib::disc::builder::build_edsk_from_cfg(&cfg);
 
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);
+    }
+
+
+    #[test]
+    fn arkos_hfe() {
+        let cfg =
+            cpclib::disc::cfg::DiscConfig::from_str(include_str!("dsk/CreateDoubleSided_3_5i.cfg"))
+                .unwrap();
+
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Head::A, 0)
+            .is_some());
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Head::A, 79)
+            .is_some());
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Head::A, 80)
+            .is_none());
+
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Head::B, 0)
+            .is_some());
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Head::B, 79)
+            .is_some());
+        assert!(cfg
+            .track_information_for_track(cpclib::disc::edsk::Head::B, 80)
+            .is_none());
+
+        for idx in cfg.track_idx_iterator() {
+            let _track = cfg
+                .track_information_for_track(*idx.0, idx.1)
+                .expect(&format!("Unable to get information for {:?}", idx));
+            println!("{:?}", idx);
+        }
+
+        let hfe = Hfe::from(&cfg);
+
     }
 
     #[test]
@@ -370,7 +410,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         // cfg2.explode()
         // );
         //
-        let dsk = cpclib::disc::builder::build_disc_from_cfg(&cfg);
+        let dsk = cpclib::disc::builder::build_edsk_from_cfg(&cfg);
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);
         let strbuffer = String::from_utf8_lossy(&buffer).to_owned();
@@ -416,7 +456,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
                 &[0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xB1, 0xB2, 0xB3]
             );
         }
-
+        use cpclib_disc::disc::Disc;
         dsk.save(&path).unwrap();
         let mut buffer = Vec::new();
         dsk.to_buffer(&mut buffer);

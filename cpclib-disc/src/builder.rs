@@ -1,8 +1,11 @@
+use hxcfe::Hxcfe;
+
 use crate::cfg::DiscConfig;
 use crate::edsk::{ExtendedDsk, Head};
+use crate::hfe::Hfe;
 
 /// Generate an edsk from the given configuration
-pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
+pub fn build_edsk_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
     let mut edsk = ExtendedDsk {
         disc_information_bloc: Default::default(),
         track_list: Default::default()
@@ -74,16 +77,35 @@ pub fn build_disc_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
 #[allow(missing_docs)]
 impl From<DiscConfig> for ExtendedDsk {
     fn from(config: DiscConfig) -> Self {
-        build_disc_from_cfg(&config)
+        build_edsk_from_cfg(&config)
     }
 }
 
 #[allow(missing_docs)]
 impl From<&DiscConfig> for ExtendedDsk {
     fn from(config: &DiscConfig) -> Self {
-        build_disc_from_cfg(config)
+        build_edsk_from_cfg(config)
     }
 }
+
+
+#[allow(missing_docs)]
+// TODO implement directly without conversion from dsk
+impl From<DiscConfig> for Hfe {
+    fn from(config: DiscConfig) -> Self {
+       Hfe::from(build_edsk_from_cfg(&config))
+    }
+}
+
+#[allow(missing_docs)]
+// TODO implement directly without conversion from dsk
+impl From<&DiscConfig> for Hfe {
+    fn from(config: &DiscConfig) -> Self {
+        build_edsk_from_cfg(config).into()
+    }
+}
+
+
 
 /// Generate a standard singled sided amsdos disc
 pub fn single_head_data_dsk() -> ExtendedDsk {

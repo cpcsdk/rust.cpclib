@@ -6,13 +6,13 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::string::ToString;
 
+use camino::Utf8Path;
 use cpclib_common::bitflags::bitflags;
 use cpclib_common::itertools::{zip, Itertools};
 use delegate::delegate;
 use getset::Getters;
 
-use crate::amsdos::{AmsdosError, AmsdosFile, AmsdosManagerMut};
-use crate::amsdos::AmsdosManagerNonMut;
+use crate::amsdos::{AmsdosError, AmsdosFile, AmsdosManagerMut, AmsdosManagerNonMut};
 use crate::disc::Disc;
 
 /// Computes the sector size as expected by the FDC from a human readable sector size
@@ -49,7 +49,7 @@ impl Into<i32> for Head {
         match self {
             Head::A => 0,
             Head::B => 1,
-            Head::Unspecified => 0,
+            Head::Unspecified => 0
         }
     }
 }
@@ -974,27 +974,13 @@ pub struct ExtendedDsk {
 impl Default for ExtendedDsk {
     fn default() -> Self {
         let cfg = crate::cfg::DiscConfig::single_head_data42_format();
-        let dsk = crate::builder::build_disc_from_cfg(&cfg);
+        let dsk = crate::builder::build_edsk_from_cfg(&cfg);
         dsk
     }
 }
 
 #[allow(missing_docs)]
 impl ExtendedDsk {
-    /// open an extended dsk from an existing file
-    pub fn open<P>(path: P) -> io::Result<Self>
-    where P: AsRef<Path> {
-        // Read the whole file
-        let buffer = {
-            let mut f = File::open(path)?;
-            let mut buffer = Vec::new();
-            f.read_to_end(&mut buffer)?;
-            buffer
-        };
-
-        Ok(Self::from_buffer(&buffer))
-    }
-
     pub fn from_buffer(buffer: &[u8]) -> Self {
         assert!(buffer.len() >= 256);
         let disc_info = DiscInformation::from_buffer(&buffer[..256]);
@@ -1033,8 +1019,6 @@ impl ExtendedDsk {
         eprint!("{:?}", manager.catalog().all_entries().collect_vec());
         manager.add_file(&file, system, read_only)?;
         eprint!("{:?}", manager.catalog().all_entries().collect_vec());
-
-
 
         Ok(())
     }
@@ -1093,14 +1077,6 @@ impl ExtendedDsk {
         ))
     }
 
-    /// Save the dsk in a file one disc
-    pub fn save<P>(&self, path: P) -> io::Result<()>
-    where P: AsRef<Path> {
-        let mut file_buffer = File::create(path)?;
-        let mut memory_buffer = Vec::new();
-        self.to_buffer(&mut memory_buffer);
-        file_buffer.write_all(&memory_buffer)
-    }
 
     /// Write the dsk in the provided buffer
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
@@ -1111,8 +1087,6 @@ impl ExtendedDsk {
     pub fn is_double_head(&self) -> bool {
         self.disc_information_bloc.is_double_head()
     }
-
-
 
     #[deprecated]
     pub fn nb_tracks_per_side(&self) -> u8 {
@@ -1175,7 +1149,6 @@ impl ExtendedDsk {
         }
     }
 
-
     /// Return all the bytes of the given track
     pub fn track_bytes<H: Into<Head>>(&self, head: H, track: u8) -> Option<Vec<u8>> {
         match self.get_track_information(head, track) {
@@ -1207,13 +1180,34 @@ impl ExtendedDsk {
     pub fn nb_tracks(&self) -> usize {
         self.tracks().len()
     }
-
-
 }
 
-
-
 impl Disc for ExtendedDsk {
+    /// open an extended dsk from an existing file
+    fn open<P>(path: P) -> Result<Self, String>
+    where P: AsRef<Path> {
+        let path = path.as_ref();
+        // Read the whole file
+        let buffer = {
+            let mut f = File::open(path).map_err(|e| e.to_string())?;
+            let mut buffer = Vec::new();
+            f.read_to_end(&mut buffer).map_err(|e| e.to_string())?;
+            buffer
+        };
+
+        Ok(Self::from_buffer(&buffer))
+    }
+
+        /// Save the dsk in a file one disc
+    fn save<P>(&self, path: P) ->  Result<(), String> 
+        where P: AsRef<Path> {
+            let path = path.as_ref();
+            let mut file_buffer = File::create(path).map_err(|e| e.to_string())?;
+            let mut memory_buffer = Vec::new();
+            self.to_buffer(&mut memory_buffer);
+            file_buffer.write_all(&memory_buffer).map_err(|e| e.to_string())
+        }
+    
 
     /// Return the smallest sector id over all tracks
     fn global_min_sector<S: Into<Head>>(&self, _side: S) -> u8 {
@@ -1228,32 +1222,32 @@ impl Disc for ExtendedDsk {
         &self,
         head: S,
         track: u8,
-        sector_id: u8,
+        sector_id: u8
     ) -> Option<Vec<u8>> {
-            self.sector(head, track, sector_id)
-                .map(|s| s.values.clone())
+        self.sector(head, track, sector_id)
+            .map(|s| s.values.clone())
     }
 
     fn sector_write_bytes<S: Into<Head>>(
-		    &mut self,
-		    head: S,
-		    track: u8,
-		    sector_id: u8,
-		    bytes: &[u8]
-	    ) -> Result<(), String>{
-    
-
-
+        &mut self,
+        head: S,
+        track: u8,
+        sector_id: u8,
+        bytes: &[u8]
+    ) -> Result<(), String> {
         let head = head.into();
-        let sector = self.sector_mut(head, track, sector_id)
-            .ok_or_else(|| format!("Head {:?} track {} sector {} missing", head, track, sector_id))?;
+        let sector = self.sector_mut(head, track, sector_id).ok_or_else(|| {
+            format!(
+                "Head {:?} track {} sector {} missing",
+                head, track, sector_id
+            )
+        })?;
         sector.set_values(bytes)?;
-
 
         Ok(())
     }
 
-    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8)->u8 {
+    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8 {
         self.get_track_information(side, track)
             .unwrap()
             .min_sector()
@@ -1271,6 +1265,4 @@ impl Disc for ExtendedDsk {
         };
         (val & 0xFF) as u8
     }
-
-
 }

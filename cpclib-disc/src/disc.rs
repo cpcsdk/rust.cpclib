@@ -1,6 +1,17 @@
+use std::{io, path::Path};
+
+use camino::Utf8Path;
+
 use crate::edsk::Head;
 
 pub trait Disc {
+    fn open<P>(path: P) -> Result<Self, String> 
+	where Self: Sized,
+	P: AsRef<Path>;
+
+	fn save<P>(&self, path: P) ->  Result<(), String> 
+        where P: AsRef<Path>;
+
 	fn global_min_sector<S: Into<Head>>(&self, side: S)-> u8;
 	fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8)->u8;
 	fn nb_tracks_per_head(&self) -> u8;

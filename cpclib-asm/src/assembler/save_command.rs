@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use cpclib_tokens::SaveType;
+use cpclib_disc::disc::Disc;
 
 use super::report::SavedFile;
 use super::Env;
@@ -113,7 +114,9 @@ impl SaveCommand {
                 if let Some(dsk_filename) = &self.dsk_filename {
                     let mut dsk = if std::path::Path::new(dsk_filename.as_str()).exists() {
                         dbg!("Load file");
-                        ExtendedDsk::open(dsk_filename)?
+                        ExtendedDsk::open(dsk_filename)
+                            .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while loading {e}") })
+                        ?
                     }
                     else {
                         dbg!("Create new file");
@@ -124,7 +127,7 @@ impl SaveCommand {
                     let system = false;
                     let read_only = false;
                     dsk.add_amsdos_file(&amsdos_file, head, read_only, system)?;
-                    dsk.save(dsk_filename)?;
+                    dsk.save(dsk_filename).map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while saving {e}") })?;
                 }
                 else {
                     return Err(AssemblerError::InvalidArgument {

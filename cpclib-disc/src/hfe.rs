@@ -21,6 +21,8 @@
 // unsigned char track0s1_encoding; // alternate track_encoding for track 0 Side 1
 // }picfileformatheader;
 
+use std::path::Path;
+
 use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use enumn::N;
@@ -35,15 +37,25 @@ pub struct Hfe {
 }
 
 impl Hfe {
-    pub fn open<P: AsRef<Utf8Path>>(fname: P) -> Result<Self, String> {
-        let hxcfe = Hxcfe::get();
-        hxcfe.load(fname.as_ref())
-            .map(|img| Hfe{img})
-    }
+
 }
 
 
 impl Disc for Hfe {
+
+    fn open<P: AsRef<Path>>(fname: P) -> Result<Self, String> {
+        let hxcfe = Hxcfe::get();
+        hxcfe.load(fname.as_ref())
+            .map(|img| Hfe{img})
+    }
+
+    fn save<P>(&self, path: P) ->  Result<(), String> 
+        where P: AsRef<Path> {
+            let path = path.as_ref();
+        self.img.save(path)
+    }
+
+
     fn sector_read_bytes<S: Into<Head>>(
 		&self,
 		head: S,
@@ -128,15 +140,18 @@ impl From<ExtendedDsk> for Hfe {
             .unwrap();
         let fname = tmp.into_temp_path();
         let fname = fname.to_path_buf();
+        let fname = fname.to_str().unwrap();
         dsk.save(&fname).unwrap();
 
         // Reload it as an hfe
-        Hfe::open(fname.display().to_string()).unwrap()
+        Hfe::open(fname).unwrap()
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::disc::Disc;
+
     use super::Hfe;
 
     #[test]

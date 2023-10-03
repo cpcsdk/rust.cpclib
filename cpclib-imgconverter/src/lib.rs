@@ -8,6 +8,7 @@ use cpclib::asm::preamble::defb_elements;
 use cpclib::asm::{assemble, assemble_to_amsdos_file};
 use cpclib::common::clap;
 use cpclib::disc::amsdos::*;
+use cpclib::disc::disc::Disc;
 use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
 use cpclib::image::ga::Palette;

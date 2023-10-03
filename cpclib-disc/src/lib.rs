@@ -6,6 +6,7 @@ use std::io::Write;
 
 use cpclib_common::clap::*;
 use edsk::Head;
+use disc::Disc;
 
 /// Concerns all stuff related to Amsdos disc format
 pub mod amsdos;
@@ -34,6 +35,7 @@ pub mod built_info {
 
 custom_error! {pub DskManagerError
     IOError{source: std::io::Error} = "IO error: {source}.",
+    AnyError{msg: String} = "{msg}",
     DiscConfigError{source: crate::cfg::DiscConfigError} = "Disc configuration: {source}",
 }
 
@@ -68,7 +70,8 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
                     .unwrap();
             }
 
-            dsk.save(dsk_fname)?;
+            dsk.save(dsk_fname)
+            .map_err(|e| DskManagerError::AnyError { msg: e })?;
 
         /*
             // TODO find why this method DOES NOT WORK
@@ -183,7 +186,7 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
         }
 
         // Save the dsk on disc
-        dsk.save(dsk_fname)?;
+        dsk.save(dsk_fname).map_err(|e| DskManagerError::AnyError { msg: e })?;
     }
     else if let Some(sub) = matches.subcommand_matches("format") {
         // Manage the formating of a disc
@@ -205,8 +208,8 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
         };
 
         // Make the dsk based on the format
-        let dsk = crate::builder::build_disc_from_cfg(&cfg);
-        dsk.save(dsk_fname)?;
+        let dsk = crate::builder::build_edsk_from_cfg(&cfg);
+        dsk.save(dsk_fname).map_err(|e| DskManagerError::AnyError { msg: e })?;
     }
     else {
         eprintln!("Missing command\n");
