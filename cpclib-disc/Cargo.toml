@@ -31,7 +31,7 @@ matches.workspace = true
 #memchr.workspace = true
 serde.workspace = true
 thiserror.workspace = true
-
+tempfile.workspace = true
 
 log = {workspace = true, optional = true }
 simplelog = { workspace = true, optional = true }

@@ -7,12 +7,12 @@ use std::path::Path;
 use std::string::ToString;
 
 use cpclib_common::bitflags::bitflags;
-use cpclib_common::itertools::zip;
+use cpclib_common::itertools::{zip, Itertools};
 use delegate::delegate;
 use getset::Getters;
 
-use crate::amsdos::{AmsdosError, AmsdosFile};
-use crate::AmsdosManager;
+use crate::amsdos::{AmsdosError, AmsdosFile, AmsdosManagerMut};
+use crate::amsdos::AmsdosManagerNonMut;
 use crate::disc::Disc;
 
 /// Computes the sector size as expected by the FDC from a human readable sector size
@@ -1028,8 +1028,13 @@ impl ExtendedDsk {
             });
         }
 
-        let mut manager = AmsdosManager::new_from_disc(self, head);
+        let mut manager = AmsdosManagerMut::new_from_disc(self, head);
+
+        eprint!("{:?}", manager.catalog().all_entries().collect_vec());
         manager.add_file(&file, system, read_only)?;
+        eprint!("{:?}", manager.catalog().all_entries().collect_vec());
+
+
 
         Ok(())
     }
@@ -1107,18 +1112,7 @@ impl ExtendedDsk {
         self.disc_information_bloc.is_double_head()
     }
 
-    // We assume we have the same number of tracks per Head.
-    // Need to be modified the day ot will not be the case.
-    #[allow(clippy::cast_possible_truncation)]
-    pub fn nb_tracks_per_head(&self) -> u8 {
-        let val = if self.disc_information_bloc.is_single_head() {
-            self.track_list.list.len()
-        }
-        else {
-            self.track_list.list.len() / 2
-        };
-        (val & 0xFF) as u8
-    }
+
 
     #[deprecated]
     pub fn nb_tracks_per_side(&self) -> u8 {
@@ -1222,7 +1216,7 @@ impl ExtendedDsk {
 impl Disc for ExtendedDsk {
 
     /// Return the smallest sector id over all tracks
-    fn min_sector<S: Into<Head>>(&self, _side: &S) -> u8 {
+    fn global_min_sector<S: Into<Head>>(&self, _side: S) -> u8 {
         self.tracks()
             .iter()
             .map(TrackInformation::min_sector)
@@ -1259,7 +1253,24 @@ impl Disc for ExtendedDsk {
         Ok(())
     }
 
+    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8)->u8 {
+        self.get_track_information(side, track)
+            .unwrap()
+            .min_sector()
+    }
 
+    // We assume we have the same number of tracks per Head.
+    // Need to be modified the day ot will not be the case.
+    #[allow(clippy::cast_possible_truncation)]
+    fn nb_tracks_per_head(&self) -> u8 {
+        let val = if self.disc_information_bloc.is_single_head() {
+            self.track_list.list.len()
+        }
+        else {
+            self.track_list.list.len() / 2
+        };
+        (val & 0xFF) as u8
+    }
 
 
 }

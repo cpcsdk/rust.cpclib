@@ -8,6 +8,8 @@ mod tests {
     use cpclib::disc::amsdos::*;
     use cpclib::disc::cfg::*;
     use cpclib::disc::edsk::ExtendedDsk;
+    use cpclib_asm::preamble::file;
+    use cpclib_disc::disc::Disc;
 
     #[test]
     fn new_data() {
@@ -19,7 +21,7 @@ mod tests {
     #[test]
     fn get_onebasic_file() {
         let onefile = ExtendedDsk::open("./tests/dsk/onefile.dsk").unwrap();
-        let manager = AmsdosManager::new_from_disc(onefile, 0);
+        let manager = AmsdosManagerNonMut::new_from_disc(&onefile, 0);
         let file = manager
             .get_file(AmsdosFileName::try_from("test.bas").unwrap())
             .unwrap();
@@ -33,8 +35,8 @@ mod tests {
 
         assert_eq!(file.content(), file2.content());
 
-        let empty_obtained = ExtendedDsk::from(DiscConfig::single_head_data_format());
-        let mut manager2 = AmsdosManager::new_from_disc(empty_obtained, 0);
+        let mut empty_obtained = ExtendedDsk::from(DiscConfig::single_head_data_format());
+        let mut manager2 = AmsdosManagerMut::new_from_disc(&mut empty_obtained, 0);
         manager2.add_file(&file2, false, false).unwrap();
 
         assert_eq!(manager.catalog(), manager2.catalog(),);
@@ -50,17 +52,17 @@ mod tests {
     #[test]
     fn list_catalog() {
         let dsk = cpclib::disc::edsk::ExtendedDsk::open("./tests/dsk/pirate.dsk").unwrap();
-        let amsdos = cpclib::disc::amsdos::AmsdosManager::new_from_disc(dsk, 0);
+        let amsdos = cpclib::disc::amsdos::AmsdosManagerNonMut::new_from_disc(&dsk, 0);
         amsdos.print_catalog();
     }
 
     #[test]
     fn empty_catalog() {
-        use cpclib::disc::amsdos::AmsdosManager;
+        use cpclib::disc::amsdos::AmsdosManagerNonMut;
         use cpclib::disc::cfg::DiscConfig;
 
-        let dsk = DiscConfig::single_head_data_format().into();
-        let manager = AmsdosManager::new_from_disc(dsk, 0);
+        let dsk: ExtendedDsk= DiscConfig::single_head_data_format().into();
+        let manager = AmsdosManagerNonMut::new_from_disc(&dsk, 0);
         let catalog = manager.catalog();
 
         println!("{:?}", catalog);
@@ -82,7 +84,7 @@ mod tests {
 
         let filename = AmsdosFileName::new_incorrect_case(0, "test", "bin").unwrap();
         let result_header =
-            AmsdosManager::compute_binary_header(&filename, 0x3210, 0x1234, &content);
+            AmsdosHeader::compute_binary_header(&filename, 0x3210, 0x1234, &content);
 
         println!("{:?}", result_header);
         println!(
@@ -181,40 +183,47 @@ mod tests {
 
     #[test]
     fn add_file() {
-        use cpclib::disc::amsdos::AmsdosManager;
+        use cpclib::disc::amsdos::AmsdosManagerNonMut;
         use cpclib::disc::cfg::DiscConfig;
 
-        let dsk = DiscConfig::single_head_data_format().into();
-        let mut manager = AmsdosManager::new_from_disc(dsk, 0);
-        let catalog = manager.catalog();
+        let mut filename = None;
+        let mut file = None;
+        let mut dsk: ExtendedDsk = DiscConfig::single_head_data_format().into();
+        {
+            let mut manager = AmsdosManagerMut::new_from_disc(&mut dsk, 0);
+            let catalog = manager.catalog();
 
-        assert_eq!(catalog.used_entries().count(), 0);
+            assert_eq!(catalog.used_entries().count(), 0);
 
-        assert_eq!(catalog.free_entries().count(), 64);
+            assert_eq!(catalog.free_entries().count(), 64);
 
-        let filename = AmsdosFileName::new_correct_case(0, "test", "bin").unwrap();
-        assert_eq!(&filename, &AmsdosFileName::try_from("test.bin").unwrap());
+            filename.replace(AmsdosFileName::new_correct_case(0, "test", "bin").unwrap());
+            assert_eq!(filename.as_ref().unwrap(), &AmsdosFileName::try_from("test.bin").unwrap());
 
-        let file = AmsdosFile::binary_file_from_buffer(
-            &filename,
-            0x3210,
-            0x1234,
-            &[0x41, 0x42, 0x43, 0x0A]
-        )
-        .unwrap();
-        manager
-            .add_file(&file, false, false)
-            .expect("Unable to add file");
+            file = Some(AmsdosFile::binary_file_from_buffer(
+                filename.as_ref().unwrap(),
+                0x3210,
+                0x1234,
+                &[0x41, 0x42, 0x43, 0x0A]
+            )
+            .unwrap());
+            manager
+                .add_file(file.as_ref().unwrap(), false, false)
+                .expect("Unable to add file");
 
-        assert_eq!(
-            &file.header().amsdos_filename().unwrap().filename(),
-            "TEST.BIN"
-        );
-        assert_eq!(&file.header().amsdos_filename().unwrap(), &filename);
-        assert_eq!(file.header().execution_address(), 0x1234);
-        assert_eq!(file.header().loading_address(), 0x3210);
+            assert_eq!(
+                file.as_ref().unwrap().header().amsdos_filename().unwrap().filename(),
+                "TEST.BIN"
+            );
+            assert_eq!(&file.as_ref().unwrap().header().amsdos_filename().unwrap(), filename.as_ref().unwrap());
+            assert_eq!(file.as_ref().unwrap().header().execution_address(), 0x1234);
+            assert_eq!(file.as_ref().unwrap().header().loading_address(), 0x3210);
+        }
 
-        let catalog_data = manager.dsk().sectors_bytes(0, 0, 0xC1, 4).unwrap();
+        let filename = filename.unwrap();
+        let file = file.unwrap();
+        
+        let catalog_data = dsk.consecutive_sectors_read_bytes(0, 0, 0xC1, 4).unwrap();
         let entry_data = &catalog_data[..32];
         let entry = AmsdosEntry::from_slice(0, &entry_data);
         println!("{:?}", entry_data);
@@ -222,6 +231,7 @@ mod tests {
         assert_eq!(entry_data[0], entry.amsdos_filename().user());
         assert_eq!(entry.amsdos_filename().user(), 0);
 
+        let mut manager = AmsdosManagerMut::new_from_disc(&mut dsk, 0);
         let catalog = manager.catalog();
 
         println!("{:?}", catalog);

@@ -1,4 +1,5 @@
 use std::process::Command;
+use std::sync::Mutex;
 
 use cpclib_asm::assembler::Env;
 use cpclib_asm::error::AssemblerError;
@@ -8,6 +9,20 @@ use cpclib_common::lazy_static;
 use pretty_assertions::assert_eq;
 use regex::Regex;
 use test_generator::test_resources;
+
+lazy_static::lazy_static!{
+    static ref  LOCK: Mutex<()> = Mutex::default();
+}
+
+
+fn manual_cleanup() {
+    for fname in &["hello.dsk"] {
+        let p = std::path::Path::new(fname);
+        if p.exists() {
+            std::fs::remove_file(p).unwrap()
+        }
+    }
+}
 
 fn command_for_generated_test(
     fname: &str,
@@ -48,6 +63,8 @@ fn test_roudoudou_generated_code() {
 
 #[test_resources("cpclib-basm/tests/asm/warning_*.asm")]
 fn expect_warning_but_success(real_fname: &str) {
+    let _lock = LOCK.lock().unwrap();
+
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
@@ -137,6 +154,9 @@ fn expect_one_line_success(real_fname: &str) {
     {
         return;
     }
+    let _lock = LOCK.lock().unwrap();
+
+    manual_cleanup() ;
 
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
 
@@ -219,6 +239,10 @@ fn expect_several_empty_lines_success(real_fname: &str) {
     if real_fname.contains("basic") {
         return;
     }
+    let _lock = LOCK.lock().unwrap();
+
+    manual_cleanup() ;
+
 
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
 
@@ -274,6 +298,10 @@ fn expect_several_empty_lines_success(real_fname: &str) {
 /// TODO write tests specifics for this purpose
 fn expect_listing_success(fname: &str) {
     let fname = &fname["cpclib-basm/tests/asm/".len()..];
+    let _lock = LOCK.lock().unwrap();
+
+    manual_cleanup() ;
+
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
@@ -307,6 +335,11 @@ fn expect_listing_success(fname: &str) {
 //#[test_resources("basm/tests/asm/good_*.sym")]
 /// TODO write tests specifics for this purpose
 fn expect_symbols_success(fname: &str) {
+    let _lock = LOCK.lock().unwrap();
+
+    manual_cleanup() ;
+
+
     let sym_gt = &fname["cpclib-basm/tests/asm/".len()..];
     let fname = sym_gt.replace(".sym", ".asm");
 
@@ -346,6 +379,10 @@ fn expect_symbols_success(fname: &str) {
 
 #[test_resources("cpclib-basm/tests/asm/good_*.asm")]
 fn expect_success(fname: &str) {
+    let _lock = LOCK.lock().unwrap();
+
+    manual_cleanup() ;
+
     eprintln!("{}", fname);
 
     let fname = &fname["cpclib-basm/tests/asm/".len()..];
@@ -396,6 +433,11 @@ fn expect_success(fname: &str) {
 
 #[test_resources("cpclib-basm/tests/asm/bad_*.asm")]
 fn expect_failure(fname: &str) {
+    let _lock = LOCK.lock().unwrap();
+
+    manual_cleanup() ;
+
+
     let fname = &fname["cpclib-basm/tests/asm/".len()..];
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");

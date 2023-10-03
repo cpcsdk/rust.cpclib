@@ -1,9 +1,11 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
+use rayon_cond::CondIterator;
 
 use super::report::SavedFile;
 use super::save_command::SaveCommand;
@@ -162,7 +164,7 @@ impl BreakpointCommand {
 #[derive(Debug, Clone)]
 pub struct DelayedCommands {
     failed_assert_commands: Vec<FailedAssertCommand>,
-    save_commands: Vec<SaveCommand>,
+    save_commands: BTreeMap<u8, Vec<SaveCommand>>, // commands are ordered per ga_mmr
     print_commands: Vec<PrintOrPauseCommand>,
     breakpoint_commands: Vec<BreakpointCommand>
 }
@@ -171,7 +173,7 @@ impl Default for DelayedCommands {
     fn default() -> Self {
         Self {
             failed_assert_commands: Vec::new(),
-            save_commands: Vec::new(),
+            save_commands: Default::default(),
             print_commands: Vec::new(),
             breakpoint_commands: Vec::new()
         }
@@ -194,7 +196,22 @@ impl DelayedCommands {
     }
 
     pub fn add_save_command(&mut self, command: SaveCommand) {
-        self.save_commands.push(command);
+        self.save_commands
+            .entry(command.ga_mmr())
+            .or_default()
+            .push(command);
+    }
+
+    pub fn get_save_mmrs(&self) -> Vec<u8> {
+        self.save_commands.keys().cloned().collect_vec()
+    }
+
+    /// can save in parallel if all commands can be saved in parallel (we are strict because we miss lots of parallelism)
+    pub fn can_save_in_parallel(&self) -> bool {
+        self.save_commands.values()
+            .all(|s| 
+                s.iter().all(|s| s.can_be_saved_in_parallel())
+            )
     }
 
     pub fn add_failed_assert_command(&mut self, command: FailedAssertCommand) {
@@ -216,13 +233,24 @@ impl DelayedCommands {
 
 /// Commands execution
 impl DelayedCommands {
-    pub fn execute_save(&self, env: &Env) -> Result<Vec<SavedFile>, AssemblerError> {
+    /// Execute the commands that correspond to the appropriate mmr configuration
+    pub fn execute_save(&self, env: &Env, ga_mmr: u8) -> Result<Vec<SavedFile>, AssemblerError> {
+
         #[cfg(not(target_arch = "wasm32"))]
-        let iter = self.save_commands.par_iter();
+        let iter = CondIterator::new(&self.save_commands, self.can_save_in_parallel());
         #[cfg(target_arch = "wasm32")]
         let iter = self.save_commands.iter();
 
         let res = iter
+            .filter_map(|(save_mmr, save_cmd)| {
+                if *save_mmr == ga_mmr {
+                    Some(save_cmd)
+                }
+                else {
+                    None
+                }
+            })
+            .flatten()
             .map(|cmd| cmd.execute_on(env))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
 

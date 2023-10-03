@@ -15,7 +15,7 @@ use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::{clap, lazy_static};
-use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
+use cpclib_disc::amsdos::{AmsdosFileName,  AmsdosHeader};
 #[cfg(feature = "xferlib")]
 use cpclib_xfer::CpcXfer;
 
@@ -426,7 +426,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
             // Compute the headers if needed
             let header = if matches.get_flag("BINARY_HEADER") {
-                AmsdosManager::compute_binary_header(
+                AmsdosHeader::compute_binary_header(
                     &amsdos_filename.unwrap(),
                     env.loading_address().unwrap(),
                     env.execution_address().unwrap(),
@@ -436,7 +436,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 .to_vec()
             }
             else if matches.get_flag("BASIC_HEADER") {
-                AmsdosManager::compute_basic_header(&amsdos_filename.unwrap(), &binary)
+                AmsdosHeader::compute_basic_header(&amsdos_filename.unwrap(), &binary)
                     .as_bytes()
                     .to_vec()
             }

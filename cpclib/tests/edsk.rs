@@ -2,6 +2,7 @@
 mod tests {
 
     use cpclib_common::itertools::Itertools;
+    use cpclib_disc::disc::Disc;
 
     fn test_single_dsk(dsk: &cpclib::disc::edsk::ExtendedDsk) {
         let track = dsk
@@ -43,7 +44,7 @@ mod tests {
         assert!(dsk.sector(0, 0, 0xC4).is_some());
 
         assert!(dsk
-            .sectors_bytes(
+            .consecutive_sectors_read_bytes(
                 0,    // track
                 0xC1, // sector
                 4,    // nb sector
@@ -52,7 +53,7 @@ mod tests {
             .is_some());
 
         assert!(dsk
-            .sectors_bytes(
+            .consecutive_sectors_read_bytes(
                 0,    // track
                 0xC1, // sector
                 4,    // nb sector
@@ -61,7 +62,7 @@ mod tests {
             .is_none());
 
         assert!(dsk
-            .sectors_bytes(
+            .consecutive_sectors_read_bytes(
                 0,    // track
                 0xC1, // sector
                 4,    // nb sector
@@ -287,7 +288,7 @@ mod tests {
             let value = *chunk.next().unwrap() as usize;
 
             assert_eq!(
-                dsk.sectors_bytes(cpclib::disc::edsk::Head::A, track, sector, 1)
+                dsk.consecutive_sectors_read_bytes(cpclib::disc::edsk::Head::A, track, sector, 1)
                     .unwrap()
                     .iter()
                     .map(|&v| v as usize)
@@ -303,7 +304,7 @@ mod tests {
         // );
 
         use cpclib::disc::amsdos::*;
-        let amsdos = AmsdosManager::new_from_disc(dsk, cpclib::disc::edsk::Head::A);
+        let amsdos = AmsdosManagerNonMut::new_from_disc(&dsk, cpclib::disc::edsk::Head::A);
         let entries = dbg!(amsdos.catalog().to_amsdos_catalog());
 
         assert_eq!(entries.len(), 1);
@@ -327,7 +328,7 @@ mod tests {
     pub fn test_turlogh() {
         use cpclib_common::itertools::Itertools;
 
-        let dsk = cpclib::disc::edsk::ExtendedDsk::open(
+        let mut dsk = cpclib::disc::edsk::ExtendedDsk::open(
             "tests/dsk/Turlogh Le Rodeur (F) (Face A) (1987) [Original] (GAPS).dsk"
         )
         .unwrap();
@@ -469,7 +470,7 @@ mod tests {
         }
 
         use cpclib::disc::amsdos::*;
-        let amsdos = AmsdosManager::new_from_disc(dsk, cpclib::disc::edsk::Head::A);
+        let amsdos = AmsdosManagerNonMut::new_from_disc(& dsk, cpclib::disc::edsk::Head::A);
         let entries = dbg!(amsdos
             .catalog()
             .to_amsdos_catalog()

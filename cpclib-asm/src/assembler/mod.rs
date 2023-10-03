@@ -33,6 +33,7 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
+use rayon_cond::CondIterator;
 
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
@@ -1064,45 +1065,56 @@ impl Env {
         let mut saved_files = Vec::new();
 
         // count the number of files to save to build the process bar
-        let mut nb_files_to_save: u64 = 0;
-        nb_files_to_save += pages_mmr[0..self.pages_info_sna.len()]
-            .iter()
-            .enumerate()
-            .map(|(activepage, page)| {
-                self.ga_mmr = *page;
-                self.pages_info_sna[activepage].nb_files_to_save() as u64
-            })
-            .sum::<u64>() as u64;
-        nb_files_to_save += self
-            .banks
-            .iter()
-            .map(|b| b.1.nb_files_to_save() as u64)
-            .sum::<u64>() as u64;
+        let nb_files_to_save = {
+            let mut nb_files_to_save: u64 = 0;
+            nb_files_to_save += pages_mmr[0..self.pages_info_sna.len()]
+                .iter()
+                .enumerate()
+                .map(|(activepage, page)| {
+                    self.ga_mmr = *page;
+                    self.pages_info_sna[activepage].nb_files_to_save() as u64
+                })
+                .sum::<u64>() as u64;
+            nb_files_to_save += self
+                .banks
+                .iter()
+                .map(|b| b.1.nb_files_to_save() as u64)
+                .sum::<u64>() as u64;
+
+            nb_files_to_save
+        };
 
         if self.options.show_progress() {
                 #[cfg(not(target_arch = "wasm32"))]
                 Progress::progress().create_save_bar(nb_files_to_save);
         }
 
-        // save from snapshot
+        // save from snapshot. cannot be done in parallel
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
-            //  eprintln!("ACTIVEPAGE. {:x}", &activepage);
-            //  eprintln!("PAGE. {:x}", &page);
+          //  eprintln!("ACTIVEPAGE. {:x}", &activepage);
+          //  eprintln!("PAGE. {:x}", &page);
 
-            self.ga_mmr = *page;
-            let mut saved = self.pages_info_sna[activepage].execute_save(self)?;
-            saved_files.append(&mut saved);
+            for mma in self.pages_info_sna[activepage].get_save_mmrs() {
+                self.ga_mmr  = mma;
+                let mut saved = self.pages_info_sna[activepage].execute_save(self, mma)?;
+                saved_files.append(&mut saved);
+            }
         }
 
-        // save from extra memory / can be done in parallal
+        // save from extra memory / can be done in parallel as it does not concerns memory
         self.ga_mmr = 0xC0;
 
         #[cfg(not(target_arch = "wasm32"))]
-        let iter = self.banks.par_iter();
+        let iter = {
+            let can_save_in_parallel = self.banks.iter()
+                .all(|b| b.1.can_save_in_parallel());
+            CondIterator::new(&self.banks, can_save_in_parallel)
+        };
         #[cfg(target_arch = "wasm32")]
         let iter = self.banks.iter();
         let mut saved = iter
-            .map(|bank| bank.1.execute_save(self))
+            .map(|bank| 
+                    bank.1.execute_save(self, self.ga_mmr))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
         for s in &mut saved {
             saved_files.append(s);
@@ -2163,13 +2175,18 @@ impl Env {
             None => None
         };
 
+
+ //       eprintln!("MMR at save=0x{:x}", self.ga_mmr);
+        let mmr = self.ga_mmr.clone();
+
         let page_info = self.active_page_info_mut();
         page_info.add_save_command(SaveCommand::new(
             from,
             size,
             filename.to_owned(),
             save_type.cloned(),
-            dsk_filename.cloned()
+            dsk_filename.cloned(),
+            mmr
         ));
 
         Ok(())

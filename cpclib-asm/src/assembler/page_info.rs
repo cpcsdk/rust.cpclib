@@ -61,8 +61,9 @@ impl PageInformation {
             pub fn failed_assert_commands(&self) -> &[FailedAssertCommand] ;
             pub fn failed_assert_commands_mut(&mut self) -> &mut[FailedAssertCommand] ;
 
-
-            pub fn execute_save(&self, env: &Env) -> Result<Vec<SavedFile>, AssemblerError>;
+            pub fn can_save_in_parallel(&self) -> bool;
+            pub fn get_save_mmrs(&self) -> Vec<u8>;
+            pub fn execute_save(&self, env: &Env, mmr: u8) -> Result<Vec<SavedFile>, AssemblerError>;
             pub fn nb_files_to_save(&self) -> usize;
             pub fn collect_assert_failure(&self) -> Result<(), AssemblerError>;
             pub fn execute_print_or_pause(&self, writer: &mut impl Write)-> Result<(), AssemblerError>;

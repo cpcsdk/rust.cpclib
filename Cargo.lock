@@ -1124,6 +1124,7 @@ dependencies = [
  "matches",
  "ouroboros",
  "paste",
+ "rayon-cond",
  "regex",
  "rust-embed",
  "serde",
@@ -1265,6 +1266,7 @@ dependencies = [
  "matches",
  "serde",
  "simplelog",
+ "tempfile",
  "thiserror",
 ]
 
@@ -4090,6 +4092,17 @@ checksum = "9c27db03db7734835b3f53954b534c91069375ce6ccaa2e065441e07d9b6cdb1"
 dependencies = [
  "either",
  "rayon-core",
+]
+
+[[package]]
+name = "rayon-cond"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "059f538b55efd2309c9794130bc149c6a553db90e9d99c2030785c82f0bd7df9"
+dependencies = [
+ "either",
+ "itertools 0.11.0",
+ "rayon",
 ]
 
 [[package]]

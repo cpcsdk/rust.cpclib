@@ -26,6 +26,7 @@ use cpclib_common::itertools::Itertools;
 use enumn::N;
 use hxcfe::{Hxcfe, Img};
 use hxcfe::TrackEncoding;
+use tempfile::{NamedTempFile, Builder};
 use crate::{edsk::{ExtendedDsk, Head}, disc::Disc};
 
 #[derive(Debug)]
@@ -79,12 +80,12 @@ impl Disc for Hfe {
           
     }
 
-    fn min_sector<S: Into<Head>>(&self, side: S)-> u8 {
+    fn global_min_sector<S: Into<Head>>(&self, side: S)-> u8 {
         let s = side.into();
         let access = self.img.sector_access().unwrap();
         let mut min_sector = std::i32::MAX;
-        for t in 0..(*self.img.floppydisk).floppyNumberOfTrack {
-            for s in 0..(*self.img.floppydisk).floppyNumberOfSide {
+        for t in 0..(self.img.nb_tracks()) {
+            for s in 0..self.img.nb_sides() {
                 let mut rec_mode = 2;  // MFM
                 let sca = access.all_track_sectors(t,s,TrackEncoding::IsoIbmMfm);
                 let sca = match sca {
@@ -95,23 +96,42 @@ impl Disc for Hfe {
                     }
                 };
 
-                for k in 0..sca.nb_sectors() {
-                    
-                }
-
+                min_sector = min_sector.min((0..sca.nb_sectors())
+                    .map(|k| sca.sector_config(k).sector_id())
+                    .min().unwrap()
+                );
             }
 
        }
 
-       todo!()
+       min_sector as _
+    }
+
+    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8)->u8 {
+        todo!()
+    }
+
+    fn nb_tracks_per_head(&self) -> u8 {
+        self.img.nb_tracks_per_head() as _
     }
 }
 
 
 impl From<ExtendedDsk> for Hfe {
-    // huge inspiration from https://sourceforge.net/p/hxcfloppyemu/code/HEAD/tree/HxCFloppyEmulator/libhxcfe/trunk/sources/loaders/cpcdsk_loader/cpcdsk_loader.c#l129
+    // TODO do it WITHOUT saving a disc
     fn from(dsk: ExtendedDsk) -> Self {
-       todo!()
+        // Save the DSK on disc
+        let tmp = Builder::new()
+            .suffix(".dsk")
+            .rand_bytes(6)
+            .tempfile()
+            .unwrap();
+        let fname = tmp.into_temp_path();
+        let fname = fname.to_path_buf();
+        dsk.save(&fname).unwrap();
+
+        // Reload it as an hfe
+        Hfe::open(fname.display().to_string()).unwrap()
     }
 }
 

@@ -19,7 +19,7 @@ use std::io::{Read, Write};
 
 use clap::value_parser;
 use cpclib_common::clap;
-use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName, AmsdosFileType, AmsdosManager};
+use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName, AmsdosFileType, AmsdosHeader};
 
 /// Convert a string to its unsigned 32 bits representation (to access to extra memory)
 /// TODO share implementation
@@ -179,9 +179,9 @@ fn main() -> std::io::Result<()> {
                         .expect("The load address is expected for a binary target")
                 ) as u16;
 
-                AmsdosManager::compute_binary_header(&filename, load, exec, &content)
+                AmsdosHeader::compute_binary_header(&filename, load, exec, &content)
             }
-            AmsdosFileType::Basic => AmsdosManager::compute_basic_header(&filename, &content),
+            AmsdosFileType::Basic => AmsdosHeader::compute_basic_header(&filename, &content),
             _ => unimplemented!()
         };
 

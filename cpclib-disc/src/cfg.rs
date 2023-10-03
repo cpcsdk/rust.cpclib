@@ -17,6 +17,7 @@ use cpclib_common::nom::sequence::*;
 use cpclib_common::nom::*;
 use custom_error::custom_error;
 use itertools::Itertools;
+use crate::disc::Disc;
 
 use crate::edsk::*;
 
