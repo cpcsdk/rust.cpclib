@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
 use cpclib_disc::edsk::{ExtendedDsk, Head};
+use cpclib_disc::hfe::Hfe;
 use cpclib_tokens::SaveType;
 use cpclib_disc::disc::Disc;
 
@@ -18,7 +19,7 @@ pub struct SaveCommand {
     size: Option<i32>,
     filename: std::path::PathBuf,
     save_type: Option<SaveType>,
-    dsk_filename: Option<String>,
+    disc_filename: Option<String>,
     ga_mmr: u8
 }
 
@@ -36,7 +37,7 @@ impl SaveCommand {
             size,
             filename: filename.into(),
             save_type,
-            dsk_filename,
+            disc_filename: dsk_filename,
             ga_mmr
         }
     }
@@ -46,7 +47,7 @@ impl SaveCommand {
     }
 
     pub fn can_be_saved_in_parallel(&self) -> bool {
-        (&self.dsk_filename).is_none()
+        (&self.disc_filename).is_none()
     }
 
     /// Really make the save - Prerequisit : the page is properly selected
@@ -102,7 +103,7 @@ impl SaveCommand {
                     SaveType::AmsdosBin | SaveType::AmsdosBas => {
                         either::Left(amsdos_file.full_content().copied().collect::<Vec<u8>>())
                     }
-                    SaveType::Dsk | SaveType::Tape => either::Right(amsdos_file)
+                    SaveType::Disc(_) | SaveType::Tape => either::Right(amsdos_file)
                 }
             }
             None => either::Left(data)
@@ -111,23 +112,21 @@ impl SaveCommand {
         // Save at the right place
         match object {
             either::Right(amsdos_file) => {
-                if let Some(dsk_filename) = &self.dsk_filename {
-                    let mut dsk = if std::path::Path::new(dsk_filename.as_str()).exists() {
-                        dbg!("Load file");
-                        ExtendedDsk::open(dsk_filename)
+                if let Some(disc_filename) = &self.disc_filename {
+                    let mut disc = if std::path::Path::new(disc_filename.as_str()).exists() {
+                        Hfe::open(disc_filename)
                             .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while loading {e}") })
                         ?
                     }
                     else {
-                        dbg!("Create new file");
-                        ExtendedDsk::default()
+                        Hfe::default()
                     };
 
                     let head = Head::A;
                     let system = false;
                     let read_only = false;
-                    dsk.add_amsdos_file(&amsdos_file, head, read_only, system)?;
-                    dsk.save(dsk_filename).map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while saving {e}") })?;
+                    disc.add_amsdos_file(&amsdos_file, head, read_only, system)?;
+                    disc.save(disc_filename).map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while saving {e}") })?;
                 }
                 else {
                     return Err(AssemblerError::InvalidArgument {

@@ -2175,6 +2175,25 @@ impl Env {
             None => None
         };
 
+        // TODO process the filename to interpret possible variables
+
+        // Check filename validity
+        if let Some(&SaveType::Disc(disc)) = &save_type {
+            let fname = dsk_filename.unwrap();
+            let lower_fname =  fname.to_ascii_lowercase();
+            match disc {
+                DiscType::Dsk => if !(lower_fname.ends_with(".dsk") || lower_fname.ends_with(".edsk")) {
+                    return Err(AssemblerError::InvalidArgument { msg: format!("{fname} has not a DSK compatible extension")})
+                },
+                DiscType::Hfe => if !lower_fname.ends_with(".hfe")  {
+                    return Err(AssemblerError::InvalidArgument { msg: format!("{fname} has not a HFE compatible extension")})
+                },
+                DiscType::Auto => if !(lower_fname.ends_with(".dsk") || lower_fname.ends_with(".edsk") || lower_fname.ends_with(".hfe")) {
+                    return Err(AssemblerError::InvalidArgument { msg: format!("{fname} has not a DSK or HFE compatible extension")})
+                },
+            }
+        }
+
 
  //       eprintln!("MMR at save=0x{:x}", self.ga_mmr);
         let mmr = self.ga_mmr.clone();

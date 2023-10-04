@@ -1166,6 +1166,7 @@ dependencies = [
  "cpclib-xfer",
  "criterion",
  "globset",
+ "parking_lot",
  "pretty_assertions",
  "regex",
  "serial_test",
@@ -2632,6 +2633,7 @@ dependencies = [
  "enumn",
  "hxcfe-sys",
  "once_cell",
+ "parking_lot",
 ]
 
 [[package]]

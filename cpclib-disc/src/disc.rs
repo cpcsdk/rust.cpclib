@@ -1,16 +1,17 @@
 use std::{io, path::Path};
 
 use camino::Utf8Path;
+use cpclib_common::itertools::Itertools;
 
-use crate::edsk::Head;
+use crate::{edsk::Head, amsdos::{AmsdosFile, AmsdosError, AmsdosManagerMut}};
 
 pub trait Disc {
     fn open<P>(path: P) -> Result<Self, String> 
 	where Self: Sized,
 	P: AsRef<Path>;
-
 	fn save<P>(&self, path: P) ->  Result<(), String> 
         where P: AsRef<Path>;
+
 
 	fn global_min_sector<S: Into<Head>>(&self, side: S)-> u8;
 	fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8)->u8;
@@ -53,4 +54,31 @@ pub trait Disc {
 
 		Some(res)
 	}
+
+
+        /// Add the file where it is possible with respect to amsdos format
+     fn add_amsdos_file<H: Into<Head>>(
+		&mut self,
+		file: &AmsdosFile,
+		head: H,
+		system: bool,
+		read_only: bool
+	) -> Result<(), AmsdosError> 
+	where Self: Sized
+	{
+		if !file.amsdos_filename().unwrap().is_valid() {
+			return Err(AmsdosError::WrongFileName {
+				msg: file.amsdos_filename().unwrap().filename()
+			});
+		}
+
+		let mut manager = AmsdosManagerMut::new_from_disc(self, head);
+
+		eprint!("{:?}", manager.catalog().all_entries().collect_vec());
+		manager.add_file(&file, system, read_only)?;
+		eprint!("{:?}", manager.catalog().all_entries().collect_vec());
+
+		Ok(())
+	}
+
 }

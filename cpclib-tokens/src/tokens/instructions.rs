@@ -369,10 +369,18 @@ pub enum CrunchType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[allow(missing_docs)]
+pub enum DiscType {
+    Dsk,
+    Hfe,
+    Auto
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[allow(missing_docs)]
 pub enum SaveType {
     AmsdosBin,
     AmsdosBas,
-    Dsk,
+    Disc(DiscType),
     Tape
 }
 

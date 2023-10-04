@@ -40,6 +40,12 @@ impl Hfe {
 
 }
 
+impl Default for Hfe {
+    fn default() -> Self {
+        let cfg = crate::cfg::DiscConfig::single_head_data42_format();
+        cfg.into()
+    }
+}
 
 impl Disc for Hfe {
 
@@ -51,8 +57,13 @@ impl Disc for Hfe {
 
     fn save<P>(&self, path: P) ->  Result<(), String> 
         where P: AsRef<Path> {
-            let path = path.as_ref();
-        self.img.save(path)
+        let path = path.as_ref();
+        let format = match path.extension().unwrap().to_str().unwrap().to_lowercase().as_str() {
+            "dsk" | "edsk" => "AMSTRADCPC_DSK",
+            "hfe" => "HXC_HFE",
+            _ => return Err(format!("i do not know how to save {}", path.display()))
+        };
+        self.img.save(path, format)
     }
 
 
@@ -95,23 +106,11 @@ impl Disc for Hfe {
     fn global_min_sector<S: Into<Head>>(&self, side: S)-> u8 {
         let s = side.into();
         let access = self.img.sector_access().unwrap();
-        let mut min_sector = std::i32::MAX;
+        let mut min_sector = std::u8::MAX;
         for t in 0..(self.img.nb_tracks()) {
             for s in 0..self.img.nb_sides() {
-                let mut rec_mode = 2;  // MFM
-                let sca = access.all_track_sectors(t,s,TrackEncoding::IsoIbmMfm);
-                let sca = match sca {
-                    Some(sca) => sca,
-                    None => {
-                        rec_mode = 1; // FM
-                        access.all_track_sectors(t,s,TrackEncoding::IsoIbmFm).unwrap()
-                    }
-                };
 
-                min_sector = min_sector.min((0..sca.nb_sectors())
-                    .map(|k| sca.sector_config(k).sector_id())
-                    .min().unwrap()
-                );
+                min_sector = self.track_min_sector(s as u8, t as _);
             }
 
        }
@@ -120,7 +119,19 @@ impl Disc for Hfe {
     }
 
     fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8)->u8 {
-        todo!()
+        let s = side.into().into();
+        let access = self.img.sector_access().unwrap();
+        let sca = access.all_track_sectors(s, track as _, TrackEncoding::IsoIbmMfm);
+        let sca = match sca {
+            Some(sca) => sca,
+            None => {
+                access.all_track_sectors(s,track as _,TrackEncoding::IsoIbmFm).unwrap()
+            }
+        };
+
+         (0..sca.nb_sectors())
+            .map(|k| sca.sector_config(k).sector_id())
+            .min().unwrap() as _
     }
 
     fn nb_tracks_per_head(&self) -> u8 {

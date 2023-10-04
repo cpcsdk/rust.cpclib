@@ -1740,7 +1740,9 @@ pub fn parse_save(
                 alt((
                     value(SaveType::AmsdosBin, parse_word("AMSDOS")),
                     value(SaveType::AmsdosBas, parse_word("BASIC")),
-                    value(SaveType::Dsk, parse_word("DSK")),
+                    value(SaveType::Disc(DiscType::Dsk), parse_word("DSK")),
+                    value(SaveType::Disc(DiscType::Hfe), parse_word("HFE")),
+                    value(SaveType::Disc(DiscType::Auto), parse_word("DISC")),
                     value(SaveType::Tape, parse_word("TAPE"))
                 ))
             ))(input)?

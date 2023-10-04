@@ -11,12 +11,12 @@ use regex::Regex;
 use test_generator::test_resources;
 
 lazy_static::lazy_static!{
-    static ref  LOCK: Mutex<()> = Mutex::default();
+    static ref  LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::default();
 }
 
 
 fn manual_cleanup() {
-    for fname in &["hello.dsk"] {
+    for fname in &["hello.dsk", "hello.hfe", "good_save_whole_inner.bin", "hello1.bin", "hello2.bin", "hello3.bin", "good_save_txt.bin"] {
         let p = std::path::Path::new(fname);
         if p.exists() {
             std::fs::remove_file(p).unwrap()
@@ -63,7 +63,8 @@ fn test_roudoudou_generated_code() {
 
 #[test_resources("cpclib-basm/tests/asm/warning_*.asm")]
 fn expect_warning_but_success(real_fname: &str) {
-    let _lock = LOCK.lock().unwrap();
+    let _lock = LOCK.lock();
+    manual_cleanup();
 
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
 
@@ -154,7 +155,9 @@ fn expect_one_line_success(real_fname: &str) {
     {
         return;
     }
-    let _lock = LOCK.lock().unwrap();
+    let _lock = LOCK.lock();
+    manual_cleanup();
+
 
     manual_cleanup() ;
 
@@ -239,7 +242,7 @@ fn expect_several_empty_lines_success(real_fname: &str) {
     if real_fname.contains("basic") {
         return;
     }
-    let _lock = LOCK.lock().unwrap();
+    let _lock = LOCK.lock();
 
     manual_cleanup() ;
 
@@ -298,7 +301,7 @@ fn expect_several_empty_lines_success(real_fname: &str) {
 /// TODO write tests specifics for this purpose
 fn expect_listing_success(fname: &str) {
     let fname = &fname["cpclib-basm/tests/asm/".len()..];
-    let _lock = LOCK.lock().unwrap();
+    let _lock = LOCK.lock();
 
     manual_cleanup() ;
 
@@ -335,7 +338,7 @@ fn expect_listing_success(fname: &str) {
 //#[test_resources("basm/tests/asm/good_*.sym")]
 /// TODO write tests specifics for this purpose
 fn expect_symbols_success(fname: &str) {
-    let _lock = LOCK.lock().unwrap();
+    let _lock = LOCK.lock();
 
     manual_cleanup() ;
 
@@ -379,7 +382,7 @@ fn expect_symbols_success(fname: &str) {
 
 #[test_resources("cpclib-basm/tests/asm/good_*.asm")]
 fn expect_success(fname: &str) {
-    let _lock = LOCK.lock().unwrap();
+    let _lock = LOCK.lock();
 
     manual_cleanup() ;
 
@@ -433,7 +436,7 @@ fn expect_success(fname: &str) {
 
 #[test_resources("cpclib-basm/tests/asm/bad_*.asm")]
 fn expect_failure(fname: &str) {
-    let _lock = LOCK.lock().unwrap();
+    let _lock = LOCK.lock();
 
     manual_cleanup() ;
 

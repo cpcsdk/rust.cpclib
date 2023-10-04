@@ -1000,28 +1000,6 @@ impl ExtendedDsk {
         }
     }
 
-    /// Add the file where it is possible with respect to amsdos format
-    pub fn add_amsdos_file<H: Into<Head>>(
-        &mut self,
-        file: &AmsdosFile,
-        head: H,
-        system: bool,
-        read_only: bool
-    ) -> Result<(), AmsdosError> {
-        if !file.amsdos_filename().unwrap().is_valid() {
-            return Err(AmsdosError::WrongFileName {
-                msg: file.amsdos_filename().unwrap().filename()
-            });
-        }
-
-        let mut manager = AmsdosManagerMut::new_from_disc(self, head);
-
-        eprint!("{:?}", manager.catalog().all_entries().collect_vec());
-        manager.add_file(&file, system, read_only)?;
-        eprint!("{:?}", manager.catalog().all_entries().collect_vec());
-
-        Ok(())
-    }
 
     /// Add the file in consecutive sectors
     pub fn add_file_sequentially(
@@ -1207,6 +1185,8 @@ impl Disc for ExtendedDsk {
             self.to_buffer(&mut memory_buffer);
             file_buffer.write_all(&memory_buffer).map_err(|e| e.to_string())
         }
+    
+
     
 
     /// Return the smallest sector id over all tracks

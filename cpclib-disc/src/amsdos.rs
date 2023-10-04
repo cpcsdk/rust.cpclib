@@ -1028,11 +1028,9 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
 
         let mut sector = self.disc.sector_read_bytes(self.head, track, sector_id).unwrap();
         let idx_in_sector: usize = ((entry.idx & 15) << 5) as usize;
-        dbg!(&sector);
         let bytes = &mut (sector[idx_in_sector..(idx_in_sector + AmsdosEntry::len())]);
         bytes.copy_from_slice(entry.as_bytes().as_ref());
-        dbg!(&sector);
-        self.disc.sector_write_bytes(self.head, track, sector_id, &sector);
+        self.disc.sector_write_bytes(self.head, track, sector_id, &sector).unwrap();
     }
 
         /// Rewrite the whole catalog
@@ -1057,15 +1055,15 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         let mut file_pos = 0;
         let file_size = content.len();
         let mut nb_entries = 0;
-        println!("File size {} bytes", file_size);
+       // println!("File size {} bytes", file_size);
         while file_pos < file_size {
-            println!("File pos {}", file_pos);
+       //     println!("File pos {}", file_pos);
             let entry_idx = match self.catalog().one_empty_entry() {
                 Some(entry) => entry.idx,
                 None => return Err(AmsdosError::NoEntriesAvailable)
             };
 
-            println!("Select entry {}", entry_idx);
+      //      println!("Select entry {}", entry_idx);
             let entry_num_page = nb_entries;
             nb_entries += 1;
 
@@ -1088,7 +1086,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                     };
                     assert!(bloc_idx.is_valid());
                     *bloc = bloc_idx;
-                    println!("Select bloc{:?}", bloc_idx);
+          //          println!("Select bloc{:?}", bloc_idx);
                     self.update_bloc(
                         bloc_idx,
                         &AmsdosManagerNonMut::<'dsk, D>::padding(
@@ -1239,7 +1237,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
             entries
         };
 
-        println!("{:?}", &entries);
+   //     println!("{:?}", &entries);
 
         // Retreive the binary data
         let content = entries
