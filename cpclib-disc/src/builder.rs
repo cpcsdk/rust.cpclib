@@ -1,8 +1,5 @@
-use hxcfe::Hxcfe;
-
 use crate::cfg::DiscConfig;
 use crate::edsk::{ExtendedDsk, Head};
-use crate::hfe::Hfe;
 
 /// Generate an edsk from the given configuration
 pub fn build_edsk_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
@@ -88,22 +85,6 @@ impl From<&DiscConfig> for ExtendedDsk {
     }
 }
 
-
-#[allow(missing_docs)]
-// TODO implement directly without conversion from dsk
-impl From<DiscConfig> for Hfe {
-    fn from(config: DiscConfig) -> Self {
-       Hfe::from(build_edsk_from_cfg(&config))
-    }
-}
-
-#[allow(missing_docs)]
-// TODO implement directly without conversion from dsk
-impl From<&DiscConfig> for Hfe {
-    fn from(config: &DiscConfig) -> Self {
-        build_edsk_from_cfg(config).into()
-    }
-}
 
 
 

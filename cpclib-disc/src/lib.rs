@@ -16,9 +16,13 @@ pub mod builder;
 pub mod cfg;
 /// EDSK File format
 pub mod edsk;
+pub mod disc;
+
+#[cfg(not(target_arch = "wasm32"))]
 /// HFE File format
 pub mod hfe;
-pub mod disc;
+
+
 
 use std::io::Read;
 use std::path::Path;

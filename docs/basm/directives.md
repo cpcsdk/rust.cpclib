@@ -440,6 +440,8 @@ Example:
 
 - `SAVE "<fname>", [[[START], [SIZE]], AMSDOS|BASIC|TAPE]`
 - `SAVE "<fname>", START, SIZE, DSK, "<fname.dsk>" [, SIDE]`
+- `SAVE "<fname>", START, SIZE, HFE, "<fname.hfe>" [, SIDE]`
+- `SAVE "<fname>", START, SIZE, DISC, "<fname.hfe>"|"<dname.dsk>" [, SIDE]`
 
 
 !!! Unimplemented

@@ -29,6 +29,8 @@ use enumn::N;
 use hxcfe::{Hxcfe, Img};
 use hxcfe::TrackEncoding;
 use tempfile::{NamedTempFile, Builder};
+use crate::builder::build_edsk_from_cfg;
+use crate::cfg::DiscConfig;
 use crate::{edsk::{ExtendedDsk, Head}, disc::Disc};
 
 #[derive(Debug)]
@@ -158,6 +160,26 @@ impl From<ExtendedDsk> for Hfe {
         Hfe::open(fname).unwrap()
     }
 }
+
+
+#[allow(missing_docs)]
+// TODO implement directly without conversion from dsk
+impl From<DiscConfig> for Hfe {
+    fn from(config: DiscConfig) -> Self {
+       Hfe::from(build_edsk_from_cfg(&config))
+    }
+}
+
+#[allow(missing_docs)]
+// TODO implement directly without conversion from dsk
+impl From<&DiscConfig> for Hfe {
+    fn from(config: &DiscConfig) -> Self {
+        build_edsk_from_cfg(config).into()
+    }
+}
+
+
+
 
 #[cfg(test)]
 mod test {
