@@ -2628,9 +2628,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hxcadaptor-sys"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "216919519d7c1a690b489d1a23537acb0747d4fa91ee508899305205299e2312"
+checksum = "67a81e5ab59341abbbedc7471c4e4c1dca391437e82f1ea07844fef1d1fa2abe"
 dependencies = [
  "bindgen",
  "copy_dir",
@@ -2640,9 +2640,9 @@ dependencies = [
 
 [[package]]
 name = "hxcfe"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "008624c1da5dd27087f89ce9d20005b908419c62130218848eea23d8f1ca408e"
+checksum = "3bb15766897cd4a2229fc6eda903f9d8d7959685c381873e65299f61cea8482c"
 dependencies = [
  "enumn",
  "hxcfe-sys",
@@ -2652,9 +2652,9 @@ dependencies = [
 
 [[package]]
 name = "hxcfe-sys"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3dac75c30bcfd236f53cd04f62628dc148e08d4f589baf46ddf0226d9646c46e"
+checksum = "69e100edb235d2f9d185366ec46a31905d49176c9fad190a1e5ce8b060e2fd88"
 dependencies = [
  "bindgen",
  "copy_dir",

@@ -156,8 +156,8 @@ eframe = "0.22"
 egui = "0.22"
 thiserror = "1.0"
 
-hxcfe = "0.1.0"
-hxcfe-sys = "0.1.0"
+hxcfe = "0.1.1"
+hxcfe-sys = "0.1.1"
 
 [patch.crates-io]
 
