@@ -25,7 +25,8 @@ There are more are less able to do:
 
 
  Documentation is available at <https://cpcsdk.github.io/rust.cpclib/>
- 
+
+ **WARNING** the windows toolchain has to be `nightly-x86_64-pc-windows-gnu`
 
  
  
