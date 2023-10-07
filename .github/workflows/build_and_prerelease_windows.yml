@@ -28,5 +28,5 @@ jobs:
           tag: latest
           name: "Development Build"
           generateReleaseNotes: true
-          artifacts: "target/x86_64-pc-windows-msvc/release/*.exe"
+          artifacts: "target/x86_64-pc-windows-gnu/release/*.exe"
   
