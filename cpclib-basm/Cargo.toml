@@ -19,16 +19,16 @@ cpclib-common =  {workspace = true, features=["cmdline"]}
 cpclib-xfer = {workspace=true, default-features=false, optional=true}
 cpclib-disc.workspace = true
 parking_lot.workspace = true
-time = "0.3.29"
+time.workspace = true
 
 [dev-dependencies]
-test-generator = "0.3.1"
-tempfile = "3.8.0"
-pretty_assertions = "1.4.0"
-criterion = "0.5.1"
-globset = "0.4.13"
-regex = "1.9.5"
-serial_test = "2.0.0"
+test-generator.workspace = true
+tempfile.workspace = true
+pretty_assertions.workspace = true
+criterion.workspace = true
+globset.workspace = true
+regex.workspace = true
+serial_test.workspace = true
 
 [build-dependencies]
 built = { version = "0.6.1", features = ["chrono"] }

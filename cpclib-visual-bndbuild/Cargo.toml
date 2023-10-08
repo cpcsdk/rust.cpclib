@@ -16,18 +16,18 @@ homepage.workspace = true
 independent = true
 
 [dependencies]
+catppuccin-egui.workspace = true
 cpclib-bndbuild.workspace = true
 eframe = {workspace=true, features=["persistence"]}
-egui_code_editor = "0.1.7"
-egui_file = "0.10"
-gag = "1.0.0"
-serde.workspace = true
+egui_file.workspace = true
+env_logger.workspace = true
+gag.workspace = true
 itertools.workspace = true
-env_logger = "0.10"
-self_cell = "1.0.1"
-open = "5.0.0"
-notify = "6.1.1"
-catppuccin-egui = "3.1.0"
+notify.workspace = true
+open.workspace = true
+self_cell.workspace = true
+serde.workspace = true
+egui_code_editor.workspace = true
 
 [build-dependencies]
 built = { version = "0.6.1", features = ["chrono"] }
