@@ -5,7 +5,7 @@ use cpclib_disc::edsk::{ExtendedDsk, Head};
 use cpclib_tokens::SaveType;
 use cpclib_disc::disc::Disc;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_os="windows"), not(target_arch = "wasm32")))]
 use cpclib_disc::hfe::Hfe;
 
 use super::report::SavedFile;
@@ -115,22 +115,21 @@ impl SaveCommand {
         match object {
             either::Right(amsdos_file) => {
                 if let Some(disc_filename) = &self.disc_filename {
-                    let mut disc = if std::path::Path::new(disc_filename.as_str()).exists() {
-                        #[cfg(not(target_arch = "wasm32"))]
-                        {Hfe::open(disc_filename)
-                            .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while loading {e}") })
-                        ?}
-                        #[cfg(target_arch = "wasm32")]
-                        {ExtendedDsk::open(disc_filename)
-                            .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while loading {e}") })
-                        ?}
-                    }
-                    else {
-                        #[cfg(not(target_arch = "wasm32"))]
-                        {Hfe::default()}
-                        #[cfg(target_arch = "wasm32")]
-                        {ExtendedDsk::default()}
-
+                     
+                    #[cfg(all(not(target_os="windows"), not(target_arch = "wasm32")))]
+                    let mut disc : Hfe = if std::path::Path::new(disc_filename.as_str()).exists() {
+                        Hfe::open(disc_filename)
+                        .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while loading {e}") })?
+                    } else {
+                        Hfe::default()
+                    };
+                    #[cfg(any(target_os="windows",target_arch = "wasm32"))]
+                    let mut disc : ExtendedDsk = if std::path::Path::new(disc_filename.as_str()).exists() {
+                        ExtendedDsk::open(disc_filename)
+                        .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while loading {e}") })
+                    ?
+                    } else {
+                        ExtendedDsk::default()
                     };
 
                     let head = Head::A;

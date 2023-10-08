@@ -18,7 +18,7 @@ pub mod cfg;
 pub mod edsk;
 pub mod disc;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_os = "windows"), not(target_arch = "wasm32")))]
 /// HFE File format
 pub mod hfe;
 

@@ -35,7 +35,7 @@ tempfile.workspace = true
 log = {workspace = true, optional = true }
 simplelog = { workspace = true, optional = true }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+[target.'cfg(all(not(target_os = "windows"), not(target_arch = "wasm32")))'.dependencies]
 hxcfe.workspace = true
 
 [build-dependencies]
