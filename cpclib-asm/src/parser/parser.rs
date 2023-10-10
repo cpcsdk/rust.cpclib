@@ -2514,7 +2514,18 @@ fn parse_ld_normal_src(
                     parse_hl_address,
                     parse_address,
                     parse_register8,
-                    parse_indexregister8,
+                    verify(parse_indexregister8, |src| {
+                        if (dst.is_register_h() || dst.is_register_l()) &&
+                           (src.is_register_ixl() || src.is_register_ixh()
+                            || src.is_register_ixl() || src.is_register_ixh()
+                            ) {
+                            return false;
+                           }
+                        else {
+                            return true;
+                        }
+                            
+                    }),
                     parse_expr
                 ))(input)
             }
