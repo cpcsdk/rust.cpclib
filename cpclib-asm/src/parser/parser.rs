@@ -1914,7 +1914,6 @@ pub fn parse_token2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
         }?;
 
     let token = token.into_located_token_between(&input_start, &input);
-    dbg!(&token);
     Ok((input, token))
         
 
@@ -2845,7 +2844,8 @@ pub fn parse_macro_or_struct_call(
         }
 
         let all_span = input_start.take(input_start.input_len() - input.input_len());
-        Ok((input, LocatedToken{inner: LocatedTokenInner::MacroCall(name, args), span:all_span, warning_embedded: None}))
+        let token  = LocatedTokenInner::MacroCall(name, args);
+        Ok((input, token.into_located_token_at(&all_span)))
     }
 }
 

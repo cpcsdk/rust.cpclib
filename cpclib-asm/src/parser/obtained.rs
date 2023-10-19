@@ -958,9 +958,8 @@ impl LocatedTokenInner {
         };
 
         LocatedToken {
-            inner: self,
+            inner: either::Either::Left(self),
             span,
-            warning_embedded: None,
         }
     }
 
@@ -968,13 +967,13 @@ impl LocatedTokenInner {
     pub fn into_located_token_at(self, span: &Z80Span) -> LocatedToken {
         match self {
             Self::WarningWrapper(token,msg) => {
-
-                LocatedToken { inner: *token, span: span.clone(), warning_embedded: Some(msg) }
+                let warned = Box::new(token.into_located_token_at(span));
+                LocatedToken { inner: either::Right((warned, msg)), span: span.clone() }
 
             }
 
             _ => {
-                LocatedToken { inner: self, span: span.clone(), warning_embedded: None }
+                LocatedToken { inner: either::Either::Left(self), span: span.clone()}
             }
         }
     }
@@ -993,11 +992,9 @@ impl LocatedTokenInner {
 /// Add span information for a Token.
 #[derive(Debug, PartialEq, Eq)]
 pub struct LocatedToken {
-    // The token of interest
-    pub(crate) inner: LocatedTokenInner,
+    // The token of interest of a warning with the token of interest
+    pub(crate) inner: either::Either<LocatedTokenInner, (Box<LocatedToken>, String)>,
     pub(crate) span: Z80Span,
-    // The warning message if any
-    pub(crate) warning_embedded: Option<String>
 }
 
 impl ListingElement for LocatedToken {
@@ -1008,105 +1005,113 @@ impl ListingElement for LocatedToken {
 
    
    fn to_token(&self) -> Cow<cpclib_tokens::Token> {
-       self.inner.to_token()
+        match &self.inner {
+            either::Either::Left(inner) => inner.to_token(),
+            either::Either::Right((inner, msg)) => {
+                unimplemented!("is it necessary to implement it ?")
+            }
+        }
    }
 
     fn is_equ(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Equ { .. } => true,
+            either::Left(LocatedTokenInner::Equ { .. }) => true,
             _ => false
         }
     }
 
     fn equ_symbol(&self) -> &str {
         match &self.inner {
-            LocatedTokenInner::Equ { label, .. } => label.as_str(),
+            either::Left(LocatedTokenInner::Equ { label, .. }) => label.as_str(),
             _ => unreachable!()
         }
     }
 
     fn equ_value(&self) -> &Self::Expr {
         match &self.inner {
-            LocatedTokenInner::Equ { expr, .. } => expr,
+            either::Left(LocatedTokenInner::Equ { expr, .. }) => expr,
             _ => unreachable!()
         }
     }
 
     fn is_warning(&self) -> bool {
-       self.warning_embedded.is_some()
+       self.inner.is_right()
     }
 
 
     fn warning_message(&self) -> &str {
-        self.warning_embedded.as_ref().unwrap()
+        match &self.inner {
+            either::Right((inner, msg)) => msg.as_str(),
+            _ => unreachable!()
+        }
     }
 
     fn is_module(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Module(..) => true,
+            either::Left(LocatedTokenInner::Module(..)) => true,
             _ => false
         }
     }
 
     fn module_listing(&self) -> &[Self] {
         match &self.inner {
-            LocatedTokenInner::Module(_, lst, ..) => lst,
+            either::Left(LocatedTokenInner::Module(_, lst, ..)) => lst,
             _ => unreachable!()
         }
     }
 
     fn module_name(&self) -> &str {
         match &self.inner {
-            LocatedTokenInner::Module(name, ..) => name.as_str(),
+            either::Left(LocatedTokenInner::Module(name, ..)) => name.as_str(),
             _ => unreachable!()
         }
     }
 
     fn is_while(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::While(..) => true,
+            either::Left(LocatedTokenInner::While(..)) => true,
             _ => false
         }
     }
 
     fn while_expr(&self) -> &Self::Expr {
         match &self.inner {
-            LocatedTokenInner::While(expr, ..) => expr,
+            either::Left(LocatedTokenInner::While(expr, ..)) => expr,
             _ => unreachable!()
         }
     }
 
     fn while_listing(&self) -> &[Self] {
         match &self.inner {
-            LocatedTokenInner::While(_, lst, ..) => lst,
+            either::Left(LocatedTokenInner::While(_, lst, ..)) => lst,
             _ => unreachable!()
         }
     }
 
     fn mnemonic(&self) -> Option<&Mnemonic> {
         match &self.inner {
-            LocatedTokenInner::OpCode(mne, ..) => Some(mne),
+            either::Left(LocatedTokenInner::OpCode(mne, ..)) => Some(mne),
             _ => None
         }
     }
 
     fn mnemonic_arg1(&self) -> Option<&Self::DataAccess> {
         match &self.inner {
-            LocatedTokenInner::OpCode(_, arg1, ..) => arg1.as_ref(),
+            either::Left(LocatedTokenInner::OpCode(_, arg1, ..)) => arg1.as_ref(),
             _ => None
         }
     }
 
     fn mnemonic_arg2(&self) -> Option<&Self::DataAccess> {
         match &self.inner {
-            LocatedTokenInner::OpCode(_, _, arg2, _) => arg2.as_ref(),
+            either::Left(LocatedTokenInner::OpCode(_, _, arg2, _)) => arg2.as_ref(),
             _ => None
         }
     }
 
     fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess> {
         match &mut self.inner {
-            LocatedTokenInner::OpCode(_, arg1, ..) => arg1.as_mut(),
+            either::Left(LocatedTokenInner::OpCode(_, arg1, ..)) => arg1.as_mut(),
 
             _ => None
         }
@@ -1114,7 +1119,7 @@ impl ListingElement for LocatedToken {
 
     fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess> {
         match &mut self.inner {
-            LocatedTokenInner::OpCode(_, _, arg2, _) => arg2.as_mut(),
+            either::Left(LocatedTokenInner::OpCode(_, _, arg2, _)) => arg2.as_mut(),
 
             _ => None
         }
@@ -1122,217 +1127,217 @@ impl ListingElement for LocatedToken {
 
     fn is_directive(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::OpCode(..) => false,
+            either::Left(LocatedTokenInner::OpCode(..)) => false,
             _ => true
         }
     }
 
     fn is_rorg(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Rorg(..) => true,
+            either::Left(LocatedTokenInner::Rorg(..)) => true,
             _ => false
         }
     }
 
     fn rorg_listing(&self) -> &[Self] {
         match &self.inner {
-            LocatedTokenInner::Rorg(_, lst) => lst,
+            either::Left(LocatedTokenInner::Rorg(_, lst)) => lst,
             _ => unreachable!()
         }
     }
 
     fn rorg_expr(&self) -> &Self::Expr {
         match &self.inner {
-            LocatedTokenInner::Rorg(exp, ..) => exp,
+            either::Left(LocatedTokenInner::Rorg(exp, ..)) => exp,
             _ => unreachable!()
         }
     }
 
     fn is_iterate(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Iterate(..) => true,
+            either::Left(LocatedTokenInner::Iterate(..)) => true,
             _ => false
         }
     }
 
     fn iterate_listing(&self) -> &[Self] {
         match &self.inner {
-            LocatedTokenInner::Iterate(_, _, listing, ..) => listing,
+            either::Left(LocatedTokenInner::Iterate(_, _, listing, ..)) => listing,
             _ => unreachable!()
         }
     }
 
     fn iterate_counter_name(&self) -> &str {
         match &self.inner {
-            LocatedTokenInner::Iterate(name, ..) => name.as_str(),
+            either::Left(LocatedTokenInner::Iterate(name, ..)) => name.as_str(),
             _ => unreachable!()
         }
     }
 
     fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr> {
         match &self.inner {
-            LocatedTokenInner::Iterate(_, values, ..) => values.as_ref(),
+            either::Left(LocatedTokenInner::Iterate(_, values, ..)) => values.as_ref(),
             _ => unreachable!()
         }
     }
 
     fn is_for(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::For { .. } => true,
+            either::Left(LocatedTokenInner::For { .. }) => true,
             _ => false
         }
     }
 
     fn for_listing(&self) -> &[Self] {
         match &self.inner {
-            LocatedTokenInner::For { listing, .. } => listing,
+            either::Left(LocatedTokenInner::For { listing, .. }) => listing,
             _ => unreachable!()
         }
     }
 
     fn for_label(&self) -> &str {
         match &self.inner {
-            LocatedTokenInner::For { label, .. } => label.as_ref(),
+            either::Left(LocatedTokenInner::For { label, .. }) => label.as_ref(),
             _ => unreachable!()
         }
     }
 
     fn for_start(&self) -> &Self::Expr {
         match &self.inner {
-            LocatedTokenInner::For { start, .. } => start,
+            either::Left(LocatedTokenInner::For { start, .. }) => start,
             _ => unreachable!()
         }
     }
 
     fn for_stop(&self) -> &Self::Expr {
         match &self.inner {
-            LocatedTokenInner::For { stop, .. } => stop,
+            either::Left(LocatedTokenInner::For { stop, .. }) => stop,
             _ => unreachable!()
         }
     }
 
     fn for_step(&self) -> Option<&Self::Expr> {
         match &self.inner {
-            LocatedTokenInner::For { step, .. } => step.as_ref(),
+            either::Left(LocatedTokenInner::For { step, .. }) => step.as_ref(),
             _ => unreachable!()
         }
     }
 
     fn is_repeat_until(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::RepeatUntil(..) => true,
+            either::Left(LocatedTokenInner::RepeatUntil(..)) => true,
             _ => false
         }
     }
 
     fn repeat_until_listing(&self) -> &[Self] {
         match &self.inner {
-            LocatedTokenInner::RepeatUntil(_, code, ..) => code,
+            either::Left(LocatedTokenInner::RepeatUntil(_, code, ..)) => code,
             _ => unreachable!()
         }
     }
 
     fn repeat_until_condition(&self) -> &Self::Expr {
         match &self.inner {
-            LocatedTokenInner::RepeatUntil(cond, ..) => cond,
+            either::Left(LocatedTokenInner::RepeatUntil(cond, ..)) => cond,
             _ => unreachable!()
         }
     }
 
     fn is_repeat(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Repeat(..) => true,
+            either::Left(LocatedTokenInner::Repeat(..)) => true,
             _ => false
         }
     }
 
     fn repeat_listing(&self) -> &[Self] {
         match &self.inner {
-            LocatedTokenInner::Repeat(_, listing, ..) => listing,
+            either::Left(LocatedTokenInner::Repeat(_, listing, ..)) => listing,
             _ => unreachable!()
         }
     }
 
     fn repeat_count(&self) -> &Self::Expr {
         match &self.inner {
-            LocatedTokenInner::Repeat(e, ..) => e,
+            either::Left(LocatedTokenInner::Repeat(e, ..)) => e,
             _ => unreachable!()
         }
     }
 
     fn repeat_counter_name(&self) -> Option<&str> {
         match &self.inner {
-            LocatedTokenInner::Repeat(_, _, counter_name, ..) => counter_name.as_ref().map(|c| c.as_str()),
+            either::Left( LocatedTokenInner::Repeat(_, _, counter_name, ..)) => counter_name.as_ref().map(|c| c.as_str()),
             _ => unreachable!()
         }
     }
 
     fn repeat_counter_start(&self) -> Option<&Self::Expr> {
         match &self.inner {
-            LocatedTokenInner::Repeat(_, _, _, start) => start.as_ref(),
+            either::Left(LocatedTokenInner::Repeat(_, _, _, start)) => start.as_ref(),
             _ => unreachable!()
         }
     }
 
     fn is_macro_definition(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Macro { .. } => true,
+            either::Left(LocatedTokenInner::Macro { .. }) => true,
             _ => false
         }
     }
 
     fn macro_definition_name(&self) -> &str {
         match &self.inner {
-            LocatedTokenInner::Macro { name, .. } => name.as_str(),
+            either::Left(LocatedTokenInner::Macro { name, .. }) => name.as_str(),
             _ => unreachable!()
         }
     }
 
     fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]> {
         match &self.inner {
-            LocatedTokenInner::Macro { params, .. } => params.iter().map(|a| a.as_str()).collect(),
+            either::Left(LocatedTokenInner::Macro { params, .. }) => params.iter().map(|a| a.as_str()).collect(),
             _ => unreachable!()
         }
     }
 
     fn macro_definition_code(&self) -> &str {
         match &self.inner {
-            LocatedTokenInner::Macro { content, .. } => content.as_str(),
+            either::Left(LocatedTokenInner::Macro { content, .. }) => content.as_str(),
             _ => unreachable!()
         }
     }
 
     fn macro_call_name(&self) -> &str {
         match &self.inner {
-            LocatedTokenInner::MacroCall(name, ..) => name.as_str(),
+            either::Left(LocatedTokenInner::MacroCall(name, ..)) => name.as_str(),
             _ => panic!()
         }
     }
 
     fn macro_call_arguments(&self) -> &[Self::MacroParam] {
         match &self.inner {
-            LocatedTokenInner::MacroCall(_, args) => args,
+            either::Left(LocatedTokenInner::MacroCall(_, args)) => args,
             _ => panic!()
         }
     }
 
     fn is_if(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::If(..) => true,
+            either::Left(LocatedTokenInner::If(..)) => true,
             _ => false
         }
     }
 
     fn if_nb_tests(&self) -> usize {
         match &self.inner {
-            LocatedTokenInner::If(tests, ..) => tests.len(),
+            either::Left(LocatedTokenInner::If(tests, ..)) => tests.len(),
             _ => panic!()
         }
     }
 
     fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]) {
         match &self.inner {
-            LocatedTokenInner::If(tests, ..) => {
+            either::Left(LocatedTokenInner::If(tests, ..)) => {
                 let data = &tests[idx];
                 (&data.0, &data.1)
             }
@@ -1342,161 +1347,161 @@ impl ListingElement for LocatedToken {
 
     fn if_else(&self) -> Option<&[Self]> {
         match &self.inner {
-            LocatedTokenInner::If(_, r#else) => r#else.as_ref().map(|l| l.as_slice()),
+            either::Left(LocatedTokenInner::If(_, r#else)) => r#else.as_ref().map(|l| l.as_slice()),
             _ => panic!()
         }
     }
 
     fn is_include(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Include(..) => true,
+            either::Left(LocatedTokenInner::Include(..)) => true,
             _ => false
         }
     }
 
     fn is_incbin(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Incbin { .. } => true,
+            either::Left(LocatedTokenInner::Incbin { .. }) => true,
             _ => false
         }
     }
 
     fn incbin_fname(&self) -> &str {
         match &self.inner {
-            LocatedTokenInner::Incbin { fname, .. } => fname,
+            either::Left(LocatedTokenInner::Incbin { fname, .. }) => fname,
             _ => unimplemented!()
         }
     }
 
     fn incbin_offset(&self) -> Option<&Self::Expr> {
         match &self.inner {
-            LocatedTokenInner::Incbin { offset, .. } => offset.as_ref(),
+            either::Left(LocatedTokenInner::Incbin { offset, .. }) => offset.as_ref(),
             _ => unimplemented!()
         }
     }
 
     fn incbin_length(&self) -> Option<&Self::Expr> {
         match &self.inner {
-            LocatedTokenInner::Incbin { length, .. } => length.as_ref(),
+            either::Left(LocatedTokenInner::Incbin { length, .. }) => length.as_ref(),
             _ => unimplemented!()
         }
     }
 
     fn incbin_transformation(&self) -> &cpclib_tokens::BinaryTransformation {
         match &self.inner {
-            LocatedTokenInner::Incbin { transformation, .. } => transformation,
+            either::Left(LocatedTokenInner::Incbin { transformation, .. }) => transformation,
             _ => unimplemented!()
         }
     }
 
     fn include_fname(&self) -> &str {
         match &self.inner {
-            LocatedTokenInner::Include(fname, ..) => fname,
+            either::Left(LocatedTokenInner::Include(fname, ..)) => fname,
             _ => unreachable!()
         }
     }
 
     fn include_namespace(&self) -> Option<&str> {
         match &self.inner {
-            LocatedTokenInner::Include(_, module, ..) => module.as_ref().map(|s| s.as_str()),
+            either::Left(LocatedTokenInner::Include(_, module, ..)) => module.as_ref().map(|s| s.as_str()),
             _ => unreachable!()
         }
     }
 
     fn include_once(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Include(_, _, once) => *once,
+            either::Left(LocatedTokenInner::Include(_, _, once)) => *once,
             _ => unreachable!()
         }
     }
 
     fn is_call_macro_or_build_struct(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::MacroCall(..) => true,
+            either::Left(LocatedTokenInner::MacroCall(..)) => true,
             _ => false
         }
     }
 
     fn is_function_definition(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Function(..) => true,
+            either::Left(LocatedTokenInner::Function(..)) => true,
             _ => false
         }
     }
 
     fn function_definition_name(&self) -> &str {
         match &self.inner {
-            LocatedTokenInner::Function(name, ..) => name.as_str(),
+            either::Left(LocatedTokenInner::Function(name, ..)) => name.as_str(),
             _ => unreachable!()
         }
     }
 
     fn function_definition_params(&self) -> SmallVec<[&str; 4]> {
         match &self.inner {
-            LocatedTokenInner::Function(_name, params, ..) => params.iter().map(|v| v.as_str()).collect(),
+            either::Left(LocatedTokenInner::Function(_name, params, ..)) => params.iter().map(|v| v.as_str()).collect(),
             _ => unreachable!()
         }
     }
 
     fn function_definition_inner(&self) -> &[Self] {
         match &self.inner {
-            LocatedTokenInner::Function(_, _, inner) => inner,
+            either::Left(LocatedTokenInner::Function(_, _, inner)) => inner,
             _ => unreachable!()
         }
     }
 
     fn is_crunched_section(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::CrunchedSection(..) => true,
+            either::Left(LocatedTokenInner::CrunchedSection(..)) => true,
             _ => false
         }
     }
 
     fn crunched_section_listing(&self) -> &[Self] {
         match &self.inner {
-            LocatedTokenInner::CrunchedSection(_, lst) => lst,
+            either::Left(LocatedTokenInner::CrunchedSection(_, lst)) => lst,
             _ => unreachable!()
         }
     }
 
     fn crunched_section_kind(&self) -> &CrunchType {
         match &self.inner {
-            LocatedTokenInner::CrunchedSection(kind, ..) => kind,
+            either::Left(LocatedTokenInner::CrunchedSection(kind, ..)) => kind,
             _ => unreachable!()
         }
     }
 
     fn is_confined(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Confined(..) => true,
+            either::Left(LocatedTokenInner::Confined(..)) => true,
             _ => false
         }
     }
 
     fn confined_listing(&self) -> &[Self] {
         match &self.inner {
-            LocatedTokenInner::Confined(lst) => lst,
+            either::Left(LocatedTokenInner::Confined(lst)) => lst,
             _ => unreachable!()
         }
     }
 
     fn is_switch(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Switch(..) => true,
+            either::Left(LocatedTokenInner::Switch(..)) => true,
             _ => false
         }
     }
 
     fn switch_expr(&self) -> &Self::Expr {
         match &self.inner {
-            LocatedTokenInner::Switch(expr, ..) => expr,
+            either::Left(LocatedTokenInner::Switch(expr, ..)) => expr,
             _ => unreachable!()
         }
     }
 
     fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_> {
         match &self.inner {
-            LocatedTokenInner::Switch(_, cases, ..) => {
+            either::Left(LocatedTokenInner::Switch(_, cases, ..)) => {
                 Box::new(cases.iter().map(|c| (&c.0, c.1.as_slice(), c.2)))
             }
             _ => unreachable!()
@@ -1505,55 +1510,58 @@ impl ListingElement for LocatedToken {
 
     fn switch_default(&self) -> Option<&[Self]> {
         match &self.inner {
-            LocatedTokenInner::Switch(_, _, default, ..) => default.as_ref().map(|l| l.as_slice()),
+            either::Left(LocatedTokenInner::Switch(_, _, default, ..)) => default.as_ref().map(|l| l.as_slice()),
             _ => unreachable!()
         }
     }
 
     fn is_db(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Defb(..) => true,
+            either::Left(LocatedTokenInner::Defb(..)) => true,
             _ => false
         }
     }
 
     fn is_dw(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Defw(..) => true,
+            either::Left(LocatedTokenInner::Defw(..)) => true,
             _ => false
         }
     }
 
     fn is_str(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Str(..) => true,
+            either::Left(LocatedTokenInner::Str(..)) => true,
             _ => false
         }
     }
 
     fn data_exprs(&self) -> &[Self::Expr] {
         match &self.inner {
-            LocatedTokenInner::Defb(e, ..) | LocatedTokenInner::Defw(e, ..) | LocatedTokenInner::Str(e, ..) => e,
+            either::Left(LocatedTokenInner::Defb(e, ..)) | either::Left(LocatedTokenInner::Defw(e, ..)) | either::Left(LocatedTokenInner::Str(e, ..)) => e,
             _ => unreachable!()
         }
     }
 
     fn is_set(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Assign { .. } => true,
+            either::Left(LocatedTokenInner::Assign { .. }) => true,
             _ => false
         }
     }
 
     fn is_comment(&self) -> bool {
         match &self.inner {
-            LocatedTokenInner::Comment(..) => true,
+            either::Left(LocatedTokenInner::Comment(..)) => true,
             _ => false
         }
     }
 
     fn warning_token(&self) -> &Self {
-        self
+        match &self.inner {
+            either::Either::Left(_) => unreachable!(),
+            either::Either::Right((inner, msg)) => inner,
+        }
     }
 }
 
@@ -2444,7 +2452,10 @@ impl Deref for LocatedToken {
     type Target = LocatedTokenInner;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        match &self.inner {
+            either::Either::Left(inner) => inner,
+            either::Either::Right((inner, _)) => inner.deref(),
+        }
     }
 }
 

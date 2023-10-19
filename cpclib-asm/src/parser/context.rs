@@ -1,5 +1,6 @@
 use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use cpclib_common::lazy_static;
@@ -31,7 +32,7 @@ pub trait ParsingStateVerified {
 
 impl ParsingStateVerified for LocatedToken {
     fn is_accepted(&self, state: &ParsingState) -> bool {
-        self.inner.is_accepted(state)
+        self.deref().is_accepted(state)
     }
 }
 

@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Display};
 use std::io::Write;
+use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
 use cpclib_common::itertools::Itertools;
@@ -126,8 +127,8 @@ impl ListingOutput {
     fn extract_code(token: &LocatedToken) -> String {
         match token {
             LocatedToken{
-                inner: LocatedTokenInner::Macro{..} |
-                        LocatedTokenInner::Repeat(..),
+                inner: either::Left(LocatedTokenInner::Macro{..} |
+                        LocatedTokenInner::Repeat(..)),
                 span,
                 ..
              } => {
@@ -240,7 +241,7 @@ impl ListingOutput {
             writeln!(self.writer, "{}", line).unwrap();
         }
 
-        self.current_token_kind = match &token.inner {
+        self.current_token_kind = match token.deref() {
             LocatedTokenInner::Label(l) => TokenKind::Label(l.to_string()),
             LocatedTokenInner::Equ { label, .. } | LocatedTokenInner::Assign { label, .. } => {
                 TokenKind::Set(label.to_string())

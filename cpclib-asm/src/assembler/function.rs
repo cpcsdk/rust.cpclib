@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::sync::RwLock;
 
 use cpclib_common::itertools::Itertools;
@@ -44,7 +45,7 @@ impl ReturnExpr for Token {
 impl ReturnExpr for LocatedToken {
     type Expr = LocatedExpr;
     fn return_expr(&self) -> Option<&Self::Expr> {
-        match &self.inner {
+        match self.deref() {
             LocatedTokenInner::Return(e) => Some(e),
             _ => None
         }

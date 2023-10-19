@@ -2747,7 +2747,19 @@ pub fn visit_located_token(
     // env.handle_output_trigger(outer_token);
 
     let span = Some(outer_token.span());
-    let token = &outer_token.inner;
+
+    // handle warning if any
+    if outer_token.is_warning() {
+        let warning = AssemblerWarning::AlreadyRenderedError(outer_token.warning_message().into());
+        let warning = warning.locate(outer_token.span().clone());
+        env.add_warning(warning);
+    }
+
+    // get the token to handle (after remobing handling wrapping)
+    let token = outer_token.deref();
+
+
+
     let res = visit_token_impl!(token, env, span, LocatedTokenInner)
         .map_err(|e| e.locate(span.unwrap().clone()));
 
