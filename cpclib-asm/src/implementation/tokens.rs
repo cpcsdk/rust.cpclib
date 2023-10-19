@@ -12,7 +12,7 @@ use crate::implementation::listing::ListingExt;
 use crate::{AssemblingOptions, EnvOptions};
 
 /// Needed methods for the Token defined in cpclib_tokens
-pub trait TokenExt: ListingElement +  Debug {
+pub trait TokenExt: ListingElement +  Debug + Visited  {
     fn estimated_duration(&self) -> Result<usize, AssemblerError>;
     /// Unroll the tokens when it represents a loop
     fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>>;
@@ -20,7 +20,22 @@ pub trait TokenExt: ListingElement +  Debug {
     /// Generate the listing of opcodes for directives that embed bytes
     fn disassemble_data(&self) -> Result<Listing, String>;
 
-    fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, AssemblerError>;
+    fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, AssemblerError> {
+        let mut env = Env::new(option);
+        // we need several passes in case the token is a directive that contains code
+        loop {
+            env.start_new_pass();
+            // println!("[pass] {:?}", env.pass);
+
+            if env.pass().is_finished() {
+                break;
+            }
+
+            self.visited(&mut env)?;
+        }
+
+        Ok(env.produced_bytes())
+    }
 
     fn number_of_bytes(&self) -> Result<usize, String> {
         let bytes = self.to_bytes();
@@ -174,22 +189,7 @@ impl TokenExt for Token {
         }
     }
 
-    fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, AssemblerError> {
-        let mut env = Env::new(option);
-        // we need several passes in case the token is a directive that contains code
-        loop {
-            env.start_new_pass();
-            // println!("[pass] {:?}", env.pass);
 
-            if env.pass().is_finished() {
-                break;
-            }
-
-            self.visited(&mut env)?;
-        }
-
-        Ok(env.produced_bytes())
-    }
 
     /// Returns an estimation of the duration.
     /// This estimation may be wrong for instruction having several states.

@@ -334,7 +334,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                 },
 
                 cpclib_tokens::UnaryTokenOperation::Opcode => {
-                    let bytes = token.clone().to_bytes()?;
+                    let bytes = token.to_bytes()?;
                     match bytes.len() {
                         0 => Err(
                             AssemblerError::ExpressionError(

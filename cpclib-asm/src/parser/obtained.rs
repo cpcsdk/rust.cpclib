@@ -434,7 +434,8 @@ impl ExprElement for LocatedExpr {
 impl ExprEvaluationExt for LocatedExpr {
     /// Resolve by adding localisation in case of error
     fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
-        resolve_impl!(self, env).map_err(|e| e.locate(self.span().clone()))
+        resolve_impl!(self, env)
+            .map_err(|e| e.locate(self.span().clone()))
     }
 
     /// Be sure it is always synchronized with Expr
@@ -2440,12 +2441,6 @@ impl TokenExt for LocatedToken{
         todo!()
     }
 
-    fn to_bytes_with_options(
-        &self,
-        _option: crate::assembler::EnvOptions
-    ) -> Result<Vec<u8>, AssemblerError> {
-        todo!()
-    }
 }
 
 impl Deref for LocatedToken {
