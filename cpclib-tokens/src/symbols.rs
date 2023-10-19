@@ -815,6 +815,7 @@ impl SymbolsTableTrait for SymbolsTable {
         value: V
     ) -> Result<Option<Value>, SymbolError> {
         let symbol = self.extend_readable_symbol(symbol)?;
+        let value = value.into();
 
         if !self.assignable.contains(&symbol) && self.map.contains_key(&symbol) {
             return Err(SymbolError::CannotModify(symbol));
@@ -822,7 +823,6 @@ impl SymbolsTableTrait for SymbolsTable {
 
         self.assignable.insert(symbol.clone());
 
-        let value = value.into();
         self.current_pass_map.insert(symbol.clone(), value.clone());
         Ok(self.map.insert(symbol, value))
     }

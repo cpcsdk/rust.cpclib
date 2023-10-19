@@ -2760,8 +2760,8 @@ pub fn visit_located_token(
 
 
 
-    let res = visit_token_impl!(token, env, span, LocatedTokenInner)
-        .map_err(|e| e.locate(span.unwrap().clone()));
+    visit_token_impl!(token, env, span, LocatedTokenInner)
+        .map_err(|e| e.locate(span.unwrap().clone()))?;
 
 
     let span = outer_token.span();
