@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -10,12 +11,18 @@ use cpclib_common::nom_locate::LocatedSpan;
 #[cfg(not(target_arch = "wasm32"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
+use cpclib_sna::{SnapshotVersion, SnapshotFlag, FlagValue};
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
-    BaseListing, BinaryFunction, BinaryOperation, CrunchType, DataAccess, Expr, ExprResult,
-    LabelPrefix, ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind,
-    TestKindElement, ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation
+    data_access_impl_most_methods,
+    data_access_is_any_indexregister16, data_access_is_any_indexregister8,
+    data_access_is_any_register16, data_access_is_any_register8, BaseListing, BinaryFunction,
+    BinaryOperation, CharsetFormat, CrunchType, DataAccess, DataAccessElem, Expr, ExprResult,
+    FlagTest, FormattedExpr, IndexRegister16, IndexRegister8, LabelPrefix, ListingElement,
+    MacroParam, MacroParamElement, Mnemonic, Register16, Register8, TestKind, TestKindElement, UnaryTokenOperation, UnaryOperation, UnaryFunction, StableTickerAction, SaveType
 };
+use cpclib_tokens::ToSimpleToken;
+use cpclib_tokens::Token;
 use ouroboros::self_referencing;
 
 use super::{
@@ -40,8 +47,6 @@ pub enum LocatedExpr {
     Float(OrderedFloat<f64>, Z80Span),
     Char(char, Z80Span),
     Bool(bool, Z80Span),
-
-
 
     String(Z80Span),
     Label(Z80Span),
@@ -84,7 +89,9 @@ impl ExprElement for LocatedExpr {
             LocatedExpr::Bool(b, _) => Expr::Bool(*b),
             LocatedExpr::String(s) => Expr::String(s.into()),
             LocatedExpr::Label(l) => Expr::Label(l.into()),
-            LocatedExpr::List(l, _) => Expr::List(l.iter().map(|e| e.to_expr().into_owned()).collect_vec()),
+            LocatedExpr::List(l, _) => {
+                Expr::List(l.iter().map(|e| e.to_expr().into_owned()).collect_vec())
+            }
             LocatedExpr::PrefixedLabel(p, l, _) => Expr::PrefixedLabel(*p, l.into()),
             LocatedExpr::Paren(box p, _) => Expr::Paren(Box::new(p.to_expr().into_owned())),
             LocatedExpr::UnaryFunction(f, box e, _) => {
@@ -97,20 +104,30 @@ impl ExprElement for LocatedExpr {
                 Expr::UnaryTokenOperation(*o, Box::new(t.to_token().into_owned()))
             }
             LocatedExpr::BinaryFunction(f, box e1, box e2, _) => {
-                Expr::BinaryFunction(*f, Box::new(e1.to_expr().into_owned()), Box::new(e2.to_expr().into_owned()))
+                Expr::BinaryFunction(
+                    *f,
+                    Box::new(e1.to_expr().into_owned()),
+                    Box::new(e2.to_expr().into_owned())
+                )
             }
             LocatedExpr::BinaryOperation(o, box e1, box e2, _) => {
-                Expr::BinaryOperation(*o, Box::new(e1.to_expr().into_owned()), Box::new(e2.to_expr().into_owned()))
+                Expr::BinaryOperation(
+                    *o,
+                    Box::new(e1.to_expr().into_owned()),
+                    Box::new(e2.to_expr().into_owned())
+                )
             }
             LocatedExpr::AnyFunction(n, a, _) => {
-                Expr::AnyFunction(n.into(), a.iter().map(|e| e.to_expr().into_owned()).collect_vec())
+                Expr::AnyFunction(
+                    n.into(),
+                    a.iter().map(|e| e.to_expr().into_owned()).collect_vec()
+                )
             }
             LocatedExpr::Rnd(_) => Expr::Rnd
         };
 
         Cow::Owned(expr)
     }
-
 
     fn is_negated(&self) -> bool {
         match self {
@@ -480,8 +497,160 @@ impl LocatedExpr {
             | LocatedExpr::Rnd(span) => span
         }
     }
+}
 
-    
+#[derive(Debug, PartialEq, Eq)]
+pub enum LocatedDataAccess {
+    /// We are using an indexed register associated to its index
+    IndexRegister16WithIndex(IndexRegister16, BinaryOperation, LocatedExpr, Z80Span),
+    IndexRegister16(IndexRegister16, Z80Span),
+    IndexRegister8(IndexRegister8, Z80Span),
+    /// Represents a standard 16 bits register
+    Register16(Register16, Z80Span),
+    /// Represents a standard 8 bits register
+    Register8(Register8, Z80Span),
+    /// Represents a memory access indexed by a register
+    MemoryRegister16(Register16, Z80Span),
+    MemoryIndexRegister16(IndexRegister16, Z80Span),
+    /// Represents any expression
+    Expression(LocatedExpr),
+    /// Represents an address
+    Memory(LocatedExpr),
+    /// Represnts the test of bit flag
+    FlagTest(FlagTest, Z80Span),
+    /// Special register I
+    SpecialRegisterI(Z80Span),
+    /// Special register R
+    SpecialRegisterR(Z80Span),
+    /// Used for in/out instructions
+    PortC(Z80Span),
+    /// Used for in/out instructions
+    PortN(LocatedExpr, Z80Span)
+}
+
+impl From<LocatedExpr> for LocatedDataAccess {
+    fn from(value: LocatedExpr) -> Self {
+        Self::Expression(value)
+    }
+}
+
+impl Into<DataAccess> for LocatedDataAccess {
+    fn into(self) -> DataAccess {
+        self.to_data_access()
+    }
+}
+
+impl LocatedDataAccess {
+    pub fn to_data_access(self) -> DataAccess {
+        match self {
+            LocatedDataAccess::IndexRegister16WithIndex(r, b, e, _) => {
+                DataAccess::IndexRegister16WithIndex(r, b, e.to_expr().into_owned())
+            }
+            LocatedDataAccess::IndexRegister16(i, _) => DataAccess::IndexRegister16(i),
+            LocatedDataAccess::IndexRegister8(i, _) => DataAccess::IndexRegister8(i),
+            LocatedDataAccess::Register16(r, _) => DataAccess::Register16(r),
+            LocatedDataAccess::Register8(r, _) => DataAccess::Register8(r),
+            LocatedDataAccess::MemoryRegister16(r, _) => DataAccess::MemoryRegister16(r),
+            LocatedDataAccess::MemoryIndexRegister16(i, _) => DataAccess::MemoryIndexRegister16(i),
+            LocatedDataAccess::Expression(e) => DataAccess::Expression(e.to_expr().into_owned()),
+            LocatedDataAccess::Memory(a) => DataAccess::Memory(a.to_expr().into_owned()),
+            LocatedDataAccess::FlagTest(f, _) => DataAccess::FlagTest(f),
+            LocatedDataAccess::SpecialRegisterI(_) => DataAccess::SpecialRegisterI,
+            LocatedDataAccess::SpecialRegisterR(_) => DataAccess::SpecialRegisterI,
+            LocatedDataAccess::PortC(_) => DataAccess::PortC,
+            LocatedDataAccess::PortN(p, _) => DataAccess::PortN(p.to_expr().into_owned())
+        }
+    }
+}
+
+impl LocatedDataAccess {
+    pub fn span(&self) -> &Z80Span {
+        match self {
+            LocatedDataAccess::IndexRegister16WithIndex(_, _, _, span)
+            | LocatedDataAccess::IndexRegister16(_, span)
+            | LocatedDataAccess::IndexRegister8(_, span)
+            | LocatedDataAccess::Register16(_, span)
+            | LocatedDataAccess::Register8(_, span)
+            | LocatedDataAccess::MemoryRegister16(_, span)
+            | LocatedDataAccess::MemoryIndexRegister16(_, span)
+            | LocatedDataAccess::FlagTest(_, span)
+            | LocatedDataAccess::SpecialRegisterI(span)
+            | LocatedDataAccess::SpecialRegisterR(span)
+            | LocatedDataAccess::PortC(span)
+            | LocatedDataAccess::PortN(_, span) => span,
+
+            LocatedDataAccess::Memory(e) | LocatedDataAccess::Expression(e) => e.span()
+        }
+    }
+}
+
+
+impl Display for LocatedDataAccess {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.span())
+    }
+}
+
+impl Into<Expr> for LocatedExpr {
+    fn into(self) -> Expr {
+        self.to_expr().into_owned()
+    }
+}
+
+impl DataAccessElem for LocatedDataAccess {
+    type Expr = LocatedExpr;
+
+    data_access_impl_most_methods!();
+
+    fn to_data_access_for_low_register(&self) -> Option<Self> {
+        match self {
+            Self::IndexRegister16(reg, span) => Some(LocatedDataAccess::IndexRegister8(reg.low(), span.clone())),
+            Self::Register16(reg, span) => 
+                reg.low()
+                    .map(|reg| {
+                        LocatedDataAccess::Register8(reg, span.clone())
+                    }),
+            _ => None
+        }
+    }
+
+    fn to_data_access_for_high_register(&self) -> Option<Self> {
+        match self {
+            Self::IndexRegister16(reg, span) => Some(LocatedDataAccess::IndexRegister8(reg.high(), span.clone())),
+            Self::Register16(reg, span) =>  
+            reg.high()
+                .map(|reg| {
+                    LocatedDataAccess::Register8(reg, span.clone())
+                }),
+            _ => None
+        }
+    }
+
+
+    fn is_port_c(&self) -> bool {
+        match self {
+            Self::PortC(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_register_i(&self) -> bool {
+        match self {
+            Self::SpecialRegisterI(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_register_r(&self) -> bool {
+        match self {
+            Self::SpecialRegisterR(..) => true,
+            _ => false
+        }
+    }
+
+    fn to_data_access(&self) -> Cow<DataAccess> {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -628,90 +797,1433 @@ impl TestKindElement for LocatedTestKind {
     }
 }
 
+// Encode the LocatedToken BEFORE computing its span
 #[derive(Debug, PartialEq, Eq)]
-/// Add span information for a Token.
-/// This hierarchy is a mirror of the original token one
-pub enum LocatedToken {
-    /// A token without any listing embedding
-    Standard {
-        /// The original token without any span information
-        token: Token,
-        /// The span that correspond to the token
-        span: Z80Span
+pub enum LocatedTokenInner {
+    Align(LocatedExpr, Option<LocatedExpr>),
+    Assert(LocatedExpr, Option<Vec<FormattedExpr>>),
+    Assign {
+        label: Z80Span,
+        expr: LocatedExpr,
+        op: Option<BinaryOperation>
     },
+
+    Bank(Option<LocatedExpr>),
+    Bankset(LocatedExpr),
+    Basic(Option<Vec<Z80Span>>, Option<Vec<u16>>, Z80Span),
+    Break,
+    Breakpoint(Option<LocatedExpr>),
+    BuildSna(Option<SnapshotVersion>),
+
+    Charset(CharsetFormat),
     Comment(Z80Span),
-    Org{val1: LocatedExpr, val2: Option<LocatedExpr>, span: Z80Span},
-    Confined(LocatedListing, Z80Span),
-    Defb(Vec<LocatedExpr>, Z80Span),
-    Defw(Vec<LocatedExpr>, Z80Span),
-    CrunchedSection(CrunchType, LocatedListing, Z80Span),
-    Str(Vec<LocatedExpr>, Z80Span),
+    Confined(LocatedListing),
+    CrunchedSection(CrunchType, LocatedListing),
+    Defb(Vec<LocatedExpr>),
+    Defs(Vec<(LocatedExpr, Option<LocatedExpr>)>),
+    Defw(Vec<LocatedExpr>),
+    End,
+    Equ {
+        label: Z80Span,
+        expr: LocatedExpr
+    },
+    Export(Vec<Z80Span>),
 
-    Assign{label: Z80Span, expr: LocatedExpr, op: Option<BinaryOperation>, span: Z80Span},
-    Equ{label: Z80Span, expr: LocatedExpr, span: Z80Span},
-    SetN{label: Z80Span, source: Z80Span, expr: Option<LocatedExpr>, span: Z80Span},
-    Next{label: Z80Span, source: Z80Span, expr: Option<LocatedExpr>, span: Z80Span},
-
+    Fail(Option<Vec<FormattedExpr>>),
     For {
         label: Z80Span,
         start: LocatedExpr,
         stop: LocatedExpr,
         step: Option<LocatedExpr>,
-        listing: LocatedListing,
-        span: Z80Span
+        listing: LocatedListing
     },
-    Function(Z80Span, Vec<Z80Span>, LocatedListing, Z80Span),
-    Include(Z80Span, Option<Z80Span>, bool, Z80Span),
+    Function(Z80Span, Vec<Z80Span>, LocatedListing),
+    If(
+        Vec<(LocatedTestKind, LocatedListing)>,
+        Option<LocatedListing>
+    ),
     Incbin {
         fname: Z80Span,
         offset: Option<LocatedExpr>,
         length: Option<LocatedExpr>,
         extended_offset: Option<LocatedExpr>,
         off: bool,
-        transformation: BinaryTransformation,
-        span: Z80Span
+        transformation: BinaryTransformation
     },
-    If(
-        Vec<(LocatedTestKind, LocatedListing)>,
-        Option<LocatedListing>,
-        Z80Span
+    Include(Z80Span, Option<Z80Span>, bool),
+    Iterate(
+        Z80Span,
+        either::Either<Vec<LocatedExpr>, LocatedExpr>,
+        LocatedListing
     ),
+
     Label(Z80Span),
+    Let(Z80Span, Expr),
+    Limit(LocatedExpr),
+    List,
+
     Macro {
         name: Z80Span,
         params: Vec<Z80Span>,
-        content: Z80Span,
-        span: Z80Span
+        content: Z80Span
     },
     /// Name, Parameters, FullSpan
-    MacroCall(Z80Span, Vec<LocatedMacroParam>, Z80Span),
-    Module(Z80Span, LocatedListing, Z80Span),
+    MacroCall(Z80Span, Vec<LocatedMacroParam>),
+    Module(Z80Span, LocatedListing),
+    MultiPop(Vec<LocatedDataAccess>),
+    MultiPush(Vec<LocatedDataAccess>),
+
+    Next {
+        label: Z80Span,
+        source: Z80Span,
+        expr: Option<LocatedExpr>
+    },
+    NoExport(Vec<Z80Span>),
+    NoList,
+
+    OpCode(
+        Mnemonic,
+        Option<LocatedDataAccess>,
+        Option<LocatedDataAccess>,
+        Option<Register8>
+    ),
+    Org {
+        val1: LocatedExpr,
+        val2: Option<LocatedExpr>
+    },
+    Pause,
+    Print(Vec<FormattedExpr>),
+    Protect(LocatedExpr, LocatedExpr),
+
+    Range(Z80Span, LocatedExpr, LocatedExpr),
     Repeat(
         LocatedExpr,
         LocatedListing,
         Option<Z80Span>,
-        Option<LocatedExpr>,
-        Z80Span
+        Option<LocatedExpr>
     ),
-    Iterate(
-        Z80Span,
-        either::Either<Vec<LocatedExpr>, LocatedExpr>,
-        LocatedListing,
-        Z80Span
-    ),
-    RepeatUntil(LocatedExpr, LocatedListing, Z80Span),
-    Rorg(LocatedExpr, LocatedListing, Z80Span),
-    /// Name, Parameters, FullSpan
-    Struct(Z80Span, Vec<(Z80Span, LocatedToken)>, Z80Span), /* TODO Store a listing that can embed if / db /dw/ str/ struct calls */
+    RepeatUntil(LocatedExpr, LocatedListing),
+    Return(LocatedExpr),
+    Rorg(LocatedExpr, LocatedListing),
+    Run(LocatedExpr, Option<LocatedExpr>),
+
+    Save{
+        filename: Z80Span,
+        address: Option<LocatedExpr>,
+        size: Option<LocatedExpr>,
+        save_type: Option<SaveType>,
+        dsk_filename: Option<Z80Span>,
+        side: Option<LocatedExpr>
+    },
+    Section(Z80Span),
+    SetN {
+        label: Z80Span,
+        source: Z80Span,
+        expr: Option<LocatedExpr>
+    },
+    SnaInit(Z80Span),
+    SnaSet(SnapshotFlag, FlagValue),
+    StableTicker(StableTickerAction),
+    Str(Vec<LocatedExpr>),
+    Struct(Z80Span, Vec<(Z80Span, LocatedToken)>),
     Switch(
         LocatedExpr,
         Vec<(LocatedExpr, LocatedListing, bool)>,
-        Option<LocatedListing>,
-        Z80Span
+        Option<LocatedListing>
     ),
-    WarningWrapper(Box<LocatedToken>, String),
-    While(LocatedExpr, LocatedListing, Z80Span)
+    Undef(Z80Span),
+
+    WaitNops(LocatedExpr),
+    WarningWrapper(Box<Self>, String),
+    While(LocatedExpr, LocatedListing)
 }
+
+impl LocatedTokenInner {
+    pub fn new_opcode(
+        mne: Mnemonic,
+        arg1: Option<LocatedDataAccess>,
+        arg2: Option<LocatedDataAccess>
+    ) -> Self {
+        LocatedTokenInner::OpCode(mne, arg1, arg2, None)
+    }
+
+    pub fn into_located_token_direct(self) -> LocatedToken {
+
+        let span = match &self {
+            Self::Label(span) | Self::Comment(span) => {
+                span.clone()
+            },
+            
+            _ => todo!("not coded yet or impossible {:?}", self)
+        };
+
+        LocatedToken {
+            inner: self,
+            span,
+            warning_embedded: None,
+        }
+    }
+
+
+    pub fn into_located_token_at(self, span: &Z80Span) -> LocatedToken {
+        match self {
+            Self::WarningWrapper(token,msg) => {
+
+                LocatedToken { inner: *token, span: span.clone(), warning_embedded: Some(msg) }
+
+            }
+
+            _ => {
+                LocatedToken { inner: self, span: span.clone(), warning_embedded: None }
+            }
+        }
+    }
+
+    pub fn into_located_token_between(self, start: &Z80Span, stop: &Z80Span) -> LocatedToken {
+        let count = start.input_len() - stop.input_len();
+        let span = start.take(count);
+
+        self.into_located_token_at(&span)
+        
+    }
+
+ 
+}
+
+/// Add span information for a Token.
+#[derive(Debug, PartialEq, Eq)]
+pub struct LocatedToken {
+    // The token of interest
+    pub(crate) inner: LocatedTokenInner,
+    pub(crate) span: Z80Span,
+    // The warning message if any
+    pub(crate) warning_embedded: Option<String>
+}
+
+impl ListingElement for LocatedToken {
+    type DataAccess = LocatedDataAccess;
+    type Expr = LocatedExpr;
+    type MacroParam = LocatedMacroParam;
+    type TestKind = LocatedTestKind;
+
+   
+   fn to_token(&self) -> Cow<cpclib_tokens::Token> {
+       self.inner.to_token()
+   }
+
+    fn is_equ(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Equ { .. } => true,
+            _ => false
+        }
+    }
+
+    fn equ_symbol(&self) -> &str {
+        match &self.inner {
+            LocatedTokenInner::Equ { label, .. } => label.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn equ_value(&self) -> &Self::Expr {
+        match &self.inner {
+            LocatedTokenInner::Equ { expr, .. } => expr,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_warning(&self) -> bool {
+       self.warning_embedded.is_some()
+    }
+
+
+    fn warning_message(&self) -> &str {
+        self.warning_embedded.as_ref().unwrap()
+    }
+
+    fn is_module(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Module(..) => true,
+            _ => false
+        }
+    }
+
+    fn module_listing(&self) -> &[Self] {
+        match &self.inner {
+            LocatedTokenInner::Module(_, lst, ..) => lst,
+            _ => unreachable!()
+        }
+    }
+
+    fn module_name(&self) -> &str {
+        match &self.inner {
+            LocatedTokenInner::Module(name, ..) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_while(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::While(..) => true,
+            _ => false
+        }
+    }
+
+    fn while_expr(&self) -> &Self::Expr {
+        match &self.inner {
+            LocatedTokenInner::While(expr, ..) => expr,
+            _ => unreachable!()
+        }
+    }
+
+    fn while_listing(&self) -> &[Self] {
+        match &self.inner {
+            LocatedTokenInner::While(_, lst, ..) => lst,
+            _ => unreachable!()
+        }
+    }
+
+    fn mnemonic(&self) -> Option<&Mnemonic> {
+        match &self.inner {
+            LocatedTokenInner::OpCode(mne, ..) => Some(mne),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg1(&self) -> Option<&Self::DataAccess> {
+        match &self.inner {
+            LocatedTokenInner::OpCode(_, arg1, ..) => arg1.as_ref(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg2(&self) -> Option<&Self::DataAccess> {
+        match &self.inner {
+            LocatedTokenInner::OpCode(_, _, arg2, _) => arg2.as_ref(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess> {
+        match &mut self.inner {
+            LocatedTokenInner::OpCode(_, arg1, ..) => arg1.as_mut(),
+
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess> {
+        match &mut self.inner {
+            LocatedTokenInner::OpCode(_, _, arg2, _) => arg2.as_mut(),
+
+            _ => None
+        }
+    }
+
+    fn is_directive(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::OpCode(..) => false,
+            _ => true
+        }
+    }
+
+    fn is_rorg(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Rorg(..) => true,
+            _ => false
+        }
+    }
+
+    fn rorg_listing(&self) -> &[Self] {
+        match &self.inner {
+            LocatedTokenInner::Rorg(_, lst) => lst,
+            _ => unreachable!()
+        }
+    }
+
+    fn rorg_expr(&self) -> &Self::Expr {
+        match &self.inner {
+            LocatedTokenInner::Rorg(exp, ..) => exp,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_iterate(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Iterate(..) => true,
+            _ => false
+        }
+    }
+
+    fn iterate_listing(&self) -> &[Self] {
+        match &self.inner {
+            LocatedTokenInner::Iterate(_, _, listing, ..) => listing,
+            _ => unreachable!()
+        }
+    }
+
+    fn iterate_counter_name(&self) -> &str {
+        match &self.inner {
+            LocatedTokenInner::Iterate(name, ..) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr> {
+        match &self.inner {
+            LocatedTokenInner::Iterate(_, values, ..) => values.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_for(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::For { .. } => true,
+            _ => false
+        }
+    }
+
+    fn for_listing(&self) -> &[Self] {
+        match &self.inner {
+            LocatedTokenInner::For { listing, .. } => listing,
+            _ => unreachable!()
+        }
+    }
+
+    fn for_label(&self) -> &str {
+        match &self.inner {
+            LocatedTokenInner::For { label, .. } => label.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn for_start(&self) -> &Self::Expr {
+        match &self.inner {
+            LocatedTokenInner::For { start, .. } => start,
+            _ => unreachable!()
+        }
+    }
+
+    fn for_stop(&self) -> &Self::Expr {
+        match &self.inner {
+            LocatedTokenInner::For { stop, .. } => stop,
+            _ => unreachable!()
+        }
+    }
+
+    fn for_step(&self) -> Option<&Self::Expr> {
+        match &self.inner {
+            LocatedTokenInner::For { step, .. } => step.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_repeat_until(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::RepeatUntil(..) => true,
+            _ => false
+        }
+    }
+
+    fn repeat_until_listing(&self) -> &[Self] {
+        match &self.inner {
+            LocatedTokenInner::RepeatUntil(_, code, ..) => code,
+            _ => unreachable!()
+        }
+    }
+
+    fn repeat_until_condition(&self) -> &Self::Expr {
+        match &self.inner {
+            LocatedTokenInner::RepeatUntil(cond, ..) => cond,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_repeat(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Repeat(..) => true,
+            _ => false
+        }
+    }
+
+    fn repeat_listing(&self) -> &[Self] {
+        match &self.inner {
+            LocatedTokenInner::Repeat(_, listing, ..) => listing,
+            _ => unreachable!()
+        }
+    }
+
+    fn repeat_count(&self) -> &Self::Expr {
+        match &self.inner {
+            LocatedTokenInner::Repeat(e, ..) => e,
+            _ => unreachable!()
+        }
+    }
+
+    fn repeat_counter_name(&self) -> Option<&str> {
+        match &self.inner {
+            LocatedTokenInner::Repeat(_, _, counter_name, ..) => counter_name.as_ref().map(|c| c.as_str()),
+            _ => unreachable!()
+        }
+    }
+
+    fn repeat_counter_start(&self) -> Option<&Self::Expr> {
+        match &self.inner {
+            LocatedTokenInner::Repeat(_, _, _, start) => start.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_macro_definition(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Macro { .. } => true,
+            _ => false
+        }
+    }
+
+    fn macro_definition_name(&self) -> &str {
+        match &self.inner {
+            LocatedTokenInner::Macro { name, .. } => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]> {
+        match &self.inner {
+            LocatedTokenInner::Macro { params, .. } => params.iter().map(|a| a.as_str()).collect(),
+            _ => unreachable!()
+        }
+    }
+
+    fn macro_definition_code(&self) -> &str {
+        match &self.inner {
+            LocatedTokenInner::Macro { content, .. } => content.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn macro_call_name(&self) -> &str {
+        match &self.inner {
+            LocatedTokenInner::MacroCall(name, ..) => name.as_str(),
+            _ => panic!()
+        }
+    }
+
+    fn macro_call_arguments(&self) -> &[Self::MacroParam] {
+        match &self.inner {
+            LocatedTokenInner::MacroCall(_, args) => args,
+            _ => panic!()
+        }
+    }
+
+    fn is_if(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::If(..) => true,
+            _ => false
+        }
+    }
+
+    fn if_nb_tests(&self) -> usize {
+        match &self.inner {
+            LocatedTokenInner::If(tests, ..) => tests.len(),
+            _ => panic!()
+        }
+    }
+
+    fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]) {
+        match &self.inner {
+            LocatedTokenInner::If(tests, ..) => {
+                let data = &tests[idx];
+                (&data.0, &data.1)
+            }
+            _ => panic!()
+        }
+    }
+
+    fn if_else(&self) -> Option<&[Self]> {
+        match &self.inner {
+            LocatedTokenInner::If(_, r#else) => r#else.as_ref().map(|l| l.as_slice()),
+            _ => panic!()
+        }
+    }
+
+    fn is_include(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Include(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_incbin(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Incbin { .. } => true,
+            _ => false
+        }
+    }
+
+    fn incbin_fname(&self) -> &str {
+        match &self.inner {
+            LocatedTokenInner::Incbin { fname, .. } => fname,
+            _ => unimplemented!()
+        }
+    }
+
+    fn incbin_offset(&self) -> Option<&Self::Expr> {
+        match &self.inner {
+            LocatedTokenInner::Incbin { offset, .. } => offset.as_ref(),
+            _ => unimplemented!()
+        }
+    }
+
+    fn incbin_length(&self) -> Option<&Self::Expr> {
+        match &self.inner {
+            LocatedTokenInner::Incbin { length, .. } => length.as_ref(),
+            _ => unimplemented!()
+        }
+    }
+
+    fn incbin_transformation(&self) -> &cpclib_tokens::BinaryTransformation {
+        match &self.inner {
+            LocatedTokenInner::Incbin { transformation, .. } => transformation,
+            _ => unimplemented!()
+        }
+    }
+
+    fn include_fname(&self) -> &str {
+        match &self.inner {
+            LocatedTokenInner::Include(fname, ..) => fname,
+            _ => unreachable!()
+        }
+    }
+
+    fn include_namespace(&self) -> Option<&str> {
+        match &self.inner {
+            LocatedTokenInner::Include(_, module, ..) => module.as_ref().map(|s| s.as_str()),
+            _ => unreachable!()
+        }
+    }
+
+    fn include_once(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Include(_, _, once) => *once,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_call_macro_or_build_struct(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::MacroCall(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_function_definition(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Function(..) => true,
+            _ => false
+        }
+    }
+
+    fn function_definition_name(&self) -> &str {
+        match &self.inner {
+            LocatedTokenInner::Function(name, ..) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn function_definition_params(&self) -> SmallVec<[&str; 4]> {
+        match &self.inner {
+            LocatedTokenInner::Function(_name, params, ..) => params.iter().map(|v| v.as_str()).collect(),
+            _ => unreachable!()
+        }
+    }
+
+    fn function_definition_inner(&self) -> &[Self] {
+        match &self.inner {
+            LocatedTokenInner::Function(_, _, inner) => inner,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_crunched_section(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::CrunchedSection(..) => true,
+            _ => false
+        }
+    }
+
+    fn crunched_section_listing(&self) -> &[Self] {
+        match &self.inner {
+            LocatedTokenInner::CrunchedSection(_, lst) => lst,
+            _ => unreachable!()
+        }
+    }
+
+    fn crunched_section_kind(&self) -> &CrunchType {
+        match &self.inner {
+            LocatedTokenInner::CrunchedSection(kind, ..) => kind,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_confined(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Confined(..) => true,
+            _ => false
+        }
+    }
+
+    fn confined_listing(&self) -> &[Self] {
+        match &self.inner {
+            LocatedTokenInner::Confined(lst) => lst,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_switch(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Switch(..) => true,
+            _ => false
+        }
+    }
+
+    fn switch_expr(&self) -> &Self::Expr {
+        match &self.inner {
+            LocatedTokenInner::Switch(expr, ..) => expr,
+            _ => unreachable!()
+        }
+    }
+
+    fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_> {
+        match &self.inner {
+            LocatedTokenInner::Switch(_, cases, ..) => {
+                Box::new(cases.iter().map(|c| (&c.0, c.1.as_slice(), c.2)))
+            }
+            _ => unreachable!()
+        }
+    }
+
+    fn switch_default(&self) -> Option<&[Self]> {
+        match &self.inner {
+            LocatedTokenInner::Switch(_, _, default, ..) => default.as_ref().map(|l| l.as_slice()),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_db(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Defb(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_dw(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Defw(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_str(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Str(..) => true,
+            _ => false
+        }
+    }
+
+    fn data_exprs(&self) -> &[Self::Expr] {
+        match &self.inner {
+            LocatedTokenInner::Defb(e, ..) | LocatedTokenInner::Defw(e, ..) | LocatedTokenInner::Str(e, ..) => e,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_set(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Assign { .. } => true,
+            _ => false
+        }
+    }
+
+    fn is_comment(&self) -> bool {
+        match &self.inner {
+            LocatedTokenInner::Comment(..) => true,
+            _ => false
+        }
+    }
+
+    fn warning_token(&self) -> &Self {
+        self
+    }
+}
+
+
+
+// Several methodsare not implemented because their return type is wrong
+// it soes not really matter because we never have to call them
+impl ListingElement for LocatedTokenInner {
+    type DataAccess = LocatedDataAccess;
+    type Expr = LocatedExpr;
+    type MacroParam = LocatedMacroParam;
+    type TestKind = LocatedTestKind;
+
+
+        /// Transform the located token in a raw token.
+    /// Warning, this is quite costly when strings or vec are involved
+    fn to_token(&self) -> Cow<Token> {
+        match self {
+            Self::OpCode(mne, arg1, arg2, arg3) => {
+                Cow::Owned(Token::OpCode(
+                    *mne,
+                    arg1.as_ref().map(|d| d.to_data_access().into_owned()),
+                    arg2.as_ref().map(|d| d.to_data_access().into_owned()),
+                    arg3.clone()
+                ))
+            }
+            Self::Comment(cmt) => Cow::Owned(Token::Comment(cmt.to_string())),
+            Self::Org { val1, val2 } => {
+                Cow::Owned(Token::Org{
+                    val1: val1.to_expr().into_owned(),
+                    val2: val2.as_ref().map(|val2| val2.to_expr().into_owned())
+            })
+            }
+            Self::CrunchedSection(c, l) => Cow::Owned(Token::CrunchedSection(*c, l.as_listing())),
+            Self::Function(name, params, inner) => {
+                Cow::Owned(Token::Function(
+                    name.into(),
+                    params.iter().map(|p| p.into()).collect_vec(),
+                    inner.as_listing()
+                ))
+            }
+            Self::If(v, e) => {
+                Cow::Owned(Token::If(
+                    v.iter()
+                        .map(|(k, l)| (k.to_test_kind(), l.as_listing()))
+                        .collect_vec(),
+                    e.as_ref().map(|l| l.as_listing())
+                ))
+            }
+            Self::Repeat(e, l, s, start) => {
+                Cow::Owned(Token::Repeat(
+                    e.to_expr().into_owned(),
+                    l.as_listing(),
+                    s.as_ref().map(|s| s.into()),
+                    start.as_ref().map(|e| e.to_expr().into_owned())
+                ))
+            }
+            Self::RepeatUntil(e, l) => {
+                Cow::Owned(Token::RepeatUntil(e.to_expr().into_owned(), l.as_listing()))
+            }
+            Self::Rorg(e, l) => Cow::Owned(Token::Rorg(e.to_expr().into_owned(), l.as_listing())),
+            Self::Switch(v, c, d) => {
+                Cow::Owned(Token::Switch(
+                    v.to_expr().into_owned(),
+                    c.iter()
+                        .map(|(e, l, b)| (e.to_expr().into_owned(), l.as_listing(), b.clone()))
+                        .collect_vec(),
+                    d.as_ref().map(|d| d.as_listing())
+                ))
+            }
+            Self::While(e, l) => Cow::Owned(Token::While(e.to_expr().into_owned(), l.as_listing())),
+            Self::Iterate(_name, _values, _code) => {
+                todo!()
+            }
+            Self::Module(..) => todo!(),
+            Self::For {
+                label,
+                start,
+                stop,
+                step,
+                listing
+            } => {
+                Cow::Owned(Token::For {
+                    label: label.into(),
+                    start: start.to_expr().into_owned(),
+                    stop: stop.to_expr().into_owned(),
+                    step: step.as_ref().map(|e| e.to_expr().into_owned()),
+                    listing: listing.as_listing()
+                })
+            }
+            Self::Label(label) => Cow::Owned(Token::Label(label.into())),
+            Self::MacroCall(name, params) => {
+                Cow::Owned(Token::MacroCall(
+                    name.into(),
+                    params.iter().map(|p| p.to_macro_param()).collect_vec()
+                ))
+            }
+            Self::Struct(name, params) => {
+                Cow::Owned(Token::Struct(
+                    name.into(),
+                    params
+                        .iter()
+                        .map(|(label, p)| (label.into(), p.as_simple_token().into_owned()))
+                        .collect_vec()
+                ))
+            }
+            Self::Defb(exprs) => {
+                Cow::Owned(Token::Defb(
+                    exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()
+                ))
+            }
+            Self::Defw(exprs) => {
+                Cow::Owned(Token::Defw(
+                    exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()
+                ))
+            }
+            Self::Str(exprs) => {
+                Cow::Owned(Token::Str(
+                    exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()
+                ))
+            }
+
+            Self::Include(..) => todo!(),
+            Self::Incbin {
+                fname: _,
+                offset: _,
+                length: _,
+                extended_offset: _,
+                off: _,
+                transformation: _
+            } => todo!(),
+            Self::Macro {
+                name,
+                params,
+                content
+            } => {
+                Cow::Owned(Token::Macro{
+                   name: name.into(),
+                   params: params.iter().map(|p| p.into()).collect_vec(),
+                  content:  content.as_str().to_owned()
+            })
+            }
+            Self::Confined(..) => todo!(),
+            Self::WarningWrapper(..) => todo!(),
+            Self::Assign {
+                label: _,
+                expr: _,
+                op: _
+            } => todo!(),
+            Self::Equ { label: _, expr: _ } => todo!(),
+            Self::SetN {
+                label: _,
+                source: _,
+                expr: _
+            } => todo!(),
+            Self::Next {
+                label: _,
+                source: _,
+                expr: _
+            } => todo!(),
+
+            _ => todo!()
+        }
+    }
+
+
+    fn is_equ(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Equ { .. } => true,
+            _ => false
+        }
+    }
+
+    fn equ_symbol(&self) -> &str {
+        match &self{
+            LocatedTokenInner::Equ { label, .. } => label.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn equ_value(&self) -> &Self::Expr {
+        match &self{
+            LocatedTokenInner::Equ { expr, .. } => expr,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_warning(&self) -> bool {
+        todo!()
+    }
+
+    fn warning_token(&self) -> &Self {
+        todo!()
+    }
+
+    fn warning_message(&self) -> &str {
+        match &self{
+            LocatedTokenInner::WarningWrapper(_token, message) => message.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_module(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Module(..) => true,
+            _ => false
+        }
+    }
+
+    fn module_listing(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn module_name(&self) -> &str {
+        match &self{
+            LocatedTokenInner::Module(name, ..) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_while(&self) -> bool {
+        match &self{
+            LocatedTokenInner::While(..) => true,
+            _ => false
+        }
+    }
+
+    fn while_expr(&self) -> &Self::Expr {
+        match &self{
+            LocatedTokenInner::While(expr, ..) => expr,
+            _ => unreachable!()
+        }
+    }
+
+    fn while_listing(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn mnemonic(&self) -> Option<&Mnemonic> {
+        match &self{
+            LocatedTokenInner::OpCode(mne, ..) => Some(mne),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg1(&self) -> Option<&Self::DataAccess> {
+        match &self{
+            LocatedTokenInner::OpCode(_, arg1, ..) => arg1.as_ref(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg2(&self) -> Option<&Self::DataAccess> {
+        match &self{
+            LocatedTokenInner::OpCode(_, _, arg2, _) => arg2.as_ref(),
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess> {
+        match self{
+            LocatedTokenInner::OpCode(_, arg1, ..) => arg1.as_mut(),
+
+            _ => None
+        }
+    }
+
+    fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess> {
+        match self{
+            LocatedTokenInner::OpCode(_, _, arg2, _) => arg2.as_mut(),
+
+            _ => None
+        }
+    }
+
+    fn is_directive(&self) -> bool {
+        match &self{
+            LocatedTokenInner::OpCode(..) => false,
+            _ => true
+        }
+    }
+
+    fn is_rorg(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Rorg(..) => true,
+            _ => false
+        }
+    }
+
+    fn rorg_listing(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn rorg_expr(&self) -> &Self::Expr {
+        match &self{
+            LocatedTokenInner::Rorg(exp, ..) => exp,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_iterate(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Iterate(..) => true,
+            _ => false
+        }
+    }
+
+    fn iterate_listing(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn iterate_counter_name(&self) -> &str {
+        match &self{
+            LocatedTokenInner::Iterate(name, ..) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr> {
+        match &self{
+            LocatedTokenInner::Iterate(_, values, ..) => values.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_for(&self) -> bool {
+        match &self{
+            LocatedTokenInner::For { .. } => true,
+            _ => false
+        }
+    }
+
+    fn for_listing(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn for_label(&self) -> &str {
+        match &self{
+            LocatedTokenInner::For { label, .. } => label.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn for_start(&self) -> &Self::Expr {
+        match &self{
+            LocatedTokenInner::For { start, .. } => start,
+            _ => unreachable!()
+        }
+    }
+
+    fn for_stop(&self) -> &Self::Expr {
+        match &self{
+            LocatedTokenInner::For { stop, .. } => stop,
+            _ => unreachable!()
+        }
+    }
+
+    fn for_step(&self) -> Option<&Self::Expr> {
+        match &self{
+            LocatedTokenInner::For { step, .. } => step.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_repeat_until(&self) -> bool {
+        match &self{
+            LocatedTokenInner::RepeatUntil(..) => true,
+            _ => false
+        }
+    }
+
+    fn repeat_until_listing(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn repeat_until_condition(&self) -> &Self::Expr {
+        match &self{
+            LocatedTokenInner::RepeatUntil(cond, ..) => cond,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_repeat(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Repeat(..) => true,
+            _ => false
+        }
+    }
+
+    fn repeat_listing(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn repeat_count(&self) -> &Self::Expr {
+        match &self{
+            LocatedTokenInner::Repeat(e, ..) => e,
+            _ => unreachable!()
+        }
+    }
+
+    fn repeat_counter_name(&self) -> Option<&str> {
+        match &self{
+            LocatedTokenInner::Repeat(_, _, counter_name, ..) => counter_name.as_ref().map(|c| c.as_str()),
+            _ => unreachable!()
+        }
+    }
+
+    fn repeat_counter_start(&self) -> Option<&Self::Expr> {
+        match &self{
+            LocatedTokenInner::Repeat(_, _, _, start) => start.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn is_macro_definition(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Macro { .. } => true,
+            _ => false
+        }
+    }
+
+    fn macro_definition_name(&self) -> &str {
+        match &self{
+            LocatedTokenInner::Macro { name, .. } => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]> {
+        match &self{
+            LocatedTokenInner::Macro { params, .. } => params.iter().map(|a| a.as_str()).collect(),
+            _ => unreachable!()
+        }
+    }
+
+    fn macro_definition_code(&self) -> &str {
+        match &self{
+            LocatedTokenInner::Macro { content, .. } => content.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn macro_call_name(&self) -> &str {
+        match &self{
+            LocatedTokenInner::MacroCall(name, ..) => name.as_str(),
+            _ => panic!()
+        }
+    }
+
+    fn macro_call_arguments(&self) -> &[Self::MacroParam] {
+        match &self{
+            LocatedTokenInner::MacroCall(_, args) => args,
+            _ => panic!()
+        }
+    }
+
+    fn is_if(&self) -> bool {
+        match &self{
+            LocatedTokenInner::If(..) => true,
+            _ => false
+        }
+    }
+
+    fn if_nb_tests(&self) -> usize {
+        match &self{
+            LocatedTokenInner::If(tests, ..) => tests.len(),
+            _ => panic!()
+        }
+    }
+
+    fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]) {
+        todo!()
+    }
+
+    fn if_else(&self) -> Option<&[Self]> {
+        todo!()
+    }
+
+    fn is_include(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Include(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_incbin(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Incbin { .. } => true,
+            _ => false
+        }
+    }
+
+    fn incbin_fname(&self) -> &str {
+        match &self{
+            LocatedTokenInner::Incbin { fname, .. } => fname,
+            _ => unimplemented!()
+        }
+    }
+
+    fn incbin_offset(&self) -> Option<&Self::Expr> {
+        match &self{
+            LocatedTokenInner::Incbin { offset, .. } => offset.as_ref(),
+            _ => unimplemented!()
+        }
+    }
+
+    fn incbin_length(&self) -> Option<&Self::Expr> {
+        match &self{
+            LocatedTokenInner::Incbin { length, .. } => length.as_ref(),
+            _ => unimplemented!()
+        }
+    }
+
+    fn incbin_transformation(&self) -> &cpclib_tokens::BinaryTransformation {
+        match &self{
+            LocatedTokenInner::Incbin { transformation, .. } => transformation,
+            _ => unimplemented!()
+        }
+    }
+
+    fn include_fname(&self) -> &str {
+        match &self{
+            LocatedTokenInner::Include(fname, ..) => fname,
+            _ => unreachable!()
+        }
+    }
+
+    fn include_namespace(&self) -> Option<&str> {
+        match &self{
+            LocatedTokenInner::Include(_, module, ..) => module.as_ref().map(|s| s.as_str()),
+            _ => unreachable!()
+        }
+    }
+
+    fn include_once(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Include(_, _, once) => *once,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_call_macro_or_build_struct(&self) -> bool {
+        match &self{
+            LocatedTokenInner::MacroCall(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_function_definition(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Function(..) => true,
+            _ => false
+        }
+    }
+
+    fn function_definition_name(&self) -> &str {
+        match &self{
+            LocatedTokenInner::Function(name, ..) => name.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn function_definition_params(&self) -> SmallVec<[&str; 4]> {
+        match &self{
+            LocatedTokenInner::Function(_name, params, ..) => params.iter().map(|v| v.as_str()).collect(),
+            _ => unreachable!()
+        }
+    }
+
+    fn function_definition_inner(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn is_crunched_section(&self) -> bool {
+        match &self{
+            LocatedTokenInner::CrunchedSection(..) => true,
+            _ => false
+        }
+    }
+
+    fn crunched_section_listing(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn crunched_section_kind(&self) -> &CrunchType {
+        match &self{
+            LocatedTokenInner::CrunchedSection(kind, ..) => kind,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_confined(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Confined(..) => true,
+            _ => false
+        }
+    }
+
+    fn confined_listing(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn is_switch(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Switch(..) => true,
+            _ => false
+        }
+    }
+
+    fn switch_expr(&self) -> &Self::Expr {
+        match &self{
+            LocatedTokenInner::Switch(expr, ..) => expr,
+            _ => unreachable!()
+        }
+    }
+
+    fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_> {
+        todo!()
+    }
+
+    fn switch_default(&self) -> Option<&[Self]> {
+        todo!()
+    }
+
+    fn is_db(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Defb(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_dw(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Defw(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_str(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Str(..) => true,
+            _ => false
+        }
+    }
+
+    fn data_exprs(&self) -> &[Self::Expr] {
+        match &self{
+            LocatedTokenInner::Defb(e, ..) | LocatedTokenInner::Defw(e, ..) | LocatedTokenInner::Str(e, ..) => e,
+            _ => unreachable!()
+        }
+    }
+
+    fn is_set(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Assign { .. } => true,
+            _ => false
+        }
+    }
+
+    fn is_comment(&self) -> bool {
+        match &self{
+            LocatedTokenInner::Comment(..) => true,
+            _ => false
+        }
+    }
+}
+
+
+
+
 
 impl std::fmt::Display for LocatedToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -757,38 +2269,7 @@ impl MayHaveSpan for LocatedToken {
 
     /// Get the span of the current token
     fn span(&self) -> &Z80Span {
-        match self {
-            LocatedToken::Standard { span, .. }
-            | LocatedToken::Comment(span)
-            | LocatedToken::Org { span , ..}
-            | LocatedToken::Confined(_, span)
-            | LocatedToken::CrunchedSection(_, _, span)
-            | LocatedToken::For { span, .. }
-            | LocatedToken::Function(_, _, _, span)
-            | LocatedToken::If(_, _, span)
-            | LocatedToken::Label(span)
-            | LocatedToken::Macro { span, .. }
-            | LocatedToken::MacroCall(_, _, span)
-            | LocatedToken::Module(_, _, span)
-            | LocatedToken::Iterate(_, _, _, span)
-            | LocatedToken::Repeat(_, _, _, _, span)
-            | LocatedToken::RepeatUntil(_, _, span)
-            | LocatedToken::Rorg(_, _, span)
-            | LocatedToken::Struct(_, _, span)
-            | LocatedToken::Switch(_, _, _, span)
-            | LocatedToken::While(_, _, span)
-            | LocatedToken::Defb(_, span)
-            | LocatedToken::Defw(_, span)
-            | LocatedToken::Str(_, span)
-            | LocatedToken::Include(_, _, _, span)
-            | LocatedToken::Incbin { span, .. } 
-            | LocatedToken::Assign {  span, .. } 
-            | LocatedToken::Equ { span, .. } 
-            | LocatedToken::SetN { span, .. } 
-            | LocatedToken::Next { span, .. }  => span,
-             LocatedToken::WarningWrapper(token, _) => token.span()
-
-        }
+        &self.span
     }
 }
 
@@ -857,150 +2338,20 @@ impl Clone for LocatedToken {
 // }
 
 impl LocatedToken {
-    /// We can obtain a token only for "standard ones". Those that rely on listing need to be handled differently
-    pub fn token(&self) -> Result<&Token, ()> {
-        match self {
-            Self::Standard { token, .. } => Ok(token),
-            _ => Err(())
-        }
-    }
-
+    // We can obtain a token only for "standard ones". Those that rely on listing need to be handled differently
+    // TODO remove that
+    // pub fn token(&self) -> Result<&Token, ()> {
+    // match self {
+    // Self::Standard { token, .. } => Ok(token),
+    // _ => Err(())
+    // }
+    // }
     pub fn context(&self) -> &ParserContext {
         &self.span().extra
     }
 }
 
 impl LocatedToken {
-    /// Transform the located token in a raw token.
-    /// Warning, this is quite costly when strings or vec are involved
-    pub fn to_token(&self) -> Cow<Token> {
-        match self {
-            LocatedToken::Standard { token, .. } => Cow::Borrowed(token),
-            LocatedToken::Comment(cmt) => Cow::Owned(Token::Comment(cmt.to_string())),
-            LocatedToken::Org { val1, val2, span: _ } => {
-                Cow::Owned(Token::Org(
-                    val1.to_expr().into_owned(), 
-                    val2.as_ref().map(|val2| val2.to_expr().into_owned())))
-            }
-            LocatedToken::CrunchedSection(c, l, _span) => {
-                Cow::Owned(Token::CrunchedSection(*c, l.as_listing()))
-            }
-            LocatedToken::Function(name, params, inner, _span) => {
-                Cow::Owned(Token::Function(
-                    name.into(),
-                    params.iter().map(|p| p.into()).collect_vec(),
-                    inner.as_listing()
-                ))
-            }
-            LocatedToken::If(v, e, _span) => {
-                Cow::Owned(Token::If(
-                    v.iter()
-                        .map(|(k, l)| (k.to_test_kind(), l.as_listing()))
-                        .collect_vec(),
-                    e.as_ref().map(|l| l.as_listing())
-                ))
-            }
-            LocatedToken::Repeat(e, l, s, start, _span) => {
-                Cow::Owned(Token::Repeat(
-                    e.to_expr().into_owned(),
-                    l.as_listing(),
-                    s.as_ref().map(|s| s.into()),
-                    start.as_ref().map(|e| e.to_expr().into_owned())
-                ))
-            }
-            LocatedToken::RepeatUntil(e, l, _span) => {
-                Cow::Owned(Token::RepeatUntil(e.to_expr().into_owned(), l.as_listing()))
-            }
-            LocatedToken::Rorg(e, l, _span) => Cow::Owned(Token::Rorg(e.to_expr().into_owned(), l.as_listing())),
-            LocatedToken::Switch(v, c, d, _span) => {
-                Cow::Owned(Token::Switch(
-                    v.to_expr().into_owned(),
-                    c.iter()
-                        .map(|(e, l, b)| (e.to_expr().into_owned(), l.as_listing(), b.clone()))
-                        .collect_vec(),
-                    d.as_ref().map(|d| d.as_listing())
-                ))
-            }
-            LocatedToken::While(e, l, _span) => {
-                Cow::Owned(Token::While(e.to_expr().into_owned(), l.as_listing()))
-            }
-            LocatedToken::Iterate(_name, _values, _code, _span) => {
-                todo!()
-            }
-            LocatedToken::Module(..) => todo!(),
-            LocatedToken::For {
-                label,
-                start,
-                stop,
-                step,
-                listing,
-                span: _
-            } => {
-                Cow::Owned(Token::For {
-                    label: label.into(),
-                    start: start.to_expr().into_owned(),
-                    stop: stop.to_expr().into_owned(),
-                    step: step.as_ref().map(|e| e.to_expr().into_owned()),
-                    listing: listing.as_listing()
-                })
-            }
-            LocatedToken::Label(label) => Cow::Owned(Token::Label(label.into())),
-            LocatedToken::MacroCall(name, params, _) => {
-                Cow::Owned(Token::MacroCall(
-                    name.into(),
-                    params.iter().map(|p| p.to_macro_param()).collect_vec()
-                ))
-            }
-            LocatedToken::Struct(name, params, _) => {
-                Cow::Owned(Token::Struct(
-                    name.into(),
-                    params
-                        .iter()
-                        .map(|(label, p)| (label.into(), p.as_simple_token().into_owned()))
-                        .collect_vec()
-                ))
-            }
-            LocatedToken::Defb(exprs, _) => {
-                Cow::Owned(Token::Defb(exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()))
-            }
-            LocatedToken::Defw(exprs, _) => {
-                Cow::Owned(Token::Defw(exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()))
-            }
-            LocatedToken::Str(exprs, _) => {
-                Cow::Owned(Token::Str(exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()))
-            }
-
-            LocatedToken::Include(..) => todo!(),
-            LocatedToken::Incbin {
-                fname: _,
-                offset: _,
-                length: _,
-                extended_offset: _,
-                off: _,
-                transformation: _,
-                span: _
-            } => todo!(),
-            LocatedToken::Macro {
-                name,
-                params,
-                content,
-                span: _
-            } => {
-                Cow::Owned(Token::Macro(
-                    name.into(),
-                    params.iter().map(|p| p.into()).collect_vec(),
-                    content.as_str().to_owned()
-                ))
-            }
-            LocatedToken::Confined(..) => todo!(),
-            LocatedToken::WarningWrapper(..) => todo!(),
-            LocatedToken::Assign { label: _, expr: _, op: _, span: _ } => todo!(),
-            LocatedToken::Equ { label: _, expr: _, span: _ } => todo!(),
-            LocatedToken::SetN { label: _, source: _, expr: _, span: _ } => todo!(),
-            LocatedToken::Next { label: _, source: _, expr: _, span: _ } => todo!(),
-        }
-    }
-
     pub fn parse_token(_value: &str) -> Result<(), String> {
         unimplemented!("Should return a LocatedToken reference + its  LocatedListing")
     }
@@ -1051,55 +2402,26 @@ pub trait Locate {
 
     fn locate(self, span: Z80Span, size: usize) -> Self::Output;
 }
+// /
+// impl Locate for Token {
+// type Output = LocatedToken;
+//
+// fn locate(self, span: Z80Span, size: usize) -> LocatedToken {
+// if self.has_at_least_one_listing() {
+// unreachable!()
+// }
+// else {
+// LocatedToken::Standard {
+// token: self,
+// span: span.take(size)
+// }
+// }
+// }
+// }
 
-impl Locate for Token {
-    type Output = LocatedToken;
-
-    fn locate(self, span: Z80Span, size: usize) -> LocatedToken {
-        if self.has_at_least_one_listing() {
-            // /
-            // match self {
-            // Token::CrunchedSection(a, b) => {
-            // LocatedToken::CrunchedSection(a, b, span)
-            // },
-            // Token::Include(a,b) => {
-            // LocatedToken::Include(a, b, span)
-            // },
-            // Token::If(a, b) => {
-            // LocatedToken::If(a, b, span)
-            // },
-            // Token::Repeat(a,b, c,) => {
-            // LocatedToken::Repeat(a,b,c,span)
-            // },
-            // Token::RepeatUntil(a, b) => {
-            // LocatedToken::RepeatUntil(a, b, span)
-            // },
-            // Token::Rorg(a, b) => {
-            // LocatedToken::Rorg(a, b, span)
-            // },
-            // Token::Switch(a) => {
-            // LocatedToken::Switch(a, span)
-            // },
-            // Token::While(a, b) => {
-            // LocatedToken::While(a, b, span)
-            // },
-            // _ => unreachable!()
-            //
-            // }
-            unreachable!()
-        }
-        else {
-            LocatedToken::Standard {
-                token: self,
-                span: span.take(size)
-            }
-        }
-    }
-}
-
-impl TokenExt for LocatedToken {
+impl TokenExt for LocatedToken{
     fn estimated_duration(&self) -> Result<usize, AssemblerError> {
-        self.token().unwrap().estimated_duration()
+        todo!("Move back the implementation of the feature directly into the TokenExt to have it available whatever is the true implementation");
     }
 
     fn unroll(&self, _env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
@@ -1118,566 +2440,11 @@ impl TokenExt for LocatedToken {
     }
 }
 
-impl ListingElement for LocatedToken {
-    type Expr = LocatedExpr;
-    type MacroParam = LocatedMacroParam;
-    type TestKind = LocatedTestKind;
-
-    fn is_equ(&self) -> bool {
-        match self {
-            Self::Equ { ..} => true,
-            _ => false
-        }
-    }
-
-    fn equ_symbol(&self) -> &str {
-        match self {
-            Self::Equ { label, ..} => label.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn equ_value(&self) -> &Self::Expr {
-        match self {
-            Self::Equ {  expr, ..} => expr,
-            _ => unreachable!()
-        }
-    }
-
-    fn is_warning(&self) -> bool {
-        match self {
-            Self::WarningWrapper(..) => true,
-            _ => false
-        }
-    }
-
-    fn warning_token(&self) -> &Self {
-        match self {
-            Self::WarningWrapper(token, _message) => token,
-            _ => unreachable!()
-        }
-    }
-
-    fn warning_message(&self) -> &str {
-        match self {
-            Self::WarningWrapper(_token, message) => message.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn is_module(&self) -> bool {
-        match self {
-            LocatedToken::Module(..) => true,
-            _ => false
-        }
-    }
-
-    fn module_listing(&self) -> &[Self] {
-        match self {
-            LocatedToken::Module(_, lst, ..) => lst.as_slice(),
-            _ => unreachable!()
-        }
-    }
-
-    fn module_name(&self) -> &str {
-        match self {
-            LocatedToken::Module(name, ..) => name.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn is_while(&self) -> bool {
-        match self {
-            LocatedToken::While(..) => true,
-            _ => false
-        }
-    }
-
-    fn while_expr(&self) -> &Self::Expr {
-        match self {
-            LocatedToken::While(expr, ..) => expr,
-            _ => unreachable!()
-        }
-    }
-
-    fn while_listing(&self) -> &[Self] {
-        match self {
-            LocatedToken::While(_, lst, ..) => lst.as_slice(),
-            _ => unreachable!()
-        }
-    }
-
-    fn mnemonic(&self) -> Option<&Mnemonic> {
-        match self {
-            Self::Standard { token, .. } => token.mnemonic(),
-            _ => None
-        }
-    }
-
-    fn mnemonic_arg1(&self) -> Option<&DataAccess> {
-        match self {
-            Self::Standard { token, .. } => token.mnemonic_arg1(),
-            _ => None
-        }
-    }
-
-    fn mnemonic_arg2(&self) -> Option<&DataAccess> {
-        match self {
-            Self::Standard { token, .. } => token.mnemonic_arg2(),
-            _ => None
-        }
-    }
-
-    fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess> {
-        match self {
-            Self::Standard { token, .. } => token.mnemonic_arg1_mut(),
-            _ => None
-        }
-    }
-
-    fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess> {
-        match self {
-            Self::Standard { token, .. } => token.mnemonic_arg2_mut(),
-            _ => None
-        }
-    }
-
-    fn is_directive(&self) -> bool {
-        match self {
-            Self::Standard {
-                token: Token::OpCode(..),
-                ..
-            } => false,
-            _ => true
-        }
-    }
-
-    fn is_rorg(&self) -> bool {
-        match self {
-            Self::Rorg(..) => true,
-            _ => false
-        }
-    }
-
-    fn rorg_listing(&self) -> &[Self] {
-        match self {
-            Self::Rorg(_, lst, _) => lst.as_slice(),
-            _ => unreachable!()
-        }
-    }
-
-    fn rorg_expr(&self) -> &Self::Expr {
-        match self {
-            Self::Rorg(exp, ..) => exp,
-            _ => unreachable!()
-        }
-    }
-
-    fn is_iterate(&self) -> bool {
-        match self {
-            Self::Iterate(..) => true,
-            _ => false
-        }
-    }
-
-    fn iterate_listing(&self) -> &[Self] {
-        match self {
-            Self::Iterate(_, _, listing, ..) => listing.as_slice(),
-            _ => unreachable!()
-        }
-    }
-
-    fn iterate_counter_name(&self) -> &str {
-        match self {
-            Self::Iterate(name, ..) => name.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr> {
-        match self {
-            Self::Iterate(_, values, ..) => values.as_ref(),
-            _ => unreachable!()
-        }
-    }
-
-    fn is_for(&self) -> bool {
-        match self {
-            Self::For { .. } => true,
-            _ => false
-        }
-    }
-
-    fn for_listing(&self) -> &[Self] {
-        match self {
-            Self::For { listing, .. } => listing.as_slice(),
-            _ => unreachable!()
-        }
-    }
-
-    fn for_label(&self) -> &str {
-        match self {
-            Self::For { label, .. } => label.as_ref(),
-            _ => unreachable!()
-        }
-    }
-
-    fn for_start(&self) -> &Self::Expr {
-        match self {
-            Self::For { start, .. } => start,
-            _ => unreachable!()
-        }
-    }
-
-    fn for_stop(&self) -> &Self::Expr {
-        match self {
-            Self::For { stop, .. } => stop,
-            _ => unreachable!()
-        }
-    }
-
-    fn for_step(&self) -> Option<&Self::Expr> {
-        match self {
-            Self::For { step, .. } => step.as_ref(),
-            _ => unreachable!()
-        }
-    }
-
-    fn is_repeat_until(&self) -> bool {
-        match self {
-            Self::RepeatUntil(..) => true,
-            _ => false
-        }
-    }
-
-    fn repeat_until_listing(&self) -> &[Self] {
-        match self {
-            Self::RepeatUntil(_, code, ..) => code.as_slice(),
-            _ => unreachable!()
-        }
-    }
-
-    fn repeat_until_condition(&self) -> &Self::Expr {
-        match self {
-            Self::RepeatUntil(cond, ..) => cond,
-            _ => unreachable!()
-        }
-    }
-
-    fn is_repeat(&self) -> bool {
-        match self {
-            Self::Repeat(..) => true,
-            _ => false
-        }
-    }
-
-    fn repeat_listing(&self) -> &[Self] {
-        match self {
-            Self::Repeat(_, listing, ..) => listing.as_ref(),
-            _ => unreachable!()
-        }
-    }
-
-    fn repeat_count(&self) -> &Self::Expr {
-        match self {
-            Self::Repeat(e, ..) => e,
-            _ => unreachable!()
-        }
-    }
-
-    fn repeat_counter_name(&self) -> Option<&str> {
-        match self {
-            Self::Repeat(_, _, counter_name, ..) => counter_name.as_ref().map(|c| c.as_str()),
-            _ => unreachable!()
-        }
-    }
-
-    fn repeat_counter_start(&self) -> Option<&Self::Expr> {
-        match self {
-            Self::Repeat(_, _, _, start, _) => start.as_ref(),
-            _ => unreachable!()
-        }
-    }
-
-    fn is_macro_definition(&self) -> bool {
-        match self {
-            Self::Macro { .. } => true,
-            _ => false
-        }
-    }
-
-    fn macro_definition_name(&self) -> &str {
-        match self {
-            Self::Macro { name, .. } => name.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]> {
-        match self {
-            Self::Macro { params, .. } => params.iter().map(|a| a.as_str()).collect(),
-            _ => unreachable!()
-        }
-    }
-
-    fn macro_definition_code(&self) -> &str {
-        match self {
-            Self::Macro { content, .. } => content.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn macro_call_name(&self) -> &str {
-        match self {
-            Self::MacroCall(name, ..) => name.as_str(),
-            _ => panic!()
-        }
-    }
-
-    fn macro_call_arguments(&self) -> &[Self::MacroParam] {
-        match self {
-            Self::MacroCall(_, args, _) => args,
-            _ => panic!()
-        }
-    }
-
-    fn is_if(&self) -> bool {
-        match self {
-            Self::If(..) => true,
-            _ => false
-        }
-    }
-
-    fn if_nb_tests(&self) -> usize {
-        match self {
-            Self::If(tests, ..) => tests.len(),
-            _ => panic!()
-        }
-    }
-
-    fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]) {
-        match self {
-            Self::If(tests, ..) => {
-                let data = &tests[idx];
-                (&data.0, &data.1)
-            }
-            _ => panic!()
-        }
-    }
-
-    fn if_else(&self) -> Option<&[Self]> {
-        match self {
-            Self::If(_, r#else, _) => r#else.as_ref().map(|l| l.as_slice()),
-            _ => panic!()
-        }
-    }
-
-    fn is_include(&self) -> bool {
-        match self {
-            Self::Include(..) => true,
-            _ => false
-        }
-    }
-
-    fn is_incbin(&self) -> bool {
-        match self {
-            Self::Incbin { .. } => true,
-            _ => false
-        }
-    }
-
-    fn incbin_fname(&self) -> &str {
-        match self {
-            Self::Incbin { fname, .. } => fname,
-            _ => unimplemented!()
-        }
-    }
-
-    fn incbin_offset(&self) -> Option<&Self::Expr> {
-        match self {
-            Self::Incbin { offset, .. } => offset.as_ref(),
-            _ => unimplemented!()
-        }
-    }
-
-    fn incbin_length(&self) -> Option<&Self::Expr> {
-        match self {
-            Self::Incbin { length, .. } => length.as_ref(),
-            _ => unimplemented!()
-        }
-    }
-
-    fn incbin_transformation(&self) -> &cpclib_tokens::BinaryTransformation {
-        match self {
-            Self::Incbin { transformation, .. } => transformation,
-            _ => unimplemented!()
-        }
-    }
-
-    fn include_fname(&self) -> &str {
-        match self {
-            Self::Include(fname, ..) => fname,
-            _ => unreachable!()
-        }
-    }
-
-    fn include_namespace(&self) -> Option<&str> {
-        match self {
-            Self::Include(_, module, ..) => module.as_ref().map(|s| s.as_str()),
-            _ => unreachable!()
-        }
-    }
-
-    fn include_once(&self) -> bool {
-        match self {
-            Self::Include(_, _, once, _) => *once,
-            _ => unreachable!()
-        }
-    }
-
-    fn is_call_macro_or_build_struct(&self) -> bool {
-        match self {
-            Self::MacroCall(..) => true,
-            _ => false
-        }
-    }
-
-    fn is_function_definition(&self) -> bool {
-        match self {
-            Self::Function(..) => true,
-            _ => false
-        }
-    }
-
-    fn function_definition_name(&self) -> &str {
-        match self {
-            Self::Function(name, ..) => name.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn function_definition_params(&self) -> SmallVec<[&str; 4]> {
-        
-        match self {
-            Self::Function(_name, params, ..) => {
-                params.iter().map(|v| v.as_str()).collect()
-            },
-            _ => unreachable!()
-        }
-    }
-
-    fn function_definition_inner(&self) -> &[Self] {
-        match self {
-            Self::Function(_, _, inner, _) => inner.as_slice(),
-            _ => unreachable!()
-        }
-    }
-
-    fn is_crunched_section(&self) -> bool {
-        match self {
-            Self::CrunchedSection(..) => true,
-            _ => false
-        }
-    }
-
-    fn crunched_section_listing(&self) -> &[Self] {
-        match self {
-            Self::CrunchedSection(_, lst, _) => lst.as_slice(),
-            _ => unreachable!()
-        }
-    }
-
-    fn crunched_section_kind(&self) -> &CrunchType {
-        match self {
-            Self::CrunchedSection(kind, ..) => kind,
-            _ => unreachable!()
-        }
-    }
-
-    fn is_confined(&self) -> bool {
-        match self {
-            Self::Confined(..) => true,
-            _ => false
-        }
-    }
-
-    fn confined_listing(&self) -> &[Self] {
-        match self {
-            Self::Confined(lst, _) => lst.as_slice(),
-            _ => unreachable!()
-        }
-    }
-
-    fn is_switch(&self) -> bool {
-        match self {
-            Self::Switch(..) => true,
-            _ => false
-        }
-    }
-
-    fn switch_expr(&self) -> &Self::Expr {
-        match self {
-            Self::Switch(expr, ..) => expr,
-            _ => unreachable!()
-        }
-    }
-
-    fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_> {
-        match self {
-            Self::Switch(_, cases, ..) => {
-                Box::new(cases.iter().map(|c| (&c.0, c.1.deref().as_slice(), c.2)))
-            }
-            _ => unreachable!()
-        }
-    }
-
-    fn switch_default(&self) -> Option<&[Self]> {
-        match self {
-            Self::Switch(_, _, default, ..) => default.as_ref().map(|l| l.as_slice()),
-            _ => unreachable!()
-        }
-    }
-
-    fn is_db(&self) -> bool {
-        match self {
-            Self::Defb(..) => true,
-            _ => false
-        }
-    }
-
-    fn is_dw(&self) -> bool {
-        match self {
-            Self::Defw(..)=> true,
-            _ => false
-        }
-    }
-
-    fn is_str(&self) -> bool {
-        match self {
-            Self::Str(..)=> true,
-            _ => false
-        }
-    }
-
-    fn data_exprs(&self) -> &[Self::Expr] {
-        match self {
-            Self::Defb(e, ..) | Self::Defw(e, ..) | Self::Str(e, ..) => e,
-            _ => unreachable!()
-        }
-    }
-
-    fn is_set(&self) -> bool {
-        match self {
-            Self::Assign{..} => true,
-            _ => false
-        }
-    }
-
-    fn is_comment(&self) -> bool {
-        match self {
-            Self::Standard { token: Token::Comment(..), .. } => true,
-            _ => false
-        }
+impl Deref for LocatedToken {
+    type Target = LocatedTokenInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
 
@@ -1700,6 +2467,23 @@ pub struct LocatedListing {
     #[borrows(src, ctx)]
     pub(crate) parse_result: ParseResult
 }
+
+/*
+impl ListingTrait for LocatedListing {
+    type Element = LocatedToken;
+
+    fn as_slice(&self) -> &[Self::Element] {
+       self.with_parse_result(|result|{
+            match result {
+                ParseResult::SuccessComplete(listing) => listing,
+                ParseResult::SuccessInner { listing, inner_span, next_span } => listing,
+                ParseResult::FailureInner(_) => unreachable!(),
+                ParseResult::FailureComplete(_) => unreachable!(),
+            }
+       })
+    }
+}
+*/
 
 impl PartialEq for LocatedListing {
     fn eq(&self, other: &Self) -> bool {

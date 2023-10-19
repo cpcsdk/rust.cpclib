@@ -8,13 +8,14 @@ use crate::assembler::Env;
 use crate::error::{ExpressionError, *};
 use crate::implementation::tokens::TokenExt;
 use crate::SymbolFor;
+use crate::UnaryFunction;
 
 /// ! Add all important methods to expresison-like structure sthat are not availalbe in the cpclib_tokens crate.
 
 /// The result of expression (without taking into account the strings) is either a int (no complex mathematical expression) or a float (division/sinus and so on)
 
-/// Evaluate an aexpression
-pub trait ExprEvaluationExt: Display {
+/// Evaluate an expression
+pub trait ExprEvaluationExt:  Display {
     /// Simple evaluation without context => can only evaluate number based operations.
     fn eval(&self) -> Result<ExprResult, AssemblerError> {
         let env = Env::default();

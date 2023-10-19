@@ -991,13 +991,11 @@ struct BlocAccessInformation {
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct AmsdosManagerMut<'dsk, D: Disc> {
-    disc: &'dsk mut D,    
+    disc: &'dsk mut D,
     head: Head
 }
 
-
 impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
-
     pub fn new_from_disc<S: Into<Head>>(disc: &'dsk mut D, head: S) -> Self {
         Self {
             disc,
@@ -1009,7 +1007,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         &mut self.disc
     }
 
-        /// Write the entry information on disc AFTER the sectors has been set up.
+    /// Write the entry information on disc AFTER the sectors has been set up.
     /// Panic if dsk is invalid
     /// Still stolen to iDSK
     pub fn update_entry(&mut self, entry: &AmsdosEntry) {
@@ -1026,22 +1024,27 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
             0
         }; // XXX why ?
 
-        let mut sector = self.disc.sector_read_bytes(self.head, track, sector_id).unwrap();
+        let mut sector = self
+            .disc
+            .sector_read_bytes(self.head, track, sector_id)
+            .unwrap();
         let idx_in_sector: usize = ((entry.idx & 15) << 5) as usize;
         let bytes = &mut (sector[idx_in_sector..(idx_in_sector + AmsdosEntry::len())]);
         bytes.copy_from_slice(entry.as_bytes().as_ref());
-        self.disc.sector_write_bytes(self.head, track, sector_id, &sector).unwrap();
+        self.disc
+            .sector_write_bytes(self.head, track, sector_id, &sector)
+            .unwrap();
     }
 
-        /// Rewrite the whole catalog
-        pub fn set_catalog(&mut self, entries: &AmsdosEntries) {
-            assert_eq!(64, entries.entries.len());
-            for entry in &entries.entries {
-                self.update_entry(entry);
-            }
+    /// Rewrite the whole catalog
+    pub fn set_catalog(&mut self, entries: &AmsdosEntries) {
+        assert_eq!(64, entries.entries.len());
+        for entry in &entries.entries {
+            self.update_entry(entry);
         }
+    }
 
-            /// Add the given amsdos file to the disc
+    /// Add the given amsdos file to the disc
     /// Code is greatly inspired by idsk with no special verifications.
     /// In case of error, the disk is in a broken state => part of the file may be stored...
     pub fn add_file(
@@ -1055,15 +1058,15 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         let mut file_pos = 0;
         let file_size = content.len();
         let mut nb_entries = 0;
-       // println!("File size {} bytes", file_size);
+        // println!("File size {} bytes", file_size);
         while file_pos < file_size {
-       //     println!("File pos {}", file_pos);
+            //     println!("File pos {}", file_pos);
             let entry_idx = match self.catalog().one_empty_entry() {
                 Some(entry) => entry.idx,
                 None => return Err(AmsdosError::NoEntriesAvailable)
             };
 
-      //      println!("Select entry {}", entry_idx);
+            //      println!("Select entry {}", entry_idx);
             let entry_num_page = nb_entries;
             nb_entries += 1;
 
@@ -1086,7 +1089,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                     };
                     assert!(bloc_idx.is_valid());
                     *bloc = bloc_idx;
-          //          println!("Select bloc{:?}", bloc_idx);
+                    //          println!("Select bloc{:?}", bloc_idx);
                     self.update_bloc(
                         bloc_idx,
                         &AmsdosManagerNonMut::<'dsk, D>::padding(
@@ -1114,7 +1117,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         Ok(())
     }
 
-       /// Write bloc content on disc. One bloc use 2 sectors
+    /// Write bloc content on disc. One bloc use 2 sectors
     /// Implementation is stolen to iDSK
     pub fn update_bloc(&mut self, bloc_idx: BlocIdx, content: &[u8]) -> Result<(), String> {
         assert!(bloc_idx.is_valid());
@@ -1125,37 +1128,53 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         let access_info = self.bloc_access_information(bloc_idx);
 
         // Copy in first sector
-        self.disc.sector_write_bytes(self.head, access_info.track1, access_info.sector1_id, &content[0..DATA_SECTOR_SIZE])?;
+        self.disc.sector_write_bytes(
+            self.head,
+            access_info.track1,
+            access_info.sector1_id,
+            &content[0..DATA_SECTOR_SIZE]
+        )?;
 
         // Copy in second sector
-        self.disc
-            .sector_write_bytes(self.head, access_info.track2, access_info.sector2_id, &content[DATA_SECTOR_SIZE..2 * DATA_SECTOR_SIZE])?;
+        self.disc.sector_write_bytes(
+            self.head,
+            access_info.track2,
+            access_info.sector2_id,
+            &content[DATA_SECTOR_SIZE..2 * DATA_SECTOR_SIZE]
+        )?;
         Ok(())
     }
 
-
     pub fn catalog<'mngr: 'dsk>(&'dsk self) -> AmsdosEntries {
-        let nonmut : AmsdosManagerNonMut<'dsk, D> = self.into();
+        let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
         nonmut.catalog()
     }
 
-    fn bloc_access_information<'mngr: 'dsk>(&'mngr self, bloc_idx: BlocIdx) -> BlocAccessInformation {
-        let nonmut : AmsdosManagerNonMut<'dsk, D> = self.into();
+    fn bloc_access_information<'mngr: 'dsk>(
+        &'mngr self,
+        bloc_idx: BlocIdx
+    ) -> BlocAccessInformation {
+        let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
         nonmut.bloc_access_information(bloc_idx)
     }
 
-    pub fn get_file<'mngr: 'dsk, F: Into<AmsdosFileName>>(&'mngr self, filename: F) -> Option<AmsdosFile> {
-        let nonmut : AmsdosManagerNonMut<'dsk, D> = self.into();
+    pub fn get_file<'mngr: 'dsk, F: Into<AmsdosFileName>>(
+        &'mngr self,
+        filename: F
+    ) -> Option<AmsdosFile> {
+        let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
         nonmut.get_file(filename)
     }
-
 }
 
-
-impl<'dsk, 'mngr: 'dsk, D: Disc> Into<AmsdosManagerNonMut<'dsk, D>> for 
-&'mngr AmsdosManagerMut<'dsk, D> {
+impl<'dsk, 'mngr: 'dsk, D: Disc> Into<AmsdosManagerNonMut<'dsk, D>>
+    for &'mngr AmsdosManagerMut<'dsk, D>
+{
     fn into(self) -> AmsdosManagerNonMut<'dsk, D> {
-        AmsdosManagerNonMut { disc: self.disc, head: self.head }
+        AmsdosManagerNonMut {
+            disc: self.disc,
+            head: self.head
+        }
     }
 }
 
@@ -1165,14 +1184,11 @@ pub struct AmsdosManagerNonMut<'dsk, D: Disc> {
     head: Head
 }
 
-
 #[allow(missing_docs)]
 impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
     pub fn dsk(&'mng self) -> &'dsk D {
         self.disc
     }
-
-
 
     pub fn new_from_disc<S: Into<Head>>(disc: &'dsk D, head: S) -> Self {
         Self {
@@ -1207,8 +1223,6 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         AmsdosEntries { entries }
     }
 
-
-
     /// Print the catalog on screen
     pub fn print_catalog(&self) {
         let entries = self.catalog();
@@ -1218,8 +1232,6 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
             }
         }
     }
-
-
 
     /// Return the file if it exists
     pub fn get_file<F: Into<AmsdosFileName>>(&self, filename: F) -> Option<AmsdosFile> {
@@ -1237,7 +1249,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
             entries
         };
 
-   //     println!("{:?}", &entries);
+        //     println!("{:?}", &entries);
 
         // Retreive the binary data
         let content = entries
@@ -1249,8 +1261,6 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
 
         Some(file)
     }
-
-
 
     /// Returns a Vec<u8> of the right size by padding 0
     pub fn padding(data: &[u8], size: usize) -> Vec<u8> {
@@ -1268,7 +1278,6 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         }
     }
 
-
     /// Returns the appropriate information to access the bloc
     /// Blindly stolen to iDSK
     fn bloc_access_information(&self, bloc_idx: BlocIdx) -> BlocAccessInformation {
@@ -1276,9 +1285,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
 
         // Compute the information to access the first sector
         let sector_pos = bloc_idx.sector();
-        let min_sector = self
-            .disc
-            .track_min_sector(self.head, 0);
+        let min_sector = self.disc.track_min_sector(self.head, 0);
         let track = {
             let mut track = bloc_idx.track();
             if min_sector == 0x41 {
@@ -1321,7 +1328,6 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         }
     }
 
- 
     /// Read the content of the given bloc
     pub fn read_bloc(&self, bloc_idx: BlocIdx) -> Vec<u8> {
         assert!(bloc_idx.is_valid());
@@ -1398,11 +1404,11 @@ impl AmsdosHeader {
         )
     }
 
-        /// Generate a header for a basic file
-        pub fn compute_basic_header(filename: &AmsdosFileName, data: &[u8]) -> AmsdosHeader {
-            AmsdosHeader::build_header(filename, AmsdosFileType::Basic, 0x0170, 0x0000, data)
-        }
-    
+    /// Generate a header for a basic file
+    pub fn compute_basic_header(filename: &AmsdosFileName, data: &[u8]) -> AmsdosHeader {
+        AmsdosHeader::build_header(filename, AmsdosFileType::Basic, 0x0170, 0x0000, data)
+    }
+
     /// XXX currently untested
     pub fn build_header(
         filename: &AmsdosFileName,

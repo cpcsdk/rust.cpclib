@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use cpclib_common::smallvec::SmallVec;
 use either::Either;
 
@@ -7,27 +9,36 @@ use crate::tokens::listing::*;
 use crate::DataAccess;
 
 impl ListingElement for Token {
+    // type Element = Token;
+    type DataAccess = DataAccess;
     type Expr = Expr;
     type MacroParam = MacroParam;
     type TestKind = TestKind;
 
+    //    type Listing = BaseListing<Token>;
+
+
+    fn to_token(&self) -> Cow<Token> {
+        Cow::Borrowed(self)
+    }
+
     fn is_equ(&self) -> bool {
         match self {
-            Token::Equ(..) => true,
+            Token::Equ { .. } => true,
             _ => false
         }
     }
 
     fn equ_symbol(&self) -> &str {
         match self {
-            Token::Equ(label, ..) => label.as_str(),
+            Token::Equ { label, .. } => label.as_str(),
             _ => unreachable!()
         }
     }
 
     fn equ_value(&self) -> &Self::Expr {
         match self {
-            Token::Equ(_label_, value, ..) => value,
+            Token::Equ { expr, .. } => expr,
             _ => unreachable!()
         }
     }
@@ -53,7 +64,7 @@ impl ListingElement for Token {
 
     fn module_listing(&self) -> &[Self] {
         match self {
-            Token::Module(_, lst, ..) => lst.as_slice(),
+            Token::Module(_, lst, ..) => lst,
             _ => unreachable!()
         }
     }
@@ -81,7 +92,7 @@ impl ListingElement for Token {
 
     fn while_listing(&self) -> &[Self] {
         match self {
-            Token::While(_, lst, ..) => lst.as_slice(),
+            Token::While(_, lst, ..) => lst,
             _ => unreachable!()
         }
     }
@@ -93,28 +104,28 @@ impl ListingElement for Token {
         }
     }
 
-    fn mnemonic_arg1(&self) -> Option<&DataAccess> {
+    fn mnemonic_arg1(&self) -> Option<&Self::DataAccess> {
         match self {
             Token::OpCode(_, ref arg1, ..) => arg1.as_ref(),
             _ => None
         }
     }
 
-    fn mnemonic_arg2(&self) -> Option<&DataAccess> {
+    fn mnemonic_arg2(&self) -> Option<&Self::DataAccess> {
         match self {
             Token::OpCode(_, _, ref arg2, _) => arg2.as_ref(),
             _ => None
         }
     }
 
-    fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess> {
+    fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess> {
         match self {
             Token::OpCode(_, ref mut arg1, ..) => arg1.as_mut(),
             _ => None
         }
     }
 
-    fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess> {
+    fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess> {
         match self {
             Token::OpCode(_, _, ref mut arg2, _) => arg2.as_mut(),
             _ => None
@@ -137,7 +148,7 @@ impl ListingElement for Token {
 
     fn iterate_listing(&self) -> &[Self] {
         match self {
-            Self::Iterate(_, _, listing, ..) => listing.as_slice(),
+            Self::Iterate(_, _, listing, ..) => listing,
             _ => unreachable!()
         }
     }
@@ -165,7 +176,7 @@ impl ListingElement for Token {
 
     fn for_listing(&self) -> &[Self] {
         match self {
-            Self::For { listing, .. } => listing.as_slice(),
+            Self::For { listing, .. } => listing,
             _ => unreachable!()
         }
     }
@@ -207,7 +218,7 @@ impl ListingElement for Token {
 
     fn repeat_until_listing(&self) -> &[Self] {
         match self {
-            Self::RepeatUntil(_, code, ..) => code.as_slice(),
+            Self::RepeatUntil(_, code, ..) => code,
             _ => unreachable!()
         }
     }
@@ -228,7 +239,7 @@ impl ListingElement for Token {
 
     fn repeat_listing(&self) -> &[Self] {
         match self {
-            Self::Repeat(_, listing, ..) => listing.as_ref(),
+            Self::Repeat(_, listing, ..) => listing,
             _ => unreachable!()
         }
     }
@@ -256,28 +267,28 @@ impl ListingElement for Token {
 
     fn is_macro_definition(&self) -> bool {
         match self {
-            Self::Macro(..) => true,
+            Self::Macro{..}=> true,
             _ => false
         }
     }
 
     fn macro_definition_name(&self) -> &str {
         match self {
-            Self::Macro(name, ..) => name.as_str(),
+            Self::Macro{name, ..} => name.as_str(),
             _ => unreachable!()
         }
     }
 
     fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]> {
         match self {
-            Self::Macro(_, args, _) => args.iter().map(|a| a.as_str()).collect(),
+            Self::Macro{params,..} => params.iter().map(|a| a.as_str()).collect(),
             _ => unreachable!()
         }
     }
 
     fn macro_definition_code(&self) -> &str {
         match self {
-            Self::Macro(_, _, code) => code.as_str(),
+            Self::Macro{content, ..} => content.as_str(),
             _ => unreachable!()
         }
     }
@@ -322,7 +333,7 @@ impl ListingElement for Token {
 
     fn if_else(&self) -> Option<&[Self]> {
         match self {
-            Self::If(_, r#else) => r#else.as_ref().map(|l| l.as_slice()),
+            Self::If(_, r#else) => r#else.as_ref().map(|l| l.as_ref()),
             _ => panic!()
         }
     }
@@ -420,7 +431,7 @@ impl ListingElement for Token {
 
     fn function_definition_inner(&self) -> &[Self] {
         match self {
-            Self::Function(_, _, inner) => inner.as_slice(),
+            Self::Function(_, _, inner) => inner,
             _ => unreachable!()
         }
     }
@@ -434,7 +445,7 @@ impl ListingElement for Token {
 
     fn crunched_section_listing(&self) -> &[Self] {
         match self {
-            Self::CrunchedSection(_, lst) => lst.as_slice(),
+            Self::CrunchedSection(_, lst) => lst,
             _ => unreachable!()
         }
     }
@@ -455,7 +466,7 @@ impl ListingElement for Token {
 
     fn rorg_listing(&self) -> &[Self] {
         match self {
-            Self::Rorg(_, lst) => lst.as_slice(),
+            Self::Rorg(_, lst) => lst,
             _ => unreachable!()
         }
     }
@@ -535,7 +546,7 @@ impl ListingElement for Token {
 
     fn is_set(&self) -> bool {
         match self {
-            Self::Assign(..) => true,
+            Self::Assign{..} => true,
             _ => false
         }
     }

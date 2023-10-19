@@ -85,9 +85,6 @@ impl From<&DiscConfig> for ExtendedDsk {
     }
 }
 
-
-
-
 /// Generate a standard singled sided amsdos disc
 pub fn single_head_data_dsk() -> ExtendedDsk {
     DiscConfig::single_head_data_format().into()

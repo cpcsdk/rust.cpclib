@@ -138,11 +138,11 @@ impl PrintOrPauseCommand {
 pub struct BreakpointCommand {
     pub(crate) address: u16,
     pub(crate) page: u8,
-    pub(crate) span: Z80Span
+    pub(crate) span: Option<Z80Span>
 }
 
 impl BreakpointCommand {
-    pub fn new(address: u16, page: u8, span: Z80Span) -> Self {
+    pub fn new(address: u16, page: u8, span: Option<Z80Span>) -> Self {
         BreakpointCommand {
             address,
             page,

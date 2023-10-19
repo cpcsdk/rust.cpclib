@@ -283,7 +283,8 @@ struct IfState<'token, T: Visited + Debug + ListingElement + Sync> {
 }
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> IfState<'token, T>
-where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+where 
+<T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
 {
     fn new(token: &'token T) -> Self {
         Self {
@@ -481,7 +482,7 @@ where
                                 let include_state = IncludeStateInnerBuilder {
                                     listing,
                                     processed_tokens_builder: |listing: &LocatedListing| {
-                                        build_processed_tokens_list(listing.as_slice(), env)
+                                        build_processed_tokens_list(listing, env)
                                     }
                                 }
                                 .build();
@@ -605,12 +606,13 @@ where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
 
-
     let options = env.options().parse_options();
         if options.show_progress {
+            /* // temporarily deactivate parallel processing while i have not found a way to compile it
         #[cfg(not(target_arch = "wasm32"))]
         let iter = tokens.par_iter();
         #[cfg(target_arch = "wasm32")]
+        */
         let mut iter = tokens.iter();
 
         // get filename of files that will be read in parallel
@@ -629,9 +631,12 @@ where
     }
 
     // the files will be read here
+    /*
     #[cfg(not(target_arch = "wasm32"))]
     let iter = tokens.par_iter();
     #[cfg(target_arch = "wasm32")]
+    */
+
     let mut iter = tokens.iter();
     iter.map(|t| build_processed_token(t, env))
         .collect::<Vec<_>>()
@@ -777,7 +782,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
         let expand_state = ExpandStateBuilder {
             listing,
             processed_tokens_builder: |listing: &LocatedListing| {
-                build_processed_tokens_list(listing.as_slice(), env)
+                build_processed_tokens_list(listing, env)
             }
         }
         .build();

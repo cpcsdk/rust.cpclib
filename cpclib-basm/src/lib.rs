@@ -15,7 +15,7 @@ use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::{clap, lazy_static};
-use cpclib_disc::amsdos::{AmsdosFileName,  AmsdosHeader};
+use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
 #[cfg(feature = "xferlib")]
 use cpclib_xfer::CpcXfer;
 

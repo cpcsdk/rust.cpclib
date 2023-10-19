@@ -26,21 +26,20 @@ use std::path::Path;
 use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use enumn::N;
-use hxcfe::{Hxcfe, Img};
-use hxcfe::TrackEncoding;
-use tempfile::{NamedTempFile, Builder};
+use hxcfe::{Hxcfe, Img, TrackEncoding};
+use tempfile::{Builder, NamedTempFile};
+
 use crate::builder::build_edsk_from_cfg;
 use crate::cfg::DiscConfig;
-use crate::{edsk::{ExtendedDsk, Head}, disc::Disc};
+use crate::disc::Disc;
+use crate::edsk::{ExtendedDsk, Head};
 
 #[derive(Debug)]
 pub struct Hfe {
     img: Img
 }
 
-impl Hfe {
-
-}
+impl Hfe {}
 
 impl Default for Hfe {
     fn default() -> Self {
@@ -50,17 +49,22 @@ impl Default for Hfe {
 }
 
 impl Disc for Hfe {
-
     fn open<P: AsRef<Path>>(fname: P) -> Result<Self, String> {
         let hxcfe = Hxcfe::get();
-        hxcfe.load(fname.as_ref())
-            .map(|img| Hfe{img})
+        hxcfe.load(fname.as_ref()).map(|img| Hfe { img })
     }
 
-    fn save<P>(&self, path: P) ->  Result<(), String> 
-        where P: AsRef<Path> {
+    fn save<P>(&self, path: P) -> Result<(), String>
+    where P: AsRef<Path> {
         let path = path.as_ref();
-        let format = match path.extension().unwrap().to_str().unwrap().to_lowercase().as_str() {
+        let format = match path
+            .extension()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_lowercase()
+            .as_str()
+        {
             "dsk" | "edsk" => "AMSTRADCPC_DSK",
             "hfe" => "HXC_HFE",
             _ => return Err(format!("i do not know how to save {}", path.display()))
@@ -68,79 +72,83 @@ impl Disc for Hfe {
         self.img.save(path, format)
     }
 
-
     fn sector_read_bytes<S: Into<Head>>(
-		&self,
-		head: S,
-		track: u8,
-		sector_id: u8,
-	) -> Option<Vec<u8>> {
+        &self,
+        head: S,
+        track: u8,
+        sector_id: u8
+    ) -> Option<Vec<u8>> {
         let hxcfe = Hxcfe::get();
 
         let head: i32 = head.into().into();
-        assert!(head==0 || head==1);
-
+        assert!(head == 0 || head == 1);
 
         let sector_access = self.img.sector_access().unwrap();
-        let cfg = sector_access.search_sector(head as _, track as _, sector_id as _, TrackEncoding::IsoIbmMfm)?;
+        let cfg = sector_access.search_sector(
+            head as _,
+            track as _,
+            sector_id as _,
+            TrackEncoding::IsoIbmMfm
+        )?;
         let data = cfg.read().to_vec();
 
         Some(data)
     }
 
     fn sector_write_bytes<S: Into<Head>>(
-		    &mut self,
-		    head: S,
-		    track: u8,
-		    sector_id: u8,
-		    bytes: &[u8]
-	    )  -> Result<(), String>  {
-            let head: i32 = head.into().into();
-            let encoding = TrackEncoding::IsoIbmMfm;
-            let sector_access = self.img.sector_access().unwrap();
-            let mut cfg = sector_access.search_sector(head as _, track as _, sector_id as _, encoding).ok_or_else(|| "sector not found".to_owned())?;
-            
-            cfg.write(encoding, bytes); // TODO handle error
-            Ok(())
-          
+        &mut self,
+        head: S,
+        track: u8,
+        sector_id: u8,
+        bytes: &[u8]
+    ) -> Result<(), String> {
+        let head: i32 = head.into().into();
+        let encoding = TrackEncoding::IsoIbmMfm;
+        let sector_access = self.img.sector_access().unwrap();
+        let mut cfg = sector_access
+            .search_sector(head as _, track as _, sector_id as _, encoding)
+            .ok_or_else(|| "sector not found".to_owned())?;
+
+        cfg.write(encoding, bytes); // TODO handle error
+        Ok(())
     }
 
-    fn global_min_sector<S: Into<Head>>(&self, side: S)-> u8 {
+    fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8 {
         let s = side.into();
         let access = self.img.sector_access().unwrap();
         let mut min_sector = std::u8::MAX;
         for t in 0..(self.img.nb_tracks()) {
             for s in 0..self.img.nb_sides() {
-
                 min_sector = self.track_min_sector(s as u8, t as _);
             }
+        }
 
-       }
-
-       min_sector as _
+        min_sector as _
     }
 
-    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8)->u8 {
+    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8 {
         let s = side.into().into();
         let access = self.img.sector_access().unwrap();
         let sca = access.all_track_sectors(s, track as _, TrackEncoding::IsoIbmMfm);
         let sca = match sca {
             Some(sca) => sca,
             None => {
-                access.all_track_sectors(s,track as _,TrackEncoding::IsoIbmFm).unwrap()
+                access
+                    .all_track_sectors(s, track as _, TrackEncoding::IsoIbmFm)
+                    .unwrap()
             }
         };
 
-         (0..sca.nb_sectors())
+        (0..sca.nb_sectors())
             .map(|k| sca.sector_config(k).sector_id())
-            .min().unwrap() as _
+            .min()
+            .unwrap() as _
     }
 
     fn nb_tracks_per_head(&self) -> u8 {
         self.img.nb_tracks_per_head() as _
     }
 }
-
 
 impl From<ExtendedDsk> for Hfe {
     // TODO do it WITHOUT saving a disc
@@ -161,12 +169,11 @@ impl From<ExtendedDsk> for Hfe {
     }
 }
 
-
 #[allow(missing_docs)]
 // TODO implement directly without conversion from dsk
 impl From<DiscConfig> for Hfe {
     fn from(config: DiscConfig) -> Self {
-       Hfe::from(build_edsk_from_cfg(&config))
+        Hfe::from(build_edsk_from_cfg(&config))
     }
 }
 
@@ -178,14 +185,10 @@ impl From<&DiscConfig> for Hfe {
     }
 }
 
-
-
-
 #[cfg(test)]
 mod test {
-    use crate::disc::Disc;
-
     use super::Hfe;
+    use crate::disc::Disc;
 
     #[test]
     fn load_hfe() {

@@ -13,10 +13,10 @@ use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
 use cpclib::image::ga::Palette;
 use cpclib::image::ocp;
-use cpclib::{sna, ExtendedDsk};
 use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
+use cpclib::{sna, ExtendedDsk};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 pub mod built_info {
@@ -753,7 +753,8 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 let mut dsk = {
                     if p.exists() {
                         ExtendedDsk::open(p).unwrap()
-                    } else {
+                    }
+                    else {
                         ExtendedDsk::default()
                     }
                 };
@@ -763,8 +764,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 let read_only = false;
 
                 dsk.add_amsdos_file(&file, head, false, false).unwrap();
-                dsk.save(fname)
-                    .unwrap();
+                dsk.save(fname).unwrap();
             }
         }
         if sub_sna.is_some() || sub_m4.is_some() {

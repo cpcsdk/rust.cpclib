@@ -10,13 +10,20 @@ use pretty_assertions::assert_eq;
 use regex::Regex;
 use test_generator::test_resources;
 
-lazy_static::lazy_static!{
+lazy_static::lazy_static! {
     static ref  LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::default();
 }
 
-
 fn manual_cleanup() {
-    for fname in &["hello.dsk", "hello.hfe", "good_save_whole_inner.bin", "hello1.bin", "hello2.bin", "hello3.bin", "good_save_txt.bin"] {
+    for fname in &[
+        "hello.dsk",
+        "hello.hfe",
+        "good_save_whole_inner.bin",
+        "hello1.bin",
+        "hello2.bin",
+        "hello3.bin",
+        "good_save_txt.bin"
+    ] {
         let p = std::path::Path::new(fname);
         if p.exists() {
             std::fs::remove_file(p).unwrap()
@@ -158,8 +165,7 @@ fn expect_one_line_success(real_fname: &str) {
     let _lock = LOCK.lock();
     manual_cleanup();
 
-
-    manual_cleanup() ;
+    manual_cleanup();
 
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
 
@@ -244,8 +250,7 @@ fn expect_several_empty_lines_success(real_fname: &str) {
     }
     let _lock = LOCK.lock();
 
-    manual_cleanup() ;
-
+    manual_cleanup();
 
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
 
@@ -303,8 +308,7 @@ fn expect_listing_success(fname: &str) {
     let fname = &fname["cpclib-basm/tests/asm/".len()..];
     let _lock = LOCK.lock();
 
-    manual_cleanup() ;
-
+    manual_cleanup();
 
     let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
@@ -340,8 +344,7 @@ fn expect_listing_success(fname: &str) {
 fn expect_symbols_success(fname: &str) {
     let _lock = LOCK.lock();
 
-    manual_cleanup() ;
-
+    manual_cleanup();
 
     let sym_gt = &fname["cpclib-basm/tests/asm/".len()..];
     let fname = sym_gt.replace(".sym", ".asm");
@@ -384,7 +387,7 @@ fn expect_symbols_success(fname: &str) {
 fn expect_success(fname: &str) {
     let _lock = LOCK.lock();
 
-    manual_cleanup() ;
+    manual_cleanup();
 
     eprintln!("{}", fname);
 
@@ -438,8 +441,7 @@ fn expect_success(fname: &str) {
 fn expect_failure(fname: &str) {
     let _lock = LOCK.lock();
 
-    manual_cleanup() ;
-
+    manual_cleanup();
 
     let fname = &fname["cpclib-basm/tests/asm/".len()..];
 

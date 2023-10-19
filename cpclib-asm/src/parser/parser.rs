@@ -24,6 +24,8 @@ use cpclib_sna::{FlagValue, SnapshotVersion};
 use cpclib_tokens::ListingElement;
 use crc::*;
 use either::Either;
+use choice_nocase::choice_nocase;
+use obtained::LocatedTokenInner;
 
 use super::context::*;
 use super::obtained::*;
@@ -597,9 +599,10 @@ pub fn parse_rorg(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserErr
 
     let (input, inner) = inner_code(input)?;
 
-    let (input, _) = preceded(space0, alt((tag_no_case("DEPHASE"), tag_no_case("REND"))))(input)?;
+    let (res, _) = preceded(space0, alt((tag_no_case("DEPHASE"), tag_no_case("REND"))))(input)?;
 
-    Ok((input.clone(), LocatedToken::Rorg(exp, inner, rorg_start)))
+    let token = LocatedTokenInner::Rorg(exp, inner).into_located_token_between(&rorg_start, &res);
+    Ok((res, token))
 }
 
 /// TODO - limit the listing possibilities
@@ -640,12 +643,11 @@ pub fn parse_function(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Parse
 
     Ok((
         input.clone(),
-        LocatedToken::Function(
+        LocatedTokenInner::Function(
             name,
             arguments,
             listing,
-            function_start.slice(..function_start.len() - input.len())
-        )
+        ).into_located_token_between(&function_start, &input)
     ))
 }
 
@@ -690,15 +692,14 @@ pub fn parse_macro(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserEr
 
     let content = before_content.take(content.0.len());
 
-    let span = dir_start.take(dir_start.input_len() - input.input_len());
     Ok((
         input.clone(),
-        LocatedToken::Macro {
+        LocatedTokenInner::Macro {
             name,
             params: arguments,
-            content,
-            span
+            content
         }
+        .into_located_token_between(&dir_start, &input)
     ))
 }
 
@@ -725,7 +726,8 @@ pub fn parse_while(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserEr
         )
     ))(input)?;
 
-    Ok((input.clone(), LocatedToken::While(cond, inner, while_start)))
+    let token = LocatedTokenInner::While(cond, inner).into_located_token_between(&while_start, &input);
+    Ok((input, token))
 }
 
 pub fn parse_module(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
@@ -740,9 +742,10 @@ pub fn parse_module(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
         preceded(space0, parse_directive_word("ENDMODULE"))
     ))(input)?;
 
+    let token = LocatedTokenInner::Module(name, inner).into_located_token_between(&module_start, &input);
     Ok((
-        input.clone(),
-        LocatedToken::Module(name, inner, module_start)
+        input,
+        token
     ))
 }
 
@@ -772,9 +775,10 @@ pub fn parse_crunched_section(input: Z80Span) -> IResult<Z80Span, LocatedToken, 
         tuple((space0, parse_directive_word("LZCLOSE"), space0))
     ))(input)?;
 
+    let token = LocatedTokenInner::CrunchedSection(kind, inner).into_located_token_between(&crunched_start, &input);
     Ok((
-        input.clone(),
-        LocatedToken::CrunchedSection(kind, inner, crunched_start)
+        input,
+        token
     ))
 }
 
@@ -832,9 +836,10 @@ pub fn parse_switch(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
             )(input)?
         };
         if endswitch {
+            let token =  LocatedTokenInner::Switch(value, cases_listing, default_listing).into_located_token_between(&switch_start, &input);
             return Ok((
                 input,
-                LocatedToken::Switch(value, cases_listing, default_listing, switch_start.clone())
+               token
             ));
         }
 
@@ -895,17 +900,17 @@ pub fn parse_for(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserErro
         )
     ))(input)?;
 
-    let for_span = for_start.take(for_start.input_len() - input.input_len());
+    let token =         LocatedTokenInner::For {
+        label: counter,
+        start,
+        stop,
+        step,
+        listing: inner
+    }
+    .into_located_token_between(&for_start, &input);
     Ok((
-        input.clone(),
-        LocatedToken::For {
-            label: counter,
-            start,
-            stop,
-            step,
-            listing: inner,
-            span: for_span
-        }
+        input,
+        token
     ))
 }
 
@@ -929,12 +934,12 @@ pub fn parse_confined(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Parse
         )
     ))(input)?;
 
+    let token = LocatedTokenInner::Confined(
+        inner
+    ).into_located_token_between(&confined_start, &input);
     Ok((
-        input.clone(),
-        LocatedToken::Confined(
-            inner,
-            confined_start.take(confined_start.input_len() - input.input_len())
-        )
+        input,
+        token
     ))
 }
 
@@ -973,15 +978,17 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
                 )
             ))(input)?;
 
+            let token =LocatedTokenInner::Repeat(
+                count,
+                inner,
+                counter,
+                counter_start
+            )
+            .into_located_token_between(
+                &repeat_start, &input);
             Ok((
-                input.clone(),
-                LocatedToken::Repeat(
-                    count,
-                    inner,
-                    counter,
-                    counter_start,
-                    repeat_start.take(repeat_start.input_len() - input.input_len())
-                )
+                input,
+                token
             ))
         }
 
@@ -993,9 +1000,11 @@ pub fn parse_repeat(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
                 delimited(space0, parse_directive_word("UNTIL"), space0)
             ))(input)?;
             let (input, cond) = cut(context("REPEAT UNTIL: condition error", located_expr))(input)?;
+            let token = LocatedTokenInner::RepeatUntil(cond, inner)
+            .into_located_token_between(&repeat_start, &input);
             Ok((
-                input.clone(),
-                LocatedToken::RepeatUntil(cond, inner, repeat_start)
+                input,
+                token
             ))
         }
     }
@@ -1056,9 +1065,11 @@ pub fn parse_iterate(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Parser
         ))
     ))(input)?;
 
+    let token = LocatedTokenInner::Iterate(counter, values, inner)
+    .into_located_token_between(&iterate_start, &input);
     Ok((
-        input.clone(),
-        LocatedToken::Iterate(counter, values, inner, iterate_start)
+        input,
+        token
     ))
 }
 
@@ -1081,12 +1092,11 @@ pub fn parse_basic(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserEr
 
     let (input, _) = tuple((tag_no_case("ENDLOCOMOTIVE"), space0))(input)?;
 
-    let args = args.map(|v| v.iter().map(|l| SmolStr::from(l.as_str())).collect_vec());
-
-    let size = basic_start.input_len() - input.input_len();
+    let token = LocatedTokenInner::Basic(args, hidden_lines, basic)
+    .into_located_token_between(&basic_start, &input);
     Ok((
         input,
-        Token::Basic(args, hidden_lines, basic.to_string()).locate(basic_start, size)
+        token
     ))
 }
 
@@ -1314,7 +1324,7 @@ pub fn parse_z80_line_complete(
                         terminated(parse_label(false), not(line_ending)),
                         parse_single_token
                     ),
-                    |t| Either::Right(vec![LocatedToken::Label(t.0), t.1])
+                    |t| Either::Right(vec![LocatedTokenInner::Label(t.0).into_located_token_direct(), t.1])
                 ),
                 // TODO add syntax where block-lmike directives have there name provided in a precedding label
                 map(parse_macro_or_struct_call(false, false), |m| {
@@ -1322,7 +1332,7 @@ pub fn parse_z80_line_complete(
                 }),
                 map(pair(space0, peek(tag(":"))), |_| Either::Right(vec![])), // a duplicated :
                 map(preceded(space0, parse_label(false)), |l| {
-                    Either::Left(LocatedToken::Label(l))
+                    Either::Left(LocatedTokenInner::Label(l).into_located_token_direct())
                 })  // a single label
             )),
             r#in
@@ -1483,7 +1493,7 @@ pub fn parse_z80_line_label_aware_directive(
                 tuple((my_space0, tag(":"))),
                 tuple((my_space0, my_line_ending))
             ))(input.clone())?;
-            return Ok((input, LocatedToken::Label(label)));
+            return Ok((input, LocatedTokenInner::Label(label).into_located_token_direct()));
         }
     }
 
@@ -1531,16 +1541,16 @@ pub fn parse_z80_line_label_aware_directive(
     // Build the needed token for the label of interest
     let token : LocatedToken = match label_modifier {
         LabelModifier::Equ => 
-            LocatedToken::Equ{label, expr: expr_arg.unwrap(), span: before_label.take(size)},
-        LabelModifier::Equal(op) => LocatedToken::Assign{label, expr:expr_arg.unwrap(), op, span},
-        LabelModifier::Set => LocatedToken::Assign{label, expr: expr_arg.unwrap(), op:None, span},
+            LocatedTokenInner::Equ{label, expr: expr_arg.unwrap()},
+        LabelModifier::Equal(op) => LocatedTokenInner::Assign{label, expr:expr_arg.unwrap(), op},
+        LabelModifier::Set => LocatedTokenInner::Assign{label, expr: expr_arg.unwrap(), op:None},
         LabelModifier::SetN => {
-            LocatedToken::SetN{label, source: source_label.unwrap(), expr: additional_arg, span}
+            LocatedTokenInner::SetN{label, source: source_label.unwrap(), expr: additional_arg}
         }
         LabelModifier::Next => {
-            LocatedToken::Next{label, source: source_label.unwrap(), expr: additional_arg, span}
+            LocatedTokenInner::Next{label, source: source_label.unwrap(), expr: additional_arg}
         }
-    };
+    }.into_located_token_at(&span);
 
     // add it to the list
 
@@ -1562,14 +1572,14 @@ pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError>
     (input)
 }
 
-pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, charset) = opt(alt((parse_charset_string, parse_charset_start_stop_end)))(input)?;
 
     Ok((
         input,
         charset
-            .map(|c| Token::Charset(c))
-            .unwrap_or_else(|| Token::Charset(CharsetFormat::Reset))
+            .map(|c| LocatedTokenInner::Charset(c))
+            .unwrap_or_else(|| LocatedTokenInner::Charset(CharsetFormat::Reset))
     ))
 }
 
@@ -1601,10 +1611,7 @@ pub fn parse_charset_string(input: Z80Span) -> IResult<Z80Span, CharsetFormat, Z
 }
 
 /// Parser for the include directive
-pub fn parse_include(
-    include_start: Z80Span
-) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+pub fn parse_include(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         let (input, once_fname) = pair(
             opt(delimited(space0, parse_word("ONCE"), space0)),
             parse_fname
@@ -1629,21 +1636,18 @@ pub fn parse_include(
             )
         ))(input)?;
 
-        let size = include_start.len() - input.len();
         Ok((
             input,
-            LocatedToken::Include(fname, namespace, once.is_some(), include_start.take(size))
+            LocatedTokenInner::Include(fname, namespace, once.is_some())
         ))
     }
-}
 
 /// Parse for the various binary include directives
 #[inline]
 pub fn parse_incbin(
-    input_start: Z80Span,
     transformation: BinaryTransformation
-) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         let (input, fname) = preceded(space0, parse_fname)(input)?;
 
         let (input, offset) =
@@ -1657,17 +1661,15 @@ pub fn parse_incbin(
             tag_no_case("OFF")
         ))(input)?;
 
-        let span = input_start.take(input_start.input_len() - input.input_len());
         Ok((
             input,
-            LocatedToken::Incbin {
+            LocatedTokenInner::Incbin {
                 fname: fname,
                 offset,
                 length,
                 extended_offset: None,
                 off: off.is_some(),
-                transformation,
-                span
+                transformation
             }
         ))
     }
@@ -1676,9 +1678,8 @@ pub fn parse_incbin(
 /// parse write direct in memory / converted to a bank directive
 /// we do not care of the parameters for roms as we are not working in an emulator
 pub fn parse_write_direct_memory(
-    input_start: Z80Span
-) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    input: Z80Span
+) ->  IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         // filter all the stuff before
         let (input, _) = tuple((
             tag_no_case("DIRECT"),
@@ -1689,21 +1690,18 @@ pub fn parse_write_direct_memory(
             parse_comma
         ))(input)?;
 
-        let (input, bank) = expr(input)?;
+        let (input, bank) = located_expr(input)?;
 
-        let token = Token::Bank(Some(bank));
-        let size = input_start.input_len() - input.input_len();
-        let token = token.locate(input_start.clone(), size);
+        let token = LocatedTokenInner::Bank(Some(bank));
 
         Ok((
             input,
-            LocatedToken::WarningWrapper(
+            LocatedTokenInner::WarningWrapper(
                 Box::new(token),
                 "Prefer BANK or PAGE directives to write direct -1, -1, XX".to_owned()
             )
         ))
     }
-}
 
 #[derive(PartialEq)]
 pub enum SaveKind {
@@ -1713,10 +1711,9 @@ pub enum SaveKind {
 
 /// Parse both save directive and write direct in a file
 pub fn parse_save(
-    input_start: Z80Span,
     save_kind: SaveKind
-) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         let input = if save_kind == SaveKind::WriteDirect {
             parse_word("DIRECT")(input)?.0
         }
@@ -1726,9 +1723,9 @@ pub fn parse_save(
 
         let (input, filename) = parse_fname(input)?;
 
-        let (input, address) = opt(preceded(parse_comma, opt(expr)))(input)?;
+        let (input, address) = opt(preceded(parse_comma, opt(located_expr)))(input)?;
         let (input, size) = if address.is_some() {
-            opt(preceded(parse_comma, opt(expr)))(input)?
+            opt(preceded(parse_comma, opt(located_expr)))(input)?
         }
         else {
             (input, None)
@@ -1764,20 +1761,15 @@ pub fn parse_save(
         };
 
         let (input, side) = if dsk_filename.is_some() && save_kind == SaveKind::Save {
-            opt(preceded(parse_comma, expr))(input)?
+            opt(preceded(parse_comma, located_expr))(input)?
         }
         else {
             (input, None)
         };
 
-        let filename = filename.to_string();
-        let dsk_filename = dsk_filename.map(|s| s.to_string());
-
-        let span_size = input_start.input_len() - input.input_len();
-
         Ok((
             input,
-            Token::Save {
+            LocatedTokenInner::Save {
                 filename,
                 address: address.unwrap_or(None),
                 size: size.unwrap_or(None),
@@ -1785,57 +1777,57 @@ pub fn parse_save(
                 dsk_filename,
                 side
             }
-            .locate(input_start.clone(), span_size)
         ))
     }
 }
 
 /// Parse  UNDEF directive.
-pub fn parse_undef(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_undef(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, label) = parse_label(false)(input)?;
 
-    Ok((input, Token::Undef(label.into())))
+    Ok((input, LocatedTokenInner::Undef(label)))
 }
 
 /// Parse return from a function
-pub fn parse_return(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, expr) = expr(input)?;
+pub fn parse_return(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (input, expr) = located_expr(input)?;
 
-    Ok((input, Token::Return(expr)))
+    Ok((input, LocatedTokenInner::Return(expr)))
 }
 
-pub fn parse_section(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_section(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, name) = preceded(space0, parse_label(false))(input)?;
 
-    Ok((input, Token::Section(name.into())))
+    Ok((input, LocatedTokenInner::Section(name)))
 }
 
-pub fn parse_range(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_range(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, start) = cut(context(
         "RANGE: wrong start address",
-        delimited(space0, expr, space0)
+        delimited(space0, located_expr, space0)
     ))(input)?;
     let (input, stop) = cut(context(
         "RANGE: wrong end address",
-        preceded(parse_comma, delimited(space0, expr, space0))
+        preceded(parse_comma, delimited(space0, located_expr, space0))
     ))(input)?;
     let (input, label) = cut(context(
         "RANGE: wrong name",
         preceded(parse_comma, delimited(space0, parse_label(false), space0))
     ))(input)?;
 
-    Ok((input, Token::Range(label.as_str().to_owned(), start, stop)))
+    Ok((input, LocatedTokenInner::Range(label, start, stop)))
 }
-
-pub fn parse_assign(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+/*
+pub fn parse_assign(input: Z80Span) -> IResult<Z80Span, TokenInner, Z80ParserError> {
     let (input, (label, op, value)) = tuple((
         parse_label(false),
         delimited(space0, parse_assign_operator, space0),
         expr
     ))(input)?;
 
-    Ok((input, Token::Assign(label.into(), value, op)))
+    Ok((input, TokenInner::Assign{label, value, op}))
 }
+*/
 
 pub fn parse_token(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let parsing_state = input.context().state().clone();
@@ -1849,90 +1841,87 @@ pub fn parse_token1(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
     parse_opcode_no_arg(input)
 }
 
+
+
+
 pub fn parse_token2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let input_start = input.clone();
 
     // Get the first word that will drive the rest of parsing
     let (rest, word) = delimited(space0, alpha1, space0)(input.clone())?;
 
-    let mut word: smartstring::SmartString<smartstring::Compact> =
-        smartstring::SmartString::from(word.as_str());
-    word.as_mut_str().make_ascii_uppercase();
 
     // Apply the right parsing
     // We use this way of doing to reduce function calls and error. Let's hope it will speed everything
-    match word.as_str() {
-        // located tokens
-        "LD" => parse_ld(input_start)(rest),
+    // choice_no_case is used to avoid memory allocation of uppercased mnemonic
+    let (input, token): (Z80Span,  LocatedTokenInner) = match word.as_str() {
+        choice_nocase!("LD") => parse_ld(rest),
+            choice_nocase!("ADC") => parse_add_or_adc(Mnemonic::Adc)(rest),
+            choice_nocase!("ADD") => parse_add_or_adc(Mnemonic::Add)(rest),
+            choice_nocase!("AND") => parse_logical_operator(Mnemonic::And)(rest),
 
-        // tokens to locate
-        word => {
-            let (input, token) = match word {
-                "ADC" => parse_add_or_adc(Mnemonic::Adc)(rest),
-                "ADD" => parse_add_or_adc(Mnemonic::Add)(rest),
-                "AND" => parse_logical_operator(Mnemonic::And)(rest),
+            choice_nocase!("BIT") => parse_res_set_bit(Mnemonic::Bit)(rest),
 
-                "BIT" => parse_res_set_bit(Mnemonic::Bit)(rest),
+            choice_nocase!("CALL") => parse_call_jp_or_jr(Mnemonic::Call)(rest),
+            choice_nocase!("CP") => parse_cp(rest),
 
-                "CALL" => parse_call_jp_or_jr(Mnemonic::Call)(rest),
-                "CP" => parse_cp(rest),
+            choice_nocase!("DEC") => parse_inc_dec(Mnemonic::Dec)(rest),
+            choice_nocase!("DJNZ") => parse_djnz(rest),
 
-                "DEC" => parse_inc_dec(Mnemonic::Dec)(rest),
-                "DJNZ" => parse_djnz(rest),
+            choice_nocase!("EX") => alt((parse_ex_af, parse_ex_hl_de, parse_ex_mem_sp))(rest),
 
-                "EX" => alt((parse_ex_af, parse_ex_hl_de, parse_ex_mem_sp))(rest),
+            choice_nocase!("EXA") => Ok((rest, LocatedTokenInner::new_opcode(Mnemonic::ExAf, None, None))),
+            choice_nocase!("EXD") => Ok((rest, LocatedTokenInner::new_opcode(Mnemonic::ExHlDe, None, None))),
 
-                "EXA" => Ok((rest, Token::new_opcode(Mnemonic::ExAf, None, None))),
-                "EXD" => Ok((rest, Token::new_opcode(Mnemonic::ExHlDe, None, None))),
+            choice_nocase!("IN") => parse_in(rest),
+            choice_nocase!("INC") => parse_inc_dec(Mnemonic::Inc)(rest),
+            choice_nocase!("IM") => parse_im(rest),
 
-                "IN" => parse_in(rest),
-                "INC" => parse_inc_dec(Mnemonic::Inc)(rest),
-                "IM" => parse_im(rest),
+            choice_nocase!("JP") => parse_call_jp_or_jr(Mnemonic::Jp)(rest),
+            choice_nocase!("JR") => parse_call_jp_or_jr(Mnemonic::Jr)(rest),
 
-                "JP" => parse_call_jp_or_jr(Mnemonic::Jp)(rest),
-                "JR" => parse_call_jp_or_jr(Mnemonic::Jr)(rest),
+            choice_nocase!("OR") => parse_logical_operator(Mnemonic::Or)(rest),
+            choice_nocase!("OUT") => parse_out(rest),
 
-                "OR" => parse_logical_operator(Mnemonic::Or)(rest),
-                "OUT" => parse_out(rest),
+            choice_nocase!("POP") => parse_push_n_pop(Mnemonic::Pop)(rest),
+            choice_nocase!("PUSH") => parse_push_n_pop(Mnemonic::Push)(rest),
 
-                "POP" => parse_push_n_pop(Mnemonic::Pop)(rest),
-                "PUSH" => parse_push_n_pop(Mnemonic::Push)(rest),
+            choice_nocase!("RES") => parse_res_set_bit(Mnemonic::Res)(rest),
+            choice_nocase!("RET") => parse_ret(rest),
+            choice_nocase!("RLC") => parse_shifts_and_rotations(Mnemonic::Rlc)(rest),
+            choice_nocase!("RL") => parse_shifts_and_rotations(Mnemonic::Rl)(rest),
+            choice_nocase!("RRC") => parse_shifts_and_rotations(Mnemonic::Rrc)(rest),
+            choice_nocase!("RR") => parse_shifts_and_rotations(Mnemonic::Rr)(rest),
+            choice_nocase!("RST") => parse_rst(rest),
 
-                "RES" => parse_res_set_bit(Mnemonic::Res)(rest),
-                "RET" => parse_ret(rest),
-                "RLC" => parse_shifts_and_rotations(Mnemonic::Rlc)(rest),
-                "RL" => parse_shifts_and_rotations(Mnemonic::Rl)(rest),
-                "RRC" => parse_shifts_and_rotations(Mnemonic::Rrc)(rest),
-                "RR" => parse_shifts_and_rotations(Mnemonic::Rr)(rest),
-                "RST" => parse_rst(rest),
+            choice_nocase!("SBC") => parse_sbc(rest),
+            choice_nocase!("SET") => parse_res_set_bit(Mnemonic::Set)(rest),
+            choice_nocase!("SL1") => parse_shifts_and_rotations(Mnemonic::Sl1)(rest),
+            choice_nocase!("SLA") => parse_shifts_and_rotations(Mnemonic::Sla)(rest),
+            choice_nocase!("SLL") => parse_shifts_and_rotations(Mnemonic::Sl1)(rest),
+            choice_nocase!("SRA") => parse_shifts_and_rotations(Mnemonic::Sra)(rest),
+            choice_nocase!("SRL") => parse_shifts_and_rotations(Mnemonic::Srl)(rest),
+            choice_nocase!("SUB") => parse_sub(rest),
 
-                "SBC" => parse_sbc(rest),
-                "SET" => parse_res_set_bit(Mnemonic::Set)(rest),
-                "SL1" => parse_shifts_and_rotations(Mnemonic::Sl1)(rest),
-                "SLA" => parse_shifts_and_rotations(Mnemonic::Sla)(rest),
-                "SLL" => parse_shifts_and_rotations(Mnemonic::Sl1)(rest),
-                "SRA" => parse_shifts_and_rotations(Mnemonic::Sra)(rest),
-                "SRL" => parse_shifts_and_rotations(Mnemonic::Srl)(rest),
-                "SUB" => parse_sub(rest),
+            choice_nocase!("XOR") => parse_logical_operator(Mnemonic::Xor)(rest),
 
-                "XOR" => parse_logical_operator(Mnemonic::Xor)(rest),
+            _ => {
+                Err(Err::Error(Z80ParserError::from_error_kind(
+                    input,
+                    ErrorKind::Alt
+                )))
+            }
+        }?;
 
-                _ => {
-                    Err(Err::Error(Z80ParserError::from_error_kind(
-                        input,
-                        ErrorKind::Alt
-                    )))
-                }
-            }?;
+    let token = token.into_located_token_between(&input_start, &input);
+    dbg!(&token);
+    Ok((input, token))
+        
 
-            let size = input_start.input_len() - input.input_len();
-            Ok((input, token.locate(input_start, size)))
-        }
-    }
 }
 
 /// Parse ex af, af' instruction
-pub fn parse_ex_af(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_ex_af(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     map(
         value(
             (),
@@ -1943,12 +1932,12 @@ pub fn parse_ex_af(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
                 parse_word("AF'")
             ))
         ),
-        |_| Token::new_opcode(Mnemonic::ExAf, None, None)
+        |_| LocatedTokenInner::new_opcode(Mnemonic::ExAf, None, None)
     )(input)
 }
 
 /// Parse ex hl, de instruction
-pub fn parse_ex_hl_de(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_ex_hl_de(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     map(
         alt((
             value(
@@ -1972,12 +1961,12 @@ pub fn parse_ex_hl_de(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError>
                 ))
             )
         )),
-        |_| Token::new_opcode(Mnemonic::ExHlDe, None, None)
+        |_| LocatedTokenInner::new_opcode(Mnemonic::ExHlDe, None, None)
     )(input)
 }
 
 /// Parse ex (sp), hl
-pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, destination) = tuple((
         //     tag_no_case("EX"),
         //      space1,
@@ -1992,7 +1981,7 @@ pub fn parse_ex_mem_sp(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError
 
     Ok((
         input,
-        Token::new_opcode(Mnemonic::ExMemSp, Some(destination.6), None)
+        LocatedTokenInner::new_opcode(Mnemonic::ExMemSp, Some(destination.6), None)
     ))
 }
 
@@ -2031,7 +2020,7 @@ fn parse_struct_directive_inner(input: Z80Span) -> IResult<Z80Span, LocatedToken
 /// Parse any directive
 pub fn parse_directive(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     let parsing_state = input.context().state().clone();
-    verify(parse_directive_new(&parsing_state.clone()), move |d| d.is_accepted(&parsing_state))(input.clone())
+    verify(parse_directive_new(&parsing_state.clone()), move |d| d.is_accepted(&parsing_state))(input)
 }
 
 #[inline]
@@ -2047,103 +2036,102 @@ impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError>  + '_ {
     let (rest, word) =
         delimited(space0, terminated(alphanumeric1, not(is_a("._"))), space0)(input.clone())?;
 
-    let mut upper_word: smartstring::SmartString<smartstring::Compact> =
-        smartstring::SmartString::from(word.as_str());
-    upper_word.as_mut_str().make_ascii_uppercase();
-
     let within_struct = local_parsing_state == &ParsingState::StructLimited;
-    match upper_word.as_str() {
-        "ORG" => parse_org(rest),
 
-        "DB" | "DEFB" | "DM" | "DEFM" | "BYTE" | "TEXT" => {
-            parse_db_or_dw_or_str(input_start, DbDwStr::Db, within_struct)(rest)
+
+    dbg!(&word);
+    
+    let (rest, token) :(Z80Span, LocatedTokenInner) = match word.as_str() {
+        choice_nocase!("ORG") => parse_org(rest)?,
+
+        choice_nocase!("DB") | choice_nocase!("DEFB") | choice_nocase!("DM") | choice_nocase!("DEFM") | choice_nocase!("BYTE") | choice_nocase!("TEXT") => {
+            parse_db_or_dw_or_str(DbDwStr::Db, within_struct)(rest)?
         }
-        "WORD" | "DW" | "DEFW" => parse_db_or_dw_or_str(input_start, DbDwStr::Dw, within_struct)(rest),
-        "STR" => parse_db_or_dw_or_str(input_start, DbDwStr::Str, within_struct)(rest),
+        choice_nocase!("WORD") | choice_nocase!("DW") | choice_nocase!("DEFW") => parse_db_or_dw_or_str( DbDwStr::Dw, within_struct)(rest)?,
+        choice_nocase!("STR") => parse_db_or_dw_or_str( DbDwStr::Str, within_struct)(rest)?,
 
-        "INCBIN" | "BINCLUDE" => parse_incbin(input_start, BinaryTransformation::None)(rest),
-        "INCEXO" => {
-            parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZEXO))(rest)
+        choice_nocase!("INCBIN") | choice_nocase!("BINCLUDE") => parse_incbin( BinaryTransformation::None)(rest)?,
+        choice_nocase!("INCEXO") => {
+            parse_incbin( BinaryTransformation::Crunch(CrunchType::LZEXO))(rest)?
         }
-        "INCLZ4" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ4))(rest),
-        "INCL48" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ48))(rest),
-        "INCL49" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZ49))(rest),
-        "INCAPU" => {
-            parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZAPU))(rest)
+        choice_nocase!("INCLZ4") => parse_incbin( BinaryTransformation::Crunch(CrunchType::LZ4))(rest)?,
+        choice_nocase!("INCL48") => parse_incbin( BinaryTransformation::Crunch(CrunchType::LZ48))(rest)?,
+        choice_nocase!("INCL49") => parse_incbin( BinaryTransformation::Crunch(CrunchType::LZ49))(rest)?,
+        choice_nocase!("INCAPU") => {
+            parse_incbin( BinaryTransformation::Crunch(CrunchType::LZAPU))(rest)?
         }
-        "INCZX0" => parse_incbin(input_start, BinaryTransformation::Crunch(CrunchType::LZX0))(rest),
+        choice_nocase!("INCZX0") => parse_incbin( BinaryTransformation::Crunch(CrunchType::LZX0))(rest)?,
 
-        "INCLUDE" | "READ" => parse_include(input_start)(rest),
+        choice_nocase!("INCLUDE") | choice_nocase!("READ") => parse_include(rest)?,
 
-        "STRUCT" => parse_struct(input_start)(rest),
-        "SAVE" => parse_save(input_start, SaveKind::Save)(rest),
-        "WRITE" => {
+        choice_nocase!("STRUCT") => parse_struct(rest)?,
+        choice_nocase!("SAVE") => parse_save(SaveKind::Save)(rest)?,
+        choice_nocase!("WRITE") => {
             alt((
-                parse_save(input_start.clone(), SaveKind::WriteDirect),
-                parse_write_direct_memory(input_start.clone())
-            ))(rest)
-        }
+                parse_save(SaveKind::WriteDirect),
+                parse_write_direct_memory
+            ))(rest)?
+        },
+                choice_nocase!("FILL") | choice_nocase!("DS") | choice_nocase!("DEFS") | choice_nocase!("RMEM") => parse_defs(rest)?,
 
-        word => {
-            let (input, token) = match word {
-                "FILL" | "DS" | "DEFS" | "RMEM" => parse_defs(rest),
+                choice_nocase!("ALIGN") => parse_align(rest)?,
+                choice_nocase!("ASSERT") => parse_assert(rest)?,
 
-                "ALIGN" => parse_align(rest),
-                "ASSERT" => parse_assert(rest),
+                choice_nocase!("BANK") => parse_bank(rest)?,
+                choice_nocase!("BANKSET") => parse_bankset(rest)?,
+                choice_nocase!("BREAKPOINT") => parse_breakpoint(rest)?,
+                choice_nocase!("BUILDSNA") => parse_buildsna(rest)?,
 
-                "BANK" => parse_bank(rest),
-                "BANKSET" => parse_bankset(rest),
-                "BREAKPOINT" => parse_breakpoint(rest),
-                "BUILDSNA" => parse_buildsna(rest),
+                choice_nocase!("CHARSET") => parse_charset(rest)?,
 
-                "CHARSET" => parse_charset(rest),
+                choice_nocase!("DEFSECTION") => parse_range(rest)?,
 
-                "DEFSECTION" => parse_range(rest),
+                choice_nocase!("END") => Ok((rest, LocatedTokenInner::End))?,
+                choice_nocase!("EXPORT") => parse_export(ExportKind::Export)(rest)?,
 
-                "END" => Ok((rest, Token::End)),
-                "EXPORT" => parse_export(ExportKind::Export)(rest),
+                choice_nocase!("FAIL") => parse_fail(rest)?,
 
-                "FAIL" => parse_fail(rest),
+                choice_nocase!("LIMIT") => parse_limit(rest)?,
+                choice_nocase!("LIST") => Ok((rest, LocatedTokenInner::List))?,
 
-                "LIMIT" => parse_limit(rest),
-                "LIST" => Ok((rest, Token::List)),
-
-                "NOEXPORT" => parse_export(ExportKind::NoExport)(rest),
-                "NOLIST" => Ok((rest, Token::NoList)),
-                "NOP" => parse_nop(rest),
+                choice_nocase!("NOEXPORT") => parse_export(ExportKind::NoExport)(rest)?,
+                choice_nocase!("NOLIST") => (rest, LocatedTokenInner::NoList),
+                choice_nocase!("NOP") => parse_nop(rest)?,
 
 
-                "PAUSE" => Ok((rest, Token::Pause)),
-                "PRINT" => parse_print(rest),
-                "PROTECT" => parse_protect(rest),
+                choice_nocase!("PAUSE") => Ok((rest, LocatedTokenInner::Pause))?,
+                choice_nocase!("PRINT") => parse_print(rest)?,
+                choice_nocase!("PROTECT") => parse_protect(rest)?,
 
-                "RANGE" => parse_range(rest),
-                "RETURN" => parse_return(rest),
-                "RUN" => parse_run(rest),
+                choice_nocase!("RANGE") => parse_range(rest)?,
+                choice_nocase!("RETURN") => parse_return(rest)?,
+                choice_nocase!("RUN") => parse_run(rest)?,
 
-                "SECTION" => parse_section(rest),
-                "SNASET" => parse_snaset(rest),
+                choice_nocase!("SECTION") => parse_section(rest)?,
+                choice_nocase!("SNASET") => parse_snaset(rest)?,
 
-                "SNAPINIT" | "SNAINIT" => parse_snainit(rest),
+                choice_nocase!("SNAPINIT") | choice_nocase!("SNAINIT") => parse_snainit(rest)?,
 
-                "TICKER" => parse_stable_ticker(rest),
+                choice_nocase!("TICKER") => parse_stable_ticker(rest)?,
 
-                "UNDEF" => parse_undef(rest),
+                choice_nocase!("UNDEF") => parse_undef(rest)?,
 
-                "WAITNOPS" => parse_waitnops(rest),
+                choice_nocase!("WAITNOPS") => parse_waitnops(rest)?,
 
                 _ => {
-                    Err(Err::Error(Z80ParserError::from_error_kind(
+                    return Err(Err::Error(Z80ParserError::from_error_kind(
                         input,
                         ErrorKind::Alt
                     )))
                 }
-            }?;
 
-            let size = input_start.input_len() - input.input_len();
-            Ok((input, token.locate(input_start, size)))
-        }
-    }
+    };
+
+    dbg!(&token);
+
+    let token = dbg!(token.into_located_token_between(&input_start, &rest));
+    Ok((rest, token))
+
 }
 }
 
@@ -2235,7 +2223,7 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Pa
         }
     }
 
-    let (input, _) = context(
+    let (res, _) = context(
         "Condition: issue in end condition",
         tuple((
             opt(alt((
@@ -2246,7 +2234,8 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Pa
         ))
     )(input_loop)?;
 
-    Ok((input, LocatedToken::If(conditions, else_clause, if_start)))
+    let token = LocatedTokenInner::If(conditions, else_clause).into_located_token_between(&if_start, &res);
+    Ok((res, token))
 }
 
 /// Read the condition part in the parse_conditional macro
@@ -2286,22 +2275,22 @@ fn parse_conditional_condition(
 }
 
 /// Parse a breakpint instruction
-pub fn parse_breakpoint(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    map(opt(expr), |exp| Token::Breakpoint(exp))(input)
+pub fn parse_breakpoint(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    map(opt(located_expr), |exp| LocatedTokenInner::Breakpoint(exp))(input)
 }
 
-pub fn parse_bankset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, count) = expr(input)?;
+pub fn parse_bankset(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (input, count) = located_expr(input)?;
 
-    Ok((input, Token::Bankset(count)))
+    Ok((input, LocatedTokenInner::Bankset(count)))
 }
 
-pub fn parse_buildsna(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_buildsna(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     terminated(
         map(
             cut(opt(alt((tag_no_case("V2"), tag_no_case("V3"))))),
             |v: Option<Z80Span>| {
-                Token::BuildSna(match v {
+                LocatedTokenInner::BuildSna(match v {
                     Some(txt) => {
                         if txt.to_lowercase() == "v2" {
                             Some(SnapshotVersion::V2)
@@ -2318,71 +2307,69 @@ pub fn parse_buildsna(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError>
     )(input)
 }
 
-pub fn parse_run(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, exp) = cut(context("RUN expects an expression (e.g. RUN $)", expr))(input)?;
-    let (input, ga) = opt(preceded(tuple((space0, char(','), space0)), expr))(input)?;
+pub fn parse_run(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (input, exp) = cut(context("RUN expects an expression (e.g. RUN $)", located_expr))(input)?;
+    let (input, ga) = opt(preceded(tuple((space0, char(','), space0)), located_expr))(input)?;
 
-    Ok((input, Token::Run(exp, ga)))
+    Ok((input, LocatedTokenInner::Run(exp, ga)))
 }
 
-pub fn parse_limit(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, exp) = expr(input)?;
+pub fn parse_limit(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (input, exp) = located_expr(input)?;
 
-    Ok((input, Token::Limit(exp)))
+    Ok((input, LocatedTokenInner::Limit(exp)))
 }
 
-pub fn parse_waitnops(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, exp) = expr(input)?;
+pub fn parse_waitnops(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (input, exp) = located_expr(input)?;
 
-    Ok((input, Token::WaitNops(exp)))
+    Ok((input, LocatedTokenInner::WaitNops(exp)))
 }
 
 /// Parse tickin directives
-pub fn parse_stable_ticker(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_stable_ticker(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     alt((parse_stable_ticker_start, parse_stable_ticker_stop))(input)
 }
 
 /// Parse begining of ticker
-pub fn parse_stable_ticker_start(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_stable_ticker_start(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     map(
         preceded(tuple((tag_no_case("start"), space1)), parse_label(false)),
-        |name| Token::StableTicker(StableTickerAction::Start(name.into()))
+        |name| LocatedTokenInner::StableTicker(StableTickerAction::Start(name.into()))
     )(input)
 }
 
 /// Parse end of ticker
-pub fn parse_stable_ticker_stop(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_stable_ticker_stop(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     map(tag_no_case("stop"), |_| {
-        Token::StableTicker(StableTickerAction::Stop)
+        LocatedTokenInner::StableTicker(StableTickerAction::Stop)
     })(input)
 }
 
-pub fn parse_bank(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, count) = opt(expr)(input)?;
+pub fn parse_bank(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (input, count) = opt(located_expr)(input)?;
 
-    Ok((input, Token::Bank(count)))
+    Ok((input, LocatedTokenInner::Bank(count)))
 }
 
 /// Parse fake and real LD instructions
 pub fn parse_ld(
-    input_start: Z80Span
-) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    input: Z80Span
+) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         context(
             "[DBG] ld",
             alt((
-                context("[DBG] fake ld", parse_ld_fake(input_start.clone())),
-                context("[DBG] normal ld", parse_ld_normal(input_start.clone()))
+                context("[DBG] fake ld", parse_ld_fake),
+                context("[DBG] normal ld", parse_ld_normal)
             ))
         )(input)
     }
-}
+
 
 /// Parse artifical LD instruction (would be replaced by several real instructions)
 pub fn parse_ld_fake(
-    input_start: Z80Span
-) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    input: Z80Span
+) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         // let (input, _) = tuple((tag_no_case("LD"), space1))(input)?;
 
         let (input, dst) = alt((
@@ -2416,24 +2403,19 @@ pub fn parse_ld_fake(
             )(input)?
         };
 
-        let token = Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src));
-        let size = input_start.input_len() - input.input_len();
-        let token = token.locate(input_start.clone(), size);
+        let token = LocatedTokenInner::new_opcode(Mnemonic::Ld, Some(dst), Some(src));
 
-        let warning = LocatedToken::WarningWrapper(
+        let warning = LocatedTokenInner::WarningWrapper(
             Box::new(token),
             "This is a fake instruction assembled using several opcodes".into()
         );
 
         Ok((input, warning))
     }
-}
 
 /// Parse the valids LD versions
 pub fn parse_ld_normal(
-    input_start: Z80Span
-) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+    input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         //  let (input, _) = context("[DBG] ...", tuple((space0, parse_word("LD"), space0)))(input)?;
 
         let _start = input.clone();
@@ -2463,19 +2445,19 @@ pub fn parse_ld_normal(
         // src possibilities depend on dst
         let (input, src) = cut(context(LD_WRONG_SOURCE, cut(parse_ld_normal_src(&dst))))(input)?;
 
-        let token = Token::new_opcode(Mnemonic::Ld, Some(dst), Some(src));
-        let size = input_start.input_len() - input.input_len();
-        let token = token.locate(input_start.clone(), size);
+        let token = LocatedTokenInner::new_opcode(Mnemonic::Ld, Some(dst), Some(src));
+
+
+        dbg!(&token);
 
         Ok((input, token))
     }
-}
 
 /// Parse the source of LD depending on its destination
 #[inline]
 fn parse_ld_normal_src(
-    dst: &DataAccess
-) -> impl Fn(Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> + '_ {
+    dst: &LocatedDataAccess
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> + '_ {
     move |input: Z80Span| {
         if dst.is_register_sp() {
             alt((
@@ -2575,8 +2557,8 @@ fn parse_ld_normal_src(
 #[inline]
 pub fn parse_res_set_bit(
     res_or_set: Mnemonic
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         let (input, bit) = cut(context("Wrong bit definition", parse_expr))(input)?;
 
         let (input, _) = cut(parse_comma)(input)?;
@@ -2600,7 +2582,7 @@ pub fn parse_res_set_bit(
 
         Ok((
             input,
-            Token::OpCode(
+            LocatedTokenInner::OpCode(
                 res_or_set,
                 Some(bit),
                 Some(operand),
@@ -2611,7 +2593,7 @@ pub fn parse_res_set_bit(
 }
 
 /// Parse CP tokens
-pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     map(
         //   preceded(
         //    parse_word("CP"),
@@ -2622,7 +2604,7 @@ pub fn parse_cp(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
             parse_indexregister_with_index,
             parse_expr
         )), //   )
-        |operand| Token::new_opcode(Mnemonic::Cp, Some(operand), None)
+        |operand| LocatedTokenInner::new_opcode(Mnemonic::Cp, Some(operand), None)
     )(input)
 }
 
@@ -2635,20 +2617,19 @@ pub enum ExportKind {
 #[inline]
 pub fn parse_export(
     code: ExportKind
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     #[inline]
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         let (input, labels) = cut(context(
             "Wrong parameters",
             separated_list0(parse_comma, parse_label(false))
         ))(input)?;
 
-        let labels = labels.iter().map(|l| SmolStr::from(l.as_str())).collect_vec(); // TODO really use LocatedToken
         if code == ExportKind::Export {
-            Ok((input, Token::Export(labels)))
+            Ok((input, LocatedTokenInner::Export(labels)))
         }
         else {
-            Ok((input, Token::NoExport(labels)))
+            Ok((input, LocatedTokenInner::NoExport(labels)))
         }
     }
 }
@@ -2663,11 +2644,10 @@ pub enum DbDwStr {
 #[inline]
 /// Parse DB DW directives
 pub fn parse_db_or_dw_or_str(
-    input_start: Z80Span,
     code: DbDwStr,
     empty_list_allowed: bool,
-) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         // STRUCT directive allows to have no arguments
         let (input, expr) = if empty_list_allowed {
             expr_list(input.clone())
@@ -2677,14 +2657,12 @@ pub fn parse_db_or_dw_or_str(
             expr_list(input)?
         };
 
-        let token_span = input_start.take(input_start.input_len() - input.input_len()); // TODO Use a real type that embeds strings in a Z80Span to avoid copying them
-
         Ok((
             input,
             match code {
-                DbDwStr::Db => LocatedToken::Defb(expr, token_span),
-                DbDwStr::Dw => LocatedToken::Defw(expr, token_span),
-                DbDwStr::Str => LocatedToken::Str(expr, token_span),
+                DbDwStr::Db => LocatedTokenInner::Defb(expr),
+                DbDwStr::Dw => LocatedTokenInner::Defw(expr),
+                DbDwStr::Str => LocatedTokenInner::Str(expr),
             }
         ))
     }
@@ -2798,10 +2776,10 @@ pub fn parse_macro_or_struct_call(
                 .is_ok();
 
         if allowed_to_return_a_label && nothing_after {
-            let token = LocatedToken::Label(name.clone());
+            let token = LocatedTokenInner::Label(name.clone());
             let msg = format!("Ambiguous code. Use (void) for macro with no args, (default) for struct with default parameters; avoid labels that do not start at beginning of a line. {} is considered to be a label, not a macro.", name);
-            let warning = LocatedToken::WarningWrapper(Box::new(token), msg);
-            return Ok((input, warning));
+            let warning = LocatedTokenInner::WarningWrapper(Box::new(token), msg);
+            return Ok((input, warning.into_located_token_at(&name)));
         }
 
         let (input, _) = pair(my_space0, not(parse_comment))(input)?;
@@ -2867,7 +2845,7 @@ pub fn parse_macro_or_struct_call(
         }
 
         let all_span = input_start.take(input_start.input_len() - input.input_len());
-        Ok((input, LocatedToken::MacroCall(name, args, all_span)))
+        Ok((input, LocatedToken{inner: LocatedTokenInner::MacroCall(name, args), span:all_span, warning_embedded: None}))
     }
 }
 
@@ -2911,9 +2889,9 @@ fn parse_word(name: &'static str) -> impl Fn(Z80Span) -> IResult<Z80Span, Z80Spa
 }
 
 /// ...
-pub fn parse_djnz(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_djnz(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     map(preceded(opt(parse_comma), parse_expr), |expr| {
-        Token::new_opcode(Mnemonic::Djnz, Some(expr), None)
+        LocatedTokenInner::new_opcode(Mnemonic::Djnz, Some(expr), None)
     })(input)
 }
 
@@ -2929,23 +2907,23 @@ pub fn expr_list(input: Z80Span) -> IResult<Z80Span, Vec<LocatedExpr>, Z80Parser
 }
 
 /// ...
-pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, expr) = cut(context("ASSERT: expression error", expr))(input)?;
+pub fn parse_assert(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (input, expr) = cut(context("ASSERT: expression error", located_expr))(input)?;
 
     let (input, exps) = cut(context(
         "ASSERT: comment error",
         opt(preceded(parse_comma, parse_print_inner))
     ))(input)?;
 
-    Ok((input, Token::Assert(expr, exps)))
+    Ok((input, LocatedTokenInner::Assert(expr, exps)))
 }
 
 /// ...
-pub fn parse_align(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, boundary) = expr(input)?;
-    let (input, fill) = opt(preceded(parse_comma, expr))(input)?;
+pub fn parse_align(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (input, boundary) = located_expr(input)?;
+    let (input, fill) = opt(preceded(parse_comma, located_expr))(input)?;
 
-    Ok((input, Token::Align(boundary, fill)))
+    Ok((input, LocatedTokenInner::Align(boundary, fill)))
 }
 
 pub fn parse_print_inner(input: Z80Span) -> IResult<Z80Span, Vec<FormattedExpr>, Z80ParserError> {
@@ -2963,12 +2941,12 @@ pub fn parse_print_inner(input: Z80Span) -> IResult<Z80Span, Vec<FormattedExpr>,
     )(input)
 }
 /// ...
-pub fn parse_print(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    map(cut(parse_print_inner), |exps| Token::Print(exps))(input)
+pub fn parse_print(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    map(cut(parse_print_inner), |exps| LocatedTokenInner::Print(exps))(input)
 }
 
-pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    map(opt(parse_print_inner), |exps| Token::Fail(exps))(input)
+pub fn parse_fail(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    map(opt(parse_print_inner), |exps| LocatedTokenInner::Fail(exps))(input)
 }
 
 /// Parse formatted expression for print like directives
@@ -3032,20 +3010,20 @@ fn parse_comma(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
 }
 
 /// ...
-pub fn parse_protect(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    let (input, start) = expr(input)?;
+pub fn parse_protect(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (input, start) = located_expr(input)?;
 
-    let (input, end) = preceded(parse_comma, expr)(input)?;
+    let (input, end) = preceded(parse_comma, located_expr)(input)?;
 
-    Ok((input, Token::Protect(start, end)))
+    Ok((input, LocatedTokenInner::Protect(start, end)))
 }
 
 #[inline]
 /// ...
 pub fn parse_logical_operator(
     operator: Mnemonic
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         let (input, operand) = context(
             "Wrong logical operand",
             alt((
@@ -3057,12 +3035,12 @@ pub fn parse_logical_operator(
             ))
         )(input)?;
 
-        Ok((input, Token::new_opcode(operator, Some(operand), None)))
+        Ok((input, LocatedTokenInner::new_opcode(operator, Some(operand), None)))
     }
 }
 
 /// Substraction with A register
-pub fn parse_sub(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_sub(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     //  let (input, _) = tag_no_case("SUB")(input)?;
     //  let (input, _) = space1(input)?;
     let (input, operand) = alt((
@@ -3073,11 +3051,11 @@ pub fn parse_sub(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
         parse_expr
     ))(input)?;
 
-    Ok((input, Token::new_opcode(Mnemonic::Sub, Some(operand), None)))
+    Ok((input, LocatedTokenInner::new_opcode(Mnemonic::Sub, Some(operand), None)))
 }
 
 /// Par se the SBC instruction
-pub fn parse_sbc(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_sbc(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     //  let (input, _) = tag_no_case("SBC")(input)?;
     //   let (input, _) = space1(input)?;
 
@@ -3086,7 +3064,7 @@ pub fn parse_sbc(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
         parse_comma
     ))(input)?;
 
-    let opera = opera.unwrap_or(DataAccess::Register8(Register8::A));
+    let opera = opera.unwrap_or(LocatedDataAccess::Register8(Register8::A, input.take(0)));
 
     let (input, operb) = if opera.is_register_a() {
         alt((
@@ -3103,7 +3081,7 @@ pub fn parse_sbc(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 
     Ok((
         input,
-        Token::new_opcode(Mnemonic::Sbc, Some(opera), Some(operb))
+        LocatedTokenInner::new_opcode(Mnemonic::Sbc, Some(opera), Some(operb))
     ))
 }
 
@@ -3111,21 +3089,19 @@ pub fn parse_sbc(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 #[inline]
 pub fn parse_add_or_adc(
     add_or_adc: Mnemonic
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         let (input, first) = opt(terminated(
             alt((
-                map(parse_register_a, |_| DataAccess::Register8(Register8::A)),
-                map(parse_register_hl, |_| {
-                    DataAccess::Register16(Register16::Hl)
-                }),
+                parse_register_a,
+                parse_register_hl,
                 parse_indexregister16
             )),
             parse_comma
         ))(input)?;
 
         // no operand implies it is A
-        let first = first.unwrap_or(DataAccess::Register8(Register8::A));
+        let first = first.unwrap_or_else(||LocatedDataAccess::Register8(Register8::A, input.take(0)));
 
         let (input, second) = if first.is_register8() {
             alt((
@@ -3157,7 +3133,7 @@ pub fn parse_add_or_adc(
 
         Ok((
             input,
-            Token::new_opcode(add_or_adc, Some(first), Some(second))
+            LocatedTokenInner::new_opcode(add_or_adc, Some(first), Some(second))
         ))
     }
 }
@@ -3166,49 +3142,56 @@ pub fn parse_add_or_adc(
 #[inline]
 pub fn parse_push_n_pop(
     push_or_pop: Mnemonic
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
-        let (input, registers) =
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+        let (input, mut registers) =
             separated_list1(parse_comma, alt((parse_register16, parse_indexregister16)))(input)?;
 
         if registers.len() > 1 {
             match push_or_pop {
-                Mnemonic::Push => Ok((input, Token::MultiPush(registers))),
-                Mnemonic::Pop => Ok((input, Token::MultiPop(registers))),
+                Mnemonic::Push => Ok((input, LocatedTokenInner::MultiPush(registers))),
+                Mnemonic::Pop => Ok((input, LocatedTokenInner::MultiPop(registers))),
                 _ => unreachable!()
             }
         }
         else {
+            let register = registers.remove(0);
             Ok((
                 input,
-                Token::new_opcode(push_or_pop, Some(registers[0].clone()), None)
+                LocatedTokenInner::new_opcode(push_or_pop, Some(register), None)
             ))
         }
     }
 }
 
 /// ...
-pub fn parse_ret(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    map(opt(parse_flag_test), |cond| {
-        Token::new_opcode(
-            Mnemonic::Ret,
-            if cond.is_some() {
-                Some(DataAccess::FlagTest(cond.unwrap()))
-            }
-            else {
-                None
-            },
+pub fn parse_ret(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (res, cond) = opt(parse_flag_test)(input.clone())?;
+
+
+    let token = LocatedTokenInner::new_opcode(
+        Mnemonic::Ret,
+        if cond.is_some() {
+            Some(LocatedDataAccess::FlagTest(cond.unwrap(), input.take(input.input_len()-res.input_len())))
+        }
+        else {
             None
-        )
-    })(input)
+        },
+        None
+    );
+
+    Ok((
+        res,
+        token
+    ))
 }
 
 /// ...
 #[inline]
 pub fn parse_inc_dec(
     inc_or_dec: Mnemonic
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         let (input, register) = alt((
             parse_register16,
             parse_indexregister16,
@@ -3219,26 +3202,26 @@ pub fn parse_inc_dec(
             parse_indexregister_with_index
         ))(input)?;
 
-        Ok((input, Token::new_opcode(inc_or_dec, Some(register), None)))
+        Ok((input, LocatedTokenInner::new_opcode(inc_or_dec, Some(register), None)))
     }
 }
 
 /// TODO manage other out formats
-pub fn parse_out(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_out(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     //  let (input, _) = parse_word("OUT")(input)?;
 
     // get the port proposal
     let (input, port) = alt((parse_portc, parse_portnn))(input)?;
 
     // the vlaue depends on the port
-    let (input, value) = if port.is_portc() {
+    let (input, value) = if port.is_port_c() {
         // reg c
         opt(preceded(
             parse_comma,
             alt((
                 parse_register8,
-                map(alt((parse_word("f"), tag("0"))), |_| {
-                    DataAccess::from(Expr::from(0))
+                map(alt((parse_word("f"), tag("0"))), |w| {
+                    LocatedDataAccess::Expression( LocatedExpr::Value(0, w))
                 })
             ))
         ))(input)?
@@ -3246,28 +3229,28 @@ pub fn parse_out(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
     else {
         map(preceded(parse_comma, parse_register_a), |reg| Some(reg))(input)?
     };
-    let value = value.unwrap_or(DataAccess::from(Expr::from(0)));
+    let value = value.unwrap_or(LocatedDataAccess::Expression( LocatedExpr::Value(0, input.take(0))));
 
     Ok((
         input,
-        Token::new_opcode(Mnemonic::Out, Some(port), Some(value))
+        LocatedTokenInner::new_opcode(Mnemonic::Out, Some(port), Some(value))
     ))
 }
 
 /// Parse all the in flavors
-pub fn parse_in(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_in(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     // let (input, _) = parse_word("IN")(input)?;
-    let zero = DataAccess::from(Expr::from(0));
 
     // get the port proposal
     let (input, destination) = opt(terminated(
         alt((
             parse_register8,
-            value(zero.clone(), alt((tag_no_case("f"), tag("0"))))
+            map(alt((tag_no_case("f"), tag("0"))),
+            |span| LocatedDataAccess::Expression(LocatedExpr::Value(0,span)))
         )),
         parse_comma
     ))(input)?;
-    let destination = destination.unwrap_or(zero);
+    let destination = destination.unwrap_or(LocatedDataAccess::Expression(LocatedExpr::Value(0,input.take(0))));
 
     let (input, port) = cut(alt((
         parse_portc,
@@ -3278,24 +3261,24 @@ pub fn parse_in(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 
     Ok((
         input,
-        Token::new_opcode(Mnemonic::In, Some(destination), Some(port))
+        LocatedTokenInner::new_opcode(Mnemonic::In, Some(destination), Some(port))
     ))
 }
 
 /// Parse the rst instruction
-pub fn parse_rst(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_rst(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     // let (input, _) = parse_word("RST")(input)?;
     let (input, val) = parse_expr(input)?;
 
-    Ok((input, Token::new_opcode(Mnemonic::Rst, Some(val), None)))
+    Ok((input, LocatedTokenInner::new_opcode(Mnemonic::Rst, Some(val), None)))
 }
 
 /// Parse the IM instruction
-pub fn parse_im(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_im(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     // let (input, _) = parse_word("IM")(input)?;
     let (input, val) = parse_expr(input)?;
 
-    Ok((input, Token::new_opcode(Mnemonic::Im, Some(val), None)))
+    Ok((input, LocatedTokenInner::new_opcode(Mnemonic::Im, Some(val), None)))
 }
 
 /// Parse all RLC, RL, RR, SLA, SRA flavors
@@ -3312,9 +3295,10 @@ pub fn parse_im(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
 #[inline]
 pub fn parse_shifts_and_rotations(
     oper: Mnemonic
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     #[inline]
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+        let start = input.clone();
         let (input, arg) = alt((
             parse_register8,
             parse_hl_address,
@@ -3324,7 +3308,7 @@ pub fn parse_shifts_and_rotations(
         // hidden opcodes
         let (input, arg2) = opt(preceded(parse_comma, parse_register8))(input)?;
 
-        Ok((input, Token::new_opcode(oper, Some(arg), arg2)))
+        Ok((input, LocatedTokenInner::new_opcode(oper, Some(arg), arg2)))
     }
 }
 
@@ -3332,10 +3316,14 @@ pub fn parse_shifts_and_rotations(
 #[inline]
 pub fn parse_call_jp_or_jr(
     call_jp_or_jr: Mnemonic
-) -> impl Fn(Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     #[inline]
-    move |input: Z80Span| -> IResult<Z80Span, Token, Z80ParserError> {
+    move |input: Z80Span| -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+        let start = input.clone();
+
         let (input, flag_test) = opt(terminated(parse_flag_test, parse_comma))(input)?;
+
+        let after_flag_test = input.clone();
 
         let (input, dst) = cut(context(
             match call_jp_or_jr {
@@ -3360,21 +3348,19 @@ pub fn parse_call_jp_or_jr(
 
         // Allow to parse JP HL as to be JP (HL) original notation is misleading
         let dst = match dst {
-            DataAccess::IndexRegister16(reg) => DataAccess::MemoryIndexRegister16(reg),
-            DataAccess::Register16(reg) => DataAccess::MemoryRegister16(reg),
+            LocatedDataAccess::IndexRegister16(reg,span) => LocatedDataAccess::MemoryIndexRegister16(reg, span),
+            LocatedDataAccess::Register16(reg, span) => LocatedDataAccess::MemoryRegister16(reg, span),
             other => other
         };
 
-        let flag_test = if flag_test.is_some() {
-            Some(DataAccess::FlagTest(flag_test.unwrap()))
-        }
-        else {
-            None
-        };
-
+        let flag_test = flag_test.map(|f|{
+            let span = start.take(start.input_len() - after_flag_test.input_len());
+            LocatedDataAccess::FlagTest(flag_test.unwrap(), span)
+        });
+        
         Ok((
             input,
-            Token::new_opcode(call_jp_or_jr, flag_test, Some(dst))
+            LocatedTokenInner::new_opcode(call_jp_or_jr, flag_test, Some(dst))
         ))
     }
 }
@@ -3403,18 +3389,18 @@ pub fn parse_flag_test(input: Z80Span) -> IResult<Z80Span, FlagTest, Z80ParserEr
 
 /// Parse any standard 16bits register
 /// TODO rename to emphasize it is standard reigsters
-pub fn parse_register16(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
+pub fn parse_register16(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
     let (next, code) = recognize(terminated(
         pair(one_of("abdhABDH"), one_of("fcelFCEL")),
         not(alpha1)
     ))(input.clone())?;
 
-    let code = code.to_ascii_uppercase();
+    let span = input.take( input.input_len()-next.input_len());
     let reg = match code.as_str() {
-        "AF" => DataAccess::Register16(Register16::Af),
-        "BC" => DataAccess::Register16(Register16::Bc),
-        "DE" => DataAccess::Register16(Register16::De),
-        "HL" => DataAccess::Register16(Register16::Hl),
+        choice_nocase!("AF") => LocatedDataAccess::Register16(Register16::Af, span),
+        choice_nocase!("BC") => LocatedDataAccess::Register16(Register16::Bc, span),
+        choice_nocase!("DE") => LocatedDataAccess::Register16(Register16::De, span),
+        choice_nocase!("HL") => LocatedDataAccess::Register16(Register16::Hl, span),
         _ => {
             return Err(Err::Error(Z80ParserError::from_error_kind(
                 input,
@@ -3428,7 +3414,7 @@ pub fn parse_register16(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80Parse
 
 /// Parse any standard 16bits register
 /// TODO rename to emphasize it is standard reigsters
-pub fn parse_register8(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
+pub fn parse_register8(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
     alt((
         map(
             tuple((
@@ -3462,26 +3448,26 @@ pub fn parse_register8(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80Parser
 }
 
 /// Parse register i
-pub fn parse_register_i(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    value(
-        DataAccess::SpecialRegisterI,
-        tuple((tag_no_case("I"), not(alphanumeric1)))
-    )(input)
+pub fn parse_register_i(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    let (next, da) = tuple((tag_no_case("I"), not(alphanumeric1)))(input.clone())?;
+    let da = LocatedDataAccess::SpecialRegisterI(input.take(input.input_len() - next.input_len()));
+    Ok((next, da))
 }
 
 /// Parse register r
-pub fn parse_register_r(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    value(
-        DataAccess::SpecialRegisterR,
-        tuple((tag_no_case("R"), not(alphanumeric1)))
-    )(input)
+pub fn parse_register_r(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    let (next, da) = tuple((tag_no_case("R"), not(alphanumeric1)))(input.clone())?;
+    let da =  LocatedDataAccess::SpecialRegisterR(input.take(input.input_len() - next.input_len()));
+    Ok((next,da))
 }
 
 macro_rules! parse_any_register8 {
     ($name: ident, $char:expr, $reg:expr) => {
         /// Parse register $char
-        pub fn $name(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-            value(DataAccess::Register8($reg), parse_word($char))(input)
+        pub fn $name(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+            let (res, word) = parse_word($char)(input.clone())?;
+            let span = input.take(input.input_len() - res.input_len());
+            Ok((res, LocatedDataAccess::Register8($reg, span)))
         }
     };
 }
@@ -3499,20 +3485,21 @@ parse_any_register8!(parse_register_l, "l", Register8::L);
 fn register16_parser(
     representation: &'static str,
     register: Register16
-) -> impl for<'src, 'ctx> Fn(Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
+) -> impl for<'src, 'ctx> Fn(Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
     #[inline]
     move |input: Z80Span| {
-        value(
-            DataAccess::Register16(register),
-            tuple((tag_no_case(representation), not(alphanumeric1)))
-        )(input)
+        let (res, _) = tuple((tag_no_case(representation), not(alphanumeric1)))(input.clone())?;
+
+        let span = input.take(input.input_len() - res.input_len());
+
+        Ok((res, LocatedDataAccess::Register16(register, span)))
     }
 }
 
 macro_rules! parse_any_register16 {
     ($name: ident, $char:expr, $reg:expr) => {
         /// Parse the $char register and return it as a DataAccess
-        pub fn $name(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
+        pub fn $name(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
             register16_parser($char, $reg)(input)
         }
     };
@@ -3525,19 +3512,13 @@ parse_any_register16!(parse_register_de, "DE", Register16::De);
 parse_any_register16!(parse_register_hl, "HL", Register16::Hl);
 
 /// Parse the IX register
-pub fn parse_register_ix(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    value(
-        DataAccess::IndexRegister16(IndexRegister16::Ix),
-        tuple((tag_no_case("IX"), not(alphanumeric1)))
-    )(input)
+pub fn parse_register_ix(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    verify(parse_indexregister16, |d: &LocatedDataAccess| d.is_register_ix())(input)
 }
 
 /// Parse the IY register
-pub fn parse_register_iy(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    value(
-        DataAccess::IndexRegister16(IndexRegister16::Iy),
-        tuple((tag_no_case("IY"), not(alphanumeric1)))
-    )(input)
+pub fn parse_register_iy(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    verify(parse_indexregister16, |d: &LocatedDataAccess| d.is_register_iy())(input)
 }
 
 // TODO find a way to not use that
@@ -3545,17 +3526,22 @@ macro_rules! parse_any_indexregister8 {
     ($($reg:ident, $alias1:ident, $alias2:ident)*) => {$(
         paste::paste! {
             /// Parse register $reg
-            pub fn [<parse_register_ $reg:lower>] (input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-                value(
-                    DataAccess::IndexRegister8(IndexRegister8::$reg),
-                    tuple((
-                        alt((
-                            parse_word( stringify!($reg)),
-                            parse_word( stringify!($alias1)),
-                            parse_word( stringify!($alias2)),
-                        ))
-                        , not(alphanumeric1)))
-                    )(input)
+            pub fn [<parse_register_ $reg:lower>] (input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+                let start = input.clone();
+                let (res, _) = tuple((
+                    alt((
+                        parse_word( stringify!($reg)),
+                        parse_word( stringify!($alias1)),
+                        parse_word( stringify!($alias2)),
+                    ))
+                    , not(alphanumeric1)))
+                (input)?;
+
+                let span = start.take(start.input_len() - res.input_len());
+
+                Ok((res, LocatedDataAccess::IndexRegister8(IndexRegister8::$reg, span)))
+
+
                 }
             }
         )*}
@@ -3568,7 +3554,7 @@ parse_any_indexregister8!(
 );
 
 /// Parse and indexed register in 8bits
-pub fn parse_indexregister8(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
+pub fn parse_indexregister8(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
     alt((
         parse_register_ixh,
         parse_register_iyh,
@@ -3578,23 +3564,32 @@ pub fn parse_indexregister8(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80P
 }
 
 /// Parse a 16 bits indexed register
-pub fn parse_indexregister16(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    terminated(
-        map(
-            alt((
-                map(tag_no_case("IX"), |_| IndexRegister16::Ix),
-                map(tag_no_case("IY"), |_| IndexRegister16::Iy)
-            )),
-            |reg| DataAccess::IndexRegister16(reg)
-        ),
-        not(alphanumeric1)
-    )(input)
+pub fn parse_indexregister16(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    let (next, code) = recognize(terminated(
+        pair(one_of("iI"), one_of("xyXY")),
+        not(alpha1)
+    ))(input.clone())?;
+
+    let span = input.take( input.input_len()-next.input_len());
+    let reg = match code.as_str() {
+        choice_nocase!("IX") => LocatedDataAccess::IndexRegister16(IndexRegister16::Ix, span),
+        choice_nocase!("IY") => LocatedDataAccess::IndexRegister16(IndexRegister16::Iy, span),
+        _ => {
+            return Err(Err::Error(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )))
+        }
+    };
+
+    Ok((next, reg))
 }
 
 /// Parse the use of an indexed register as (IX + 5)"
 pub fn parse_indexregister_with_index(
     input: Z80Span
-) -> IResult<Z80Span, DataAccess, Z80ParserError> {
+) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    let start = input.clone();
     let (input, reg) = preceded(tuple((tag("("), space0)), parse_indexregister16)(input)?;
 
     let (input, op) = preceded(
@@ -3605,43 +3600,42 @@ pub fn parse_indexregister_with_index(
         ))
     )(input)?;
 
-    let (input, expr) = terminated(expr, tuple((space0, tag(")"))))(input)?;
+    let (input, expr) = terminated(located_expr, tuple((space0, tag(")"))))(input)?;
+
+    let span = start.take(start.input_len()-input.input_len());
 
     Ok((
         input,
-        DataAccess::IndexRegister16WithIndex(
+        LocatedDataAccess::IndexRegister16WithIndex(
             reg.get_indexregister16().unwrap(),
-            match op {
-                BinaryOperation::Add => expr,
-                BinaryOperation::Sub => expr.neg(),
-                _ => unreachable!()
-            }
+            op,
+            expr,
+            span
         )
     ))
 }
 
 /// Parse (C) used in in/out
-pub fn parse_portc(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    value(
-        DataAccess::PortC,
-        tuple((tag("("), space0, parse_register_c, space0, tag(")")))
-    )(input)
+pub fn parse_portc(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    let (next, _) = tuple((tag("("), space0, parse_register_c, space0, tag(")")))(input.clone())?;
+    let span = input.take( input.input_len()-next.input_len());
+
+    Ok((next, LocatedDataAccess::PortC(span)))
 }
 
 /// Parse (nn) used in in/out
-pub fn parse_portnn(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    map(
-        delimited(tag("("), expr, preceded(space0, tag(")"))),
-        |address| DataAccess::PortN(address)
-    )(input)
+pub fn parse_portnn(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+
+    let (res, address) = delimited(tag("("), located_expr, preceded(space0, tag(")")))(input.clone())?;
+    let span = input.take(input.input_len() - res.input_len());
+    Ok((res, LocatedDataAccess::PortN(address, span)))
 }
 
 /// Parse an address access `(expression)`
-pub fn parse_address(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    map(
-        delimited(
+pub fn parse_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    let (res, address) = delimited(
             tag("("),
-            expr,
+            located_expr,
             terminated(
                 preceded(space0, tag(")")),
                 not(
@@ -3649,85 +3643,85 @@ pub fn parse_address(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserEr
                     preceded(space0, is_a("/+=-*<>%"))
                 )
             )
-        ),
-        |address| DataAccess::Memory(address)
-    )(input)
+        )(input)?;
+    Ok((res, LocatedDataAccess::Memory(address)))
+
 }
 
 /// Parse (R16)
-pub fn parse_reg_address(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    map(
+pub fn parse_reg_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    let (res, reg) = 
         delimited(
             terminated(tag("("), space0),
             parse_register16,
             preceded(space0, tag(")"))
-        ),
-        |reg| DataAccess::MemoryRegister16(reg.get_register16().unwrap())
-    )(input)
+        )(input.clone())?;
+
+    let da = LocatedDataAccess::MemoryRegister16(reg.get_register16().unwrap(), input.take(input.input_len() - res.input_len()));
+    Ok((res, da))
 }
 
 /// Parse (HL)
-pub fn parse_hl_address(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    value(
-        DataAccess::MemoryRegister16(Register16::Hl),
-        delimited(
+pub fn parse_hl_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+   let (res, _) = delimited(
             terminated(tag("("), space0),
             parse_register_hl,
             preceded(space0, tag(")"))
         )
-    )(input)
+    (input.clone())?;
+
+    let span = input.take(input.input_len() - res.input_len());
+    Ok((res, LocatedDataAccess::MemoryRegister16(Register16::Hl, span)))
 }
 
 /// Parse (ix) and (iy)
-pub fn parse_indexregister_address(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    map(
-        delimited(
+pub fn parse_indexregister_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    let (res, reg) =  delimited(
             terminated(tag("("), space0),
             parse_indexregister16,
             preceded(space0, tag(")"))
-        ),
-        |reg| DataAccess::MemoryIndexRegister16(reg.get_indexregister16().unwrap())
-    )(input)
+        )(input.clone())?;
+
+    let span = input.take(input.input_len() - res.input_len());
+    Ok((res,  LocatedDataAccess::MemoryIndexRegister16(reg.get_indexregister16().unwrap(), span)))
 }
 
 /// Parse an expression and returns it inside a DataAccession::Expression
-pub fn parse_expr(input: Z80Span) -> IResult<Z80Span, DataAccess, Z80ParserError> {
-    let (input, expr) = expr(input)?;
-    Ok((input, DataAccess::Expression(expr)))
+pub fn parse_expr(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    let (input, expr) = located_expr(input)?;
+    Ok((input, LocatedDataAccess::Expression(expr)))
 }
 
 /// Parse standard org directive
-pub fn parse_org(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    let input_start = input.clone();
+pub fn parse_org(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, val1) = cut(context("Invalid argument", located_expr))(input)?;
     let (input, val2) = opt(preceded(parse_comma, located_expr))(input)?;
 
-    let span = input_start.take(input_start.input_len() - input.input_len());
-    Ok((input, LocatedToken::Org{val1, val2, span}))
+    Ok((input, LocatedTokenInner::Org{val1, val2}))
 }
 
 /// Parse defs instruction. TODO add optional parameters
-pub fn parse_defs(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_defs(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, val) = separated_list1(
         parse_comma,
         cut(context(
             "Wrong argument",
-            tuple((expr, opt(preceded(parse_comma, expr))))
+            tuple((located_expr, opt(preceded(parse_comma, located_expr))))
         ))
     )(input)?;
 
-    Ok((input, Token::Defs(val)))
+    Ok((input, LocatedTokenInner::Defs(val)))
 }
 
-pub fn parse_nop(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+pub fn parse_nop(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, val) = cut(context(
         "Wrong argument. NOP expects an expression",
-        opt(expr)
+        opt(map(located_expr, |le| LocatedDataAccess::from(le)))
     ))(input)?;
 
     Ok((
         input,
-        Token::OpCode(Mnemonic::Nop, val.map(|e| e.into()), None, None)
+        LocatedTokenInner::OpCode(Mnemonic::Nop, val, None, None)
     ))
 }
 
@@ -3737,73 +3731,67 @@ pub fn parse_opcode_no_arg(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80
         preceded(
             space0,
             consumed(map_opt(alpha1, |word: Z80Span| {
-                match word.as_str().to_ascii_uppercase().as_str() {
-                    "CCF" => Some(Mnemonic::Ccf),
-                    "CPD" => Some(Mnemonic::Cpd),
-                    "CPDR" => Some(Mnemonic::Cpdr),
-                    "CPI" => Some(Mnemonic::Cpi),
-                    "CPIR" => Some(Mnemonic::Cpir),
-                    "CPL" => Some(Mnemonic::Cpl),
-                    "DAA" => Some(Mnemonic::Daa),
-                    "DI" => Some(Mnemonic::Di),
-                    "EI" => Some(Mnemonic::Ei),
-                    "EXX" => Some(Mnemonic::Exx),
-                    "HALT" => Some(Mnemonic::Halt),
-                    "IND" => Some(Mnemonic::Ind),
-                    "INDR" => Some(Mnemonic::Indr),
-                    "INI" => Some(Mnemonic::Ini),
-                    "INIR" => Some(Mnemonic::Inir),
-                    "LDD" => Some(Mnemonic::Ldd),
-                    "LDDR" => Some(Mnemonic::Lddr),
-                    "LDI" => Some(Mnemonic::Ldi),
-                    "LDIR" => Some(Mnemonic::Ldir),
-                    "NEG" => Some(Mnemonic::Neg),
-                    "NOPS2" => Some(Mnemonic::Nop2),
-                    "OTDR" => Some(Mnemonic::Otdr),
-                    "OTIR" => Some(Mnemonic::Otir),
-                    "OUTD" => Some(Mnemonic::Outd),
-                    "OUTDR" => Some(Mnemonic::Otdr),
-                    "OUTI" => Some(Mnemonic::Outi),
-                    "OUTIR" => Some(Mnemonic::Otir),
-                    "RETI" => Some(Mnemonic::Reti),
-                    "RETN" => Some(Mnemonic::Retn),
-                    "RLA" => Some(Mnemonic::Rla),
-                    "RLCA" => Some(Mnemonic::Rlca),
-                    "RLD" => Some(Mnemonic::Rld),
-                    "RRA" => Some(Mnemonic::Rra),
-                    "RRCA" => Some(Mnemonic::Rrca),
-                    "RRD" => Some(Mnemonic::Rrd),
-                    "SCF" => Some(Mnemonic::Scf),
+                match word.as_str() {
+                    choice_nocase!("CCF") => Some(Mnemonic::Ccf),
+                    choice_nocase!("CPD") => Some(Mnemonic::Cpd),
+                    choice_nocase!("CPDR") => Some(Mnemonic::Cpdr),
+                    choice_nocase!("CPI") => Some(Mnemonic::Cpi),
+                    choice_nocase!("CPIR") => Some(Mnemonic::Cpir),
+                    choice_nocase!("CPL") => Some(Mnemonic::Cpl),
+                    choice_nocase!("DAA") => Some(Mnemonic::Daa),
+                    choice_nocase!("DI") => Some(Mnemonic::Di),
+                    choice_nocase!("EI") => Some(Mnemonic::Ei),
+                    choice_nocase!("EXX") => Some(Mnemonic::Exx),
+                    choice_nocase!("HALT") => Some(Mnemonic::Halt),
+                    choice_nocase!("IND") => Some(Mnemonic::Ind),
+                    choice_nocase!("INDR") => Some(Mnemonic::Indr),
+                    choice_nocase!("INI") => Some(Mnemonic::Ini),
+                    choice_nocase!("INIR") => Some(Mnemonic::Inir),
+                    choice_nocase!("LDD") => Some(Mnemonic::Ldd),
+                    choice_nocase!("LDDR") => Some(Mnemonic::Lddr),
+                    choice_nocase!("LDI") => Some(Mnemonic::Ldi),
+                    choice_nocase!("LDIR") => Some(Mnemonic::Ldir),
+                    choice_nocase!("NEG") => Some(Mnemonic::Neg),
+                    choice_nocase!("NOPS2") => Some(Mnemonic::Nop2),
+                    choice_nocase!("OTDR") => Some(Mnemonic::Otdr),
+                    choice_nocase!("OTIR") => Some(Mnemonic::Otir),
+                    choice_nocase!("OUTD") => Some(Mnemonic::Outd),
+                    choice_nocase!("OUTDR") => Some(Mnemonic::Otdr),
+                    choice_nocase!("OUTI") => Some(Mnemonic::Outi),
+                    choice_nocase!("OUTIR") => Some(Mnemonic::Otir),
+                    choice_nocase!("RETI") => Some(Mnemonic::Reti),
+                    choice_nocase!("RETN") => Some(Mnemonic::Retn),
+                    choice_nocase!("RLA") => Some(Mnemonic::Rla),
+                    choice_nocase!("RLCA") => Some(Mnemonic::Rlca),
+                    choice_nocase!("RLD") => Some(Mnemonic::Rld),
+                    choice_nocase!("RRA") => Some(Mnemonic::Rra),
+                    choice_nocase!("RRCA") => Some(Mnemonic::Rrca),
+                    choice_nocase!("RRD") => Some(Mnemonic::Rrd),
+                    choice_nocase!("SCF") => Some(Mnemonic::Scf),
                     _ => None
                 }
             }))
         ),
         |(span, mne)| {
-            LocatedToken::Standard {
-                token: Token::OpCode(mne, None, None, None),
-                span
-            }
+            LocatedTokenInner::OpCode(mne, None, None, None).into_located_token_at(&span)
         }
     )(input)?;
 
     Ok((input, token))
 }
 
-fn parse_snainit(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+fn parse_snainit(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, fname) = parse_fname(input)?;
 
-    Ok((input, Token::SnaInit(fname.to_string())))
+    Ok((input, LocatedTokenInner::SnaInit(fname)))
 }
 
-fn parse_struct(
-    input_start: Z80Span
-) -> impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
-    move |input: Z80Span| -> IResult<Z80Span, LocatedToken, Z80ParserError> {
+fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
         let (input, name) = cut(parse_label(false))(input)?;
 
         // TODO parse inner with filtering on the allowed operations
         // would be easier to write and would allow conditional operations
-        let (input, fields) = cut(context(
+        let (input, fields) : (Z80Span, Vec<(Z80Span, LocatedToken)>) = cut(context(
             "STRUCT: error in inner content",
             many1(delimited(
                 my_many0_nocollect(alt((
@@ -3835,12 +3823,10 @@ fn parse_struct(
 
         let (input, _) = cut(preceded(space0, parse_directive_word("ENDSTRUCT")))(input)?;
 
-        let all_span = input_start.take(input_start.input_len() - input.input_len());
-        Ok((input, LocatedToken::Struct(name, fields, all_span)))
+        Ok((input, LocatedTokenInner::Struct(name, fields)))
     }
-}
 
-fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
+fn parse_snaset(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, flagname) = cut(context(SNASET_WRONG_LABEL, parse_label(false)))(input)?;
     let (input, _) = context(SNASET_MISSING_COMMA, cut(parse_comma))(input)?;
 
@@ -3866,14 +3852,14 @@ fn parse_snaset(input: Z80Span) -> IResult<Z80Span, Token, Z80ParserError> {
             VerboseError::from_error_kind(input.clone(), ErrorKind::AlphaNumeric).into()
         )
     })?;
-    Ok((input, Token::SnaSet(flag, value)))
+    Ok((input, LocatedTokenInner::SnaSet(flag, value)))
 }
 
 /// Parse a comment that start by `;` and ends at the end of the line.
 pub fn parse_comment(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     map(
         preceded(alt((tag(";"), tag("//"))), take_till(|ch| ch == '\n')),
-        |string: Z80Span| LocatedToken::Comment(string)
+        |string: Z80Span| LocatedTokenInner::Comment(string).into_located_token_direct()
     )(input)
 }
 

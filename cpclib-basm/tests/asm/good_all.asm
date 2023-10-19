@@ -919,32 +919,32 @@ label    set 0,(hl)
     ld c,ixh
     ld d,ixh
     ld e,ixh
-    ld h,ixh
-    ld l,ixh
+    ;ld h,ixh
+    ;ld l,ixh
 
     ld a,ixl
     ld b,ixl
     ld c,ixl
     ld d,ixl
     ld e,ixl
-    ld h,ixl
-    ld l,ixl
+    ;ld h,ixl
+    ;ld l,ixl
 
     ld a,iyh
     ld b,iyh
     ld c,iyh
     ld d,iyh
     ld e,iyh
-    ld h,iyh
-    ld l,iyh
+    ;ld h,iyh
+    ;ld l,iyh
 
     ld a,iyl
     ld b,iyl
     ld c,iyl
     ld d,iyl
     ld e,iyl
-    ld h,iyl
-    ld l,iyl
+    ;ld h,iyl
+    ;ld l,iyl
 
     ld ixh,a
     ld ixh,b

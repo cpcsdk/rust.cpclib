@@ -7,7 +7,7 @@ use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::symbols::PhysicalAddress;
 use cpclib_tokens::{ExprResult, Token};
 
-use crate::preamble::{LocatedToken, MayHaveSpan};
+use crate::preamble::{LocatedToken, MayHaveSpan, LocatedTokenInner};
 /// Generate an output listing.
 /// Can be useful to detect issues
 
@@ -125,18 +125,16 @@ impl ListingOutput {
 
     fn extract_code(token: &LocatedToken) -> String {
         match token {
-            LocatedToken::Macro{span, ..} 
-            | LocatedToken::Repeat(_, _, _, _, span) => {
+            LocatedToken{
+                inner: LocatedTokenInner::Macro{..} |
+                        LocatedTokenInner::Repeat(..),
+                span,
+                ..
+             } => {
                 // 		self.need_to_cut = true;
                 span.fragment().to_string()
-            }
-            LocatedToken::Standard {
-                token: Token::Macro(..),
-                ..
-            } => {
-                unreachable!()
-            }
-            
+            },
+          
 
             _ => {
                 // 			self.need_to_cut = false;
@@ -242,17 +240,17 @@ impl ListingOutput {
             writeln!(self.writer, "{}", line).unwrap();
         }
 
-        self.current_token_kind = match token {
-            LocatedToken::Label(l) => TokenKind::Label(l.to_string()),
-            LocatedToken::Equ { label, .. } | LocatedToken::Assign { label, .. } => {
+        self.current_token_kind = match &token.inner {
+            LocatedTokenInner::Label(l) => TokenKind::Label(l.to_string()),
+            LocatedTokenInner::Equ { label, .. } | LocatedTokenInner::Assign { label, .. } => {
                 TokenKind::Set(label.to_string())
             }
-            LocatedToken::Macro { name, .. } => TokenKind::MacroDefine(name.to_string()),
-            LocatedToken::MacroCall(..) 
-            | LocatedToken::Org { ..} 
-            | LocatedToken::Comment(..)
-            | LocatedToken::Include(..)
-            | LocatedToken::Repeat(..)
+            LocatedTokenInner::Macro { name, .. } => TokenKind::MacroDefine(name.to_string()),
+            LocatedTokenInner::MacroCall(..) 
+            | LocatedTokenInner::Org { ..} 
+            | LocatedTokenInner::Comment(..)
+            | LocatedTokenInner::Include(..)
+            | LocatedTokenInner::Repeat(..)
             => TokenKind::Displayable,
             _ => TokenKind::Hidden
         };

@@ -1000,7 +1000,6 @@ impl ExtendedDsk {
         }
     }
 
-
     /// Add the file in consecutive sectors
     pub fn add_file_sequentially(
         &mut self,
@@ -1054,7 +1053,6 @@ impl ExtendedDsk {
             next_track.min_sector()
         ))
     }
-
 
     /// Write the dsk in the provided buffer
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
@@ -1176,18 +1174,17 @@ impl Disc for ExtendedDsk {
         Ok(Self::from_buffer(&buffer))
     }
 
-        /// Save the dsk in a file one disc
-    fn save<P>(&self, path: P) ->  Result<(), String> 
-        where P: AsRef<Path> {
-            let path = path.as_ref();
-            let mut file_buffer = File::create(path).map_err(|e| e.to_string())?;
-            let mut memory_buffer = Vec::new();
-            self.to_buffer(&mut memory_buffer);
-            file_buffer.write_all(&memory_buffer).map_err(|e| e.to_string())
-        }
-    
-
-    
+    /// Save the dsk in a file one disc
+    fn save<P>(&self, path: P) -> Result<(), String>
+    where P: AsRef<Path> {
+        let path = path.as_ref();
+        let mut file_buffer = File::create(path).map_err(|e| e.to_string())?;
+        let mut memory_buffer = Vec::new();
+        self.to_buffer(&mut memory_buffer);
+        file_buffer
+            .write_all(&memory_buffer)
+            .map_err(|e| e.to_string())
+    }
 
     /// Return the smallest sector id over all tracks
     fn global_min_sector<S: Into<Head>>(&self, _side: S) -> u8 {

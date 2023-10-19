@@ -1,19 +1,27 @@
 use core::fmt::Debug;
+use std::borrow::Cow;
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 
 use cpclib_common::smallvec::SmallVec;
 
 use crate::{
-    BinaryTransformation, CrunchType, DataAccess, ExprElement, MacroParamElement, Mnemonic,
-    TestKindElement
+    BinaryTransformation, CrunchType, DataAccess, DataAccessElem, ExprElement, MacroParamElement,
+    Mnemonic, TestKindElement
 };
-/// The ListingElement trait contains the public method any memeber of a listing should contain
+
+//
+/// The ListingElement trait contains the public method any member of a listing should contain
 /// ATM there is nothing really usefull
-pub trait ListingElement: Debug + Sized {
+pub trait ListingElement
+where Self: Debug + Sized + Sync
+{
     type MacroParam: MacroParamElement;
     type TestKind: TestKindElement;
     type Expr: ExprElement + Debug + Eq + Clone;
+    // type Element: ListingElement + Debug + Sync;
+    type DataAccess: DataAccessElem<Expr = Self::Expr>;
+    // type Listing: ListingTrait;
 
     fn defer_listing_output(&self) -> bool {
         false // self.is_equ() | self.is_set()
@@ -31,14 +39,15 @@ pub trait ListingElement: Debug + Sized {
     fn warning_message(&self) -> &str;
 
     fn mnemonic(&self) -> Option<&Mnemonic>;
-    fn mnemonic_arg1(&self) -> Option<&DataAccess>;
-    fn mnemonic_arg2(&self) -> Option<&DataAccess>;
-    fn mnemonic_arg1_mut(&mut self) -> Option<&mut DataAccess>;
-    fn mnemonic_arg2_mut(&mut self) -> Option<&mut DataAccess>;
+    fn mnemonic_arg1(&self) -> Option<&Self::DataAccess>;
+    fn mnemonic_arg2(&self) -> Option<&Self::DataAccess>;
+    fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess>;
+    fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess>;
 
     fn is_directive(&self) -> bool;
 
     fn is_module(&self) -> bool;
+    // fn module_listing(&self) -> &[Self];
     fn module_listing(&self) -> &[Self];
     fn module_name(&self) -> &str;
 
@@ -123,6 +132,8 @@ pub trait ListingElement: Debug + Sized {
     fn is_dw(&self) -> bool;
     fn is_str(&self) -> bool;
     fn data_exprs(&self) -> &[Self::Expr];
+
+    fn to_token(&self) -> Cow<crate::Token>;
 }
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -232,3 +243,15 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
         self.listing.get(idx)
     }
 }
+
+// pub trait ListingTrait {
+// type Element: ListingElement;
+// fn as_slice(&self) -> &[Self::Element];
+// }
+//
+// impl<T: ListingElement + Clone> ListingTrait for BaseListing<T> {
+// type Element = T;
+// fn as_slice(&self) -> &[Self::Element] {
+// self.listing.as_ref()
+// }
+// }

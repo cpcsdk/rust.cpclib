@@ -470,7 +470,7 @@ mod tests {
         }
 
         use cpclib::disc::amsdos::*;
-        let amsdos = AmsdosManagerNonMut::new_from_disc(& dsk, cpclib::disc::edsk::Head::A);
+        let amsdos = AmsdosManagerNonMut::new_from_disc(&dsk, cpclib::disc::edsk::Head::A);
         let entries = dbg!(amsdos
             .catalog()
             .to_amsdos_catalog()

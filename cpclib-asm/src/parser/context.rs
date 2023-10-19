@@ -31,65 +31,31 @@ pub trait ParsingStateVerified {
 
 impl ParsingStateVerified for LocatedToken {
     fn is_accepted(&self, state: &ParsingState) -> bool {
-        match state {
-            ParsingState::GeneratedLimited => !self.is_directive(),
-            ParsingState::Standard => {
-                match self {
-                    LocatedToken::Standard { token, span: _span } => token.is_accepted(state), /* because of return */
-                    _ => true
-                }
-            }
-            ParsingState::FunctionLimited => {
-                match self {
-                    LocatedToken::Standard { token, span: _span } => token.is_accepted(state),
-                    LocatedToken::If { .. }
-                    | LocatedToken::Repeat { .. }
-                    | LocatedToken::Switch { .. }
-                    | LocatedToken::Iterate { .. } => true,
-                    _ => false
-                }
-            }
-            ParsingState::StructLimited => {
-                match self {
-                    LocatedToken::Standard { token, span: _span } => token.is_accepted(state),
-                    LocatedToken::Defb(..) |
-                    LocatedToken::Defw(..) |
-                    LocatedToken::Str(..) |
-                    LocatedToken::MacroCall(..) => true,
-                    _ => false
-                }
-            },
-            ParsingState::SymbolsLimited => {
-                match self {
-                    LocatedToken::Standard { token, span: _span } => token.is_accepted(state),
-                    _ => false
-                }
-            }
-        }
+        self.inner.is_accepted(state)
     }
 }
 
-impl ParsingStateVerified for Token {
+macro_rules!  parsing_state_verified_inner {
+ () => {
     fn is_accepted(&self, state: &ParsingState) -> bool {
         match state {
             ParsingState::GeneratedLimited => !self.is_directive(),
-
             ParsingState::Standard => {
                 match self {
-                    Token::Return(_) => false,
+                    Self::Return(..) => false,
                     _ => true
                 }
             }
             ParsingState::FunctionLimited => {
                 match self {
-                    Token::Equ(..) | Token::Let(..) => true,
-                    Token::If { .. }
-                    | Token::Repeat { .. }
-                    | Token::Break
-                    | Token::Switch { .. }
-                    | Token::Iterate { .. } => true,
-                    Token::Return(_) => true,
-                    Token::Assert(..) | Token::Print(_) | Token::Fail(_) | Token::Comment(_) => {
+                    Self::Equ{..} | Self::Let(..) => true,
+                    Self::If { .. }
+                    | Self::Repeat { .. }
+                    | Self::Break
+                    | Self::Switch { .. }
+                    | Self::Iterate { .. } => true,
+                    Self::Return(_) => true,
+                    Self::Assert(..) | Self::Print(_) | Self::Fail(_) | Self::Comment(_) => {
                         true
                     }
                     _ => false
@@ -97,22 +63,30 @@ impl ParsingStateVerified for Token {
             }
             ParsingState::StructLimited => {
                 match self {
-                    Token::Defb(..) |
-                    Token::Defw(..) |
-                    Token::Str(..) |
-                    Token::MacroCall(..) => true,
+                    Self::Defb(..) |
+                    Self::Defw(..) |
+                    Self::Str(..) |
+                    Self::MacroCall(..) => true,
                     _ => false
                 }
-            }
-
+            },
             ParsingState::SymbolsLimited => {
                 match self {
-                    Token::Equ(..) | Token::Let(..) | Token::Comment(_) => true,
+                    Self::Equ{..} | Self::Let(..) | Self::Comment(_) => true,
                     _ => false
                 }
             }
         }
     }
+ }
+}
+
+impl ParsingStateVerified for LocatedTokenInner {
+    parsing_state_verified_inner!();
+}
+
+impl ParsingStateVerified for Token {
+    parsing_state_verified_inner!();
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

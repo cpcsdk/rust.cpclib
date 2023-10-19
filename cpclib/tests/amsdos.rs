@@ -61,7 +61,7 @@ mod tests {
         use cpclib::disc::amsdos::AmsdosManagerNonMut;
         use cpclib::disc::cfg::DiscConfig;
 
-        let dsk: ExtendedDsk= DiscConfig::single_head_data_format().into();
+        let dsk: ExtendedDsk = DiscConfig::single_head_data_format().into();
         let manager = AmsdosManagerNonMut::new_from_disc(&dsk, 0);
         let catalog = manager.catalog();
 
@@ -198,31 +198,44 @@ mod tests {
             assert_eq!(catalog.free_entries().count(), 64);
 
             filename.replace(AmsdosFileName::new_correct_case(0, "test", "bin").unwrap());
-            assert_eq!(filename.as_ref().unwrap(), &AmsdosFileName::try_from("test.bin").unwrap());
-
-            file = Some(AmsdosFile::binary_file_from_buffer(
+            assert_eq!(
                 filename.as_ref().unwrap(),
-                0x3210,
-                0x1234,
-                &[0x41, 0x42, 0x43, 0x0A]
-            )
-            .unwrap());
+                &AmsdosFileName::try_from("test.bin").unwrap()
+            );
+
+            file = Some(
+                AmsdosFile::binary_file_from_buffer(
+                    filename.as_ref().unwrap(),
+                    0x3210,
+                    0x1234,
+                    &[0x41, 0x42, 0x43, 0x0A]
+                )
+                .unwrap()
+            );
             manager
                 .add_file(file.as_ref().unwrap(), false, false)
                 .expect("Unable to add file");
 
             assert_eq!(
-                file.as_ref().unwrap().header().amsdos_filename().unwrap().filename(),
+                file.as_ref()
+                    .unwrap()
+                    .header()
+                    .amsdos_filename()
+                    .unwrap()
+                    .filename(),
                 "TEST.BIN"
             );
-            assert_eq!(&file.as_ref().unwrap().header().amsdos_filename().unwrap(), filename.as_ref().unwrap());
+            assert_eq!(
+                &file.as_ref().unwrap().header().amsdos_filename().unwrap(),
+                filename.as_ref().unwrap()
+            );
             assert_eq!(file.as_ref().unwrap().header().execution_address(), 0x1234);
             assert_eq!(file.as_ref().unwrap().header().loading_address(), 0x3210);
         }
 
         let filename = filename.unwrap();
         let file = file.unwrap();
-        
+
         let catalog_data = dsk.consecutive_sectors_read_bytes(0, 0, 0xC1, 4).unwrap();
         let entry_data = &catalog_data[..32];
         let entry = AmsdosEntry::from_slice(0, &entry_data);

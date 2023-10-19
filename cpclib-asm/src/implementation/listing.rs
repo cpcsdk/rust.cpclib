@@ -62,7 +62,7 @@ impl ListingExt for Listing {
         code: S
     ) -> Result<(), AssemblerError> {
         parse_z80_str(code.as_ref().trim_end()).map(|local_tokens| {
-            let mut local_tokens = local_tokens.as_listing();
+            let mut local_tokens = local_tokens.as_listing().to_vec();
             self.listing_mut().append(&mut local_tokens);
         })
     }
@@ -102,7 +102,7 @@ impl ListingExt for Listing {
         let mut options = EnvOptions::default();
 
         for instruction in self.listing() {
-            if let Token::Org(address, _) = instruction {
+            if let Token::Org{val1:address,..} = instruction {
                 current_address = Some(address.eval().unwrap().int().unwrap() as u16);
             }
 
@@ -216,7 +216,7 @@ impl ListingExt for Listing {
         while current_idx < self.len() && nb_labels_added < sorted_labels.len() {
             let current_instruction = &self.listing()[current_idx];
 
-            let next_address = if let Token::Org(address, _) = current_instruction {
+            let next_address = if let Token::Org{val1:address, ..} = current_instruction {
                 current_address = Some(address.eval().unwrap().int().unwrap() as u16);
                 current_address.clone()
             }
@@ -287,7 +287,7 @@ impl<'a> fmt::Display for PrintableListing<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for token in self.0.listing().iter() {
             match token {
-                Token::Label(_) | Token::Equ(..) | Token::Comment(_) => (),
+                Token::Label(_) | Token::Equ{..} | Token::Comment(_) => (),
                 _ => {
                     write!(f, "\t")?;
                 }

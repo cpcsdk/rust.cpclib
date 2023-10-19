@@ -5,8 +5,8 @@ use std::fs::File;
 use std::io::Write;
 
 use cpclib_common::clap::*;
-use edsk::Head;
 use disc::Disc;
+use edsk::Head;
 
 /// Concerns all stuff related to Amsdos disc format
 pub mod amsdos;
@@ -14,15 +14,13 @@ pub mod amsdos;
 pub mod builder;
 /// Parser of the format description
 pub mod cfg;
+pub mod disc;
 /// EDSK File format
 pub mod edsk;
-pub mod disc;
 
 #[cfg(all(not(target_os = "windows"), not(target_arch = "wasm32")))]
 /// HFE File format
 pub mod hfe;
-
-
 
 use std::io::Read;
 use std::path::Path;
@@ -190,7 +188,8 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
         }
 
         // Save the dsk on disc
-        dsk.save(dsk_fname).map_err(|e| DskManagerError::AnyError { msg: e })?;
+        dsk.save(dsk_fname)
+            .map_err(|e| DskManagerError::AnyError { msg: e })?;
     }
     else if let Some(sub) = matches.subcommand_matches("format") {
         // Manage the formating of a disc
@@ -213,7 +212,8 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
 
         // Make the dsk based on the format
         let dsk = crate::builder::build_edsk_from_cfg(&cfg);
-        dsk.save(dsk_fname).map_err(|e| DskManagerError::AnyError { msg: e })?;
+        dsk.save(dsk_fname)
+            .map_err(|e| DskManagerError::AnyError { msg: e })?;
     }
     else {
         eprintln!("Missing command\n");

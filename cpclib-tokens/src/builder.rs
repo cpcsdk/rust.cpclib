@@ -10,12 +10,15 @@ pub fn nop() -> Token {
 
 /// Generate org directive
 pub fn org<E: Into<Expr>>(val: E) -> Token {
-    Token::Org(val.into(), None)
+    Token::Org{val1: val.into(), val2: None}
 }
 
 #[allow(missing_docs)]
 pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {
-    Token::Equ(label.as_ref().into(), expr.into())
+    Token::Equ {
+        label: label.as_ref().into(),
+        expr: expr.into()
+    }
 }
 
 #[allow(missing_docs)]
@@ -275,7 +278,16 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
         Register8::L.into(),
-        DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, expr)
+        DataAccess::IndexRegister16WithIndex(
+            IndexRegister16::Ix,
+            if expr.is_negated() {
+                BinaryOperation::Sub
+            }
+            else {
+                BinaryOperation::Add
+            },
+            if expr.is_negated() { expr.neg() } else { expr }
+        )
     )
 }
 

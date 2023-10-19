@@ -19,11 +19,11 @@ use std::io::{Read, Write};
 /// Catalog tool manipulator.
 use cpclib_common::clap::{value_parser, Arg, ArgAction, Command};
 use cpclib_common::num::Num;
-use cpclib_disc::amsdos::{AmsdosEntries,  AmsdosManagerNonMut, BlocIdx};
+use cpclib_disc::amsdos::{AmsdosEntries, AmsdosManagerNonMut, BlocIdx};
+use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
 use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
-use cpclib_disc::disc::Disc;
 #[must_use]
 pub fn to_number<T>(repr: &str) -> T
 where

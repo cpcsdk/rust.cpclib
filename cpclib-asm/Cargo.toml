@@ -23,6 +23,7 @@ cpclib-image.workspace = true
 
 arrayref.workspace = true
 cfg-if.workspace = true
+choice_nocase.workspace = true
 codespan-reporting.workspace = true
 crc.workspace = true
 custom_error.workspace = true

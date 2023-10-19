@@ -6,7 +6,7 @@ use cpclib::disc::disc::Disc;
 mod tests {
     use std::str::FromStr;
 
-    #[cfg(all(not(target_os="windows"), not(target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "windows"), not(target_arch = "wasm32")))]
     use cpclib_disc::hfe::Hfe;
 
     const DOUBLE_SIDED: &str = "NbTrack = 80
@@ -327,8 +327,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         dsk.to_buffer(&mut buffer);
     }
 
-
-    #[cfg(all(not(target_os="windows"), not(target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "windows"), not(target_arch = "wasm32")))]
     #[test]
     fn arkos_hfe() {
         let cfg =
@@ -363,7 +362,6 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         }
 
         let hfe = Hfe::from(&cfg);
-
     }
 
     #[test]

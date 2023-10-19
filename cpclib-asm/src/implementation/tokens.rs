@@ -12,7 +12,7 @@ use crate::implementation::listing::ListingExt;
 use crate::{AssemblingOptions, EnvOptions};
 
 /// Needed methods for the Token defined in cpclib_tokens
-pub trait TokenExt: ListingElement + Clone + Debug {
+pub trait TokenExt: ListingElement +  Debug {
     fn estimated_duration(&self) -> Result<usize, AssemblerError>;
     /// Unroll the tokens when it represents a loop
     fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>>;
@@ -200,7 +200,7 @@ impl TokenExt for Token {
             | Token::Breakpoint(_)
             | Token::Comment(_)
             | Token::Label(_)
-            | Token::Equ(..)
+            | Token::Equ{..}
             | Token::Protect(..) => 0,
 
             // Here, there is a strong limitation => it will works only if no symbols are used

@@ -21,17 +21,19 @@ use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
-use crate::preamble::{LocatedToken, MayHaveSpan, ParsingState};
+use crate::preamble::{LocatedToken, MayHaveSpan, ParsingState, LocatedExpr, LocatedTokenInner};
 use crate::section::*;
 use crate::Visited;
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
-    fn return_expr(&self) -> Option<&Expr>;
+    type Expr: ExprEvaluationExt;
+    fn return_expr(&self) -> Option<&Self::Expr>;
 }
 
 impl ReturnExpr for Token {
-    fn return_expr(&self) -> Option<&Expr> {
+    type Expr = Expr;
+    fn return_expr(&self) -> Option<&Self::Expr> {
         match self {
             Token::Return(exp) => Some(exp),
             _ => None
@@ -40,9 +42,10 @@ impl ReturnExpr for Token {
 }
 
 impl ReturnExpr for LocatedToken {
-    fn return_expr(&self) -> Option<&Expr> {
-        match self {
-            LocatedToken::Standard { token, .. } => token.return_expr(),
+    type Expr = LocatedExpr;
+    fn return_expr(&self) -> Option<&Self::Expr> {
+        match &self.inner {
+            LocatedTokenInner::Return(e) => Some(e),
             _ => None
         }
     }
@@ -627,7 +630,7 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
     let mut env = Env::default();
     env.symbols = base_env.symbols().clone();
     env.start_new_pass();
-    env.visit_bank(None)?; // assemble in a new bank
+    env.visit_bank::<Expr>(None)?; // assemble in a new bank
     env.visit_listing(&tokens)?;
     let bank_info = env.banks.pop().unwrap();
     match &bank_info.1.startadr {
