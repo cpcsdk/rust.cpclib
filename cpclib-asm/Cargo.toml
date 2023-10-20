@@ -47,7 +47,8 @@ smartstring.workspace = true
 substring.workspace = true
 tempfile.workspace = true
 velcro.workspace = true
-rayon-cond = "0.3.0"
+
+rayon-cond = {version="0.3.0", optional= true}
 
 chardetng = {workspace = true, optional = true}
 
@@ -65,5 +66,5 @@ build-deps = "0.1.4"
 default = ["colored_errors", "indicatif"]
 colored_errors = []
 indicatif = ["dep:indicatif"]
-rayon = ["cpclib-common/rayon"]
+rayon = ["cpclib-common/rayon", "dep:rayon-cond"]
 chardet = ["dep:chardetng"]

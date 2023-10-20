@@ -30,12 +30,12 @@ use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static::__Deref;
 #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
-use cpclib_common::rayon::prelude::*;
+use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
+
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
-use rayon_cond::CondIterator;
 
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
@@ -1121,12 +1121,12 @@ impl Env {
         // save from extra memory / can be done in parallel as it does not concerns memory
         self.ga_mmr = 0xC0;
 
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
         let iter = {
             let can_save_in_parallel = self.banks.iter().all(|b| b.1.can_save_in_parallel());
             CondIterator::new(&self.banks, can_save_in_parallel)
         };
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(target_arch = "wasm32", not(feature="rayon")))]
         let iter = self.banks.iter();
         let mut saved = iter
             .map(|bank| bank.1.execute_save(self, self.ga_mmr))

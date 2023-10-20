@@ -4,8 +4,7 @@ use std::io::Write;
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
-use cpclib_common::rayon::prelude::*;
-use rayon_cond::CondIterator;
+use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
 use super::report::SavedFile;
 use super::save_command::SaveCommand;
@@ -236,9 +235,9 @@ impl DelayedCommands {
     /// Execute the commands that correspond to the appropriate mmr configuration
     pub fn execute_save(&self, env: &Env, ga_mmr: u8) -> Result<Vec<SavedFile>, AssemblerError> {
 
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
         let iter = CondIterator::new(&self.save_commands, self.can_save_in_parallel());
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(target_arch = "wasm32", not(feature="rayon")))]
         let iter = self.save_commands.iter();
 
         let res = iter
