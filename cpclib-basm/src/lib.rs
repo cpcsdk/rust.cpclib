@@ -8,6 +8,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use cpclib_asm::assembler::file::{get_filename, handle_source_encoding};
+use cpclib_asm::preamble::file::read_source;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
 use cpclib_asm::preamble::*;
 use cpclib_asm::progress::{normalize, Progress};
@@ -145,22 +146,21 @@ pub fn parse<'arg>(
     let mut builder = options.clone().context_builder();
 
     // get the source code if any
-    let code = if matches.contains_id("INPUT") {
+    let (builder, code) = if matches.contains_id("INPUT") {
         builder = builder.set_current_filename(&filename);
-        let filename = get_filename(filename, &options, None)?;
-        let content = fs::read(filename.clone()).map_err(|e| {
-            AssemblerError::IOError {
-                msg: format!("Unable to open {:?}. {}", filename, e)
-            }
-        })?;
-        handle_source_encoding(filename.to_str().unwrap(), &content)?
+        let fname = get_filename(filename, &options, None)?;
+
+
+        let src = read_source(fname, &options)?;
+        (builder, src)
+
+
     }
     else if let Some(code) = matches.get_one::<String>("INLINE") {
-        builder = builder.set_context_name("INLINED CODE");
-        format!(" {}", code)
+        (builder.set_context_name("INLINED CODE"), format!(" {}", code))
     }
     else {
-        panic!("No code provided to assemble");
+        return Err(BasmError::InvalidArgument("No code provided to assemble".to_owned()));
     };
 
     let fname = builder

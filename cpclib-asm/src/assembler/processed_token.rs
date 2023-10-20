@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};

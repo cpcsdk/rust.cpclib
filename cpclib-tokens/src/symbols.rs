@@ -4,10 +4,8 @@ use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 
 use cpclib_common::itertools::Itertools;
-#[cfg(not(target_arch = "wasm32"))]
-use cpclib_common::rayon::iter::IntoParallelRefIterator;
-#[cfg(not(target_arch = "wasm32"))]
-use cpclib_common::rayon::prelude::*;
+#[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
+use cpclib_common::rayon::{prelude, iter::IntoParallelRefIterator};
 use cpclib_common::smallvec::{smallvec, SmallVec};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{lazy_static, strsim};
@@ -1099,9 +1097,9 @@ impl SymbolsTable {
     ) -> Result<Option<SmolStr>, SymbolError> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol(symbol)?;
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
         let iter = self.map.par_iter();
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(target_arch = "wasm32", not(feature="rayon")))]
         let iter = self.map.iter();
 
         Ok(iter

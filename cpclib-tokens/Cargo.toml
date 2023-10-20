@@ -30,3 +30,8 @@ regex.workspace = true
 
 [build-dependencies]
 built.workspace = true
+
+
+[features]
+default = []
+rayon = ["cpclib-common/rayon"]

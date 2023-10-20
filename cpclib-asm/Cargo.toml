@@ -22,6 +22,7 @@ cpclib-common.workspace = true
 cpclib-image.workspace = true
 
 arrayref.workspace = true
+assert_matches.workspace = true
 cfg-if.workspace = true
 choice_nocase.workspace = true
 codespan-reporting.workspace = true
@@ -29,28 +30,27 @@ crc.workspace = true
 custom_error.workspace = true
 delegate.workspace = true
 either.workspace = true
+encoding_rs.workspace = true
 getset.workspace = true
 globset.workspace = true
+hashbag.workspace = true
+indicatif = {workspace = true, optional=true}
 lazy_static.workspace = true
 libc.workspace = true
 matches.workspace = true
-hashbag.workspace = true
 ouroboros.workspace = true
 paste.workspace = true
 regex.workspace = true
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 serde = { workspace = true, features = ["derive"] }
-substring.workspace = true
-velcro.workspace = true
-assert_matches.workspace = true
-tempfile.workspace = true
-chardetng.workspace = true
-encoding_rs.workspace = true
 smartstring.workspace = true
-indicatif = {workspace = true, optional=true}
-
-
+substring.workspace = true
+tempfile.workspace = true
+velcro.workspace = true
 rayon-cond = "0.3.0"
+
+chardetng = {workspace = true, optional = true}
+
 
 [build-dependencies]
 built.workspace = true
@@ -65,3 +65,5 @@ build-deps = "0.1.4"
 default = ["colored_errors", "indicatif"]
 colored_errors = []
 indicatif = ["dep:indicatif"]
+rayon = ["cpclib-common/rayon"]
+chardet = ["dep:chardetng"]

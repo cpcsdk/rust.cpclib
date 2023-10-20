@@ -91,11 +91,17 @@ pub fn read_source<P: AsRef<Path>>(
     let fname = fname.as_ref();
 
     let content = load_binary(Either::Left(fname), options)?;
-    handle_source_encoding(fname.to_str().unwrap(), &content)
+    //handle_source_encoding(fname.to_str().unwrap(), &content)
+
+
+    String::from_utf8(content)
+        .map_err(|e| {
+            AssemblerError::AlreadyRenderedError(format!("{} is not a valid utf8 file. {}", fname.display(), e))
+        })
 }
 
 // Never fail
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature="chardetng", not(target_arch = "wasm32")))]
 pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
     let mut decoder = chardetng::EncodingDetector::new();
     decoder.feed(content, true);
@@ -107,7 +113,7 @@ pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, As
     Ok(content)
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any( not(feature="chardetng"), target_arch = "wasm32"))]
 pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
-    todo!()
+    unimplemented!("i have deactivated this stuff to speed up everything. Let's consider each source is UTF8!")
 }

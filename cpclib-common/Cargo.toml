@@ -37,8 +37,9 @@ semver = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rayon.workspace = true
+rayon = {workspace = true, optional = true }
 
 
 [features]
 cmdline = ["time", "semver", "clap"]
+rayon = ["dep:rayon"]

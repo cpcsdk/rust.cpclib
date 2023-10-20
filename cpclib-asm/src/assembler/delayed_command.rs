@@ -3,7 +3,7 @@ use std::io::Write;
 
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
 use cpclib_common::rayon::prelude::*;
 use rayon_cond::CondIterator;
 

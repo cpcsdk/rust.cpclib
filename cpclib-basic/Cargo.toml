@@ -37,6 +37,7 @@ built.workspace = true
 
 [features]
 basic = []
+rayon = ["cpclib-common/rayon"]
 
 [[bin]]
 name = "locomotive"

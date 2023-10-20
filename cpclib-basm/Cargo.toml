@@ -50,6 +50,7 @@ default = ["xferlib", "indicatif", "colored_errors"]
 xferlib = ["cpclib-xfer"]
 indicatif = ["cpclib-asm/indicatif"]
 colored_errors = ["cpclib-asm/colored_errors"]
+rayon = ["cpclib-asm/rayon"]
 
 
 [profile.release]

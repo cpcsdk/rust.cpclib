@@ -29,7 +29,7 @@ use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static::__Deref;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;

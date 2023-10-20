@@ -15,7 +15,7 @@ use cpclib_common::nom::sequence::*;
 #[allow(missing_docs)]
 use cpclib_common::nom::*;
 use cpclib_common::nom_locate::LocatedSpan;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{bin_number, dec_number, hex_number, lazy_static};
@@ -3971,9 +3971,9 @@ fn impossible_names(dotted_directive: bool) -> &'static [&'static str] {
 
 #[inline]
 fn allowed_label(name: &str, dotted_directive: bool) -> bool {
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
     let iter = impossible_names(dotted_directive).par_iter();
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(any(target_arch = "wasm32", not(feature="rayon")))]
     let mut iter = impossible_names(dotted_directive).iter();
 
     !iter.any(|&content| content == name)

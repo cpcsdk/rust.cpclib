@@ -8,7 +8,7 @@ use cpclib_common::nom::combinator::{cut, eof};
 use cpclib_common::nom::error::{context, ErrorKind, VerboseError};
 use cpclib_common::nom::{Err, IResult, InputLength, InputTake};
 use cpclib_common::nom_locate::LocatedSpan;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_sna::{SnapshotVersion, SnapshotFlag, FlagValue};
@@ -2869,9 +2869,9 @@ impl LocatedListing {
     // }
 
     pub fn as_listing(&self) -> BaseListing<Token> {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
         let iter = self.deref().par_iter();
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(target_arch = "wasm32", not(feature="rayon")))]
         let iter = self.deref().iter();
 
         iter.map(|lt| lt.to_token())
