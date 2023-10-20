@@ -152,6 +152,26 @@ where
     tokens.append(Group::new(Delimiter::Parenthesis, inside));
 }
 
+
+fn two_named_params<T1, T2>(name: &str, field1: &str,  t1: &T1, field2: &str, t2: &T2, tokens: &mut TokenStream)
+where
+    T1: MyToTokens,
+    T2: MyToTokens
+{
+    tokens.append(Ident::new(name, Span::call_site()));
+
+    let mut inside = TokenStream::new();
+    inside.append(Ident::new(field1, Span::call_site()));
+    inside.append(Punct::new(':', Spacing::Joint));
+    t1.to_tokens(&mut inside);
+    inside.append(Punct::new(',', Spacing::Joint));
+    inside.append(Ident::new(field2, Span::call_site()));
+    inside.append(Punct::new(':', Spacing::Joint));
+    t2.to_tokens(&mut inside);
+
+    tokens.append(Group::new(Delimiter::Bracket, inside));
+}
+
 fn three_params<T1, T2, T3>(name: &str, t1: &T1, t2: &T2, t3: &T3, tokens: &mut TokenStream)
 where
     T1: MyToTokens,
@@ -226,8 +246,9 @@ impl MyToTokens for Token {
                 tokens.append(Group::new(Delimiter::Parenthesis, vec_tokens));
             }
 
-            Self::Equ(arg1, arg2) => {
-                two_params("Equ", arg1, arg2, tokens);
+            Self::Equ{label, expr} => {
+                two_named_params("Equ", "label", label, "expr", expr, tokens);
+
             }
 
             Self::Label(arg) => {
@@ -252,8 +273,8 @@ impl MyToTokens for Token {
                 tokens.append(Group::new(Delimiter::Parenthesis, inner_content));
             }
 
-            Self::Org(arg1, arg2) => {
-                two_params("Org", arg1, arg2, tokens);
+            Self::Org{val1, val2} => {
+                two_named_params("Org", "val1", val1, "val2", val2, tokens);
             }
 
             Self::StableTicker(arg) => {

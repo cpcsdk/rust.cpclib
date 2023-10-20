@@ -600,7 +600,7 @@ impl eframe::App for BndBuildApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        catppuccin_egui::set_theme(&ctx, catppuccin_egui::MOCHA);
+        //catppuccin_egui::set_theme(&ctx, catppuccin_egui::MOCHA);
 
         if self.job.is_some() {
             ctx.set_cursor_icon(egui::CursorIcon::Progress);

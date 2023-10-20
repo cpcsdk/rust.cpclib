@@ -16,7 +16,6 @@ homepage.workspace = true
 independent = true
 
 [dependencies]
-catppuccin-egui.workspace = true
 cpclib-bndbuild.workspace = true
 eframe = {workspace=true, features=["persistence"]}
 egui_file.workspace = true

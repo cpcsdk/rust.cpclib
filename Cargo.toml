@@ -162,12 +162,11 @@ velcro = "0.5.4"
 choice_nocase = "0.1.2"
 
 # gui based dependencies
-eframe = "0.22"
-egui = "0.22"
-catppuccin-egui = "3.1.0"
+eframe = "0.23"
+egui = "0.23"
 claui = {git="https://github.com/rgiot/claui.git"}
-egui_code_editor = "0.1.7" # cannot be updated to 0.1.8 yet
-egui_file = "0.10"
+egui_code_editor = "0.1.8" # cannot be updated to 0.1.8 yet
+egui_file = "0.11"
 open = "5.0.0"
 
 

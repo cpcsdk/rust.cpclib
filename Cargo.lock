@@ -750,15 +750,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
-name = "catppuccin-egui"
-version = "3.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d3754c4417c19dc020529b0a3fb5e649afa59b16d49c9231210800ce00891b5"
-dependencies = [
- "egui 0.22.0",
-]
-
-[[package]]
 name = "cc"
 version = "1.0.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -923,7 +914,7 @@ version = "0.3.0"
 source = "git+https://github.com/rgiot/claui.git#d1a216a22ca40179b46d793397ceac1a12f00ae5"
 dependencies = [
  "clap",
- "eframe",
+ "eframe 0.22.0",
  "shh",
 ]
 
@@ -1387,9 +1378,8 @@ name = "cpclib-visual-bndbuild"
 version = "0.2.1"
 dependencies = [
  "built",
- "catppuccin-egui",
  "cpclib-bndbuild",
- "eframe",
+ "eframe 0.23.0",
  "egui_code_editor",
  "egui_file",
  "env_logger",
@@ -1827,7 +1817,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e479a7fa3f23d4e794f8b2f8b3568dd4e47886ad1b12c9c095e141cb591eb63"
 dependencies = [
  "bytemuck",
- "serde",
 ]
 
 [[package]]
@@ -1835,6 +1824,10 @@ name = "ecolor"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfdf4e52dbbb615cfd30cf5a5265335c217b5fd8d669593cea74a517d9c605af"
+dependencies = [
+ "bytemuck",
+ "serde",
+]
 
 [[package]]
 name = "eframe"
@@ -1844,10 +1837,9 @@ checksum = "bf4596583a2c680c55b6feaa748f74890c4f9cb9c7cb69d6117110444cb65b2f"
 dependencies = [
  "bytemuck",
  "cocoa",
- "directories-next",
  "egui 0.22.0",
- "egui-winit",
- "egui_glow",
+ "egui-winit 0.22.0",
+ "egui_glow 0.22.0",
  "glow",
  "glutin",
  "glutin-winit",
@@ -1857,8 +1849,39 @@ dependencies = [
  "objc",
  "percent-encoding",
  "raw-window-handle",
+ "thiserror",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "winapi",
+ "winit",
+]
+
+[[package]]
+name = "eframe"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26d9efede6c8905d3fc51a5ec9a506d4da4011bbcae0253d0304580fe40af3f5"
+dependencies = [
+ "bytemuck",
+ "cocoa",
+ "directories-next",
+ "egui 0.23.0",
+ "egui-winit 0.23.0",
+ "egui_glow 0.23.0",
+ "glow",
+ "glutin",
+ "glutin-winit",
+ "image",
+ "js-sys",
+ "log",
+ "objc",
+ "parking_lot",
+ "percent-encoding",
+ "raw-window-handle",
  "ron",
  "serde",
+ "static_assertions",
  "thiserror",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1878,8 +1901,6 @@ dependencies = [
  "epaint 0.22.0",
  "log",
  "nohash-hasher",
- "ron",
- "serde",
 ]
 
 [[package]]
@@ -1888,9 +1909,13 @@ version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8bd69fed5fcf4fbb8225b24e80ea6193b61e17a625db105ef0c4d71dde6eb8b7"
 dependencies = [
+ "accesskit",
  "ahash",
  "epaint 0.23.0",
+ "log",
  "nohash-hasher",
+ "ron",
+ "serde",
 ]
 
 [[package]]
@@ -1905,8 +1930,25 @@ dependencies = [
  "instant",
  "log",
  "raw-window-handle",
+ "smithay-clipboard",
+ "webbrowser",
+ "winit",
+]
+
+[[package]]
+name = "egui-winit"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c15479a96d9fadccf5dac690bdc6373b97b8e1c0dd28367058f25a5298da0195"
+dependencies = [
+ "accesskit_winit",
+ "arboard",
+ "egui 0.23.0",
+ "log",
+ "raw-window-handle",
  "serde",
  "smithay-clipboard",
+ "web-time",
  "webbrowser",
  "winit",
 ]
@@ -1922,11 +1964,11 @@ dependencies = [
 
 [[package]]
 name = "egui_file"
-version = "0.10.2"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e625867c037383fe7d6b3669ea5b53bdcccfbcbd822c7a9e996495abcf7bd631"
+checksum = "7d36bb265b94d54e34378528b5895fbf132db63a8547376947f452edfda98d2d"
 dependencies = [
- "egui 0.22.0",
+ "egui 0.23.0",
 ]
 
 [[package]]
@@ -1937,6 +1979,21 @@ checksum = "1f8c2752cdf1b0ef5fcda59a898cacabad974d4f5880e92a420b2c917022da64"
 dependencies = [
  "bytemuck",
  "egui 0.22.0",
+ "glow",
+ "log",
+ "memoffset 0.6.5",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "egui_glow"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce6726c08798822280038bbad2e32f4fc3cbed800cd51c6e34e99cd2d60cc1bc"
+dependencies = [
+ "bytemuck",
+ "egui 0.23.0",
  "glow",
  "log",
  "memoffset 0.6.5",
@@ -1957,7 +2014,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3857d743a6e0741cdd60b622a74c7a36ea75f5f8f11b793b41d905d2c9721a4b"
 dependencies = [
  "bytemuck",
- "serde",
 ]
 
 [[package]]
@@ -1965,6 +2021,10 @@ name = "emath"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ef2b29de53074e575c18b694167ccbe6e5191f7b25fe65175a0d905a32eeec0"
+dependencies = [
+ "bytemuck",
+ "serde",
+]
 
 [[package]]
 name = "encode_unicode"
@@ -2047,7 +2107,6 @@ dependencies = [
  "log",
  "nohash-hasher",
  "parking_lot",
- "serde",
 ]
 
 [[package]]
@@ -2058,10 +2117,13 @@ checksum = "58067b840d009143934d91d8dcb8ded054d8301d7c11a517ace0a99bb1e1595e"
 dependencies = [
  "ab_glyph",
  "ahash",
+ "bytemuck",
  "ecolor 0.23.0",
  "emath 0.23.0",
+ "log",
  "nohash-hasher",
  "parking_lot",
+ "serde",
 ]
 
 [[package]]
@@ -5390,7 +5452,7 @@ dependencies = [
  "built",
  "claui",
  "cpclib-basm",
- "eframe",
+ "eframe 0.23.0",
  "static_vcruntime",
 ]
 
@@ -5614,6 +5676,16 @@ name = "web-sys"
 version = "0.3.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b85cbef8c220a6abc02aefd892dfc0fc23afb1c6a426316ec33253a3877249b"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "web-time"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8208e3fdbc243c8fd30805721869242a7f6de3e2e9f3b057652ab36e52ae1e87"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
