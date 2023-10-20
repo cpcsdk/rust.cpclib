@@ -650,7 +650,22 @@ impl DataAccessElem for LocatedDataAccess {
     }
 
     fn to_data_access(&self) -> Cow<DataAccess> {
-        todo!()
+        Cow::Owned(match self {
+            LocatedDataAccess::IndexRegister16WithIndex(a, b, c, _) => DataAccess::IndexRegister16WithIndex(*a, *b, c.to_expr().into_owned()),
+            LocatedDataAccess::IndexRegister16(a, _) => DataAccess::IndexRegister16(*a),
+            LocatedDataAccess::IndexRegister8(a, _) => DataAccess::IndexRegister8(*a),
+            LocatedDataAccess::Register16(a, _) => DataAccess::Register16(*a),
+            LocatedDataAccess::Register8(a, _) => DataAccess::Register8(*a),
+            LocatedDataAccess::MemoryRegister16(a, _) => DataAccess::MemoryRegister16(*a),
+            LocatedDataAccess::MemoryIndexRegister16(a, _) => DataAccess::MemoryIndexRegister16(*a),
+            LocatedDataAccess::Expression(e) => DataAccess::Expression(e.to_expr().into_owned()),
+            LocatedDataAccess::Memory(a) => DataAccess::Memory(a.to_expr().into_owned()),
+            LocatedDataAccess::FlagTest(a, _) => DataAccess::FlagTest(*a),
+            LocatedDataAccess::SpecialRegisterI(_) => DataAccess::SpecialRegisterI,
+            LocatedDataAccess::SpecialRegisterR(_) => DataAccess::SpecialRegisterR,
+            LocatedDataAccess::PortC(_) => DataAccess::PortC,
+            LocatedDataAccess::PortN(e, _) => DataAccess::PortN(e.to_expr().into_owned()),
+        })
     }
 }
 
@@ -2430,7 +2445,7 @@ pub trait Locate {
 
 impl TokenExt for LocatedToken{
     fn estimated_duration(&self) -> Result<usize, AssemblerError> {
-        todo!("Move back the implementation of the feature directly into the TokenExt to have it available whatever is the true implementation");
+        self.to_token().estimated_duration()
     }
 
     fn unroll(&self, _env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {

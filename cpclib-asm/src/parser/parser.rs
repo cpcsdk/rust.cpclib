@@ -2038,8 +2038,6 @@ impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError>  + '_ {
     let within_struct = local_parsing_state == &ParsingState::StructLimited;
 
 
-    dbg!(&word);
-    
     let (rest, token) :(Z80Span, LocatedTokenInner) = match word.as_str() {
         choice_nocase!("ORG") => parse_org(rest)?,
 
@@ -2126,9 +2124,8 @@ impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError>  + '_ {
 
     };
 
-    dbg!(&token);
 
-    let token = dbg!(token.into_located_token_between(&input_start, &rest));
+    let token = token.into_located_token_between(&input_start, &rest);
     Ok((rest, token))
 
 }
@@ -2446,8 +2443,6 @@ pub fn parse_ld_normal(
 
         let token = LocatedTokenInner::new_opcode(Mnemonic::Ld, Some(dst), Some(src));
 
-
-        dbg!(&token);
 
         Ok((input, token))
     }

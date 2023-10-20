@@ -2759,7 +2759,6 @@ pub fn visit_located_token(
     let token = outer_token.deref();
 
 
-
     visit_token_impl!(token, env, span, LocatedTokenInner)
         .map_err(|e| e.locate(span.unwrap().clone()))?;
 
