@@ -4426,6 +4426,7 @@ pub fn expr2(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
         parse_oper(shift, ">=", BinaryOperation::GreaterOrEqual),
         parse_oper(shift, ">", BinaryOperation::StrictlyGreater),
         parse_oper(shift, "==", BinaryOperation::Equal),
+        parse_oper(shift, "=", BinaryOperation::Equal),
         parse_oper(shift, "!=", BinaryOperation::Different)
     )))(input)?;
 

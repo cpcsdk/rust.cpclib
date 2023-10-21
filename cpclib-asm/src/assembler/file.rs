@@ -94,10 +94,8 @@ pub fn read_source<P: AsRef<Path>>(
     //handle_source_encoding(fname.to_str().unwrap(), &content)
 
 
-    String::from_utf8(content)
-        .map_err(|e| {
-            AssemblerError::AlreadyRenderedError(format!("{} is not a valid utf8 file. {}", fname.display(), e))
-        })
+    Ok(String::from_utf8_lossy(&content)
+        .into_owned())
 }
 
 // Never fail
