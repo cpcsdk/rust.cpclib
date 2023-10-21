@@ -226,7 +226,7 @@ const STAND_ALONE_DIRECTIVE: &[&str] = &[
 ];
 
 const START_DIRECTIVE: &[&str] = &[
-    "CONFINED", "FOR", "IF", "IFDEF", "IFNDEF", "IFUSED", "ITER", "ITERATE", "LZ4", "LZ48", "LZ49",
+    "CONFINED", "FOR", "IF", "IFDEF", "IFEXIST", "IFNDEF", "IFUSED", "ITER", "ITERATE", "LZ4", "LZ48", "LZ49",
     "LZ48", "LZAPU", "LZX0", "LZEXO", "LZ4", "LZX7", "MACRO", "MODULE", "PHASE", "REPEAT", "REPT",
     "STRUCT", "SWITCH", "WHILE"
 ];
@@ -2174,6 +2174,9 @@ pub fn parse_conditional(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Pa
             map(parse_directive_word("IFUSED"), |_| {
                 KindOfConditional::IfUsed
             }),
+            map(parse_directive_word("IFEXIST"), |_| {
+                KindOfConditional::IfUsed
+            }),
             map(parse_directive_word("IFNUSED"), |_| {
                 KindOfConditional::IfNused
             })
@@ -3626,7 +3629,7 @@ pub fn parse_indexregister_with_index(
     input: Z80Span
 ) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
     let start = input.clone();
-    let (input, reg) = preceded(tuple((tag("("), space0)), parse_indexregister16)(input)?;
+    let (input, (open, _, reg)) = tuple((tag("("), space0, parse_indexregister16))(input)?;
 
     let (input, op) = preceded(
         space0,
@@ -3636,7 +3639,12 @@ pub fn parse_indexregister_with_index(
         ))
     )(input)?;
 
-    let (input, expr) = terminated(located_expr, tuple((space0, tag(")"))))(input)?;
+    let (input, expr) = if open.as_str() == "(" {
+        terminated(located_expr, tuple((space0, tag(")"))))(input)?
+    } else {
+        assert_eq!(open.as_str(), "]");
+        terminated(located_expr, tuple((space0, tag("]"))))(input)?
+    };
 
     let span = start.take(start.input_len()-input.input_len());
 
@@ -3654,7 +3662,10 @@ pub fn parse_indexregister_with_index(
 /// Parse (C) used in in/out
 #[inline]
 pub fn parse_portc(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
-    let (next, _) = tuple((tag("("), space0, parse_register_c, space0, tag(")")))(input.clone())?;
+    let (next, _) = alt((
+        tuple((tag("("), space0, parse_register_c, space0, tag(")"))),
+        tuple((tag("["), space0, parse_register_c, space0, tag("]"))),
+    ))(input.clone())?;
     let span = input.take( input.input_len()-next.input_len());
 
     Ok((next, LocatedDataAccess::PortC(span)))
@@ -3664,7 +3675,10 @@ pub fn parse_portc(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80Par
 #[inline]
 pub fn parse_portnn(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
 
-    let (res, address) = delimited(tag("("), located_expr, preceded(space0, tag(")")))(input.clone())?;
+    let (res, address) = alt((
+        delimited(tag("("), located_expr, preceded(space0, tag(")"))),
+        delimited(tag("["), located_expr, preceded(space0, tag("]"))),
+    ))(input.clone())?;
     let span = input.take(input.input_len() - res.input_len());
     Ok((res, LocatedDataAccess::PortN(address, span)))
 }
@@ -3672,7 +3686,10 @@ pub fn parse_portnn(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80Pa
 /// Parse an address access `(expression)`
 #[inline]
 pub fn parse_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
-    let (res, address) = delimited(
+    let (res, address) = alt((
+        
+        
+        delimited(
             tag("("),
             located_expr,
             terminated(
@@ -3682,7 +3699,22 @@ pub fn parse_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80P
                     preceded(space0, is_a("/+=-*<>%"))
                 )
             )
-        )(input)?;
+        ),
+
+        delimited(
+            tag("["),
+            located_expr,
+            terminated(
+                preceded(space0, tag("]")),
+                not(
+                    // filter expressions ; they are followed by some operators
+                    preceded(space0, is_a("/+=-*<>%"))
+                )
+            )
+        )
+        
+        
+        ))(input)?;
     Ok((res, LocatedDataAccess::Memory(address)))
 
 }
@@ -3690,12 +3722,20 @@ pub fn parse_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80P
 /// Parse (R16)
 #[inline]
 pub fn parse_reg_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
-    let (res, reg) = 
+    let (res, reg) = alt((
         delimited(
             terminated(tag("("), space0),
             parse_register16,
             preceded(space0, tag(")"))
-        )(input.clone())?;
+        ),
+        delimited(
+            terminated(tag("["), space0),
+            parse_register16,
+            preceded(space0, tag("]"))
+        )
+      
+        
+    ))(input.clone())?;
 
     let da = LocatedDataAccess::MemoryRegister16(reg.get_register16().unwrap(), input.take(input.input_len() - res.input_len()));
     Ok((res, da))
@@ -3704,11 +3744,18 @@ pub fn parse_reg_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, 
 /// Parse (HL)
 #[inline]
 pub fn parse_hl_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
-   let (res, _) = delimited(
+   let (res, _) = alt((
+    delimited(
             terminated(tag("("), space0),
             parse_register_hl,
             preceded(space0, tag(")"))
+        ),
+        delimited(
+            terminated(tag("["), space0),
+            parse_register_hl,
+            preceded(space0, tag("]"))
         )
+    ))
     (input.clone())?;
 
     let span = input.take(input.input_len() - res.input_len());
