@@ -461,6 +461,7 @@ where
         Some(ProcessedTokenState::If(state))
     }
     else if token.is_include() {
+        // we cannot use the real method onf IncludeState because it modifies env and here wa cannot
         let fname = token.include_fname();
         let options = env.options().parse_options();
         match get_filename(fname, options, Some(env)) {
@@ -500,6 +501,8 @@ where
             }
             Err(_) => Some(ProcessedTokenState::Include(Default::default())) /* we were unable to get the filename with the provided information */
         }
+       
+
     }
     else if token.is_incbin() {
         Some(ProcessedTokenState::Incbin(Default::default()))
@@ -607,7 +610,7 @@ where
 {
 
     let options = env.options().parse_options();
-        if options.show_progress {
+    if options.show_progress {
             /* // temporarily deactivate parallel processing while i have not found a way to compile it
         #[cfg(not(target_arch = "wasm32"))]
         let iter = tokens.par_iter();
@@ -630,14 +633,12 @@ where
         Progress::progress().add_parses(include_fnames);
     }
 
-    // the files will be read here
-    /*
-    #[cfg(not(target_arch = "wasm32"))]
+    // the files will be read here while token are built
+    // this is really important to keep this place parallelized
+    #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
     let iter = tokens.par_iter();
-    #[cfg(target_arch = "wasm32")]
-    */
-
-    let mut iter = tokens.iter();
+    #[cfg(any(target_arch = "wasm32", not(feature="rayon")))]
+    let iter = tokens.iter();
     iter.map(|t| build_processed_token(t, env))
         .collect::<Vec<_>>()
 }

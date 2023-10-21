@@ -50,10 +50,11 @@ default = ["xferlib", "indicatif", "colored_errors"]
 xferlib = ["cpclib-xfer"]
 indicatif = ["cpclib-asm/indicatif"]
 colored_errors = ["cpclib-asm/colored_errors"]
-rayon = ["cpclib-asm/rayon"]
+rayon = ["cpclib-asm/rayon", "cpclib-common/rayon"]
 
 
 [profile.release]
-lto = true
+lto = "fat"
+opt-level = 3
 codegen-units = 1
 strip = true
