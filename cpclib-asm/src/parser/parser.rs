@@ -3893,8 +3893,16 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80Parser
                 pair(
                     context(
                         "STRUCT: label error",
-                        verify(terminated(parse_label(true), space1), |label: &Z80Span| {
-                            label.to_ascii_lowercase() != "endstruct"
+                        verify(
+                            terminated(
+                                parse_label(false), 
+                                alt((
+                                        recognize(tuple((space0, char(':'), space0))), 
+                                        recognize(space1)
+                                    ))
+                                ), 
+                                |label: &Z80Span| {
+                                    label.to_ascii_lowercase() != "endstruct"
                         })
                     ),
                     cut(context(
@@ -3911,7 +3919,12 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80Parser
             ))
         ))(input)?;
 
-        let (input, _) = cut(preceded(space0, parse_directive_word("ENDSTRUCT")))(input)?;
+        let (input, _) = cut(preceded(space0, 
+            alt((
+                parse_directive_word("ENDSTRUCT"),
+                parse_directive_word("ENDS"),
+        ))
+    ))(input)?;
 
         Ok((input, LocatedTokenInner::Struct(name, fields)))
     }
