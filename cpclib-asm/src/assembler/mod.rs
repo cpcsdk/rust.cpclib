@@ -1676,6 +1676,25 @@ impl Env {
         Ok(())
     }
 
+    // Remove the global part if needed and change if if needed
+    fn handle_global_and_local_labels<'s>(&mut self, label: &'s str) -> Result<&'s str, AssemblerError>  {
+        let label = if let Some(dot_pos) = label[1..].find(".") {
+            let global = &label[0..(dot_pos+1)];
+            let local = &label[(dot_pos+1)..label.len()];
+            let current = self.symbols().get_current_label().as_ref();
+            if global !=  current {
+                self.symbols_mut().set_current_label(global)?;
+
+            } 
+            local
+            
+        } else {
+            label
+        };
+
+        Ok(label)
+    }
+
     fn visit_label(&mut self, label: &str) -> Result<(), AssemblerError> {
         let label = self.symbols().normalize_symbol(label);
         let label = label.value();
@@ -1696,9 +1715,12 @@ impl Env {
             })
         }
         else {
+            //TODO we should make the expansion right now because it is fucked up otherwise
+
+            let label = self.handle_global_and_local_labels(label)?;
             // XXX limit: should not be done here as it may start by {...} that contains when interpreted.}
             if !label.starts_with('.') {
-                self.symbols_mut().set_current_label(label)?;
+                self.symbols_mut().set_current_label(label);
             }
 
             // If the current address is not set up, we force it to be 0
@@ -1707,6 +1729,7 @@ impl Env {
                 Err(_) => 0
             };
             let addr = self.logical_to_physical_address(value);
+
 
             self.add_symbol_to_symbol_table(label, addr)
         };
@@ -3540,6 +3563,7 @@ impl Env {
         }
         else {
 
+            let label = self.handle_global_and_local_labels(label)?;
             if !label.starts_with('.') {
                 self.symbols_mut().set_current_label(label)?;
             }
@@ -3574,6 +3598,7 @@ impl Env {
             .as_mut()
             .map(|o| o.replace_code_address(&value));
 
+        let label = self.handle_global_and_local_labels(label)?;
         if !label.starts_with('.') {
                 self.symbols_mut().set_current_label(label)?;
             }

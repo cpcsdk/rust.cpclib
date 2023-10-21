@@ -464,6 +464,12 @@ impl Into<SmolStr> for &Symbol {
     }
 }
 
+impl AsRef<str> for Symbol {
+    fn as_ref(&self) -> &str {
+        self.value()
+    }
+}
+
 impl Symbol {
     pub fn value(&self) -> &str {
         &self.0
@@ -652,6 +658,10 @@ impl SymbolsTable {
         }
 
         Ok(())
+    }
+
+    pub fn get_current_label(&self) -> &Symbol {
+        &self.current_global_label
     }
 
     /// Some symbols are local and need to be converted to their global value.
@@ -1230,6 +1240,13 @@ impl SymbolsTableCaseDependent {
         self.table
             .set_current_global_label(self.normalize_symbol(symbol))
     }
+
+
+
+    pub fn get_current_label(&self) -> &Symbol {
+        self.table.get_current_label()
+    }
+
 
     pub fn set_symbol_to_current_address<S: Into<Symbol>>(
         &mut self,
