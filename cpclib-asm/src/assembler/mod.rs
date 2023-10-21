@@ -3485,7 +3485,10 @@ impl Env {
                         span: curr_span
                     }
                 ) => {
-                    if prev_addr.offset_in_cpc() + *prev_size as u32 == curr_addr.offset_in_cpc() {
+                    if 
+                    (prev_addr.offset_in_cpc() + *prev_size as u32 == curr_addr.offset_in_cpc()) &&
+                    (prev_span.extra.source.as_ptr() == curr_span.extra.source.as_ptr())
+                     {
                         let new_size = *prev_size + *curr_size;
 
                         let start_str = prev_span.fragment();
@@ -3628,7 +3631,7 @@ impl Env {
             self.output_trigger
                 .as_mut()
                 .map(|o| o.replace_code_address(&value));
-            dbg!(self.add_symbol_to_symbol_table(label, value)?);
+            self.add_symbol_to_symbol_table(label, value)?;
 
             self.map_counter = self.map_counter.wrapping_add(delta);
 

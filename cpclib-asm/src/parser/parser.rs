@@ -3703,9 +3703,10 @@ pub fn parse_portnn(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80Pa
 /// Parse an address access `(expression)`
 #[inline]
 pub fn parse_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
+    let filter = "/+=-*<>%&|";
     let (res, address) = alt((
         
-        
+
         delimited(
             tag("("),
             located_expr,
@@ -3713,7 +3714,7 @@ pub fn parse_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80P
                 preceded(space0, tag(")")),
                 not(
                     // filter expressions ; they are followed by some operators
-                    preceded(space0, is_a("/+=-*<>%"))
+                    preceded(space0, is_a(filter))
                 )
             )
         ),
@@ -3725,7 +3726,7 @@ pub fn parse_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80P
                 preceded(space0, tag("]")),
                 not(
                     // filter expressions ; they are followed by some operators
-                    preceded(space0, is_a("/+=-*<>%"))
+                    preceded(space0, is_a(filter))
                 )
             )
         )
