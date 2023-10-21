@@ -1541,7 +1541,7 @@ pub fn parse_z80_line_label_aware_directive(
 
     // Build the needed token for the label of interest
     let token : LocatedToken = match label_modifier {
-        LabelModifier::Equ => 
+        LabelModifier::Equ =>
             LocatedTokenInner::Equ{label, expr: expr_arg.unwrap()},
         LabelModifier::Equal(op) => LocatedTokenInner::Assign{label, expr:expr_arg.unwrap(), op},
         LabelModifier::Set => LocatedTokenInner::Assign{label, expr: expr_arg.unwrap(), op:None},
@@ -1565,14 +1565,18 @@ pub fn parse_fname(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> 
 }
 
 /// Parser for file names in appropriate directives
+#[inline]
 pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
-    alt((
-    preceded(tag("\""), terminated(take_until("\""), take(1usize))),
-    verify(
-        preceded(tag("'"), terminated(take_until("'"), take(1usize))),
-        |s: &Z80Span| s.len() > 1
-    ),
-    )) // single quote is stricly reserved for chars now, so we accept strings with 2 chars at minimum
+
+    delimited(
+        tag("\""),
+        escaped(
+            none_of("\\\""),
+            '\\',
+            one_of("\"\\")
+        ),
+        tag("\"")
+    )
     (input)
 }
 
@@ -1923,7 +1927,7 @@ pub fn parse_token2(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserE
 
     let token = token.into_located_token_between(&input_start, &input);
     Ok((input, token))
-        
+
 
 }
 
@@ -2004,7 +2008,7 @@ pub fn parse_struct_directive(input: Z80Span)  -> IResult<Z80Span, LocatedToken,
 fn parse_struct_directive_inner(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     // XXX Sadly the state is stored within the context that cannot
     //     by changed. So we can cannot really use parsing state sutf
-    
+
     let input_start = input.clone();
     let parsing_state = ParsingState::StructLimited;
     let (input, directive) = verify(parse_directive_new(&parsing_state.clone()), move |d| d.is_accepted(&parsing_state))(input.clone())?;
@@ -2536,7 +2540,7 @@ fn parse_ld_normal_src(
                         else {
                             return true;
                         }
-                            
+
                     }),
                     parse_expr
                 ))(input)
@@ -3400,7 +3404,7 @@ pub fn parse_call_jp_or_jr(
             let span = start.take(start.input_len() - after_flag_test.input_len());
             LocatedDataAccess::FlagTest(flag_test.unwrap(), span)
         });
-        
+
         Ok((
             input,
             LocatedTokenInner::new_opcode(call_jp_or_jr, flag_test, Some(dst))
@@ -3705,7 +3709,7 @@ pub fn parse_portnn(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80Pa
 pub fn parse_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80ParserError> {
     let filter = "/+=-*<>%&|";
     let (res, address) = alt((
-        
+
 
         delimited(
             tag("("),
@@ -3730,8 +3734,8 @@ pub fn parse_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, Z80P
                 )
             )
         )
-        
-        
+
+
         ))(input)?;
     Ok((res, LocatedDataAccess::Memory(address)))
 
@@ -3751,8 +3755,8 @@ pub fn parse_reg_address(input: Z80Span) -> IResult<Z80Span, LocatedDataAccess, 
             parse_register16,
             preceded(space0, tag("]"))
         )
-      
-        
+
+
     ))(input.clone())?;
 
     let da = LocatedDataAccess::MemoryRegister16(reg.get_register16().unwrap(), input.take(input.input_len() - res.input_len()));
@@ -3913,12 +3917,12 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80Parser
                         "STRUCT: label error",
                         verify(
                             terminated(
-                                parse_label(false), 
+                                parse_label(false),
                                 alt((
-                                        recognize(tuple((space0, char(':'), space0))), 
+                                        recognize(tuple((space0, char(':'), space0))),
                                         recognize(space1)
                                     ))
-                                ), 
+                                ),
                                 |label: &Z80Span| {
                                     label.to_ascii_lowercase() != "endstruct"
                         })
@@ -3937,7 +3941,7 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80Parser
             ))
         ))(input)?;
 
-        let (input, _) = cut(preceded(space0, 
+        let (input, _) = cut(preceded(space0,
             alt((
                 parse_directive_word("ENDSTRUCT"),
                 parse_directive_word("ENDS"),
@@ -3977,6 +3981,7 @@ fn parse_snaset(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80Parser
 }
 
 /// Parse a comment that start by `;` and ends at the end of the line.
+#[inline]
 pub fn parse_comment(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError> {
     map(
         preceded(alt((tag(";"), tag("//"))), take_till(|ch| ch == '\n')),
@@ -3985,15 +3990,18 @@ pub fn parse_comment(input: Z80Span) -> IResult<Z80Span, LocatedToken, Z80Parser
 }
 
 /// Usefull later for db
+#[inline]
 pub fn string_between_quotes(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
-    delimited(char('\"'), is_not("\""), char('\"'))(input)
+    parse_string(input)
 }
 
 /// TODO
+#[inline]
 pub fn string_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
     map(string_between_quotes, |string| LocatedExpr::String(string))(input)
 }
 
+#[inline]
 pub fn char_expr(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserError> {
     let input_start = input.clone();
 
@@ -4067,7 +4075,7 @@ pub fn parse_label(
         else {
             input
         };
-        
+
 
         // Be sure that ::ld is not considered to be a label
         let label_len = true_label.len();
@@ -4705,6 +4713,8 @@ pub fn decode_parsing_error(_orig: &str, _e: cpclib_common::nom::Err<&str>) -> S
     // error_string
 }
 
+
+
 // Test are deactivated, API is not enough stabilized and tests are broken
 #[cfg(test_deactivated)]
 mod test {
@@ -4757,7 +4767,7 @@ mod test {
         let res = std::dbg!(parse_conditional(Z80Span::new_extra(
             "if THING
                     nop
-                    endif 
+                    endif
                     ",
             ctx()
         ),));
@@ -5054,7 +5064,7 @@ mod test {
                         ld de, .load_chessboard2
                         ld a, chessboard_file
                         jp .common_part_loading_in_main_memory
-                        
+
                         endif",
             ctx()
         )));
