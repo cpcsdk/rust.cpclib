@@ -24,7 +24,7 @@ pub fn parse_value<T>(
     input: LocatedSpan<&str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&str, T>>>
 where T: Clone {
-    alt((dec_number, hex_number, bin_number))(input)
+    alt((dec_number, hex_number, bin_number_or_decimal))(input)
 }
 
 #[inline]
@@ -99,22 +99,50 @@ where T: Clone {
     Ok((input, number))
 }
 
+///
+/// Parse a binary number, but fallback to a decimal number if there are no previx/suffix of binary number to avoid to call another parser for that
 #[inline]
-pub fn bin_number<'src, T>(
+pub fn bin_number_or_decimal<'src, T>(
     input: LocatedSpan<&'src str, T>
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
 where T: Clone {
-    let (input, digits) = preceded(
-        alt((tag("0b"), tag("%"))),
-        verify(is_a("01_"), |s: &LocatedSpan<&'src str, T>| {
-            !s.starts_with('_')
-        })
-    )(input)?;
-    let number = digits
+
+    // Get the prefix of binary number
+    let (input,prefix) = opt(alt((tag("0b"), tag("%"))))(input)?;
+
+    // get the numbers
+    let (input, digits) = verify(is_a("01_"), |s: &LocatedSpan<&'src str, T>| {
+        !s.starts_with('_')
+    })(input)?;
+
+    // get the postfix if there are no prefixes
+    let (input, is_binary) = if prefix.is_none() {
+        let (input, prefix) = opt(tag("b"))(input)?;
+        if prefix.is_some() {
+            (input, true)
+        }
+        else {
+            let (input, next) = not(is_a("23456789_"))(input)?;
+            (input, false)
+        }
+    } else {
+        (input, true)
+    };
+    
+    // make the computation
+    let number = if is_binary {
+        digits
         .chars()
         .filter(|c| *c != '_')
         .map(|c| c.to_digit(2).unwrap())
-        .fold(0, |acc, val| acc * 2 + val);
+        .fold(0, |acc, val| acc * 2 + val)
+    } else {
+        digits
+            .chars()
+            .filter(|c| *c != '_')
+            .map(|c| c.to_digit(10).unwrap())
+            .fold(0, |acc, val| acc * 10 + val)
+    };
 
     Ok((input, number))
 }
@@ -126,5 +154,10 @@ mod tests {
     #[test]
     fn test_parse_value() {
         assert!(parse_value(LocatedSpan::new("0x12")).is_ok());
+        assert!(dbg!(parse_value(LocatedSpan::new("0b0100101"))).is_ok());
+        assert!(dbg!(parse_value(LocatedSpan::new("%0100101"))).is_ok());
+        assert!(dbg!(parse_value(LocatedSpan::new("0100101b"))).is_ok());
+        assert!(dbg!(parse_value(LocatedSpan::new("160"))).is_ok());
+        assert!(dbg!(bin_number_or_decimal(LocatedSpan::new("160"))).is_err());
     }
 }

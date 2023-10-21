@@ -1459,7 +1459,7 @@ impl std::ops::Shr for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn shr(self, rhs: Self) -> Self::Output {
-        Ok((self.int()? >> rhs.int()?).into())
+        Ok((self.int()?.wrapping_shr(rhs.int()? as _)).into())
     }
 }
 
@@ -1467,7 +1467,7 @@ impl std::ops::Shl for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn shl(self, rhs: Self) -> Self::Output {
-        Ok((self.int()? << rhs.int()?).into())
+        Ok((self.int()?.wrapping_shl(rhs.int()? as u32)).into())
     }
 }
 

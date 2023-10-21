@@ -18,7 +18,7 @@ use cpclib_common::nom_locate::LocatedSpan;
 #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::{bin_number, dec_number, hex_number, lazy_static};
+use cpclib_common::{bin_number_or_decimal, dec_number, hex_number, lazy_static};
 use cpclib_sna::parse::{parse_flag, parse_flag_value};
 use cpclib_sna::{FlagValue, SnapshotVersion};
 use cpclib_tokens::ListingElement;
@@ -1122,7 +1122,7 @@ pub fn dec_number_inner(input: Z80Span) -> IResult<Z80Span, u32, Z80ParserError>
 #[inline]
 pub fn bin_number_inner(input: Z80Span) -> IResult<Z80Span, u32, Z80ParserError> {
     let input_inner = input.deref().clone();
-    let (input, number) = bin_number(input_inner).map_err(|_err| {
+    let (input, number) = bin_number_or_decimal(input_inner).map_err(|_err| {
         cpclib_common::nom::Err::Error(
             VerboseError::from_error_kind(input, ErrorKind::AlphaNumeric).into()
         )
@@ -3643,7 +3643,7 @@ pub fn parse_indexregister_with_index(
         terminated(located_expr, tuple((space0, tag(")"))))(input)?
     } else {
         assert_eq!(open.as_str(), "]");
-        terminated(located_expr, tuple((space0, tag("]"))))(input)?
+        terminated(located_expr, tuple((space0, tag("]"))))(input).unwrap()
     };
 
     let span = start.take(start.input_len()-input.input_len());
@@ -4169,7 +4169,7 @@ pub fn parse_value(input: Z80Span) -> IResult<Z80Span, LocatedExpr, Z80ParserErr
 
     let alien_start = input.deref().clone();
     let (alien_end, val) =
-        alt((hex_number, dec_number, bin_number))(alien_start.clone()).map_err(|_op| {
+        alt((hex_number, dec_number, bin_number_or_decimal))(alien_start.clone()).map_err(|_op| {
             cpclib_common::nom::Err::Error(
                 VerboseError::from_error_kind(input, ErrorKind::Verify).into()
             )
