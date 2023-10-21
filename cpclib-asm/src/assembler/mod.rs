@@ -1696,6 +1696,7 @@ impl Env {
             })
         }
         else {
+            // XXX limit: should not be done here as it may start by {...} that contains when interpreted.}
             if !label.starts_with('.') {
                 self.symbols_mut().set_current_label(label)?;
             }
@@ -3538,6 +3539,11 @@ impl Env {
             })
         }
         else {
+
+            if !label.starts_with('.') {
+                self.symbols_mut().set_current_label(label)?;
+            }
+
             let value = self.resolve_expr_may_fail_in_first_pass(exp)?;
             self.output_trigger
                 .as_mut()
@@ -3568,6 +3574,9 @@ impl Env {
             .as_mut()
             .map(|o| o.replace_code_address(&value));
 
+        if !label.starts_with('.') {
+                self.symbols_mut().set_current_label(label)?;
+            }
         self.symbols_mut().assign_symbol_to_value(label, value)?;
 
         Ok(())
