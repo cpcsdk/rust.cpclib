@@ -532,6 +532,7 @@ pub enum Token {
     Export(Vec<SmolStr>),
 
     Fail(Option<Vec<FormattedExpr>>),
+    Field{label: SmolStr, expr: Expr},
     For {
         label: SmolStr,
         start: Expr,
@@ -567,6 +568,7 @@ pub enum Token {
     Macro{name: SmolStr, params: Vec<SmolStr>, content: String}, // Content of the macro is parsed on use
     // macro call can be used for struct too
     MacroCall(SmolStr, Vec<MacroParam>), /* String are used in order to not be limited to expression and allow opcode/registers use */
+    Map(Expr),
     Module(SmolStr, Listing),
     // Fake pop directive with several arguments
     MultiPop(Vec<DataAccess>),
@@ -756,6 +758,8 @@ impl Clone for Token {
                     listing: listing.clone()
                 }
             }
+            Token::Map(e) => Token::Map(e.clone()),
+            Token::Field { label, expr } => Token::Field{label: label.clone(), expr:expr.clone()},
         }
     }
 }

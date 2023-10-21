@@ -14,7 +14,7 @@ use cpclib_common::nom::multi::{separated_list1, *};
 use cpclib_common::nom::sequence::*;
 #[allow(missing_docs)]
 use cpclib_common::nom::*;
-use cpclib_common::nom_locate::LocatedSpan;
+use cpclib_common::nom_locate::{LocatedSpan, impl_input_iter};
 #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smol_str::SmolStr;
@@ -156,6 +156,7 @@ const INSTRUCTIONS: &[&str] = &[
 ];
 
 const STAND_ALONE_DIRECTIVE: &[&str] = &[
+    "#",
     "ALIGN",
     "ASSERT",
     "BANK",
@@ -194,6 +195,7 @@ const STAND_ALONE_DIRECTIVE: &[&str] = &[
     "LIMIT",
     "LIST",
     "LZEXO",
+    "MAP",
     "MODULE",
     "NOEXPORT",
     "NOLIST",
@@ -1207,7 +1209,8 @@ enum LabelModifier {
     Set,
     Equal(Option<BinaryOperation>),
     SetN,
-    Next
+    Next,
+    Field
 }
 
 #[inline]
@@ -1424,20 +1427,17 @@ pub fn parse_z80_line_label_aware_directive(
     let (input, label) = context("Label issue", preceded(space0, parse_label(true)))(input)?; // here there is true because of arkos tracker 2 player
 
     let (next, label_modifier) =
-        opt(preceded(space0, is_a("DEFLdeflQUquSTNstnXx=<>+-*/%^|&")))(input.clone())?;
+        opt(preceded(space0, is_a("#DEFLdeflQUquSTNstnXx=<>+-*/%^|&")))(input.clone())?;
 
     let (input, label_modifier): (Z80Span, Option<LabelModifier>) = match label_modifier {
         Some(label_modifier) => {
-            let mut label_modifier =
-                smartstring::SmartString::<smartstring::Compact>::from(label_modifier.as_str());
-            label_modifier.as_mut_str().make_ascii_uppercase();
 
             match label_modifier.as_str() {
-                "DEFL" => (next, Some(LabelModifier::Equ)),
-                "EQU" => (next, Some(LabelModifier::Equ)),
-                "SETN" => (next, Some(LabelModifier::SetN)),
-                "NEXT" => (next, Some(LabelModifier::Next)),
-                "SET" => {
+                choice_nocase!("DEFL") => (next, Some(LabelModifier::Equ)),
+                choice_nocase!("EQU") => (next, Some(LabelModifier::Equ)),
+                choice_nocase!("SETN") => (next, Some(LabelModifier::SetN)),
+                choice_nocase!("NEXT") => (next, Some(LabelModifier::Next)),
+                choice_nocase!("SET") => {
                     if tuple((space0, expr, parse_comma))(next.clone()).is_err() {
                         (next, Some(LabelModifier::Set))
                     }
@@ -1446,6 +1446,7 @@ pub fn parse_z80_line_label_aware_directive(
                     }
                 }
                 "=" => (next, Some(LabelModifier::Equal(None))),
+                choice_nocase!("FIELD") | "#" => (next, Some(LabelModifier::Field)),
                 oper => {
                     let oper = match oper {
                         ">>=" => Some(BinaryOperation::RightShift),
@@ -1512,7 +1513,7 @@ pub fn parse_z80_line_label_aware_directive(
     }
 
     let (input, expr_arg) = match &label_modifier {
-        LabelModifier::Equ | LabelModifier::Equal(..) | LabelModifier::Set => {
+        LabelModifier::Equ | LabelModifier::Equal(..) | LabelModifier::Set | LabelModifier::Field => {
             cut(context("Value error", map(located_expr, |e| Some(e))))(input)?
         }
         _ => (input, None)
@@ -1549,6 +1550,9 @@ pub fn parse_z80_line_label_aware_directive(
         }
         LabelModifier::Next => {
             LocatedTokenInner::Next{label, source: source_label.unwrap(), expr: additional_arg}
+        }
+        LabelModifier::Field => {
+            LocatedTokenInner::Field{label, expr: expr_arg.unwrap()}
         }
     }.into_located_token_at(&span);
 
@@ -2100,6 +2104,8 @@ impl Fn(Z80Span) -> IResult<Z80Span, LocatedToken, Z80ParserError>  + '_ {
                 choice_nocase!("LIMIT") => parse_limit(rest)?,
                 choice_nocase!("LIST") => Ok((rest, LocatedTokenInner::List))?,
 
+                choice_nocase!("MAP") => parse_map(rest)?,
+
                 choice_nocase!("NOEXPORT") => parse_export(ExportKind::NoExport)(rest)?,
                 choice_nocase!("NOLIST") => (rest, LocatedTokenInner::NoList),
                 choice_nocase!("NOP") => parse_nop(rest)?,
@@ -2316,6 +2322,7 @@ pub fn parse_buildsna(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80
     )(input)
 }
 
+#[inline]
 pub fn parse_run(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, exp) = cut(context("RUN expects an expression (e.g. RUN $)", located_expr))(input)?;
     let (input, ga) = opt(preceded(tuple((space0, char(','), space0)), located_expr))(input)?;
@@ -2323,12 +2330,22 @@ pub fn parse_run(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80Parse
     Ok((input, LocatedTokenInner::Run(exp, ga)))
 }
 
+#[inline]
+pub fn parse_map(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
+    let (input, exp) = located_expr(input)?;
+
+    Ok((input, LocatedTokenInner::Map(exp)))
+}
+
+
+#[inline]
 pub fn parse_limit(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, exp) = located_expr(input)?;
 
     Ok((input, LocatedTokenInner::Limit(exp)))
 }
 
+#[inline]
 pub fn parse_waitnops(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     let (input, exp) = located_expr(input)?;
 

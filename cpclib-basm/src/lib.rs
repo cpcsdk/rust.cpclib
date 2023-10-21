@@ -150,17 +150,19 @@ pub fn parse<'arg>(
         builder = builder.set_current_filename(&filename);
         let fname = get_filename(filename, &options, None)?;
 
-
         let src = read_source(fname, &options)?;
         (builder, src)
-
-
     }
     else if let Some(code) = matches.get_one::<String>("INLINE") {
-        (builder.set_context_name("INLINED CODE"), format!(" {}", code))
+        (
+            builder.set_context_name("INLINED CODE"),
+            format!(" {}", code)
+        )
     }
     else {
-        return Err(BasmError::InvalidArgument("No code provided to assemble".to_owned()));
+        return Err(BasmError::InvalidArgument(
+            "No code provided to assemble".to_owned()
+        ));
     };
 
     let fname = builder

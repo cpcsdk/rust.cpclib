@@ -431,6 +431,8 @@ pub struct Env {
 
     included_paths: HashSet<PathBuf>,
 
+    map_counter: i32,
+
     // temporary stuff
     extra_print_from_function: RwLock<Vec<PrintOrPauseCommand>>,
     extra_failed_assert_from_function: RwLock<Vec<FailedAssertCommand>>
@@ -490,7 +492,9 @@ impl Clone for Env {
                 .read()
                 .unwrap()
                 .clone()
-                .into()
+                .into(),
+
+            map_counter: self.map_counter
         }
     }
 }
@@ -560,7 +564,8 @@ impl Default for Env {
             included_paths: HashSet::default(),
 
             extra_print_from_function: Vec::new().into(),
-            extra_failed_assert_from_function: Vec::new().into()
+            extra_failed_assert_from_function: Vec::new().into(),
+            map_counter: 0
         }
     }
 }
@@ -1676,6 +1681,14 @@ impl Env {
         Ok(())
     }
 
+
+    fn visit_map<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
+        let value = self.resolve_expr_must_never_fail(exp)?.int()?;
+        self.map_counter = value;
+
+        Ok(())
+    }
+
     // Remove the global part if needed and change if if needed
     fn handle_global_and_local_labels<'s>(&mut self, label: &'s str) -> Result<&'s str, AssemblerError>  {
         let label = if let Some(dot_pos) = label[1..].find(".") {
@@ -2626,6 +2639,9 @@ pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerE
 
 macro_rules! visit_token_impl {
     ($token:ident, $env:ident, $span:ident,  $cls:tt) => {{
+
+   //     dbg!($token);
+
         $env.update_dollar();
         match $token {
             $cls::Align(ref boundary, ref fill) => $env.visit_align(boundary, fill.as_ref()),
@@ -2658,6 +2674,8 @@ macro_rules! visit_token_impl {
             $cls::Equ{label, expr} => $env.visit_equ(label, expr),
     
             $cls::Fail(ref exp) => $env.visit_fail(exp.as_ref().map(|v| v.as_slice())),
+            $cls::Field{label, expr, ..} => $env.visit_field(label, expr),
+
 
             $cls::Label(ref label) => $env.visit_label(label),
             $cls::Limit(ref exp) => $env.visit_limit(exp),
@@ -2669,6 +2687,7 @@ macro_rules! visit_token_impl {
             }
 
 
+            $cls::Map(ref exp) => $env.visit_map(exp),
             $cls::MultiPush(ref regs) => $env.visit_multi_pushes(regs),
             $cls::MultiPop(ref regs) => $env.visit_multi_pops(regs),
           
@@ -3573,6 +3592,47 @@ impl Env {
                 .as_mut()
                 .map(|o| o.replace_code_address(&value));
             self.add_symbol_to_symbol_table(label, value)
+        }
+    }
+
+    fn visit_field<E: ExprEvaluationExt + ExprElement + Debug + MayHaveSpan>(
+        &mut self,
+        label: &str,
+        exp: &E
+    ) -> Result<(), AssemblerError> {
+        if self.symbols().contains_symbol(label)? && self.pass.is_first_pass() {
+            Err(AssemblerError::AlreadyDefinedSymbol {
+                symbol: label.into(),
+                kind: self.symbols().kind(label)?.into()
+            })
+        }
+        else {
+            let delta = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+            if delta < 0 {
+                let mut e = AssemblerError::AlreadyRenderedError (
+                    format!("FIELD argument must be positive ({delta} is a wrong value).")
+                );
+                if let Some(span) = exp.possible_span() {
+                    e = e.locate(span.clone());
+                }
+                return Err(e);
+            }
+
+
+            let label = self.handle_global_and_local_labels(label)?;
+            if !label.starts_with('.') {
+                self.symbols_mut().set_current_label(label)?;
+            }
+
+            let value: ExprResult = self.map_counter.into();
+            self.output_trigger
+                .as_mut()
+                .map(|o| o.replace_code_address(&value));
+            dbg!(self.add_symbol_to_symbol_table(label, value)?);
+
+            self.map_counter = self.map_counter.wrapping_add(delta);
+
+            Ok(())
         }
     }
 

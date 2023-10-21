@@ -476,8 +476,17 @@ impl ExprEvaluationExt for LocatedExpr {
     }
 }
 
-impl LocatedExpr {
-    pub fn span(&self) -> &Z80Span {
+
+impl MayHaveSpan for LocatedExpr {
+    fn has_span(&self) -> bool {
+        true
+    }
+
+    fn possible_span(&self) -> Option<&Z80Span> {
+        Some(self.span())
+    }
+
+    fn span(&self) -> &Z80Span {
         match self {
             LocatedExpr::RelativeDelta(_, span)
             | LocatedExpr::Value(_, span)
@@ -846,6 +855,7 @@ pub enum LocatedTokenInner {
     Export(Vec<Z80Span>),
 
     Fail(Option<Vec<FormattedExpr>>),
+    Field{label:Z80Span, expr:LocatedExpr},
     For {
         label: Z80Span,
         start: LocatedExpr,
@@ -885,6 +895,7 @@ pub enum LocatedTokenInner {
     },
     /// Name, Parameters, FullSpan
     MacroCall(Z80Span, Vec<LocatedMacroParam>),
+    Map(LocatedExpr),
     Module(Z80Span, LocatedListing),
     MultiPop(Vec<LocatedDataAccess>),
     MultiPush(Vec<LocatedDataAccess>),
@@ -2279,6 +2290,20 @@ impl MayHaveSpan for Token {
 
     fn has_span(&self) -> bool {
         false
+    }
+}
+
+impl MayHaveSpan for Expr {
+    fn possible_span(&self) -> Option<&Z80Span> {
+        None
+    }
+
+    fn has_span(&self) -> bool {
+        false
+    }
+
+    fn span(&self) -> &Z80Span {
+        panic!()
     }
 }
 

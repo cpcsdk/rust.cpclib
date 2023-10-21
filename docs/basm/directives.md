@@ -173,7 +173,20 @@ Example:
 --8<-- "cpclib-basm/tests/asm/good_assign.asm"
 ```
 
+### MAP
+
+`MAP VALUE` define a map counter to `the required value.
+`#` is used to assign the value to a given label and increment it of the appropriate amount.
+
+
+Example:
+```z80
+--8<-- "cpclib-basm/tests/asm/good_map.asm"
+```
+
 ### SETN, NEXT
+
+`MAP` directive is probably easier to use
 
 Example:
 ```z80
