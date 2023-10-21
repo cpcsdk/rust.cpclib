@@ -3893,7 +3893,7 @@ fn parse_struct(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80Parser
                 pair(
                     context(
                         "STRUCT: label error",
-                        verify(terminated(parse_label(false), space1), |label: &Z80Span| {
+                        verify(terminated(parse_label(true), space1), |label: &Z80Span| {
                             label.to_ascii_lowercase() != "endstruct"
                         })
                     ),
