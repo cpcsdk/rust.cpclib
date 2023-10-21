@@ -1561,23 +1561,45 @@ pub fn parse_z80_line_label_aware_directive(
     Ok((input, token))
 }
 pub fn parse_fname(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
-    parse_string(input)
+    let (input, res) = parse_string(input)?;
+    dbg!(&input);
+    Ok((input, res))
+
 }
 
 /// Parser for file names in appropriate directives
 #[inline]
 pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
+    let (input, first) = alt((char('"'), char('\'')))(input)?;
+    let start = input.clone();
 
-    delimited(
-        tag("\""),
-        escaped(
-            none_of("\\\""),
+    let (input, content) = if first == '\'' {
+        terminated(verify(escaped(
+            none_of("\\'"),
             '\\',
-            one_of("\"\\")
-        ),
-        tag("\"")
-    )
-    (input)
+            one_of("'\\")
+        ),|s: &Z80Span| s.len() > 1
+    ), context("End of string not found", char('\'')))(input)
+    } else {
+        alt((
+            tag("\""),
+            terminated(escaped(
+                none_of("\\\""),
+                '\\',
+                one_of("\"\\")
+            ),
+            context("End of string not found", char('"')))
+        ))(input)
+    }?;
+
+    let string = if first == '"' && content.len() == 1 && content.chars().next() == Some('\"')
+    {
+        start.slice(0..0) // we remove " (it is not present for the others)
+    } else {
+        content
+    };
+
+    Ok((input, dbg!(string)))
 }
 
 pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
