@@ -7,7 +7,7 @@ pub use rayon;
 pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
-use winnow::{PResult, combinator::{alt, opt, terminated, fail}, Parser, ascii::{hex_digit1, space0}, token::{one_of, take_while, tag_no_case}, error::StrContext};
+use winnow::{PResult, combinator::{alt, opt, terminated, fail}, Parser, ascii::{hex_digit1, space0}, token::{one_of, take_while, tag_no_case}, error::{StrContext, ParserError}, stream::{AsChar, StreamIsPartial, Compare, AsBytes}};
 pub use {
     bitfield, bitflags, bitsets, bitvec, itertools, lazy_static,  num,
     resolve_path, smallvec, smol_str, strsim
@@ -16,12 +16,20 @@ use winnow::prelude::*;
 use winnow::stream::BStr;
 use winnow::stream::Stream;
 
+pub use winnow;
+
 #[inline]
 /**
  *  (prefix) space number suffix
  */
-pub fn parse_value(input: &mut &BStr) -> PResult<u32> {
-    dbg!(&input);
+pub fn parse_value<T, I, Error: ParserError<I>>(input: &mut I) -> PResult<u32> 
+where I: Stream + StreamIsPartial + for<'a> Compare<&'a str>,
+<I as Stream>::Slice: AsBytes,
+<I as Stream>::Token: AsChar,
+<I as Stream>::Token: Clone,
+I: for<'a> Compare<&'a [u8; 2]>,
+I: for<'a> Compare<&'a [u8; 1]>, 
+{
 
     #[derive(Clone, PartialEq, Debug)]
     #[repr(u32)]
@@ -35,8 +43,8 @@ pub fn parse_value(input: &mut &BStr) -> PResult<u32> {
     // numbers have an optional prefix with an eventual space
     let encoding = opt(terminated(
         alt((
-            alt(("0x","0X", "#", "$", "&")).value(EncodingKind::Hex) , // hexadecimal number
-            alt(("0b", "0B", "%")).value(EncodingKind::Bin), //binary number
+            alt((b"0x",b"0X", b"#", b"$", b"&")).value(EncodingKind::Hex) , // hexadecimal number
+            alt((b"0b", b"0B", b"%")).value(EncodingKind::Bin), //binary number
         )), 
         space0
     ).context(StrContext::Label("Number prefix detection"))
@@ -76,11 +84,12 @@ pub fn parse_value(input: &mut &BStr) -> PResult<u32> {
             else {
                 // we need to choose between bin and dec so we reparse a second time :()
                 input.reset(backup);
+                let digits: &[u8] = digits.as_bytes();
                 let last_digit = digits[digits.len()-1];
                 if last_digit == b'b' || last_digit == b'B' {
                     // we need to check this is really a binary
                     let digits = bin_digits_and_sep.parse_next(input)?;
-                    alt((b'b', b'B')).parse_next(input)?;
+                    alt(('b' , 'B')).parse_next(input)?;
                     (EncodingKind::Bin, digits)
                 } else {
                     (EncodingKind::Dec, dec_digits_and_sep.parse_next(input)?)
@@ -91,8 +100,9 @@ pub fn parse_value(input: &mut &BStr) -> PResult<u32> {
 
     // right here encoding anddigits are compatible
     debug_assert!(encoding != EncodingKind::Unk);
+    let digits: &[u8] = digits.as_bytes();
 
-    let base = dbg!(encoding as u32);
+    let base = encoding as u32;
     let mut number = 0;
     for digit in digits.into_iter().filter(|&&digit| digit != b'_') {
         let digit = *digit;
@@ -113,18 +123,21 @@ pub fn parse_value(input: &mut &BStr) -> PResult<u32> {
 
 #[cfg(test)]
 mod tests {
+    use winnow::{stream::AsBStr, error::{VerboseError, ContextError}};
+
     use super::*;
 
     #[test]
     fn test_parse_value() {
-        assert_eq!(dbg!(parse_value.parse(BStr::new(b"42"))).unwrap(), 42);
-        assert_eq!(parse_value.parse(BStr::new(b"0x12")).unwrap(), 0x12);
-        assert_eq!(parse_value.parse(BStr::new(b"0x1_2")).unwrap(), 0x12);
-        assert_eq!(dbg!(parse_value.parse(BStr::new(b"0b0100101"))).unwrap(), 0b0100101);
-        assert_eq!(dbg!(parse_value.parse(BStr::new(b"0b0_100_101"))).unwrap(), 0b0100101);
-        assert_eq!(dbg!(parse_value.parse(BStr::new(b"%0100101"))).unwrap(), 0b0100101);
-        assert_eq!(dbg!(parse_value.parse(BStr::new(b"0100101b"))).unwrap(), 0b0100101);
-        assert_eq!(dbg!(parse_value.parse(BStr::new(b"160"))).unwrap(), 160);
-        assert_eq!(dbg!(parse_value.parse(BStr::new(b"1_60"))).unwrap(), 160);
+        let mut fortytwo = "42".as_bstr();
+        assert_eq!(dbg!(parse_value::<&[u8], _, ContextError>.parse_next(&mut fortytwo)).unwrap(), 42);
+        assert_eq!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"0x12")).unwrap(), 0x12);
+        assert_eq!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"0x1_2")).unwrap(), 0x12);
+        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"0b0100101"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"0b0_100_101"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"%0100101"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"0100101b"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"160"))).unwrap(), 160);
+        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"1_60"))).unwrap(), 160);
     }
 }

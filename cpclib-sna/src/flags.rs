@@ -368,7 +368,7 @@ impl FromStr for SnapshotFlag {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = &s.to_uppercase();
+        let s = s.to_uppercase();
 
         if s.contains(':') {
             let elems = s.split(':').collect::<Vec<_>>();
