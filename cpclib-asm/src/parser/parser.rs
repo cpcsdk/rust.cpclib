@@ -1562,7 +1562,6 @@ pub fn parse_z80_line_label_aware_directive(
 }
 pub fn parse_fname(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError> {
     let (input, res) = parse_string(input)?;
-    dbg!(&input);
     Ok((input, res))
 
 }
@@ -1599,7 +1598,7 @@ pub fn parse_string(input: Z80Span) -> IResult<Z80Span, Z80Span, Z80ParserError>
         content
     };
 
-    Ok((input, dbg!(string)))
+    Ok((input, string))
 }
 
 pub fn parse_charset(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
@@ -3106,6 +3105,14 @@ pub fn parse_logical_operator(
 pub fn parse_sub(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80ParserError> {
     //  let (input, _) = tag_no_case("SUB")(input)?;
     //  let (input, _) = space1(input)?;
+
+
+    let (input, first) = opt(terminated(
+            parse_register_a,
+        parse_comma
+    ))(input)?;
+
+    
     let (input, operand) = alt((
         parse_register8,
         parse_indexregister8,
