@@ -117,8 +117,6 @@ libc = "0.2.149"
 log =  "0.4.20"
 matches = "0.1.10"
 minus = {version="5.4.1", features=["static_output"]}
-nom = "7.1.3"
-nom_locate = "4.2.0"
 notify = "6.1.1"
 num = "0.4.1"
 num_enum = "0.6.1"
@@ -160,6 +158,7 @@ thiserror = "1.0"
 time = "0.3.29"
 velcro = "0.5.4"
 choice_nocase = "0.1.2"
+winnow = {version= "0.5.17", features=["simd"]}
 
 # gui based dependencies
 eframe = "0.23"

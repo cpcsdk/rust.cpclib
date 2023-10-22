@@ -22,8 +22,7 @@ bitvec.workspace = true
 
 itertools.workspace = true
 lazy_static.workspace = true
-nom.workspace = true
-nom_locate.workspace = true
+winnow.workspace = true
 num.workspace = true
 num-bigint.workspace = true
 resolve-path.workspace = true

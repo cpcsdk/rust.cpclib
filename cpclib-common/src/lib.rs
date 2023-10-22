@@ -1,151 +1,115 @@
 #[cfg(feature = "cmdline")]
 pub use clap;
-use nom::branch::*;
-use nom::bytes::complete::*;
-use nom::character::complete::*;
-use nom::combinator::*;
-use nom::error::*;
-use nom::sequence::*;
-use nom::*;
-pub use nom_locate::LocatedSpan;
+
 #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
 pub use rayon;
 #[cfg(feature = "cmdline")]
 pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
+use winnow::{PResult, combinator::{alt, opt, terminated, fail}, Parser, ascii::{hex_digit1, space0}, token::{one_of, take_while, tag_no_case}, error::StrContext};
 pub use {
-    bitfield, bitflags, bitsets, bitvec, itertools, lazy_static, nom, nom_locate, num,
+    bitfield, bitflags, bitsets, bitvec, itertools, lazy_static,  num,
     resolve_path, smallvec, smol_str, strsim
 };
-
-/// Read a valuepub
-pub fn parse_value<T>(
-    input: LocatedSpan<&str, T>
-) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&str, T>>>
-where T: Clone {
-    alt((dec_number, hex_number, bin_number_or_decimal))(input)
-}
+use winnow::prelude::*;
+use winnow::stream::BStr;
+use winnow::stream::Stream;
 
 #[inline]
-/// Parse an usigned 32 bit number
-pub fn dec_number<'src, T>(
-    input: LocatedSpan<&'src str, T>
-) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where T: Clone {
-    let (input, digits) = terminated(
-        verify(is_a("0123456789_"), |s: &LocatedSpan<&'src str, T>| {
-            !s.starts_with('_')
-        }),
-        not(alpha1)
-    )(input)?;
-    let number = digits
-        .chars()
-        .filter(|c| *c != '_')
-        .map(|c| c.to_digit(10).unwrap())
-        .fold(0, |acc, val| acc * 10 + val);
+/**
+ *  (prefix) space number suffix
+ */
+pub fn parse_value(input: &mut &BStr) -> PResult<u32> {
+    dbg!(&input);
 
-    Ok((input, number))
-}
+    #[derive(Clone, PartialEq, Debug)]
+    #[repr(u32)]
+    enum EncodingKind {
+        Hex = 16,
+        Bin = 2,
+        Dec = 10,
+        Unk = 255
+    }
 
-#[inline]
-pub fn hex_number<T>(
-    input: LocatedSpan<&str, T>
-) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&str, T>>>
-where T: Clone {
-    alt((hex_number1, hex_number2))(input)
-}
+    // numbers have an optional prefix with an eventual space
+    let encoding = opt(terminated(
+        alt((
+            alt(("0x","0X", "#", "$", "&")).value(EncodingKind::Hex) , // hexadecimal number
+            alt(("0b", "0B", "%")).value(EncodingKind::Bin), //binary number
+        )), 
+        space0
+    ).context(StrContext::Label("Number prefix detection"))
+    )
+    .parse_next(input)?
+    .unwrap_or(EncodingKind::Unk);
 
-// Prefixed version
-#[inline]
-pub fn hex_number1<'src, T>(
-    input: LocatedSpan<&'src str, T>
-) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where T: Clone {
-    let (input, digits) = preceded(
-        pair(alt((tag_no_case("0x"), tag("#"), tag("$"), tag("&"))), space0),
-        verify(
-            is_a("0123456789abcdefABCDEF_"),
-            |s: &LocatedSpan<&'src str, T>| !s.starts_with('_')
-        )
-    )(input)?;
-    let number = digits
-        .chars()
-        .filter(|c| *c != '_')
-        .map(|c| c.to_digit(16).unwrap())
-        .fold(0, |acc, val| acc * 16 + val);
+    let mut hex_digits_and_sep = take_while(1..,(
+        ('0'..='9'), 
+        ('a'..='f'), 
+        ('A'..='F'), 
+        '_')
+    ).context(StrContext::Label("Read hexadecimal digits"));
+    let mut dec_digits_and_sep = take_while(1..,(
+        ('0'..='9'), 
+        '_')
+    ).context(StrContext::Label("Read decimal digits"));
+    let mut bin_digits_and_sep = take_while(1..,(
+        ('0'..='1'), 
+        '_')
+    ).context(StrContext::Label("Read binary digits"));
 
-    Ok((input, number))
-}
+    let (encoding, digits) = match encoding {
+        EncodingKind::Hex => (EncodingKind::Hex, hex_digits_and_sep.parse_next(input)?),
+        EncodingKind::Bin => (EncodingKind::Bin, bin_digits_and_sep.parse_next(input)?),
+        EncodingKind::Dec => unreachable!("No prefix exist for decimal kind"),
+        EncodingKind::Unk => {
+            // we parse for hexdecimal then guess the encoding
+            let backup = input.checkpoint();
+            let digits = hex_digits_and_sep.parse_next(input)?;
+            let suffix = opt(tag_no_case("h")).parse_next(input)?;
 
-#[inline]
-pub fn hex_number2<'src, T>(
-    input: LocatedSpan<&'src str, T>
-) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where T: Clone {
-    let (input, digits) = terminated(
-        verify(
-            is_a("0123456789abcdefABCDEF_"),
-            |s: &LocatedSpan<&'src str, T>| !s.starts_with('_')
-        ),
-        terminated(is_a("hH"), not(alpha1))
-    )(input)?;
-    let number = digits
-        .chars()
-        .filter(|c| *c != '_')
-        .map(|c| c.to_digit(16).unwrap())
-        .fold(0, |acc, val| acc * 16 + val);
-
-    Ok((input, number))
-}
-
-///
-/// Parse a binary number, but fallback to a decimal number if there are no previx/suffix of binary number to avoid to call another parser for that
-#[inline]
-pub fn bin_number_or_decimal<'src, T>(
-    input: LocatedSpan<&'src str, T>
-) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
-where T: Clone {
-
-    // Get the prefix of binary number
-    let (input,prefix) = opt(alt((tag("0b"), tag("%"))))(input)?;
-
-    // get the numbers
-    let (input, digits) = verify(is_a("01_"), |s: &LocatedSpan<&'src str, T>| {
-        !s.starts_with('_')
-    })(input)?;
-
-    // get the postfix if there are no prefixes
-    let (input, is_binary) = if prefix.is_none() {
-        let (input, prefix) = opt(tag("b"))(input)?;
-        if prefix.is_some() {
-            (input, true)
+            if suffix.is_some() {
+                // we know if is hex
+                (EncodingKind::Hex, digits)
+            }
+            else {
+                // we need to choose between bin and dec so we reparse a second time :()
+                input.reset(backup);
+                let last_digit = digits[digits.len()-1];
+                if last_digit == b'b' || last_digit == b'B' {
+                    // we need to check this is really a binary
+                    let digits = bin_digits_and_sep.parse_next(input)?;
+                    alt((b'b', b'B')).parse_next(input)?;
+                    (EncodingKind::Bin, digits)
+                } else {
+                    (EncodingKind::Dec, dec_digits_and_sep.parse_next(input)?)
+                }
+            }
         }
-        else {
-            let (input, next) = not(is_a("23456789_"))(input)?;
-            (input, false)
-        }
-    } else {
-        (input, true)
-    };
-    
-    // make the computation
-    let number = if is_binary {
-        digits
-        .chars()
-        .filter(|c| *c != '_')
-        .map(|c| c.to_digit(2).unwrap())
-        .fold(0, |acc, val| acc * 2 + val)
-    } else {
-        digits
-            .chars()
-            .filter(|c| *c != '_')
-            .map(|c| c.to_digit(10).unwrap())
-            .fold(0, |acc, val| acc * 10 + val)
     };
 
-    Ok((input, number))
+    // right here encoding anddigits are compatible
+    debug_assert!(encoding != EncodingKind::Unk);
+
+    let base = dbg!(encoding as u32);
+    let mut number = 0;
+    for digit in digits.into_iter().filter(|&&digit| digit != b'_') {
+        let digit = *digit;
+        let digit = if digit >=b'0' && digit <= b'9' {
+            digit - b'0'
+        } else if digit >= b'a' && digit <= b'F' {
+            digit - b'a' + 10
+        } else {
+            digit - b'A' + 10
+        } as u32;
+
+        number = base*number + digit;
+    }
+
+    Ok(number)
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -153,11 +117,14 @@ mod tests {
 
     #[test]
     fn test_parse_value() {
-        assert!(parse_value(LocatedSpan::new("0x12")).is_ok());
-        assert!(dbg!(parse_value(LocatedSpan::new("0b0100101"))).is_ok());
-        assert!(dbg!(parse_value(LocatedSpan::new("%0100101"))).is_ok());
-        assert!(dbg!(parse_value(LocatedSpan::new("0100101b"))).is_ok());
-        assert!(dbg!(parse_value(LocatedSpan::new("160"))).is_ok());
-        assert!(dbg!(bin_number_or_decimal(LocatedSpan::new("160"))).is_err());
+        assert_eq!(dbg!(parse_value.parse(BStr::new(b"42"))).unwrap(), 42);
+        assert_eq!(parse_value.parse(BStr::new(b"0x12")).unwrap(), 0x12);
+        assert_eq!(parse_value.parse(BStr::new(b"0x1_2")).unwrap(), 0x12);
+        assert_eq!(dbg!(parse_value.parse(BStr::new(b"0b0100101"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value.parse(BStr::new(b"0b0_100_101"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value.parse(BStr::new(b"%0100101"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value.parse(BStr::new(b"0100101b"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value.parse(BStr::new(b"160"))).unwrap(), 160);
+        assert_eq!(dbg!(parse_value.parse(BStr::new(b"1_60"))).unwrap(), 160);
     }
 }
