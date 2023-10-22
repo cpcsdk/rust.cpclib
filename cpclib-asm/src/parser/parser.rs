@@ -3107,7 +3107,7 @@ pub fn parse_sub(input: Z80Span) -> IResult<Z80Span, LocatedTokenInner, Z80Parse
     //  let (input, _) = space1(input)?;
 
 
-    let (input, first) = opt(terminated(
+    let (input, _first) = opt(terminated(
             parse_register_a,
         parse_comma
     ))(input)?;

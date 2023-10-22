@@ -63,7 +63,7 @@ pub fn hex_number1<'src, T>(
 ) -> IResult<LocatedSpan<&str, T>, u32, VerboseError<LocatedSpan<&'src str, T>>>
 where T: Clone {
     let (input, digits) = preceded(
-        alt((tag_no_case("0x"), tag("#"), tag("$"), tag("&"))),
+        pair(alt((tag_no_case("0x"), tag("#"), tag("$"), tag("&"))), space0),
         verify(
             is_a("0123456789abcdefABCDEF_"),
             |s: &LocatedSpan<&'src str, T>| !s.starts_with('_')
