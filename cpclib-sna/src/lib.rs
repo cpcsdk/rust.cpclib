@@ -369,17 +369,7 @@ impl Snapshot {
         }
     }
 
-    pub fn print_info(&self) {
-        println!("# Flags");
-        for flag in SnapshotFlag::enumerate().iter() {
-            println!("{:?} => {}", &flag, &self.get_value(flag));
-        }
 
-        println!("# Chunks");
-        for chunk in self.chunks() {
-            chunk.print_info();
-        }
-    }
 }
 
 /// Memory relaterd code

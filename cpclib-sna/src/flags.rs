@@ -1,6 +1,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+use cpclib_common::itertools::Itertools;
+
 use crate::error::*;
 
 /// Encode a flag of the snaphot
@@ -81,10 +83,10 @@ pub enum SnapshotFlag {
 
 #[allow(missing_docs)]
 impl SnapshotFlag {
-    pub fn enumerate() -> [Self; 67] {
+    pub fn enumerate() -> &'static [Self; 67] {
         use self::SnapshotFlag::*;
 
-        [
+        &[
             Z80_AF,
             Z80_F,
             Z80_A,
@@ -487,15 +489,15 @@ pub enum FlagValue {
 impl fmt::Display for FlagValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            FlagValue::Byte(ref val) => write!(f, "0x{:x}", val),
-            FlagValue::Word(ref val) => write!(f, "0x{:x}", val),
+            FlagValue::Byte(ref val) => write!(f, "0x{:.2x}", val),
+            FlagValue::Word(ref val) => write!(f, "0x{:.4x}", val),
             FlagValue::Array(ref array) => {
                 write!(f, "[")
                     .and_then(|_x| {
                         write!(
                             f,
-                            "{:?}",
-                            &array.iter().map(|b| format!("{}", b)).collect::<Vec<_>>()
+                            "{}",
+                            &array.iter().map(|b| format!("{}", b)).join(", ")
                         )
                     })
                     .and_then(|_x| write!(f, "]"))

@@ -7,7 +7,7 @@ pub use rayon;
 pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
-use winnow::{PResult, combinator::{alt, opt, terminated, fail}, Parser, ascii::{hex_digit1, space0}, token::{one_of, take_while, tag_no_case}, error::{StrContext, ParserError}, stream::{AsChar, StreamIsPartial, Compare, AsBytes}};
+use winnow::{PResult, combinator::{alt, opt, terminated, fail}, Parser, ascii::{hex_digit1, space0}, token::{one_of, take_while, tag_no_case}, error::{StrContext, ParserError, AddContext}, stream::{AsChar, StreamIsPartial, Compare, AsBytes}};
 pub use {
     bitfield, bitflags, bitsets, bitvec, itertools, lazy_static,  num,
     resolve_path, smallvec, smol_str, strsim
@@ -22,13 +22,14 @@ pub use winnow;
 /**
  *  (prefix) space number suffix
  */
-pub fn parse_value<T, I, Error: ParserError<I>>(input: &mut I) -> PResult<u32> 
+pub fn parse_value<I, Error: ParserError<I>>(input: &mut I) -> PResult<u32, Error> 
 where I: Stream + StreamIsPartial + for<'a> Compare<&'a str>,
 <I as Stream>::Slice: AsBytes,
 <I as Stream>::Token: AsChar,
 <I as Stream>::Token: Clone,
 I: for<'a> Compare<&'a [u8; 2]>,
 I: for<'a> Compare<&'a [u8; 1]>, 
+Error: AddContext<I, winnow::error::StrContext>
 {
 
     #[derive(Clone, PartialEq, Debug)]
@@ -108,7 +109,7 @@ I: for<'a> Compare<&'a [u8; 1]>,
         let digit = *digit;
         let digit = if digit >=b'0' && digit <= b'9' {
             digit - b'0'
-        } else if digit >= b'a' && digit <= b'F' {
+        } else if digit >= b'a' && digit <= b'f' {
             digit - b'a' + 10
         } else {
             digit - b'A' + 10
@@ -130,14 +131,18 @@ mod tests {
     #[test]
     fn test_parse_value() {
         let mut fortytwo = "42".as_bstr();
-        assert_eq!(dbg!(parse_value::<&[u8], _, ContextError>.parse_next(&mut fortytwo)).unwrap(), 42);
-        assert_eq!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"0x12")).unwrap(), 0x12);
-        assert_eq!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"0x1_2")).unwrap(), 0x12);
-        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"0b0100101"))).unwrap(), 0b0100101);
-        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"0b0_100_101"))).unwrap(), 0b0100101);
-        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"%0100101"))).unwrap(), 0b0100101);
-        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"0100101b"))).unwrap(), 0b0100101);
-        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"160"))).unwrap(), 160);
-        assert_eq!(dbg!(parse_value::<&BStr, _, ContextError>.parse(BStr::new(b"1_60"))).unwrap(), 160);
+        assert_eq!(dbg!(parse_value::<_,  ContextError>.parse_next(&mut fortytwo)).unwrap(), 42);
+        assert_eq!(parse_value::<_, ContextError>.parse(BStr::new(b"0x12")).unwrap(), 0x12);
+        assert_eq!(parse_value::<_, ContextError>.parse(BStr::new(b"0x0000")).unwrap(), 0x0000);
+        assert_eq!(parse_value::<_, ContextError>.parse(BStr::new(b"0x4000")).unwrap(), 0x4000);
+        assert_eq!(parse_value::<_, ContextError>.parse(BStr::new(b"0x8000")).unwrap(), 0x8000);
+        assert_eq!(parse_value::<_, ContextError>.parse(BStr::new(b"0xc000")).unwrap(), 0xc000);
+        assert_eq!(parse_value::<_,  ContextError>.parse(BStr::new(b"0x1_2")).unwrap(), 0x12);
+        assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"0b0100101"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"0b0_100_101"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"%0100101"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"0100101b"))).unwrap(), 0b0100101);
+        assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"160"))).unwrap(), 160);
+        assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"1_60"))).unwrap(), 160);
     }
 }

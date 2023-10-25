@@ -3,22 +3,33 @@
 use std::fmt::Write;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_common::nom::branch::*;
-use cpclib_common::nom::bytes::complete::*;
-use cpclib_common::nom::character::complete::*;
-use cpclib_common::nom::combinator::*;
-use cpclib_common::nom::error::*;
-use cpclib_common::nom::sequence::*;
-use cpclib_common::nom::*;
-use cpclib_common::{bin_number, dec_number, hex_number, LocatedSpan};
+use cpclib_common::winnow::Parser;
+use cpclib_common::{parse_value, winnow};
 use minus::{ExitStrategy, Pager};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
-
+use crate::cli::winnow::ascii::space1;
+use crate::cli::winnow::combinator::{alt, cut_err, delimited, opt, preceded};
+use crate::cli::winnow::error::{ContextError, StrContext};
+use crate::cli::winnow::token::{tag_no_case, take_until1};
+use crate::cli::winnow::{Located, PResult};
 use crate::*;
+use crate::cli::winnow::error::ErrMode;
+use crate::cli::winnow::error::TreeError;
+use crate::cli::winnow::error::ParserError;
+use crate::cli::winnow::stream::Compare;
+use crate::cli::winnow::stream::Stream;
+use crate::cli::winnow::stream::AsChar;
+use crate::cli::winnow::stream::AsBytes;
+use crate::cli::winnow::stream::StreamIsPartial;
+use crate::cli::winnow::error::AddContext;
+use crate::cli::winnow::stream::FindSlice;
+use line_span::LineSpanExt;
 
-type Source<'src> = LocatedSpan<&'src str>;
+type Source<'src> = winnow::Located<&'src [u8]>;
 
+
+#[derive(Debug)]
 enum Command {
     Disassemble(Option<u32>, Option<u32>),
     Load2(String),
@@ -31,7 +42,7 @@ const DATA_WIDTH: usize = 16;
 
 fn mem_to_string(sna: &Snapshot, from: Option<u32>, amount: Option<u32>) -> String {
     let from = from.unwrap_or(0);
-    let amount = amount.unwrap_or_else(|| sna.memory.len() as u32 - from);
+    let amount = amount.unwrap_or_else(|| dbg!(sna.memory.len()) as u32 - dbg!(from));
 
     (from..(from + amount))
         .map(move |addr| sna.get_byte(addr))
@@ -86,7 +97,7 @@ impl Command {
         match self {
             Command::Load2(fname) => {
                 use cpclib_common::resolve_path::*;
-                let path = fname.resolve();
+                let path = &fname.resolve();
                 Snapshot::load(&path)
                     .map(|s| sna2.replace((fname.clone(), s)))
                     .map_err(|e| {
@@ -112,7 +123,6 @@ impl Command {
                 }
 
                 minus::page_all(output).unwrap();
-                dbg!("exit pager");
             }
 
             Command::Disassemble(..) => todo!(),
@@ -137,72 +147,128 @@ impl Command {
     }
 }
 
-fn parse_number(input: Source<'_>) -> IResult<Source<'_>, u32, VerboseError<Source<'_>>> {
-    alt((hex_number, bin_number, dec_number))(input)
-}
-
-fn parse_line(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
-    alt((
+fn parse_line<'i, I, Error: ParserError<I>>(input: &mut I) ->  PResult<Command,Error> 
+where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
+<I as Stream>::Slice: AsBytes,
+<I as Stream>::Token: AsChar,
+<I as Stream>::Token: Clone,
+I: for <'a> Compare<&'a [u8; 2]>,
+I: for <'a> Compare<&'a [u8; 1]>, 
+Error: AddContext<I, winnow::error::StrContext>
+{
+    cut_err(alt((
         parse_memory,
         parse_disassemble,
         parse_help,
         parse_load2,
         parse_symbols
-    ))(input)
+    )))
+    .context(StrContext::Label("Wrong command"))
+    .parse_next(input)
 }
 
-fn parse_memory(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
-    map(
-        tuple((
-            alt((tag_no_case("MEMORY"), tag_no_case("MEM"))),
-            opt(preceded(space1, parse_number)),
-            opt(preceded(space1, parse_number))
+fn parse_memory<'i, I, Error: ParserError<I>>(input: &mut I)  ->  PResult<Command,Error> 
+where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
+<I as Stream>::Slice: AsBytes,
+<I as Stream>::Token: AsChar,
+<I as Stream>::Token: Clone,
+I: for <'a> Compare<&'a [u8; 2]>,
+I: for <'a> Compare<&'a [u8; 1]>, 
+Error: AddContext<I, winnow::error::StrContext>
+{
+    (
+        alt((tag_no_case("MEMORY"), tag_no_case("MEM"))),
+        opt(preceded(
+            space1,
+            parse_value
         )),
-        |v| Command::Memory(v.1, v.2)
-    )(input)
+        opt(preceded(
+            space1,
+            parse_value
+        ))
+    )
+        .map(|v| Command::Memory(v.1, v.2))
+        .parse_next(input)
 }
 
-fn parse_disassemble(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
-    map(
-        tuple((
-            alt((
-                tag_no_case("DISASSEMBLE"),
-                tag_no_case("DISASS"),
-                tag_no_case("DIS")
-            )),
-            opt(preceded(space1, parse_number)),
-            opt(preceded(space1, parse_number))
+fn parse_disassemble<'i, I, Error: ParserError<I>>(input: &mut I)  ->  PResult<Command,Error> 
+where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
+<I as Stream>::Slice: AsBytes,
+<I as Stream>::Token: AsChar,
+<I as Stream>::Token: Clone,
+I: for <'a> Compare<&'a [u8; 2]>,
+I: for <'a> Compare<&'a [u8; 1]>, 
+Error: AddContext<I, winnow::error::StrContext>
+{
+    (
+        alt((
+            tag_no_case("DISASSEMBLE"),
+            tag_no_case("DISASS"),
+            tag_no_case("DIS")
         )),
-        |v| Command::Disassemble(v.1, v.2)
-    )(input)
+        opt(preceded(
+            space1,
+            parse_value
+        )),
+        opt(preceded(
+            space1,
+            parse_value
+        ))
+    )
+        .map(|v| Command::Disassemble(v.1, v.2))
+        .parse_next(input)
 }
 
-fn parse_symbols(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
-    map(
-        tuple((alt((
-            tag_no_case("SYMBOLS"),
-            tag_no_case("SYMB"),
-            tag_no_case("S")
-        )),)),
-        |v| Command::Symbols(None)
-    )(input)
+fn parse_symbols<'i, I, Error: ParserError<I>>(input: &mut I)  ->  PResult<Command,Error> 
+where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
+<I as Stream>::Slice: AsBytes,
+<I as Stream>::Token: AsChar,
+<I as Stream>::Token: Clone,
+I: for <'a> Compare<&'a [u8; 2]>,
+I: for <'a> Compare<&'a [u8; 1]>, 
+Error: AddContext<I, winnow::error::StrContext>
+{
+    (alt((
+        tag_no_case("SYMBOLS"),
+        tag_no_case("SYMB"),
+        tag_no_case("S")
+    )))
+    .map(|v| Command::Symbols(None))
+    .parse_next(input)
 }
 
-fn parse_help(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
-    map(tag_no_case("HELP"), |_| Command::Help)(input)
+fn parse_help<'i, I, Error: ParserError<I>>(input: &mut I)  ->  PResult<Command,Error> 
+where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
+<I as Stream>::Slice: AsBytes,
+<I as Stream>::Token: AsChar,
+<I as Stream>::Token: Clone,
+I: for <'a> Compare<&'a [u8; 2]>,
+I: for <'a> Compare<&'a [u8; 1]>, 
+Error: AddContext<I, winnow::error::StrContext>
+{
+    tag_no_case("HELP").map(|_| Command::Help).parse_next(input)
 }
 
-fn parse_load2(input: Source<'_>) -> IResult<Source<'_>, Command, VerboseError<Source<'_>>> {
-    map(
-        preceded(
-            tuple((tag_no_case("LOAD2"), space1)),
-            cut(context(
-                "Filename needs to be in a string",
-                recognize(delimited(char('"'), take_until("\""), char('"')))
-            ))
-        ),
-        |fname: Source| Command::Load2(fname[1..(fname.len() - 1)].to_string())
-    )(input)
+fn parse_load2<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command,Error> 
+where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
+<I as Stream>::Slice: AsBytes,
+<I as Stream>::Token: AsChar,
+<I as Stream>::Token: Clone,
+I: for <'a> Compare<&'a [u8; 2]>,
+I: for <'a> Compare<&'a [u8; 1]>, 
+Error: AddContext<I, winnow::error::StrContext>
+{
+    preceded(
+        (tag_no_case("LOAD2"), cut_err(space1).context(StrContext::Label("LOAD2 expects a filename"))),
+        cut_err(
+            delimited('"', take_until1("\""), '"')
+                .context(StrContext::Label("Filename needs to be in a string"))
+        )
+    )
+    .map(|fname: &[u8]| {
+        Command::Load2(String::from_utf8_lossy(fname).into_owned())
+    })
+    .parse_next(input)
 }
 
 pub fn cli(fname: &str, mut sna: Snapshot) {
@@ -234,10 +300,32 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
 
-                let src = Source::new(line.as_str());
-                match parse_line(src) {
-                    Ok((_input, cmd)) => cmd.handle(&mut sna, &mut sna2),
-                    Err(e) => eprintln!("Wrong command. {}", e)
+                let line = line.as_bytes();
+                
+
+                let mut src = Source::new(line);
+                match parse_line::<Source, ContextError>.parse(src) {
+                    Ok(cmd) => cmd.handle(&mut sna, &mut sna2),
+                    Err(e) => {
+                        // Coded as if there ere several lines
+                        let input = e.input().as_bytes();
+                        let input = unsafe{std::str::from_utf8_unchecked(input)}; 
+                        let offset = e.offset();
+
+                        let range = input.find_line_range(offset);
+                        assert_eq!(range.start, 0);
+                        let pos_in_line = offset - range.start;
+
+                        let line = &input[range];
+                        eprintln!("{line}");
+                        for _ in 0..offset {
+                            eprint!(" ");
+                        }
+                        eprintln!("^");
+                        eprintln!("{}", e.inner());
+
+                    }
+                    _ => todo!()
                 }
             }
             Err(ReadlineError::Interrupted) => break,

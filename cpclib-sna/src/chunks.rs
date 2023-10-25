@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+use cpclib_common::itertools::Itertools;
 use delegate::delegate;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -342,6 +343,15 @@ impl AceSymbolChunk {
 
         res
     }
+
+
+    pub fn print_info(&self) {
+        let s = self.get_symbols()
+            .into_iter()
+            .map(|(s,v)| format!("{} = 0x{:.4x}", s, v))
+            .join("\n");
+        println!("{s}")
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -447,12 +457,21 @@ impl SnapshotChunk {
             self.code()[3] as char,
         );
 
-        if self.is_memory_chunk() {
-            self.memory_chunk().unwrap().print_info();
+        if let Some(chunk) = self.memory_chunk(){
+            chunk.print_info();
         }
+        else if let Some(chunk) = self.ace_symbol_chunk() {
+            chunk.print_info();
+        }
+
+        
     }
 
     pub fn is_memory_chunk(&self) -> bool {
+        self.memory_chunk().is_some()
+    }
+
+    pub fn is_ace_symbol_chunk(&self) -> bool {
         self.memory_chunk().is_some()
     }
 

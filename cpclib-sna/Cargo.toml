@@ -21,7 +21,8 @@ delegate.workspace = true
 matches.workspace = true
 serde.workspace = true
 num_enum.workspace = true
-
+comfy-table = {version="7.0.1", optional = true}
+line-span = "0.1.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rustyline = { workspace = true, optional = true}
@@ -36,7 +37,7 @@ built.workspace = true
 
 [features]
 default = []
-snapshot = ["cpclib-common/cmdline", "rustyline", "minus"]
+snapshot = ["cpclib-common/cmdline", "rustyline", "minus", "comfy-table"]
 
 
 [[bin]]
