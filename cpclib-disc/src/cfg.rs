@@ -6,15 +6,13 @@ use std::path::Path;
 use std::str::FromStr;
 
 use cpclib_common::itertools;
-use cpclib_common::nom::branch::*;
-use cpclib_common::nom::bytes::complete::*;
-use cpclib_common::nom::character::complete::*;
-use cpclib_common::nom::combinator::*;
-use cpclib_common::nom::lib::std::convert::Into;
-use cpclib_common::nom::multi::*;
-use cpclib_common::nom::sequence::*;
+use cpclib_common::winnow::ascii::{line_ending, space0};
+use cpclib_common::winnow::combinator::{
+    alt, delimited, fold_repeat, opt, preceded, separated0, terminated
+};
+use cpclib_common::winnow::token::{tag, tag_no_case};
+use cpclib_common::winnow::{PResult, Parser};
 /// Parser of the disc configuraiton used by the Arkos Loader
-use cpclib_common::nom::*;
 use custom_error::custom_error;
 use itertools::Itertools;
 
@@ -68,19 +66,9 @@ impl FromStr for DiscConfig {
     /// Generates the configuration from a &str. Panic in case of failure.
     /// The format corresponds to cpctools format from Ramlaid/Mortel.
     fn from_str(config: &str) -> Result<Self, Self::Err> {
-        match parse_config(config) {
-            Ok((next, res)) => {
-                if next.trim().is_empty() {
-                    Ok(res)
-                }
-                else {
-                    Err(DiscConfigError::ParseError {
-                        msg: format!(
-                            "Bug in the parser, there is still content to parse: {}",
-                            next
-                        )
-                    })
-                }
+        match parse_config.parse(&mut config.as_bytes()) {
+            Ok(res) => {
+                Ok(res)
             }
             Err(error) => {
                 Err(DiscConfigError::ParseError {
@@ -372,130 +360,124 @@ impl From<&ExtendedDsk> for DiscConfig {
     }
 }
 
-fn number(input: &str) -> IResult<&str, u16> {
-    alt((hex, dec))(input)
+fn number(input: &mut &[u8]) -> PResult<u16> {
+    cpclib_common::parse_value(input).map(|v| v as u16)
 }
 
-fn list_of_values(input: &str) -> IResult<&str, Vec<u16>> {
-    separated_list0(tag(","), number)(input)
+fn list_of_values(input: &mut &[u8]) -> PResult<Vec<u16>> {
+    separated0(number, tag(",")).parse_next(input)
 }
 
-fn from_hex(input: &str) -> Result<u16, std::num::ParseIntError> {
-    u16::from_str_radix(input, 16)
-}
-
-fn from_dec(input: &str) -> Result<u16, std::num::ParseIntError> {
-    u16::from_str_radix(input, 10)
-}
-
-fn is_hex_digit(c: char) -> bool {
-    c.is_ascii_hexdigit()
-}
-
-fn is_dec_digit(c: char) -> bool {
-    c.is_ascii_digit()
-}
-
-fn hex(input: &str) -> IResult<&str, u16> {
-    preceded(
-        tag("0x"),
-        map_res(take_while_m_n(1, 2, is_hex_digit), from_hex)
-    )(input)
-}
-
-fn dec(input: &str) -> IResult<&str, u16> {
-    map_res(take_while(is_dec_digit), from_dec)(input)
-}
-
-fn value_of_key<'a>(key: &'static str) -> impl Fn(&'a str) -> IResult<&'a str, u16> {
-    move |input: &'a str| {
+fn value_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> PResult<u16> {
+    move |input: &mut &[u8]| {
         delimited(
-            tuple((space0, tag_no_case(key), space0, tag("="), space0)),
+            (space0, tag_no_case(key), space0, tag("="), space0),
             number,
-            tuple((space0, opt(line_ending)))
-        )(input)
+            (space0, opt(line_ending))
+        )
+        .parse_next(input)
     }
 }
 
-fn list_of_key<'a>(key: &'static str) -> impl Fn(&'a str) -> IResult<&'a str, Vec<u16>> {
-    move |input: &'a str| {
+fn list_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> PResult<Vec<u16>> {
+    move |input: &mut &[u8]| {
         delimited(
-            tuple((space0, tag_no_case(key), space0, tag("="), space0)),
+            (space0, tag_no_case(key), space0, tag("="), space0),
             list_of_values,
-            tuple((space0, opt(line_ending)))
-        )(input)
+            (space0, opt(line_ending))
+        )
+        .parse_next(input)
     }
 }
 
-fn empty_line(input: &str) -> IResult<&str, ()> {
-    value((), tuple((space0, line_ending)))(input)
+fn empty_line(input: &mut &[u8]) -> PResult<()> {
+    (space0, line_ending).parse_next(input).map(|_| ())
 }
 
-fn track_group_head(input: &str) -> IResult<&str, TrackGroup> {
-    let (input, head) = alt((
+fn track_group_head(input: &mut &[u8]) -> PResult<TrackGroup> {
+    let head = alt((
         delimited(
             tag_no_case("[Track-"),
             alt((
-                value(Head::A, tag_no_case("A")),
-                value(Head::B, tag_no_case("B"))
+                tag_no_case("A").value(Head::A),
+                tag_no_case("B").value(Head::B)
             )),
             tag_no_case(":")
         ),
-        value(Head::Unspecified, tag_no_case("[Track:"))
-    ))(input)?;
+        tag_no_case("[Track:").value(Head::Unspecified)
+    ))
+    .parse_next(input)?;
 
-    let (input, tracks) =
-        terminated(list_of_values, tuple((tag_no_case("]"), many0(empty_line))))(input)?;
+    let tracks: Vec<u16> = terminated(
+        list_of_values,
+        (
+            tag_no_case("]"),
+            fold_repeat(0.., empty_line, || (), |_, _| ())
+        )
+    )
+    .parse_next(input)?;
 
     // TODO modify the remaining part in order to allow any order
 
-    let (input, sector_size) = terminated(value_of_key("SectorSize"), many0(empty_line))(input)?;
+    let sector_size = terminated(
+        value_of_key(b"SectorSize"),
+        fold_repeat(0.., empty_line, || (), |_, _| ())
+    )
+    .parse_next(input)?;
 
-    let (input, gap3) = terminated(value_of_key("Gap3"), many0(empty_line))(input)?;
+    let gap3 = terminated(
+        value_of_key(b"Gap3"),
+        fold_repeat(0.., empty_line, || (), |_, _| ())
+    )
+    .parse_next(input)?;
 
-    let (input, sector_id) = list_of_key("SectorId")(input)?;
+    let sector_id = list_of_key(b"SectorId").parse_next(input)?;
 
-    let (input, sector_id_head) = list_of_key("SectorIdHead")(input)?;
+    let sector_id_head = list_of_key(b"SectorIdHead").parse_next(input)?;
 
-    Ok((
-        input,
-        TrackGroup {
-            tracks: tracks.iter().map(|v| *v as u8).collect::<Vec<u8>>(),
-            head,
-            sector_size,
-            gap3: gap3 as u8,
-            sector_id: sector_id.iter().map(|&v| v as u8).collect::<Vec<_>>(),
-            sector_id_head: sector_id_head.iter().map(|&v| v as u8).collect::<Vec<_>>()
-        }
-    ))
+    Ok(TrackGroup {
+        tracks: tracks.iter().map(|v| *v as u8).collect::<Vec<u8>>(),
+        head,
+        sector_size,
+        gap3: gap3 as u8,
+        sector_id: sector_id.iter().map(|&v| v as u8).collect::<Vec<_>>(),
+        sector_id_head: sector_id_head.iter().map(|&v| v as u8).collect::<Vec<_>>()
+    })
 }
 
 /// TODO allow to write the information in a different order
-pub fn parse_config(input: &str) -> IResult<&str, DiscConfig> {
-    let (input, nb_tracks) = preceded(many0(empty_line), value_of_key("NbTrack"))(input)?;
+pub fn parse_config(input: &mut &[u8]) -> PResult<DiscConfig> {
+    let nb_tracks = preceded(
+        fold_repeat(0.., empty_line, || (), |_, _| ()),
+        value_of_key(b"NbTrack")
+    )
+    .parse_next(input)?;
 
-    let (input, nb_heads) = preceded(
-        many0(empty_line),
-        alt((value_of_key("NbHead"), value_of_key("NbSide")))
-    )(input)?;
+    let nb_heads = preceded(
+        fold_repeat(0.., empty_line, || (), |_, _| ()),
+        alt((value_of_key(b"NbHead"), value_of_key(b"NbSide")))
+    )
+    .parse_next(input)?;
 
-    let (input, track_groups) = fold_many1(
-        preceded(many0(empty_line), track_group_head),
+    let track_groups = fold_repeat(
+        1..,
+        preceded(
+            fold_repeat(0.., empty_line, || (), |_, _| ()),
+            track_group_head
+        ),
         Vec::new,
         |mut acc: Vec<_>, item| {
             acc.push(item);
             acc
         }
-    )(input)?;
+    )
+    .parse_next(input)?;
 
-    Ok((
-        input,
-        DiscConfig {
-            nb_tracks: nb_tracks as _,
-            nb_heads: nb_heads as _,
-            track_groups
-        }
-    ))
+    Ok(DiscConfig {
+        nb_tracks: nb_tracks as _,
+        nb_heads: nb_heads as _,
+        track_groups
+    })
 }
 
 #[cfg(test)]
@@ -503,43 +485,25 @@ mod tests {
     use crate::cfg::*;
 
     #[test]
-    fn parse_decimal() {
-        let res = dec("10 ");
-        assert!(res.is_ok());
-
-        let res = dec("10");
-        assert!(res.is_ok());
-    }
-
-    #[test]
-    fn parse_hexadecimal() {
-        let res = hex("10 ");
-        assert!(res.is_err());
-
-        let res = hex("0x10 ");
-        assert!(res.is_ok());
-    }
-
-    #[test]
     fn parse_value() {
-        let res = number("0x10 ");
+        let res = number(&mut b"0x10 ".as_slice());
         assert!(res.is_ok());
 
-        let res = number("10 ");
+        let res = number(&mut b"10 ".as_slice());
         assert!(res.is_ok());
     }
 
     #[test]
     fn parse_list_value() {
-        let res = list_of_values("0x10 ");
+        let res = list_of_values(&mut b"0x10 ".as_slice());
         assert!(res.is_ok());
-        let (_next, res) = res.unwrap();
+        let res = res.unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0], 0x10);
 
-        let res = list_of_values("10,11 ");
+        let res = list_of_values(&mut b"10,11 ".as_slice());
         assert!(res.is_ok());
-        let (_next, res) = res.unwrap();
+        let res = res.unwrap();
         assert_eq!(res.len(), 2);
         assert_eq!(res[0], 10);
         assert_eq!(res[1], 11);
@@ -547,7 +511,7 @@ mod tests {
 
     #[test]
     fn test_value_of_key() {
-        let res = value_of_key("NbTrack")("NbTrack = 80");
+        let res = value_of_key(b"NbTrack")(&mut b"NbTrack = 80".as_slice());
         println!("{:?}", &res);
         assert!(res.is_ok());
     }
