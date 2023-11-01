@@ -1,3 +1,4 @@
+use cpclib_common::winnow::Parser;
 use cpclib_xfer::CpcXfer;
 use rustyline::completion::{extract_word, Completer, FilenameCompleter, Pair};
 use rustyline::error::ReadlineError;
@@ -194,8 +195,8 @@ pub struct XferInteractor<'a> {
 
 impl<'a> XferInteractor<'a> {
     pub fn treat_line(&mut self, line: &str) {
-        let parse = parse_command(line);
-        if let Ok((_, command)) = parse {
+        let parse = parse_command.parse(&mut &line);
+        if let Ok(command) = parse {
             println!("{command:?}");
 
             match command {

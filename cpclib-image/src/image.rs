@@ -935,6 +935,17 @@ pub struct Sprite {
 
 #[allow(missing_docs)]
 impl Sprite {
+
+    pub fn from_pens(pens: &[Vec<Pen>], mode: Mode, palette: Option<Palette>) -> Self {
+        let data = pens.iter()
+            .map(|line| crate::pixels::pens_to_vec(line, mode))
+            .collect_vec();
+        Sprite {
+            data, mode: Some(mode), palette
+        }
+    }
+
+
     /// TODO Use TryFrom once in standard rust
     /// The conversion can only work if a palette and a mode is provided
     pub fn to_color_matrix(&self) -> Option<ColorMatrix> {

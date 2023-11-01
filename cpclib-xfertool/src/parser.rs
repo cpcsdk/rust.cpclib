@@ -1,12 +1,7 @@
 use std::str;
 
-use cpclib_common::nom;
-use nom::branch::alt;
-use nom::bytes::complete::{tag_no_case, take_till};
-use nom::character::complete::{space0, space1};
-use nom::combinator::{map, rest, value};
-use nom::sequence::{preceded, tuple};
-use nom::IResult;
+use cpclib_common::winnow::{PResult, combinator::{preceded, rest, alt}, ascii::{space0,space1}, token::{tag_no_case, take_till1}, Parser};
+
 
 #[derive(Debug, Clone)]
 pub(crate) enum XferCommand {
@@ -32,66 +27,67 @@ pub(crate) enum XferCommand {
 
 // TODO find a way to reduce code duplicaiton
 
-fn ls_path(input: &str) -> IResult<&str, XferCommand> {
-    map(
-        preceded(tuple((tag_no_case("ls"), space1)), rest),
+fn ls_path(input: &mut &str) -> PResult<XferCommand> {
+        preceded((tag_no_case("ls"), space1), rest)
+        .map(
         |path: &str| XferCommand::Ls(Some(path.to_string()))
-    )(input)
+    ).parse_next(input)
 }
 
-fn ls_no_path(input: &str) -> IResult<&str, XferCommand> {
-    value(XferCommand::Ls(None), tag_no_case("ls"))(input)
+fn ls_no_path(input: &mut &str) -> PResult<XferCommand> {
+    tag_no_case("ls").value(XferCommand::Ls(None)).parse_next(input)
 }
 
-fn ls(input: &str) -> IResult<&str, XferCommand> {
-    alt((ls_path, ls_no_path))(input)
+fn ls(input: &mut &str) -> PResult<XferCommand> {
+    alt((ls_path, ls_no_path)).parse_next(input)
 }
 
-fn cd_path(input: &str) -> IResult<&str, XferCommand> {
-    map(
-        preceded(tuple((tag_no_case("cd"), space1)), rest),
-        |path: &str| XferCommand::Cd(Some(path.to_string()))
-    )(input)
+fn cd_path(input: &mut &str) -> PResult<XferCommand> {
+    
+        preceded((tag_no_case("cd"), space1), rest)
+        .map(|path: &str| XferCommand::Cd(Some(path.to_string()))
+    ).parse_next(input)
 }
 
-fn cd_no_path(input: &str) -> IResult<&str, XferCommand> {
-    value(XferCommand::Cd(None), tag_no_case("cd"))(input)
+fn cd_no_path(input: &mut &str) -> PResult<XferCommand> {
+    tag_no_case("cd").value(XferCommand::Cd(None)).parse_next(input)
 }
 
-fn cd(input: &str) -> IResult<&str, XferCommand> {
-    alt((cd_path, cd_no_path))(input)
+fn cd(input: &mut &str) -> PResult<XferCommand> {
+    alt((cd_path, cd_no_path)).parse_next(input)
 }
 
-fn launch(input: &str) -> IResult<&str, XferCommand> {
-    map(
-        preceded(tuple((tag_no_case("launch"), space1)), rest),
+fn launch(input: &mut &str) -> PResult<XferCommand> {
+
+        preceded((tag_no_case("launch"), space1), rest)
+        .map(
         |path: &str| XferCommand::LaunchHost(path.to_string())
-    )(input)
+    ).parse_next(input)
 }
 
-fn local(input: &str) -> IResult<&str, XferCommand> {
-    map(
-        preceded(tuple((tag_no_case("!"), space0)), rest),
+fn local(input: &mut &str) -> PResult<XferCommand> {
+
+        preceded((tag_no_case("!"), space0), rest)
+        .map(
         |path: &str| XferCommand::LocalCommand(path.to_string())
-    )(input)
+    ).parse_next(input)
 }
 
 /// PUT a file on the M4 with defining a directory
-fn put(input: &str) -> IResult<&str, XferCommand> {
-    map(
-        preceded(
-            tuple((tag_no_case("put"), space1)),
-            take_till(char::is_whitespace)
-        ),
+fn put(input:&mut &str) -> PResult<XferCommand> {
+            preceded(
+            (tag_no_case("put"), space1),
+            take_till1(char::is_whitespace)
+        ).map(
         |path: &str| XferCommand::Put(path.to_string())
-    )(input)
+    ).parse_next(input)
 }
 
 /// Delete a file from the M4
-fn rm(input: &str) -> IResult<&str, XferCommand> {
-    map(
+fn rm(input: &mut &str) -> PResult<XferCommand> {
+
         preceded(
-            tuple((
+            (
                 alt((
                     tag_no_case("rm"),
                     tag_no_case("delete"),
@@ -99,29 +95,28 @@ fn rm(input: &str) -> IResult<&str, XferCommand> {
                     tag_no_case("era")
                 )),
                 space1
-            )),
-            take_till(char::is_whitespace)
-        ),
+            ),
+            take_till1(char::is_whitespace)
+        )
+        .map(
         |path: &str| XferCommand::Era(path.to_string())
-    )(input)
+    ).parse_next(input)
 }
 
-fn no_arg(input: &str) -> IResult<&str, XferCommand> {
+fn no_arg(input:&mut  &str) -> PResult< XferCommand> {
     alt((
-        map(tag_no_case("pwd"), |_| XferCommand::Pwd),
-        map(tag_no_case("help"), |_| XferCommand::Help),
-        map(tag_no_case("reboot"), |_| XferCommand::Reboot),
-        map(tag_no_case("reset"), |_| XferCommand::Reset),
-        map(alt((tag_no_case("exit"), tag_no_case("quit"))), {
-            |_| XferCommand::Exit
-        }),
-        map(rest, {
+        tag_no_case("pwd").value( XferCommand::Pwd),
+        tag_no_case("help").value( XferCommand::Help),
+        tag_no_case("reboot").value( XferCommand::Reboot),
+        tag_no_case("reset").value( XferCommand::Reset),
+        alt((tag_no_case("exit"), tag_no_case("quit"))).value(XferCommand::Exit),
+        rest.map( {
             |fname: &str| XferCommand::LaunchM4(fname.to_string())
         })
-    ))(input)
+    )).parse_next(input)
 }
 
 /// Launch the parsing of the line
-pub(crate) fn parse_command(input: &str) -> IResult<&str, XferCommand> {
-    alt((cd, ls, launch, local, put, rm, no_arg))(input)
+pub(crate) fn parse_command(input: &mut &str) -> PResult<XferCommand> {
+    alt((cd, ls, launch, local, put, rm, no_arg)).parse_next(input)
 }

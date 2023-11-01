@@ -10,6 +10,15 @@ pub fn byte_to_pens(byte: u8, mode: Mode) -> Box<dyn Iterator<Item = Pen>> {
     }
 }
 
+pub fn pens_to_vec(pens: &[Pen], mode: Mode) -> Vec<u8> {
+    match mode {
+        Mode::Zero => mode0::pens_to_vec(pens),
+        Mode::One => mode1::pens_to_vec(pens),
+        Mode::Two => mode2::pens_to_vec(pens),
+        _ => unimplemented!()
+    }
+}
+
 /// Mode 2 specific pixels managment functions
 pub mod mode2 {
     use crate::ga::Pen;
