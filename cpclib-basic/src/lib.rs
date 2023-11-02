@@ -157,16 +157,11 @@ impl BasicProgram {
     /// Create the program from a code to parse
     pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, BasicError> {
         let input = code.as_ref();
-        match parse_basic_program.parse(&mut & input) {
-            Ok(prog) => {
-                    Ok(prog)
-            }
+        match parse_basic_program.parse(&mut &input) {
+            Ok(prog) => Ok(prog),
             Err(e) => {
                 Err(BasicError::ParseError {
-                    msg: format!(
-                        "Error while parsing the Basic content: {}",
-                        e
-                    )
+                    msg: format!("Error while parsing the Basic content: {}", e)
                 })
             }
 

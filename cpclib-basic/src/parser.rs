@@ -1,10 +1,7 @@
-use std::task::Context;
-
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::ascii::line_ending;
-use cpclib_common::winnow::binary::bits::take;
 use cpclib_common::winnow::combinator::{
-    alt, cut_err, eof, fold_repeat, opt, preceded, repeat, terminated, not
+    alt, cut_err, eof, fold_repeat, not, opt, preceded, repeat, terminated
 };
 use cpclib_common::winnow::error::{ContextError, ParserError, StrContext};
 use cpclib_common::winnow::stream::AsChar;
@@ -172,7 +169,7 @@ pub fn parse_quote<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
 pub fn parse_canal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     (
         '#'.value(BasicToken::SimpleToken('#'.into())),
-        one_of(('0'..='7')).map(|c| {
+        one_of('0'..='7').map(|c| {
             BasicToken::SimpleToken(match c {
                 '0' => BasicTokenNoPrefix::ConstantNumber0,
                 '1' => BasicTokenNoPrefix::ConstantNumber1,
@@ -318,7 +315,7 @@ pub fn parse_base_variable_name<'src>(input: &mut &'src str) -> BasicSeveralToke
     let first = one_of(('a'..='z', 'A'..='Z')).parse_next(input)?;
 
     let next =
-        opt(take_while(0.., (('a'..='z', 'A'..='Z', '0'..='9'))).verify(|s: &str| s.len() < 39))
+        opt(take_while(0.., ('a'..='z', 'A'..='Z', '0'..='9')).verify(|s: &str| s.len() < 39))
             .parse_next(input)?;
 
     // TODO check that it is valid
@@ -999,7 +996,7 @@ pub fn hex_u16_inner(input: &mut &str) -> PResult<u16, ContextError> {
 /// XXX stolen to the asm parser
 #[inline]
 pub fn dec_u16_inner(input: &mut &str) -> PResult<u16, ContextError> {
-    take_while(1.., ('0'..='9'))
+    take_while(1.., '0'..='9')
         .verify(|parsed: &str| parsed.len() > 5)
         .map(|parsed: &str| {
             let mut res = 0_u32;
@@ -1094,7 +1091,7 @@ mod test {
     }
 
     fn check_expression(code: &str) {
-        let res = parse_numeric_expression(NumericExpressionConstraint::None).parse(&mut & code);
+        let res = parse_numeric_expression(NumericExpressionConstraint::None).parse(&mut &code);
         match res {
             Ok(line) => {
                 println!("{} => {:?}", code, &line);
@@ -1106,7 +1103,7 @@ mod test {
     }
 
     fn check_print_expression(code: &str) {
-        let res = parse_print_expression.parse(&mut & code);
+        let res = parse_print_expression.parse(&mut &code);
         match res {
             Ok(line) => {
                 println!("{} => {:?}", code, &line);
@@ -1128,7 +1125,10 @@ mod test {
     }
 }
 
-pub fn test_parse<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(mut parser: P, code: &'code str) -> BasicLine {
+pub fn test_parse<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(
+    mut parser: P,
+    code: &'code str
+) -> BasicLine {
     let tokens = dbg!(parser.parse(&mut &code)).expect("Parse issue");
 
     BasicLine {
@@ -1138,7 +1138,10 @@ pub fn test_parse<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(m
     }
 }
 
-pub fn test_parse1<'code, P: Parser<&'code str, BasicToken, ContextError>>(mut parser: P, code: &'code str) -> BasicLine {
+pub fn test_parse1<'code, P: Parser<&'code str, BasicToken, ContextError>>(
+    mut parser: P,
+    code: &'code str
+) -> BasicLine {
     let tokens = dbg!(parser.parse(code)).expect("Parse issue");
 
     BasicLine {
@@ -1149,7 +1152,7 @@ pub fn test_parse1<'code, P: Parser<&'code str, BasicToken, ContextError>>(mut p
 }
 
 pub fn test_parse_and_compare<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(
-    mut parser: P,
+    parser: P,
     code: &'code str,
     bytes: &[u8]
 ) {
