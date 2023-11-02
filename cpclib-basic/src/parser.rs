@@ -43,8 +43,6 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
         (parse_instruction, alt((eof, line_ending, ":"))),
         Vec::new,
         |mut acc: Vec<_>, (mut item, next)| {
-            dbg!(&item);
-            dbg!(&next);
             acc.append(&mut item);
             if !next.is_empty() {
                 let char = next.chars().next().unwrap();
@@ -133,7 +131,7 @@ pub fn parse_rem<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     ))
     .parse_next(input)?;
 
-    let list = take_while(0.., |ch| ch == '\n').parse_next(input)?;
+    let list = take_while(0.., |ch| ch != '\n').parse_next(input)?;
 
     Ok(BasicToken::Comment(sym, list.as_bytes().to_vec()))
 }
@@ -829,7 +827,7 @@ pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8; 5], BasicError> {
         while (deci & mask) == 0 {
             mask /= 2;
         }
-        // count the number of remaining bits
+        // count the number of ContextErroraining bits
         while mask > 0 {
             exp += 1;
             mask /= 2;
@@ -981,14 +979,13 @@ pub fn hex_u16_inner(input: &mut &str) -> PResult<u16, ContextError> {
     take_while(1..=4, AsChar::is_hex_digit)
         .map(|parsed: &str| {
             let mut res = 0_u32;
-            for e in parsed.chars() {
-                let digit = e;
+            for digit in parsed.chars() {
                 let value = digit.to_digit(16).unwrap_or(0);
                 res = value + (res * 16);
             }
             res
         })
-        .verify(|res| *res > u32::from(u16::max_value()))
+        .verify(|res| *res < u32::from(u16::max_value()))
         .map(|res| res as u16)
         .parse_next(input)
 }
@@ -997,7 +994,7 @@ pub fn hex_u16_inner(input: &mut &str) -> PResult<u16, ContextError> {
 #[inline]
 pub fn dec_u16_inner(input: &mut &str) -> PResult<u16, ContextError> {
     take_while(1.., '0'..='9')
-        .verify(|parsed: &str| parsed.len() > 5)
+        .verify(|parsed: &str| parsed.len() <= 5)
         .map(|parsed: &str| {
             let mut res = 0_u32;
             for e in parsed.chars() {
