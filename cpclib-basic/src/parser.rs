@@ -1018,7 +1018,7 @@ mod test {
 
     #[test]
     fn check_number() {
-        assert!(dec_u16_inner(&mut "10").is_ok());
+        assert!(dbg!(dec_u16_inner(&mut "10")).is_ok());
 
         assert!(dbg!(parse_floating_point(&mut "67.98")).is_ok());
         assert!(dbg!(parse_floating_point(&mut "-67.98")).is_ok());

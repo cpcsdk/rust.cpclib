@@ -35,8 +35,8 @@ tempfile.workspace = true
 log = {workspace = true, optional = true }
 simplelog = { workspace = true, optional = true }
 
-[target.'cfg(all(not(target_os = "windows"), not(target_arch = "wasm32")))'.dependencies]
-hxcfe.workspace = true
+# Only allow it on linux, because it fails on other platforms right now
+hxcfe = {workspace = true, optional = true}
 
 [build-dependencies]
 built.workspace = true
@@ -47,6 +47,8 @@ default = ["dskmanager", "catalog", "hideur"]
 dskmanager = ["cpclib-common/cmdline"]
 catalog = ["cpclib-common/cmdline", "log", "simplelog"]
 hideur = ["cpclib-common/cmdline"]
+hfe = ["hxcfe"]
+
 
 [[bin]]
 name = "dskmanager"
