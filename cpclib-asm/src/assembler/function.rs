@@ -22,7 +22,7 @@ use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
-use crate::preamble::{LocatedToken, MayHaveSpan, ParsingState, LocatedExpr, LocatedTokenInner};
+use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
 use crate::section::*;
 use crate::Visited;
 
@@ -34,6 +34,7 @@ pub trait ReturnExpr {
 
 impl ReturnExpr for Token {
     type Expr = Expr;
+
     fn return_expr(&self) -> Option<&Self::Expr> {
         match self {
             Token::Return(exp) => Some(exp),
@@ -44,6 +45,7 @@ impl ReturnExpr for Token {
 
 impl ReturnExpr for LocatedToken {
     type Expr = LocatedExpr;
+
     fn return_expr(&self) -> Option<&Self::Expr> {
         match self.deref() {
             LocatedTokenInner::Return(e) => Some(e),
@@ -133,7 +135,6 @@ where
         init_env: &Env,
         params: &[ExprResult]
     ) -> Result<ExprResult, AssemblerError> {
-
         if self.args.len() != params.len() {
             return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
                 self.name.clone(),
@@ -351,7 +352,7 @@ impl HardCodedFunction {
                         else {
                             None
                         }
-                    }
+                    },
                     _ => None
                 }
             })
@@ -368,7 +369,7 @@ impl HardCodedFunction {
                         params.len()
                     ));
                 }
-            }
+            },
             _ => {}
         }
 
@@ -380,7 +381,7 @@ impl HardCodedFunction {
                         .number()
                         .into()
                 )
-            }
+            },
             HardCodedFunction::Mode1ByteToPenAt => {
                 Ok(
                     cpclib_image::pixels::mode1::byte_to_pens(params[0].int()? as _)
@@ -388,7 +389,7 @@ impl HardCodedFunction {
                         .number()
                         .into()
                 )
-            }
+            },
             HardCodedFunction::Mode2ByteToPenAt => {
                 Ok(
                     cpclib_image::pixels::mode2::byte_to_pens(params[0].int()? as _)
@@ -396,7 +397,7 @@ impl HardCodedFunction {
                         .number()
                         .into()
                 )
-            }
+            },
 
             HardCodedFunction::PenAtToMode0Byte => {
                 Ok(cpclib_image::pixels::mode0::pen_to_pixel_byte(
@@ -404,14 +405,14 @@ impl HardCodedFunction {
                     (params[1].int()? as u8 % 2).into()
                 )
                 .into())
-            }
+            },
             HardCodedFunction::PenAtToMode1Byte => {
                 Ok(cpclib_image::pixels::mode1::pen_to_pixel_byte(
                     (params[0].int()? as u8 % 4).into(),
                     (params[1].int()? as u8 % 4).into()
                 )
                 .into())
-            }
+            },
 
             HardCodedFunction::PenAtToMode2Byte => {
                 Ok(cpclib_image::pixels::mode2::pen_to_pixel_byte(
@@ -419,7 +420,7 @@ impl HardCodedFunction {
                     (params[1].int()? as u8 % 8).into()
                 )
                 .into())
-            }
+            },
 
             HardCodedFunction::PensToMode0Byte => {
                 Ok(cpclib_image::pixels::mode0::pens_to_byte(
@@ -427,7 +428,7 @@ impl HardCodedFunction {
                     params[1].int()?.into()
                 )
                 .into())
-            }
+            },
             HardCodedFunction::PensToMode1Byte => {
                 Ok(cpclib_image::pixels::mode1::pens_to_byte(
                     params[0].int()?.into(),
@@ -436,7 +437,7 @@ impl HardCodedFunction {
                     params[3].int()?.into()
                 )
                 .into())
-            }
+            },
             HardCodedFunction::PensToMode2Byte => {
                 Ok(cpclib_image::pixels::mode2::pens_to_byte(
                     params[0].int()?.into(),
@@ -449,11 +450,11 @@ impl HardCodedFunction {
                     params[7].int()?.into()
                 )
                 .into())
-            }
+            },
             HardCodedFunction::ListNew => Ok(list_new(params[0].int()? as _, params[1].clone())),
             HardCodedFunction::ListSet => {
                 list_set(params[0].clone(), params[1].int()? as _, params[2].clone())
-            }
+            },
             HardCodedFunction::ListGet => list_get(&params[0], params[1].int()? as _),
             HardCodedFunction::ListPush => list_push(params[0].clone(), params[1].clone()),
 
@@ -461,7 +462,7 @@ impl HardCodedFunction {
             HardCodedFunction::ListLen => list_len(&params[0]),
             HardCodedFunction::ListSublist => {
                 list_sublist(&params[0], params[1].int()? as _, params[2].int()? as _)
-            }
+            },
 
             HardCodedFunction::StringPush => string_push(params[0].clone(), params[1].clone()),
 
@@ -474,7 +475,7 @@ impl HardCodedFunction {
                     base = string_push(base, params[i].clone())?
                 }
                 Ok(base)
-            }
+            },
             HardCodedFunction::ListSort => list_sort(params[0].clone()),
             HardCodedFunction::ListArgsort => list_argsort(&params[0]),
 
@@ -484,7 +485,7 @@ impl HardCodedFunction {
                     params[1].int()? as _,
                     params[2].clone()
                 ))
-            }
+            },
             HardCodedFunction::MatrixSet => {
                 matrix_set(
                     params[0].clone(),
@@ -492,19 +493,19 @@ impl HardCodedFunction {
                     params[2].int()? as _,
                     params[3].clone()
                 )
-            }
+            },
             HardCodedFunction::MatrixGet => {
                 matrix_get(&params[0], params[1].int()? as _, params[2].int()? as _)
-            }
+            },
             HardCodedFunction::MatrixCol => matrix_col(&params[0], params[1].int()? as _),
             HardCodedFunction::MatrixRow => matrix_row(&params[0], params[1].int()? as _),
             HardCodedFunction::MatrixSetRow => {
                 matrix_set_row(params[0].clone(), params[1].int()? as _, &params[2])
-            }
+            },
 
             HardCodedFunction::MatrixSetCol => {
                 matrix_set_col(params[0].clone(), params[1].int()? as _, &params[2])
-            }
+            },
             HardCodedFunction::MatrixWidth => matrix_width(&params[0]),
             HardCodedFunction::MatrixHeight => matrix_height(&params[0]),
 
@@ -513,7 +514,7 @@ impl HardCodedFunction {
                 let data =
                     file::load_binary(Either::Right((fname, env)), env.options().parse_options())?;
                 Ok(ExprResult::from(data.as_slice()))
-            }
+            },
 
             HardCodedFunction::SectionStart => section_start(params[0].string()?, env),
             HardCodedFunction::SectionStop => section_stop(params[0].string()?, env),
@@ -641,7 +642,7 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
                 .map(|b| ExprResult::from(*b))
                 .collect_vec();
             Ok(ExprResult::List(bytes))
-        }
+        },
         None => Ok(ExprResult::List(Default::default()))
     }
 }

@@ -85,6 +85,7 @@ camino = "1.1.6"
 cc = "1.0.83"
 cfg-if = "1.0.0"
 chardetng = {version = "0.1.17", features = ["multithreading"]}
+choice_nocase = "0.2.0"
 clap = "4.4.6"
 codespan-reporting = "0.11.1"
 contracts = "0.6.3"
@@ -101,8 +102,8 @@ enumn = "0.1.12"
 env_logger = "0.10"
 evalexpr = "11.1.0"
 exitcode = "1.1.2"
-getset = "0.1.2"
 gag = "1.0.0"
+getset = "0.1.2"
 gif = "0.12.0"
 gif-dispose = "4.0.1"
 globset = "0.4.13"
@@ -157,8 +158,7 @@ test-generator = "0.3.1"
 thiserror = "1.0"
 time = "0.3.29"
 velcro = "0.5.4"
-choice_nocase = "0.1.2"
-winnow = {version= "0.5.17", features=["simd"]}
+winnow = {version= "0.5.19", features=["simd"]}
 
 # gui based dependencies
 eframe = "0.23"

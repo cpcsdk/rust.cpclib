@@ -1,21 +1,23 @@
-use std::borrow::Borrow;
-use std::ops::{Deref, DerefMut};
-use cpclib_common::smol_str::SmolStr;
 
-use cpclib_common::nom::error::{ErrorKind, ParseError};
-use cpclib_common::nom::{
-    Compare, CompareResult, Err, FindSubstring, IResult, InputIter, InputLength, InputTake, Needed,
-    Offset, Slice
-};
-use cpclib_common::nom_locate::LocatedSpan;
-use cpclib_tokens::symbols::Source;
+use std::fmt::Display;
+use std::ops::{Deref, DerefMut};
+
+use cpclib_common::smol_str::SmolStr;
+use cpclib_common::winnow::stream::{AsBStr, Offset};
+use cpclib_common::winnow::{Located, Stateful};
+use cpclib_tokens::symbols::{Source, Symbol};
+use line_col::LineColLookup;
+use line_span::LineSpanExt;
 
 use super::context::ParserContext;
-use super::ParsingState;
+use super::{ParsingState};
 
-type InnerZ80Span = LocatedSpan<
-    // the type of data, owned by the base listing of interest
-    &'static str,
+// This type is only handled by the parser
+pub type InnerZ80Span = Stateful<
+    Located<
+        // the type of data, owned by the base listing of interest
+        &'static [u8]
+    >,
     // The parsing context
     // TODO remove it an pass it over the parse arguments
     &'static ParserContext
@@ -24,24 +26,118 @@ type InnerZ80Span = LocatedSpan<
 #[derive(Clone, PartialEq, Eq)]
 pub struct Z80Span(pub(crate) InnerZ80Span);
 
+impl From<InnerZ80Span> for Z80Span {
+    fn from(value: InnerZ80Span) -> Self {
+        Self(value)
+    }
+}
+
+impl Into<InnerZ80Span> for Z80Span {
+    fn into(self) -> InnerZ80Span {
+        self.0
+    }
+}
+
 impl AsRef<str> for Z80Span {
     #[inline]
     fn as_ref(&self) -> &str {
-        self.fragment()
+        unsafe { std::str::from_utf8_unchecked(self.0.as_bstr()) }
+    }
+}
+
+impl<'a> Into<&'a str> for &'a Z80Span {
+    fn into(self) -> &'a str {
+        AsRef::as_ref(self)
+    }
+}
+
+pub trait SourceString: Display {
+    fn as_str(&self) -> &str;
+}
+
+impl Into<Symbol> for &dyn SourceString {
+    fn into(self) -> Symbol {
+        self.as_str().into()
+    }
+}
+
+impl Into<Symbol> for &Z80Span {
+    fn into(self) -> Symbol {
+        self.as_str().into()
+    }
+}
+
+impl SourceString for &Z80Span {
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl SourceString for Z80Span {
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl SourceString for &String {
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl SourceString for &SmolStr {
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl SourceString for SmolStr {
+    fn as_str(&self) -> &str {
+        self.as_ref()
     }
 }
 
 impl Z80Span {
     #[inline]
-    pub fn as_str(&self) -> &str {
-        self.as_ref()
+    pub fn complete_source(&self) -> &str {
+        self.0.state.source
     }
-}
 
-impl Borrow<str> for Z80Span {
+    /// Get the offset from the start of the string (when considered to be a array of bytes)
     #[inline]
-    fn borrow(&self) -> &str {
-        self.as_str()
+    pub fn offset_from_start(&self) -> usize {
+        let src = self.complete_source();
+        let src = src.as_bstr();
+        self.as_bstr().offset_from(&src)
+    }
+
+    /// Get the line and column relatively to the source start
+    #[inline]
+    pub fn relative_line_and_column(&self) -> (usize, usize) {
+        // TODO store this lookup somewhere instead of recomputing it each time
+        let lookup = LineColLookup::new(self.complete_source());
+
+        let offset = self.offset_from_start();
+        lookup.get(offset)
+    }
+
+    #[inline]
+    pub fn location_line(&self) -> u32 {
+        self.relative_line_and_column().0 as _
+    }
+
+    /// Get the full line from the whole source code that contains the following span
+    #[inline]
+    pub fn complete_line(&self) -> &str {
+        let offset = self.offset_from_start();
+        let range = self.complete_source().find_line_range(offset);
+        let line = &self.complete_source().as_bytes()[range.start..range.end];
+        unsafe { std::str::from_utf8_unchecked(line) }
+    }
+
+    #[inline]
+    pub fn get_line_beginning(&self) -> &str {
+        self.complete_line()
     }
 }
 
@@ -59,6 +155,7 @@ impl std::fmt::Display for Z80Span {
 impl std::fmt::Debug for Z80Span {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (line, column) = self.relative_line_and_column();
         write!(
             f,
             "{}:{}:{} <{}>",
@@ -66,9 +163,9 @@ impl std::fmt::Debug for Z80Span {
                 .current_filename
                 .as_ref()
                 .map(|f| f.to_str().unwrap_or("<invalid filename>"))
-                .unwrap_or("unknown"),
-            self.location_line(),
-            self.get_utf8_column(),
+                .unwrap_or("<unknown filename>"),
+            line,
+            column,
             self.as_str()
         )
     }
@@ -80,24 +177,19 @@ impl Into<SmolStr> for &Z80Span {
     }
 }
 
-impl Into<SmolStr> for Z80Span {
-    fn into(self) -> SmolStr {
-        SmolStr::from(self.as_str())
-    }
-}
-
-
 impl Into<Source> for &Z80Span {
     #[inline]
     fn into(self) -> Source {
+        let (line, column) = self.relative_line_and_column();
+
         Source::new(
             self.context()
                 .current_filename
                 .as_ref()
                 .map(|fname| fname.display().to_string())
                 .unwrap_or_else(|| "<INLINE>".into()),
-            self.0.location_line() as _,
-            self.0.get_utf8_column()
+            line as _,
+            column
         )
     }
 }
@@ -140,20 +232,6 @@ impl Into<Source> for &Z80Span {
 // }
 // }
 
-impl<'a> Into<LocatedSpan<&'a str>> for Z80Span {
-    #[inline]
-    fn into(self) -> LocatedSpan<&'a str> {
-        unsafe {
-            LocatedSpan::new_from_raw_offset(
-                self.location_offset(),
-                self.location_line(),
-                self.fragment(),
-                ()
-            )
-        }
-    }
-}
-
 impl Deref for Z80Span {
     type Target = InnerZ80Span;
 
@@ -175,177 +253,20 @@ impl AsRef<InnerZ80Span> for Z80Span {
     }
 }
 
-impl Compare<&'static str> for Z80Span {
-    #[inline]
-    fn compare(&self, t: &'static str) -> CompareResult {
-        self.deref().compare(t)
-    }
-
-    #[inline]
-    fn compare_no_case(&self, t: &'static str) -> CompareResult {
-        self.deref().compare_no_case(t)
-    }
-}
-impl cpclib_common::nom::InputIter for Z80Span {
-    type Item = <InnerZ80Span as cpclib_common::nom::InputIter>::Item;
-    type Iter = <InnerZ80Span as cpclib_common::nom::InputIter>::Iter;
-    type IterElem = <InnerZ80Span as cpclib_common::nom::InputIter>::IterElem;
-
-    #[inline]
-    fn iter_indices(&self) -> Self::Iter {
-        self.deref().iter_indices()
-    }
-
-    #[inline]
-    fn iter_elements(&self) -> Self::IterElem {
-        self.deref().iter_elements()
-    }
-
-    #[inline]
-    fn position<P>(&self, predicate: P) -> Option<usize>
-    where P: Fn(Self::Item) -> bool {
-        self.deref().position(predicate)
-    }
-
-    #[inline]
-    fn slice_index(&self, count: usize) -> Result<usize, Needed> {
-        self.deref().slice_index(count)
-    }
-}
-
-impl cpclib_common::nom::InputLength for Z80Span {
-    #[inline]
-    fn input_len(&self) -> usize {
-        self.deref().input_len()
-    }
-}
-
-impl Offset for Z80Span {
-    #[inline]
-    fn offset(&self, second: &Self) -> usize {
-        self.deref().offset(second.deref())
-    }
-}
-
-impl cpclib_common::nom::InputTake for Z80Span {
-    #[inline]
-    fn take(&self, count: usize) -> Self {
-        Self(self.deref().take(count))
-    }
-
-    #[inline]
-    fn take_split(&self, count: usize) -> (Self, Self) {
-        let res = self.deref().take_split(count);
-        (Self(res.0), Self(res.1))
-    }
-}
-
-impl cpclib_common::nom::InputTakeAtPosition for Z80Span {
-    type Item = <InnerZ80Span as cpclib_common::nom::InputIter>::Item;
-
-    #[inline]
-    fn split_at_position<P, E: ParseError<Self>>(&self, predicate: P) -> IResult<Self, Self, E>
-    where P: Fn(Self::Item) -> bool {
-        match self.deref().position(predicate) {
-            Some(n) => Ok(self.take_split(n)),
-            None => Err(Err::Incomplete(cpclib_common::nom::Needed::new(1)))
-        }
-    }
-
-    #[inline]
-    fn split_at_position1<P, E: ParseError<Self>>(
-        &self,
-        predicate: P,
-        e: ErrorKind
-    ) -> IResult<Self, Self, E>
-    where
-        P: Fn(Self::Item) -> bool
-    {
-        match self.deref().position(predicate) {
-            Some(0) => Err(Err::Error(E::from_error_kind(self.clone(), e))),
-            Some(n) => Ok(self.take_split(n)),
-            None => Err(Err::Incomplete(cpclib_common::nom::Needed::new(1)))
-        }
-    }
-
-    #[inline]
-    fn split_at_position_complete<P, E: ParseError<Self>>(
-        &self,
-        predicate: P
-    ) -> IResult<Self, Self, E>
-    where
-        P: Fn(Self::Item) -> bool
-    {
-        match self.split_at_position(predicate) {
-            Err(Err::Incomplete(_)) => Ok(self.take_split(self.input_len())),
-            res => res
-        }
-    }
-
-    #[inline]
-    fn split_at_position1_complete<P, E: ParseError<Self>>(
-        &self,
-        predicate: P,
-        e: ErrorKind
-    ) -> IResult<Self, Self, E>
-    where
-        P: Fn(Self::Item) -> bool
-    {
-        match self.fragment().position(predicate) {
-            Some(0) => Err(Err::Error(E::from_error_kind(self.clone(), e))),
-            Some(n) => Ok(self.take_split(n)),
-            None => {
-                if self.fragment().input_len() == 0 {
-                    Err(Err::Error(E::from_error_kind(self.clone(), e)))
-                }
-                else {
-                    Ok(self.take_split(self.input_len()))
-                }
-            }
-        }
-    }
-}
-impl<'src, 'ctx, U> FindSubstring<U> for Z80Span
-where &'src str: FindSubstring<U>
-{
-    #[inline]
-    fn find_substring(&self, substr: U) -> Option<usize> {
-        self.fragment().find_substring(substr)
-    }
-}
-
-impl Slice<std::ops::Range<usize>> for Z80Span {
-    #[inline]
-    fn slice(&self, range: std::ops::Range<usize>) -> Self {
-        Self(self.deref().slice(range))
-    }
-}
-impl Slice<std::ops::RangeFrom<usize>> for Z80Span {
-    #[inline]
-    fn slice(&self, range: std::ops::RangeFrom<usize>) -> Self {
-        Self(self.deref().slice(range))
-    }
-}
-impl Slice<std::ops::RangeTo<usize>> for Z80Span {
-    #[inline]
-    fn slice(&self, range: std::ops::RangeTo<usize>) -> Self {
-        Self(self.deref().slice(range))
-    }
-}
-
 impl Z80Span {
     pub fn new_extra(src: &str, ctx: &ParserContext) -> Self {
-        Self(LocatedSpan::new_extra(
-            // pointer is always good as source is stored in a Arc
-            unsafe { &*(src as *const str) as &'static str },
-            unsafe { &*(ctx as *const ParserContext) as &'static ParserContext }
-        ))
+        let src = unsafe { &*(src as *const str) as &'static str };
+        let ctx = unsafe { &*(ctx as *const ParserContext) as &'static ParserContext };
+
+        Self(Stateful {
+            input: Located::new(src.as_bytes()),
+            state: ctx
+        })
     }
 
     pub fn context(&self) -> &ParserContext {
-        &self.0.extra
+        &self.state
     }
-
 }
 
 impl Z80Span {

@@ -6,7 +6,7 @@ use cpclib_sna::AceSymbolChunk;
 use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait, Value};
 use cpclib_tokens::ExprResult;
 
-pub enum SymbolOutputFormat{
+pub enum SymbolOutputFormat {
     Basm,
     Winape
 }
@@ -18,26 +18,26 @@ impl SymbolOutputFormat {
                 match v {
                     Value::Address(a) => {
                         format!("{} equ #{:04X}", k.value(), a.address())
-                    }
+                    },
                     Value::Expr(ExprResult::Value(i)) => {
                         format!("{} equ #{:04X}", k.value(), i)
-                    }
+                    },
                     Value::Expr(ExprResult::Bool(b)) => {
                         format!("{} equ {}", k.value(), *b)
-                    }
+                    },
                     Value::Expr(e @ ExprResult::Float(_f)) => {
                         format!("{} equ #{:04X}", k.value(), e.int().unwrap())
-                    }
+                    },
                     Value::Expr(ExprResult::String(s)) => {
                         format!("{} equ {}", k.value(), s)
-                    }
+                    },
                     Value::Expr(l @ ExprResult::List(_)) => {
                         format!("{} equ {}", k.value(), l)
-                    }
+                    },
                     Value::Expr(m @ ExprResult::Matrix { .. }) => {
                         format!("{} equ {}", k.value(), m)
-                    }
-    
+                    },
+
                     _ => unimplemented!("{:?}", v)
                 }
             },
@@ -45,29 +45,29 @@ impl SymbolOutputFormat {
                 match v {
                     Value::Address(a) => {
                         format!("{} #{:X}", k.value(), a.address())
-                    }
+                    },
                     Value::Expr(ExprResult::Value(i)) => {
                         format!("{} #{:X}", k.value(), i)
-                    }
+                    },
                     Value::Expr(ExprResult::Bool(b)) => {
                         format!("{} {}", k.value(), *b)
-                    }
+                    },
                     Value::Expr(e @ ExprResult::Float(_f)) => {
                         format!("{} #{:X}", k.value(), e.int().unwrap())
-                    }
+                    },
                     Value::Expr(ExprResult::String(_s)) => {
                         "".to_owned() // ignored by winape
-                    }
+                    },
                     Value::Expr(_l @ ExprResult::List(_)) => {
                         "".to_owned() // ignored by winape
-                    }
+                    },
                     Value::Expr(_m @ ExprResult::Matrix { .. }) => {
                         "".to_owned() // ignored by winape
-                    }
-    
+                    },
+
                     _ => unimplemented!("{:?}", v)
                 }
-            },
+            }
         }
     }
 }
@@ -108,41 +108,26 @@ impl Default for SymbolOutputGenerator {
 }
 
 impl SymbolOutputGenerator {
-
     pub fn build_ace_snapshot_chunk(&self, symbs: &impl SymbolsTableTrait) -> AceSymbolChunk {
         let mut chunk = AceSymbolChunk::new();
         for (k, v) in symbs
-        .expression_symbol()
-        .iter()
-        .filter(|(s, _v)| self.keep_symbol(s))
-        .sorted_by_key(|(s, _v)| s.to_string().to_ascii_lowercase()) {
-
+            .expression_symbol()
+            .iter()
+            .filter(|(s, _v)| self.keep_symbol(s))
+            .sorted_by_key(|(s, _v)| s.to_string().to_ascii_lowercase())
+        {
             // Get the symbol
-           let k = k.value();
+            let k = k.value();
 
-           // get a possible value when using u16
-           let v = match v {
-                Value::Address(a) => {
-                    Some(a.address())
-                }
-                Value::Expr(ExprResult::Value(i)) => {
-                     Some(*i as u16)
-                }
-                Value::Expr(ExprResult::Bool(b)) => {
-                    Some(*b as u16)
-                }
-                Value::Expr(_e @ ExprResult::Float(_f)) => {
-                    None
-                }
-                Value::Expr(ExprResult::String(_s)) => {
-                    None
-                }
-                Value::Expr(_l @ ExprResult::List(_)) => {
-                   None
-                }
-                Value::Expr(_m @ ExprResult::Matrix { .. }) => {
-                    None
-                }
+            // get a possible value when using u16
+            let v = match v {
+                Value::Address(a) => Some(a.address()),
+                Value::Expr(ExprResult::Value(i)) => Some(*i as u16),
+                Value::Expr(ExprResult::Bool(b)) => Some(*b as u16),
+                Value::Expr(_e @ ExprResult::Float(_f)) => None,
+                Value::Expr(ExprResult::String(_s)) => None,
+                Value::Expr(_l @ ExprResult::List(_)) => None,
+                Value::Expr(_m @ ExprResult::Matrix { .. }) => None,
 
                 _ => None
             };
@@ -154,7 +139,6 @@ impl SymbolOutputGenerator {
         }
         chunk
     }
-
 
     /// Generate the symbol table in w
     pub fn generate<W: Write>(

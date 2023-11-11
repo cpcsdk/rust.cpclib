@@ -102,7 +102,7 @@ impl ListingExt for Listing {
         let mut options = EnvOptions::default();
 
         for instruction in self.listing() {
-            if let Token::Org{val1:address,..} = instruction {
+            if let Token::Org { val1: address, .. } = instruction {
                 current_address = Some(address.eval().unwrap().int().unwrap() as u16);
             }
 
@@ -112,7 +112,7 @@ impl ListingExt for Listing {
                     options
                         .symbols_mut()
                         .set_current_address(PhysicalAddress::new(*address, 0xC0));
-                }
+                },
                 None => {
                     res += "???? ";
                 }
@@ -153,7 +153,7 @@ impl ListingExt for Listing {
                     else {
                         Vec::new()
                     }
-                }
+                },
                 Err(err) => {
                     panic!("{:?} {:?} {:?}", instruction, err, options);
                     // BUG need to better manage interpretation to never achieve such error
@@ -216,7 +216,7 @@ impl ListingExt for Listing {
         while current_idx < self.len() && nb_labels_added < sorted_labels.len() {
             let current_instruction = &self.listing()[current_idx];
 
-            let next_address = if let Token::Org{val1:address, ..} = current_instruction {
+            let next_address = if let Token::Org { val1: address, .. } = current_instruction {
                 current_address = Some(address.eval().unwrap().int().unwrap() as u16);
                 current_address.clone()
             }
@@ -231,7 +231,7 @@ impl ListingExt for Listing {
                         else {
                             None
                         }
-                    }
+                    },
                 }
             };
 
@@ -253,7 +253,7 @@ impl ListingExt for Listing {
                     else {
                         current_idx += 1;
                     }
-                }
+                },
                 (..) => {
                     current_idx += 1;
                 }
@@ -287,7 +287,7 @@ impl<'a> fmt::Display for PrintableListing<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for token in self.0.listing().iter() {
             match token {
-                Token::Label(_) | Token::Equ{..} | Token::Comment(_) => (),
+                Token::Label(_) | Token::Equ { .. } | Token::Comment(_) => (),
                 _ => {
                     write!(f, "\t")?;
                 }

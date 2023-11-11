@@ -1850,7 +1850,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
                 )
                 .unwrap_or_else(|_| defb_elements(&[*prefix, 0xCB, *param, *opcode]));
                 continue_disassembling(token, rest)
-            }
+            },
 
             [prefix, ref opcode, rest @ ..]
                 if *prefix == 0xCB || *prefix == 0xED || *prefix == 0xDD || *prefix == 0xFD =>
@@ -1868,7 +1868,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
                 )
                 .unwrap_or_else(|_| (defb_elements(&[*prefix, *opcode]), rest));
                 continue_disassembling(token, rest)
-            }
+            },
 
             [ref opcode, rest @ ..] => {
                 let (token, rest) = disassemble_with_potential_argument(*opcode, &TABINSTR, rest)

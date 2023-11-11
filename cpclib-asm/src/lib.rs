@@ -10,9 +10,9 @@
 #![feature(map_try_insert)]
 #![feature(get_mut_unchecked)]
 #![feature(stmt_expr_attributes)]
+#![feature(slice_take)]
 
-
-/// Implementation of various behvior for the tokens of cpclib_tokens
+/// Implementation of various behavior for the tokens of cpclib_tokens
 pub mod implementation;
 
 /// All the stuff to parse z80 code.
@@ -30,9 +30,6 @@ pub mod error;
 mod crunchers;
 
 pub mod progress;
-
-#[cfg(feature = "basm")]
-pub mod basm_utils;
 
 use std::fmt::Debug;
 use std::io::Write;

@@ -6,25 +6,25 @@ use std::sync::{Arc, RwLock};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::symbols::PhysicalAddress;
-use cpclib_tokens::{ExprResult, Token};
+use cpclib_tokens::{ExprResult};
 
-use crate::preamble::{LocatedToken, MayHaveSpan, LocatedTokenInner};
+use crate::preamble::{LocatedToken, LocatedTokenInner, MayHaveSpan, SourceString};
 /// Generate an output listing.
 /// Can be useful to detect issues
-
 
 #[derive(PartialEq)]
 pub enum TokenKind {
     Hidden,
     Label(String),
     Set(String),
-    MacroCall, MacroDefine(String),
+    MacroCall,
+    MacroDefine(String),
     Displayable
 }
 
 impl TokenKind {
     fn is_displayable(&self) -> bool {
-        self == & TokenKind::Displayable
+        self == &TokenKind::Displayable
     }
 }
 pub struct ListingOutput {
@@ -108,7 +108,7 @@ impl ListingOutput {
         match &self.current_source {
             Some(current_source) => {
                 std::ptr::eq(token.context().source.as_ptr(), current_source.as_ptr())
-            }
+            },
             None => false
         }
     }
@@ -119,28 +119,28 @@ impl ListingOutput {
             Some((current_location, _current_line)) => {
                 self.token_is_on_same_source(token)
                     && *current_location == token.span().location_line()
-            }
+            },
             None => false
         }
     }
 
     fn extract_code(token: &LocatedToken) -> String {
         match token {
-            LocatedToken{
-                inner: either::Left(LocatedTokenInner::Macro{..} |
-                        LocatedTokenInner::Repeat(..)),
+            LocatedToken {
+                inner: either::Left(LocatedTokenInner::Macro { .. } | LocatedTokenInner::Repeat(..)),
                 span,
                 ..
-             } => {
+            } => {
                 // 		self.need_to_cut = true;
-                span.fragment().to_string()
+                span.as_str().to_string()
             },
-          
 
             _ => {
                 // 			self.need_to_cut = false;
-                unsafe { std::str::from_utf8_unchecked(token.span().get_line_beginning()) }
-                    .to_owned()
+                unsafe {
+                    std::str::from_utf8_unchecked(token.span().get_line_beginning().as_bytes())
+                }
+                .to_owned()
             }
         }
     }
@@ -158,48 +158,43 @@ impl ListingOutput {
             return;
         }
 
-
         // dbg!(token);
 
         let fname_handling = self.manage_fname(token);
 
-                        // Check if the current line has to drawn in a different way
-            let specific_content = match &self.current_token_kind {
-                TokenKind::Hidden => None,
-                TokenKind::Label(l) => {
-                    Some(format!(
-                        "{:04X} {:05X} {l}",
-                        self.current_first_address,
-                        self.current_physical_address.offset_in_cpc()
-                    ))
-                }
-                TokenKind::Set(label) => {
-                    Some(format!(
-                        "{:04X} {} {label}",
-                        self.current_first_address, "?????"
-                    ))
-                }
-                TokenKind::MacroCall | TokenKind::Displayable  => {
-                    None
-                },
-                TokenKind::MacroDefine(name) => {
-                    Some(format!("MACRO      {name}"))
-                }
-            };
-    
-            // if so, defer its output
-            if let Some(specific_content) = &specific_content {
-                self.deferred_for_line.push(specific_content.clone());
-            }
+        // Check if the current line has to drawn in a different way
+        let specific_content = match &self.current_token_kind {
+            TokenKind::Hidden => None,
+            TokenKind::Label(l) => {
+                Some(format!(
+                    "{:04X} {:05X} {l}",
+                    self.current_first_address,
+                    self.current_physical_address.offset_in_cpc()
+                ))
+            },
+            TokenKind::Set(label) => {
+                Some(format!(
+                    "{:04X} {} {label}",
+                    self.current_first_address, "?????"
+                ))
+            },
+            TokenKind::MacroCall | TokenKind::Displayable => None,
+            TokenKind::MacroDefine(name) => Some(format!("MACRO      {name}"))
+        };
 
-         {
+        // if so, defer its output
+        if let Some(specific_content) = &specific_content {
+            self.deferred_for_line.push(specific_content.clone());
+        }
+
+        {
             // !self.token_is_on_same_line(token)
             if true {
                 // if specific_content.is_some() && fname_handling.is_some() {
                 // writeln!(self.writer, "{}", fname_handling.take().unwrap()).unwrap();
                 // }
                 // handle previous line
-                if !self.token_is_on_same_line(token){
+                if !self.token_is_on_same_line(token) {
                     self.process_current_line(); // request a display
                 }
 
@@ -224,8 +219,6 @@ impl ListingOutput {
             }
         }
 
-
-
         self.current_line_bytes.extend_from_slice(bytes);
         self.current_address_kind = if self.current_address_kind == AddressKind::None {
             address_kind
@@ -245,24 +238,18 @@ impl ListingOutput {
             LocatedTokenInner::Label(l) => TokenKind::Label(l.to_string()),
             LocatedTokenInner::Equ { label, .. } | LocatedTokenInner::Assign { label, .. } => {
                 TokenKind::Set(label.to_string())
-            }
+            },
             LocatedTokenInner::Macro { name, .. } => TokenKind::MacroDefine(name.to_string()),
-            LocatedTokenInner::MacroCall(..) 
-            | LocatedTokenInner::Org { ..} 
+            LocatedTokenInner::MacroCall(..)
+            | LocatedTokenInner::Org { .. }
             | LocatedTokenInner::Comment(..)
             | LocatedTokenInner::Include(..)
-            | LocatedTokenInner::Repeat(..)
-            => TokenKind::Displayable,
+            | LocatedTokenInner::Repeat(..) => TokenKind::Displayable,
             _ => TokenKind::Hidden
         };
     }
 
     pub fn process_current_line(&mut self) {
-
-
-
-
-
         // retrieve the line
         let (line_number, line) = match &self.current_line_group {
             Some((idx, line)) => (idx, line),
@@ -291,8 +278,13 @@ impl ListingOutput {
                 writeln!(
                     self.writer,
                     "{:37}{:4} {}",
-                    if line_delta == 0 {specific_content} else {""},
-                    line_number + delta as u32  + line_delta as u32 - lines_count as u32,
+                    if line_delta == 0 {
+                        specific_content
+                    }
+                    else {
+                        ""
+                    },
+                    line_number + delta as u32 + line_delta as u32 - lines_count as u32,
                     line
                 )
                 .unwrap();
@@ -334,15 +326,8 @@ impl ListingOutput {
                 format!("{:4}", line_number + idx)
             };
 
-
-            
-
-
             // missing instruction must be added manually using TokenKind
             if !self.current_line_bytes.is_empty() || self.current_token_kind.is_displayable() {
-
-
-                
                 writeln!(
                     self.writer,
                     "{loc_representation} {phys_addr_representation} {:bytes_width$} {line_nb_representation} {}",
@@ -351,17 +336,16 @@ impl ListingOutput {
                     bytes_width = self.bytes_per_line() * 3
                 )
                 .unwrap();
-
-
             }
 
             idx += 1;
         }
 
-
         if !self.current_line_bytes.is_empty() || self.current_token_kind.is_displayable() {
             for counter in self.counter_update.iter() {
-                self.writer.write(format!("{}\n", counter).as_bytes()).unwrap();
+                self.writer
+                    .write(format!("{}\n", counter).as_bytes())
+                    .unwrap();
             }
             self.counter_update.clear();
         }
@@ -370,8 +354,6 @@ impl ListingOutput {
         self.current_line_group = None;
         self.current_source = None;
         self.current_line_bytes.clear();
-
-
     }
 
     pub fn finish(&mut self) {
@@ -385,7 +367,7 @@ impl ListingOutput {
     pub fn manage_fname(&mut self, token: &LocatedToken) -> Option<String> {
         // 	dbg!(token);
 
-        let ctx = &token.span().extra;
+        let ctx = &token.span().state;
         let fname = ctx
             .filename()
             .map(|p| p.as_os_str().to_str().unwrap().to_string())
@@ -405,7 +387,7 @@ impl ListingOutput {
                 else {
                     None
                 }
-            }
+            },
             None => None
         }
     }
@@ -477,10 +459,8 @@ impl ListingOutputTrigger {
     /// Override the address value by the expression result
     /// BUGGY when it is not a number ...
     pub fn replace_code_address(&mut self, address: &ExprResult) {
-        Self::result_to_address(address)
-            .map(|a| self.start = a);
+        Self::result_to_address(address).map(|a| self.start = a);
     }
-
 
     /// Applies the conversion when possible
     fn result_to_address(address: &ExprResult) -> Option<u32> {
@@ -537,14 +517,15 @@ impl ListingOutputTrigger {
             let value = Self::result_to_address(value);
             if let Some(value) = value {
                 format!("{value:04X} ????? {counter}")
-            } else {
+            }
+            else {
                 format!("???? ????? {counter}")
             }
-        } else {
+        }
+        else {
             format!("???? ???? {counter}")
         };
 
-        self.builder.write().unwrap()
-            .counter_update.push(line);
+        self.builder.write().unwrap().counter_update.push(line);
     }
 }

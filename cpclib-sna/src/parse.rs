@@ -13,7 +13,7 @@ use cpclib_common::winnow::{PResult, Parser};
 
 use crate::flags::{FlagValue, SnapshotFlag};
 
-pub fn parse_flag<I, Error: ParserError<I>>(input: &mut I) -> PResult<SnapshotFlag>
+pub fn parse_flag<I, Error: ParserError<I>>(input: &mut I) -> PResult<SnapshotFlag, Error>
 where
     I: StreamIsPartial,
     I: Stream,

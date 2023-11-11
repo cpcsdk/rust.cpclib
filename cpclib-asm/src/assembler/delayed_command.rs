@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap};
 use std::io::Write;
 
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
-#[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
 use super::report::SavedFile;
@@ -57,7 +57,7 @@ impl PrintCommand {
                 )
                 .unwrap();
                 Ok(())
-            }
+            },
             either::Either::Right(e) => Err(e.clone())
         }
     }
@@ -207,10 +207,9 @@ impl DelayedCommands {
 
     /// can save in parallel if all commands can be saved in parallel (we are strict because we miss lots of parallelism)
     pub fn can_save_in_parallel(&self) -> bool {
-        self.save_commands.values()
-            .all(|s| 
-                s.iter().all(|s| s.can_be_saved_in_parallel())
-            )
+        self.save_commands
+            .values()
+            .all(|s| s.iter().all(|s| s.can_be_saved_in_parallel()))
     }
 
     pub fn add_failed_assert_command(&mut self, command: FailedAssertCommand) {
@@ -234,10 +233,9 @@ impl DelayedCommands {
 impl DelayedCommands {
     /// Execute the commands that correspond to the appropriate mmr configuration
     pub fn execute_save(&self, env: &Env, ga_mmr: u8) -> Result<Vec<SavedFile>, AssemblerError> {
-
-        #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
         let iter = CondIterator::new(&self.save_commands, self.can_save_in_parallel());
-        #[cfg(any(target_arch = "wasm32", not(feature="rayon")))]
+        #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
         let iter = self.save_commands.iter();
 
         let res = iter

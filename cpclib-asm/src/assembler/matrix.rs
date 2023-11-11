@@ -22,7 +22,7 @@ pub fn matrix_col(matrix: &ExprResult, x: usize) -> Result<ExprResult, crate::As
             }
 
             Ok(matrix.matrix_col(x))
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -30,7 +30,7 @@ pub fn matrix_col(matrix: &ExprResult, x: usize) -> Result<ExprResult, crate::As
                     msg: format!("{} is not a matrix", matrix)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -57,16 +57,16 @@ pub fn matrix_set_col(
 
                     matrix.matrix_set_col(x, col.list_content());
                     Ok(matrix)
-                }
+                },
                 _ => {
                     Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                         Box::new(AssemblerError::AssemblingError {
                             msg: format!("{} is not a list", matrix)
                         })
                     )))
-                }
+                },
             }
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -74,7 +74,7 @@ pub fn matrix_set_col(
                     msg: format!("{} is not a matrix", matrix)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -88,7 +88,7 @@ pub fn matrix_row(matrix: &ExprResult, y: usize) -> Result<ExprResult, crate::As
             }
 
             Ok(matrix.matrix_row(y).clone())
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -96,7 +96,7 @@ pub fn matrix_row(matrix: &ExprResult, y: usize) -> Result<ExprResult, crate::As
                     msg: format!("{} is not a matrix", matrix)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -127,16 +127,16 @@ pub fn matrix_set_row(
 
                     content[y] = row.clone();
                     Ok(matrix)
-                }
+                },
                 _ => {
                     Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                         Box::new(AssemblerError::AssemblingError {
                             msg: format!("{} is not a list", matrix)
                         })
                     )))
-                }
+                },
             }
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -144,7 +144,7 @@ pub fn matrix_set_row(
                     msg: format!("{} is not a matrix", matrix)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -168,7 +168,7 @@ pub fn matrix_set(
             }
             matrix.matrix_set(y, x, value);
             Ok(matrix)
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -176,7 +176,7 @@ pub fn matrix_set(
                     msg: format!("{} is not a matrix", matrix)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -198,7 +198,7 @@ pub fn matrix_get(
                 ));
             }
             Ok(matrix.matrix_get(y, x).clone())
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -206,7 +206,7 @@ pub fn matrix_get(
                     msg: format!("{} is not a matrix", matrix)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -219,7 +219,7 @@ pub fn matrix_width(matrix: &ExprResult) -> Result<ExprResult, crate::AssemblerE
                     msg: format!("{} is not a matrix", matrix)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -232,6 +232,6 @@ pub fn matrix_height(matrix: &ExprResult) -> Result<ExprResult, crate::Assembler
                     msg: format!("{} is not a matrix", matrix)
                 })
             )))
-        }
+        },
     }
 }

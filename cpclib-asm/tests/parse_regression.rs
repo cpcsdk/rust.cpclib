@@ -2,6 +2,9 @@ use std::ops::Deref;
 
 use cpclib_asm::parser::ParserContext;
 use cpclib_asm::preamble::*;
+use cpclib_common::winnow;
+use either::Either;
+use winnow::Parser;
 
 fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
     let mut ctx = Box::new(ParserContextBuilder::default().build(code));
@@ -50,13 +53,13 @@ fn test_regression1() {
 fn expr_negative_regression() {
     let (_ctx_, span) = ctx_and_span("18");
     assert_eq!(
-        expr2(span).unwrap().1.to_expr().into_owned(),
+        expr2(&mut span.into()).unwrap().to_expr().into_owned(),
         Expr::Value(18)
     );
 
     let (_ctx_, span) = ctx_and_span("-18");
     assert_eq!(
-        expr2(span).unwrap().1.to_expr().into_owned(),
+        expr2(&mut span.into()).unwrap().to_expr().into_owned(),
         Expr::Value(-18)
     );
 }
@@ -66,20 +69,20 @@ fn db_negative_regression() {
     let code = "	db 18";
     let listing = parse_z80_str(code).unwrap();
     assert_eq!(listing.len(), 1);
-    match &listing[0] {
-        LocatedToken::Defb(v, _) => {
+    match listing[0].to_token().as_ref() {
+        Token::Defb(v) => {
             assert_eq!(v[0].to_expr().into_owned(), Expr::Value(18))
-        }
+        },
         _ => panic!()
     }
 
     let code = "	db -18";
     let listing = parse_z80_str(code).unwrap();
     assert_eq!(listing.len(), 1);
-    match &listing[0] {
-        LocatedToken::Defb(v, _) => {
+    match listing[0].to_token().as_ref() {
+        Token::Defb(v) => {
             assert_eq!(v[0].to_expr().into_owned(), Expr::Value(-18))
-        }
+        },
         _ => panic!()
     }
 }
@@ -116,7 +119,7 @@ fn macro_args1() {
 fn macro_args_single() {
     let code = "1";
     let (_ctx_, span) = ctx_and_span(code);
-    let arg = dbg!(parse_macro_arg(span)).unwrap().1;
+    let arg = dbg!(parse_macro_arg.parse(span.into())).unwrap();
 
     assert_eq!(arg.to_macro_param(), MacroParam::Single("1".to_string()))
 }
@@ -125,7 +128,7 @@ fn macro_args_single() {
 fn macro_args_list_1() {
     let code = "[1]";
     let (_ctx_, span) = ctx_and_span(code);
-    let arg = dbg!(parse_macro_arg(span)).unwrap().1;
+    let arg = dbg!(parse_macro_arg.parse(span.into())).unwrap();
 
     assert_eq!(
         arg.to_macro_param(),
@@ -137,7 +140,7 @@ fn macro_args_list_1() {
 fn macro_args_list_2() {
     let code = "[1, 3]";
     let (_ctx_, input) = ctx_and_span(code);
-    let arg = dbg!(parse_macro_arg(input)).unwrap().1;
+    let arg = dbg!(parse_macro_arg.parse(input.into())).unwrap();
 
     assert_eq!(
         arg.to_macro_param(),
@@ -152,7 +155,7 @@ fn macro_args_list_2() {
 fn macro_args_list_3() {
     let code = "[1, ,3]";
     let (_ctx_, span) = ctx_and_span(code);
-    let arg = dbg!(parse_macro_arg(span)).unwrap().1;
+    let arg = dbg!(parse_macro_arg.parse(span.into())).unwrap();
 
     assert_eq!(
         arg.to_macro_param(),
@@ -178,9 +181,9 @@ fn regression_akm1() {
 
     let (_ctx_, input) = ctx_and_span(input);
 
-    let bin = dbg!(parse_conditional(input));
+    let bin = dbg!(parse_conditional.parse(input.into()));
     assert!(bin.is_ok());
-    dbg!(bin.unwrap().1.to_token());
+    dbg!(bin.unwrap().to_token());
 }
 
 #[test]
@@ -196,9 +199,9 @@ fn regression_akm2() {
 ";
     let (_ctx_, input) = ctx_and_span(input);
 
-    let bin = dbg!(parse_conditional(input));
+    let bin = dbg!(parse_conditional.parse(input.into()));
     assert!(bin.is_ok());
-    dbg!(bin.unwrap().1.to_token());
+    dbg!(bin.unwrap().to_token());
 }
 
 #[test]
@@ -211,9 +214,9 @@ fn regression_akm3() {
 ";
     let (_ctx_, input) = ctx_and_span(input);
 
-    let bin = dbg!(parse_conditional(input));
+    let bin = dbg!(parse_conditional.parse(input.into()));
     assert!(bin.is_ok());
-    dbg!(bin.unwrap().1.to_token());
+    dbg!(bin.unwrap().to_token());
 }
 
 #[test]
@@ -227,9 +230,9 @@ dknr3:  ld de,4
 ";
     let (_ctx_, input) = ctx_and_span(input);
 
-    let bin = dbg!(parse_conditional(input));
+    let bin = dbg!(parse_conditional.parse(input.into()));
     assert!(bin.is_ok());
-    dbg!(bin.unwrap().1.to_token());
+    dbg!(bin.unwrap().to_token());
 }
 
 #[test]
@@ -258,9 +261,9 @@ dknr3:  ld de,4
 
 ";
     let (_ctx_, input) = ctx_and_span(input);
-    let bin = dbg!(parse_conditional(input));
+    let bin = dbg!(parse_conditional.parse(input.into()));
     assert!(bin.is_ok());
-    dbg!(bin.unwrap().1.to_token());
+    dbg!(bin.unwrap().to_token());
 }
 
 #[test]
@@ -385,14 +388,14 @@ fn regression_label_parsing() {
 
     let (_ctx_, input) = ctx_and_span("ds_m4_rom_byte_storage equ $");
 
-    assert!(dbg!(inner_code_with_state(ParsingState::Standard)(input)).is_ok());
+    assert!(dbg!(inner_code_with_state(ParsingState::Standard).parse(input.into())).is_ok());
 
     let (_ctx_, input) = ctx_and_span(
         "ds_m4_rom_byte_storage equ $
     "
     );
 
-    assert!(dbg!(inner_code_with_state(ParsingState::Standard)(input)).is_ok());
+    assert!(dbg!(inner_code_with_state(ParsingState::Standard).parse(input.into())).is_ok());
 
     let (_ctx_, input) = ctx_and_span(
         "ifndef ds_m4_rom_byte_storage
@@ -401,7 +404,7 @@ fn regression_label_parsing() {
         endif
         "
     );
-    assert!(dbg!(inner_code_with_state(ParsingState::Standard)(input)).is_ok());
+    assert!(dbg!(inner_code_with_state(ParsingState::Standard).parse(input.into())).is_ok());
 
     let (_ctx_, input) = ctx_and_span(
         "    if USE_CPCWIFI
@@ -415,5 +418,5 @@ ds_m4_rom_byte_storage equ $
     endif
     "
     );
-    assert!(dbg!(inner_code_with_state(ParsingState::Standard)(input)).is_ok());
+    assert!(dbg!(inner_code_with_state(ParsingState::Standard).parse(input.into())).is_ok());
 }

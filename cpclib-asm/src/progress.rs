@@ -2,11 +2,8 @@ use core::time::Duration;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use cpclib_common::itertools::Itertools;
-
 #[cfg(feature = "indicatif")]
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-
-
 
 lazy_static::lazy_static! {
     static ref PROGRESS: Arc<Mutex<Progress>> = Arc::new(Mutex::new(Progress::new()));
@@ -30,7 +27,7 @@ pub struct Progress {
     parse: CountedProgress,
     load: CountedProgress,
     save: Option<CountedProgress>,
-    pass: Option<(usize, usize, usize)>, // pass, nb ivisited, nb to do
+    pass: Option<(usize, usize, usize)> // pass, nb ivisited, nb to do
 }
 
 pub fn normalize(path: &std::path::Path) -> &str {
@@ -38,7 +35,7 @@ pub fn normalize(path: &std::path::Path) -> &str {
 }
 
 #[cfg(feature = "indicatif")]
-//TODO add the multiprogess bar as a field and never pass it as an argument
+// TODO add the multiprogess bar as a field and never pass it as an argument
 // it will allow to reduce duplicated code with indicatf/no indicatif versions
 struct CountedProgress {
     bar: Option<ProgressBar>,
@@ -61,7 +58,6 @@ struct CountedProgress {
     last_tick: std::time::SystemTime
 }
 
-
 #[cfg(feature = "indicatif")]
 impl CountedProgress {
     pub fn new(kind: &'static str, index: usize, freeze_amount: bool) -> Self {
@@ -72,7 +68,7 @@ impl CountedProgress {
             nb_expected: 0,
             prefix: kind,
             index,
-            freeze_amount,
+            freeze_amount
         };
         cp
     }
@@ -150,7 +146,6 @@ impl CountedProgress {
     }
 }
 
-
 #[cfg(not(feature = "indicatif"))]
 impl CountedProgress {
     pub fn new(kind: &'static str, index: usize, freeze_amount: bool) -> Self {
@@ -193,38 +188,34 @@ impl CountedProgress {
         self.update_visual();
     }
 
-    fn finished(&mut self) {
-    }
+    fn finished(&mut self) {}
 
     fn update_visual(&mut self) {
-
-        const HZ:u128 = 1000/15;
+        const HZ: u128 = 1000 / 15;
 
         if self.last_tick.elapsed().unwrap().as_millis() >= HZ {
-
             self.really_show();
 
             self.last_tick = std::time::SystemTime::now();
-
         }
-
     }
 
     fn really_show(&self) {
-
         let content = self.current_items.iter().join(", ");
         let other_content = &content[..70.min(content.len())];
         let extra = if other_content.len() != content.len() {
             "..."
-        } else {
+        }
+        else {
             ""
         };
 
-        println!("{} [{}/{}] {}{}", self.prefix, self.nb_done, self.nb_expected, other_content, extra);
+        println!(
+            "{} [{}/{}] {}{}",
+            self.prefix, self.nb_done, self.nb_expected, other_content, extra
+        );
     }
-
 }
-
 
 #[cfg(feature = "indicatif")]
 fn new_spinner() -> ProgressBar {
@@ -274,7 +265,7 @@ impl Progress {
             load: CountedProgress::new("  Load", 0, false),
             parse: CountedProgress::new(" Parse", 1, false),
             save: None,
-            pass: None           
+            pass: None
         }
     }
 
@@ -355,7 +346,9 @@ impl Progress {
             self.pass = Some((0, 0, 0));
         }
 
-        self.pass.as_mut().map(|pass: &mut (usize, usize, usize) | *pass = (pass.0+1, 0, 0));
+        self.pass
+            .as_mut()
+            .map(|pass: &mut (usize, usize, usize)| *pass = (pass.0 + 1, 0, 0));
     }
 
     #[cfg(feature = "indicatif")]

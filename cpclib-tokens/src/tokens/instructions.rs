@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::fmt;
 
@@ -38,7 +39,7 @@ pub trait MacroParamElement: Clone + core::fmt::Debug {
     fn is_single(&self) -> bool;
     fn is_list(&self) -> bool;
 
-    fn single_argument(&self) -> &str;
+    fn single_argument(&self) -> Cow<str>;
     fn list_argument(&self) -> &[Box<Self>];
 }
 
@@ -55,9 +56,9 @@ impl MacroParamElement for MacroParam {
         matches!(self, MacroParam::List(_))
     }
 
-    fn single_argument(&self) -> &str {
+    fn single_argument(&self) -> Cow<str> {
         match self {
-            MacroParam::Single(s) => s,
+            MacroParam::Single(s) => Cow::Borrowed(s),
             MacroParam::List(_) => unreachable!()
         }
     }
@@ -349,9 +350,9 @@ is_mnemonic!(
 /// Stable ticker serves to count nops with the assembler !
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
-pub enum StableTickerAction {
+pub enum StableTickerAction<S: AsRef<str>>  {
     /// Start of the ticker with its name that will contains its duration
-    Start(SmolStr),
+    Start(S),
     Stop
 }
 
@@ -511,7 +512,7 @@ pub enum Token {
     Bank(Option<Expr>),
     Bankset(Expr),
     /// Basic code which tokens will be included in the code (imported variables, lines to hide,  code)
-    Basic(Option<Vec<SmolStr>>, Option<Vec<u16>>, String),
+    Basic(Option<Vec<SmolStr>>, Option<Vec<Expr>>, String),
     Break,
     Breakpoint(Option<Expr>),
     BuildCpr,
@@ -628,7 +629,7 @@ pub enum Token {
         cpclib_sna::flags::SnapshotFlag,
         cpclib_sna::flags::FlagValue
     ),
-    StableTicker(StableTickerAction),
+    StableTicker(StableTickerAction<SmolStr>),
     Str(Vec<Expr>),
     Struct(SmolStr, Vec<(SmolStr, Token)>),
     Switch(Expr, Vec<(Expr, Listing, bool)>, Option<Listing>),

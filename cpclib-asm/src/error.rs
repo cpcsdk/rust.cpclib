@@ -17,7 +17,7 @@ use cpclib_tokens::{tokens, BinaryOperation, ExpressionTypeError};
 
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
-use crate::preamble::{LocatedListing, Z80ParserError, Z80ParserErrorKind};
+use crate::preamble::{LocatedListing, SourceString, Z80ParserError, Z80ParserErrorKind};
 use crate::{PhysicalAddress, Z80Span};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -298,7 +298,7 @@ impl From<SymbolError> for AssemblerError {
                 AssemblerError::AssemblingError {
                     msg: "There is no namespace active".to_owned()
                 }
-            }
+            },
         }
     }
 }
@@ -335,7 +335,7 @@ impl AssemblerError {
         }
         else {
             AssemblerError::RelocatedError {
-                span: span,
+                span,
                 error: Box::new(self)
             }
         }
@@ -370,7 +370,9 @@ impl AssemblerError {
                     .iter()
                     .filter(|e| {
                         match e.1 {
-                            Z80ParserErrorKind::Context(ctx) => !ctx.starts_with("[DBG]"),
+                            Z80ParserErrorKind::Context(ctx) => {
+                                !ctx.to_string().starts_with("[DBG]")
+                            },
                             //  Z80ParserErrorKind::Nom(ErrorKind::Eof) => true,
                             _ => true
                         }
@@ -378,15 +380,15 @@ impl AssemblerError {
                     .map(|e| {
                         match e.1 {
                             Z80ParserErrorKind::Context(_)
-                            | Z80ParserErrorKind::Nom(_)
+                            | Z80ParserErrorKind::Winnow(_)
                             | Z80ParserErrorKind::Char(_) => {
                                 // Get the real are build the context
                                 let ctx: std::borrow::Cow<str> = match e.1 {
-                                    Z80ParserErrorKind::Context(ctx) => Cow::Borrowed(*ctx),
-                                    Z80ParserErrorKind::Nom(_) => "Unknown error".into(),
+                                    Z80ParserErrorKind::Context(ctx) => Cow::Owned(ctx.to_string()),
+                                    Z80ParserErrorKind::Winnow(_) => "Unknown error".into(),
                                     Z80ParserErrorKind::Char(c) => {
                                         format!("Error with char '{}'", c).into()
-                                    }
+                                    },
                                     _ => unreachable!()
                                 };
                                 let ctx = ctx.deref();
@@ -395,16 +397,16 @@ impl AssemblerError {
 
                                 // Add filename to database if needed
                                 let filename =
-                                    e.0.extra
+                                    e.0.state
                                         .filename()
                                         .map(|p| p.as_os_str().to_str().unwrap());
 
                                 let filename = filename.unwrap_or_else(|| {
-                                    e.0.extra.context_name().unwrap_or_else(|| "no file")
+                                    e.0.state.context_name().unwrap_or_else(|| "no file")
                                 });
                                 let filename = Box::new(filename.to_owned());
 
-                                let source = e.0.extra.complete_source();
+                                let source = e.0.state.complete_source();
                                 let file_id = match fname_to_id.get(filename.deref()) {
                                     Some(&id) => id,
                                     None => {
@@ -415,11 +417,12 @@ impl AssemblerError {
                                     }
                                 };
 
+                                let offset = Z80Span::from(**span).offset_from_start();
                                 let sample_range = std::ops::Range {
-                                    start: span.location_offset(),
+                                    start: offset,
                                     end: guess_error_end(
                                         source_files.get(file_id).unwrap().source(),
-                                        span.location_offset(),
+                                        offset,
                                         ctx
                                     )
                                 };
@@ -442,14 +445,14 @@ impl AssemblerError {
                                     .unwrap();
 
                                 std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
-                            }
+                            },
 
                             _ => unreachable!("{:?}", e.1)
                         }
                     })
                     .join("\n");
                 write!(f, "{}", str)
-            }
+            },
 
             AssemblerError::IncludedFileError { span, error } => {
                 match error.as_ref() {
@@ -460,7 +463,7 @@ impl AssemblerError {
                             span
                         );
                         write!(f, "{}", msg)
-                    }
+                    },
                     _ => {
                         let msg = build_simple_error_message(
                             "Error in imported file",
@@ -471,7 +474,7 @@ impl AssemblerError {
                         error.fmt(f)
                     }
                 }
-            }
+            },
 
             AssemblerError::OverrideMemory(address, count) => {
                 write!(
@@ -482,38 +485,38 @@ impl AssemblerError {
                     address.offset_in_page(),
                     address.page()
                 )
-            }
+            },
             AssemblerError::DisassemblerError { msg } => write!(f, "Disassembler error: {}", msg),
 
             AssemblerError::ExpressionError(e) => {
                 let msg = match e {
                     ExpressionError::LeftError(oper, error) => {
                         format!("on left operand of {}: {}.", oper, error)
-                    }
+                    },
                     ExpressionError::RightError(oper, error) => {
                         format!("on right operand of {}: {}.", oper, error)
-                    }
+                    },
                     ExpressionError::LeftAndRightError(oper, error1, error2) => {
                         format!(
                             "on left and right operand of {}: {} / {}",
                             oper, error1, error2
                         )
-                    }
+                    },
                     ExpressionError::OwnError(error) => {
                         format!("{}", error)
-                    }
+                    },
                     ExpressionError::InvalidSize(expected, index) => {
                         format!("{} index incompatible with size {}", index, expected)
                     }
                 };
                 write!(f, "Expression error {}", msg)
-            }
+            },
             AssemblerError::CounterAlreadyExists { symbol } => {
                 write!(f, "A counter named `{}` already exists", symbol)
-            }
+            },
             AssemblerError::SymbolAlreadyExists { symbol } => {
                 write!(f, "A symbol named `{}` already exists", symbol)
-            }
+            },
             AssemblerError::IncoherentCode { msg } => write!(f, "Incoherent code: {}", msg),
             AssemblerError::NoActiveCounter => write!(f, "No active counter"),
             AssemblerError::OutputExceedsLimits(address, limit) => {
@@ -525,42 +528,43 @@ impl AssemblerError {
                     address.page(),
                     limit
                 )
-            }
+            },
             AssemblerError::OutputAlreadyExceedsLimits(limit) => {
                 write!(f, "Code  already exceeds limits of 0x{:X}", limit)
-            }
+            },
             AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
             AssemblerError::AlreadyDefinedSymbol { symbol, kind } => {
                 write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind)
-            }
+            },
 
             AssemblerError::MultipleErrors { errors } => {
                 for e in errors.iter() {
                     writeln!(f, "{}", e)?;
                 }
                 Ok(())
-            }
+            },
 
             AssemblerError::UnknownSymbol { symbol, closest } => {
                 write!(
                     f,
                     "Unknown symbol: {}.{}",
-                    symbol, closest
+                    symbol,
+                    closest
                         .as_ref()
                         .map(|v| format!(" Closest one is: `{v}`"))
                         .unwrap_or_default()
                 )
-            }
+            },
 
             AssemblerError::ExpressionTypeError(e) => write!(f, "{}", e),
 
             AssemblerError::EmptyBinaryFile(_) => todo!(),
-            AssemblerError::AmsdosError { error: e} => {
+            AssemblerError::AmsdosError { error: e } => {
                 write!(f, "AMSDOS error: {}", e)
-            }
+            },
             AssemblerError::BugInAssembler { file, line, msg } => {
                 write!(f, "BUG in assembler {}:{} {}", file, line, msg)
-            }
+            },
             AssemblerError::BugInParser {
                 error: _,
                 context: _
@@ -575,7 +579,7 @@ impl AssemblerError {
                 guidance
             } => {
                 write!(f, "Assert error: {} {} {}", test, msg, guidance)
-            }
+            },
 
             AssemblerError::UnknownMacro { symbol, closest } => {
                 write!(
@@ -584,26 +588,26 @@ impl AssemblerError {
                     symbol,
                     closest.as_ref().unwrap_or(&SmolStr::new_inline(""))
                 )
-            }
+            },
             AssemblerError::FunctionWithoutReturn(name) => {
                 write!(f, "Function {} has no RETURN directive", name)
-            }
+            },
             AssemblerError::FunctionWithEmptyBody(name) => {
                 write!(f, "Function {} has no body", name)
-            }
+            },
             AssemblerError::FunctionUnknown(name) => {
                 write!(f, "Function {} unknown", name)
-            }
+            },
             AssemblerError::FunctionError(name, e) => {
                 write!(f, "Function {} error: {}", name, e)
-            }
+            },
             AssemblerError::FunctionWithWrongNumberOfArguments(name, expected, received) => {
                 write!(
                     f,
                     "Function {} called with {} parameters instead of {}",
                     name, received, expected
                 )
-            }
+            },
             AssemblerError::WrongNumberOfParameters {
                 symbol: _,
                 nb_paramers: _,
@@ -611,16 +615,16 @@ impl AssemblerError {
             } => todo!(),
             AssemblerError::MacroError { name, root } => {
                 write!(f, "Error in macro call: {}\n{}", name, root)
-            }
+            },
             AssemblerError::WrongSymbolType {
                 symbol: s,
                 isnot: n
             } => {
                 write!(f, "Wrong symbol type: {} is not {}", s, n)
-            }
+            },
             AssemblerError::IOError { msg } => {
                 write!(f, "IO Error: {}", msg)
-            }
+            },
             AssemblerError::UnknownAssemblingAddress => todo!(),
             AssemblerError::ExpressionUnresolvable { expression: _ } => todo!(),
             AssemblerError::RelativeAddressUncomputable {
@@ -629,7 +633,7 @@ impl AssemblerError {
                 error
             } => {
                 write!(f, "Unable to compute relative address {}", error)
-            }
+            },
 
             // By construction contains only error with no span information
             AssemblerError::RelocatedError { error, span } => {
@@ -638,7 +642,7 @@ impl AssemblerError {
                     match error.deref() {
                         AssemblerError::RelocatedError { error, span: _ } => {
                             write!(f, "{}", error)
-                        }
+                        },
 
                         AssemblerError::UnknownSymbol { symbol, closest } => {
                             let msg = match closest {
@@ -648,18 +652,18 @@ impl AssemblerError {
                                         vec![format!("Closest one is: {}", closest)],
                                         span
                                     )
-                                }
+                                },
                                 None => {
                                     build_simple_error_message(
                                         &format!("Unknown symbol: {}", symbol),
                                         span,
                                         Severity::Error
                                     )
-                                }
+                                },
                             };
 
                             write!(f, "{}", msg)
-                        }
+                        },
 
                         AssemblerError::UnknownMacro { symbol, closest } => {
                             let msg = match closest {
@@ -669,18 +673,18 @@ impl AssemblerError {
                                         vec![format!("Closest one is: {}", closest)],
                                         span
                                     )
-                                }
+                                },
                                 None => {
                                     build_simple_error_message(
                                         &format!("Unknown macro: {}", symbol),
                                         span,
                                         Severity::Error
                                     )
-                                }
+                                },
                             };
 
                             write!(f, "{}", msg)
-                        }
+                        },
 
                         AssemblerError::MacroError { name, root } => {
                             let msg = build_simple_error_message(
@@ -689,13 +693,13 @@ impl AssemblerError {
                                 Severity::Error
                             );
                             write!(f, "{}\n{}", msg, root)
-                        }
+                        },
 
                         AssemblerError::BasicError { error } => {
                             let msg =
                                 build_simple_error_message("BASIC error", span, Severity::Error);
                             write!(f, "{}\n{}", msg, error)
-                        }
+                        },
 
                         AssemblerError::OutputProtected { area, address } => {
                             let msg = build_simple_error_message_with_message(
@@ -709,7 +713,7 @@ impl AssemblerError {
                                 span
                             );
                             write!(f, "{}", msg)
-                        }
+                        },
 
                         AssemblerError::CrunchedSectionError { error } => {
                             let msg = build_simple_error_message(
@@ -719,7 +723,7 @@ impl AssemblerError {
                             );
                             write!(f, "{}", msg)?;
                             write!(f, "{}", error)
-                        }
+                        },
 
                         _ => {
                             let msg = build_simple_error_message(
@@ -734,10 +738,10 @@ impl AssemblerError {
                 else {
                     write!(f, "{}", error)
                 }
-            }
+            },
             AssemblerError::ReadOnlySymbol(symb) => {
                 write!(f, "{} cannot be modified", symb.value())
-            }
+            },
 
             AssemblerError::RepeatIssue {
                 error,
@@ -755,7 +759,7 @@ impl AssemblerError {
                 else {
                     write!(f, "Repeat issue\n{}", error)
                 }
-            }
+            },
 
             AssemblerError::ForIssue { error, span } => {
                 if span.is_some() {
@@ -769,7 +773,7 @@ impl AssemblerError {
                 else {
                     write!(f, "FOR issue\n{}", error)
                 }
-            }
+            },
 
             AssemblerError::WhileIssue { error, span } => {
                 if span.is_some() {
@@ -783,7 +787,7 @@ impl AssemblerError {
                 else {
                     write!(f, "WHILE issue\n{}", error)
                 }
-            }
+            },
 
             AssemblerError::OutputProtected { area, address } => {
                 write!(
@@ -793,38 +797,38 @@ impl AssemblerError {
                     area.start(),
                     area.end()
                 )
-            }
+            },
             AssemblerError::InvalidSymbol(msg) => {
                 write!(f, "Invalid symbol \"{}\"", msg)
-            }
+            },
             AssemblerError::NoDataToCrunch => {
                 write!(f, "There is no bytes to crunch")
-            }
+            },
             AssemblerError::MMRError { value } => {
                 write!(
                     f,
                     "{} is invalid. We expect values from 0xC0 to 0xc7.",
                     value
                 )
-            }
+            },
             AssemblerError::RelocatedWarning { warning, span } => {
                 let msg =
                     build_simple_error_message(&format!("{}", warning), span, Severity::Warning);
                 write!(f, "{}", msg)
-            }
+            },
             AssemblerError::RelocatedInfo { info, span } => {
                 let msg = build_simple_error_message(&format!("{}", info), span, Severity::Note);
                 write!(f, "{}", msg)
-            }
+            },
             AssemblerError::SnapshotError { error } => write!(f, "Snapshot error. {:#?}", error),
             AssemblerError::CrunchedSectionError { error } => {
                 write!(f, "Error when crunching code {}", error)
-            }
+            },
             AssemblerError::NotAllowed => write!(f, "Instruction not allowed in this context."),
             AssemblerError::Fail { msg } => write!(f, "FAIL: {}", msg),
             AssemblerError::LocatedListingError(arc) => {
                 write!(f, "{}", arc.as_ref().cpclib_error_unchecked())
-            }
+            },
             AssemblerError::AlreadyRenderedError(e) => write!(f, "{}", e)
         }
     }
@@ -832,16 +836,17 @@ impl AssemblerError {
 
 fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z80Span) -> String {
     let filename = build_filename(span);
-    let source = span.extra.complete_source();
+    let source = span.state.complete_source();
+    let offset = span.offset_from_start();
 
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);
 
     let sample_range = std::ops::Range {
-        start: span.location_offset(),
+        start: offset,
         end: guess_error_end(
             source_files.get(file).unwrap().source(),
-            span.location_offset(),
+            offset,
             JP_WRONG_PARAM // fake value
         )
     };
@@ -863,9 +868,9 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
 }
 
 pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
-
     let filename = build_filename(span);
-    let source = span.extra.complete_source();
+    let source = span.state.complete_source();
+    let offset = span.offset_from_start();
 
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);
@@ -873,19 +878,17 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
     // TODO do it in a cleaner way. Here it is an ugly path !!!
     let end = if title.starts_with("Override ") {
         // XXX Handle the case of memory overriding that can use lots of instructions
-        span.chars().count() +  span.location_offset() + 1
-    } else {
+        span.as_str().chars().count() + offset + 1
+    }
+    else {
         guess_error_end(
             source_files.get(file).unwrap().source(),
-            span.location_offset(),
+            offset,
             JP_WRONG_PARAM // fake value
         )
     };
 
-    let sample_range = std::ops::Range {
-        start: span.location_offset(),
-        end: end
-    };
+    let sample_range = std::ops::Range { start: offset, end };
 
     let diagnostic = Diagnostic::new(severity)
         .with_message(title)
@@ -906,8 +909,8 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
 }
 
 fn build_filename(span: &Z80Span) -> Box<String> {
-    let fname = &span.extra.filename();
-    let context = &span.extra.context_name();
+    let fname = &span.state.filename();
+    let context = &span.state.context_name();
 
     let name = fname
         .as_ref()
@@ -927,19 +930,18 @@ fn build_simple_error_message_with_notes(
     notes: Vec<String>,
     span: &Z80Span
 ) -> String {
-
-    
     let filename = build_filename(span);
-    let source = span.extra.complete_source();
+    let source = span.state.complete_source();
+    let offset = span.offset_from_start();
 
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);
 
     let sample_range = std::ops::Range {
-        start: span.location_offset(),
+        start: offset,
         end: guess_error_end(
             source_files.get(file).unwrap().source(),
-            span.location_offset(),
+            offset,
             JP_WRONG_PARAM // fake value
         )
     };
@@ -984,7 +986,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
                         offset += 1;
                     }
                     offset
-                }
+                },
 
                 EndKind::CommaOrEnd => {
                     for current in code[offset..].chars() {

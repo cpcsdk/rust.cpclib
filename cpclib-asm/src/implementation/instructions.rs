@@ -22,31 +22,31 @@ impl Cruncher for CrunchType {
                 Err(AssemblerError::AssemblingError {
                     msg: "LZX7 compression not implemented".to_owned()
                 })
-            }
+            },
             #[cfg(target_arch = "wasm32")]
             CrunchType::LZ4 => {
                 Err(AssemblerError::AssemblingError {
                     msg: "LZ4 compression not available".to_owned()
                 })
-            }
+            },
             #[cfg(target_arch = "wasm32")]
             CrunchType::LZX0 => {
                 Err(AssemblerError::AssemblingError {
                     msg: "LZX0 compression not available".to_owned()
                 })
-            }
+            },
             #[cfg(target_arch = "wasm32")]
             CrunchType::LZEXO => {
                 Err(AssemblerError::AssemblingError {
                     msg: "LZEXO compression not available".to_owned()
                 })
-            }
+            },
             #[cfg(target_arch = "wasm32")]
             CrunchType::LZAPU => {
                 Err(AssemblerError::AssemblingError {
                     msg: "LZAPU compression not available".to_owned()
                 })
-            }
+            },
 
             #[cfg(not(target_arch = "wasm32"))]
             CrunchType::LZ4 => Ok(crunchers::lz4::compress(raw)),

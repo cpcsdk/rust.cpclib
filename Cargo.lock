@@ -804,9 +804,9 @@ dependencies = [
 
 [[package]]
 name = "choice_nocase"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b77d5c1dd74a8308a06276a7c9bebb42882a169a83b8e39ac5397382c930a27"
+checksum = "188916c0aa44c9b38fb2910758222451f588d1baa918c9cb6e1e736594af9abc"
 dependencies = [
  "proc-macro2 1.0.69",
  "syn 2.0.38",
@@ -1155,6 +1155,8 @@ dependencies = [
  "indicatif",
  "lazy_static",
  "libc",
+ "line-col",
+ "line-span",
  "matches",
  "ouroboros",
  "paste",
@@ -3242,6 +3244,12 @@ dependencies = [
  "pkg-config",
  "vcpkg",
 ]
+
+[[package]]
+name = "line-col"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e69cdf6b85b5c8dce514f694089a2cf8b1a702f6cd28607bcb3cf296c9778db"
 
 [[package]]
 name = "line-span"
@@ -6008,9 +6016,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.5.17"
+version = "0.5.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3b801d0e0a6726477cc207f60162da452f3a95adb368399bef20a946e06f65c"
+checksum = "829846f3e3db426d4cee4510841b71a8e58aa2a76b1132579487ae430ccd9c7b"
 dependencies = [
  "memchr",
 ]

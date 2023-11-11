@@ -36,50 +36,49 @@ impl ParsingStateVerified for LocatedToken {
     }
 }
 
-macro_rules!  parsing_state_verified_inner {
- () => {
-    fn is_accepted(&self, state: &ParsingState) -> bool {
-        match state {
-            ParsingState::GeneratedLimited => !self.is_directive(),
-            ParsingState::Standard => {
-                match self {
-                    Self::Return(..) => false,
-                    _ => true
-                }
-            }
-            ParsingState::FunctionLimited => {
-                match self {
-                    Self::Equ{..} | Self::Let(..) => true,
-                    Self::If { .. }
-                    | Self::Repeat { .. }
-                    | Self::Break
-                    | Self::Switch { .. }
-                    | Self::Iterate { .. } => true,
-                    Self::Return(_) => true,
-                    Self::Assert(..) | Self::Print(_) | Self::Fail(_) | Self::Comment(_) => {
-                        true
+macro_rules! parsing_state_verified_inner {
+    () => {
+        fn is_accepted(&self, state: &ParsingState) -> bool {
+            match state {
+                ParsingState::GeneratedLimited => !self.is_directive(),
+                ParsingState::Standard => {
+                    match self {
+                        Self::Return(..) => false,
+                        _ => true
                     }
-                    _ => false
-                }
-            }
-            ParsingState::StructLimited => {
-                match self {
-                    Self::Defb(..) |
-                    Self::Defw(..) |
-                    Self::Str(..) |
-                    Self::MacroCall(..) => true,
-                    _ => false
-                }
-            },
-            ParsingState::SymbolsLimited => {
-                match self {
-                    Self::Equ{..} | Self::Let(..) | Self::Comment(_) => true,
-                    _ => false
-                }
+                },
+                ParsingState::FunctionLimited => {
+                    match self {
+                        Self::Equ { .. } | Self::Let(..) => true,
+                        Self::If { .. }
+                        | Self::Repeat { .. }
+                        | Self::Break
+                        | Self::Switch { .. }
+                        | Self::Iterate { .. } => true,
+                        Self::Return(_) => true,
+                        Self::Assert(..) | Self::Print(_) | Self::Fail(_) | Self::Comment(_) => {
+                            true
+                        },
+                        _ => false
+                    }
+                },
+                ParsingState::StructLimited => {
+                    match self {
+                        Self::Defb(..) | Self::Defw(..) | Self::Str(..) | Self::MacroCall(..) => {
+                            true
+                        },
+                        _ => false
+                    }
+                },
+                ParsingState::SymbolsLimited => {
+                    match self {
+                        Self::Equ { .. } | Self::Let(..) | Self::Comment(_) => true,
+                        _ => false
+                    }
+                },
             }
         }
-    }
- }
+    };
 }
 
 impl ParsingStateVerified for LocatedTokenInner {
@@ -241,7 +240,7 @@ impl ParserOptions {
             Ok(path) => {
                 let path = path.parent().unwrap().to_owned();
                 self.add_search_path(path)
-            }
+            },
 
             Err(err) => {
                 Err(AssemblerError::IOError {
@@ -251,7 +250,7 @@ impl ParserOptions {
                         err.to_string()
                     )
                 })
-            }
+            },
         }
     }
 
@@ -288,13 +287,13 @@ impl ParserOptions {
                     Ok(Some(Value::Counter(e))) => e.to_string(),
                     Ok(Some(unkn)) => {
                         unimplemented!("{:?}", unkn)
-                    }
+                    },
                     Ok(None) => {
                         return Err(Either::Left(AssemblerError::UnknownSymbol {
                             symbol: model.into(),
                             closest: env.symbols().closest_symbol(model, SymbolFor::Any).unwrap()
                         }))
-                    }
+                    },
                     Err(e) => return Err(Either::Left(e.into()))
                 };
                 fname = fname.replace(model, &local_value);
@@ -421,7 +420,7 @@ impl ParserContext {
             context_name: self.context_name.clone(),
             source: self.source,
             options: self.options.clone(),
-            state: state
+            state
         }
     }
 }

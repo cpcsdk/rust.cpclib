@@ -1,11 +1,13 @@
 use std::ops::Deref;
 
+
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
+use cpclib_common::winnow::Parser;
 use cpclib_tokens::symbols::{Macro, Source, Struct};
 use cpclib_tokens::{MacroParamElement, Token};
 
 use crate::error::AssemblerError;
-use crate::preamble::Z80Span;
+use crate::preamble::{Z80ParserError, Z80Span};
 use crate::Env;
 
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
@@ -30,16 +32,17 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
                 .set_context_name("MACRO parameter expansion");
             let ctx = ctx_builder.build(src);
             let src = Z80Span::new_extra(src, &ctx);
-            let expr_token = crate::parser::located_expr(src)
-                .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?
-                .1;
+            let expr_token = crate::parser::located_expr.parse(src.0).map_err(|e| {
+                let e: &Z80ParserError = e.inner();
+                AssemblerError::SyntaxError { error: e.clone() }
+            })?;
             let value = env
                 .resolve_expr_must_never_fail(&expr_token)
                 .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?;
             return Ok(value.to_string());
         }
         else {
-            Ok(s.to_owned())
+            Ok(s.into_owned())
         }
     }
     else {

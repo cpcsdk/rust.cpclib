@@ -8,7 +8,6 @@ use super::embedded::EmbeddedFiles;
 use super::Env;
 use crate::error::AssemblerError;
 use crate::preamble::ParserOptions;
-
 use crate::progress::Progress;
 
 type Fname<'a, 'b> = either::Either<&'a Path, (&'a str, &'b Env)>;
@@ -25,7 +24,7 @@ pub fn get_filename(
                 AssemblerError::AssemblingError {
                     msg: format!("{} not found. TEsted {:?}", fname, tested)
                 }
-            }
+            },
         }
     })
 }
@@ -91,15 +90,13 @@ pub fn read_source<P: AsRef<Path>>(
     let fname = fname.as_ref();
 
     let content = load_binary(Either::Left(fname), options)?;
-    //handle_source_encoding(fname.to_str().unwrap(), &content)
+    // handle_source_encoding(fname.to_str().unwrap(), &content)
 
-
-    Ok(String::from_utf8_lossy(&content)
-        .into_owned())
+    Ok(String::from_utf8_lossy(&content).into_owned())
 }
 
 // Never fail
-#[cfg(all(feature="chardetng", not(target_arch = "wasm32")))]
+#[cfg(all(feature = "chardetng", not(target_arch = "wasm32")))]
 pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
     let mut decoder = chardetng::EncodingDetector::new();
     decoder.feed(content, true);
@@ -111,7 +108,9 @@ pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, As
     Ok(content)
 }
 
-#[cfg(any( not(feature="chardetng"), target_arch = "wasm32"))]
-pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
-    unimplemented!("i have deactivated this stuff to speed up everything. Let's consider each source is UTF8!")
+#[cfg(any(not(feature = "chardetng"), target_arch = "wasm32"))]
+pub fn handle_source_encoding(_fname: &str, _content: &[u8]) -> Result<String, AssemblerError> {
+    unimplemented!(
+        "i have deactivated this stuff to speed up everything. Let's consider each source is UTF8!"
+    )
 }

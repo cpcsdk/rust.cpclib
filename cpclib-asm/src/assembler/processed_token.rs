@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
-#[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
@@ -283,8 +283,7 @@ struct IfState<'token, T: Visited + Debug + ListingElement + Sync> {
 }
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> IfState<'token, T>
-where 
-<T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
     fn new(token: &'token T) -> Self {
         Self {
@@ -410,7 +409,7 @@ where
                     self.tests_listing.insert(selected_idx, listing);
                 }
                 self.tests_listing.get_mut(&selected_idx)
-            }
+            },
             None => {
                 // build else listing if needed
                 if self.else_listing.is_none() && self.token.if_else().is_some() {
@@ -492,17 +491,15 @@ where
                                 map.insert(fname, include_state);
 
                                 Some(ProcessedTokenState::Include(IncludeState(map)))
-                            }
+                            },
                             Err(_) => Some(ProcessedTokenState::Include(Default::default()))
                         }
-                    }
+                    },
                     Err(_) => Some(ProcessedTokenState::Include(Default::default()))
                 }
-            }
+            },
             Err(_) => Some(ProcessedTokenState::Include(Default::default())) /* we were unable to get the filename with the provided information */
         }
-       
-
     }
     else if token.is_incbin() {
         Some(ProcessedTokenState::Incbin(Default::default()))
@@ -608,36 +605,33 @@ pub fn build_processed_tokens_list<
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
-
     let options = env.options().parse_options();
     if options.show_progress {
-            /* // temporarily deactivate parallel processing while i have not found a way to compile it
-        #[cfg(not(target_arch = "wasm32"))]
-        let iter = tokens.par_iter();
-        #[cfg(target_arch = "wasm32")]
-        */
-        let mut iter = tokens.iter();
+        // // temporarily deactivate parallel processing while i have not found a way to compile it
+        // #[cfg(not(target_arch = "wasm32"))]
+        // let iter = tokens.par_iter();
+        // #[cfg(target_arch = "wasm32")]
+        let iter = tokens.iter();
 
         // get filename of files that will be read in parallel
         let include_fnames = iter
             .filter(|t| t.include_is_standard_include())
             .map(|t| get_filename(t.include_fname(), options, Some(env)))
             .filter(|f| f.is_ok())
-            .map(|f| f.unwrap()).collect::<Vec::<_>>();
-        let include_fnames = include_fnames.iter()
-            .map(|t| progress::normalize(&t));
-            
+            .map(|f| f.unwrap())
+            .collect::<Vec<_>>();
+        let include_fnames = include_fnames.iter().map(|t| progress::normalize(&t));
 
         // inform the progress bar
-            // add all fnames in one time
+        // add all fnames in one time
         Progress::progress().add_parses(include_fnames);
     }
 
     // the files will be read here while token are built
     // this is really important to keep this place parallelized
-    #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
     let iter = tokens.par_iter();
-    #[cfg(any(target_arch = "wasm32", not(feature="rayon")))]
+    #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
     let iter = tokens.iter();
     iter.map(|t| build_processed_token(t, env))
         .collect::<Vec<_>>()
@@ -655,7 +649,7 @@ where
 {
     // Ignore if function has already returned (mainly a workaround for switch case)
     if env.return_value.is_some() {
-        return Ok(())
+        return Ok(());
     }
 
     let options = env.options();
@@ -739,7 +733,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                             error: e.into(),
                             span: span.clone()
                         })
-                    }
+                    },
                     None => Err(e)
                 };
             }
@@ -760,7 +754,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
             let listing = match self.token.possible_span() {
                 Some(span) => {
                     use crate::ParserContextBuilder;
-                    let ctx_builder = ParserContextBuilder::from(span.extra.clone())
+                    let ctx_builder = ParserContextBuilder::from(span.state.clone())
                         .remove_filename()
                         .set_context_name(&format!(
                             "{}:{}:{} > {} {}:",
@@ -771,7 +765,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                             name,
                         ));
                     parse_z80_with_context_builder(code, ctx_builder)?
-                }
+                },
                 _ => {
                     use crate::parse_z80_str;
                     parse_z80_str(&code)?
@@ -804,12 +798,9 @@ where
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
         let possible_span = self.possible_span().cloned();
         let mut really_does_the_job = move || {
-
             let deferred = self.token.defer_listing_output();
-            if !deferred
-            {
-
-               // dbg!(&self.token, deferred);
+            if !deferred {
+                // dbg!(&self.token, deferred);
                 let outer_token = unsafe {
                     (self.token as *const T as *const LocatedToken)
                         .as_ref()
@@ -857,7 +848,7 @@ where
                             previous_compressed_bytes,
                             span.as_ref()
                         )
-                    }
+                    },
 
                     Some(ProcessedTokenState::For(SimpleListingState {
                         processed_tokens,
@@ -871,14 +862,14 @@ where
                             processed_tokens,
                             span.as_ref()
                         )
-                    }
+                    },
 
                     Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(
                         Some(_fun)
                     ))) => {
                         // TODO check if the funtion has already been defined during this pass
                         Ok(())
-                    }
+                    },
                     Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(
                         option
                     ))) => {
@@ -898,11 +889,11 @@ where
                             // TODO raise an error ?
                         }
                         Ok(())
-                    }
+                    },
 
                     Some(ProcessedTokenState::Incbin(IncbinState { contents })) => {
                         if cfg!(target_arch = "wasm32") {
-                            return Err(AssemblerError::AssemblingError { msg: 
+                            return Err(AssemblerError::AssemblingError { msg:
                                 "INCBIN-like directives are not allowed in a web-based assembling.".to_owned()
                             });
                         }
@@ -963,7 +954,7 @@ where
                                     });
                                 }
                                 data = &data[offset..];
-                            }
+                            },
                             None => {}
                         }
 
@@ -982,7 +973,7 @@ where
                                     });
                                 }
                                 data = &data[..length];
-                            }
+                            },
                             None => {}
                         }
 
@@ -1002,7 +993,7 @@ where
                         };
 
                         env.visit_incbin(data.borrow())
-                    }
+                    },
 
                     Some(ProcessedTokenState::Include(ref mut state)) => {
                         state.handle(
@@ -1011,7 +1002,7 @@ where
                             self.token.include_namespace(),
                             self.token.include_once()
                         )
-                    }
+                    },
 
                     Some(ProcessedTokenState::If(if_state)) => {
                         let listing = if_state.choose_listing_to_assemble(env)?;
@@ -1021,7 +1012,7 @@ where
                         }
 
                         Ok(())
-                    }
+                    },
 
                     Some(ProcessedTokenState::Iterate(SimpleListingState {
                         processed_tokens,
@@ -1033,7 +1024,7 @@ where
                             processed_tokens,
                             span.as_ref()
                         )
-                    }
+                    },
 
                     Some(ProcessedTokenState::MacroCallOrBuildStruct(state)) => {
                         let name = self.token.macro_call_name();
@@ -1068,7 +1059,7 @@ where
                                             error: e.into(),
                                             span: span.clone()
                                         })
-                                    }
+                                    },
                                     None => Err(e)
                                 }
                             })?;
@@ -1088,7 +1079,7 @@ where
                         env.symbols_mut().pop_seed();
 
                         Ok(())
-                    }
+                    },
 
                     Some(ProcessedTokenState::Module(SimpleListingState {
                         processed_tokens,
@@ -1099,7 +1090,7 @@ where
                         env.leave_namespace()?;
 
                         Ok(())
-                    }
+                    },
 
                     Some(ProcessedTokenState::Repeat(SimpleListingState {
                         processed_tokens,
@@ -1112,7 +1103,7 @@ where
                             self.token.repeat_counter_start(),
                             self.token.possible_span()
                         )
-                    }
+                    },
 
                     Some(ProcessedTokenState::RepeatUntil(SimpleListingState {
                         processed_tokens,
@@ -1123,7 +1114,7 @@ where
                             processed_tokens,
                             self.token.possible_span()
                         )
-                    }
+                    },
 
                     Some(ProcessedTokenState::Rorg(SimpleListingState {
                         processed_tokens,
@@ -1162,7 +1153,7 @@ where
                         }
 
                         Ok(())
-                    }
+                    },
 
                     Some(ProcessedTokenState::Warning(box token)) => {
                         let warning = AssemblerError::RelocatedWarning {
@@ -1175,7 +1166,7 @@ where
 
                         env.add_warning(warning);
                         token.visited(env)
-                    }
+                    },
                     Some(ProcessedTokenState::While(SimpleListingState {
                         processed_tokens,
                         ..
@@ -1185,7 +1176,7 @@ where
                             processed_tokens,
                             self.token.possible_span()
                         )
-                    }
+                    },
 
                     // no state implies a standard visit
                     None => self.token.visited(env)
@@ -1193,8 +1184,7 @@ where
             }?;
 
             env.update_dollar();
-            if deferred
-            {
+            if deferred {
                 let outer_token = unsafe {
                     (self.token as *const T as *const LocatedToken)
                         .as_ref()

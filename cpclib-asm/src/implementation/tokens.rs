@@ -12,7 +12,7 @@ use crate::implementation::listing::ListingExt;
 use crate::{AssemblingOptions, EnvOptions};
 
 /// Needed methods for the Token defined in cpclib_tokens
-pub trait TokenExt: ListingElement +  Debug + Visited  {
+pub trait TokenExt: ListingElement + Debug + Visited {
     fn estimated_duration(&self) -> Result<usize, AssemblerError>;
     /// Unroll the tokens when it represents a loop
     fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>>;
@@ -150,7 +150,7 @@ impl TokenExt for Token {
                 match token {
                     Token::Defb(_) | Token::Defw(_) | Token::Defs(_) => {
                         return Err(format!("{} as not been disassembled", token))
-                    }
+                    },
                     _ => {}
                 }
             }
@@ -170,7 +170,7 @@ impl TokenExt for Token {
                         acc
                     })
                     .and_then(|b| wrap(&b))
-            }
+            },
 
             Token::Defb(e) | Token::Defw(e) | Token::Str(e) => {
                 use crate::assembler::visit_db_or_dw_or_str;
@@ -179,7 +179,7 @@ impl TokenExt for Token {
                 visit_db_or_dw_or_str(self.into(), e, &mut env)
                     .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
                 wrap(&env.produced_bytes())
-            }
+            },
 
             _ => {
                 let mut lst = Listing::new();
@@ -188,8 +188,6 @@ impl TokenExt for Token {
             }
         }
     }
-
-
 
     /// Returns an estimation of the duration.
     /// This estimation may be wrong for instruction having several states.
@@ -200,7 +198,7 @@ impl TokenExt for Token {
             | Token::Breakpoint(_)
             | Token::Comment(_)
             | Token::Label(_)
-            | Token::Equ{..}
+            | Token::Equ { .. }
             | Token::Protect(..) => 0,
 
             // Here, there is a strong limitation => it will works only if no symbols are used
@@ -208,7 +206,7 @@ impl TokenExt for Token {
                 self.disassemble_data()
                     .map_err(|e| AssemblerError::DisassemblerError { msg: e })
                     .and_then(|lst| lst.estimated_duration())?
-            }
+            },
 
             Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref _arg3) => {
                 match mnemonic {
@@ -220,12 +218,12 @@ impl TokenExt for Token {
                                     Some(DataAccess::IndexRegister16WithIndex(..)) => 5,
                                     _ => 2
                                 }
-                            }
+                            },
                             Some(DataAccess::Register16(_)) => 4,
                             Some(DataAccess::IndexRegister16(_)) => 5,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     &Mnemonic::And | &Mnemonic::Or | &Mnemonic::Xor => {
                         match arg1 {
@@ -236,14 +234,14 @@ impl TokenExt for Token {
                             Some(DataAccess::IndexRegister16WithIndex(..)) => 5,
                             _ => unreachable!()
                         }
-                    }
+                    },
 
                     Mnemonic::Call => {
                         match arg1 {
                             Some(_) => 3, // unstable (5 if jump)
                             None => 5
                         }
-                    }
+                    },
 
                     // XXX Not stable timing
                     &Mnemonic::Djnz => 3, // or 4
@@ -256,7 +254,7 @@ impl TokenExt for Token {
                             Some(DataAccess::Register16(_)) => 2,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     &Mnemonic::Jp => {
                         match arg1 {
@@ -272,7 +270,7 @@ impl TokenExt for Token {
                                         )
                                     }
                                 }
-                            }
+                            },
 
                             Some(DataAccess::FlagTest(_)) => {
                                 match arg2 {
@@ -284,11 +282,11 @@ impl TokenExt for Token {
                                         )
                                     }
                                 }
-                            }
+                            },
 
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     // Always give the fastest
                     &Mnemonic::Jr => {
@@ -303,7 +301,7 @@ impl TokenExt for Token {
                                         )
                                     }
                                 }
-                            }
+                            },
 
                             Some(DataAccess::FlagTest(_)) => {
                                 match arg2 {
@@ -315,11 +313,11 @@ impl TokenExt for Token {
                                         )
                                     }
                                 }
-                            }
+                            },
 
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     &Mnemonic::Ld => {
                         match arg1 {
@@ -335,7 +333,7 @@ impl TokenExt for Token {
                                         )
                                     }
                                 }
-                            }
+                            },
 
                             // Dest in 8bits reg
                             Some(DataAccess::Register8(ref _dst)) => {
@@ -352,7 +350,7 @@ impl TokenExt for Token {
                                         )
                                     }
                                 }
-                            }
+                            },
 
                             // Dest in 16bits reg
                             Some(DataAccess::Register16(ref dst)) => {
@@ -367,7 +365,7 @@ impl TokenExt for Token {
                                         )
                                     }
                                 }
-                            }
+                            },
 
                             Some(DataAccess::IndexRegister16(_)) => {
                                 match arg2 {
@@ -379,7 +377,7 @@ impl TokenExt for Token {
                                         )
                                     }
                                 }
-                            }
+                            },
 
                             Some(DataAccess::Memory(_)) => {
                                 match arg2 {
@@ -394,11 +392,11 @@ impl TokenExt for Token {
                                         )
                                     }
                                 }
-                            }
+                            },
 
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     &Mnemonic::Ldi | &Mnemonic::Ldd => 5,
 
@@ -411,7 +409,7 @@ impl TokenExt for Token {
                             Some(DataAccess::Expression(_)) => 3,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     Mnemonic::Outi | Mnemonic::Outd => 5,
 
@@ -421,7 +419,7 @@ impl TokenExt for Token {
                             Some(DataAccess::IndexRegister16(_)) => 4,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     &Mnemonic::Push => {
                         match arg1 {
@@ -429,7 +427,7 @@ impl TokenExt for Token {
                             Some(DataAccess::IndexRegister16(_)) => 5,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     &Mnemonic::Res | &Mnemonic::Set => {
                         match arg2 {
@@ -438,14 +436,14 @@ impl TokenExt for Token {
                             Some(DataAccess::IndexRegister16WithIndex(..)) => 7,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     &Mnemonic::Ret => {
                         match arg1 {
                             None => 3,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     &Mnemonic::Sub => {
                         match arg1 {
@@ -456,7 +454,7 @@ impl TokenExt for Token {
                             Some(DataAccess::IndexRegister16WithIndex(..)) => 5,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
-                    }
+                    },
 
                     _ => {
                         panic!(
@@ -465,14 +463,14 @@ impl TokenExt for Token {
                         )
                     }
                 }
-            }
+            },
             _ => {
                 return Err(AssemblerError::BugInAssembler {
                     file: file!(),
                     line: line!(),
                     msg: format!("Duration computation for {:?} not yet coded", self)
                 })
-            }
+            },
         };
         Ok(duration)
     }

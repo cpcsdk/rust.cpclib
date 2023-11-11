@@ -1,12 +1,11 @@
 use std::convert::TryFrom;
 
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
-use cpclib_disc::edsk::{ExtendedDsk, Head};
-use cpclib_tokens::SaveType;
 use cpclib_disc::disc::Disc;
-
-#[cfg(all(not(target_os="windows"), not(target_arch = "wasm32")))]
+use cpclib_disc::edsk::{ExtendedDsk, Head};
+#[cfg(feature = "hfe")]
 use cpclib_disc::hfe::Hfe;
+use cpclib_tokens::SaveType;
 
 use super::report::SavedFile;
 use super::Env;
@@ -72,8 +71,7 @@ impl SaveCommand {
             }
         };
 
-
-  //      eprintln!("Save from 0x{:X} for a size 0x{:X}", &from, &size);
+        //      eprintln!("Save from 0x{:X} for a size 0x{:X}", &from, &size);
 
         let data = env.memory(from as _, size as _);
 
@@ -104,10 +102,10 @@ impl SaveCommand {
                 match r#type {
                     SaveType::AmsdosBin | SaveType::AmsdosBas => {
                         either::Left(amsdos_file.full_content().copied().collect::<Vec<u8>>())
-                    }
+                    },
                     SaveType::Disc(_) | SaveType::Tape => either::Right(amsdos_file)
                 }
-            }
+            },
             None => either::Left(data)
         };
 
@@ -115,35 +113,46 @@ impl SaveCommand {
         match object {
             either::Right(amsdos_file) => {
                 if let Some(disc_filename) = &self.disc_filename {
-                     
-                    #[cfg(all(not(target_os="windows"), not(target_arch = "wasm32")))]
-                    let mut disc : Hfe = if std::path::Path::new(disc_filename.as_str()).exists() {
-                        Hfe::open(disc_filename)
-                        .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while loading {e}") })?
-                    } else {
+                    #[cfg(feature = "hfe")]
+                    let mut disc: Hfe = if std::path::Path::new(disc_filename.as_str()).exists() {
+                        Hfe::open(disc_filename).map_err(|e| {
+                            AssemblerError::AssemblingError {
+                                msg: format!("Error while loading {e}")
+                            }
+                        })?
+                    }
+                    else {
                         Hfe::default()
                     };
-                    #[cfg(any(target_os="windows",target_arch = "wasm32"))]
-                    let mut disc : ExtendedDsk = if std::path::Path::new(disc_filename.as_str()).exists() {
-                        ExtendedDsk::open(disc_filename)
-                        .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while loading {e}") })
-                    ?
-                    } else {
-                        ExtendedDsk::default()
-                    };
+                    #[cfg(not(feature = "hfe"))]
+                    let mut disc: ExtendedDsk =
+                        if std::path::Path::new(disc_filename.as_str()).exists() {
+                            ExtendedDsk::open(disc_filename).map_err(|e| {
+                                AssemblerError::AssemblingError {
+                                    msg: format!("Error while loading {e}")
+                                }
+                            })?
+                        }
+                        else {
+                            ExtendedDsk::default()
+                        };
 
                     let head = Head::A;
                     let system = false;
                     let read_only = false;
                     disc.add_amsdos_file(&amsdos_file, head, read_only, system)?;
-                    disc.save(disc_filename).map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while saving {e}") })?;
+                    disc.save(disc_filename).map_err(|e| {
+                        AssemblerError::AssemblingError {
+                            msg: format!("Error while saving {e}")
+                        }
+                    })?;
                 }
                 else {
                     return Err(AssemblerError::InvalidArgument {
                         msg: "DSK parameter not provided".to_owned()
                     });
                 }
-            }
+            },
             either::Left(data) => {
                 std::fs::write(&self.filename, &data).map_err(|e| {
                     AssemblerError::AssemblingError {

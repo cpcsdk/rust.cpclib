@@ -41,7 +41,7 @@ pub fn list_set(
             let mut s = s.to_string();
             s.replace_range(index..index + 1, &c);
             Ok(ExprResult::String(fix_string(s)))
-        }
+        },
         ExprResult::List(_) => {
             if index >= list.list_len() {
                 return Err(AssemblerError::ExpressionError(
@@ -50,7 +50,7 @@ pub fn list_set(
             }
             list.list_set(index, value);
             Ok(list)
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -58,7 +58,7 @@ pub fn list_set(
                     msg: format!("{} is not a list", list)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -72,7 +72,7 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, crate::As
                 ));
             }
             Ok(ExprResult::Value(s.chars().nth(index).unwrap() as _))
-        }
+        },
         ExprResult::List(_) => {
             if index >= list.list_len() {
                 return Err(AssemblerError::ExpressionError(
@@ -80,7 +80,7 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, crate::As
                 ));
             }
             Ok(list.list_get(index).clone())
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -88,7 +88,7 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, crate::As
                     msg: format!("{} is not a list", list)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -111,7 +111,7 @@ pub fn list_sublist(
                 ));
             }
             Ok(ExprResult::String(s.substring(start, end).into()))
-        }
+        },
         ExprResult::List(l) => {
             if start >= l.len() {
                 return Err(AssemblerError::ExpressionError(
@@ -124,7 +124,7 @@ pub fn list_sublist(
                 ));
             }
             Ok(ExprResult::List(l[start..end].to_vec()))
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -132,7 +132,7 @@ pub fn list_sublist(
                     msg: format!("{} is not a list", list)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -146,7 +146,7 @@ pub fn list_len(list: &ExprResult) -> Result<ExprResult, crate::AssemblerError> 
                     msg: format!("{} is not a list", list)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -155,14 +155,14 @@ pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, crate
         ExprResult::List(mut l) => {
             l.push(elem);
             Ok(ExprResult::List(l))
-        }
+        },
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a list", list)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -171,14 +171,14 @@ pub fn list_sort(list: ExprResult) -> Result<ExprResult, crate::AssemblerError> 
         ExprResult::List(mut l) => {
             l.sort();
             Ok(ExprResult::List(l))
-        }
+        },
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a list", list)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -194,14 +194,14 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
 
             let l = argsort(l);
             Ok(ExprResult::List(l.into()))
-        }
+        },
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
                     msg: format!("{} is not a list", list)
                 })
             )))
-        }
+        },
     }
 }
 
@@ -223,7 +223,7 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
                 })
                 .collect::<Result<String, AssemblerError>>()
                 .map(|s| s.into())
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -231,7 +231,7 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
                     msg: format!("string_from_list must take a list as an argument")
                 })
             )))
-        }
+        },
     }
 }
 
@@ -240,7 +240,7 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
         (ExprResult::String(s1), ExprResult::String(s2)) => {
             let s1 = s1.to_string() + fix_string(s2).as_str();
             Ok(ExprResult::String(s1.into()))
-        }
+        },
         (ExprResult::String(s1), ExprResult::List(l)) => {
             let mut s1 = s1.to_string() + "[";
 
@@ -254,27 +254,27 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
 
             s1 += "]";
             Ok(ExprResult::String(s1.into()))
-        }
+        },
 
         (ExprResult::String(s1), ExprResult::Float(s2)) => {
             let mut s1 = s1.to_string();
             s1 += &s2.into_inner().to_string();
             Ok(ExprResult::String(s1.into()))
-        }
+        },
 
         (ExprResult::String(s1), ExprResult::Value(s2)) => {
             let mut s1 = s1.to_string();
 
             s1 += &s2.to_string();
             Ok(ExprResult::String(s1.into()))
-        }
+        },
 
         (ExprResult::String(s1), ExprResult::Bool(s2)) => {
             let mut s1 = s1.to_string();
 
             s1 += &s2.to_string();
             Ok(ExprResult::String(s1.into()))
-        }
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -282,6 +282,6 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
                     msg: format!("string_push called with wrong types")
                 })
             )))
-        }
+        },
     }
 }

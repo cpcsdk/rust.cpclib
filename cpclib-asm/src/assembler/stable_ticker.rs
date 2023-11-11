@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use crate::error::AssemblerError;
 
 /// Manage the stack of stable counters.
@@ -12,14 +10,14 @@ pub struct StableTickerCounters {
 #[allow(missing_docs)]
 impl StableTickerCounters {
     /// Check if a counter with the same name already exists
-    pub fn has_counter<S: Borrow<str>>(&self, name: &S) -> bool {
-        let name = name.borrow();
+    pub fn has_counter<S: AsRef<str>>(&self, name: &S) -> bool {
+        let name = name.as_ref();
         self.counters.iter().any(|(s, _)| s == name)
     }
 
     /// Add a new counter if no counter has the same name
-    pub fn add_counter<S: Borrow<str>>(&mut self, name: &S) -> Result<(), AssemblerError> {
-        let name: String = name.borrow().to_owned();
+    pub fn add_counter<S: AsRef<str>>(&mut self, name: &S) -> Result<(), AssemblerError> {
+        let name: String = name.as_ref().to_owned();
         if self.has_counter(&name) {
             return Err(AssemblerError::CounterAlreadyExists { symbol: name });
         }

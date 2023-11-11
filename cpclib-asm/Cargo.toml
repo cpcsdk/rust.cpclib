@@ -35,6 +35,8 @@ getset.workspace = true
 globset.workspace = true
 hashbag.workspace = true
 indicatif = {workspace = true, optional=true}
+line-span = "0.1"
+line-col = "0.2.1"
 lazy_static.workspace = true
 libc.workspace = true
 matches.workspace = true
@@ -49,7 +51,6 @@ tempfile.workspace = true
 velcro.workspace = true
 
 rayon-cond = {version="0.3.0", optional= true}
-
 chardetng = {workspace = true, optional = true}
 
 

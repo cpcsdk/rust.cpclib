@@ -158,7 +158,7 @@ pub struct Struct {
 }
 
 impl Struct {
-    pub fn new<T: ListingElement + ToSimpleToken, S: Borrow<str>>(
+    pub fn new<T: ListingElement + ToSimpleToken, S: AsRef<str>>(
         name: impl AsRef<str>,
         content: &[(S, T)],
         source: Option<Source>
@@ -167,7 +167,7 @@ impl Struct {
             name: name.as_ref().into(),
             content: content
                 .iter()
-                .map(|(s, t)| (SmolStr::from(s.borrow()), t.as_simple_token().into_owned()))
+                .map(|(s, t)| (SmolStr::from(s.as_ref()), t.as_simple_token().into_owned()))
                 .collect_vec(),
             source
         }
@@ -422,6 +422,9 @@ impl Display for Symbol {
         write!(f, "{}", &self.0)
     }
 }
+
+
+
 impl From<&str> for Symbol {
     fn from(s: &str) -> Symbol {
         s.to_owned().into()
@@ -491,29 +494,49 @@ pub trait SymbolsTableTrait {
     fn expression_symbol(&self) -> Vec<(&Symbol, &Value)>;
 
     /// Return true if the symbol has already been used in an expression
-    fn is_used<S: Into<Symbol>>(&self, symbol: S) -> bool;
+    fn is_used<S>(&self, symbol: S)  -> bool
+    where Symbol: From<S>,
+    S: AsRef<str>;
     /// Add a symbol to the list of used symbols
-    fn use_symbol<S: Into<Symbol>>(&mut self, symbol: S);
+    fn use_symbol<S>(&mut self, symbol: S)  
+    where Symbol: From<S>,
+    S: AsRef<str>;
 
     /// Return the integer value corredponding to this symbol (if any)
-    fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError>;
+    fn int_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>;
 
-    fn value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Value>, SymbolError>;
-    fn counter_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError>;
-    fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>;
-    fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError>;
-    fn address_value<S: Into<Symbol>>(
+    fn value<S>(&self, symbol: S) -> Result<Option<&Value>, SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>;
+    fn counter_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>;
+    fn macro_value<S>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>;
+    fn struct_value<S>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>;
+    fn address_value<S>(
         &self,
         symbol: S
-    ) -> Result<Option<&PhysicalAddress>, SymbolError>;
+    ) -> Result<Option<&PhysicalAddress>, SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>;
 
-    fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>;
+    fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>;
 
-    fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
+    fn assign_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<Option<Value>, SymbolError>;
+    ) -> Result<Option<Value>, SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>;
 
     fn enter_namespace(&mut self, namespace: &str);
     fn leave_namespace(&mut self) -> Result<Symbol, SymbolError>;
@@ -644,17 +667,19 @@ impl SymbolsTable {
     }
 
     /// Setup the current label for local to global labels conversions
-    pub fn set_current_global_label<S: Into<Symbol>>(
+    pub fn set_current_global_label<S>(
         &mut self,
         symbol: S
-    ) -> Result<(), SymbolError> {
-        let label = symbol.into();
+    ) -> Result<(), SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        let label  = Symbol::from(symbol);
 
         if !label.value().starts_with('.') && !label.value().starts_with('@') {
             if label.value().contains('.') {
                 return Err(SymbolError::WrongSymbol(label));
             }
-            self.current_global_label = self.extend_local_and_patterns_for_symbol(label)?;
+            self.current_global_label = self.extend_local_and_patterns_for_symbol::<Symbol>(label)?;
         }
 
         Ok(())
@@ -666,11 +691,13 @@ impl SymbolsTable {
 
     /// Some symbols are local and need to be converted to their global value.
     /// Some have expressions that need to be expended
-    pub fn extend_local_and_patterns_for_symbol<S: Into<Symbol>>(
+    pub fn extend_local_and_patterns_for_symbol<S> (
         &self,
         symbol: S
-    ) -> Result<Symbol, SymbolError> {
-        let symbol = symbol.into();
+    ) -> Result<Symbol, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        let symbol:Symbol = symbol.into();
         let mut symbol = symbol.value().to_owned();
 
         // handle the labels build with patterns
@@ -689,7 +716,7 @@ impl SymbolsTable {
         for model in replace.iter() {
             let local_expr = &model[1..model.len() - 1]; // remove {}
 
-            let local_value = match self.value(local_expr)? {
+            let local_value = match self.value::<&str>(local_expr)? {
                 Some(Value::String(s)) => s.to_string(),
                 Some(Value::Expr(e)) => e.to_string(),
                 Some(Value::Counter(e)) => e.to_string(),
@@ -701,7 +728,7 @@ impl SymbolsTable {
                     let mut context = HashMapContext::new();
                     for variable in tree.iter_variable_identifiers() {
                         let variable_value = dbg!(self
-                            .value(variable)?
+                            .value::<&str>(variable)?
                             .ok_or_else(|| { SymbolError::WrongSymbol(variable.into()) }))?;
                         context
                             .set_value(variable.to_owned(), variable_value.clone().into())
@@ -783,7 +810,7 @@ impl SymbolsTable {
     }
 
     /// Split the namespaces of the symbol
-    fn split_namespaces(symbol: &Symbol) -> Vec<Symbol> {
+    fn split_namespaces(symbol: Symbol) -> Vec<Symbol> {
         symbol
             .value()
             .split(':')
@@ -806,7 +833,9 @@ impl SymbolsTableTrait for SymbolsTable {
             .collect_vec()
     }
 
-    fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
+    fn int_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str>{
         Ok(self.value(symbol)?.and_then(|v| v.integer()).or({
             if self.dummy {
                 Some(1i32)
@@ -817,11 +846,13 @@ impl SymbolsTableTrait for SymbolsTable {
         }))
     }
 
-    fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
+    fn assign_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<Option<Value>, SymbolError> {
+    ) -> Result<Option<Value>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let symbol = self.extend_readable_symbol(symbol)?;
         let value = value.into();
 
@@ -847,12 +878,16 @@ impl SymbolsTableTrait for SymbolsTable {
     }
 
     /// Returns the Value at the given key
-    fn value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Value>, SymbolError> {
+    fn value<S>(&self, symbol: S) -> Result<Option<&Value>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str>{
         let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self.map.get(&symbol))
     }
 
-    fn counter_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
+    fn counter_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         Ok(self
             .value(symbol.into())?
             .map(|v| v.counter())
@@ -867,33 +902,45 @@ impl SymbolsTableTrait for SymbolsTable {
             }))
     }
 
-    fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError> {
+    fn macro_value<S>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str>{
         Ok(self.value(symbol)?.map(|v| v.r#macro()).unwrap_or(None))
     }
 
-    fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError> {
+    fn struct_value<S>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         Ok(self.value(symbol)?.map(|v| v.r#struct()).unwrap_or(None))
     }
 
-    fn address_value<S: Into<Symbol>>(
+    fn address_value<S>(
         &self,
         symbol: S
-    ) -> Result<Option<&PhysicalAddress>, SymbolError> {
+    ) -> Result<Option<&PhysicalAddress>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         Ok(self.value(symbol)?.map(|v| v.address()).unwrap_or(None))
     }
 
     /// Remove the given symbol name from the table. (used by undef)
-    fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError> {
+    fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str>{
         let symbol = self.extend_readable_symbol(symbol)?;
         Ok(self.map.remove(&symbol))
     }
 
-    fn is_used<S: Into<Symbol>>(&self, symbol: S) -> bool {
+    fn is_used<S>(&self, symbol: S) -> bool  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let symbol = self.extend_readable_symbol(symbol).unwrap();
         self.used_symbols.contains(&symbol)
     }
 
-    fn use_symbol<S: Into<Symbol>>(&mut self, symbol: S) {
+    fn use_symbol<S>(&mut self, symbol: S)  
+    where Symbol: From<S>,
+    S: AsRef<str>{
         let symbol = self.extend_readable_symbol(symbol).unwrap();
         self.used_symbols.insert(symbol);
     }
@@ -946,13 +993,17 @@ impl SymbolsTable {
         }
     }
 
-    fn inject_current_namespace<S: Into<Symbol>>(&self, symbol: S) -> Symbol {
+    fn inject_current_namespace<S>(&self, symbol: S) -> Symbol  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let mut global = self.namespace_stack.clone();
         global.push(symbol.into());
         global.iter().join(".").into()
     }
 
-    fn extend_readable_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
+    fn extend_readable_symbol<S>(&self, symbol: S) -> Result<Symbol, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let candidates = self.get_potential_candidates(symbol);
 
@@ -967,7 +1018,9 @@ impl SymbolsTable {
         }
     }
 
-    fn extend_writable_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<Symbol, SymbolError> {
+    fn extend_writable_symbol<S>(&self, symbol: S) -> Result<Symbol, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let candidates = self.get_potential_candidates(symbol);
 
@@ -992,12 +1045,14 @@ impl SymbolsTable {
     }
 
     /// Set the given symbol to $ value
-    pub fn set_symbol_to_current_address<S: Into<Symbol>>(
+    pub fn set_symbol_to_current_address<S>(
         &mut self,
         symbol: S
-    ) -> Result<(), SymbolError> {
+    ) -> Result<(), SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
-        let symbol = self.extend_readable_symbol(symbol)?;
+        let symbol = self.extend_readable_symbol::<Symbol>(symbol)?;
         self.current_address().map(|val| {
             let value = Value::Expr(val.into());
             self.map.insert(symbol.clone(), value.clone());
@@ -1007,13 +1062,15 @@ impl SymbolsTable {
 
     /// Set the given Value to the given value
     /// Return the previous value if any
-    pub fn set_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
+    pub fn set_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<Option<Value>, SymbolError> {
+    ) -> Result<Option<Value>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
-        let symbol = self.inject_current_namespace(symbol);
+        let symbol = self.inject_current_namespace::<Symbol>(symbol);
 
         let value = value.into();
         self.current_pass_map.insert(symbol.clone(), value.clone());
@@ -1021,11 +1078,13 @@ impl SymbolsTable {
         Ok(self.map.insert(symbol, value))
     }
 
-    pub fn update_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
+    pub fn update_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<(), SymbolError> {
+    ) -> Result<(), SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let symbol = self.extend_readable_symbol(symbol)?;
         let symbols = self.get_potential_candidates(symbol);
         let symbol = symbols
@@ -1044,13 +1103,15 @@ impl SymbolsTable {
 
     /// Instead of returning the value, return the bank information
     /// logic stolen to rasm
-    pub fn prefixed_value<S: Into<Symbol>>(
+    pub fn prefixed_value<S>(
         &self,
         prefix: &LabelPrefix,
         key: S
-    ) -> Result<Option<u16>, SymbolError> {
-        let key = key.into();
-        let addr = self.address_value(key)?;
+    ) -> Result<Option<u16>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        let key = Symbol::from(key);
+        let addr = self.address_value::<Symbol>(key)?;
         Ok(addr.map(|v| {
             match prefix {
                 LabelPrefix::Bank => v.bank() as u16,
@@ -1081,17 +1142,21 @@ impl SymbolsTable {
     }
 
     /// Check if the symbol table contains the expected symbol, whatever is the pass
-    pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
+    pub fn contains_symbol<S>(&self, symbol: S) -> Result<bool, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbols = self.get_potential_candidates(symbol);
         Ok(symbols.iter().any(|symbol| self.map.contains_key(symbol)))
     }
 
     /// Check if the symbol table contains the expected symbol, added during the current pass
-    pub fn symbol_exist_in_current_pass<S: Into<Symbol>>(
+    pub fn symbol_exist_in_current_pass<S>(
         &self,
         symbol: S
-    ) -> Result<bool, SymbolError> {
+    ) -> Result<bool, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbols = self.get_potential_candidates(symbol);
         Ok(symbols
@@ -1100,13 +1165,15 @@ impl SymbolsTable {
     }
 
     /// Returns the closest Value
-    pub fn closest_symbol<S: Into<Symbol>>(
+    pub fn closest_symbol<S>(
         &self,
         symbol: S,
         r#for: SymbolFor
-    ) -> Result<Option<SmolStr>, SymbolError> {
+    ) -> Result<Option<SmolStr>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
-        let symbol = self.extend_readable_symbol(symbol)?;
+        let symbol = self.extend_readable_symbol::<Symbol>(symbol)?;
         #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
         let iter = self.map.par_iter();
         #[cfg(any(target_arch = "wasm32", not(feature="rayon")))]
@@ -1145,7 +1212,9 @@ impl SymbolsTable {
             .map(|(_distance, symbol2)| symbol2))
     }
 
-    pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> Result<&'static str, SymbolError> {
+    pub fn kind<S>(&self, symbol: S) -> Result<&'static str, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         Ok(match self.value(symbol)? {
             Some(Value::Expr(_)) => "number",
             Some(Value::Address(_)) => "address",
@@ -1189,14 +1258,18 @@ impl SymbolsTableCaseDependent {
             pub fn current_address(&self) -> Result<u16, SymbolError>;
             pub fn set_current_address(&mut self, addr: PhysicalAddress);
             pub fn set_current_output_address(&mut self, addr: PhysicalAddress);
-            pub fn closest_symbol<S: Into<Symbol>>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<SmolStr>, SymbolError>;
+            pub fn closest_symbol<S>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<SmolStr>, SymbolError>  
+            where Symbol: From<S>,
+            S: AsRef<str>;
             pub fn push_seed(&mut self, seed: usize);
             pub fn pop_seed(&mut self);
 
-    pub fn extend_local_and_patterns_for_symbol<S: Into<Symbol>>(
+    pub fn extend_local_and_patterns_for_symbol<S>(
         &self,
         symbol: S
-    ) -> Result<Symbol, SymbolError>;
+    ) -> Result<Symbol, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str>;
 
         }
     }
@@ -1222,12 +1295,15 @@ impl SymbolsTableCaseDependent {
     }
 
     /// Modify the Value value depending on the case confurigration (do nothing, or set uppercase)
-    pub fn normalize_symbol<S: Into<Symbol>>(&self, symbol: S) -> Symbol {
+    pub fn normalize_symbol<S>(&self, symbol: S) -> Symbol 
+    where Symbol: From<S>,
+    S: AsRef<str>
+    {
         if self.case_sensitive {
             symbol.into()
         }
         else {
-            symbol.into().to_uppercase()
+            symbol.as_ref().to_uppercase().into()
         }
     }
 
@@ -1236,9 +1312,12 @@ impl SymbolsTableCaseDependent {
     }
 
     // Setup the current label for local to global labels conversions
-    pub fn set_current_label<S: Into<Symbol>>(&mut self, symbol: S) -> Result<(), SymbolError> {
+    pub fn set_current_label<S>(&mut self, symbol: S) -> Result<(), SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>
+    {
         self.table
-            .set_current_global_label(self.normalize_symbol(symbol))
+            .set_current_global_label::<Symbol>(self.normalize_symbol(symbol))
     }
 
 
@@ -1248,113 +1327,151 @@ impl SymbolsTableCaseDependent {
     }
 
 
-    pub fn set_symbol_to_current_address<S: Into<Symbol>>(
+    pub fn set_symbol_to_current_address<S>(
         &mut self,
         symbol: S
-    ) -> Result<(), SymbolError> {
+    ) -> Result<(), SymbolError> 
+     
+    where Symbol: From<S>,
+    S: AsRef<str> {
         self.table
-            .set_symbol_to_current_address(self.normalize_symbol(symbol))
+            .set_symbol_to_current_address::<Symbol>(self.normalize_symbol(symbol))
     }
 
-    pub fn set_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
+    pub fn set_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<Option<Value>, SymbolError> {
+    ) -> Result<Option<Value>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         self.table
-            .set_symbol_to_value(self.normalize_symbol(symbol), value)
+            .set_symbol_to_value::<Symbol, _>(self.normalize_symbol(symbol), value)
     }
 
-    pub fn update_symbol_to_value<S: Into<Symbol>, E: Into<Value>>(
+    pub fn update_symbol_to_value<S, E: Into<Value>>(
         &mut self,
         symbol: S,
         value: E
-    ) -> Result<(), SymbolError> {
+    ) -> Result<(), SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>
+    {
         self.table
-            .update_symbol_to_value(self.normalize_symbol(symbol), value.into())
+            .update_symbol_to_value::<Symbol, _>(self.normalize_symbol(symbol), value.into())
     }
 
-    pub fn prefixed_value<S: Into<Symbol>>(
+    pub fn prefixed_value<S>(
         &self,
         prefix: &LabelPrefix,
         symbol: S
-    ) -> Result<Option<u16>, SymbolError> {
+    ) -> Result<Option<u16>, SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>
+    {
         self.table
-            .prefixed_value(prefix, self.normalize_symbol(symbol))
+            .prefixed_value::<Symbol>(prefix, self.normalize_symbol(symbol))
     }
 
-    pub fn contains_symbol<S: Into<Symbol>>(&self, symbol: S) -> Result<bool, SymbolError> {
-        self.table.contains_symbol(self.normalize_symbol(symbol))
+    pub fn contains_symbol<S>(&self, symbol: S) -> Result<bool, SymbolError> 
+    where Symbol: From<S>,
+    S: AsRef<str>
+    {
+        self.table.contains_symbol::<Symbol>(self.normalize_symbol(symbol))
     }
 
-    pub fn symbol_exist_in_current_pass<S: Into<Symbol>>(
+    pub fn symbol_exist_in_current_pass<S>(
         &self,
         symbol: S
-    ) -> Result<bool, SymbolError> {
+    ) -> Result<bool, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str>{
         self.table
-            .symbol_exist_in_current_pass(self.normalize_symbol(symbol))
+            .symbol_exist_in_current_pass::<Symbol>(self.normalize_symbol(symbol))
     }
 
     pub fn new_pass(&mut self) {
         self.table.new_pass();
     }
 
-    pub fn kind<S: Into<Symbol>>(&self, symbol: S) -> Result<&'static str, SymbolError> {
+    pub fn kind<S>(&self, symbol: S) -> Result<&'static str, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         self.table.kind(symbol)
     }
 }
 
 impl SymbolsTableTrait for SymbolsTableCaseDependent {
-    fn is_used<S: Into<Symbol>>(&self, symbol: S) -> bool {
-        self.table.is_used(self.normalize_symbol(symbol))
+    fn is_used<S>(&self, symbol: S) -> bool  
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        self.table.is_used::<Symbol>(self.normalize_symbol(symbol))
     }
 
-    fn use_symbol<S: Into<Symbol>>(&mut self, symbol: S) {
-        self.table.use_symbol(self.normalize_symbol(symbol))
+    fn use_symbol<S>(&mut self, symbol: S)  
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        self.table.use_symbol::<Symbol>(self.normalize_symbol(symbol))
     }
 
     fn expression_symbol(&self) -> Vec<(&Symbol, &Value)> {
         self.table.expression_symbol()
     }
 
-    fn int_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
-        self.table.int_value(self.normalize_symbol(symbol))
+    fn int_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str>{
+        self.table.int_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
-    fn counter_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<i32>, SymbolError> {
-        self.table.counter_value(self.normalize_symbol(symbol))
+    fn counter_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str>{
+        self.table.counter_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
-    fn macro_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError> {
-        self.table.macro_value(self.normalize_symbol(symbol))
+    fn macro_value<S>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        self.table.macro_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
-    fn struct_value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError> {
-        self.table.struct_value(self.normalize_symbol(symbol))
+    fn struct_value<S>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        self.table.struct_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
-    fn value<S: Into<Symbol>>(&self, symbol: S) -> Result<Option<&Value>, SymbolError> {
-        self.table.value(self.normalize_symbol(symbol))
+    fn value<S>(&self, symbol: S) -> Result<Option<&Value>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        self.table.value::<Symbol>(self.normalize_symbol(symbol))
     }
 
-    fn remove_symbol<S: Into<Symbol>>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError> {
-        self.table.remove_symbol(self.normalize_symbol(symbol))
+    fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        self.table.remove_symbol::<Symbol>(self.normalize_symbol(symbol))
     }
 
-    fn address_value<S: Into<Symbol>>(
+    fn address_value<S>(
         &self,
         symbol: S
-    ) -> Result<Option<&PhysicalAddress>, SymbolError> {
-        self.table.address_value(self.normalize_symbol(symbol))
+    ) -> Result<Option<&PhysicalAddress>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        self.table.address_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
-    fn assign_symbol_to_value<S: Into<Symbol>, V: Into<Value>>(
+    fn assign_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<Option<Value>, SymbolError> {
+    ) -> Result<Option<Value>, SymbolError>  
+    where Symbol: From<S>,
+    S: AsRef<str> {
         self.table
-            .assign_symbol_to_value(self.normalize_symbol(symbol), value)
+            .assign_symbol_to_value::<Symbol, _>(self.normalize_symbol(symbol), value)
     }
 
     fn enter_namespace(&mut self, namespace: &str) {
