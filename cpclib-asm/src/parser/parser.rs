@@ -1173,7 +1173,7 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z8
 pub fn parse_empty_line(input: &mut InnerZ80Span) -> PResult<Option<LocatedToken>, Z80ParserError> {
     // let _ =opt(line_ending).parse_next(input)?;
     let _before_comment = input.clone();
-    let comment = dbg!(delimited(space0, opt(parse_comment), space0).parse_next(input))?;
+    let comment = delimited(space0, opt(parse_comment), space0).parse_next(input)?;
     let _ = alt((line_ending, eof)).parse_next(input)?;
 
     // let res = if comment.is_some() {
@@ -1234,7 +1234,7 @@ pub fn parse_z80_line_complete(
     move |input: &mut InnerZ80Span| -> PResult<(), Z80ParserError> {
 
         // Early exit if line is empty or with comment
-        if let Some(empty) = dbg!(opt(parse_empty_line).parse_next(input))? {
+        if let Some(empty) = opt(parse_empty_line).parse_next(input)? {
             if let Some(comment) = empty {
                 r#in.push(comment);
             }
@@ -1285,7 +1285,6 @@ pub fn parse_z80_line_complete(
         let before_end = input.checkpoint();
         let stop = opt(parse_end_directive).parse_next(input)?;
         if stop.is_some() {
-            dbg!(&r#in);
             input.reset(before_end);
             return Ok(());
         }
@@ -1303,7 +1302,7 @@ pub fn parse_z80_line_complete(
         // r#in.push(comment.locate(before_comment, size));
         // }
 
-        dbg!(&r#in);
+       // dbg!(&r#in);
 
         let _ = cut_err(
             preceded(
@@ -2076,7 +2075,7 @@ pub fn parse_directive_new(
         let input_start = input.checkpoint();
 
         // Get the first word that will drive the rest of parsing
-        let word = dbg!(delimited(
+        let word = delimited(
             my_space0,
             terminated(
                 alphanumeric1,
@@ -2087,11 +2086,11 @@ pub fn parse_directive_new(
             ),
             my_space0
         )
-        .parse_next(input))?;
+        .parse_next(input)?;
 
         let within_struct = local_parsing_state == &ParsingState::StructLimited;
 
-        dbg!("Directive:", unsafe{std::str::from_utf8_unchecked(word)});
+     //   dbg!("Directive:", unsafe{std::str::from_utf8_unchecked(word)});
 
         let token: LocatedTokenInner = match word {
             choice_nocase!(b"ORG") => parse_org.parse_next(input)?,
@@ -2275,10 +2274,10 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         .parse_next(input)?;
 
         // get the conditionnal code
-        dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
+      //  dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
         let code = cut_err(inner_code.context("Condition: syntax error in conditionnal code"))
             .parse_next(input)?;
-        dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
+      //  dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
 
 
         if let Some(condition) = condition {
@@ -2300,7 +2299,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     }
 
     // Here we have read the latest block
-    dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
+   // dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
 
     let _ = (
         opt(alt((
@@ -2312,12 +2311,12 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         .context("Condition: issue in end condition")
         .parse_next(input)?;
 
-        dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())}); // endif must have been eaten
+        //dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())}); // endif must have been eaten
 
 
     let token = LocatedTokenInner::If(conditions, else_clause)
         .into_located_token_between(if_start, input.clone());
-    dbg!(Ok(token))
+    Ok(token)
 }
 
 /// Read the condition part in the parse_conditional macro
@@ -2477,7 +2476,7 @@ pub fn parse_ld_fake(mnemonic_name_parsed: bool) -> impl Fn(&mut InnerZ80Span) -
     #[inline]
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         if !mnemonic_name_parsed {
-            dbg!(terminated(parse_word("LD"), my_space1).parse_next(input))?;
+            terminated(parse_word("LD"), my_space1).parse_next(input)?;
         }
     
     let dst = alt((
@@ -2530,7 +2529,7 @@ pub fn parse_ld_normal(mnemonic_name_parsed: bool) -> impl Fn(&mut InnerZ80Span)
 
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         if !mnemonic_name_parsed {
-            dbg!(parse_word("LD").parse_next(input))?;
+            parse_word("LD").parse_next(input)?;
         }
     
     let _start = input.clone();
@@ -3087,7 +3086,7 @@ pub fn parse_print(directive_name_parsed: bool) -> impl Fn(&mut InnerZ80Span) ->
     #[inline]
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         if !directive_name_parsed {
-            dbg!(parse_word("PRINT").parse_next(input))?;
+            parse_word("PRINT").parse_next(input)?;
         }
         
         cut_err(parse_print_inner)
@@ -3100,7 +3099,7 @@ pub fn parse_fail(directive_name_parsed: bool) -> impl Fn(&mut InnerZ80Span) -> 
 
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         if !directive_name_parsed {
-            dbg!(parse_word("FAIL").parse_next(input))?;
+            parse_word("FAIL").parse_next(input)?;
         }
     
     opt(parse_print_inner)
@@ -4194,7 +4193,7 @@ fn parse_snaset(directive_name_parsed: bool) -> impl Fn(&mut InnerZ80Span) -> PR
 
 move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
     if !directive_name_parsed {
-        dbg!(parse_word("SNASET").parse_next(input))?;
+        parse_word("SNASET").parse_next(input)?;
     }
 
 

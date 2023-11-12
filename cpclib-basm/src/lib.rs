@@ -15,6 +15,7 @@ use cpclib_asm::progress::{normalize, Progress};
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
 use cpclib_common::itertools::Itertools;
+use cpclib_common::winnow::Parser;
 use cpclib_common::{clap, lazy_static};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
 #[cfg(feature = "xferlib")]
@@ -254,10 +255,9 @@ pub fn assemble<'arg>(
                 .build(value);
 
             let span = Z80Span::new_extra(value, &ctx);
-            let value = /*cpclib_common::*/parse_value(span)
+            let value = /*cpclib_common::*/parse_value.parse(span.into())
                     .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))
-                    ?
-                    .1;
+                    ?;
 
             assemble_options
                 .symbols_mut()
