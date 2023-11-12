@@ -3,7 +3,6 @@ use std::ops::Deref;
 use cpclib_asm::parser::ParserContext;
 use cpclib_asm::preamble::*;
 use cpclib_common::winnow;
-
 use winnow::Parser;
 
 fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {

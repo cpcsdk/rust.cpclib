@@ -8,9 +8,10 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::winnow::combinator::{cut_err, eof, repeat_till0};
-use cpclib_common::winnow::error::{ErrMode};
+use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Checkpoint, Offset, Stream, UpdateSlice};
-use cpclib_common::winnow::{PResult, Parser, trace::trace};
+use cpclib_common::winnow::trace::trace;
+use cpclib_common::winnow::{PResult, Parser};
 use cpclib_sna::{FlagValue, SnapshotFlag, SnapshotVersion};
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
@@ -2624,13 +2625,27 @@ impl LocatedListing {
 
                 let mut tokens = Vec::with_capacity(100);
                 // really make the parsing
-                let res: Result<_, cpclib_common::winnow::error::ParseError<cpclib_common::winnow::Stateful<cpclib_common::winnow::Located<&[u8]>, &ParserContext>, Z80ParserError>> = trace("DEBUG winnow",
-                    repeat_till0::<_, _, (), _, Z80ParserError, _, _>(parse_z80_line_complete(&mut tokens), eof)
-            ).parse(input_start.0);
+                let res: Result<
+                    _,
+                    cpclib_common::winnow::error::ParseError<
+                        cpclib_common::winnow::Stateful<
+                            cpclib_common::winnow::Located<&[u8]>,
+                            &ParserContext
+                        >,
+                        Z80ParserError
+                    >
+                > = trace(
+                    "DEBUG winnow",
+                    repeat_till0::<_, _, (), _, Z80ParserError, _, _>(
+                        parse_z80_line_complete(&mut tokens),
+                        eof
+                    )
+                )
+                .parse(input_start.0);
 
                 // analyse result and can generate error even if parsing was ok
                 // Ok only if everything is parsed
-                let res : Result<InnerLocatedListing, Z80ParserError>  = match res {
+                let res: Result<InnerLocatedListing, Z80ParserError> = match res {
                     Ok(_) => {
                         // no more things to assemble
                         Ok(InnerLocatedListing::from(tokens))
@@ -2645,11 +2660,7 @@ impl LocatedListing {
                 // Build the result
                 let res = match res {
                     Ok(listing) => ParseResult::SuccessComplete(listing),
-                    Err(e) => {
-                        ParseResult::FailureComplete(AssemblerError::SyntaxError {
-                            error: e
-                        })
-                    },
+                    Err(e) => ParseResult::FailureComplete(AssemblerError::SyntaxError { error: e })
                 };
 
                 return res;

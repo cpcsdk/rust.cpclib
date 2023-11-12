@@ -1,4 +1,3 @@
-
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
@@ -10,7 +9,7 @@ use line_col::LineColLookup;
 use line_span::LineSpanExt;
 
 use super::context::ParserContext;
-use super::{ParsingState};
+use super::ParsingState;
 
 // This type is only handled by the parser
 pub type InnerZ80Span = Stateful<
@@ -50,7 +49,6 @@ impl<'a> Into<&'a str> for &'a Z80Span {
         AsRef::as_ref(self)
     }
 }
-
 
 pub trait SourceString: Display {
     fn as_str(&self) -> &str;
