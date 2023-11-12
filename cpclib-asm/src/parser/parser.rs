@@ -5446,7 +5446,7 @@ mod test {
         );
 
         r#in.clear();
-        let res = parse_test(parse_z80_line_complete(&mut r#in), "\t\tld  bc.low, a\n\t");
+        let res: TestResult<()> = parse_test(repeat(2, parse_z80_line_complete(&mut r#in)), "\t\tld  bc.low, a\n\t");
         assert!(res.is_ok(), "{:?}", &res);
     }
 }
