@@ -3948,31 +3948,25 @@ pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80
             || c == b'&'
             || c == b'|'
     };
-    let address = alt((
-        delimited(
-            tag("("),
-            located_expr,
-            terminated(
-                preceded(space0, tag(")")),
-                not(
-                    // filter expressions ; they are followed by some operators
-                    preceded(space0, take_while(0.., filter))
-                )
-            )
-        ),
-        delimited(
-            tag("["),
-            located_expr,
-            terminated(
-                preceded(space0, tag("]")),
-                not(
-                    // filter expressions ; they are followed by some operators
-                    preceded(space0, take_while(0.., filter))
-                )
+
+
+    let first_char = alt(('(', '[')).parse_next(input)?;
+    let address = terminated(
+        located_expr,
+        (
+            my_space0,
+            if first_char == b'(' {
+                b')'
+            } else {
+                b']'
+            },
+            not(
+                // filter expressions ; they are followed by some operators
+                preceded(my_space0, one_of(filter))
             )
         )
-    ))
-    .parse_next(input)?;
+    ).parse_next(input)?;
+
     Ok(LocatedDataAccess::Memory(address))
 }
 
@@ -5284,6 +5278,12 @@ mod test {
         assert!(res.is_ok(), "{:?}", res);
     }
 
+    #[test]
+    fn test_parse_address() {
+        let res = parse_test(parse_address, "(here)");
+        assert!(res.is_ok(), "{:?}", res);
+
+    }
 
     #[test]
     fn test_parse_word() {
