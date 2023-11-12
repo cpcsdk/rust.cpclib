@@ -2163,7 +2163,7 @@ pub fn parse_directive_new(
             choice_nocase!(b"END") => Ok(LocatedTokenInner::End)?,
             choice_nocase!(b"EXPORT") => parse_export(ExportKind::Export).parse_next(input)?,
 
-            choice_nocase!(b"FAIL") => parse_fail.parse_next(input)?,
+            choice_nocase!(b"FAIL") => parse_fail(true).parse_next(input)?,
 
             choice_nocase!(b"LIMIT") => parse_limit.parse_next(input)?,
             choice_nocase!(b"LIST") => Ok(LocatedTokenInner::List)?,
@@ -2175,7 +2175,7 @@ pub fn parse_directive_new(
             choice_nocase!(b"NOP") => parse_nop.parse_next(input)?,
 
             choice_nocase!(b"PAUSE") => Ok(LocatedTokenInner::Pause)?,
-            choice_nocase!(b"PRINT") => parse_print.parse_next(input)?,
+            choice_nocase!(b"PRINT") => parse_print(true).parse_next(input)?,
             choice_nocase!(b"PROTECT") => parse_protect.parse_next(input)?,
 
             choice_nocase!(b"RANGE") => parse_range.parse_next(input)?,
@@ -3078,18 +3078,35 @@ pub fn parse_print_inner(input: &mut InnerZ80Span) -> PResult<Vec<FormattedExpr>
     )
     .parse_next(input)
 }
+
+
 /// ...
-pub fn parse_print(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    cut_err(parse_print_inner)
+#[inline]
+pub fn parse_print(directive_name_parsed: bool) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+
+    #[inline]
+    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+        if !directive_name_parsed {
+            dbg!(parse_word("PRINT").parse_next(input))?;
+        }
+        
+        cut_err(parse_print_inner)
         .map(|exps| LocatedTokenInner::Print(exps))
         .parse_next(input)
 }
+}
 
-pub fn parse_fail(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_fail(directive_name_parsed: bool) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+
+    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+        if !directive_name_parsed {
+            dbg!(parse_word("FAIL").parse_next(input))?;
+        }
+    
     opt(parse_print_inner)
         .map(|exps| LocatedTokenInner::Fail(exps))
         .parse_next(input)
-}
+}}
 
 /// Parse formatted expression for print like directives
 /// WARNING: only formated case is taken into account
@@ -5221,14 +5238,14 @@ mod test {
 
     #[test]
     fn test_parse_print() {
-        let res = parse_test(parse_print, "PRINT VAR");
+        let res = parse_test(parse_print(false), "PRINT VAR");
         let res = res.res.unwrap();
         assert_eq!(
             res,
             LocatedTokenInner::Print(vec![FormattedExpr::Raw(Expr::Label("VAR".into()))])
         );
 
-        let res = parse_test(parse_print, "PRINT VAR, VAR");
+        let res = parse_test(parse_print(false), "PRINT VAR, VAR");
         let res = res.res.unwrap();
         assert_eq!(
             res,
@@ -5238,7 +5255,7 @@ mod test {
             ])
         );
 
-        let res = parse_test(parse_print, "PRINT {hex}VAR");
+        let res = parse_test(parse_print(false), "PRINT {hex}VAR");
         let res = res.res.unwrap();
         assert_eq!(
             res,
@@ -5248,7 +5265,7 @@ mod test {
             )])
         );
 
-        let res = parse_test(parse_print, "PRINT \"hello\"");
+        let res = parse_test(parse_print(false), "PRINT \"hello\"");
         let res = res.res.unwrap();
         assert_eq!(
             res,
