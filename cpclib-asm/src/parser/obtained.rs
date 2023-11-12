@@ -10,6 +10,7 @@ use cpclib_common::smallvec::SmallVec;
 use cpclib_common::winnow::combinator::{cut_err, eof, repeat_till0};
 use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Checkpoint, Offset, Stream, UpdateSlice};
+use cpclib_common::winnow::token::take;
 use cpclib_common::winnow::trace::trace;
 use cpclib_common::winnow::{PResult, Parser};
 use cpclib_sna::{FlagValue, SnapshotFlag, SnapshotVersion};
@@ -2739,8 +2740,13 @@ impl LocatedListing {
                         let inner_length = inner_code_ptr.offset_from(&inner_start);
                         let inner_span: &'static [u8] = unsafe{std::mem::transmute(&input_code.as_bytes()[..inner_length])}; // remove the bytes eaten by the inner parser
 
-
                         let inner_span = input_code.clone().update_slice(inner_span);
+
+                        take::<_,_, Z80ParserError>(inner_length).parse_next(input_code).expect("BUG in parser"); // really consume from the input
+
+                        dbg!("Inner content", unsafe{std::str::from_utf8_unchecked(inner_span.as_bytes())});
+                        dbg!("Following code / must contains ends", unsafe{std::str::from_utf8_unchecked(input_code.as_bytes())});
+
                         ParseResult::SuccessInner {
                             inner_span: inner_span.into(),
                             listing: InnerLocatedListing::from(tokens)
