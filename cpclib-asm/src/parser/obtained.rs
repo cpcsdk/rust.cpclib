@@ -8,7 +8,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::winnow::combinator::{cut_err, eof, repeat_till0};
-use cpclib_common::winnow::error::{ErrMode, ParserError};
+use cpclib_common::winnow::error::{ErrMode};
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Checkpoint, Offset, Stream, UpdateSlice};
 use cpclib_common::winnow::{PResult, Parser, trace::trace};
 use cpclib_sna::{FlagValue, SnapshotFlag, SnapshotVersion};

@@ -4838,7 +4838,7 @@ mod test {
     use std::ops::Deref;
 
     use cpclib_common::winnow::error::ParseError;
-    use cpclib_sna::parse;
+    
 
     use super::*;
 
@@ -4861,7 +4861,7 @@ mod test {
     O: std::fmt::Debug,
     
      {
-        let (ctx, mut span) = ctx_and_span(code);
+        let (ctx, span) = ctx_and_span(code);
         let res = dbg!(parser.parse(span.0));
 
         TestResult { ctx, span, res}
@@ -4869,7 +4869,7 @@ mod test {
 
 
     fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
-        let mut ctx = Box::new(ParserContextBuilder::default().set_context_name("TEST").build(code));
+        let ctx = Box::new(ParserContextBuilder::default().set_context_name("TEST").build(code));
         let span = Z80Span::new_extra(code, ctx.deref());
         (ctx, span)
     }
@@ -5215,7 +5215,7 @@ mod test {
         let mut r#in = Vec::new();
         let res = parse_test(parse_z80_line_complete(&mut r#in)," ld a, hl.low");
         assert!(res.is_ok(), "{:?}", &res);
-        let res = res.res.unwrap();
+        let _res = res.res.unwrap();
 
         let res = parse_test(parse_ld_normal, "ld bc.low, a");
         assert!(res.is_ok(), "{:?}", &res);
