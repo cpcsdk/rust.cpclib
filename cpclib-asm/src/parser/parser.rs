@@ -5278,8 +5278,7 @@ mod test {
         let z80 = std::dbg!(
             "  repeat 5
                         nop
-                        endrepeat
-                        "
+                        endrepeat"
         );
         let res = parse_test(parse_repeat, z80);
         assert!(res.is_ok(), "{:?}", res);
