@@ -1179,8 +1179,8 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z8
 pub fn parse_empty_line(input: &mut InnerZ80Span) -> PResult<Option<LocatedToken>, Z80ParserError> {
     // let _ =opt(line_ending).parse_next(input)?;
     let _before_comment = input.clone();
-    let comment = delimited(space0, opt(parse_comment), space0).parse_next(input)?;
-    let _ = alt((line_ending, eof)).parse_next(input)?;
+    let comment = dbg!(delimited(space0, opt(parse_comment), space0).parse_next(input))?;
+    let _ = dbg!(alt((line_ending, eof)).parse_next(input))?;
 
     // let res = if comment.is_some() {
     // let size = before_comment.input_len() - input.input_len();
@@ -1238,15 +1238,23 @@ pub fn parse_z80_line_complete(
     r#in: &mut Vec<LocatedToken>
 ) -> impl FnMut(&mut InnerZ80Span) -> PResult<(), Z80ParserError> + '_ {
     move |input: &mut InnerZ80Span| -> PResult<(), Z80ParserError> {
-        // Early exit if line is empty
-        if let Some(Some(notempty)) = opt(parse_empty_line).parse_next(input)? {
-            r#in.push(notempty);
+
+        dbg!(input.eof_offset(), String::from_utf8_lossy(input.as_bytes()));
+
+        // Early exit if line is empty or with comment
+        if let Some(empty) = dbg!(opt(parse_empty_line).parse_next(input))? {
+            if let Some(comment) = empty {
+                r#in.push(comment);
+            }
             return Ok(());
         }
 
+        dbg!(input.eof_offset(), String::from_utf8_lossy(input.as_bytes()));
+
+
         // get the line components
         my_separated0_in(
-            (space0, tag(":"), space0),
+            (space0, ":", space0),
             // Take care of the order to not break parse
             alt((
                 // handle set/equ/ and so on
@@ -1279,9 +1287,15 @@ pub fn parse_z80_line_complete(
         )
         .parse_next(input)?;
 
+        dbg!(input.eof_offset(), String::from_utf8_lossy(input.as_bytes()));
+
+
         // we may have some space after the last component
         // also a : that is not cpatured when there is nothing after
         let _ = ((space0, opt(tag(":")), space0)).parse_next(input)?;
+
+        dbg!(input.eof_offset(), String::from_utf8_lossy(input.as_bytes()));
+
 
         // early stop in case of stop directive
         let stop = opt(parse_end_directive).parse_next(input)?;
@@ -1289,16 +1303,25 @@ pub fn parse_z80_line_complete(
             return Ok(());
         }
 
+        dbg!(input.eof_offset(), String::from_utf8_lossy(input.as_bytes()));
+
+
         // get the possible comment
         let _ = space0(input)?;
         let _before_comment = input.clone();
         let _comment = opt(parse_comment).parse_next(input)?;
         let _ = space0(input)?;
 
+        dbg!(input.eof_offset(), String::from_utf8_lossy(input.as_bytes()));
+
+
         // if let Some(comment) = comment {
         // let size = before_comment.input_len() - input.input_len();
         // r#in.push(comment.locate(before_comment, size));
         // }
+
+
+        dbg!(&r#in);
 
         let _ = cut_err(
             preceded(
@@ -1308,6 +1331,9 @@ pub fn parse_z80_line_complete(
             .context("Line ending expected")
         )
         .parse_next(input)?;
+
+        dbg!(input.eof_offset());
+
 
         Ok(())
     }
@@ -1374,9 +1400,9 @@ pub fn parse_z80_line_label_aware_directive(
     let r#let = opt(delimited(space0, parse_directive_word("LET"), space0)).parse_next(input)?;
 
     let _after_let = input.clone();
-    let label = preceded(space0, parse_label(true))
+    let label = dbg!(preceded(space0, parse_label(true))
         .context("Label issue")
-        .parse_next(input)?; // here there is true because of arkos tracker 2 player
+.parse_next(input))?; // here there is true because of arkos tracker 2 player
 
     let label_modifier = opt(preceded(
         space0,
@@ -2348,7 +2374,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
 }
 
 pub fn parse_bankset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+    dbg!("Banket befor expr");
     let count = located_expr(input)?;
+    dbg!(&count);
+    dbg!("Banket after expr");
 
     Ok(LocatedTokenInner::Bankset(count))
 }
@@ -4502,7 +4531,7 @@ pub fn positive_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
 }
 
 #[inline]
-pub fn parse_labelprefix(input: &mut InnerZ80Span) -> PResult<LabelPrefix> {
+pub fn parse_labelprefix(input: &mut InnerZ80Span) -> PResult<LabelPrefix, Z80ParserError> {
     alt((
         tag_no_case("{pageset}").value(LabelPrefix::Pageset),
         tag_no_case("{bank}").value(LabelPrefix::Bank),
@@ -4804,98 +4833,108 @@ pub fn comp(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
 }
 
 // Test are deactivated, API is not enough stabilized and tests are broken
-#[cfg(test_deactivated)]
+#[cfg(test)]
 mod test {
+    use std::ops::Deref;
+
+    use cpclib_common::winnow::error::ParseError;
+    use cpclib_sna::parse;
+
     use super::*;
 
-    lazy_static::lazy_static! {
-        static ref  CTX: ParserContext = ParserContextBuilder::default().build();
+    #[derive(Debug)]
+    struct TestResult<O: std::fmt::Debug> {
+        ctx: Box<ParserContext>,
+        span: Z80Span,
+        res: Result<O, ParseError<InnerZ80Span, Z80ParserError>>
     }
 
-    // TODO: remove all its use
-    fn ctx() -> &'static ParserContext {
-        &CTX
+    impl<O: std::fmt::Debug> Deref for TestResult<O> {
+        type Target = Result<O, ParseError<InnerZ80Span, Z80ParserError>>;
+        fn deref(&self) -> &Self::Target {
+            &self.res
+        }
     }
 
-    fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, InnerZ80Span) {
-        let mut ctx = Box::new(ParserContextBuilder::default().build());
-        ctx.source = Some(code);
-        ctx.context_name = Some("TEST".into());
-        let span = InnerZ80Span::new_extra(code, ctx.deref());
+    fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(mut parser: P, code: &'static str) -> TestResult<O>
+    where 
+    O: std::fmt::Debug,
+    
+     {
+        let (ctx, mut span) = ctx_and_span(code);
+        let res = dbg!(parser.parse(span.0));
+
+        TestResult { ctx, span, res}
+    }
+
+
+    fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
+        let mut ctx = Box::new(ParserContextBuilder::default().set_context_name("TEST").build(code));
+        let span = Z80Span::new_extra(code, ctx.deref());
         (ctx, span)
     }
 
     #[test]
     fn test_parse_end_directive() {
-        let res = dbg!(parse_end_directive(InnerZ80Span::new_extra("endif", ctx())));
+        let res = parse_test(parse_end_directive, "endif");
         assert!(res.is_ok());
     }
+
+
+
     #[test]
     fn parse_test_cond() {
-        let res = dbg!(inner_code(InnerZ80Span::new_extra(
-            " nop
-                endif",
-            ctx(),
-        )));
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap().1.len(), 1);
 
-        let res = inner_code(InnerZ80Span::new_extra(
+
+        let res = parse_test(inner_code, " nop
+        endif");
+        assert!(res.is_ok());
+        assert_eq!(res.res.unwrap().len(), 1);
+
+        let res = parse_test(inner_code, 
             " nop
                 else",
-            ctx()
-        ));
+        );
         assert!(res.is_ok());
-        assert_eq!(res.unwrap().1.len(), 1);
+        assert_eq!(res.res.unwrap().len(), 1);
 
-        let res = parse_conditional_condition(KindOfConditional::If)(InnerZ80Span::new_extra(
-            "THING",
-            ctx()
-        ));
+        let res = parse_test(parse_conditional_condition(KindOfConditional::If),
+            "THING"
+        );
         assert!(res.is_ok());
 
-        let res = std::dbg!(parse_conditional(InnerZ80Span::new_extra(
+        let res = parse_test(parse_conditional, 
             "if THING
                     nop
                     endif
                     ",
-            ctx()
-        ),));
+        );
         assert!(res.is_ok());
-        assert_eq!("", res.unwrap().0.trim());
 
-        let res = std::dbg!(parse_conditional(InnerZ80Span::new_extra(
+        let res = parse_test(parse_conditional, 
             "if THING
                     nop
                     endif ",
-            ctx()
-        ),));
+        );
         assert!(res.is_ok());
-        assert_eq!("", res.unwrap().0.trim());
 
-        let res = parse_conditional(InnerZ80Span::new_extra(
+        let res = parse_test(parse_conditional,
             "if THING
                     nop
                     else
                     nop
-                    endif",
-            ctx()
-        ));
+                    endif");
         assert!(res.is_ok());
-        assert_eq!(b"", res.unwrap().0.as_bytes());
 
-        let res = parse_conditional(InnerZ80Span::new_extra(
+        let res =parse_test(parse_conditional,
             "ifndef THING
                     nop
                     else
                     nop
-                    endif",
-            ctx()
-        ));
+                    endif");
         assert!(res.is_ok());
-        assert_eq!(b"", res.unwrap().0.as_bytes());
 
-        let res = std::dbg!(parse_conditional(InnerZ80Span::new_extra(
+        let res = parse_test(parse_conditional,
             "if demo_system_music_activated != 0
                     ; XXX Ensure memory is properly set
                     ld bc, 0x7fc2 : out (c), c
@@ -4903,67 +4942,60 @@ mod test {
                     else
                     WAIT_CYCLES 64*16
                     ret
-                    endif",
-            ctx()
-        )));
+                    endif");
         assert!(res.is_ok());
-        assert_eq!(b"", res.unwrap().0.as_bytes());
 
-        let res = std::dbg!(parse_conditional(InnerZ80Span::new_extra(
+        let res = parse_test(parse_conditional,
             "ifndef __DEFINED_DEBUG__
                     __DEFINED_DEBUG__ equ 1
-                    endif",
-            ctx()
-        )));
+                    endif");
         assert!(res.is_ok());
-        assert_eq!(b"", res.unwrap().0.as_bytes());
 
-        let res = std::dbg!(parse_z80_line(InnerZ80Span::new_extra(
+        let mut r#in = Default::default();
+        let res = parse_test(parse_z80_line_complete(&mut r#in),
             " ifndef __DEFINED_DEBUG__
                     __DEFINED_DEBUG__ equ 1
-                    endif",
-            ctx()
-        )));
+                    endif");
         assert!(res.is_ok(), "{:?}", res);
-        assert_eq!(b"", res.unwrap().0.as_bytes());
     }
 
     #[test]
     fn parse_indexregister8() {
         assert_eq!(
-            parse_register_ixl(InnerZ80Span::new_extra("ixl", ctx()))
+            parse_test(parse_register_ixl, "ixl")
+                .res
                 .unwrap()
-                .1,
+                .to_data_access(),
             DataAccess::IndexRegister8(IndexRegister8::Ixl)
         );
 
         assert_eq!(
-            parse_register_ixl(InnerZ80Span::new_extra("lx", ctx()))
+            parse_test(parse_register_ixl, "lx")
+                .res
                 .unwrap()
-                .1,
+                .to_data_access(),
             DataAccess::IndexRegister8(IndexRegister8::Ixl)
         );
 
-        assert!(parse_register_iyl(InnerZ80Span::new_extra("ixl", ctx())).is_err());
+        assert!(parse_test(parse_register_iyl, "ixl").is_err());
     }
 
     #[test]
     fn test_parse_prefix_label() {
-        let (span, res) = parse_labelprefix(InnerZ80Span::new_extra("{bank}", ctx())).unwrap();
-        assert!(span.is_empty());
+        let res = parse_test(parse_labelprefix, "{bank}");
+        let res = res.res.unwrap();
         assert_eq!(res, LabelPrefix::Bank);
 
-        let (span, res) = dbg!(expr(InnerZ80Span::new_extra("{bank}label", ctx())).unwrap());
-        assert!(span.is_empty());
+        let res = parse_test(expr, "{bank}label"); // TODO code that
+        let res = res.res.unwrap();
         assert_eq!(res, Expr::PrefixedLabel(LabelPrefix::Bank, "label".into()));
     }
 
     #[test]
     fn test_parse_expr_format() {
-        let res = formatted_expr(InnerZ80Span::new_extra("{hex} VAL", ctx()));
+        let res = parse_test(formatted_expr, "{hex} VAL");
         assert!(res.is_ok());
-        let (span, res) = res.unwrap();
-        assert!(span.is_empty());
+        let res = res.res.unwrap();
 
         assert_eq!(
             res,
@@ -4975,13 +5007,14 @@ mod test {
     fn test_undocumented_code() {
         let listing = parse_z80_str(" RLC (IY+2), B").unwrap();
         let token = &listing[0];
-        let token = token.token().unwrap();
+        let token = token.as_simple_token().into_owned();
         assert_eq!(
-            *token,
+            token,
             Token::OpCode(
                 Mnemonic::Rlc,
                 Some(DataAccess::IndexRegister16WithIndex(
                     IndexRegister16::Iy,
+                    BinaryOperation::Add,
                     2.into()
                 )),
                 Some(DataAccess::Register8(Register8::B)),
@@ -4989,16 +5022,17 @@ mod test {
             )
         );
 
-        let listing = parse_z80_str(" RES 5, (IY+2), B").unwrap();
+        let listing = parse_z80_str(" RES 5, (IY-2), B").unwrap();
         let token = &listing[0];
-        let token = token.token().unwrap();
+        let token = token.as_simple_token().into_owned();
         assert_eq!(
-            *token,
+            token,
             Token::OpCode(
                 Mnemonic::Res,
                 Some(DataAccess::Expression(5.into())),
                 Some(DataAccess::IndexRegister16WithIndex(
                     IndexRegister16::Iy,
+                    BinaryOperation::Sub,
                     2.into()
                 )),
                 Some(Register8::B)
@@ -5008,39 +5042,39 @@ mod test {
 
     #[test]
     fn test_parse_print() {
-        let (span, res) = parse_print(InnerZ80Span::new_extra("PRINT VAR", ctx())).unwrap();
-        assert!(span.is_empty());
+        let res = parse_test(parse_print, "PRINT VAR");
+        let res = res.res.unwrap();
         assert_eq!(
             res,
-            Token::Print(vec![FormattedExpr::Raw(Expr::Label("VAR".into()))])
+            LocatedTokenInner::Print(vec![FormattedExpr::Raw(Expr::Label("VAR".into()))])
         );
 
-        let (span, res) = parse_print(InnerZ80Span::new_extra("PRINT VAR, VAR", ctx())).unwrap();
-        assert!(span.is_empty());
+
+        let res = parse_test(parse_print, "PRINT VAR, VAR");
+        let res = res.res.unwrap();
         assert_eq!(
             res,
-            Token::Print(vec![
+            LocatedTokenInner::Print(vec![
                 FormattedExpr::Raw(Expr::Label("VAR".into())),
                 FormattedExpr::Raw(Expr::Label("VAR".into()))
             ])
         );
 
-        let (span, res) = parse_print(InnerZ80Span::new_extra("PRINT {hex}VAR", ctx())).unwrap();
-        assert!(span.is_empty());
+        let res = parse_test(parse_print, "PRINT {hex}VAR");
+        let res = res.res.unwrap();
         assert_eq!(
             res,
-            Token::Print(vec![FormattedExpr::Formatted(
+            LocatedTokenInner::Print(vec![FormattedExpr::Formatted(
                 ExprFormat::Hex(None),
                 Expr::Label("VAR".into())
             )])
         );
 
-        let (span, res) = parse_print(InnerZ80Span::new_extra("PRINT \"hello\"", ctx())).unwrap();
-        assert!(span.is_empty());
-
+        let res = parse_test(parse_print, "PRINT \"hello\"");
+        let res = res.res.unwrap();
         assert_eq!(
             res,
-            Token::Print(vec![FormattedExpr::Raw(Expr::String("hello".into()))])
+            LocatedTokenInner::Print(vec![FormattedExpr::Raw(Expr::String("hello".into()))])
         );
     }
 
@@ -5052,18 +5086,14 @@ mod test {
                         endrepeat
                         "
         );
-        let res = parse_repeat(InnerZ80Span::new_extra(z80, ctx()));
+        let res = parse_test(parse_repeat, z80);
         assert!(res.is_ok(), "{:?}", res);
-        let res = res.unwrap();
-        assert_eq!(res.0.trim().len(), 0, "{:?}", res);
     }
 
     #[test]
     fn parser_regression_1() {
-        let res = std::dbg!(parse_ld_normal(InnerZ80Span::new_extra(
-            "ld a, chessboard_file",
-            ctx()
-        )));
+        let res = parse_test(parse_ld_normal, 
+            "ld a, chessboard_file");
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
@@ -5071,35 +5101,20 @@ mod test {
         let code = " nop
                     "
         .replace("\u{C2}\u{A0}", " ");
-        let code = unsafe { &*(code.as_str() as *const str) as &'static str };
-        let (_ctx, span) = ctx_and_span(code);
-        let res = std::dbg!(parse_z80_line_complete(span));
+        let code: &'static str = unsafe{std::mem::transmute(code.as_str())};
+        let mut vec = Vec::new();
+        let res = parse_test(parse_z80_line_complete(&mut vec), code);
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.unwrap().0.as_str(), "                    ");
-    }
-    #[test]
-    fn parser_regression_1b() {
-        let code = " nop
-                    "
-        .replace("\u{C2}\u{A0}", " ");
-        let code = unsafe { &*(code.as_str() as *const str) as &'static str };
-        let (_ctx, span) = ctx_and_span(code);
-        let res = std::dbg!(parse_z80_line(span));
-        assert!(res.is_ok(), "{:?}", &res);
-        assert!(res.unwrap().0.trim().is_empty());
-    }
+        }
     #[test]
     fn parser_regression_1c() {
         let code = " nop
                     nop
                     "
         .replace("\u{C2}\u{A0}", " ");
-        let code = unsafe { &*(code.as_str() as *const str) as &'static str };
-        let (_ctx, span) = ctx_and_span(code);
-        let res = std::dbg!(parse_z80_str(span));
+    let code: &'static str = unsafe{std::mem::transmute(code.as_str())};
+        let res = parse_z80_str(code);
         assert!(res.is_ok(), "{:?}", &res);
-        let res = res.unwrap();
-        assert_eq!(res.0.len(), 0, "{:?}", &res);
     }
     #[test]
     fn parser_regression_1d() {
@@ -5107,9 +5122,9 @@ mod test {
                     nop
                     "
         .replace("\u{C2}\u{A0}", " ");
-        let res = inner_code(InnerZ80Span::new_extra(&code.to_owned(), ctx()));
-        assert!(res.is_ok(), "{}", &res.err().unwrap().to_string());
-        assert_eq!(res.unwrap().0.trim().len(), 0);
+    let code: &'static str = unsafe{std::mem::transmute(code.as_str())};
+        let res = parse_test(inner_code, code);
+        assert!(res.is_ok());
     }
     #[test]
     fn parser_regression_1e() {
@@ -5125,7 +5140,7 @@ mod test {
     }
     #[test]
     fn parser_regression_1f() {
-        let res = std::dbg!(inner_code(InnerZ80Span::new_extra(
+        let res = parse_test(inner_code,
             "
                         .load_chessboard
                         ld de, .load_chessboard2
@@ -5136,15 +5151,12 @@ mod test {
                         ld a, main_memory_chessboard_extra_file
                         ld a, chessboard_file
                         jp .common_part_loading_in_main_memory
-                        ",
-            ctx()
-        )));
+                        ");
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.unwrap().0.trim().len(), 0);
     }
     #[test]
     fn parser_regression_1g() {
-        let res = std::dbg!(parse_conditional(InnerZ80Span::new_extra(
+        let res = parse_test(parse_conditional,
             "if 0
                         .load_chessboard
                         ld de, .load_chessboard2
@@ -5155,84 +5167,60 @@ mod test {
                         ld a, chessboard_file
                         jp .common_part_loading_in_main_memory
 
-                        endif",
-            ctx()
-        )));
+                        endif");
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn parser_regression2() {
-        let res = std::dbg!(parse_assert(InnerZ80Span::new_extra("assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)", ctx())));
+        let res = parse_test(parse_assert,"assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)");
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
     }
 
     #[test]
     fn parser_sna() {
-        let res = std::dbg!(parse_buildsna(InnerZ80Span::new_extra("BUILDSNA", ctx())));
+        let res = parse_test(parse_buildsna,"BUILDSNA");
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
-        let res = std::dbg!(parse_buildsna(InnerZ80Span::new_extra(
-            "BUILDSNA V2",
-            ctx()
-        )));
+        let res = parse_test(parse_buildsna,
+            "BUILDSNA V2");
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
-        let res = std::dbg!(parse_buildsna(InnerZ80Span::new_extra(
-            "BUILDSNA V3",
-            ctx()
-        )));
+        let res = parse_test(parse_buildsna,
+            "BUILDSNA V3");
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
-        let res = std::dbg!(parse_buildsna(InnerZ80Span::new_extra(
-            "BUILDSNA V4",
-            ctx()
-        )));
+        let res = parse_test(parse_buildsna,
+            "BUILDSNA V4");
         assert!(res.is_err(), "{:?}", &res);
     }
 
     #[test]
     fn test_parse_snaset() {
-        let res = std::dbg!(parse_snaset(InnerZ80Span::new_extra(
-            "SNASET Z80_SP, 0x500",
-            ctx()
-        )));
+        let res = parse_test(parse_snaset,
+            "SNASET Z80_SP, 0x500");
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
-        let res = std::dbg!(parse_snaset(InnerZ80Span::new_extra(
-            "SNASET GA_PAL, 0, 30",
-            ctx()
-        )));
+        let res = parse_test(parse_snaset,
+            "SNASET GA_PAL, 0, 30");
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
 
-        let res = std::dbg!(parse_snaset(InnerZ80Span::new_extra(
-            "SNASET CRTC_REG, 1, 48",
-            ctx()
-        )));
+        let res = parse_test(parse_snaset,
+            "SNASET CRTC_REG, 1, 48");
         assert!(res.is_ok(), "{:?}", &res);
-        assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
     }
 
     #[test]
     fn test_parse_r16_to_r8() {
-        let res = parse_z80_line(InnerZ80Span::new_extra(" ld a, hl.low", ctx()));
+        let mut r#in = Vec::new();
+        let res = parse_test(parse_z80_line_complete(&mut r#in)," ld a, hl.low");
         assert!(res.is_ok(), "{:?}", &res);
-        let res = res.unwrap();
-        assert_eq!(res.0.trim().len(), 0, "{:?}", res.0);
+        let res = res.res.unwrap();
 
-        let res = parse_ld_normal(InnerZ80Span::new_extra("ld bc.low, a", ctx()));
+        let res = parse_test(parse_ld_normal, "ld bc.low, a");
         assert!(res.is_ok(), "{:?}", &res);
-        let res = res.unwrap();
-        assert_eq!(res.0.trim().len(), 0, "{:?}", &res);
+        let res = res.res.unwrap().to_token().into_owned();
 
-        let (span, res) = res;
-        assert!(span.is_empty());
         assert_eq!(
             res,
             Token::new_opcode(
@@ -5242,17 +5230,13 @@ mod test {
             )
         );
 
-        let res = parse_z80_line(InnerZ80Span::new_extra(" ld bc.low, a", ctx()));
+        r#in.clear();
+        let res = parse_test(parse_z80_line_complete(&mut r#in), " ld bc.low, a");
         assert!(res.is_ok(), "{:?}", &res);
-        let res = res.unwrap();
-        assert_eq!(res.0.trim().len(), 0, "{:?}", &res);
 
-        let (span, res) = res;
-        assert!(span.is_empty());
         assert_eq!(
-            res.iter()
-                .map(|t| t.token().unwrap())
-                .cloned()
+            r#in.iter()
+                .map(|t| t.to_token().into_owned())
                 .collect_vec(),
             vec![Token::new_opcode(
                 Mnemonic::Ld,
@@ -5261,9 +5245,8 @@ mod test {
             )]
         );
 
-        let res = parse_z80_line(InnerZ80Span::new_extra("\t\tld  bc.low, a\n\t", ctx()));
+        r#in.clear();
+        let res = parse_test(parse_z80_line_complete(&mut r#in), "\t\tld  bc.low, a\n\t");
         assert!(res.is_ok(), "{:?}", &res);
-        let res = res.unwrap();
-        assert_eq!(res.0.trim().len(), 0, "{:?}", res);
     }
 }

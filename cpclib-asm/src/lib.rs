@@ -315,7 +315,7 @@ Truc
         let asm_options = AssemblingOptions::new_case_insensitive();
         let env_options = EnvOptions::new(ParserOptions::default(), asm_options);
         let res = assemble_with_options(code, env_options);
-        res.unwrap();
+        res.map_err(|e| eprintln!("{e}")).unwrap();
     }
 
     /// Test stolen to rasm
