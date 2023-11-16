@@ -290,7 +290,7 @@ impl MyToTokens for Token {
     }
 }
 
-impl MyToTokens for StableTickerAction {
+impl<S: AsRef<str>> MyToTokens for StableTickerAction<S> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         no_param("StableTickerAction", tokens);
         tokens.append(Punct::new(':', Spacing::Joint));
@@ -298,7 +298,7 @@ impl MyToTokens for StableTickerAction {
 
         match self {
             StableTickerAction::Start(label) => {
-                one_param("Start", label, tokens);
+                one_param("Start", label.as_ref(), tokens);
             }
 
             StableTickerAction::Stop => {
