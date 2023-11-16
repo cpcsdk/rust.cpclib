@@ -1199,25 +1199,34 @@ pub fn parse_line_component(input: &mut InnerZ80Span) -> PResult<(Option<Located
         if r#let.is_some() {
             // label is mandatory when there is let
             cut_err(
-                terminated(parse_label(false), my_space0)
+                parse_label(false)
                 .context("LET: missing label")
             
             .map(|l| Some(l))
             )
             .parse_next(input)?
         } else {
-            terminated(
-                opt(parse_label(false)), 
-                my_space0
-            )
+            // let was absent
+                opt(parse_label(false))
                 .parse_next(input)?
         };
-        
+
     // build the label token later when needed
     let build_possible_label = move || {
         label.map(|label| LocatedTokenInner::Label(label.into())
         .into_located_token_direct())
     };
+    
+
+    let before_double_column = input.checkpoint();
+    let followed_by_double_column = if label.is_some() {
+        opt(':').parse_next(input)?
+    } else {
+        None
+    };
+
+    my_space0(input)?;
+        
 
     // early exit if at the end of the line or if there is a comment
     if r#let.is_none() && input.eof_offset() == 0 || 
@@ -1431,9 +1440,16 @@ pub fn parse_line_component(input: &mut InnerZ80Span) -> PResult<(Option<Located
         Ok((None, Some(token)))
     
     } else {
-        // ensure we have not eaten some label modifier bytes
+        // ensure we have not eaten some label modifier bytes in case of error
         input.reset(before_label_modifier);
 
+        // if a label was present as well as :, we prefer to stop here
+        if label.is_some() && followed_by_double_column.is_some() {
+            input.reset(before_double_column);
+            return Ok((build_possible_label(), None));
+        }
+
+        // otherwise this is a normal stuff
 
         // we must have an instruction if label is missing; otherwise it is optional
         let instruction = opt(alt((
