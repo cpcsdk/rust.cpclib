@@ -252,6 +252,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"READ",
     b"REND",
     b"REPEAT",
+    b"REP",
     b"RORG",
     b"RETURN",
     b"RUN",
