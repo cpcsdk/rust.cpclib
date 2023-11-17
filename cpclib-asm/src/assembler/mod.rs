@@ -4088,7 +4088,7 @@ where
         Mnemonic::Add | Mnemonic::Adc => {
             assemble_add_or_adc(
                 mnemonic,
-                arg1.as_ref().unwrap(),
+                arg1.as_ref(),
                 arg2.as_ref().unwrap(),
                 env
             )
@@ -5659,7 +5659,7 @@ fn assemble_ex_memsp<D: DataAccessElem>(arg1: &D) -> Result<Bytes, AssemblerErro
 
 fn assemble_add_or_adc<D: DataAccessElem>(
     mnemonic: Mnemonic,
-    arg1: &D,
+    arg1: Option<&D>,
     arg2: &D,
     env: &Env
 ) -> Result<Bytes, AssemblerError>
@@ -5673,7 +5673,8 @@ where
         _ => panic!("Impossible case")
     };
 
-    if arg1.is_register_a() {
+
+    if arg1.is_none() || arg1.as_ref().map(|arg1| arg1.is_register_a()).unwrap() {
         if arg2.is_address_in_hl() {
             if is_add {
                 bytes.push(0b1000_0110);
@@ -5730,7 +5731,7 @@ where
             }
         }
     }
-    else if arg1.is_register_hl() {
+    else if arg1.as_ref().unwrap().is_register_hl() {
         if arg2.is_register16() {
             let reg = arg2.get_register16().unwrap();
             let base = if is_add {
@@ -5744,8 +5745,8 @@ where
             bytes.push(base | (register16_to_code_with_sp(reg) << 4));
         }
     }
-    else if arg1.is_indexregister16() {
-        let reg1 = arg1.get_indexregister16().unwrap();
+    else if arg1.as_ref().unwrap().is_indexregister16() {
+        let reg1 = arg1.as_ref().unwrap().get_indexregister16().unwrap();
         {
             if arg2.is_register16() {
                 let reg2 = arg2.get_register16().unwrap();
