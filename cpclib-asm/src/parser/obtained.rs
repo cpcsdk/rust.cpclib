@@ -28,7 +28,7 @@ use ouroboros::self_referencing;
 
 use super::{
     build_span, my_many0_nocollect, parse_z80_line_complete, InnerZ80Span, ParserContext,
-    SourceString, Z80ParserError, Z80Span
+    SourceString, Z80ParserError, Z80Span, parse_lines
 };
 use crate::assembler::Env;
 use crate::error::AssemblerError;
@@ -2624,10 +2624,9 @@ impl LocatedListing {
                 let src = ctx.source;
                 let input_start = Z80Span::new_extra(src, ctx);
 
-                let mut tokens = Vec::with_capacity(100);
                 // really make the parsing
                 let res: Result<
-                    _,
+                    Vec<LocatedToken>,
                     cpclib_common::winnow::error::ParseError<
                         cpclib_common::winnow::Stateful<
                             cpclib_common::winnow::Located<&[u8]>,
@@ -2635,19 +2634,13 @@ impl LocatedListing {
                         >,
                         Z80ParserError
                     >
-                > = trace(
-                    "DEBUG winnow",
-                    repeat_till0::<_, _, (), _, Z80ParserError, _, _>(
-                        parse_z80_line_complete(&mut tokens),
-                        eof
-                    )
-                )
+                > = parse_lines
                 .parse(input_start.0);
 
                 // analyse result and can generate error even if parsing was ok
                 // Ok only if everything is parsed
                 let res: Result<InnerLocatedListing, Z80ParserError> = match res {
-                    Ok(_) => {
+                    Ok(tokens) => {
                         // no more things to assemble
                         Ok(InnerLocatedListing::from(tokens))
                     },

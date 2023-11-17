@@ -1748,6 +1748,7 @@ impl Env {
         // Try to fallback on a macro call - parser is not that much great
         if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
             if kind == "macro" || kind == "struct" {
+                panic!("Panic to remove, i'm just tracing a bug");
                 return Err(AssemblerError::AssemblingError {
                     msg:
                         "Use (void) for macros with no parameters to disambiguate them with labels"

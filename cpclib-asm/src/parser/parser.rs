@@ -8,6 +8,7 @@ use choice_nocase::choice_nocase;
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, escaped, line_ending, space0, space1};
 use cpclib_common::winnow::combinator::{
@@ -21,7 +22,7 @@ use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, Stream, UpdateS
 use cpclib_common::winnow::token::{
     none_of, one_of, tag, tag_no_case, take, take_till0, take_till1, take_until0, take_while
 };
-use cpclib_common::winnow::{PResult, Parser};
+use cpclib_common::winnow::{PResult, Parser, trace};
 use cpclib_common::{lazy_static, winnow};
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::{FlagValue, SnapshotVersion};
@@ -735,9 +736,9 @@ pub fn parse_macro(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
         .collect_vec();
 
     let _ = alt((space0.value(()), my_line_ending.value(()))).parse_next(input)?;
-    let _before_content = input.checkpoint();
-    let content = cut_err(
-        repeat_till0::<_, _, (), _, _, _, _>(
+    let before_content = input.checkpoint();
+    let (_, end) = cut_err(
+        repeat_till0::<_,_,(),_,_,_,_>(
             take(1usize),
             alt((
                 parse_directive_word("ENDM"),
@@ -746,9 +747,13 @@ pub fn parse_macro(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
             ))
         )
         .context("MACRO: impossible to collect macro content")
-        .recognize()
     )
     .parse_next(input)?;
+
+    let content_length = end.offset_from(&before_content);
+    let mut content = input.clone();
+    content.reset(before_content);
+    let content : &[u8] = unsafe{std::mem::transmute(&content.as_bytes()[..content_length])};
     let content = input.clone().update_slice(content); // TODO find a way to improve that part. I'd like to not make the conversion
 
     Ok(LocatedTokenInner::Macro {
@@ -1181,10 +1186,24 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z8
 }
 
 
-/// Optionaly return a label and a command
-/// next  token is a separator :, \n, eof
 pub fn parse_line_component(input: &mut InnerZ80Span) -> PResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
     my_space0.parse_next(input)?;
+
+    alt((
+     //   parse_line_component_macro, // probably really slow to do that here . I'm confident some refactoring is needed
+        parse_line_component_standard,
+    )).parse_next(input)
+}
+
+
+pub fn parse_line_component_macro(input: &mut InnerZ80Span) -> PResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
+    let call = parse_macro_or_struct_call(false, false).parse_next(input)?;
+    Ok((None, Some(call)))
+}
+
+/// Optionally return a label and a command
+/// next  token is a separator :, \n, eof
+pub fn parse_line_component_standard(input: &mut InnerZ80Span) -> PResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
 
     let before_let = input.checkpoint();
     let r#let = terminated(
@@ -1195,7 +1214,7 @@ pub fn parse_line_component(input: &mut InnerZ80Span) -> PResult<(Option<Located
 
     let before_label = input.checkpoint();
 
-    let label : Option<InnerZ80Span>  = 
+    let mut label : Option<InnerZ80Span>  = 
         if r#let.is_some() {
             // label is mandatory when there is let
             cut_err(
@@ -1458,10 +1477,20 @@ pub fn parse_line_component(input: &mut InnerZ80Span) -> PResult<(Option<Located
             ))
         ).parse_next(input)?;
 
-        my_space0.parse_next(input)?;
 
+        if label.is_some() && instruction.is_none() {
+            let call = parse_macro_or_struct_call_inner(false, label.take().unwrap()) // label is eaten
+                .map(|m| Some(m))
+                .parse_next(input)?; // cleanup this patch
+            let call = call.map(|t| t.into_located_token_between(before_label, input.clone()));
+            my_space0.parse_next(input)?;
 
-        Ok((build_possible_label(), instruction))
+            Ok((None, call))
+        } else {
+            // this cannot be a macro as there is an instruction
+            my_space0.parse_next(input)?;
+            Ok((build_possible_label(), instruction))
+        }
     }
 }
 
@@ -1523,6 +1552,26 @@ pub fn parse_z80_directive_with_block(
     .parse_next(input)
 }
 
+
+
+#[inline]
+pub fn parse_lines(input: &mut InnerZ80Span) -> PResult<Vec<LocatedToken>, Z80ParserError> {
+
+    let mut tokens = Vec::with_capacity(100);
+
+    loop {
+        let offset = input.eof_offset();
+        let res = opt(parse_z80_line_complete(&mut tokens)).parse_next(input)?;
+        if res.is_none() || offset == input.eof_offset() {
+            break;
+        }
+    }
+
+    Ok(tokens)
+}
+
+
+
 /// Parse a line (ie a set of components separated by :) until the end of the line or a stop directive
 /// XXX: In opposite to the other functions, the result is stored in the parameter (to avoid unnecessary memory allocations and copies)
 #[inline]
@@ -1531,19 +1580,45 @@ pub fn parse_line(
 ) -> impl FnMut(&mut InnerZ80Span) -> PResult<(), Z80ParserError> + '_ {
     move |input: &mut InnerZ80Span| -> PResult<(), Z80ParserError> {
     
+        my_space0.parse_next(input)?;
     
-        let components: Vec<_> = separated(
-            0..,
-            parse_line_component,
-            (my_space0, ':', my_space0).value(()),
-        ).parse_next(input)?;
 
-        let comment = opt(parse_comment).parse_next(input)?;
 
-        alt((eof::<_,Z80ParserError>, line_ending))
-            .value(())
-            .context("Line ending expected")
-            .parse_next(input)?;
+
+        let mut components: SmallVec<[_; 1]> = Default::default
+        () ;
+        loop {
+            let local = opt(parse_line_component).parse_next(input)?;
+            if let Some(local) = local {
+                components.push(local);
+            } else {
+                break; //  macro content ?
+            }
+
+            let delim = opt((my_space0.value(()), ':', my_space0.value(())).value(())).parse_next(input)?;
+            if delim.is_none() {
+                break;
+            }
+        }
+        
+        
+
+        // early stop parsing in case of stop directive
+        let before_end = input.checkpoint();
+        let stop = opt(parse_end_directive).parse_next(input)?;
+        let comment = if stop.is_some() {
+            input.reset(before_end);
+            None
+        } else {
+            let comment = opt(parse_comment).parse_next(input)?;
+
+            alt((eof::<_,Z80ParserError>, line_ending))
+                .value(())
+                .context("Line ending expected")
+                .parse_next(input)?;
+
+            comment
+        };
 
         // Inject the list of instructions
         for (label, instruction) in components.into_iter() {
@@ -3212,16 +3287,164 @@ pub fn parse_macro_arg(input: &mut InnerZ80Span) -> PResult<LocatedMacroParam, Z
     Ok(param)
 }
 
+
+
+
+
+
+
+
+
+/// Manage the call of a macro.
+#[inline]
+pub fn parse_macro_or_struct_call_inner(
+    for_struct: bool,
+    name: InnerZ80Span
+) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| {
+
+        let input_start = input.checkpoint();
+
+
+        dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
+
+        // Check if the macro name is allowed
+        if !ignore_ascii_case_allowed_label(name.as_bstr(), input.state.options().dotted_directive)
+        {
+            return Err(ErrMode::Backtrack(
+                Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
+                    input,
+                    if for_struct {
+                        "STRUCT: forbidden name"
+                    }
+                    else {
+                        "MACRO or STRUCT: forbidden name"
+                    }
+                )
+            ));
+        }
+
+        let nothing_after = peek((
+            space0,
+            alt((parse_comment.recognize(), tag(":"), tag("\n")))
+        ))
+        .parse_next(input)
+        .is_ok();
+
+        /*
+        if allowed_to_return_a_label && nothing_after {
+            let token = LocatedTokenInner::Label(name.into());
+            let msg = format!("Ambiguous code. Use (void) for macro with no args, (default) for struct with default parameters; avoid labels that do not start at beginning of a line. {} is considered to be a label, not a macro.", String::from_utf8_lossy(name.as_bstr()));
+            let warning = LocatedTokenInner::WarningWrapper(Box::new(token), msg);
+            return Ok(warning.into_located_token_at(name.clone()));
+        }
+        */
+
+        let _ = (my_space0, not(parse_comment)).parse_next(input)?;
+        let input2 = input.clone();
+
+        let args: Vec<(LocatedMacroParam, &[u8])> = if peek(alt((
+            eof::<_, Z80ParserError>.value(()),
+            tag("\n").value(()),
+            tag(":").value(())
+        )))
+        .parse_next(input)
+        .is_ok()
+        {
+            vec![]
+        }
+        else {
+            cut_err(
+                alt((
+                    delimited(my_space0, tag_no_case("(void)"), my_space0).value(Default::default()),
+                    alt((
+                        tag_no_case("(void)").value(Vec::new()),
+                        separated(
+                            1..,
+                            alt((
+                                parse_macro_arg.with_recognized(),
+                                space1
+                                    .map(|space: &[u8]| {
+                                        let space = input2.clone().update_slice(&space[..0]);
+                                        LocatedMacroParam::Single(space.into())
+                                        // string of size 0;
+                                    })
+                                    .with_recognized()
+                            )),
+                            parse_comma
+                        )
+                    ))
+                ))
+                .context(if for_struct {
+                    "STRUCT: error in arguments list"
+                }
+                else {
+                    "MACRO or STRUCT: forbidden name"
+                })
+            )
+            .parse_next(input)?
+        };
+
+        if args.len() == 1 && args.first().unwrap().0.is_empty() {
+            panic!();
+        }
+
+        // avoid ambiguate code such as label nop
+        if args.len() == 1 {
+            let mut arg = input.clone().update_slice(args[0].1);
+            if alt((
+                parse_word("NOP").recognize(),
+                parse_opcode_no_arg.recognize()
+            ))
+            .parse_next(&mut arg)
+            .is_ok()
+            {
+                input.reset(input_start);
+                return Err(ErrMode::Cut(
+                    Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
+                        input,
+                        if for_struct {
+                            "First argument of STRUCT cannot be an opcode with no argument"
+                        }
+                        else {
+                            "First argument of MACRO or STRUCT cannot be an opcode with no argument"
+                        }
+                    )
+                ));
+            }
+        }
+
+        let args = args.into_iter().map(|(a, _b)| a).collect_vec();
+        Ok(LocatedTokenInner::MacroCall(name.into(), args))
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
 /// Manage the call of a macro.
 /// When ambiguou may return a label
 #[inline]
+/// TODO remove by restore the way to parse the macro name
 pub fn parse_macro_or_struct_call(
     allowed_to_return_a_label: bool,
     for_struct: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     move |input: &mut InnerZ80Span| {
+
+        panic!("Should not be called anymore");
+
+
         // BUG: added because of parsing issues. Need to find why and remove ot
-        let _ = space0(input)?;
+        my_space0(input)?;
         let input_start = input.checkpoint();
         let name = terminated(
             parse_macro_name,
@@ -3499,6 +3722,7 @@ fn my_space0(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> 
         .map(|s| cloned.update_slice(s))
         .parse_next(input)
 }
+
 
 
 
@@ -5840,8 +6064,6 @@ mod test {
         let mut tokens = Vec::new();
 
 
-
-
         let res = parse_test(parse_line(&mut tokens), " hello   ");
         assert!(res.is_ok(), "{:?}", &res);
         tokens.clear();
@@ -5865,7 +6087,11 @@ mod test {
         tokens.clear();
 
 
-        let res = parse_test(parse_line(&mut tokens), " hello :  world  ");
+        let res = parse_test(parse_line(&mut tokens), " hello :  world");
+        assert!(res.is_ok(), "{:?}", &res);
+        tokens.clear();
+
+        let res = parse_test(parse_line(&mut tokens), " hello:  set world  ");
         assert!(res.is_ok(), "{:?}", &res);
         tokens.clear();
 
@@ -6011,6 +6237,39 @@ mod test {
 
         assert!(
             dbg!(parse_test(parse_label(false), "label{i+5}"))
+            .is_ok()
+        );
+    }
+
+
+
+    #[test]
+    fn test_parse_macro_call() {
+        assert!(
+            dbg!(parse_test(parse_line_component, "empty (void)"))
+            .is_ok()
+        );
+
+        let res = 
+            dbg!(parse_test(
+                (
+                    parse_line_component,
+                    ':',
+                    parse_line_component
+                
+                ), "empty (void):ld a,1")
+            )
+            .res
+            .unwrap();
+
+        assert!(res.0.0.is_none());
+        assert!(res.0.1.is_some());
+        assert!(res.2.0.is_none());
+        assert!(res.2.1.is_some());
+
+
+        assert!(
+            dbg!(parse_test(parse_line_component, "notempty \"arg1\", \"arg2\""))
             .is_ok()
         );
     }
