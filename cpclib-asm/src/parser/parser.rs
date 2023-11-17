@@ -3441,12 +3441,62 @@ pub fn parse_macro_or_struct_call_inner(
 
 
 
+#[inline]
+/// TODO remove by restore the way to parse the macro name
+pub fn parse_macro_or_struct_call(
+    allowed_to_return_a_label: bool,
+    for_struct: bool
+) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+    move |input: &mut InnerZ80Span|  -> PResult<LocatedToken, Z80ParserError>  {
+
+        dbg!("here");
+
+        my_space0(input)?;
+        let input_start = input.checkpoint();
+        let name = terminated(
+            parse_macro_name,
+            not(alt((
+                (space0, alt((tag(":"), line_ending, eof))).recognize(),
+                ('.').recognize()
+            )))
+        )
+        .parse_next(input)?;
+
+
+    dbg!(&name.as_bstr());
+
+        // Check if the macro name is allowed
+        if !ignore_ascii_case_allowed_label(name.as_bstr(), input.state.options().dotted_directive)
+        {
+            input.reset(input_start);
+            return Err(ErrMode::Backtrack(
+                Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
+                    input,
+                    if for_struct {
+                        "STRUCT: forbidden name"
+                    }
+                    else {
+                        "MACRO or STRUCT: forbidden name"
+                    }
+                )
+            ));
+        }
+
+
+        let inner = parse_macro_or_struct_call_inner(for_struct, name).parse_next(input)?;
+        let inner = inner.into_located_token_between(input_start, input.clone());
+        Ok(inner)
+
+
+    }
+}
+
 
 /// Manage the call of a macro.
 /// When ambiguou may return a label
 #[inline]
 /// TODO remove by restore the way to parse the macro name
-pub fn parse_macro_or_struct_call(
+pub fn parse_macro_or_struct_call_beckup_to_remove(
     allowed_to_return_a_label: bool,
     for_struct: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
