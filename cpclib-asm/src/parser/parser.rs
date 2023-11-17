@@ -253,6 +253,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"REND",
     b"REPEAT",
     b"REP",
+    b"REPT",
     b"RORG",
     b"RETURN",
     b"RUN",
@@ -1480,17 +1481,22 @@ pub fn parse_line_component_standard(input: &mut InnerZ80Span) -> PResult<(Optio
 
 
         if label.is_some() && instruction.is_none() {
-            let call = parse_macro_or_struct_call_inner(false, label.take().unwrap()) // label is eaten
+            if let Ok(call)  = parse_macro_or_struct_call_inner(false, label.take().unwrap()) // label is eaten
                 .map(|m| Some(m))
-                .parse_next(input)?; // cleanup this patch
-            let call = call.map(|t| t.into_located_token_between(before_label, input.clone()));
-            my_space0.parse_next(input)?;
+                .parse_next(input) {
+                    // this is a macro call
+                    let call = call.map(|t| t.into_located_token_between(before_label, input.clone()));
+                    my_space0.parse_next(input)?;
 
-            Ok((None, call))
+                    return Ok((None, call));
+                } else {
+                    // this is a label
+                    return Ok((build_possible_label(), None));
+                }
         } else {
             // this cannot be a macro as there is an instruction
             my_space0.parse_next(input)?;
-            Ok((build_possible_label(), instruction))
+            return Ok((build_possible_label(), instruction));
         }
     }
 }
@@ -3306,6 +3312,9 @@ pub fn parse_macro_or_struct_call_inner(
 
         let input_start = input.checkpoint();
 
+        my_space0.parse_next(input)?;
+        not(':').parse_next(input)?;
+
 
         dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
 
@@ -3325,12 +3334,14 @@ pub fn parse_macro_or_struct_call_inner(
             ));
         }
 
+/* if uncommented we do not detect (void) !
         let nothing_after = peek((
             space0,
             alt((parse_comment.recognize(), tag(":"), tag("\n")))
         ))
         .parse_next(input)
         .is_ok();
+*/
 
         /*
         if allowed_to_return_a_label && nothing_after {
