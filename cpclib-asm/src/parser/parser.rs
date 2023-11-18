@@ -2027,10 +2027,13 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80Parser
     let _start = input.checkpoint();
 
     let content = if first == b'\'' {
-        terminated(
-            escaped(none_of((b'\\', b'\'')), '\\', one_of(b"'\\")).verify(|s: &[u8]| s.len() > 1),
-            ('\'').context("End of string not found")
-        )
+        alt((
+            tag("'"),
+            terminated(
+                escaped(none_of((b'\\', b'\'')), '\\', one_of(b"'\\"))/* .verify(|s: &[u8]| s.len() > 1)*/,
+                ('\'').context("End of string not found")
+            )
+        ))
         .parse_next(input)
     }
     else {
@@ -2044,12 +2047,14 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80Parser
         .parse_next(input)
     }?;
 
-    let string = if first == b'"' && content.len() == 1 && content[0] == b'\"' {
-        &content[..1] // we remove " (it is not present for the others)
+
+    let string = if content.len() == 1  && first == content[0] {
+        &content[..0] // we remove " (it is not present for the others)
     }
     else {
         &content[..]
     };
+
 
     let string = input.clone().update_slice(string);
 
@@ -6339,5 +6344,36 @@ mod test {
             dbg!(parse_test(parse_line_component, "notempty \"arg1\", \"arg2\""))
             .is_ok()
         );
+    }
+
+
+    #[test]
+    fn test_parse_string() {
+        for string in &[
+            "\"kjkjhkl\"",
+            "\"kjk'jhkl\"",
+            "\"kj\\\"kjhkl\"",
+            "'kjkjhkl'",
+            "'kjk\"jhkl'",
+            "'kjkj\\\'hkl'",
+            "\"\"",
+            "''",
+        ] {
+            let res = parse_test(parse_string, string);
+            assert!(
+                dbg!(&res)
+                .is_ok()
+            );
+
+            assert_eq!(
+                res.res.unwrap().as_bstr(),
+                (&string[1..string.len()-1]).as_bstr()
+            );
+
+            assert!(
+                dbg!(parse_test(parse_expr, string))
+                .is_ok()
+            );
+        }
     }
 }
