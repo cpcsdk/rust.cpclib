@@ -4,6 +4,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use cpclib_common::lazy_static;
+use cpclib_common::winnow::BStr;
 use either::Either;
 use regex::Regex;
 
@@ -176,13 +177,14 @@ impl ParserContextBuilder {
     }
 
     /// Build a ParserContext for the given source code
-    pub fn build(self, code: &str) -> ParserContext {
+    pub fn build(self, code: & str) -> ParserContext {
+        let str : &'static BStr = unsafe{std::mem::transmute(BStr::new(code))};
         ParserContext {
             options: self.options,
             current_filename: self.current_filename,
             context_name: self.context_name,
             state: self.state,
-            source: unsafe { &*(code as *const str) as &'static str }
+            source: str
         }
     }
 }
@@ -370,7 +372,7 @@ pub struct ParserContext {
     pub context_name: Option<String>,
     pub options: ParserOptions,
     /// Full source code of the parsing state
-    pub source: &'static str
+    pub source: &'static BStr
 }
 
 impl Eq for ParserContext {}
@@ -436,8 +438,8 @@ impl ParserContext {
     }
 
     //#[deprecated(note="Totally unsafe. Every test should be modified to not use it")]
-    pub fn build_span<S: AsRef<str>>(&self, src: S) -> Z80Span {
-        Z80Span::new_extra(src.as_ref(), self)
+    pub fn build_span<S: ?Sized + AsRef<[u8]>>(&self, src: &S) -> Z80Span {
+        Z80Span::new_extra(src, self)
     }
 
     /// Specify the path that contains the code
@@ -455,7 +457,7 @@ impl ParserContext {
     }
 
     pub fn complete_source(&self) -> &str {
-        self.source
+        unsafe{std::mem::transmute(self.source.deref())}
     }
 
     pub fn options(&self) -> &ParserOptions {

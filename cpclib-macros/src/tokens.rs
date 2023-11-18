@@ -130,7 +130,7 @@ fn no_param(name: &str, tokens: &mut TokenStream) {
 }
 
 fn one_param<T>(name: &str, t: &T, tokens: &mut TokenStream)
-where T: MyToTokens {
+where T: MyToTokens + ?Sized {
     tokens.append(Ident::new(name, Span::call_site()));
     let mut inside = TokenStream::new();
     t.to_tokens(&mut inside);

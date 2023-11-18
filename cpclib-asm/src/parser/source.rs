@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::stream::{AsBStr, Offset};
-use cpclib_common::winnow::{Located, Stateful};
+use cpclib_common::winnow::{Located, Stateful, Bytes, BStr};
 use cpclib_tokens::symbols::{Source, Symbol};
 use line_col::LineColLookup;
 use line_span::LineSpanExt;
@@ -15,7 +15,7 @@ use super::ParsingState;
 pub type InnerZ80Span = Stateful<
     Located<
         // the type of data, owned by the base listing of interest
-        &'static [u8]
+        &'static BStr
     >,
     // The parsing context
     // TODO remove it an pass it over the parse arguments
@@ -99,7 +99,7 @@ impl SourceString for SmolStr {
 impl Z80Span {
     #[inline]
     pub fn complete_source(&self) -> &str {
-        self.0.state.source
+        self.0.state.complete_source()
     }
 
     /// Get the offset from the start of the string (when considered to be a array of bytes)
@@ -253,12 +253,12 @@ impl AsRef<InnerZ80Span> for Z80Span {
 }
 
 impl Z80Span {
-    pub fn new_extra(src: &str, ctx: &ParserContext) -> Self {
-        let src = unsafe { &*(src as *const str) as &'static str };
+    pub fn new_extra<S: ?Sized + AsRef<[u8]>>(src: & S, ctx: &ParserContext) -> Self {
+        let src = unsafe{std::mem::transmute(BStr::new(src))};
         let ctx = unsafe { &*(ctx as *const ParserContext) as &'static ParserContext };
 
         Self(Stateful {
-            input: Located::new(src.as_bytes()),
+            input: Located::new(src),
             state: ctx
         })
     }

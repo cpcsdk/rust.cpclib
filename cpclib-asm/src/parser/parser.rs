@@ -22,7 +22,7 @@ use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, Stream, UpdateS
 use cpclib_common::winnow::token::{
     none_of, one_of, tag, tag_no_case, take, take_till0, take_till1, take_until0, take_while
 };
-use cpclib_common::winnow::{PResult, Parser, trace};
+use cpclib_common::winnow::{PResult, Parser, trace, BStr};
 use cpclib_common::{lazy_static, winnow};
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::{FlagValue, SnapshotVersion};
@@ -755,7 +755,7 @@ pub fn parse_macro(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     let content_length = end.offset_from(&before_content);
     let mut content = input.clone();
     content.reset(before_content);
-    let content : &[u8] = unsafe{std::mem::transmute(&content.as_bytes()[..content_length])};
+    let content : &BStr = unsafe{std::mem::transmute(&content.as_bstr()[..content_length])};
     let content = input.clone().update_slice(content); // TODO find a way to improve that part. I'd like to not make the conversion
 
     Ok(LocatedTokenInner::Macro {
@@ -1277,28 +1277,17 @@ pub fn parse_line_component_standard(input: &mut InnerZ80Span) -> PResult<(Optio
         opt(
         take_while(1..6, |c| { // Here we have listed the letters of the label modifiers
             c == b'#'
-                || c == b'D'
-                || c == b'E'
-                || c == b'F'
-                || c == b'L'
-                || c == b'd'
-                || c == b'e'
-                || c == b'f'
-                || c == b'l'
-                || c == b'Q'
-                || c == b'U'
-                || c == b'q'
-                || c == b'u'
-                || c == b'S'
-                || c == b'T'
-                || c == b'N'
-                || c == b's'
-                || c == b't'
-                || c == b'b'
-                || c == b'X'
-                || c == b'x'
-                || c == b'I'
-                || c == b'i'
+            || c == b'D' || c == b'd'
+            || c == b'E' || c == b'e'
+            || c == b'F' || c == b'f'
+            || c == b'L' || c == b'l'
+            || c == b'Q' || c == b'q'
+            || c == b'U' || c == b'u'
+            || c == b'S' || c == b's'
+            || c == b'T' || c == b't'
+            || c == b'N' || c == b'n'
+            || c == b'X' || c == b'x'
+            || c == b'I' || c == b'i'
                 || c == b'='
                 || c == b'<'
                 || c == b'>'
@@ -1318,7 +1307,7 @@ pub fn parse_line_component_standard(input: &mut InnerZ80Span) -> PResult<(Optio
 
 
    // TODO also handle directives that eat this label in other assemblers (macro/struct and so on)
-    let label_modifier: Option<LabelModifier> = match label_modifier {
+    let label_modifier: Option<LabelModifier> = match dbg!(label_modifier) {
         Some(label_modifier) => {
             match label_modifier {
                 choice_nocase!(b"DEFL") => Some(LabelModifier::Equ),
@@ -1373,6 +1362,8 @@ pub fn parse_line_component_standard(input: &mut InnerZ80Span) -> PResult<(Optio
     };
 
 
+    dbg!(&label_modifier);
+
 
     if let Some(label_modifier)  = label_modifier {
         // we must generate a directive related to the label handling
@@ -1382,21 +1373,21 @@ pub fn parse_line_component_standard(input: &mut InnerZ80Span) -> PResult<(Optio
             | LabelModifier::Equal(..)
             | LabelModifier::Set
             | LabelModifier::Field => {
-                cut_err(located_expr.map(|e| Some(e)))
+                dbg!(cut_err(located_expr.map(|e| Some(e)))
                     .context("Value error")
-                    .parse_next(input)?
+                    .parse_next(input))?
             },
             _ => None
         };
     
         let source_label = match &label_modifier {
             LabelModifier::Next | LabelModifier::SetN => {
-                cut_err(
+                dbg!(cut_err(
                     preceded(my_space0, parse_label(false))
                         .map(|l| Some(l))
                         .context("Label expected")
                 )
-                .parse_next(input)?
+                .parse_next(input))?
             },
             _ => None
         };
@@ -1404,7 +1395,7 @@ pub fn parse_line_component_standard(input: &mut InnerZ80Span) -> PResult<(Optio
         // optional expression to control the displacement
         let additional_arg = match &label_modifier {
             LabelModifier::Next | LabelModifier::SetN => {
-                opt(preceded(parse_comma, located_expr)).parse_next(input)?
+                dbg!(opt(preceded(parse_comma, located_expr)).parse_next(input))?
             },
             _ => None
         };
@@ -1602,7 +1593,9 @@ pub fn parse_line(
                 break; //  macro content ?
             }
 
-            let delim = opt((my_space0.value(()), ':', my_space0.value(())).value(())).parse_next(input)?;
+            my_space0.value(()).parse_next(input)?;
+
+            let delim = opt((':', my_space0.value(())).value(())).parse_next(input)?;
             if delim.is_none() {
                 break;
             }
@@ -1805,6 +1798,10 @@ pub fn parse_assign_operator(
 pub fn parse_z80_line_label_aware_directive(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedToken, Z80ParserError> {
+
+
+    panic!("Do not use anymore");
+
     let before_label = input.checkpoint();
 
     let r#let = opt(terminated(parse_directive_word("LET"), my_space0)).parse_next(input)?;
@@ -1818,26 +1815,16 @@ pub fn parse_z80_line_label_aware_directive(
         my_space0,
         take_while(1..5, |c| {
             c == b'#'
-                || c == b'D'
-                || c == b'E'
-                || c == b'F'
-                || c == b'L'
-                || c == b'd'
-                || c == b'e'
-                || c == b'f'
-                || c == b'l'
-                || c == b'Q'
-                || c == b'U'
-                || c == b'q'
-                || c == b'u'
-                || c == b'S'
-                || c == b'T'
-                || c == b'N'
-                || c == b's'
-                || c == b't'
-                || c == b'b'
-                || c == b'X'
-                || c == b'x'
+                || c == b'D' || c == b'd'
+                || c == b'E' || c == b'e'
+                || c == b'F' || c == b'f'
+                || c == b'L' || c == b'l'
+                || c == b'Q' || c == b'q'
+                || c == b'U' || c == b'u'
+                || c == b'S' || c == b's'
+                || c == b'T' || c == b't'
+                || c == b'N' || c == b'n'
+                || c == b'X' || c == b'X'
                 || c == b'='
                 || c == b'<'
                 || c == b'>'
@@ -3315,10 +3302,6 @@ pub fn parse_macro_or_struct_call_inner(
         my_space0.parse_next(input)?;
         not(':').parse_next(input)?;
 
-
-        dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
-
-        // Check if the macro name is allowed
         if !ignore_ascii_case_allowed_label(name.as_bstr(), input.state.options().dotted_directive)
         {
             return Err(ErrMode::Backtrack(
@@ -4878,7 +4861,8 @@ move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
     ))
 .parse_next(input))?;
 
-    let flagname = unsafe { std::str::from_utf8_unchecked(flagname.as_bytes()) };
+    let flagname = flagname.as_bstr();
+    let flagname = unsafe { std::str::from_utf8_unchecked(flagname) };
     let (flagname, value) = if values.len() == 1 {
         (Cow::Borrowed(flagname), values[0].clone())
     }
@@ -5693,7 +5677,7 @@ mod test {
             eprintln!("Parse error: {}", e);
         }
         else {
-            assert!(unsafe{std::str::from_utf8_unchecked(span.0.as_bytes())}.trim_start().starts_with(next));
+            assert!(unsafe{std::str::from_utf8_unchecked(span.0.as_bstr())}.trim_start().starts_with(next));
         }
 
         TestResultRest { ctx, span, res }
@@ -6157,13 +6141,34 @@ mod test {
         assert!(res.is_ok(), "{:?}", &res);
         tokens.clear();
 
-        let res = parse_test(parse_line(&mut tokens), "hello xor a : ld a, 0");
+        let res = parse_test(parse_line(&mut tokens), "data1 SETN data");
         assert!(res.is_ok(), "{:?}", &res);
+
+
+        let res = parse_test(parse_line(&mut tokens), "data1 SETN data ; comment");
+        assert!(res.is_ok(), "{:?}", &res);
+
 
     }
 
     #[test]
     fn test_parse_line_component() {
+
+        let res = parse_test(parse_line_component, "data1 SETN data");
+        assert!(res.is_ok(), "{:?}", &res);
+    
+
+        let res = parse_test(parse_line_component, "data2 next data, 2");
+        assert!(res.is_ok(), "{:?}", &res);
+
+
+        let res = parse_test((parse_line_component, space1, parse_comment), "data1 SETN data ; comment");
+        assert!(res.is_ok(), "{:?}", &res);
+
+
+        let res = parse_test((parse_line_component, space1, parse_comment), "data1 setn data ; comment");
+        assert!(res.is_ok(), "{:?}", &res);
+
 
         let res = parse_test(parse_line_component, " IN a,(c)");
         assert!(res.is_ok(), "{:?}", &res);

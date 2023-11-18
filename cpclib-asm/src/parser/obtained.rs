@@ -12,7 +12,7 @@ use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Checkpoint, Offset, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take;
 use cpclib_common::winnow::trace::trace;
-use cpclib_common::winnow::{PResult, Parser};
+use cpclib_common::winnow::{PResult, Parser, BStr};
 use cpclib_sna::{FlagValue, SnapshotFlag, SnapshotVersion};
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
@@ -1017,7 +1017,7 @@ impl LocatedTokenInner {
     #[inline]
     pub fn into_located_token_between(
         self,
-        start: Checkpoint<Checkpoint<Checkpoint<&[u8]>>>,
+        start: Checkpoint<Checkpoint<Checkpoint<&BStr>>>,
         mut i: InnerZ80Span
     ) -> LocatedToken {
         let input = i.clone();
@@ -1025,7 +1025,7 @@ impl LocatedTokenInner {
         i.reset(unsafe { std::mem::transmute(start) });
         let start_eof_offset: usize = i.eof_offset();
 
-        let start_checkpoint: Checkpoint<Checkpoint<Checkpoint<&[u8]>>> =
+        let start_checkpoint: Checkpoint<Checkpoint<Checkpoint<&BStr>>> =
             unsafe { std::mem::transmute(start) };
 
         let span = build_span(start_eof_offset, start_checkpoint, input);
@@ -2621,7 +2621,7 @@ impl LocatedListing {
 
             // tokens depend both on the source and context. However source can be obtained from context so we do not use it here (it is usefull for the inner case)
             parse_result_builder: |_, ctx| {
-                let src = ctx.source;
+                let src :&BStr = ctx.source;
                 let input_start = Z80Span::new_extra(src, ctx);
 
                 // really make the parsing
@@ -2629,7 +2629,7 @@ impl LocatedListing {
                     Vec<LocatedToken>,
                     cpclib_common::winnow::error::ParseError<
                         cpclib_common::winnow::Stateful<
-                            cpclib_common::winnow::Located<&[u8]>,
+                            cpclib_common::winnow::Located<&BStr>,
                             &ParserContext
                         >,
                         Z80ParserError
@@ -2731,14 +2731,14 @@ impl LocatedListing {
                 match res {
                     Ok(_) => {
                         let inner_length = inner_code_ptr.offset_from(&inner_start);
-                        let inner_span: &'static [u8] = unsafe{std::mem::transmute(&input_code.as_bytes()[..inner_length])}; // remove the bytes eaten by the inner parser
+                        let inner_span: &'static BStr = unsafe{std::mem::transmute(&input_code.as_bstr().as_bytes()[..inner_length])}; // remove the bytes eaten by the inner parser
 
                         let inner_span = input_code.clone().update_slice(inner_span);
 
                         take::<_,_, Z80ParserError>(inner_length).parse_next(input_code).expect("BUG in parser"); // really consume from the input
 
-                        dbg!("Inner content", unsafe{std::str::from_utf8_unchecked(inner_span.as_bytes())});
-                        dbg!("Following code / must contains ends", unsafe{std::str::from_utf8_unchecked(input_code.as_bytes())});
+                        dbg!("Inner content", unsafe{std::str::from_utf8_unchecked(inner_span.as_bstr().as_bytes())});
+                        dbg!("Following code / must contains ends", unsafe{std::str::from_utf8_unchecked(input_code.as_bstr().as_bytes())});
 
                         ParseResult::SuccessInner {
                             inner_span: inner_span.into(),
