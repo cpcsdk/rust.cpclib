@@ -314,17 +314,17 @@ impl AceSymbolChunk {
         self.add_bytes(&bytes);
 
         // update chunk size
-        let payload_size = self.size() - 4;
-        self.data.data[0] = (payload_size & 0xFF) as u8;
-        self.data.data[1] = ((payload_size >> 8) & 0xFF) as u8;
-        self.data.data[2] = ((payload_size >> 16) & 0xFF) as u8;
-        self.data.data[3] = ((payload_size >> 24) & 0xFF) as u8;
+  //      let payload_size = self.size() - 4;
+ //       self.data.data[0] = (payload_size & 0xFF) as u8;
+ //       self.data.data[1] = ((payload_size >> 8) & 0xFF) as u8;
+ //       self.data.data[2] = ((payload_size >> 16) & 0xFF) as u8;
+ //       self.data.data[3] = ((payload_size >> 24) & 0xFF) as u8;
     }
 
     pub fn get_symbols(&self) -> Vec<(&str, u16)> {
         let mut res = Vec::new();
 
-        let mut idx = 4;
+        let mut idx = 0; // 4;
         while idx < self.size() {
             let count = self.data()[idx] as usize;
             idx += 1;

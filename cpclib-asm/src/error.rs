@@ -578,7 +578,7 @@ impl AssemblerError {
                 msg,
                 guidance
             } => {
-                write!(f, "Assert error: {} {} {}", test, msg, guidance)
+                write!(f, "Assert error: {}\n{}\n{}", test, msg, guidance)
             },
 
             AssemblerError::UnknownMacro { symbol, closest } => {

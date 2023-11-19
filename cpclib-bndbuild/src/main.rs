@@ -45,6 +45,7 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .long("file")
                 .action(ArgAction::Set)
                 .value_name("FILE")
+                .value_hint(ValueHint::FilePath)
                 .default_value("bndbuild.yml")
                 .help("Provide the YAML file for the given project.")
         )
@@ -108,6 +109,18 @@ fn inner_main() -> Result<(), BndBuilderError> {
 
     // Get the file and read it
     let fname: &String = matches.get_one("file").unwrap();
+    if !std::path::Path::new(fname).exists() {
+        eprintln!("{fname} does not exists.");
+        if let Some(Some(fname)) = matches.get_many::<String>("target").map(|s| s.into_iter().next())  {
+            if  fname.ends_with("bndbuild.yml") {
+                eprintln!("Have you forgotten to do \"-f {}\" ?", fname);
+            }
+        }
+        std::process::exit(1);
+    }
+
+
+
     let builder = BndBuilder::from_fname(fname)?;
 
     // Print list if asked
