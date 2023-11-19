@@ -639,7 +639,7 @@ pub fn inner_code_with_state(
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
     #[inline]
     move |input: &mut InnerZ80Span| {
-        dbg!("Requested state", &new_state);
+       // dbg!("Requested state", &new_state);
         LocatedListing::parse_inner(input, new_state)
             .map(|l| (Arc::<LocatedListing>::try_unwrap(l).unwrap()))
     }
@@ -668,7 +668,7 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
 
 /// TODO - limit the listing possibilities
 pub fn parse_function_listing(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
-    dbg!("parse_function_listing requests FunctionLimited state");
+    //dbg!("parse_function_listing requests FunctionLimited state");
     inner_code_with_state(ParsingState::FunctionLimited).parse_next(input)
 }
 
@@ -676,8 +676,6 @@ pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
     let function_start = input.checkpoint();
     let _ = preceded(my_space0, parse_directive_word("FUNCTION")).parse_next(input)?;
     let name = cut_err(parse_label(false).context("FUNCTION: wrong name")).parse_next(input)?; // TODO use a specific function for that
-
-    dbg!("Function deteced");
 
     let cloned = input.clone();
     let arguments: Vec<InnerZ80Span> = cut_err(
@@ -700,13 +698,7 @@ pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
     .parse_next(input)?;
     let arguments = arguments.into_iter().map(|span| span.into()).collect_vec();
 
-    dbg!("Arguments consummed");
-
-
     cut_err(preceded(my_space0, my_line_ending).context("FUNCTION: errors after parameters")).parse_next(input)?;
-
-    dbg!("code to parse");
-
 
     let listing =
         cut_err(parse_function_listing.context("FUNCTION: invalid content")).parse_next(input)?;
@@ -1410,21 +1402,21 @@ pub fn parse_line_component_standard(
             | LabelModifier::Equal(..)
             | LabelModifier::Set
             | LabelModifier::Field => {
-                dbg!(cut_err(located_expr.map(|e| Some(e)))
+                cut_err(located_expr.map(|e| Some(e)))
                     .context("Value error")
-                    .parse_next(input))?
+                    .parse_next(input)?
             },
             _ => None
         };
 
         let source_label = match &label_modifier {
             LabelModifier::Next | LabelModifier::SetN => {
-                dbg!(cut_err(
+                cut_err(
                     preceded(my_space0, parse_label(false))
                         .map(|l| Some(l))
                         .context("Label expected")
                 )
-                .parse_next(input))?
+                .parse_next(input)?
             },
             _ => None
         };
@@ -1432,7 +1424,7 @@ pub fn parse_line_component_standard(
         // optional expression to control the displacement
         let additional_arg = match &label_modifier {
             LabelModifier::Next | LabelModifier::SetN => {
-                dbg!(opt(preceded(parse_comma, located_expr)).parse_next(input))?
+                opt(preceded(parse_comma, located_expr)).parse_next(input)?
             },
             _ => None
         };
@@ -2063,7 +2055,6 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80Parser
     ))
     .parse_next(input)?;
 
-    dbg!(BStr::new(&content));
 
     let string = if content.len() == 1 && first == (content[0] as char) {
         &content[..0] // we remove " (it is not present for the others)
@@ -2073,8 +2064,6 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80Parser
     };
 
     let string = input.clone().update_slice(string);
-
-    dbg!(&string);
 
     Ok(string)
 }
@@ -2748,7 +2737,6 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     // Here we have read the latest block
     // dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
 
-    dbg!(&input);
     let _ = (
         opt(alt((
             delimited(my_space0, tag(":"), my_space0),
@@ -2822,10 +2810,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
 }
 
 pub fn parse_bankset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    dbg!("Banket befor expr");
     let count = located_expr(input)?;
-    dbg!(&count);
-    dbg!("Banket after expr");
 
     Ok(LocatedTokenInner::Bankset(count))
 }
@@ -3452,8 +3437,6 @@ pub fn parse_macro_or_struct_call(
             )))
         )
         .parse_next(input)?;
-
-        dbg!(&name.as_bstr());
 
         // Check if the macro name is allowed
         if !ignore_ascii_case_allowed_label(name.as_bstr(), input.state.options().dotted_directive)
@@ -4849,12 +4832,12 @@ fn parse_snaset(
         let flagname = cut_err(parse_label(false).context(SNASET_WRONG_LABEL)).parse_next(input)?;
         let _ = cut_err(parse_comma.context(SNASET_MISSING_COMMA)).parse_next(input)?;
 
-        let values: Vec<_> = dbg!(cut_err(separated(
+        let values: Vec<_> = cut_err(separated(
             1..,
             parse_flag_value_inner.context("SNASET: wrong flag value"),
             delimited(space0, parse_comma, space0)
         ))
-        .parse_next(input))?;
+        .parse_next(input)?;
 
         let flagname = flagname.as_bstr();
         let flagname = unsafe { std::str::from_utf8_unchecked(flagname) };
@@ -5648,8 +5631,7 @@ mod test {
         if let Err(e) = &res {
             let e = e.inner();
             let e = AssemblerError::SyntaxError { error: e.clone() };
-            dbg!(&e);
-            eprintln!("PArse error: {}", e);
+            eprintln!("Parse error: {}", e);
         }
 
         TestResult { ctx, span, res }

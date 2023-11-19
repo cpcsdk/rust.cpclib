@@ -289,7 +289,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                 Some(cpclib_tokens::symbols::Value::Address(ref val)) => Ok(val.address().into()),
                 Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym).into()),
                 Some(cpclib_tokens::symbols::Value::String(ref val)) => Ok(val.into()),
-                Some(e) => {dbg!(e); Err(AssemblerError::WrongSymbolType {
+                Some(e) => { Err(AssemblerError::WrongSymbolType {
                     symbol: label.into(),
                     isnot: "a value".into(),
                 })},

@@ -669,7 +669,6 @@ where
     }
     else {
         // normal iteration
-        dbg!(&tokens);
         for token in tokens.iter_mut() {
             token.visited(env)?;
         }

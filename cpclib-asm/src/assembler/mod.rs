@@ -2225,7 +2225,7 @@ impl Env {
         let repr = info
             .map(|info| self.build_string_from_formatted_expression(info))
             .unwrap_or_else(|| Ok("".to_owned()))?;
-        dbg!(Err(AssemblerError::Fail { msg: repr }))
+        Err(AssemblerError::Fail { msg: repr })
     }
 
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
@@ -2403,7 +2403,6 @@ impl Env {
             .map(|t| t.enter_crunched_section());
 
         visit_processed_tokens(lst, &mut crunched_env).map_err(|e| {
-            dbg!(&self.pass, &crunched_env.pass);
             let e = AssemblerError::CrunchedSectionError { error: e.into() };
             match span {
                 Some(span) => {
@@ -3366,7 +3365,6 @@ impl Env {
                 span
             } = &e
             {
-                dbg!(symbol, counter_name);
                 if let Some(counter_name) = counter_name {
                     if counter_name == &format!("{{{}}}", symbol) {
                         AssemblerError::RelocatedError {
@@ -3524,8 +3522,8 @@ impl Env {
                     {
                         let new_size = *prev_size + *curr_size;
 
-                        let start_str = dbg!(prev_span.as_str());
-                        let end_str = dbg!(curr_span.as_str());
+                        let start_str = prev_span.as_str();
+                        let end_str = curr_span.as_str();
                         let start_str = start_str.as_bytes();
                         let end_str = end_str.as_bytes();
 

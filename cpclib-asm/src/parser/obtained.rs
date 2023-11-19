@@ -2683,9 +2683,6 @@ impl LocatedListing {
         // ... but the state can be modified to forbid some keywords
         ctx.state = new_state;
 
-        dbg!(&ctx);
-
-
         // we do not change ctx.source that must be the very same than the parent
         //       let input_fragment = input_code.fragment();
         //       ctx.source = Some(input_fragment);
@@ -2707,21 +2704,13 @@ impl LocatedListing {
 
                 let src = unsafe { &*( std::str::from_utf8_unchecked(input_code.as_bstr()) as *const str) } as &'static str;
 
-
-                dbg!(&lst_ctx);
-
                 // Build the span that will be parsed to collect inner tokens.
                 // It has a length of input_length.
                 let mut inner_span = Z80Span::new_extra(
                     src,
                     lst_ctx
                 );
-                dbg!(&inner_span);
-
                 let inner_code_ptr = &mut inner_span;
-
-
-                
                 /*
                 (unsafe {
                     LocatedSpan::new_from_raw_offset(
@@ -2746,9 +2735,6 @@ impl LocatedListing {
                         let inner_span = input_code.clone().update_slice(inner_span);
 
                         take::<_,_, Z80ParserError>(inner_length).parse_next(input_code).expect("BUG in parser"); // really consume from the input
-
-                        dbg!("Inner content", unsafe{std::str::from_utf8_unchecked(inner_span.as_bstr().as_bytes())});
-                        dbg!("Following code / must contains ends", unsafe{std::str::from_utf8_unchecked(input_code.as_bstr().as_bytes())});
 
                         ParseResult::SuccessInner {
                             inner_span: inner_span.into(),
