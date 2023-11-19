@@ -3914,7 +3914,7 @@ pub fn parse_sbc(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
     ))
     .parse_next(input)?;
 
-    let operb = if opera.as_ref().map(|r| r.is_register_a()).unwrap_or(false) {
+    let operb = if opera.as_ref().map(|r| r.is_register_a()).unwrap_or(true) {
         alt((
             parse_register8,
             parse_indexregister8,
@@ -6023,6 +6023,7 @@ mod test {
         let res = parse_test(parse_buildsna(false), "BUILDSNA");
         assert!(res.is_ok(), "{:?}", &res);
 
+        
         let res = parse_test(parse_buildsna(false), "BUILDSNA V2");
         assert!(res.is_ok(), "{:?}", &res);
 
@@ -6127,6 +6128,12 @@ mod test {
 
     #[test]
     fn test_parse_line_component() {
+        let res = parse_test(parse_line_component, "ld a, d");
+        assert!(res.is_ok(), "{:?}", &res);
+
+        let res = parse_test(parse_line_component, "sbc h");
+        assert!(res.is_ok(), "{:?}", &res);
+
         let res = parse_test(parse_line_component, "data1 SETN data");
         assert!(res.is_ok(), "{:?}", &res);
 
