@@ -4156,7 +4156,7 @@ where
         Mnemonic::Nop2 => env.assemble_nop::<Expr>(Mnemonic::Nop2, None),
 
         Mnemonic::Sub => env.assemble_sub(arg1.as_ref().unwrap()),
-        Mnemonic::Sbc => env.assemble_sbc(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
+        Mnemonic::Sbc => env.assemble_sbc(arg1.as_ref(), arg2.as_ref().unwrap()),
         Mnemonic::Sla
         | Mnemonic::Sra
         | Mnemonic::Srl
@@ -4639,7 +4639,7 @@ impl Env {
 
     pub fn assemble_sbc<D: DataAccessElem>(
         &mut self,
-        arg1: &D,
+        arg1: Option<&D>,
         arg2: &D
     ) -> Result<Bytes, AssemblerError>
     where
@@ -4647,7 +4647,7 @@ impl Env {
     {
         let mut bytes = Bytes::new();
 
-        if arg1.is_register_a() {
+        if arg1.as_ref().map(|arg| arg.is_register_a()).unwrap_or(true) {
             if arg2.is_register8() {
                 let reg = arg2.get_register8().unwrap();
                 {
@@ -4690,7 +4690,7 @@ impl Env {
             }
         }
         else {
-            assert!(arg1.is_register_hl());
+            assert!(arg1.unwrap().is_register_hl());
             assert!(arg2.is_register16());
             let reg = arg2.get_register16().unwrap();
             bytes.push(0xED);
