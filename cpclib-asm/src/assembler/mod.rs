@@ -30,6 +30,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static::__Deref;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
+use cpclib_common::winnow::stream::UpdateSlice;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
@@ -3522,17 +3523,17 @@ impl Env {
                         && (prev_span.complete_source().as_ptr()
                             == curr_span.complete_source().as_ptr())
                     {
-                        let _new_size = *prev_size + *curr_size;
+                        let new_size = *prev_size + *curr_size;
 
-                        let start_str = prev_span.as_str();
-                        let end_str = curr_span.as_str();
+                        let start_str = dbg!(prev_span.as_str());
+                        let end_str = dbg!(curr_span.as_str());
                         let start_str = start_str.as_bytes();
                         let end_str = end_str.as_bytes();
 
                         let start_ptr = &start_str[0] as *const u8;
                         let end_last_ptr = &end_str[end_str.len() - 1] as *const u8;
                         assert!(end_last_ptr > start_ptr);
-                        let _txt = unsafe {
+                        let txt = unsafe {
                             let slice = std::slice::from_raw_parts(
                                 start_ptr,
                                 end_last_ptr.offset_from(start_ptr) as _
@@ -3540,17 +3541,10 @@ impl Env {
                             std::str::from_utf8(slice).unwrap()
                         };
 
-                        let _new_span = todo!();
-                        // let new_span = unsafe {
-                        // use cpclib_common::LocatedSpan;
-                        // Z80Span(LocatedSpan::new_from_raw_offset(
-                        // prev_span.location_offset(),
-                        // prev_span.location_line(),
-                        // txt,
-                        // prev_span.0.extra
-                        // ))
-                        // };
-                        //(Some(new_size), Some(new_span))
+
+                        let new_span = Z80Span::from(prev_span.0.clone().update_slice(txt.as_bytes()));
+
+                        (Some(new_size), Some(new_span))
                     }
                     else {
                         (None, None)
