@@ -35,6 +35,7 @@ use crate::error::AssemblerError;
 /// ! This crate is related to the adaptation of tokens and listing for the case where they are parsed
 use crate::error::ExpressionError;
 use crate::implementation::expression::ExprEvaluationExt;
+use crate::implementation::listing::ListingExt;
 use crate::implementation::tokens::TokenExt;
 use crate::preamble::parse_z80_str;
 use crate::{
@@ -2921,5 +2922,39 @@ impl ParseToken for Token {
                 ))
             },
         }
+    }
+}
+
+
+
+impl ListingExt for LocatedListing {
+    fn add_code<S: AsRef<str> + core::fmt::Display>(
+        &mut self,
+        code: S
+    ) -> Result<(), AssemblerError> {
+        panic!("Cannot be used in this context");
+    }
+
+    fn to_bytes_with_options(&self, options: crate::assembler::EnvOptions) -> Result<Vec<u8>, AssemblerError> {
+        let (_, env) =
+            crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), options)
+                .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
+        Ok(env.produced_bytes())
+    }
+
+    fn estimated_duration(&self) -> Result<usize, AssemblerError> {
+        todo!()
+    }
+
+    fn to_string(&self) -> String {
+        todo!()
+    }
+
+    fn to_enhanced_string(&self) -> String {
+        todo!()
+    }
+
+    fn inject_labels(&mut self, labels: &[(u16, &str)]) {
+        todo!()
     }
 }
