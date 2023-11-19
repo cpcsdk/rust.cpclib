@@ -1307,7 +1307,7 @@ pub fn parse_line_component_standard(input: &mut InnerZ80Span) -> PResult<(Optio
 
 
    // TODO also handle directives that eat this label in other assemblers (macro/struct and so on)
-    let label_modifier: Option<LabelModifier> = match dbg!(label_modifier) {
+    let label_modifier: Option<LabelModifier> = match label_modifier {
         Some(label_modifier) => {
             match label_modifier {
                 choice_nocase!(b"DEFL") => Some(LabelModifier::Equ),
@@ -1360,10 +1360,6 @@ pub fn parse_line_component_standard(input: &mut InnerZ80Span) -> PResult<(Optio
 
         None => None
     };
-
-
-    dbg!(&label_modifier);
-
 
     if let Some(label_modifier)  = label_modifier {
         // we must generate a directive related to the label handling
@@ -2023,32 +2019,37 @@ pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserE
 /// Parser for file names in appropriate directives
 #[inline]
 pub fn parse_string(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
-    let first = alt(((b'"'), (b'\''))).parse_next(input)?;
-    let _start = input.checkpoint();
-
-    let content = if first == b'\'' {
-        alt((
-            tag("'"),
-            terminated(
-                escaped(none_of((b'\\', b'\'')), '\\', one_of(b"'\\"))/* .verify(|s: &[u8]| s.len() > 1)*/,
-                ('\'').context("End of string not found")
-            )
-        ))
-        .parse_next(input)
-    }
-    else {
-        alt((
-            tag("\""),
-            terminated(
-                escaped(none_of(b"\\\""), '\\', one_of(b"\"\\")),
-                ('"').context("End of string not found")
-            )
-        ))
-        .parse_next(input)
-    }?;
+    let first = alt(('"', '\'')).parse_next(input)? as char;
+    let last = first;
+    let (normal, escapable) = match first {
+        '\'' => {(
+            none_of(('\\', '\'')),
+            one_of(('\\', '\''))
+        )},
+        '"' => {(
+            none_of(('\\', '"')),
+            one_of(('\\', '"'))
+        )},
+        _ => unreachable!()
+    };
 
 
-    let string = if content.len() == 1  && first == content[0] {
+    let content = alt((
+        last.recognize(),
+        terminated(
+            escaped(
+                normal,
+                '\\',
+                escapable
+            ),
+            last.context("End of string not found")
+        )
+    )).parse_next(input)?;
+
+
+    dbg!(BStr::new(&content));
+
+    let string = if content.len() == 1  && first == (content[0] as char) {
         &content[..0] // we remove " (it is not present for the others)
     }
     else {
@@ -2057,6 +2058,8 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80Parser
 
 
     let string = input.clone().update_slice(string);
+
+    dbg!(&string);
 
     Ok(string)
 }
@@ -3665,8 +3668,9 @@ pub fn parse_djnz(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
 /// ...
 #[inline]
 pub fn expr_list(input: &mut InnerZ80Span) -> PResult<Vec<LocatedExpr>, Z80ParserError> {
-    separated1(
-        cut_err(alt((string_expr, located_expr)).context("Error in expression")),
+    separated(
+        1..,
+        cut_err(located_expr.context("Error in expression")),
         (tag(","), space0)
     )
     .parse_next(input)
@@ -6347,17 +6351,43 @@ mod test {
     }
 
 
+
+    #[test]
+    fn test_parse_expr() {
+
+        for code in &[
+            "'o'",
+            "'o' + 0x80",
+            "\"\\\" et voila\""
+        ] {
+            assert!(
+                dbg!(parse_test(parse_expr, code))
+                .is_ok()
+            );
+
+
+            assert!(
+                dbg!(parse_test(expr_list, code))
+                .is_ok()
+            );
+        }
+    }
+
+
+    // TODO find why this test fails wheras cpclib_common::tests::parse_string succeed. I do not get the differences
     #[test]
     fn test_parse_string() {
         for string in &[
-            "\"kjkjhkl\"",
-            "\"kjk'jhkl\"",
-            "\"kj\\\"kjhkl\"",
-            "'kjkjhkl'",
-            "'kjk\"jhkl'",
-            "'kjkj\\\'hkl'",
-            "\"\"",
-            "''",
+            r#""kjkjhkl""#,
+            r#""kjk'jhkl""#,
+            r#""kj\"kjhkl""#,
+            r#"'kjkjhkl'"#,
+            r#"'kjk\\"jhkl'"#,
+            r#"'kjkj\'hkl'"#,
+            r#""""#,
+            r#"''"#,
+            r#""fdfd\" et voila""#,
+            r#""\" et voila""#
         ] {
             let res = parse_test(parse_string, string);
             assert!(

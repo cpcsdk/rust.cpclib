@@ -9,6 +9,7 @@
     org 0x3000
     db "Next one will be more complex"
     db "   \" et voila"
+    db " \" et voila"
     db "\" et voila"
 
     assert memory(0x1000) == memory(0x2000)
