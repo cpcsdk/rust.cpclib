@@ -1335,6 +1335,23 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
             (ExprResult::Value(v1), ExprResult::Char(v2)) => Ok((v1 + *v2 as i32).into()),
             (ExprResult::Char(v1), ExprResult::Value(v2)) => Ok((*v1 as i32 + *v2).into()),
 
+
+                        
+            (ExprResult::String(s), _ ) if s.len() == 1 => {
+                ExprResult::Char(s.chars().next().unwrap() as u8) + rhs.clone()
+            }
+            (ExprResult::Char(c), _) => {
+                ExprResult::Value(*c as _) + rhs.clone()
+            },
+
+            (_, ExprResult::String(s)) if s.len() == 1 => {
+                self.clone() + ExprResult::Char(s.chars().next().unwrap() as u8)
+            }
+            (_, ExprResult::Char(c)) => {
+                self.clone() + ExprResult::Value(*c as _)
+            },
+
+
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible addition between {} and {}",

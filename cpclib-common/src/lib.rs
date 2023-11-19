@@ -60,7 +60,7 @@ Error: AddContext<I, winnow::error::StrContext>
     .parse_next(input)?
     .unwrap_or(EncodingKind::Unk);
 
-    let mut hex_digits_and_sep = take_while(1..,(
+    let hex_digits_and_sep = || take_while(1..,(
         ('0'..='9'), 
         ('a'..='f'), 
         ('A'..='F'), 
@@ -76,33 +76,39 @@ Error: AddContext<I, winnow::error::StrContext>
     ).context(StrContext::Label("Read binary digits"));
 
     let (encoding, digits) = match encoding {
-        EncodingKind::Hex => (EncodingKind::Hex, hex_digits_and_sep.parse_next(input)?),
+        EncodingKind::Hex => (EncodingKind::Hex, hex_digits_and_sep().parse_next(input)?),
         EncodingKind::Bin => (EncodingKind::Bin, bin_digits_and_sep.parse_next(input)?),
         EncodingKind::Dec => unreachable!("No prefix exist for decimal kind"),
         EncodingKind::AmbiguousBinHex => {
                // we parse for hexdecimal then guess the encoding
-               let digits = hex_digits_and_sep.parse_next(input)?;
-               let suffix = opt(alt(('h', 'H'))).parse_next(input)?;
+               let digits = opt(hex_digits_and_sep()).parse_next(input)?;
+               let suffix = opt(alt(('h', 'H'))).verify(|s| 
+                    if digits.is_none() {
+                        s.is_some()
+                    } else {
+                        true
+                    }
+                ).parse_next(input)?;
 
                if suffix.is_some() {
                     // this is an hexadecimal number and part of the encoding place was 
                      // TODO find a more efficient way to not redo that
                     input.reset(before_encoding);
                     '0'.parse_next(input)?; // eat 0
-                    let digits = hex_digits_and_sep.parse_next(input)?;
+                    let digits = hex_digits_and_sep().parse_next(input)?;
                     let _suffix= alt(('h', 'H')).parse_next(input)?;
 
                     (EncodingKind::Hex, digits)
                } else {
                     // this is a decimal number
-                    (EncodingKind::Bin, digits)
+                    (EncodingKind::Bin, digits.unwrap())
                }
             
         }
         EncodingKind::Unk => {
             // we parse for hexdecimal then guess the encoding
             let backup = input.checkpoint();
-            let digits = hex_digits_and_sep.parse_next(input)?;
+            let digits = hex_digits_and_sep().parse_next(input)?;
             let suffix = opt(tag_no_case("h")).parse_next(input)?;
 
             if suffix.is_some() {
@@ -173,5 +179,6 @@ mod tests {
         assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"160"))).unwrap(), 160);
         assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"1_60"))).unwrap(), 160);
         assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"0b0h"))).unwrap(), 0x0b0);
+        assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"0bh"))).unwrap(), 0xb);
     }
 }
