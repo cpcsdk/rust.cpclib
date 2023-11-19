@@ -1,12 +1,7 @@
-use cpclib_common::nom::branch::*;
-use cpclib_common::nom::bytes::complete::*;
-use cpclib_common::nom::character::complete::*;
-use cpclib_common::nom::combinator::*;
-use cpclib_common::nom::sequence::*;
-use cpclib_common::nom::*;
+use cpclib_common::winnow::{self, combinator::{delimited, alt}, token::tag_no_case, PResult, Parser, ascii::space0};
 use serde::{self, Deserialize, Deserializer};
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub enum Constraint {
     Windows,
     Linux,
@@ -22,47 +17,44 @@ pub(crate) fn deserialize_constraint<'de, D>(
 ) -> Result<Option<Constraint>, D::Error>
 where D: Deserializer<'de> {
     let s = String::deserialize(deserializer)?;
-    let (input, cons) =
-        parse_constraint(&s).map_err(|e| serde::de::Error::custom(e.to_string()))?;
+    let cons =
+        parse_constraint.parse(&s).map_err(|e| serde::de::Error::custom(e.to_string()))?;
 
-    if input.len() != 0 {
-        unimplemented!()
-    }
 
     Ok(Some(cons))
 }
 
-fn parse_constraint(input: &str) -> IResult<&str, Constraint> {
-    alt((parse_negated_constraint, parse_positive_constraint))(input)
+fn parse_constraint(input: &mut &str) -> PResult< Constraint> {
+    alt((parse_negated_constraint, parse_positive_constraint)).parse_next(input)
 }
 
-fn parse_negated_constraint(input: &str) -> IResult<&str, Constraint> {
+fn parse_negated_constraint(input: &mut &str) -> PResult< Constraint> {
     delimited(
-        tuple((tag_no_case("not("), space0)),
+        (tag_no_case("not("), space0),
         parse_positive_constraint,
-        tuple((space0, char(')'), space0))
-    )(input)
+        (space0, ')', space0)
+    ).parse_next(input)
 }
 
-fn parse_positive_constraint(input: &str) -> IResult<&str, Constraint> {
-    parse_leaf_constraint(input)
+fn parse_positive_constraint(input: &mut &str) -> PResult< Constraint> {
+    parse_leaf_constraint.parse_next(input)
 }
 
-fn parse_os_constraint(input: &str) -> IResult<&str, Constraint> {
-    let (input, _) = tag_no_case("os")(input)?;
+fn parse_os_constraint(input: &mut &str) -> PResult< Constraint> {
+    tag_no_case("os").parse_next(input)?;
     delimited(
-        tuple((char('('), space0)),
+        ('(', space0),
         alt((
-            map(tag_no_case("windows"), |_| Constraint::Windows),
-            map(tag_no_case("linux"), |_| Constraint::Linux),
-            map(tag_no_case("macos"), |_| Constraint::MacOsx)
+            tag_no_case("windows").value(Constraint::Windows),
+            tag_no_case("linux").value(Constraint::Linux),
+            tag_no_case("macos").value(Constraint::MacOsx)
         )),
-        tuple((space0, char(')'), space0))
-    )(input)
+        (space0, ')', space0)
+    ).parse_next(input)
 }
 
-fn parse_leaf_constraint(input: &str) -> IResult<&str, Constraint> {
-    parse_os_constraint(input)
+fn parse_leaf_constraint(input: &mut &str) -> PResult< Constraint> {
+    parse_os_constraint.parse_next(input)
 }
 
 impl Constraint {
