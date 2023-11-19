@@ -12,31 +12,31 @@ struct VerifyOutput {
 }
 
 macro_rules! import_rasm_check {
-    ($verif:ident, chk($chk:expr)) => {
+    ($verif:ident,chk($chk:expr)) => {
         $verif.chk = Some($chk);
     };
 
-    ($verif:ident, len($chk:expr)) => {
+    ($verif:ident,len($chk:expr)) => {
         $verif.size = Some($chk);
     };
 
-    ($verif:ident, opcode0($chk:expr)) => {
+    ($verif:ident,opcode0($chk:expr)) => {
         $verif.opcodes.push((0, $chk));
     };
 
-    ($verif:ident, opcode1($chk:expr)) => {
+    ($verif:ident,opcode1($chk:expr)) => {
         $verif.opcodes.push((1, $chk));
     };
 
-    ($verif:ident, opcode2($chk:expr)) => {
+    ($verif:ident,opcode2($chk:expr)) => {
         $verif.opcodes.push((2, $chk));
     };
 
-    ($verif:ident, opcode3($chk:expr)) => {
+    ($verif:ident,opcode3($chk:expr)) => {
         $verif.opcodes.push((3, $chk));
     };
 
-    ($verif:ident, opcode4($chk:expr)) => {
+    ($verif:ident,opcode4($chk:expr)) => {
         $verif.opcodes.push((4, $chk));
     };
 }

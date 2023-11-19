@@ -77,23 +77,23 @@ impl Display for BasmError {
             BasmError::AssemblerError { error } => write!(f, "Assembling error:\n{}", error),
             BasmError::InvalidAmsdosFilename { filename } => {
                 write!(f, "Invalid Amsdos filename: {}", filename)
-            }
+            },
             BasmError::NotAValidDirectory { path } => {
                 write!(f, "{} is not a valid directory.", path)
-            }
+            },
             BasmError::NotAValidFile { file } => write!(f, "{} is not a valid file.", file),
 
             BasmError::ListingGeneration { msg } => {
                 write!(f, "Error when generating the symbol table: {}", msg)
-            }
+            },
 
             BasmError::InvalidSymbolFile { msg } => {
                 write!(f, "Error when reading the symbol table: {}", msg)
-            }
+            },
 
             BasmError::InvalidArgument(msg) => {
                 write!(f, "Invalid argument: {}", msg)
-            }
+            },
             BasmError::ErrorWithListing {
                 box error,
                 listing: _
@@ -129,7 +129,7 @@ pub fn parse<'arg>(
     match std::env::current_dir() {
         Ok(cwd) => {
             options.add_search_path(cwd)?;
-        }
+        },
         Err(_) => todo!()
     }
     options.add_search_path_from_file(&filename); // we ignore the potential error
@@ -365,7 +365,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 if let Some(bar) = bar {
                     Progress::progress().remove_bar_ok(&bar);
                 }
-            }
+            },
             None => {}
         }
     }
@@ -492,7 +492,7 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
             Some(content) => {
                 println!("{}", std::str::from_utf8(content.data.as_ref()).unwrap());
                 std::process::exit(0);
-            }
+            },
             None => {
                 eprintln!("Embedded file {fname} does not exist");
                 std::process::exit(-1);

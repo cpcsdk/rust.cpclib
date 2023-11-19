@@ -12,7 +12,7 @@ use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Checkpoint, Offset, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take;
 use cpclib_common::winnow::trace::trace;
-use cpclib_common::winnow::{PResult, Parser, BStr};
+use cpclib_common::winnow::{BStr, PResult, Parser};
 use cpclib_sna::{FlagValue, SnapshotFlag, SnapshotVersion};
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
@@ -27,8 +27,8 @@ use cpclib_tokens::{
 use ouroboros::self_referencing;
 
 use super::{
-    build_span, my_many0_nocollect, parse_z80_line_complete, InnerZ80Span, ParserContext,
-    SourceString, Z80ParserError, Z80Span, parse_lines
+    build_span, my_many0_nocollect, parse_lines, parse_z80_line_complete, InnerZ80Span,
+    ParserContext, SourceString, Z80ParserError, Z80Span
 };
 use crate::assembler::Env;
 use crate::error::AssemblerError;
@@ -2621,7 +2621,7 @@ impl LocatedListing {
 
             // tokens depend both on the source and context. However source can be obtained from context so we do not use it here (it is usefull for the inner case)
             parse_result_builder: |_, ctx| {
-                let src :&BStr = ctx.source;
+                let src: &BStr = ctx.source;
                 let input_start = Z80Span::new_extra(src, ctx);
 
                 // really make the parsing
@@ -2634,8 +2634,7 @@ impl LocatedListing {
                         >,
                         Z80ParserError
                     >
-                > = parse_lines
-                .parse(input_start.0);
+                > = parse_lines.parse(input_start.0);
 
                 // analyse result and can generate error even if parsing was ok
                 // Ok only if everything is parsed

@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::stream::{AsBStr, Offset};
-use cpclib_common::winnow::{Located, Stateful, Bytes, BStr};
+use cpclib_common::winnow::{BStr, Bytes, Located, Stateful};
 use cpclib_tokens::symbols::{Source, Symbol};
 use line_col::LineColLookup;
 use line_span::LineSpanExt;
@@ -253,8 +253,8 @@ impl AsRef<InnerZ80Span> for Z80Span {
 }
 
 impl Z80Span {
-    pub fn new_extra<S: ?Sized + AsRef<[u8]>>(src: & S, ctx: &ParserContext) -> Self {
-        let src = unsafe{std::mem::transmute(BStr::new(src))};
+    pub fn new_extra<S: ?Sized + AsRef<[u8]>>(src: &S, ctx: &ParserContext) -> Self {
+        let src = unsafe { std::mem::transmute(BStr::new(src)) };
         let ctx = unsafe { &*(ctx as *const ParserContext) as &'static ParserContext };
 
         Self(Stateful {

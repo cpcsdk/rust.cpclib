@@ -201,7 +201,8 @@ impl ListingOutput {
                 // handle the new line
 
                 // replace the objects of interest
-                self.current_source = Some(unsafe{std::mem::transmute(token.context().complete_source())});
+                self.current_source =
+                    Some(unsafe { std::mem::transmute(token.context().complete_source()) });
 
                 // TODO manage differently for macros and so on
                 // let current_line = current_line.split("\n").next().unwrap_or(current_line);

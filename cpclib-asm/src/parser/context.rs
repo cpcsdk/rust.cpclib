@@ -177,8 +177,8 @@ impl ParserContextBuilder {
     }
 
     /// Build a ParserContext for the given source code
-    pub fn build(self, code: & str) -> ParserContext {
-        let str : &'static BStr = unsafe{std::mem::transmute(BStr::new(code))};
+    pub fn build(self, code: &str) -> ParserContext {
+        let str: &'static BStr = unsafe { std::mem::transmute(BStr::new(code)) };
         ParserContext {
             options: self.options,
             current_filename: self.current_filename,
@@ -457,7 +457,7 @@ impl ParserContext {
     }
 
     pub fn complete_source(&self) -> &str {
-        unsafe{std::mem::transmute(self.source.deref())}
+        unsafe { std::mem::transmute(self.source.deref()) }
     }
 
     pub fn options(&self) -> &ParserOptions {

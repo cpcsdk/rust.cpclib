@@ -631,8 +631,7 @@ mod tests {
                 2
             );
             assert_eq!(
-                dbg!(Token::parse_token(" ld a, (dd)")
-                    .unwrap())
+                dbg!(Token::parse_token(" ld a, (dd)").unwrap())
                     .estimated_duration()
                     .unwrap(),
                 4

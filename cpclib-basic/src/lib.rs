@@ -5,7 +5,7 @@ pub mod tokens;
 
 use std::fmt::{self};
 
-use cpclib_common::winnow::Parser;
+use cpclib_common::winnow::{Parser, ascii::space0};
 use cpclib_sna::Snapshot;
 use parser::parse_basic_program;
 use thiserror::Error;
@@ -157,8 +157,8 @@ impl BasicProgram {
     /// Create the program from a code to parse
     pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, BasicError> {
         let input = code.as_ref();
-        match parse_basic_program.parse(&mut &input) {
-            Ok(prog) => Ok(prog),
+        match (parse_basic_program, space0).parse(&mut &input) {
+            Ok((prog, _)) => Ok(prog),
             Err(e) => {
                 Err(BasicError::ParseError {
                     msg: format!("Error while parsing the Basic content: {}", e)

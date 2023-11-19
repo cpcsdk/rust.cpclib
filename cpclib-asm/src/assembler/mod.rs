@@ -4086,12 +4086,7 @@ where
             assemble_logical_operator(mnemonic, arg1.as_ref().unwrap(), env)
         },
         Mnemonic::Add | Mnemonic::Adc => {
-            assemble_add_or_adc(
-                mnemonic,
-                arg1.as_ref(),
-                arg2.as_ref().unwrap(),
-                env
-            )
+            assemble_add_or_adc(mnemonic, arg1.as_ref(), arg2.as_ref().unwrap(), env)
         },
         Mnemonic::Cp => env.assemble_cp(arg1.as_ref().unwrap()),
         Mnemonic::ExMemSp => assemble_ex_memsp(arg1.as_ref().unwrap()),
@@ -5672,7 +5667,6 @@ where
         Mnemonic::Adc => false,
         _ => panic!("Impossible case")
     };
-
 
     if arg1.is_none() || arg1.as_ref().map(|arg1| arg1.is_register_a()).unwrap() {
         if arg2.is_address_in_hl() {
