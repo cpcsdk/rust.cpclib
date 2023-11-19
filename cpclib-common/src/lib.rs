@@ -1,3 +1,5 @@
+use std::slice;
+
 #[cfg(feature = "cmdline")]
 pub use clap;
 
@@ -7,7 +9,7 @@ pub use rayon;
 pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
-use winnow::{PResult, combinator::{alt, opt, terminated, fail}, Parser, ascii::{hex_digit1, space0}, token::{one_of, take_while, tag_no_case}, error::{StrContext, ParserError, AddContext}, stream::{AsChar, StreamIsPartial, Compare, AsBytes}};
+use winnow::{PResult, combinator::{alt, opt, terminated, fail}, Parser, ascii::{hex_digit1, space0}, token::{one_of, take_while, tag_no_case, any}, error::{StrContext, ParserError, AddContext}, stream::{AsChar, StreamIsPartial, Compare, AsBytes, UpdateSlice}, binary::bits::take};
 pub use {
     bitfield, bitflags, bitsets, bitvec, itertools, lazy_static,  num,
     resolve_path, smallvec, smol_str, strsim
@@ -23,7 +25,7 @@ pub use winnow;
  *  (prefix) space number suffix
  */
 pub fn parse_value<I, Error: ParserError<I>>(input: &mut I) -> PResult<u32, Error> 
-where I: Stream + StreamIsPartial + for<'a> Compare<&'a str>,
+where I: Stream + StreamIsPartial + for<'a> Compare<&'a str> + Clone + UpdateSlice,
 <I as Stream>::Slice: AsBytes,
 <I as Stream>::Token: AsChar,
 <I as Stream>::Token: Clone,
@@ -38,14 +40,19 @@ Error: AddContext<I, winnow::error::StrContext>
         Hex = 16,
         Bin = 2,
         Dec = 10,
+
+        AmbiguousBinHex = 200,
         Unk = 255
     }
+
+    let before_encoding: <I as Stream>::Checkpoint = input.checkpoint();
 
     // numbers have an optional prefix with an eventual space
     let encoding = opt(terminated(
         alt((
             alt((b"0x",b"0X", b"#", b"$", b"&")).value(EncodingKind::Hex) , // hexadecimal number
-            alt((b"0b", b"0B", b"%")).value(EncodingKind::Bin), //binary number
+            alt((b"0b", b"0B")).value(EncodingKind::AmbiguousBinHex),
+             b"%".value(EncodingKind::Bin), //binary number
         )), 
         space0
     ).context(StrContext::Label("Number prefix detection"))
@@ -72,6 +79,26 @@ Error: AddContext<I, winnow::error::StrContext>
         EncodingKind::Hex => (EncodingKind::Hex, hex_digits_and_sep.parse_next(input)?),
         EncodingKind::Bin => (EncodingKind::Bin, bin_digits_and_sep.parse_next(input)?),
         EncodingKind::Dec => unreachable!("No prefix exist for decimal kind"),
+        EncodingKind::AmbiguousBinHex => {
+               // we parse for hexdecimal then guess the encoding
+               let digits = hex_digits_and_sep.parse_next(input)?;
+               let suffix = opt(alt(('h', 'H'))).parse_next(input)?;
+
+               if suffix.is_some() {
+                    // this is an hexadecimal number and part of the encoding place was 
+                     // TODO find a more efficient way to not redo that
+                    input.reset(before_encoding);
+                    '0'.parse_next(input)?; // eat 0
+                    let digits = hex_digits_and_sep.parse_next(input)?;
+                    let _suffix= alt(('h', 'H')).parse_next(input)?;
+
+                    (EncodingKind::Hex, digits)
+               } else {
+                    // this is a decimal number
+                    (EncodingKind::Bin, digits)
+               }
+            
+        }
         EncodingKind::Unk => {
             // we parse for hexdecimal then guess the encoding
             let backup = input.checkpoint();
@@ -101,6 +128,7 @@ Error: AddContext<I, winnow::error::StrContext>
 
     // right here encoding anddigits are compatible
     debug_assert!(encoding != EncodingKind::Unk);
+    debug_assert!(encoding != EncodingKind::AmbiguousBinHex);
     let digits: &[u8] = digits.as_bytes();
 
     let base = encoding as u32;
@@ -144,5 +172,6 @@ mod tests {
         assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"0100101b"))).unwrap(), 0b0100101);
         assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"160"))).unwrap(), 160);
         assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"1_60"))).unwrap(), 160);
+        assert_eq!(dbg!(parse_value::<_,  ContextError>.parse(BStr::new(b"0b0h"))).unwrap(), 0x0b0);
     }
 }
