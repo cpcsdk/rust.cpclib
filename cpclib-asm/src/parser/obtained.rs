@@ -2677,10 +2677,14 @@ impl LocatedListing {
     ) -> PResult<Arc<LocatedListing>, Z80ParserError> {
         let mut tokens = Vec::with_capacity(20);
 
+
         // The context is similar to the initial one ...
         let mut ctx = input_code.state.clone();
         // ... but the state can be modified to forbid some keywords
         ctx.state = new_state;
+
+        dbg!(&ctx);
+
 
         // we do not change ctx.source that must be the very same than the parent
         //       let input_fragment = input_code.fragment();
@@ -2703,13 +2707,20 @@ impl LocatedListing {
 
                 let src = unsafe { &*( std::str::from_utf8_unchecked(input_code.as_bstr()) as *const str) } as &'static str;
 
+
+                dbg!(&lst_ctx);
+
                 // Build the span that will be parsed to collect inner tokens.
                 // It has a length of input_length.
                 let mut inner_span = Z80Span::new_extra(
                     src,
                     lst_ctx
                 );
+                dbg!(&inner_span);
+
                 let inner_code_ptr = &mut inner_span;
+
+
                 
                 /*
                 (unsafe {

@@ -277,6 +277,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
 
 const START_DIRECTIVE: &[&[u8]] = &[
     b"CONFINED",
+    b"FUNCTION",
     b"FOR",
     b"IF",
     b"IFDEF",
@@ -638,6 +639,7 @@ pub fn inner_code_with_state(
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
     #[inline]
     move |input: &mut InnerZ80Span| {
+        dbg!("Requested state", &new_state);
         LocatedListing::parse_inner(input, new_state)
             .map(|l| (Arc::<LocatedListing>::try_unwrap(l).unwrap()))
     }
@@ -666,19 +668,23 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
 
 /// TODO - limit the listing possibilities
 pub fn parse_function_listing(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
+    dbg!("parse_function_listing requests FunctionLimited state");
     inner_code_with_state(ParsingState::FunctionLimited).parse_next(input)
 }
 
 pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let function_start = input.checkpoint();
-    let _ = preceded(space0, parse_directive_word("FUNCTION")).parse_next(input)?;
+    let _ = preceded(my_space0, parse_directive_word("FUNCTION")).parse_next(input)?;
     let name = cut_err(parse_label(false).context("FUNCTION: wrong name")).parse_next(input)?; // TODO use a specific function for that
+
+    dbg!("Function deteced");
 
     let cloned = input.clone();
     let arguments: Vec<InnerZ80Span> = cut_err(
         preceded(
             opt(parse_comma), // comma after macro name is not mandatory
-            separated0::<_, InnerZ80Span, Vec<InnerZ80Span>, _, _, _, _>(
+            separated::<_, InnerZ80Span, Vec<InnerZ80Span>, _, _, _, _>(
+                0..,
                 // parse_label(false)
                 delimited(
                     my_space0,
@@ -689,12 +695,18 @@ pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
                 parse_comma
             )
         )
-        .context("FUNCTION: wrong parameters")
+        .context("FUNCTION: errors in parameters")
     )
     .parse_next(input)?;
     let arguments = arguments.into_iter().map(|span| span.into()).collect_vec();
 
-    let _ = preceded(space0, my_line_ending).parse_next(input)?;
+    dbg!("Arguments consummed");
+
+
+    cut_err(preceded(my_space0, my_line_ending).context("FUNCTION: errors after parameters")).parse_next(input)?;
+
+    dbg!("code to parse");
+
 
     let listing =
         cut_err(parse_function_listing.context("FUNCTION: invalid content")).parse_next(input)?;
@@ -2736,6 +2748,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     // Here we have read the latest block
     // dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
 
+    dbg!(&input);
     let _ = (
         opt(alt((
             delimited(my_space0, tag(":"), my_space0),
@@ -2743,7 +2756,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         ))),
         cut_err(preceded(my_space0, parse_directive_word("ENDIF"))).recognize()
     )
-        .context("Condition: issue in end condition")
+        .context("Condition: end condition not found")
         .parse_next(input)?;
 
     // dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())}); // endif must have been eaten
