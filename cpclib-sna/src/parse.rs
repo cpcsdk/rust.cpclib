@@ -6,7 +6,7 @@ use cpclib_common::winnow::ascii::space0;
 use cpclib_common::winnow::combinator::{alt, delimited, preceded, separated1};
 use cpclib_common::winnow::error::{ErrMode, ErrorKind, ParserError};
 use cpclib_common::winnow::stream::{
-    AsBytes, AsChar, Compare, Stream, StreamIsPartial
+    AsBytes, AsChar, Compare, Stream, StreamIsPartial, UpdateSlice
 };
 use cpclib_common::winnow::token::{take_while};
 use cpclib_common::winnow::{PResult, Parser};
@@ -32,8 +32,8 @@ where
 }
 
 pub fn parse_flag_value<I, Error: ParserError<I>>(input: &mut I) -> PResult<FlagValue>
-where
-    I: Stream + StreamIsPartial + for<'a> Compare<&'a str>,
+where I: Stream + StreamIsPartial + for<'a> Compare<&'a str> + Clone + UpdateSlice,
+
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
